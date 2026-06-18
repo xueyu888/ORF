@@ -388,8 +388,7 @@ export const commentOperators = {
 
   "api.comment_upload_response": {
     ok: async ({ params }) => {
-      const response = await requiredCapturedResponse(params, "response");
-      expect(response.ok).toBe(true);
+      const response = await attachmentUploadResponse(params, "response");
       expect(response.status).toBe(200);
       expect(response.body).toMatchObject({
         ok: true,
@@ -399,10 +398,6 @@ export const commentOperators = {
       });
     },
 
-    unsupported: async ({ params }) => {
-      const response = requiredApiAttemptResult(params, "result");
-      expect(response.status).toBe(415);
-    },
   },
 
   "api.comment_direct": {
@@ -622,12 +617,12 @@ export const commentOperators = {
     },
 
     image_button_enabled: async ({ ctx }) => {
-      await expect(commentPanel(ctx.page).getByRole("button", { name: "添加图片" })).toBeEnabled();
+      await expect(commentPanel(ctx.page).getByRole("button", { name: "添加附件" })).toBeEnabled();
     },
 
     choose_image: async ({ ctx, params }) => {
       const file = requiredMockImageFile(params, "file");
-      await expect(commentPanel(ctx.page).getByRole("button", { name: "添加图片" })).toBeEnabled();
+      await expect(commentPanel(ctx.page).getByRole("button", { name: "添加附件" })).toBeEnabled();
       return performWithCapturedResponse(
         captureCommentResponse(ctx.page, "POST", "/api/comments/attachments"),
         () =>
@@ -641,12 +636,16 @@ export const commentOperators = {
 
     choose_file: async ({ ctx, params }) => {
       const file = requiredMockImageFile(params, "file");
-      await expect(commentPanel(ctx.page).getByRole("button", { name: "添加图片" })).toBeEnabled();
+      await expect(commentPanel(ctx.page).getByRole("button", { name: "添加附件" })).toBeEnabled();
       await commentPanel(ctx.page).locator('input[type="file"]').setInputFiles({
         buffer: file.buffer,
         mimeType: file.mimeType,
         name: file.fileName,
       });
+    },
+
+    contains_file_reference: async ({ ctx, params }) => {
+      await expect(commentComposer(ctx.page)).toHaveValue(new RegExp(escapeRegExp(requiredString(params, "fileName"))));
     },
 
     upload_error_visible: async ({ ctx, params }) => {
@@ -826,6 +825,20 @@ function requiredApiAttemptResult(params: StepParams, key: string): { status?: n
   return value as { status?: number; body?: unknown };
 }
 
+async function attachmentUploadResponse(params: StepParams, key: string): Promise<{ status?: number; body?: unknown }> {
+  const value = await params[key];
+  if (isPlainApiResult(value)) {
+    return value;
+  }
+  const captured = await requiredCapturedResponse(params, key);
+  expect(captured.ok).toBe(true);
+  return captured;
+}
+
+function isPlainApiResult(value: unknown): value is { status?: number; body?: unknown } {
+  return Boolean(value && typeof value === "object" && "status" in value && "body" in value);
+}
+
 function createCommentPayload(params: StepParams) {
   const target = requiredCommentTarget(params, "target");
   return {
@@ -842,4 +855,8 @@ function createReplyPayload(params: StepParams) {
     ...createCommentPayload(params),
     parentMessageId: parent.messageId,
   };
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

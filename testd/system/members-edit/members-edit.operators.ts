@@ -110,7 +110,7 @@ export const systemMembersEditOperators = {
     },
     click_duplicate_and_snapshot: async ({ ctx }) => {
       await saveButton(ctx.page).click();
-      await ctx.page.waitForTimeout(500);
+      await expect(toastCards(ctx.page).filter({ hasText: /邮箱已存在|Email already exists|用户更新失败|Name already exists|已存在/ }).first()).toBeVisible({ timeout: 5_000 });
       return await captureEditUserDialogSnapshot(ctx.page);
     },
   },

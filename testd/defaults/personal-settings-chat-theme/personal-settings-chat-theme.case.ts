@@ -80,10 +80,10 @@ export const personalSettingsChatThemeCase = {
     description: "分别选择舒适暗色和经典浅色，并进入聊天页面观察主题背景",
     steps: [
       step("Action-1", "playwright", "chat_theme.select.dark", "在个人设置页面的聊天界面主题设置项选择 舒适暗色", "personal_settings.chat_theme", "select", { emailFrom: "data.email", label: "舒适暗色", saveAs: "darkPreferenceSnapshot" }),
-      step("Action-2", "playwright", "chat_page.open.dark", "打开 聊天页面", "chat_page", "open", { saveAs: "darkChatSnapshot" }),
+      step("Action-2", "playwright", "chat_page.open.dark", "打开 聊天页面", "chat_page", "open", { theme: "dark", saveAs: "darkChatSnapshot" }),
       step("Action-3", "playwright", "page.goto.settings.after_dark", "打开 个人设置页面", "page", "goto", { path: "/settings" }),
       step("Action-4", "playwright", "chat_theme.select.light", "在个人设置页面的聊天界面主题设置项选择 经典浅色", "personal_settings.chat_theme", "select", { emailFrom: "data.email", label: "经典浅色", saveAs: "lightPreferenceSnapshot" }),
-      step("Action-5", "playwright", "chat_page.open.light", "打开 聊天页面", "chat_page", "open", { saveAs: "lightChatSnapshot" }),
+      step("Action-5", "playwright", "chat_page.open.light", "打开 聊天页面", "chat_page", "open", { theme: "light", saveAs: "lightChatSnapshot" }),
     ],
   },
   S1: {

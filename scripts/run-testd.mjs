@@ -13,6 +13,7 @@ const extraArgs = process.argv.slice(2);
 const requestedSuite = process.env.TESTD_SUITE;
 const inferredSuite = requestedSuite ?? inferSuiteFromArgs(extraArgs);
 const suites = inferredSuite ? suitesFor(inferredSuite) : ["isolated", "permissions", "settings"];
+const runnableSuites = suites.filter((suite) => hasRunnableSpecsForSuite(suite, extraArgs));
 const outputTailLimit = 1024 * 1024;
 const defaultNetworkRetryDivisors = [2, 4, 8];
 const networkFailurePatterns = [
@@ -51,7 +52,7 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
 ensureTestdConfigFileExists();
 
 if (await shouldRunRecoveryPass(extraArgs)) {
-  for (const suite of suites) {
+  for (const suite of runnableSuites) {
     if (terminating) {
       break;
     }
@@ -69,7 +70,7 @@ if (await shouldRunRecoveryPass(extraArgs)) {
 }
 
 if (!process.exitCode) {
-  for (const suite of suites) {
+  for (const suite of runnableSuites) {
     if (terminating) {
       break;
     }
@@ -213,6 +214,56 @@ function ensureTestdConfigFileExists() {
     }
     throw error;
   }
+}
+
+function hasRunnableSpecsForSuite(suite, args) {
+  if (hasExplicitTestPathArgs(args)) {
+    return true;
+  }
+
+  const specPaths = listSpecPaths(path.join(process.cwd(), "testd"));
+  const hasSpecs = specPaths.some((specPath) => specBelongsToSuite(suite, specPath));
+  if (!hasSpecs) {
+    console.error(`TestD 跳过 ${suite} suite：当前没有匹配的测试文件。`);
+  }
+  return hasSpecs;
+}
+
+function hasExplicitTestPathArgs(args) {
+  return args.some((arg) => arg.length > 0 && !arg.startsWith("-"));
+}
+
+function listSpecPaths(rootDir) {
+  if (!fs.existsSync(rootDir)) {
+    return [];
+  }
+
+  const output = [];
+  const entries = fs.readdirSync(rootDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      output.push(...listSpecPaths(entryPath));
+      continue;
+    }
+    if (entry.isFile() && entry.name.endsWith(".spec.ts")) {
+      output.push(entryPath);
+    }
+  }
+  return output;
+}
+
+function specBelongsToSuite(suite, specPath) {
+  const normalized = specPath.split(path.sep).join("/");
+  const inPermissions = normalized.includes("/permissions/");
+  const inSettings = normalized.includes("/settings/");
+  if (suite === "permissions") {
+    return inPermissions;
+  }
+  if (suite === "settings") {
+    return inSettings;
+  }
+  return !inPermissions && !inSettings;
 }
 
 function runRecoveryPass(suite, args, reason) {

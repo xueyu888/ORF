@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { users } from "../../../../server/db/schema";
-import { saveUserPreferences } from "../../../../server/settings/personalSettings";
+import { readUserPreferences, saveUserPreferences } from "../../../../server/settings/personalSettings";
 import { db } from "../../../_operators/testd-db-client";
 
 export async function setDefaultLandingPathByEmail(email: string, path: string | null) {
@@ -8,6 +8,21 @@ export async function setDefaultLandingPathByEmail(email: string, path: string |
   for (const row of rows) {
     await saveUserPreferences(row.id, { defaultLandingPath: path });
   }
+}
+
+export async function setSidebarCollapsedByEmail(email: string, collapsed: boolean | null) {
+  const rows = await readUserIdsByEmail(email);
+  for (const row of rows) {
+    await saveUserPreferences(row.id, { sidebarCollapsed: collapsed });
+  }
+}
+
+export async function readSidebarCollapsedByEmail(email: string) {
+  const [row] = await readUserIdsByEmail(email);
+  if (!row) {
+    return null;
+  }
+  return (await readUserPreferences(row.id)).sidebarCollapsed;
 }
 
 async function readUserIdsByEmail(email: string) {

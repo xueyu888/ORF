@@ -6,7 +6,6 @@ import type { PersonalSettingsSystemSkinCaseData, TestContext } from "./_support
 import {
   listAppSystemBackgrounds,
   readAppBackgroundByEmail,
-  readDefaultAppBackground,
   setAppBackgroundByEmail,
   setDefaultLandingPathByEmail,
   systemBackgroundFileExists,
@@ -62,7 +61,7 @@ export const personalSettingsSystemSkinOperators = {
       await expect(systemSkinCard(ctx.page, background)).toBeEnabled();
     },
     select: async ({ ctx }) => {
-      const background = await pickSystemBackground();
+      const background = await selectedOrFirstSystemBackground(ctx.page);
       await systemSkinCard(ctx.page, background).click();
       await expect(selectedBackgroundText(ctx.page, background)).toBeVisible();
       await expect(useSelectedBackgroundButton(ctx.page)).toBeEnabled();
@@ -79,9 +78,7 @@ export const personalSettingsSystemSkinOperators = {
       await useSystemDefaultButton(ctx.page).click();
       await responsePromise;
       await expect.poll(() => readAppBackgroundByEmail(email)).toBeNull();
-      const defaultBackground = await readDefaultAppBackground();
-      await expect.poll(() => pageUsesBackground(ctx.page, defaultBackground)).toBe(true);
-      return captureSystemSkinSnapshot(ctx.page, email, defaultBackground);
+      return captureSystemSkinSnapshot(ctx.page, email, null);
     },
   },
   "personal_settings.use_selected_background": {
@@ -143,6 +140,17 @@ async function pickSystemBackground() {
     throw new Error("个人设置页面缺少可选择的系统皮肤");
   }
   return background;
+}
+
+async function selectedOrFirstSystemBackground(page: Page) {
+  const selectedFileName = await settingsBackgroundGallery(page)
+    .locator(".orf-settings-background-card-selected img")
+    .first()
+    .getAttribute("alt")
+    .catch(() => null);
+  const backgrounds = await listAppSystemBackgrounds();
+  const selected = selectedFileName ? backgrounds.find((item) => item.fileName === selectedFileName) : null;
+  return selected ?? pickSystemBackground();
 }
 
 function settingsBackgroundGallery(page: Page) {

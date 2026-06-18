@@ -68,6 +68,7 @@ export const personalSettingsSavePersistenceOperators = {
       const email = requiredString(params, "email");
       await ctx.page.reload();
       await expect(ctx.page.getByRole("heading", { name: "个人设置", exact: true })).toBeVisible();
+      await waitForExpectedSettings(ctx.page, email, params);
       return captureSettingsSnapshot(ctx.page, email);
     },
   },
@@ -167,6 +168,28 @@ async function captureSettingsSnapshot(page: Page, email: string): Promise<Setti
     sidebarStateValue: requiredSidebarValue(await settingsSelect(page, "侧边栏默认状态").inputValue()),
     toastEnabled: await toastToggle(page).isChecked(),
   };
+}
+
+async function waitForExpectedSettings(page: Page, email: string, params: Record<string, unknown>) {
+  if (typeof params.defaultLandingLabel === "string") {
+    const expected = valueForDefaultLandingLabel(params.defaultLandingLabel);
+    await expect(settingsSelect(page, "默认进入页面")).toHaveValue(expected);
+    await expect.poll(() => readSavedPreferencesByEmail(email).then((value) => value?.defaultLandingPath ?? null)).toBe(expected || null);
+  }
+  if (typeof params.sidebarLabel === "string") {
+    const expected = valueForSidebarLabel(params.sidebarLabel);
+    await expect(settingsSelect(page, "侧边栏默认状态")).toHaveValue(expected);
+    await expect.poll(() => readSavedPreferencesByEmail(email).then((value) => value?.sidebarState)).toBe(expected);
+  }
+  if (typeof params.chatThemeLabel === "string") {
+    const expected = valueForChatThemeLabel(params.chatThemeLabel);
+    await expect(settingsSelect(page, "聊天界面主题")).toHaveValue(expected);
+    await expect.poll(() => readSavedPreferencesByEmail(email).then((value) => value?.chatTheme)).toBe(expected);
+  }
+  if (typeof params.toastEnabled === "boolean") {
+    await expect(toastToggle(page)).toBeChecked({ checked: params.toastEnabled });
+    await expect.poll(() => readSavedPreferencesByEmail(email).then((value) => value?.toastEnabled)).toBe(params.toastEnabled);
+  }
 }
 
 function settingsBlock(page: Page, label: string) {
