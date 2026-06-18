@@ -39,8 +39,7 @@ export type CreateFeedbackOutcome =
   | { status: "notFound" }
   | { status: "invalid" }
   | { status: "invalidOwner" }
-  | { status: "tooLarge" }
-  | { status: "unsupported" };
+  | { status: "tooLarge" };
 export type FeedbackStatusActor = { id: string; name: string; role: "admin" | "member"; scope?: RuntimeScope | null };
 export type FeedbackStatusUpdateResult = { status: "ok" } | { status: "notFound" } | { status: "forbidden" };
 export type FeedbackReference = Pick<Feedback, "id" | "phenomenon">;

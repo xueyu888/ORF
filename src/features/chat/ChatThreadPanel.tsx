@@ -1,8 +1,9 @@
 import { Bell, BellOff } from "lucide-react";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import type { ChatAttachment, ChatMessage, ChatThread, ChatUser, Feedback } from "../../types/orf";
+import type { ChatMessage, ChatThread, ChatUser, Feedback } from "../../types/orf";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessageItem } from "./ChatMessageItem";
+import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import { scrollChatFeedToMessage } from "./chatFeedScroll";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import { chatMessageDeliveryStatus, type ChatSendHandler } from "./chatModels";
@@ -17,7 +18,7 @@ type ChatThreadPanelProps = {
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   focusMessageId: string | null;
   composerFocusSignal?: number;
-  onAttachmentPreview: (attachment: ChatAttachment) => void;
+  onAttachmentPreview: ChatAttachmentPreviewHandler;
   onCancelEdit: () => void;
   onCopyLink: (message: ChatMessage) => void;
   onCopyMessage: (message: ChatMessage) => void;

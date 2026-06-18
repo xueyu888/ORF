@@ -17,6 +17,9 @@ const commentStatusSchema = z.enum(["open", "resolved"]);
 const commentThreadParamsSchema = z.object({ threadId: z.string().min(1) });
 const commentMessageParamsSchema = commentThreadParamsSchema.extend({ messageId: z.string().min(1) });
 const commentAttachmentParamsSchema = z.object({ attachmentId: z.string().min(1) });
+const commentAttachmentContentQuerySchema = z.object({
+  disposition: z.enum(["attachment", "inline"]).optional(),
+});
 const createCommentBodySchema = z.object({
   targetType: commentTargetTypeSchema,
   targetId: z.string().min(1),
@@ -80,7 +83,7 @@ export function registerCommentRoutes(app: FastifyInstance) {
 
     const upload = await readCommentAttachmentUpload(request);
     if (!upload) {
-      return reply.code(400).send({ error: "Image file is required" });
+      return reply.code(400).send({ error: "Attachment file is required" });
     }
 
     const outcome = await uploadCommentAttachment({ ...upload, body: upload.buffer }, user);
@@ -91,13 +94,10 @@ export function registerCommentRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: "Forbidden" });
     }
     if (outcome.status === "tooLarge") {
-      return reply.code(413).send({ error: "Image is too large" });
-    }
-    if (outcome.status === "unsupported") {
-      return reply.code(415).send({ error: "Unsupported image type" });
+      return reply.code(413).send({ error: "Attachment is too large" });
     }
     if (outcome.status === "invalid") {
-      return reply.code(400).send({ error: "Image file is required" });
+      return reply.code(400).send({ error: "Attachment file is required" });
     }
 
     return { ok: true, attachment: outcome.attachment, markdown: outcome.markdown };
@@ -128,7 +128,8 @@ export function registerCommentRoutes(app: FastifyInstance) {
     }
 
     const params = commentAttachmentParamsSchema.parse(request.params);
-    const outcome = await getCommentAttachmentContent(params.attachmentId, user);
+    const query = commentAttachmentContentQuerySchema.parse(request.query);
+    const outcome = await getCommentAttachmentContent(params.attachmentId, user, query);
     if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Comment attachment not found" });
     }
@@ -137,7 +138,9 @@ export function registerCommentRoutes(app: FastifyInstance) {
     }
 
     reply.header("Cache-Control", "private, max-age=60");
+    reply.header("Content-Disposition", contentDispositionHeader(outcome.contentDisposition, outcome.fileName));
     reply.header("Content-Type", outcome.contentType);
+    reply.header("X-Content-Type-Options", "nosniff");
     if (outcome.contentLength !== undefined) {
       reply.header("Content-Length", outcome.contentLength);
     }
@@ -185,4 +188,12 @@ export function registerCommentRoutes(app: FastifyInstance) {
     const params = commentMessageParamsSchema.parse(request.params);
     return sendCommentOutcome(reply, await deleteCommentMessage(params.threadId, params.messageId, user));
   });
+}
+
+function contentDispositionHeader(disposition: "attachment" | "inline", fileName: string) {
+  const fallback = (fileName || "attachment")
+    .replace(/["\\\r\n]/g, "_")
+    .replace(/[^\x20-\x7e]/g, "_")
+    .trim() || "attachment";
+  return `${disposition}; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName || "attachment")}`;
 }

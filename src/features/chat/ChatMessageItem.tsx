@@ -5,11 +5,13 @@ import { createPortal } from "react-dom";
 import { IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser, Feedback } from "../../types/orf";
 import { formatPastedFeedbackLinks } from "../feedback/model/feedbackIssue";
+import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
+import { ChatReactionEmoji } from "./ChatReactionEmoji";
 import { ChatReactionPicker } from "./ChatReactionPicker";
-import { canonicalChatReactionName, displayChatReactionEmoji, isVisibleChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
+import { canonicalChatReactionName, isVisibleChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
 import { ChatDraftEditor } from "./ChatDraftEditor";
 import { chatMessageDeliveryStatus, draftFromStoredBody, serializeDraft, type ChatDraft } from "./chatModels";
 import type { ChatOpenThreadOptions } from "./useChatThreadState";
@@ -25,7 +27,7 @@ type ChatMessageItemProps = {
   focused?: boolean;
   mentionableUsers: ChatUser[];
   message: ChatMessage;
-  onAttachmentPreview: (attachment: ChatAttachment) => void;
+  onAttachmentPreview: ChatAttachmentPreviewHandler;
   onCancelEdit: () => void;
   onCopyLink: (message: ChatMessage) => void;
   onCopyMessage: (message: ChatMessage) => void;
@@ -207,7 +209,7 @@ function AttachmentGrid({
   onAttachmentPreview,
 }: {
   attachments: ChatAttachment[];
-  onAttachmentPreview: (attachment: ChatAttachment) => void;
+  onAttachmentPreview: ChatAttachmentPreviewHandler;
 }) {
   if (attachments.length === 0) return null;
   const singleImage = attachments.length === 1 && Boolean(attachments[0]?.mimeType.startsWith("image/"));
@@ -216,7 +218,7 @@ function AttachmentGrid({
       {attachments.map((attachment) => {
         const isImage = attachment.mimeType.startsWith("image/");
         return isImage ? (
-          <button type="button" className="orf-chat-image-attachment" key={attachment.id} onClick={() => onAttachmentPreview(attachment)}>
+          <button type="button" className="orf-chat-image-attachment" key={attachment.id} onClick={() => onAttachmentPreview(attachment, attachments)}>
             <img
               src={attachment.contentUrl}
               alt={attachment.fileName}
@@ -227,7 +229,7 @@ function AttachmentGrid({
             <span>{attachment.fileName}</span>
           </button>
         ) : (
-          <button type="button" className="orf-chat-file-attachment" key={attachment.id} onClick={() => onAttachmentPreview(attachment)}>
+          <button type="button" className="orf-chat-file-attachment" key={attachment.id} onClick={() => onAttachmentPreview(attachment, attachments)}>
             <FileText className="h-5 w-5" />
             <span>{attachment.fileName}</span>
             <small>{formatFileSize(attachment.fileSize)}</small>
@@ -701,7 +703,9 @@ export function ChatMessageItem({
                     aria-label={summaryLabel}
                     onClick={() => onReaction(message, reaction.emojiName)}
                   >
-                    <span className="orf-chat-reaction-symbol" aria-hidden="true">{displayChatReactionEmoji(reaction.emojiName)}</span>
+                    <span className="orf-chat-reaction-symbol" aria-hidden="true">
+                      <ChatReactionEmoji decorative emojiName={reaction.emojiName} size="reaction" />
+                    </span>
                     <span>{reaction.count}</span>
                   </button>
                 );
@@ -731,7 +735,7 @@ export function ChatMessageItem({
               aria-label={option.label}
               onClick={() => selectReaction(option.emojiName)}
             >
-              {option.symbol}
+              <ChatReactionEmoji decorative emojiName={option.emojiName} size="quick" />
             </button>
           ))}
           <div className="orf-chat-message-action-anchor" ref={emojiAnchorRef}>

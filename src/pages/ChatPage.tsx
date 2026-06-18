@@ -5,6 +5,12 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { AttachmentPreview, ChannelModal, ConversationModal, DeleteMessageDialog } from "../features/chat/ChatDialogs";
 import { ChatHeader } from "../features/chat/ChatHeader";
+import {
+  createChatAttachmentPreviewState,
+  moveChatAttachmentPreviewImage,
+  type ChatAttachmentPreviewHandler,
+  type ChatAttachmentPreviewState,
+} from "../features/chat/chatAttachmentPreview";
 import { matchesChatShortcutKey } from "../features/chat/chatKeyboardShortcuts";
 import { ChatMessageFeed } from "../features/chat/ChatMessageFeed";
 import { ChatRightPanel } from "../features/chat/ChatRightPanel";
@@ -58,7 +64,7 @@ import {
   updateChatMessageRequest,
 } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback } from "../types/orf";
+import type { ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback } from "../types/orf";
 
 const chatFeedPrefetchDelayMs = 250;
 
@@ -134,10 +140,16 @@ export function ChatPage() {
   });
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [markingUnreadChannelsRead, setMarkingUnreadChannelsRead] = useState(false);
-  const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachment | null>(null);
+  const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachmentPreviewState | null>(null);
   const [memberSearchFocusSignal, setMemberSearchFocusSignal] = useState(0);
   const handledBootstrapInvalidationKeyRef = useRef("");
   const openChannelRequestIdRef = useRef(0);
+  const openAttachmentPreview = useCallback<ChatAttachmentPreviewHandler>((attachment, messageAttachments) => {
+    setAttachmentPreview(createChatAttachmentPreviewState(messageAttachments, attachment));
+  }, []);
+  const navigateAttachmentPreview = useCallback((direction: -1 | 1) => {
+    setAttachmentPreview((current) => current ? moveChatAttachmentPreviewImage(current, direction) : current);
+  }, []);
   const mobileViewport = useChatMobileViewport();
   const routeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : null;
   const activeChannel = routeChannel ?? (!mobileViewport && !routeChannelId ? channels[0] ?? null : null);
@@ -993,7 +1005,7 @@ export function ChatPage() {
               loadingOlderMessages={olderMessagesLoading}
               mentionableUsers={activeMentionableUsers}
               messages={messages}
-              onAttachmentPreview={setAttachmentPreview}
+              onAttachmentPreview={openAttachmentPreview}
               onCancelEdit={() => setEditingMessage(null)}
               onClearUnread={() => void clearActiveChannelUnread()}
               onCopyLink={handleCopyMessageLink}
@@ -1119,7 +1131,7 @@ export function ChatPage() {
             reconcileThreadFollow(thread.rootMessage.id, response.thread.following);
             await refreshChatUnreadSummary();
           }}
-          onAttachmentPreview={setAttachmentPreview}
+          onAttachmentPreview={openAttachmentPreview}
           onReaction={handleReaction}
           onRemovePending={handleRemovePendingMessage}
           onRetryPending={handleRetryPendingMessage}
@@ -1161,7 +1173,13 @@ export function ChatPage() {
           submitting={deleteSubmitting}
         />
       )}
-      {attachmentPreview && <AttachmentPreview attachment={attachmentPreview} onClose={() => setAttachmentPreview(null)} />}
+      {attachmentPreview && (
+        <AttachmentPreview
+          onClose={() => setAttachmentPreview(null)}
+          onNavigateImage={navigateAttachmentPreview}
+          preview={attachmentPreview}
+        />
+      )}
     </div>
   );
 }

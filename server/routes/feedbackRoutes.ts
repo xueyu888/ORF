@@ -120,10 +120,7 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       return reply.code(409).send({ error: "Feedback owner must be an active member" });
     }
     if (outcome.status === "tooLarge") {
-      return reply.code(413).send({ error: "Image is too large" });
-    }
-    if (outcome.status === "unsupported") {
-      return reply.code(415).send({ error: "Unsupported image type" });
+      return reply.code(413).send({ error: "Attachment is too large" });
     }
 
     return { feedback: outcome.feedback };

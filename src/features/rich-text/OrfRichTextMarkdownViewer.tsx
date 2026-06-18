@@ -545,8 +545,13 @@ export function OrfRichTextMarkdownViewer({
         }
         if (block.kind === "heading") {
           const Tag = `h${Math.min(compact ? 4 : block.level, 6)}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+          const headingClassName = [
+            `${classNamePrefix}-heading`,
+            `${classNamePrefix}-heading-${block.level}`,
+            compact ? `${classNamePrefix}-heading-compact` : null,
+          ].filter(Boolean).join(" ");
           return (
-            <Tag className={`${classNamePrefix}-heading ${classNamePrefix}-heading-${block.level}`} key={block.key}>
+            <Tag className={headingClassName} key={block.key}>
               {renderInlineFragments(block.text, context, block.key)}
             </Tag>
           );
@@ -564,9 +569,12 @@ export function OrfRichTextMarkdownViewer({
         if (block.kind === "list") {
           const ListTag = block.ordered ? "ol" : "ul";
           return (
-            <ListTag className={`${classNamePrefix}-list`} key={block.key}>
+            <ListTag className={`${classNamePrefix}-list orf-rich-text-markdown-list`} key={block.key}>
               {block.items.map((item, index) => (
-                <li className={item.checked === null ? undefined : `${classNamePrefix}-task-item`} key={`${block.key}:item:${index}`}>
+                <li
+                  className={item.checked === null ? undefined : `${classNamePrefix}-task-item orf-rich-text-markdown-task-item`}
+                  key={`${block.key}:item:${index}`}
+                >
                   {item.checked !== null && <input checked={item.checked} readOnly type="checkbox" />}
                   {renderInlineFragments(item.text, context, `${block.key}:item:${index}`)}
                 </li>

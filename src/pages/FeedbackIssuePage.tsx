@@ -18,7 +18,7 @@ import {
   serializeCommentDraft,
 } from "../features/challenge/comments/CommentPanel";
 import { commentTimeDisplay } from "../features/challenge/comments/commentTime";
-import type { OrfRichTextImageUploadResult } from "../features/rich-text/OrfRichTextEditor";
+import type { OrfRichTextAttachmentUploadResult } from "../features/rich-text/OrfRichTextEditor";
 import { canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
 import {
   feedbackIssueDisplayId,
@@ -340,7 +340,7 @@ function OriginalFeedbackCard({
   onReply: (message: CommentMessage) => void;
   onStartEdit: (entry: FeedbackCommentEntry) => void;
   onSubmitEdit: (event: FormEvent, messageId: string) => void;
-  onUploadAttachment: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
+  onUploadAttachment: (file: File) => Promise<OrfRichTextAttachmentUploadResult | null>;
 }) {
   const message = entry?.message ?? null;
   const createdAt = commentTimeDisplay(message?.createdAt ?? feedback.createdAt);

@@ -1,7 +1,8 @@
 import { Loader2, MessageSquare, X } from "lucide-react";
 import { IconButton } from "../../components/ui";
-import type { ChatAttachment, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback } from "../../types/orf";
+import type { ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback } from "../../types/orf";
 import { ChatChannelInfoPanel } from "./ChatChannelInfoPanel";
+import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import { chatChannelInfoLabel } from "./chatChannelPresentation";
 import { ChatCollectionPanel } from "./ChatCollectionPanel";
 import type { ChatSendHandler } from "./chatModels";
@@ -24,7 +25,7 @@ type ChatRightPanelProps = {
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   memberSearchFocusSignal?: number;
   onAddMembers: (userIds: string[]) => Promise<void>;
-  onAttachmentPreview: (attachment: ChatAttachment) => void;
+  onAttachmentPreview: ChatAttachmentPreviewHandler;
   onCancelEdit: () => void;
   onClose: () => void;
   onCopyLink: (message: ChatMessage) => void;

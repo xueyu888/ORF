@@ -10,6 +10,8 @@ import {
   orfRichTextMentionLabel,
   type OrfMentionReference,
 } from "../rich-text/orfRichTextMarkdown";
+import { ChatReactionEmoji } from "./ChatReactionEmoji";
+import { tokenizeChatReactionEmojiText } from "./chatReactions";
 
 type ChatMarkdownProps = {
   body: string;
@@ -44,6 +46,14 @@ function renderMarkdownLink(href: string, children: ReactNode, key: string) {
   );
 }
 
+function renderEmojiTextFragments(text: string, keyPrefix: string) {
+  return tokenizeChatReactionEmojiText(text).map((token, index) => (
+    token.kind === "emoji"
+      ? <ChatReactionEmoji emojiName={token.emojiName} key={`${keyPrefix}:emoji:${index}`} size="inline" />
+      : <span key={`${keyPrefix}:text:${index}`}>{token.text}</span>
+  ));
+}
+
 function renderSystemMentionFragments(text: string, keyPrefix: string) {
   const nodes: ReactNode[] = [];
   const pattern = /(^|[^A-Za-z0-9_@.])@(all|channel|here|所有人)(?=$|[^A-Za-z0-9_])/gi;
@@ -54,7 +64,7 @@ function renderSystemMentionFragments(text: string, keyPrefix: string) {
     const prefix = match[1] ?? "";
     const mention = match[2] ?? "";
     const mentionStart = match.index + prefix.length;
-    if (mentionStart > index) nodes.push(<span key={`${keyPrefix}:text:${index}`}>{text.slice(index, mentionStart)}</span>);
+    if (mentionStart > index) nodes.push(...renderEmojiTextFragments(text.slice(index, mentionStart), `${keyPrefix}:text:${index}`));
     nodes.push(
       <span className="orf-chat-mention-token orf-chat-system-mention-token" key={`${keyPrefix}:system-mention:${mentionStart}`}>
         @{mention}
@@ -63,7 +73,7 @@ function renderSystemMentionFragments(text: string, keyPrefix: string) {
     index = mentionStart + mention.length + 1;
   }
 
-  if (index < text.length) nodes.push(<span key={`${keyPrefix}:text:${index}`}>{text.slice(index)}</span>);
+  if (index < text.length) nodes.push(...renderEmojiTextFragments(text.slice(index), `${keyPrefix}:text:${index}`));
   return nodes;
 }
 

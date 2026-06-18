@@ -66,7 +66,7 @@ export function useOrfProviderCommentActions({
           const response = await uploadCommentAttachmentRequest(input);
           return { attachment: response.attachment, markdown: response.markdown };
         } catch (error) {
-          notify(commentMutationFailureMessage(error, "图片上传失败"));
+          notify(commentMutationFailureMessage(error, "附件上传失败"));
           return null;
         }
       },

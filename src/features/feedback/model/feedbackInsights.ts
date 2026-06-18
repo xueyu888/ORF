@@ -1,4 +1,5 @@
 import type { Feedback } from "../../../types/orf";
+import { feedbackCauseGroupsForCategories } from "./feedbackCategories";
 
 const highImpactLevels = new Set<Feedback["impact"]>(["High", "Critical"]);
 
@@ -21,12 +22,12 @@ export function summarizeFeedbackInsights(feedback: readonly Feedback[]): Feedba
       highImpactCount += 1;
     }
 
-    const causes = uniqueCleanCauses(item.causeCategories);
-    if (causes.length === 0) {
+    const rawCauses = uniqueCleanCauses(item.causeCategories);
+    if (rawCauses.length === 0) {
       uncategorizedCount += 1;
     }
 
-    for (const cause of causes) {
+    for (const cause of feedbackCauseGroupsForCategories(rawCauses)) {
       causeCounts.set(cause, (causeCounts.get(cause) ?? 0) + 1);
     }
 

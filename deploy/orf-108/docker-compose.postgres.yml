@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${ORF_POSTGRES_DB:-orf}
+      POSTGRES_USER: ${ORF_POSTGRES_USER:-orf_project_user}
+      POSTGRES_PASSWORD: ${ORF_POSTGRES_PASSWORD:?ORF_POSTGRES_PASSWORD is required}
+    ports:
+      - "127.0.0.1:${ORF_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ${ORF_POSTGRES_DATA_DIR:-/mnt/data1/orf/postgres}:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
