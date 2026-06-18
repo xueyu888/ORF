@@ -8,8 +8,9 @@ import { formatPastedFeedbackLinks } from "../feedback/model/feedbackIssue";
 import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
+import { ChatReactionEmoji } from "./ChatReactionEmoji";
 import { ChatReactionPicker } from "./ChatReactionPicker";
-import { canonicalChatReactionName, displayChatReactionEmoji, isVisibleChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
+import { canonicalChatReactionName, isVisibleChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
 import { ChatDraftEditor } from "./ChatDraftEditor";
 import { chatMessageDeliveryStatus, draftFromStoredBody, serializeDraft, type ChatDraft } from "./chatModels";
 import type { ChatOpenThreadOptions } from "./useChatThreadState";
@@ -701,7 +702,9 @@ export function ChatMessageItem({
                     aria-label={summaryLabel}
                     onClick={() => onReaction(message, reaction.emojiName)}
                   >
-                    <span className="orf-chat-reaction-symbol" aria-hidden="true">{displayChatReactionEmoji(reaction.emojiName)}</span>
+                    <span className="orf-chat-reaction-symbol" aria-hidden="true">
+                      <ChatReactionEmoji decorative emojiName={reaction.emojiName} size="reaction" />
+                    </span>
                     <span>{reaction.count}</span>
                   </button>
                 );
@@ -731,7 +734,7 @@ export function ChatMessageItem({
               aria-label={option.label}
               onClick={() => selectReaction(option.emojiName)}
             >
-              {option.symbol}
+              <ChatReactionEmoji decorative emojiName={option.emojiName} size="quick" />
             </button>
           ))}
           <div className="orf-chat-message-action-anchor" ref={emojiAnchorRef}>

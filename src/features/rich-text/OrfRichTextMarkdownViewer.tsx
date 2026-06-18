@@ -545,8 +545,13 @@ export function OrfRichTextMarkdownViewer({
         }
         if (block.kind === "heading") {
           const Tag = `h${Math.min(compact ? 4 : block.level, 6)}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+          const headingClassName = [
+            `${classNamePrefix}-heading`,
+            `${classNamePrefix}-heading-${block.level}`,
+            compact ? `${classNamePrefix}-heading-compact` : null,
+          ].filter(Boolean).join(" ");
           return (
-            <Tag className={`${classNamePrefix}-heading ${classNamePrefix}-heading-${block.level}`} key={block.key}>
+            <Tag className={headingClassName} key={block.key}>
               {renderInlineFragments(block.text, context, block.key)}
             </Tag>
           );

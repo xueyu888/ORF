@@ -14633,11 +14633,12 @@ a.orf-row-loot-action,
   border-radius: 4px;
   background: var(--orf-bg-muted);
   color: var(--orf-text-primary);
-  padding: 1px 5px;
+  padding: 0.08em 0.38em;
   font-family:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     monospace;
   font-size: 0.92em;
+  line-height: 1.35;
 }
 
 .orf-chat-message-text strong,
@@ -14666,25 +14667,34 @@ a.orf-row-loot-action,
 }
 
 .orf-chat-markdown-heading {
-  margin: 6px 0 4px;
+  margin: 8px 0 5px;
   color: var(--orf-text-primary);
   font-weight: 850;
-  line-height: 1.25;
+  line-height: 1.18;
 }
 
 .orf-chat-markdown-heading-1 {
-  font-size: 18px;
+  font-size: 30px;
 }
 
 .orf-chat-markdown-heading-2 {
-  font-size: 16px;
+  font-size: 26px;
 }
 
-.orf-chat-markdown-heading-3,
+.orf-chat-markdown-heading-3 {
+  font-size: 22px;
+}
+
 .orf-chat-markdown-heading-4,
 .orf-chat-markdown-heading-5,
 .orf-chat-markdown-heading-6 {
-  font-size: 14px;
+  font-size: 18px;
+}
+
+.orf-chat-markdown-heading-compact {
+  margin: 4px 0 2px;
+  font-size: inherit;
+  line-height: 1.35;
 }
 
 .orf-chat-markdown-divider {
@@ -14816,8 +14826,10 @@ a.orf-row-loot-action,
   border-radius: 999px;
   background: var(--orf-accent-soft);
   color: var(--orf-accent-text);
-  padding: 0 5px;
+  line-height: 1.32;
+  padding: 0.05em 0.36em;
   font-weight: 800;
+  vertical-align: 0.02em;
 }
 
 .orf-chat-message-deleted {
@@ -14892,15 +14904,14 @@ a.orf-row-loot-action,
 
 .orf-chat-quick-reaction {
   display: inline-flex;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   align-items: center;
   justify-content: center;
   border: 0;
   border-radius: var(--orf-radius-control);
   background: transparent;
   padding: 0;
-  font-size: 17px;
   line-height: 1;
 }
 
@@ -15096,15 +15107,16 @@ button.orf-chat-image-attachment {
 .orf-chat-thread-summary,
 .orf-chat-follow-button {
   display: inline-flex;
-  min-height: 26px;
+  min-height: 30px;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   border: 1px solid var(--orf-border);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
   color: var(--orf-text-secondary);
-  padding: 3px 8px;
+  padding: 3px 9px 3px 7px;
   font-size: 12px;
+  font-weight: 800;
 }
 
 .orf-chat-reaction-active {
@@ -15114,8 +15126,71 @@ button.orf-chat-image-attachment {
 }
 
 .orf-chat-reaction-symbol {
-  min-width: 16px;
+  display: inline-flex;
+  min-width: 20px;
+  align-items: center;
+  justify-content: center;
   text-align: center;
+}
+
+.orf-chat-emoji-symbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-family:
+    "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
+    "Android Emoji", "EmojiSymbols", sans-serif;
+  font-variant-emoji: emoji;
+  line-height: 1;
+  text-rendering: optimizeLegibility;
+  vertical-align: -0.2em;
+}
+
+.orf-chat-emoji-symbol-inline {
+  width: 1.08em;
+  min-width: 1.08em;
+  height: 1.08em;
+  font-size: 1em;
+}
+
+.orf-chat-markdown-paragraph .orf-chat-emoji-symbol-inline,
+.orf-chat-markdown-list .orf-chat-emoji-symbol-inline,
+.orf-chat-markdown-quote .orf-chat-emoji-symbol-inline,
+.orf-chat-markdown-table .orf-chat-emoji-symbol-inline {
+  width: 21px;
+  min-width: 21px;
+  height: 21px;
+  font-size: 21px;
+}
+
+.orf-chat-markdown-heading .orf-chat-emoji-symbol-inline {
+  width: 1.05em;
+  min-width: 1.05em;
+  height: 1.05em;
+  font-size: 1em;
+  vertical-align: -0.14em;
+}
+
+.orf-chat-emoji-symbol-reaction {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  font-size: 20px;
+}
+
+.orf-chat-emoji-symbol-quick {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  font-size: 22px;
+}
+
+.orf-chat-emoji-symbol-picker {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  font-size: 24px;
 }
 
 .orf-chat-emoji-anchor,
@@ -15155,7 +15230,7 @@ button.orf-chat-image-attachment {
   position: fixed;
   z-index: 120;
   display: flex;
-  width: min(280px, 72vw);
+  width: min(304px, 78vw);
   max-height: calc(100dvh - var(--orf-topbar-height) - 16px);
   flex-direction: column;
   gap: 8px;
@@ -15190,22 +15265,21 @@ button.orf-chat-image-attachment {
 
 .orf-chat-emoji-grid {
   display: grid;
-  max-height: 184px;
-  grid-template-columns: repeat(6, 34px);
+  max-height: 228px;
+  grid-template-columns: repeat(6, 38px);
   gap: 4px;
   overflow-y: auto;
 }
 
 .orf-chat-emoji-option {
   display: inline-flex;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   align-items: center;
   justify-content: center;
   border: 0;
   border-radius: 7px;
   background: transparent;
-  font-size: 18px;
 }
 
 .orf-chat-emoji-option:hover,
@@ -17618,21 +17692,37 @@ html[data-orf-display-ready="true"] .orf-rich-text-editor-content {
 }
 
 html[data-orf-display-ready="true"] .orf-comment-markdown-heading-1,
-html[data-orf-display-ready="true"] .orf-comment-markdown-heading-2,
-html[data-orf-display-ready="true"] .orf-chat-markdown-heading-1 {
+html[data-orf-display-ready="true"] .orf-comment-markdown-heading-2 {
   font-size: calc(var(--orf-content-font-size) * 1.22) !important;
 }
 
 html[data-orf-display-ready="true"] .orf-comment-markdown-heading-3,
 html[data-orf-display-ready="true"] .orf-comment-markdown-heading-4,
 html[data-orf-display-ready="true"] .orf-comment-markdown-heading-5,
-html[data-orf-display-ready="true"] .orf-comment-markdown-heading-6,
-html[data-orf-display-ready="true"] .orf-chat-markdown-heading-2,
-html[data-orf-display-ready="true"] .orf-chat-markdown-heading-3,
+html[data-orf-display-ready="true"] .orf-comment-markdown-heading-6 {
+  font-size: calc(var(--orf-content-font-size) * 1.08) !important;
+}
+
+html[data-orf-display-ready="true"] .orf-chat-markdown-heading-1 {
+  font-size: calc(var(--orf-content-font-size) * 2.05) !important;
+}
+
+html[data-orf-display-ready="true"] .orf-chat-markdown-heading-2 {
+  font-size: calc(var(--orf-content-font-size) * 1.78) !important;
+}
+
+html[data-orf-display-ready="true"] .orf-chat-markdown-heading-3 {
+  font-size: calc(var(--orf-content-font-size) * 1.5) !important;
+}
+
 html[data-orf-display-ready="true"] .orf-chat-markdown-heading-4,
 html[data-orf-display-ready="true"] .orf-chat-markdown-heading-5,
 html[data-orf-display-ready="true"] .orf-chat-markdown-heading-6 {
-  font-size: calc(var(--orf-content-font-size) * 1.08) !important;
+  font-size: calc(var(--orf-content-font-size) * 1.22) !important;
+}
+
+html[data-orf-display-ready="true"] .orf-chat-markdown-heading-compact {
+  font-size: inherit !important;
 }
 
 html[data-orf-display-density="compact"] .orf-page,
