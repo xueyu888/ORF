@@ -1,6 +1,7 @@
 import { CheckCheck, ChevronDown, Loader2, Reply } from "lucide-react";
 import type { RefObject } from "react";
-import type { ChatAttachment, ChatMessage, ChatUser, Feedback } from "../../types/orf";
+import type { ChatMessage, ChatUser, Feedback } from "../../types/orf";
+import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import { formatDay } from "./chatFormat";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import { resolveUnreadJumpTarget, type ChatUnreadJumpTarget, type UnreadAnchor } from "./chatModels";
@@ -20,7 +21,7 @@ type ChatMessageFeedProps = {
   loadingOlderMessages: boolean;
   mentionableUsers: ChatUser[];
   messages: ChatMessage[];
-  onAttachmentPreview: (attachment: ChatAttachment) => void;
+  onAttachmentPreview: ChatAttachmentPreviewHandler;
   onCancelEdit: () => void;
   onClearUnread: () => void;
   onCopyLink: (message: ChatMessage) => void;

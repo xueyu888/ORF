@@ -12817,6 +12817,7 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-image-preview-dialog {
+  position: relative;
   display: grid;
   width: 100vw;
   height: 100dvh;
@@ -12889,6 +12890,7 @@ body[data-dragging-floating="true"] {
   opacity: 0.44;
 }
 
+.orf-image-preview-counter,
 .orf-image-preview-zoom-value {
   display: inline-flex;
   min-width: 52px;
@@ -12899,6 +12901,54 @@ body[data-dragging-floating="true"] {
   font-size: 12px;
   font-weight: 850;
   font-variant-numeric: tabular-nums;
+}
+
+.orf-image-preview-counter {
+  min-width: 48px;
+  color: #e2e8f0;
+}
+
+.orf-image-preview-side-navigation {
+  position: absolute;
+  z-index: 4;
+  inset: 56px 0 0;
+  pointer-events: none;
+}
+
+.orf-image-preview-side-button {
+  position: absolute;
+  top: 50%;
+  display: inline-flex;
+  width: 48px;
+  height: 64px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(226, 232, 240, 0.16);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.58);
+  color: #f8fafc;
+  pointer-events: auto;
+  transform: translateY(-50%);
+}
+
+.orf-image-preview-side-button:hover,
+.orf-image-preview-side-button:focus-visible {
+  border-color: rgba(103, 199, 215, 0.48);
+  background: rgba(15, 23, 42, 0.82);
+  outline: 0;
+}
+
+.orf-image-preview-side-button:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.orf-image-preview-side-button-previous {
+  left: max(16px, env(safe-area-inset-left));
+}
+
+.orf-image-preview-side-button-next {
+  right: max(16px, env(safe-area-inset-right));
 }
 
 .orf-image-preview-viewport {
@@ -12943,6 +12993,10 @@ body[data-dragging-floating="true"] {
   }
 
   .orf-image-preview-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .orf-image-preview-side-navigation {
     display: none;
   }
 

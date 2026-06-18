@@ -1,4 +1,4 @@
-import { Check, Copy, Download, RotateCcw, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Copy, Download, RotateCcw, X, ZoomIn, ZoomOut } from "lucide-react";
 import { type CSSProperties, type PointerEvent, type WheelEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -14,10 +14,36 @@ export type ImagePreview = {
   width?: number | null;
 };
 
-export function ImagePreviewDialog({ onClose, preview }: { onClose: () => void; preview: ImagePreview }) {
+export type ImagePreviewNavigation = {
+  canGoNext: boolean;
+  canGoPrevious: boolean;
+  counterLabel: string;
+  onGoNext: () => void;
+  onGoPrevious: () => void;
+};
+
+type ImagePreviewSwipe = {
+  pointerId: number;
+  x: number;
+  y: number;
+};
+
+const imagePreviewSwipeMinDistancePx = 48;
+const imagePreviewSwipeDominance = 1.35;
+
+export function ImagePreviewDialog({
+  navigation,
+  onClose,
+  preview,
+}: {
+  navigation?: ImagePreviewNavigation;
+  onClose: () => void;
+  preview: ImagePreview;
+}) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const imageViewportRef = useRef<HTMLDivElement | null>(null);
   const imageDragRef = useRef<{ pointerId: number; scrollLeft: number; scrollTop: number; x: number; y: number } | null>(null);
+  const imageSwipeRef = useRef<ImagePreviewSwipe | null>(null);
   const copyResetTimerRef = useRef<number | null>(null);
   const [zoom, setZoom] = useState(1);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copying" | "copied" | "failed">("idle");
@@ -28,6 +54,7 @@ export function ImagePreviewDialog({ onClose, preview }: { onClose: () => void; 
   const copySourceUrl = preview.copySourceUrl ?? null;
   const downloadUrl = preview.downloadUrl ?? null;
   const downloadFileName = preview.downloadFileName ?? preview.label;
+  const canNavigateImages = Boolean(navigation);
   const previewIdentity = [
     preview.alt,
     preview.copySourceUrl ?? "",
@@ -39,6 +66,15 @@ export function ImagePreviewDialog({ onClose, preview }: { onClose: () => void; 
     preview.src,
     preview.width ?? "",
   ].join("\n");
+
+  const goToPrevious = () => {
+    if (!navigation?.canGoPrevious) return;
+    navigation.onGoPrevious();
+  };
+  const goToNext = () => {
+    if (!navigation?.canGoNext) return;
+    navigation.onGoNext();
+  };
 
   const setZoomLevel = (update: number | ((current: number) => number), anchor?: { clientX: number; clientY: number }) => {
     setZoom((current) => {
@@ -79,6 +115,15 @@ export function ImagePreviewDialog({ onClose, preview }: { onClose: () => void; 
     if (event.button !== 0) return;
     const viewport = imageViewportRef.current;
     if (!viewport) return;
+    if (canNavigateImages && zoom === 1 && event.pointerType !== "mouse") {
+      imageSwipeRef.current = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+      };
+      viewport.setPointerCapture(event.pointerId);
+      return;
+    }
     imageDragRef.current = {
       pointerId: event.pointerId,
       scrollLeft: viewport.scrollLeft,
@@ -90,6 +135,16 @@ export function ImagePreviewDialog({ onClose, preview }: { onClose: () => void; 
     setDragging(true);
   };
   const moveImageDrag = (event: PointerEvent<HTMLDivElement>) => {
+    const swipe = imageSwipeRef.current;
+    if (swipe?.pointerId === event.pointerId) {
+      const deltaX = event.clientX - swipe.x;
+      const deltaY = event.clientY - swipe.y;
+      if (Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY)) {
+        event.preventDefault();
+      }
+      return;
+    }
+
     const drag = imageDragRef.current;
     const viewport = imageViewportRef.current;
     if (!drag || !viewport || drag.pointerId !== event.pointerId) return;
@@ -98,8 +153,32 @@ export function ImagePreviewDialog({ onClose, preview }: { onClose: () => void; 
     viewport.scrollTop = drag.scrollTop - (event.clientY - drag.y);
   };
   const stopImageDrag = (event: PointerEvent<HTMLDivElement>) => {
-    const drag = imageDragRef.current;
+    const swipe = imageSwipeRef.current;
     const viewport = imageViewportRef.current;
+    if (swipe?.pointerId === event.pointerId) {
+      imageSwipeRef.current = null;
+      if (viewport?.hasPointerCapture(event.pointerId)) {
+        viewport.releasePointerCapture(event.pointerId);
+      }
+      const deltaX = event.clientX - swipe.x;
+      const deltaY = event.clientY - swipe.y;
+      const isSwipe = (
+        event.type !== "pointercancel" &&
+        event.type !== "pointerleave" &&
+        Math.abs(deltaX) >= imagePreviewSwipeMinDistancePx &&
+        Math.abs(deltaX) > Math.abs(deltaY) * imagePreviewSwipeDominance
+      );
+      if (isSwipe) {
+        if (deltaX > 0) {
+          goToPrevious();
+        } else {
+          goToNext();
+        }
+      }
+      return;
+    }
+
+    const drag = imageDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     imageDragRef.current = null;
     if (viewport?.hasPointerCapture(event.pointerId)) {
@@ -123,15 +202,27 @@ export function ImagePreviewDialog({ onClose, preview }: { onClose: () => void; 
   };
 
   useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
+    const handlePreviewKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        if (navigation?.canGoPrevious) {
+          event.preventDefault();
+          navigation.onGoPrevious();
+        }
+        return;
+      }
+      if (event.key === "ArrowRight" && navigation?.canGoNext) {
+        event.preventDefault();
+        navigation.onGoNext();
       }
     };
 
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
+    window.addEventListener("keydown", handlePreviewKeyDown);
+    return () => window.removeEventListener("keydown", handlePreviewKeyDown);
+  }, [navigation, onClose]);
 
   useEffect(() => {
     dialogRef.current?.focus();
@@ -146,6 +237,8 @@ export function ImagePreviewDialog({ onClose, preview }: { onClose: () => void; 
     setZoom(1);
     setCopyStatus("idle");
     setDragging(false);
+    imageDragRef.current = null;
+    imageSwipeRef.current = null;
     setNaturalSize(imagePreviewNaturalSize(preview));
     setFitSize(null);
     if (copyResetTimerRef.current !== null) {
@@ -215,6 +308,17 @@ export function ImagePreviewDialog({ onClose, preview }: { onClose: () => void; 
         <header className="orf-image-preview-toolbar">
           <span>{preview.label}</span>
           <div className="orf-image-preview-actions" aria-label="图片查看工具">
+            {navigation && (
+              <>
+                <button type="button" onClick={goToPrevious} disabled={!navigation.canGoPrevious} title="上一张图片" aria-label="上一张图片">
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="orf-image-preview-counter">{navigation.counterLabel}</span>
+                <button type="button" onClick={goToNext} disabled={!navigation.canGoNext} title="下一张图片" aria-label="下一张图片">
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </>
+            )}
             <button type="button" onClick={zoomOut} disabled={zoom <= 0.25} title="缩小图片" aria-label="缩小图片">
               <ZoomOut className="h-4 w-4" />
             </button>
@@ -240,6 +344,30 @@ export function ImagePreviewDialog({ onClose, preview }: { onClose: () => void; 
             </button>
           </div>
         </header>
+        {navigation && (
+          <div className="orf-image-preview-side-navigation" aria-label="图片翻页">
+            <button
+              type="button"
+              className="orf-image-preview-side-button orf-image-preview-side-button-previous"
+              onClick={goToPrevious}
+              disabled={!navigation.canGoPrevious}
+              title="上一张图片"
+              aria-label="上一张图片"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+            <button
+              type="button"
+              className="orf-image-preview-side-button orf-image-preview-side-button-next"
+              onClick={goToNext}
+              disabled={!navigation.canGoNext}
+              title="下一张图片"
+              aria-label="下一张图片"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          </div>
+        )}
         <div
           className={["orf-image-preview-viewport", dragging ? "orf-image-preview-viewport-dragging" : ""].filter(Boolean).join(" ")}
           ref={imageViewportRef}
