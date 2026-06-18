@@ -3,7 +3,6 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { CommentPanel, type CommentReplyInput } from "./comments/CommentPanel";
 import { ChallengeToolbar } from "./components/ChallengeToolbar";
 import { ChallengeTree } from "./components/ChallengeTree";
-import { PendingChallengeApplicationsPanel } from "./components/PendingChallengeApplicationsPanel";
 import { TeamDashboard } from "./components/TeamDashboard";
 import { canShowFrontend } from "../../config/frontendVisibility";
 import { hasPermission } from "../../config/permissions";
@@ -303,10 +302,7 @@ export function ChallengePlanPage() {
   const temporaryChildRow = childCreationTemporaryRow(childCreationSession);
   const childOverlay = childCreationSubmittedOverlay(childCreationSession);
   const challengeState = useMemo<ChallengeReadModelState>(
-    () => ({
-      ...applyTaskCompletionOverlays(applyTitleEditOverlays(applyChildCreationOverlay(baseChallengeState, childOverlay), titleEditOverlays), completionOverlays),
-      pendingChallengeApplications: baseChallengeState.pendingChallengeApplications,
-    }),
+    () => applyTaskCompletionOverlays(applyTitleEditOverlays(applyChildCreationOverlay(baseChallengeState, childOverlay), titleEditOverlays), completionOverlays),
     [baseChallengeState, childOverlay, completionOverlays, titleEditOverlays],
   );
   const clearChildCreation = () => setChildCreationSession(clearChildCreationSession);
@@ -1216,7 +1212,6 @@ export function ChallengePlanPage() {
       }}
     >
       {showAll && <TeamDashboard groups={filteredGroups} />}
-      {!showAll && <PendingChallengeApplicationsPanel applications={challengeState.pendingChallengeApplications} />}
       <ChallengeToolbar
         canShowAll={canShowAllChallenges}
         canManageProjects={currentUser?.role === "admin"}

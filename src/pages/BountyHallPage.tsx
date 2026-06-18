@@ -14,6 +14,7 @@ import {
   buildHallItems,
   compareByUrgency,
   compareHallItems,
+  isCurrentUserApplicationBounty,
   isStartedBounty,
   searchableBountyText,
 } from "../features/bounty-hall/model/bountyHallItems";
@@ -89,6 +90,7 @@ export function BountyHallPage() {
     [bountyData],
   );
 
+  const currentUserId = currentUser?.id ?? "";
   const publicBounties = bountyData?.publicItems ?? [];
   const availableBounties = bountyData?.availableItems ?? [];
   const objectiveOptions = bountyData?.objectiveOptions ?? [];
@@ -102,7 +104,18 @@ export function BountyHallPage() {
   }, [hallItems, objectiveOptions]);
   const recruitingHallItems = useMemo(() => hallItems.filter((item) => !isStartedBounty(item)), [hallItems]);
   const startedHallItems = useMemo(() => hallItems.filter(isStartedBounty), [hallItems]);
-  const tabbedHallItems = activeTab === "all" ? hallItems : activeTab === "started" ? startedHallItems : recruitingHallItems;
+  const myApplicationHallItems = useMemo(
+    () => hallItems.filter((item) => isCurrentUserApplicationBounty(item, currentUserId)),
+    [currentUserId, hallItems],
+  );
+  const tabbedHallItems =
+    activeTab === "all"
+      ? hallItems
+      : activeTab === "mine"
+        ? myApplicationHallItems
+        : activeTab === "started"
+          ? startedHallItems
+          : recruitingHallItems;
 
   const filteredHallItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -126,10 +139,12 @@ export function BountyHallPage() {
   useEffect(() => {
     if (!linkedBountyObjectiveId) return;
     const linkedItem = hallItems.find((item) => item.objective.id === linkedBountyObjectiveId);
-    if (linkedItem && isStartedBounty(linkedItem)) {
+    if (linkedItem && isCurrentUserApplicationBounty(linkedItem, currentUserId)) {
+      setActiveTab("mine");
+    } else if (linkedItem && isStartedBounty(linkedItem)) {
       setActiveTab("started");
     }
-  }, [hallItems, linkedBountyObjectiveId]);
+  }, [currentUserId, hallItems, linkedBountyObjectiveId]);
 
   useEffect(() => {
     if (!linkedBountyObjectiveId) return undefined;
@@ -166,6 +181,7 @@ export function BountyHallPage() {
     const ok = await applyForBounty(item.objective.id, reason);
     setProcessingBountyId(null);
     if (ok) {
+      setActiveTab("mine");
       await loadBountyData();
       setConfirmTarget(null);
     }
@@ -212,6 +228,7 @@ export function BountyHallPage() {
           activeTab={activeTab}
           counts={{
             all: hallItems.length,
+            mine: myApplicationHallItems.length,
             recruiting: recruitingHallItems.length,
             started: startedHallItems.length,
           }}
@@ -232,8 +249,9 @@ export function BountyHallPage() {
         {filteredHallItems.length > 0 ? (
           <BountyObjectiveList
             activeObjectiveId={linkedBountyObjectiveId}
-            currentUserId={currentUser?.id ?? ""}
+            currentUserId={currentUserId}
             currentUserName={currentUser?.name ?? ""}
+            applicationView={activeTab === "mine"}
             items={filteredHallItems}
             now={now}
             onOpenChallengeWork={openChallengeTarget}

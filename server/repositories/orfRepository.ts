@@ -410,6 +410,7 @@ async function notifyTeamOfObjectivePublication(input: {
 async function notifyMemberOfChallengeApplicationApproval(input: {
   actorUserId: string;
   applicant: string;
+  applicantUserId?: string | null;
   objectiveId: string;
   objectiveTitle: string;
   teamId: string;
@@ -421,13 +422,51 @@ async function notifyMemberOfChallengeApplicationApproval(input: {
     body: `你申请挑战「${input.objectiveTitle}」已通过，头像已挂到悬赏大厅目标上。`,
     kind: "challenge.application.approved",
     metadata: { applicant: input.applicant, objectiveTitle: input.objectiveTitle },
-    recipientUserIds: await getActiveMemberNotificationRecipientsByNames(input.teamId, [input.applicant]),
+    recipientUserIds: await challengeApplicationRecipientUserIds(input),
     targetHref: challengeObjectiveHref("/bounties", input.objectiveId),
     targetId: input.objectiveId,
     targetType: "objective",
     teamId: input.teamId,
     title: "挑战申请已通过",
   });
+}
+
+async function notifyMemberOfChallengeApplicationRejection(input: {
+  actorUserId: string;
+  applicant: string;
+  applicantUserId?: string | null;
+  objectiveId: string;
+  objectiveTitle: string;
+  teamId: string;
+}) {
+  const actorName = await getUserNameById(input.actorUserId);
+  await createNotifications({
+    actorName: actorName || "指挥官",
+    actorUserId: input.actorUserId,
+    body: `你申请挑战「${input.objectiveTitle}」未通过。`,
+    kind: "challenge.application.rejected",
+    metadata: { applicant: input.applicant, objectiveTitle: input.objectiveTitle },
+    recipientUserIds: await challengeApplicationRecipientUserIds(input),
+    targetHref: challengeObjectiveHref("/bounties", input.objectiveId),
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "挑战申请未通过",
+  });
+}
+
+async function challengeApplicationRecipientUserIds(input: {
+  applicant: string;
+  applicantUserId?: string | null;
+  teamId: string;
+}) {
+  const applicantUserId = input.applicantUserId?.trim();
+  if (applicantUserId) {
+    const recipients = await getActiveMemberNotificationRecipientsByIds(input.teamId, [applicantUserId]);
+    if (recipients.length > 0) return recipients;
+  }
+
+  return getActiveMemberNotificationRecipientsByNames(input.teamId, [input.applicant]);
 }
 
 async function notifyMembersOfRecruitment(input: {
@@ -1271,6 +1310,7 @@ export async function approveObjectiveChallengeApplication(
       notification: {
         actorUserId: actorId,
         applicant: applicant.name,
+        applicantUserId: applicant.id,
         objectiveId,
         objectiveTitle: objective.title,
         teamId: objective.teamId,
@@ -1299,9 +1339,11 @@ export async function rejectObjectiveChallengeApplication(
     if (!objective) return { status: "notFound" as const };
     if (objectiveClosedForChallengeEntry(objective) || !canReviewObjectiveChallengeApplications(objective)) return { status: "invalid" as const };
     const applications = objective.challengeApplications ?? [];
-    if (!applications.some((item) => item.id === applicationId && item.status === "pending")) return { status: "notFound" as const };
+    const application = applications.find((item) => item.id === applicationId && item.status === "pending");
+    if (!application) return { status: "notFound" as const };
+    const decidedAt = nowIso();
     const nextApplications = applications.map((item) =>
-      item.id === applicationId ? { ...item, status: "declined" as const, decidedAt: nowIso(), decidedBy: actorId } : item,
+      item.id === applicationId ? { ...item, status: "declined" as const, decidedAt, decidedBy: actorId } : item,
     );
     const hasPending = nextApplications.some((item) => item.status === "pending");
     const assignedChallengerUserIds = await assignedChallengerUserIdsForRow(tx, objective.teamId, objective.assignedChallengerUserIds ?? [], objective.assignedChallengers ?? []);
@@ -1319,10 +1361,22 @@ export async function rejectObjectiveChallengeApplication(
         updatedBy: actorId,
       })
       .where(eq(objectives.id, objectiveId));
-    return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
+    return {
+      status: "ok" as const,
+      scope: runtimeScope(objective.teamId),
+      notification: {
+        actorUserId: actorId,
+        applicant: application.applicant,
+        applicantUserId: application.applicantUserId,
+        objectiveId,
+        objectiveTitle: objective.title,
+        teamId: objective.teamId,
+      },
+    };
   });
 
   if (rejectedResult.status === "ok") {
+    await notifyMemberOfChallengeApplicationRejection(rejectedResult.notification);
     publishObjectiveInvalidation({
       actorUserId: actorId,
       reason: "objective.challenge.application.changed",

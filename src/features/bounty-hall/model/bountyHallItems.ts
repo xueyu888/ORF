@@ -1,13 +1,14 @@
 import { canApplyForObjectiveChallenge } from "../../../domain/orfLifecycle";
 import { resultDetailText } from "../../../domain/orfResultDetails";
 import { hasUncalibratedResultPoints } from "../../../domain/orfSettlement";
-import type { UncertaintyLevel } from "../../../types/orf";
+import type { ChallengeApplication, UncertaintyLevel } from "../../../types/orf";
 import type { BountyItem, DifficultyFilter, HallTab, SortKey } from "./bountyHallTypes";
 
 export const difficultyOptions: DifficultyFilter[] = ["all", "简易", "入门", "进阶", "破局", "渡劫", "飞升"];
 export const hallTabs: Array<{ key: HallTab; label: string }> = [
   { key: "recruiting", label: "招募中" },
   { key: "started", label: "已开始" },
+  { key: "mine", label: "我的申请" },
   { key: "all", label: "全部" },
 ];
 
@@ -48,6 +49,25 @@ export function compareByUrgency(left: BountyItem, right: BountyItem) {
 
 export function isStartedBounty(item: BountyItem) {
   return item.objective.flowStatus === "reestimating" || item.challengers.length > 0;
+}
+
+export function currentUserApplication(
+  item: BountyItem,
+  currentUserId: string,
+  options: { includeDeclined?: boolean } = {},
+) {
+  if (!currentUserId) return null;
+
+  const applications = item.applications.filter((application) => {
+    if (application.applicantUserId !== currentUserId) return false;
+    return options.includeDeclined || application.status !== "declined";
+  });
+
+  return [...applications].sort(compareChallengeApplicationsByRecency)[0] ?? null;
+}
+
+export function isCurrentUserApplicationBounty(item: BountyItem, currentUserId: string) {
+  return Boolean(currentUserApplication(item, currentUserId, { includeDeclined: true }));
 }
 
 export function publishedDateLabel(item: BountyItem) {
@@ -106,4 +126,12 @@ function publishedSortValue(item: BountyItem) {
 
 function bountySortTitle(item: BountyItem) {
   return item.result?.title ?? item.objective.title;
+}
+
+function compareChallengeApplicationsByRecency(left: ChallengeApplication, right: ChallengeApplication) {
+  return challengeApplicationTime(right).localeCompare(challengeApplicationTime(left)) || right.id.localeCompare(left.id);
+}
+
+function challengeApplicationTime(application: ChallengeApplication) {
+  return application.createdAt || "";
 }
