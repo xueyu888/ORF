@@ -1,4 +1,5 @@
 import type { Feedback, Objective, OrfUser, Result, Task } from "../../../types/orf";
+import { feedbackCauseGroupsForCategories } from "../../feedback/model/feedbackCategories";
 
 const inactiveObjectiveStatuses = new Set<Objective["flowStatus"]>(["settled", "closed"]);
 const highImpactLevels = new Set<Feedback["impact"]>(["High", "Critical"]);
@@ -19,7 +20,7 @@ export function summarizeDashboardState(state: DashboardSummaryInput, currentUse
   const causeCounts = new Map<string, number>();
 
   for (const feedback of pendingFeedback) {
-    for (const cause of feedback.causeCategories) {
+    for (const cause of feedbackCauseGroupsForCategories(feedback.causeCategories)) {
       causeCounts.set(cause, (causeCounts.get(cause) ?? 0) + 1);
     }
   }

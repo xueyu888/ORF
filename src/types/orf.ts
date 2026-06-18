@@ -13,6 +13,7 @@ export type NotificationKind =
   | "objective.published"
   | "challenge.application.created"
   | "challenge.application.approved"
+  | "challenge.application.rejected"
   | "objective.recruitment.created"
   | "objective.challenge.accepted"
   | "objective.alignment.requested"
@@ -482,15 +483,19 @@ export interface OrfRules {
 
 export type CommentTargetType = "objective" | "result" | "task" | "subtask" | "feedback";
 export type CommentStatus = "open" | "resolved";
+export type CommentAttachmentPreviewKind = "download" | "image" | "markdown" | "pdf" | "text";
 
 export interface CommentAttachment {
+  contentUrl: string;
+  downloadUrl: string;
   id: string;
   fileName: string;
   mimeType: string;
   fileSize: number;
+  previewKind: CommentAttachmentPreviewKind;
+  previewUrl?: string;
   width?: number;
   height?: number;
-  contentUrl: string;
 }
 
 export interface CommentAttachmentUploadResult {

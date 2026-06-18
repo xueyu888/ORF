@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { BountyBadge, BountyButton, BountyEmptyState, BountySelect, BountyTextInput } from "../features/bounty-hall/BountyHallSkin";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
+import { feedbackCauseGroupsForCategories, feedbackMatchesCauseGroup } from "../features/feedback/model/feedbackCategories";
 import { summarizeFeedbackInsights } from "../features/feedback/model/feedbackInsights";
 import { feedbackIssueBodyPreview, feedbackIssueCommentCount, feedbackIssueDisplayId, feedbackIssueHref, feedbackIssueStateLabel, isFeedbackIssueOpen } from "../features/feedback/model/feedbackIssue";
 import { useOrf } from "../state/OrfProvider";
@@ -30,7 +31,7 @@ export function FeedbackInboxPage() {
       visibleFeedback.filter((item) => {
         const itemIsOpen = isFeedbackIssueOpen(item);
         const stateMatch = listState === "all" || (listState === "open" ? itemIsOpen : !itemIsOpen);
-        const causeMatch = cause === "All" || item.causeCategories.includes(cause);
+        const causeMatch = cause === "All" || feedbackMatchesCauseGroup(item.causeCategories, cause);
         const searchableText = [
           item.id,
           item.phenomenon,
@@ -38,6 +39,7 @@ export function FeedbackInboxPage() {
           item.owner,
           feedbackIssueStateLabel(item),
           impactLabel[item.impact],
+          ...feedbackCauseGroupsForCategories(item.causeCategories),
           ...item.causeCategories,
         ].join(" ").toLowerCase();
         const queryMatch = normalizedQuery.length === 0 || searchableText.includes(normalizedQuery);

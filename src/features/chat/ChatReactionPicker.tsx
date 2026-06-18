@@ -1,6 +1,7 @@
 import { Search } from "lucide-react";
 import { type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ChatReactionEmoji } from "./ChatReactionEmoji";
 import { searchChatReactionOptions } from "./chatReactions";
 
 type ChatReactionPickerProps = {
@@ -173,7 +174,7 @@ export function ChatReactionPicker({
               onMouseEnter={() => setSelectedIndex(index)}
               onClick={() => onSelect(option.emojiName)}
             >
-              {option.symbol}
+              <ChatReactionEmoji decorative emojiName={option.emojiName} size="picker" />
             </button>
           ))
         ) : (

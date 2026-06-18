@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, ImagePlus } from "lucide-react";
+import { ArrowLeft, Check, Paperclip } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -30,13 +30,13 @@ export function FeedbackCreatePage() {
   const { createFeedback, currentUser, notify, state } = useOrf();
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
   const defaultOwner = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
-  const causeOptions = teamFeedbackCauseOptions(state.causeCategories);
+  const causeOptions = teamFeedbackCauseOptions();
   const activeOwnerOptions = state.users.filter((user) => user.status === "active").map((user) => user.name);
   const ownerOptions = activeOwnerOptions.length > 0 ? activeOwnerOptions : [defaultOwner];
   const initialOwner = ownerOptions.includes(defaultOwner) ? defaultOwner : ownerOptions[0] ?? defaultOwner;
   const [title, setTitle] = useState("");
   const [draft, setDraft] = useState<CommentDraft>(() => emptyCommentDraft());
-  const [cause, setCause] = useState(causeOptions[0] ?? "技术问题");
+  const [cause, setCause] = useState<string>(causeOptions[0] ?? "技术问题");
   const [impact, setImpact] = useState<Impact>("Medium");
   const [owner, setOwner] = useState(initialOwner);
   const [pendingAttachments, setPendingAttachments] = useState<PendingFeedbackAttachment[]>([]);
@@ -71,7 +71,7 @@ export function FeedbackCreatePage() {
     const id = `pending-${Date.now()}-${attachmentCounterRef.current}`;
     const previewUrl = URL.createObjectURL(file);
     pendingPreviewUrlsRef.current.add(previewUrl);
-    const markdown = `![${file.name || "image"}](orf-pending-attachment:${id})`;
+    const markdown = `![${file.name || "attachment"}](orf-pending-attachment:${id})`;
     setPendingAttachments((items) => [...items, { file, id, previewUrl }]);
     return { markdown, previewUrl };
   };
@@ -148,8 +148,8 @@ export function FeedbackCreatePage() {
                   <div className="feedback-create-attachment-strip">
                     {referencedAttachments.map((attachment) => (
                       <span key={attachment.id}>
-                        <ImagePlus aria-hidden="true" />
-                        {attachment.file.name || "image"}
+                        <Paperclip aria-hidden="true" />
+                        {attachment.file.name || "attachment"}
                       </span>
                     ))}
                   </div>

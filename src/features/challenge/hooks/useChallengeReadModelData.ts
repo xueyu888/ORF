@@ -4,7 +4,7 @@ import type { OrfState } from "../../../types/orf";
 import type { OrfReadModelInvalidation } from "../../../types/realtime";
 import { readModelInvalidationKey } from "../../realtime/readModelInvalidations";
 
-export type ChallengeReadModelState = OrfState & Pick<TaskManagementData, "pendingChallengeApplications">;
+export type ChallengeReadModelState = OrfState;
 
 export function useChallengeReadModelData(input: {
   readModelInvalidations: OrfReadModelInvalidation[];
@@ -36,10 +36,12 @@ export function useChallengeReadModelData(input: {
   ]);
 
   return useMemo<ChallengeReadModelState>(() => {
+    if (!challengeData) return state;
+    const { pendingChallengeApplications: _pendingChallengeApplications, ...taskManagementData } = challengeData;
+
     return {
       ...state,
-      ...(challengeData ?? {}),
-      pendingChallengeApplications: challengeData?.pendingChallengeApplications ?? [],
+      ...taskManagementData,
     };
   }, [challengeData, state]);
 }

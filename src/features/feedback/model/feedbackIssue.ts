@@ -132,5 +132,5 @@ export function feedbackIssueIdsFromText(text: string) {
 }
 
 export function feedbackIssueBodyPreview(value: string) {
-  return orfRichTextMarkdownToPlainText(value, { attachmentText: "[图片]" });
+  return orfRichTextMarkdownToPlainText(value, { attachmentText: "[附件]" });
 }

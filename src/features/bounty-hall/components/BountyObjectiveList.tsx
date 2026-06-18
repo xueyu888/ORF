@@ -4,7 +4,7 @@ import { canApplyForObjectiveChallenge } from "../../../domain/orfLifecycle";
 import { resultDetailPreviewText } from "../../../domain/orfResultDetails";
 import { remainingTime } from "../../challenge/model/challengeDates";
 import { BountyBadge } from "../BountyHallSkin";
-import { bountyPointsLabel, highestDifficultyLabel, publishedDateLabel, resultCountLabel } from "../model/bountyHallItems";
+import { bountyPointsLabel, currentUserApplication, highestDifficultyLabel, publishedDateLabel, resultCountLabel } from "../model/bountyHallItems";
 import type { BountyItem, ChallengeAction } from "../model/bountyHallTypes";
 import { BountyRowActions } from "./BountyRowActions";
 import { ParticipationPreview } from "./ParticipationPreview";
@@ -14,6 +14,7 @@ export function BountyObjectiveList({
   currentUserId,
   currentUserName,
   items,
+  applicationView = false,
   now,
   onOpenChallengeWork,
   onOpenObjective,
@@ -24,6 +25,7 @@ export function BountyObjectiveList({
   currentUserId: string;
   currentUserName: string;
   items: BountyItem[];
+  applicationView?: boolean;
   now: Date;
   onOpenChallengeWork: (objectiveId: string) => void;
   onOpenObjective?: (objectiveId: string) => void;
@@ -47,6 +49,7 @@ export function BountyObjectiveList({
           active={item.objective.id === activeObjectiveId}
           currentUserId={currentUserId}
           currentUserName={currentUserName}
+          applicationView={applicationView}
           item={item}
           now={now}
           onOpenChallengeWork={onOpenChallengeWork}
@@ -63,6 +66,7 @@ function BountyListRow({
   item,
   currentUserId,
   currentUserName,
+  applicationView,
   now,
   onOpenChallengeWork,
   onOpenObjective,
@@ -73,6 +77,7 @@ function BountyListRow({
   active: boolean;
   currentUserId: string;
   currentUserName: string;
+  applicationView: boolean;
   item: BountyItem;
   now: Date;
   onOpenChallengeWork: (objectiveId: string) => void;
@@ -80,7 +85,7 @@ function BountyListRow({
   processing: boolean;
   onAction: (action: ChallengeAction) => void;
 }) {
-  const currentApplication = item.applications.find((application) => application.status !== "declined" && application.applicantUserId === currentUserId);
+  const currentApplication = currentUserApplication(item, currentUserId, { includeDeclined: applicationView });
   const canApply = item.isRecruitment || canApplyForObjectiveChallenge(item.objective);
   const openable = Boolean(onOpenObjective);
   const openObjective = () => onOpenObjective?.(item.objective.id);
@@ -158,6 +163,7 @@ function BountyListRow({
           processing={processing}
           onAccept={() => onAction("accept")}
           onApply={() => onAction("apply")}
+          applyLabel={currentApplication?.status === "declined" ? "再次申请" : undefined}
           onOpenChallengeWork={openChallengeWork}
           onOpenObjective={openObjective}
         />

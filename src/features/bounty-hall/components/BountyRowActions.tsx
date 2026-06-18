@@ -12,6 +12,7 @@ export function BountyRowActions({
   processing,
   onAccept,
   onApply,
+  applyLabel = "申请挑战",
   onOpenChallengeWork,
   onOpenObjective,
 }: {
@@ -23,6 +24,7 @@ export function BountyRowActions({
   processing: boolean;
   onAccept: () => void;
   onApply: () => void;
+  applyLabel?: string;
   onOpenChallengeWork: () => void;
   onOpenObjective: () => void;
 }) {
@@ -48,11 +50,30 @@ export function BountyRowActions({
     return <BountyActionNote>申请中</BountyActionNote>;
   }
 
+  if (currentApplicationStatus === "declined") {
+    return (
+      <>
+        <BountyActionNote>未通过</BountyActionNote>
+        {canApply ? (
+          <BountyButton variant="primary" onClick={onApply} disabled={processing}>
+            {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {applyLabel}
+          </BountyButton>
+        ) : openable ? (
+          <BountyButton variant="secondary" onClick={onOpenObjective} disabled={processing}>
+            <ArrowRight className="h-4 w-4" />
+            查看目标
+          </BountyButton>
+        ) : null}
+      </>
+    );
+  }
+
   if (canApply) {
     return (
       <BountyButton variant="primary" onClick={onApply} disabled={processing}>
         {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        申请挑战
+        {applyLabel}
       </BountyButton>
     );
   }

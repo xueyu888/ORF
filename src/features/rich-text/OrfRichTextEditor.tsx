@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Bold, Check, Code, Heading3, ImagePlus, Italic, Link as LinkIcon, List, ListOrdered, Quote, Strikethrough, Unlink, X } from "lucide-react";
+import { Bold, Check, Code, Heading3, ImagePlus, Italic, Link as LinkIcon, List, ListOrdered, Paperclip, Quote, Strikethrough, Unlink, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -16,6 +16,15 @@ import {
   type ReactNode,
 } from "react";
 import { UserAvatar } from "../../components/UserAvatar";
+import {
+  applyOrfLineMarkdown,
+  continueOrfMarkdownListOnEnter,
+  getOrfRichTextBlockState,
+  nextOrfBlockMarkdownInsert,
+  replaceOrfMarkdownRange,
+  type OrfRichTextLineMarkdownKind,
+  type OrfRichTextTextRange,
+} from "./orfRichTextEditorModel";
 import {
   orfMentionMarkdown,
   orfRichTextHasMeaningfulContent,
@@ -48,15 +57,11 @@ type MentionRange = {
   to: number;
 };
 
-type TextRange = {
-  from: number;
-  to: number;
-};
-
 export type OrfRichTextImageUploadResult = {
   markdown: string;
   previewUrl?: string | null;
 };
+export type OrfRichTextAttachmentUploadResult = OrfRichTextImageUploadResult;
 
 export type OrfRichTextEditorActions = {
   focus: () => void;
@@ -91,6 +96,7 @@ export type OrfRichTextEditorProps = {
   onKeyDown?: (event: KeyboardEvent, actions: OrfRichTextEditorActions) => boolean | void;
   onMentionInsert?: (insert: OrfRichTextMentionInsert) => void;
   onSubmitRequest?: () => void;
+  onUploadAttachment?: (file: File) => Promise<OrfRichTextAttachmentUploadResult | null>;
   onUploadImage?: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
   placeholder: string;
   submitOnEnter?: boolean;
@@ -121,45 +127,10 @@ function mentionRangeForMarkdown(markdown: string, cursor: number): MentionRange
   };
 }
 
-function textRangeForTextarea(textarea: HTMLTextAreaElement | null): TextRange {
+function textRangeForTextarea(textarea: HTMLTextAreaElement | null): OrfRichTextTextRange {
   return {
     from: textarea?.selectionStart ?? 0,
     to: textarea?.selectionEnd ?? 0,
-  };
-}
-
-function selectedLineRange(markdown: string, range: TextRange): TextRange {
-  const from = markdown.lastIndexOf("\n", Math.max(0, range.from - 1)) + 1;
-  const nextNewline = markdown.indexOf("\n", range.to);
-  return {
-    from,
-    to: nextNewline === -1 ? markdown.length : nextNewline,
-  };
-}
-
-function lineParts(markdown: string, range: TextRange) {
-  const block = markdown.slice(range.from, range.to);
-  const hasTrailingNewline = block.endsWith("\n");
-  const lines = hasTrailingNewline ? block.slice(0, -1).split("\n") : block.split("\n");
-  return { hasTrailingNewline, lines };
-}
-
-function joinLineParts(lines: string[], hasTrailingNewline: boolean) {
-  return `${lines.join("\n")}${hasTrailingNewline ? "\n" : ""}`;
-}
-
-function replaceRange(markdown: string, range: TextRange, value: string) {
-  return `${markdown.slice(0, range.from)}${value}${markdown.slice(range.to)}`;
-}
-
-function nextBlockInsert(markdown: string, range: TextRange, block: string) {
-  const before = markdown.slice(0, range.from);
-  const after = markdown.slice(range.to);
-  const prefix = !before.trim() ? "" : before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
-  const suffix = !after.trim() ? "" : after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n";
-  return {
-    markdown: `${before}${prefix}${block}${suffix}${after}`,
-    selection: before.length + prefix.length + block.length,
   };
 }
 
@@ -211,6 +182,7 @@ export function OrfRichTextEditor({
   onKeyDown,
   onMentionInsert,
   onSubmitRequest,
+  onUploadAttachment,
   onUploadImage,
   placeholder,
   submitOnEnter = true,
@@ -234,15 +206,17 @@ export function OrfRichTextEditor({
   const onKeyDownRef = useRef(onKeyDown);
   const onMentionInsertRef = useRef(onMentionInsert);
   const onSubmitRequestRef = useRef(onSubmitRequest);
+  const onUploadAttachmentRef = useRef(onUploadAttachment);
   const onUploadImageRef = useRef(onUploadImage);
   const submitOnEnterRef = useRef(submitOnEnter);
   const transformPastedTextRef = useRef(transformPastedText);
-  const uploadImageRef = useRef<(file: File) => void>(() => undefined);
+  const uploadAttachmentRef = useRef<(file: File) => void>(() => undefined);
   const [markdown, setMarkdown] = useState(value);
   const [mentionRange, setMentionRange] = useState<MentionRange | null>(null);
+  const [selectionRange, setSelectionRange] = useState<OrfRichTextTextRange>({ from: 0, to: 0 });
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
   const [linkDraft, setLinkDraft] = useState<{ error: string; open: boolean; url: string }>({ error: "", open: false, url: "" });
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
   const filteredMentionUsers = useMemo(() => {
     return listVisibleMentionUsers({
@@ -252,6 +226,14 @@ export function OrfRichTextEditor({
       users: mentionableUsers,
     });
   }, [currentUserId, excludeCurrentUserFromMentions, mentionRange, mentionableUsers]);
+
+  const activeBlockState = useMemo(() => getOrfRichTextBlockState(markdown, selectionRange), [markdown, selectionRange]);
+  const activeBlockKind = activeBlockState.kind;
+  const footerHint = uploadingAttachment
+    ? "附件上传中..."
+    : activeBlockKind === "paragraph"
+      ? idleHint
+      : activeBlockState.label;
 
   const resizeAutoGrowTextarea = useCallback(() => {
     if (!autoGrow) return;
@@ -284,13 +266,14 @@ export function OrfRichTextEditor({
     };
   }, [autoGrow, resizeAutoGrowTextarea]);
 
-  const refreshMentionRange = useCallback((nextMarkdown = markdownRef.current, cursor = textareaRef.current?.selectionStart ?? 0) => {
+  const refreshEditorContext = useCallback((nextMarkdown = markdownRef.current, range = textRangeForTextarea(textareaRef.current)) => {
     const textarea = textareaRef.current;
-    if (!textarea || textarea.selectionStart !== textarea.selectionEnd) {
+    setSelectionRange(range);
+    if (!textarea || range.from !== range.to) {
       setMentionRange(null);
       return;
     }
-    setMentionRange(mentionRangeForMarkdown(nextMarkdown, cursor));
+    setMentionRange(mentionRangeForMarkdown(nextMarkdown, range.to));
   }, []);
 
   const focusSelection = useCallback((from: number, to = from) => {
@@ -299,11 +282,11 @@ export function OrfRichTextEditor({
       if (!textarea) return;
       textarea.focus();
       textarea.setSelectionRange(from, to);
-      refreshMentionRange(markdownRef.current, to);
+      refreshEditorContext(markdownRef.current, { from, to });
     });
-  }, [refreshMentionRange]);
+  }, [refreshEditorContext]);
 
-  const applyLocalMarkdown = useCallback((nextMarkdown: string, selection?: TextRange | number) => {
+  const applyLocalMarkdown = useCallback((nextMarkdown: string, selection?: OrfRichTextTextRange | number) => {
     markdownRef.current = nextMarkdown;
     lastAppliedMarkdownRef.current = nextMarkdown;
     setMarkdown(nextMarkdown);
@@ -313,20 +296,20 @@ export function OrfRichTextEditor({
     }
   }, [focusSelection]);
 
-  const emitMarkdown = useCallback((nextMarkdown: string, selection?: TextRange | number) => {
+  const emitMarkdown = useCallback((nextMarkdown: string, selection?: OrfRichTextTextRange | number) => {
     applyLocalMarkdown(nextMarkdown, selection);
     onChangeRef.current(nextMarkdown);
   }, [applyLocalMarkdown]);
 
   const insertRawText = useCallback((text: string) => {
     const range = textRangeForTextarea(textareaRef.current);
-    const nextMarkdown = replaceRange(markdownRef.current, range, text);
+    const nextMarkdown = replaceOrfMarkdownRange(markdownRef.current, range, text);
     emitMarkdown(nextMarkdown, range.from + text.length);
   }, [emitMarkdown]);
 
   const insertBlockMarkdown = useCallback((block: string) => {
     const range = textRangeForTextarea(textareaRef.current);
-    const next = nextBlockInsert(markdownRef.current, range, block);
+    const next = nextOrfBlockMarkdownInsert(markdownRef.current, range, block);
     emitMarkdown(next.markdown, next.selection);
   }, [emitMarkdown]);
 
@@ -342,9 +325,9 @@ export function OrfRichTextEditor({
     isSelectionAtStart: () => (textareaRef.current?.selectionStart ?? 0) <= 0,
     setMarkdown: (nextMarkdown: string) => {
       applyLocalMarkdown(nextMarkdown);
-      refreshMentionRange(nextMarkdown);
+      refreshEditorContext(nextMarkdown);
     },
-  }), [applyLocalMarkdown, focusSelection, insertRawText, refreshMentionRange]);
+  }), [applyLocalMarkdown, focusSelection, insertRawText, refreshEditorContext]);
 
   useEffect(() => {
     if (!actionsRef) return undefined;
@@ -391,6 +374,10 @@ export function OrfRichTextEditor({
   }, [onSubmitRequest]);
 
   useEffect(() => {
+    onUploadAttachmentRef.current = onUploadAttachment;
+  }, [onUploadAttachment]);
+
+  useEffect(() => {
     onUploadImageRef.current = onUploadImage;
   }, [onUploadImage]);
 
@@ -409,8 +396,8 @@ export function OrfRichTextEditor({
   useEffect(() => {
     if (value === lastAppliedMarkdownRef.current) return;
     applyLocalMarkdown(value);
-    refreshMentionRange(value);
-  }, [applyLocalMarkdown, refreshMentionRange, value]);
+    refreshEditorContext(value);
+  }, [applyLocalMarkdown, refreshEditorContext, value]);
 
   useEffect(() => {
     setSelectedMentionIndex(0);
@@ -425,37 +412,45 @@ export function OrfRichTextEditor({
     if (autoFocus && !disabled) focusSelection(markdownRef.current.length);
   }, [autoFocus, disabled, focusSelection]);
 
-  const uploadImage = useCallback(async (file: File) => {
+  const uploadAttachment = useCallback(async (file: File) => {
     if (disabledRef.current) return;
+    const uploadAttachmentHandler = onUploadAttachmentRef.current;
     const uploadImageHandler = onUploadImageRef.current;
-    if (!uploadImageHandler) return;
-    if (!isImageFile(file)) {
+    const uploadHandler = uploadAttachmentHandler ?? uploadImageHandler;
+    if (!uploadHandler) return;
+    if (!uploadAttachmentHandler && !isImageFile(file)) {
       onErrorChangeRef.current?.("只能上传 PNG、JPEG、GIF 或 WebP 图片");
       return;
     }
 
-    setUploadingImage(true);
+    setUploadingAttachment(true);
     onBusyChangeRef.current?.(true);
     onErrorChangeRef.current?.("");
     try {
-      const upload = await uploadImageHandler(file);
+      const upload = await uploadHandler(file);
       const attachment = upload ? parseOrfAttachmentMarkdownToken(upload.markdown) : null;
       if (!upload || !attachment) {
-        onErrorChangeRef.current?.("图片上传失败");
+        onErrorChangeRef.current?.(uploadAttachmentHandler ? "附件上传失败" : "图片上传失败");
         return;
       }
       insertBlockMarkdown(upload.markdown);
     } finally {
-      setUploadingImage(false);
+      setUploadingAttachment(false);
       onBusyChangeRef.current?.(false);
     }
   }, [insertBlockMarkdown]);
 
   useEffect(() => {
-    uploadImageRef.current = (file: File) => {
-      void uploadImage(file);
+    uploadAttachmentRef.current = (file: File) => {
+      void uploadAttachment(file);
     };
-  }, [uploadImage]);
+  }, [uploadAttachment]);
+
+  const uploadAttachments = useCallback(async (files: File[]) => {
+    for (const file of files.filter((item) => item.size > 0)) {
+      await uploadAttachment(file);
+    }
+  }, [uploadAttachment]);
 
   const wrapInlineMarkdown = useCallback((prefix: string, suffix = prefix) => {
     const range = textRangeForTextarea(textareaRef.current);
@@ -463,54 +458,19 @@ export function OrfRichTextEditor({
     const selected = current.slice(range.from, range.to);
     if (selected && selected.startsWith(prefix) && selected.endsWith(suffix)) {
       const inner = selected.slice(prefix.length, selected.length - suffix.length);
-      emitMarkdown(replaceRange(current, range, inner), { from: range.from, to: range.from + inner.length });
+      emitMarkdown(replaceOrfMarkdownRange(current, range, inner), { from: range.from, to: range.from + inner.length });
       return;
     }
     const nextText = `${prefix}${selected}${suffix}`;
     const nextRange = selected
       ? { from: range.from, to: range.from + nextText.length }
       : { from: range.from + prefix.length, to: range.from + prefix.length };
-    emitMarkdown(replaceRange(current, range, nextText), nextRange);
+    emitMarkdown(replaceOrfMarkdownRange(current, range, nextText), nextRange);
   }, [emitMarkdown]);
 
-  const applyLineMarkdown = useCallback((kind: "bullet" | "heading" | "ordered" | "quote") => {
-    const current = markdownRef.current;
-    const range = selectedLineRange(current, textRangeForTextarea(textareaRef.current));
-    const { hasTrailingNewline, lines } = lineParts(current, range);
-    const actionable = lines.filter((line) => line.trim());
-    if (actionable.length === 0) {
-      const marker = kind === "heading" ? "### " : kind === "ordered" ? "1. " : kind === "quote" ? "> " : "- ";
-      emitMarkdown(replaceRange(current, textRangeForTextarea(textareaRef.current), marker), range.from + marker.length);
-      return;
-    }
-
-    let orderedIndex = 1;
-    const nextLines = lines.map((line) => {
-      if (!line.trim()) return line;
-      if (kind === "heading") {
-        return actionable.every((item) => /^\s{0,3}#{1,6}\s+/.test(item))
-          ? line.replace(/^(\s{0,3})#{1,6}\s+/, "$1")
-          : line.replace(/^(\s{0,3})(?:#{1,6}\s+)?/, "$1### ");
-      }
-      if (kind === "quote") {
-        return actionable.every((item) => /^\s*>\s?/.test(item))
-          ? line.replace(/^(\s*)>\s?/, "$1")
-          : line.replace(/^(\s*)/, "$1> ");
-      }
-      if (kind === "bullet") {
-        return actionable.every((item) => /^\s*[-*+]\s+/.test(item))
-          ? line.replace(/^(\s*)[-*+]\s+/, "$1")
-          : line.replace(/^(\s*)(?:[-*+]\s+)?/, "$1- ");
-      }
-      const nextOrderedIndex = orderedIndex;
-      orderedIndex += 1;
-      return actionable.every((item) => /^\s*\d+[.)]\s+/.test(item))
-        ? line.replace(/^(\s*)\d+[.)]\s+/, "$1")
-        : line.replace(/^(\s*)(?:\d+[.)]\s+)?/, `$1${nextOrderedIndex}. `);
-    });
-
-    const nextBlock = joinLineParts(nextLines, hasTrailingNewline);
-    emitMarkdown(replaceRange(current, range, nextBlock), { from: range.from, to: range.from + nextBlock.length });
+  const applyLineMarkdown = useCallback((kind: OrfRichTextLineMarkdownKind) => {
+    const next = applyOrfLineMarkdown(markdownRef.current, textRangeForTextarea(textareaRef.current), kind);
+    emitMarkdown(next.markdown, next.selection);
   }, [emitMarkdown]);
 
   const openLinkEditor = useCallback(() => {
@@ -544,7 +504,7 @@ export function OrfRichTextEditor({
     const selected = markdownRef.current.slice(range.from, range.to);
     const label = unwrapMarkdownLink(selected).trim() || url;
     const token = `[${label}](${url})`;
-    emitMarkdown(replaceRange(markdownRef.current, range, token), { from: range.from, to: range.from + token.length });
+    emitMarkdown(replaceOrfMarkdownRange(markdownRef.current, range, token), { from: range.from, to: range.from + token.length });
     setLinkDraft({ error: "", open: false, url: "" });
   }, [closeLinkEditor, emitMarkdown, linkDraft.url]);
 
@@ -552,7 +512,7 @@ export function OrfRichTextEditor({
     const range = textRangeForTextarea(textareaRef.current);
     const selected = markdownRef.current.slice(range.from, range.to);
     const unwrapped = unwrapMarkdownLink(selected);
-    emitMarkdown(replaceRange(markdownRef.current, range, unwrapped), { from: range.from, to: range.from + unwrapped.length });
+    emitMarkdown(replaceOrfMarkdownRange(markdownRef.current, range, unwrapped), { from: range.from, to: range.from + unwrapped.length });
     setLinkDraft({ error: "", open: false, url: "" });
   }, [emitMarkdown]);
 
@@ -563,7 +523,7 @@ export function OrfRichTextEditor({
     const defaultText = plainText ? `@${label}` : orfMentionMarkdown({ label, userId: user.id });
     const mentionText = formatMentionTextRef.current?.(user, label) ?? defaultText;
     const valueWithTrailingSpace = `${mentionText} `;
-    emitMarkdown(replaceRange(markdownRef.current, mentionRange, valueWithTrailingSpace), mentionRange.from + valueWithTrailingSpace.length);
+    emitMarkdown(replaceOrfMarkdownRange(markdownRef.current, mentionRange, valueWithTrailingSpace), mentionRange.from + valueWithTrailingSpace.length);
     onMentionInsertRef.current?.({
       label,
       range: { from: mentionRange.from, to: mentionRange.to },
@@ -575,7 +535,10 @@ export function OrfRichTextEditor({
 
   const handleMarkdownChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     emitMarkdown(event.target.value);
-    refreshMentionRange(event.target.value, event.target.selectionStart);
+    refreshEditorContext(event.target.value, {
+      from: event.target.selectionStart,
+      to: event.target.selectionEnd,
+    });
   };
 
   const handleDrop = (event: DragEvent<HTMLTextAreaElement>) => {
@@ -585,10 +548,15 @@ export function OrfRichTextEditor({
       event.preventDefault();
       return;
     }
+    if (files.length > 0 && onUploadAttachmentRef.current) {
+      event.preventDefault();
+      void uploadAttachments(files);
+      return;
+    }
     const image = files.find(isImageFile);
     if (!image || !onUploadImageRef.current) return;
     event.preventDefault();
-    uploadImageRef.current(image);
+    uploadAttachmentRef.current(image);
   };
 
   const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -598,10 +566,15 @@ export function OrfRichTextEditor({
       event.preventDefault();
       return;
     }
+    if (files.length > 0 && onUploadAttachmentRef.current) {
+      event.preventDefault();
+      void uploadAttachments(files);
+      return;
+    }
     const image = files.find(isImageFile);
     if (image && onUploadImageRef.current) {
       event.preventDefault();
-      uploadImageRef.current(image);
+      uploadAttachmentRef.current(image);
       return;
     }
     const transform = transformPastedTextRef.current;
@@ -644,6 +617,15 @@ export function OrfRichTextEditor({
 
     const currentSubmit = onSubmitRequestRef.current;
     const isComposing = event.nativeEvent.isComposing;
+    if (event.key === "Enter" && !event.ctrlKey && !event.metaKey && !event.altKey && !isComposing) {
+      const continuedList = continueOrfMarkdownListOnEnter(markdownRef.current, textRangeForTextarea(textareaRef.current));
+      if (continuedList) {
+        event.preventDefault();
+        emitMarkdown(continuedList.markdown, continuedList.selection);
+        return;
+      }
+    }
+
     if (
       currentSubmit &&
       ((submitOnEnterRef.current && event.key === "Enter" && !event.shiftKey && !event.altKey && !isComposing) ||
@@ -655,6 +637,24 @@ export function OrfRichTextEditor({
     }
 
     if (onKeyDownRef.current?.(event.nativeEvent, actions)) return;
+
+    if (!isComposing && event.shiftKey && event.altKey && !event.ctrlKey && !event.metaKey) {
+      if (event.code === "Digit7") {
+        event.preventDefault();
+        applyLineMarkdown("ordered");
+        return;
+      }
+      if (event.code === "Digit8") {
+        event.preventDefault();
+        applyLineMarkdown("bullet");
+        return;
+      }
+      if (event.code === "Digit9") {
+        event.preventDefault();
+        applyLineMarkdown("quote");
+        return;
+      }
+    }
 
     const primary = event.ctrlKey || event.metaKey;
     if (!primary || event.altKey || isComposing) return;
@@ -675,7 +675,7 @@ export function OrfRichTextEditor({
   };
 
   return (
-    <div className={clsx("orf-rich-text-editor", className, disabled && "orf-rich-text-editor-disabled")}>
+    <div className={clsx("orf-rich-text-editor", `orf-rich-text-editor-block-${activeBlockKind}`, className, disabled && "orf-rich-text-editor-disabled")}>
       <div className="orf-rich-text-toolbar" aria-label="Markdown 编辑工具">
         <ToolbarButton disabled={disabled} label="加粗" onClick={() => wrapInlineMarkdown("**")}>
           <Bold className="h-4 w-4" />
@@ -689,37 +689,38 @@ export function OrfRichTextEditor({
         <ToolbarButton disabled={disabled} label="代码" onClick={() => wrapInlineMarkdown("`")}>
           <Code className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton disabled={disabled} label="标题" onClick={() => applyLineMarkdown("heading")}>
+        <ToolbarButton active={activeBlockKind === "heading"} disabled={disabled} label="标题" onClick={() => applyLineMarkdown("heading")}>
           <Heading3 className="h-4 w-4" />
         </ToolbarButton>
         <span className="orf-rich-text-toolbar-divider" />
-        <ToolbarButton disabled={disabled} label="无序列表" onClick={() => applyLineMarkdown("bullet")}>
+        <ToolbarButton active={activeBlockKind === "bullet"} disabled={disabled} label="无序列表" onClick={() => applyLineMarkdown("bullet")}>
           <List className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton disabled={disabled} label="有序列表" onClick={() => applyLineMarkdown("ordered")}>
+        <ToolbarButton active={activeBlockKind === "ordered"} disabled={disabled} label="有序列表" onClick={() => applyLineMarkdown("ordered")}>
           <ListOrdered className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton disabled={disabled} label="引用" onClick={() => applyLineMarkdown("quote")}>
+        <ToolbarButton active={activeBlockKind === "quote"} disabled={disabled} label="引用" onClick={() => applyLineMarkdown("quote")}>
           <Quote className="h-4 w-4" />
         </ToolbarButton>
         <span className="orf-rich-text-toolbar-divider" />
         <ToolbarButton disabled={disabled} label="链接" onClick={openLinkEditor}>
           <LinkIcon className="h-4 w-4" />
         </ToolbarButton>
-        {onUploadImage && (
+        {(onUploadAttachment || onUploadImage) && (
           <>
-            <ToolbarButton disabled={disabled || uploadingImage} label="添加图片" onClick={() => fileInputRef.current?.click()}>
-              <ImagePlus className="h-4 w-4" />
+            <ToolbarButton disabled={disabled || uploadingAttachment} label={onUploadAttachment ? "添加附件" : "添加图片"} onClick={() => fileInputRef.current?.click()}>
+              {onUploadAttachment ? <Paperclip className="h-4 w-4" /> : <ImagePlus className="h-4 w-4" />}
             </ToolbarButton>
             <input
               ref={fileInputRef}
-              accept="image/gif,image/jpeg,image/png,image/webp"
+              accept={onUploadAttachment ? undefined : "image/gif,image/jpeg,image/png,image/webp"}
               className="hidden"
+              multiple={Boolean(onUploadAttachment)}
               type="file"
               onChange={(event) => {
-                const file = event.target.files?.[0];
+                const files = Array.from(event.target.files ?? []);
                 event.target.value = "";
-                if (file) void uploadImage(file);
+                if (files.length > 0) void uploadAttachments(files);
               }}
             />
           </>
@@ -764,12 +765,12 @@ export function OrfRichTextEditor({
           placeholder={placeholder}
           value={markdown}
           onChange={handleMarkdownChange}
-          onClick={() => refreshMentionRange()}
+          onClick={() => refreshEditorContext()}
           onDrop={handleDrop}
           onKeyDown={handleKeyDown}
-          onKeyUp={() => refreshMentionRange()}
+          onKeyUp={() => refreshEditorContext()}
           onPaste={handlePaste}
-          onSelect={() => refreshMentionRange()}
+          onSelect={() => refreshEditorContext()}
         />
         {mentionRange && mentionableUsers.length > 0 && (
           <div className="orf-comment-mention-menu orf-rich-text-mention-menu" role="listbox" aria-label="提及成员">
@@ -803,7 +804,7 @@ export function OrfRichTextEditor({
         )}
       </div>
       <div className="orf-rich-text-footer">
-        <span className="orf-comment-hint">{uploadingImage ? "图片上传中..." : idleHint}</span>
+        <span className="orf-comment-hint">{footerHint}</span>
         {footer}
       </div>
     </div>
@@ -811,11 +812,13 @@ export function OrfRichTextEditor({
 }
 
 function ToolbarButton({
+  active = false,
   children,
   disabled = false,
   label,
   onClick,
 }: {
+  active?: boolean;
   children: ReactNode;
   disabled?: boolean;
   label: string;
@@ -824,9 +827,10 @@ function ToolbarButton({
   return (
     <button
       type="button"
-      className="orf-rich-text-tool-button"
+      className={clsx("orf-rich-text-tool-button", active && "orf-rich-text-tool-button-active")}
       disabled={disabled}
       aria-label={label}
+      aria-pressed={active}
       title={label}
       onMouseDown={(event) => {
         event.preventDefault();

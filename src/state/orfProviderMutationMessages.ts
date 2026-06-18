@@ -123,14 +123,14 @@ export function bountyMutationFailureMessage(error: unknown, fallback: string) {
 
 export function commentMutationFailureMessage(error: unknown, fallback: string) {
   if (error instanceof ApiError) {
-    const isImageMutation = fallback.includes("图片");
+    const isAttachmentMutation = fallback.includes("图片") || fallback.includes("附件");
 
     if (error.status === 401) {
       return "登录已过期，请重新登录";
     }
 
     if (error.status === 403) {
-      return isImageMutation ? "没有权限上传这个评论图片" : "只能编辑或删除自己的评论";
+      return isAttachmentMutation ? "没有权限上传这个评论附件" : "只能编辑或删除自己的评论";
     }
 
     if (error.status === 404) {
@@ -138,15 +138,15 @@ export function commentMutationFailureMessage(error: unknown, fallback: string) 
     }
 
     if (error.status === 413) {
-      return "图片过大，请压缩后再上传";
+      return "附件过大，请压缩后再上传";
     }
 
     if (error.status === 415) {
-      return "只能上传 PNG、JPEG、GIF 或 WebP 图片";
+      return "不支持这种附件类型";
     }
 
     if (error.status === 400) {
-      return isImageMutation ? "图片文件无效" : "评论内容不能为空";
+      return isAttachmentMutation ? "附件文件无效" : "评论内容不能为空";
     }
 
     return error.message || fallback;
@@ -180,6 +180,14 @@ export function businessMutationFailureMessage(error: unknown, fallback: string)
         return "请先校准目标下所有指标积分，再完成对齐冻结";
       }
       return error.message || "数据状态已变化，请刷新后再试";
+    }
+
+    if (error.status === 413) {
+      return "附件过大，请压缩后再上传";
+    }
+
+    if (error.status === 415) {
+      return "不支持这种附件类型";
     }
 
     if (error.status === 400) {

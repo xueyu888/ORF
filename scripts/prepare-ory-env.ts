@@ -22,12 +22,16 @@ const oryPoolParams = [
 const trimSlash = (value: string) => value.replace(/\/+$/, "");
 
 function databaseUrlFromEnv() {
-  const databaseUrl = process.env.DATABASE_URL ?? process.env.REMOTE_DATABASE_URL;
+  const databaseUrl = process.env.ORY_DATABASE_URL ?? process.env.DATABASE_URL ?? process.env.REMOTE_DATABASE_URL;
   if (!databaseUrl) {
-    throw new Error("DATABASE_URL or REMOTE_DATABASE_URL is required for Ory");
+    throw new Error("ORY_DATABASE_URL, DATABASE_URL, or REMOTE_DATABASE_URL is required for Ory");
   }
 
   return databaseUrl;
+}
+
+function databaseProbeUrlFromEnv(databaseUrl: string) {
+  return process.env.ORY_DATABASE_PROBE_URL ?? databaseUrl;
 }
 
 async function assertOryMigrationPermission(connectionString: string) {
@@ -114,7 +118,7 @@ async function main() {
   const databaseUrl = databaseUrlFromEnv();
   const url = new URL(databaseUrl);
 
-  await assertOryMigrationPermission(databaseUrl);
+  await assertOryMigrationPermission(databaseProbeUrlFromEnv(databaseUrl));
 
   fs.mkdirSync(certDir, { recursive: true });
 

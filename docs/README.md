@@ -51,7 +51,7 @@ docs/
 | [GitLab Mattermost 项目 Hook 自动收敛 - 后端.md](./backend/GitLab%20Mattermost%20项目%20Hook%20自动收敛%20-%20后端.md) | 自动为 GitLab develop 项目补齐 Mattermost GitLab 插件 webhook |
 | [Mattermost Jira 提醒 - 后端.md](./backend/Mattermost%20Jira%20提醒%20-%20后端.md) | 每日 Jira 提醒私信发送规则 |
 | [消息系统开发.md](./project/消息系统开发.md) | 系统内消息模型、投递事件、接口和前端入口 |
-| [评论图片附件迁移方案.md](./project/评论图片附件迁移方案.md) | 评论图片附件的 S3/MinIO 分阶段迁移方案 |
+| [评论图片附件迁移方案.md](./project/评论图片附件迁移方案.md) | 评论附件从图片阶段扩展到通用文件的 S3/MinIO 分阶段迁移记录 |
 | [ORF 悬赏目标流程设计.md](./rules/ORF%20悬赏目标流程设计.md) | 悬赏目标流程的产品术语、核心原则和状态流转 |
 | [ORF 思路记录.md](./rules/ORF%20思路记录.md) | ORF 产品方法中待沉淀的原则和思路 |
 | [积分结算规则.md](./rules/积分结算规则.md) | 积分结算后端规则口径 |
