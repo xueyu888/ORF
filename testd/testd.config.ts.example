@@ -274,6 +274,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.personal-settings.save-persistence",
+    title: "20-个人设置保存后刷新和重新登录保留配置",
+    doc: "testd-doc/cases/defaults/20-个人设置保存后刷新和重新登录保留配置.md",
+    changePolicy: "open",
+    spec: "testd/defaults/personal-settings-save-persistence/_entry/personal-settings-save-persistence.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
