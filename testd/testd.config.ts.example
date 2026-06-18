@@ -294,6 +294,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.about-update.status",
+    title: "22-关于ORF检查更新与安装状态",
+    doc: "testd-doc/cases/defaults/22-关于ORF检查更新与安装状态.md",
+    changePolicy: "open",
+    spec: "testd/defaults/about-update-status/_entry/about-update-status.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
