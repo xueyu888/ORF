@@ -334,6 +334,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "system.members-list.fields",
+    title: "03-成员管理用户列表字段展示",
+    doc: "testd-doc/cases/system/03-成员管理用户列表字段展示.md",
+    changePolicy: "open",
+    spec: "testd/system/members-list/_entry/members-list.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
