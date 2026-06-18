@@ -304,6 +304,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.about-close.return",
+    title: "23-关于ORF页面关闭返回原页面",
+    doc: "testd-doc/cases/defaults/23-关于ORF页面关闭返回原页面.md",
+    changePolicy: "open",
+    spec: "testd/defaults/about-close-return/_entry/about-close-return.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
