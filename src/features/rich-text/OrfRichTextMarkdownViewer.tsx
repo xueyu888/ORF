@@ -564,9 +564,12 @@ export function OrfRichTextMarkdownViewer({
         if (block.kind === "list") {
           const ListTag = block.ordered ? "ol" : "ul";
           return (
-            <ListTag className={`${classNamePrefix}-list`} key={block.key}>
+            <ListTag className={`${classNamePrefix}-list orf-rich-text-markdown-list`} key={block.key}>
               {block.items.map((item, index) => (
-                <li className={item.checked === null ? undefined : `${classNamePrefix}-task-item`} key={`${block.key}:item:${index}`}>
+                <li
+                  className={item.checked === null ? undefined : `${classNamePrefix}-task-item orf-rich-text-markdown-task-item`}
+                  key={`${block.key}:item:${index}`}
+                >
                   {item.checked !== null && <input checked={item.checked} readOnly type="checkbox" />}
                   {renderInlineFragments(item.text, context, `${block.key}:item:${index}`)}
                 </li>

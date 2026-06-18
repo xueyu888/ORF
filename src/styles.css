@@ -7683,14 +7683,21 @@ button:disabled {
   line-height: 1.55;
 }
 
-.work-logs-activity-markdown .orf-rich-text-viewer-paragraph,
-.work-logs-activity-markdown .orf-rich-text-viewer-list {
+.work-logs-activity-markdown .orf-work-log-markdown-paragraph {
   margin: 0 0 8px;
 }
 
-.work-logs-activity-markdown .orf-rich-text-viewer-paragraph:last-child,
-.work-logs-activity-markdown .orf-rich-text-viewer-list:last-child {
+.work-logs-activity-markdown .orf-work-log-markdown-list {
+  margin: 0 0 8px 20px;
+}
+
+.work-logs-activity-markdown .orf-work-log-markdown-paragraph:last-child,
+.work-logs-activity-markdown .orf-work-log-markdown-list:last-child {
   margin-bottom: 0;
+}
+
+.work-logs-activity-markdown .orf-work-log-markdown-task-item input {
+  accent-color: var(--orf-accent);
 }
 
 .work-logs-draft-list {
@@ -12801,35 +12808,10 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-comment-markdown-list {
-  list-style-position: outside;
   margin: 5px 0 5px 20px;
-  padding: 0;
-  white-space: normal;
-}
-
-.orf-comment-markdown-list:is(ul) {
-  list-style-type: disc;
-}
-
-.orf-comment-markdown-list:is(ol) {
-  list-style-type: decimal;
-}
-
-.orf-comment-markdown-list li {
-  display: list-item;
-  padding-left: 2px;
-}
-
-.orf-comment-markdown-task-item {
-  list-style: none;
-  margin-left: -18px;
 }
 
 .orf-comment-markdown-task-item input {
-  width: 14px;
-  height: 14px;
-  margin: 0 6px 0 0;
-  vertical-align: -2px;
   accent-color: #0b8f7f;
 }
 
@@ -13227,6 +13209,38 @@ body[data-dragging-floating="true"] {
   grid-column: 2;
   min-width: 0;
   width: 100%;
+}
+
+.orf-rich-text-markdown-list {
+  list-style-position: outside;
+  margin-left: 20px;
+  padding: 0;
+  white-space: normal;
+}
+
+.orf-rich-text-markdown-list:is(ul) {
+  list-style-type: disc;
+}
+
+.orf-rich-text-markdown-list:is(ol) {
+  list-style-type: decimal;
+}
+
+.orf-rich-text-markdown-list li {
+  display: list-item;
+  padding-left: 2px;
+}
+
+.orf-rich-text-markdown-task-item {
+  list-style: none;
+  margin-left: -18px;
+}
+
+.orf-rich-text-markdown-task-item input {
+  width: 14px;
+  height: 14px;
+  margin: 0 6px 0 0;
+  vertical-align: -2px;
 }
 
 .orf-rich-text-editor {
@@ -14933,34 +14947,10 @@ a.orf-row-loot-action,
 }
 
 .orf-chat-markdown-list {
-  list-style-position: outside;
   margin: 4px 0 4px 20px;
-  padding: 0;
-}
-
-.orf-chat-markdown-list:is(ul) {
-  list-style-type: disc;
-}
-
-.orf-chat-markdown-list:is(ol) {
-  list-style-type: decimal;
-}
-
-.orf-chat-markdown-list li {
-  display: list-item;
-  padding-left: 2px;
-}
-
-.orf-chat-markdown-task-item {
-  list-style: none;
-  margin-left: -18px;
 }
 
 .orf-chat-markdown-task-item input {
-  width: 14px;
-  height: 14px;
-  margin: 0 6px 0 0;
-  vertical-align: -2px;
   accent-color: var(--orf-accent);
 }
 

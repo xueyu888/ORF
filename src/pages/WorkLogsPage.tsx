@@ -1098,9 +1098,7 @@ function WorkLogHistoryList({
                   </button>
                 </div>
               </div>
-              <div className="work-logs-activity-markdown">
-                <OrfRichTextMarkdownViewer body={entry.bodyMarkdown} compact />
-              </div>
+              <WorkLogMarkdown body={entry.bodyMarkdown} />
             </article>
           ))}
         </div>
@@ -1162,11 +1160,21 @@ function WorkLogActivityCard({
               <em>剩 {entry.remainingEstimatePercent}%</em>
             )}
         </div>
-        <div className="work-logs-activity-markdown">
-          <OrfRichTextMarkdownViewer body={entry.bodyMarkdown} compact />
-        </div>
+        <WorkLogMarkdown body={entry.bodyMarkdown} />
       </div>
     </article>
+  );
+}
+
+function WorkLogMarkdown({ body }: { body: string }) {
+  return (
+    <div className="work-logs-activity-markdown">
+      <OrfRichTextMarkdownViewer
+        body={body}
+        classNamePrefix="orf-work-log-markdown"
+        compact
+      />
+    </div>
   );
 }
 
@@ -1666,9 +1674,7 @@ function WorkLogReportCellPopover({
                   <em>剩 {entry.remainingEstimatePercent}%</em>
                 )}
             </div>
-            <div className="work-logs-activity-markdown">
-              <OrfRichTextMarkdownViewer body={entry.bodyMarkdown} compact />
-            </div>
+            <WorkLogMarkdown body={entry.bodyMarkdown} />
           </article>
         ))}
       </div>
