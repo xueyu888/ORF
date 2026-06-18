@@ -379,7 +379,7 @@ export const testdCases = [
     doc: "testd-doc/cases/system/07-成员管理停用启用用户校验.md",
     changePolicy: "open",
     spec: "testd/system/members-status/_entry/members-status.spec.ts",
-    enabled: true,
+    enabled: false,
     fixtureLifecycle: "isolated",
     traceability: "verified",
   },

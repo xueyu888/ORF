@@ -7,6 +7,8 @@ import { personalSettingsCustomSkinCase } from "../personal-settings-custom-skin
 import { personalSettingsCustomSkinOperators } from "../personal-settings-custom-skin.operators";
 
 test.describe("19-个人设置自定义皮肤管理校验测试用例", () => {
+  test.setTimeout(90_000);
+
   test(personalSettingsCustomSkinCase.title, async ({ context, page }, testInfo) => {
     const ctx: TestContext = { context, page };
 

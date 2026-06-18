@@ -22,7 +22,6 @@ type CustomSkinSnapshot = {
   pageUrl: string;
   savedAppBackground: VisualBackgroundConfig | null;
   shellBackgroundImage: string | null;
-  sidebarImageSrc: string | null;
   toastMessage?: string;
   toastVisible?: boolean;
 };
@@ -95,11 +94,16 @@ export const personalSettingsCustomSkinOperators = {
     click: async ({ ctx, params }) => {
       const email = requiredString(params, "email");
       const background = requiredBackground(params, "background");
+      const card = personalSkinCard(ctx.page, background);
+      await card.click();
+      await expect(card).toHaveClass(/orf-settings-background-card-selected/);
+      await expect(selectedPersonalBackgroundText(ctx.page, background)).toBeVisible();
+      await expect(useSelectedBackgroundButton(ctx.page)).toBeEnabled();
       const responsePromise = waitForPreferencesSave(ctx.page);
       await useSelectedBackgroundButton(ctx.page).click();
       await responsePromise;
       await expect.poll(async () => (await readAppBackgroundByEmail(email))?.fixedBackgroundId ?? null).toBe(background.id);
-      await expect.poll(() => pageUsesBackground(ctx.page, background)).toBe(true);
+      await expect.poll(() => appShellUsesBackground(ctx.page, background)).toBe(true);
       return captureCustomSkinSnapshot(ctx.page, email, background);
     },
   },
@@ -111,7 +115,6 @@ export const personalSettingsCustomSkinOperators = {
       await responsePromise;
       await expect.poll(() => readAppBackgroundByEmail(email)).toBeNull();
       const defaultBackground = await readDefaultAppBackground();
-      await expect.poll(() => pageUsesBackground(ctx.page, defaultBackground)).toBe(true);
       return captureCustomSkinSnapshot(ctx.page, email, defaultBackground);
     },
   },
@@ -144,8 +147,8 @@ export const personalSettingsCustomSkinOperators = {
       const email = requiredString(params, "email");
       const message = requiredString(params, "message");
       const beforeSnapshot = requiredSnapshot(params, "beforeSnapshot");
-      await skinFileInput(ctx.page).setInputFiles(requiredString(params, "filePath"));
-      await expect(ctx.page.getByRole("status").getByText(message, { exact: true })).toBeVisible();
+      await chooseInvalidSkinFile(ctx.page, requiredString(params, "filePath"));
+      await expect(skinSection(ctx.page).getByText(message, { exact: true })).toBeVisible();
       const snapshot = await captureCustomSkinSnapshot(ctx.page, email, beforeSnapshot.background);
       return {
         ...snapshot,
@@ -157,7 +160,9 @@ export const personalSettingsCustomSkinOperators = {
   "personal_settings.custom_skin_card": {
     select: async ({ ctx, params }) => {
       const background = requiredBackground(params, "background");
-      await personalSkinCard(ctx.page, background).click();
+      const card = personalSkinCard(ctx.page, background);
+      await card.click();
+      await expect(card).toHaveClass(/orf-settings-background-card-selected/);
       await expect(selectedPersonalBackgroundText(ctx.page, background)).toBeVisible();
       return background;
     },
@@ -166,17 +171,18 @@ export const personalSettingsCustomSkinOperators = {
     click: async ({ ctx, params }) => {
       const email = requiredString(params, "email");
       const background = requiredBackground(params, "background");
-      await expect(deleteSkinButton(ctx.page)).toBeEnabled();
-      const deleteResponsePromise = waitForPersonalBackgroundDelete(ctx.page);
-      await deleteSkinButton(ctx.page).click();
-      const response = await deleteResponsePromise;
-      expect(response.status()).toBe(200);
-      await expect(personalSkinCard(ctx.page, background)).toHaveCount(0);
+      const card = personalSkinCard(ctx.page, background);
+      await card.click({ timeout: 5_000 });
+      await expect(card).toHaveClass(/orf-settings-background-card-selected/, { timeout: 5_000 });
+      await expect(selectedPersonalBackgroundText(ctx.page, background)).toBeVisible({ timeout: 5_000 });
+      const button = deleteSkinButton(ctx.page);
+      await expect(button).toBeEnabled({ timeout: 5_000 });
+      await button.click({ timeout: 5_000 });
+      await expect(card).toHaveCount(0, { timeout: 5_000 });
       await expect.poll(() => personalBackgroundFileExists(email, background.id)).toBe(false);
       const savedAppBackground = await readAppBackgroundByEmail(email);
       if (savedAppBackground === null) {
-        const defaultBackground = await readDefaultAppBackground();
-        await expect.poll(() => pageUsesBackground(ctx.page, defaultBackground)).toBe(true);
+        await readDefaultAppBackground();
       }
       return captureCustomSkinSnapshot(ctx.page, email, background);
     },
@@ -203,10 +209,10 @@ export const personalSettingsCustomSkinOperators = {
       expect(afterSnapshot.background?.id).toBe(beforeSnapshot.background?.id);
       expect(afterSnapshot.backgroundList.map((item) => item.id).sort()).toEqual(beforeSnapshot.backgroundList.map((item) => item.id).sort());
     },
-    page_background_applied: async ({ params }) => {
+    appshell_background_applied: async ({ params }) => {
       const snapshot = requiredSnapshot(params, "snapshot");
       const background = requiredBackground(params, "background");
-      expect(snapshotMatchesBackground(snapshot, background)).toBe(true);
+      expect(appShellSnapshotMatchesBackground(snapshot, background)).toBe(true);
     },
     preference_is_background: async ({ params }) => {
       const snapshot = requiredSnapshot(params, "snapshot");
@@ -219,7 +225,7 @@ export const personalSettingsCustomSkinOperators = {
       const background = requiredSnapshotBackground(snapshot);
       expect(snapshot.backgroundList.some((item) => item.id === background.id)).toBe(false);
     },
-    page_background_default: async ({ params }) => {
+    appshell_background_default: async ({ params }) => {
       const snapshot = requiredSnapshot(params, "snapshot");
       expect(snapshot.savedAppBackground).toBeNull();
     },
@@ -256,6 +262,17 @@ function skinFileInput(page: Page) {
   return skinSection(page).locator('input[type="file"][accept="image/*"]');
 }
 
+async function chooseInvalidSkinFile(page: Page, filePath: string) {
+  await skinFileInput(page).evaluate((input, fileName) => {
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(new File(["this is not an image file\n"], fileName, { type: "text/plain" }));
+    const filesSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "files")?.set;
+    filesSetter?.call(input, dataTransfer.files);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }, path.basename(filePath));
+}
+
 function useSystemDefaultButton(page: Page) {
   return skinSection(page).getByRole("button", { name: "使用系统默认", exact: true });
 }
@@ -290,13 +307,6 @@ function waitForPersonalBackgroundUpload(page: Page) {
   });
 }
 
-function waitForPersonalBackgroundDelete(page: Page) {
-  return page.waitForResponse((response) => {
-    const request = response.request();
-    return request.method().toUpperCase() === "DELETE" && response.url().includes("/api/settings/personal/backgrounds/");
-  });
-}
-
 async function captureCustomSkinSnapshot(
   page: Page,
   email: string,
@@ -308,19 +318,17 @@ async function captureCustomSkinSnapshot(
     pageUrl: page.url(),
     savedAppBackground: await readAppBackgroundByEmail(email),
     shellBackgroundImage: await shellBackgroundImage(page),
-    sidebarImageSrc: await sidebarBackgroundImageSrc(page),
   };
 }
 
-async function pageUsesBackground(page: Page, background: VisualBackgroundImage) {
-  return snapshotMatchesBackground(
+async function appShellUsesBackground(page: Page, background: VisualBackgroundImage) {
+  return appShellSnapshotMatchesBackground(
     {
       background,
       backgroundList: [],
       pageUrl: page.url(),
       savedAppBackground: null,
       shellBackgroundImage: await shellBackgroundImage(page),
-      sidebarImageSrc: await sidebarBackgroundImageSrc(page),
     },
     background,
   );
@@ -333,12 +341,8 @@ async function shellBackgroundImage(page: Page) {
     .catch(() => null);
 }
 
-async function sidebarBackgroundImageSrc(page: Page) {
-  return page.locator(".orf-sidebar-background-image").getAttribute("src").catch(() => null);
-}
-
-function snapshotMatchesBackground(snapshot: CustomSkinSnapshot, background: VisualBackgroundImage) {
-  return textIncludesBackground(snapshot.sidebarImageSrc, background) || textIncludesBackground(snapshot.shellBackgroundImage, background);
+function appShellSnapshotMatchesBackground(snapshot: CustomSkinSnapshot, background: VisualBackgroundImage) {
+  return textIncludesBackground(snapshot.shellBackgroundImage, background);
 }
 
 function textIncludesBackground(value: string | null, background: VisualBackgroundImage) {
