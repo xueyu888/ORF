@@ -53,12 +53,18 @@ function normalizeMimeType(value: string) {
   return value.split(";")[0]?.trim().toLowerCase() ?? "";
 }
 
+const previewableTextFileExtensions = new Set(["csv", "json", "log", "txt"]);
+const previewableTextMimeTypes = new Set(["application/json", "text/csv", "text/plain"]);
+const unsafeTextPreviewFileExtensions = new Set(["htm", "html", "svg", "xhtml", "xml"]);
+
 export function commentAttachmentPreviewKind(row: Pick<CommentAttachmentRow | CommentAttachmentInsert, "fileName" | "mimeType">): CommentAttachmentPreviewKind {
   const mimeType = normalizeMimeType(row.mimeType);
   const fileName = row.fileName.toLowerCase();
+  const extension = extensionFromFileName(fileName);
   if (mimeType === "image/gif" || mimeType === "image/jpeg" || mimeType === "image/png" || mimeType === "image/webp") return "image";
   if (mimeType === "application/pdf") return "pdf";
   if (mimeType === "text/markdown" || fileName.endsWith(".md") || fileName.endsWith(".markdown")) return "markdown";
+  if (previewableTextFileExtensions.has(extension) || (previewableTextMimeTypes.has(mimeType) && !unsafeTextPreviewFileExtensions.has(extension))) return "text";
   return "download";
 }
 
@@ -111,7 +117,9 @@ function extensionFromFileName(fileName: string) {
 
 function extensionFromMimeType(mimeType: string) {
   const normalized = normalizeMimeType(mimeType);
+  if (normalized === "application/json") return "json";
   if (normalized === "application/pdf") return "pdf";
+  if (normalized === "text/csv") return "csv";
   if (normalized === "text/markdown") return "md";
   if (normalized === "text/plain") return "txt";
   return "bin";
@@ -125,6 +133,12 @@ function isMarkdownFile(input: { fileName: string; mimeType: string }) {
   const extension = extensionFromFileName(input.fileName);
   const mimeType = normalizeMimeType(input.mimeType);
   return extension === "md" || extension === "markdown" || mimeType === "text/markdown";
+}
+
+function isPreviewableTextFile(input: { fileName: string; mimeType: string }) {
+  const extension = extensionFromFileName(input.fileName);
+  const mimeType = normalizeMimeType(input.mimeType);
+  return previewableTextFileExtensions.has(extension) || (previewableTextMimeTypes.has(mimeType) && !unsafeTextPreviewFileExtensions.has(extension));
 }
 
 function safeStoredMimeType(input: { body: Buffer; fileName: string; mimeType: string }): CommentAttachmentUploadMetadata {
@@ -145,6 +159,10 @@ function safeStoredMimeType(input: { body: Buffer; fileName: string; mimeType: s
 
   if (isMarkdownFile(input)) {
     return { extension: extensionFromFileName(input.fileName) || "md", mimeType: "text/markdown; charset=utf-8" };
+  }
+
+  if (isPreviewableTextFile(input)) {
+    return { extension: extensionFromFileName(input.fileName) || extensionFromMimeType(declaredMimeType), mimeType: "text/plain; charset=utf-8" };
   }
 
   if (declaredMimeType.startsWith("image/") || declaredMimeType === "application/pdf") {

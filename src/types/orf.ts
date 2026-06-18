@@ -482,7 +482,7 @@ export interface OrfRules {
 
 export type CommentTargetType = "objective" | "result" | "task" | "subtask" | "feedback";
 export type CommentStatus = "open" | "resolved";
-export type CommentAttachmentPreviewKind = "download" | "image" | "markdown" | "pdf";
+export type CommentAttachmentPreviewKind = "download" | "image" | "markdown" | "pdf" | "text";
 
 export interface CommentAttachment {
   contentUrl: string;

@@ -531,13 +531,15 @@ export function CommentBodyText({
 }
 
 function CommentFileAttachmentCard({ attachment }: { attachment: CommentAttachment }) {
-  const canPreview = Boolean(attachment.previewUrl && (attachment.previewKind === "markdown" || attachment.previewKind === "pdf"));
+  const canPreview = Boolean(attachment.previewUrl && (attachment.previewKind === "markdown" || attachment.previewKind === "pdf" || attachment.previewKind === "text"));
   const fileKindLabel = attachment.previewKind === "markdown"
     ? "Markdown"
     : attachment.previewKind === "pdf"
       ? "PDF"
-      : attachment.mimeType || "文件";
-  const Icon = attachment.previewKind === "markdown" || attachment.previewKind === "pdf" ? FileText : FileIcon;
+      : attachment.previewKind === "text"
+        ? "文本"
+        : attachment.mimeType || "文件";
+  const Icon = attachment.previewKind === "markdown" || attachment.previewKind === "pdf" || attachment.previewKind === "text" ? FileText : FileIcon;
 
   return (
     <figure className="orf-comment-attachment orf-comment-file-attachment">

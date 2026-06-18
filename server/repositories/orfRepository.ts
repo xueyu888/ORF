@@ -2216,7 +2216,7 @@ export async function getCommentAttachmentContent(
     contentDisposition,
     contentLength: stored.contentLength,
     contentType: contentDisposition === "inline"
-      ? previewKind === "markdown"
+      ? previewKind === "markdown" || previewKind === "text"
         ? "text/plain; charset=utf-8"
         : attachment.mimeType
       : canPreview
