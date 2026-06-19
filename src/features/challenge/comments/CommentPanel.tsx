@@ -650,6 +650,7 @@ export function CommentDraftFields({
         )}
         {showSubmitButton && (
           <IconButton
+            className="orf-comment-send-button"
             type="submit"
             icon={Send}
             label={submitLabel}

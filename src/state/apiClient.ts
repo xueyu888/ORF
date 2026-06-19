@@ -114,6 +114,13 @@ export type ChatThreadsResponse = { status?: "ok"; threads: ChatThreadSummary[] 
 export type ChatAttachmentUploadResponse = { status?: "ok"; attachment: ChatAttachment };
 export type ChatMentionableUsersResponse = { status?: "ok"; users: ChatUser[] };
 export type ChatSearchResponse = { status?: "ok"; results: ChatSearchResult[] };
+export type ApiUploadProgress = {
+  lengthComputable: boolean;
+  loadedBytes: number;
+  percent: number | null;
+  timestampMs: number;
+  totalBytes: number | null;
+};
 export type GitLabOrfChatConfigStatus = {
   accessTokenConfigured: boolean;
   channelType: "public" | "private";
@@ -268,6 +275,18 @@ async function readErrorPayload(response: Response) {
   }
 }
 
+function parseXhrPayload(xhr: XMLHttpRequest) {
+  const contentType = xhr.getResponseHeader("content-type") ?? "";
+  const text = typeof xhr.responseText === "string" ? xhr.responseText : "";
+  if (!contentType.includes("application/json")) return text;
+
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return text;
+  }
+}
+
 export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body && !headers.has("Content-Type") && !(init.body instanceof FormData)) {
@@ -291,6 +310,44 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function apiRequest(path: string, init?: RequestInit): Promise<void> {
   await apiJson<unknown>(path, init);
+}
+
+function uploadFormDataJson<T>(
+  path: string,
+  formData: FormData,
+  options: { method?: "POST" | "PUT" | "PATCH"; onProgress?: (progress: ApiUploadProgress) => void } = {},
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method ?? "POST", path);
+    xhr.withCredentials = true;
+
+    if (options.onProgress) {
+      xhr.upload.onprogress = (event) => {
+        const totalBytes = event.lengthComputable && event.total > 0 ? event.total : null;
+        options.onProgress?.({
+          lengthComputable: event.lengthComputable,
+          loadedBytes: event.loaded,
+          percent: totalBytes ? Math.max(0, Math.min(100, (event.loaded / totalBytes) * 100)) : null,
+          timestampMs: globalThis.performance?.now?.() ?? Date.now(),
+          totalBytes,
+        });
+      };
+    }
+
+    xhr.onload = () => {
+      const payload = parseXhrPayload(xhr);
+      if (xhr.status < 200 || xhr.status >= 300) {
+        emitAuthenticationExpired(path, xhr.status);
+        reject(new ApiError(xhr.status, path, apiErrorMessage(payload, xhr.status, path)));
+        return;
+      }
+      resolve(payload as T);
+    };
+    xhr.onerror = () => reject(new ApiError(0, path, "网络请求失败"));
+    xhr.onabort = () => reject(new ApiError(0, path, "上传已取消"));
+    xhr.send(formData);
+  });
 }
 
 export async function getBountyHallData() {
@@ -621,13 +678,14 @@ export async function setChatThreadFollowRequest(rootMessageId: string, followin
   });
 }
 
-export async function uploadChatAttachment(input: { channelId: string; file: File }) {
+export async function uploadChatAttachment(input: { channelId: string; file: File; onProgress?: (progress: ApiUploadProgress) => void }) {
   const formData = new FormData();
   formData.set("file", input.file);
-  return apiJson<ChatAttachmentUploadResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/attachments`, {
-    method: "POST",
-    body: formData,
-  });
+  return uploadFormDataJson<ChatAttachmentUploadResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/attachments`,
+    formData,
+    { onProgress: input.onProgress },
+  );
 }
 
 export async function getChatMentionableUsers(channelId: string) {
