@@ -363,7 +363,7 @@ export async function createScopedUser(scope: RuntimeScope, actorUserId: string,
       .limit(1);
 
     if (matchedMembership) {
-      assertCanChangeRole(actorUserId, matchedUser.id, normalized.role);
+      throw Object.assign(new Error("User already exists"), { statusCode: 409 });
     }
   }
 
