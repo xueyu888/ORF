@@ -1,6 +1,5 @@
 import type {
   AppNotification,
-  ChatMessageSystemMetadata,
   CommentTargetType,
   NotificationKind,
   NotificationStream,
@@ -8,6 +7,16 @@ import type {
 } from "../../src/types/orf";
 import { pool } from "../db/client";
 import { ensureOrfChatBotActor } from "../integrations/orf-chat-delivery";
+import {
+  buildNotificationSystemMetadata,
+  formatNotificationChatBody,
+  notificationChatDeliveryId,
+  resolveNotificationRecipients,
+  type NotificationDeliveryStatus,
+  type NotificationMetadataInput,
+  type NotificationRecipientFact,
+} from "../notifications/notificationEventModel";
+import { publishRealtimeNotification } from "../realtime/realtimeEventBus";
 import { sendChatMessage, type ChatActor } from "./chatRepository";
 import { makeId, nowIso, stableConversationName } from "./chatRepositoryModel";
 import type { RuntimeScope } from "./runtimeScope";
@@ -30,25 +39,59 @@ export type NotificationEventInput = {
   title: string;
 };
 
-type SystemChatMessageProjectionRow = {
-  actor_name: string | null;
+type NotificationEventRow = {
+  actor_name: string;
   actor_user_id: string | null;
   body: string;
-  channel_id: string;
-  channel_system_kind: NotificationStream;
   created_at: Date | string;
+  delivered_at: Date | string;
   id: string;
-  last_read_at: Date | string | null;
-  notification_event_id: string | null;
-  recipient_user_id: string | null;
+  kind: NotificationKind;
+  metadata: Record<string, string> | null;
+  read_at: Date | string | null;
+  recipient_user_id: string;
   reply_target_id: string | null;
   reply_target_type: CommentTargetType | null;
-  system_metadata: ChatMessageSystemMetadata | null;
-  target_href: string | null;
-  target_id: string | null;
-  target_title: string | null;
-  target_type: NotificationTargetType | null;
-  title: string | null;
+  stream: NotificationStream;
+  target_href: string;
+  target_id: string;
+  target_type: NotificationTargetType;
+  team_id: string;
+  title: string;
+};
+
+type NotificationReceiptRow = {
+  delivered_at: Date | string;
+  read_at: Date | string | null;
+  recipient_user_id: string;
+};
+
+type NotificationDeliveryEventRow = {
+  actor_name: string;
+  actor_user_id: string | null;
+  attempts: number;
+  body: string;
+  delivery_id: string;
+  delivery_recipient_user_id: string | null;
+  delivery_status: NotificationDeliveryStatus;
+  event_created_at: Date | string;
+  event_id: string;
+  kind: NotificationKind;
+  metadata: Record<string, string> | null;
+  reply_target_id: string | null;
+  reply_target_type: CommentTargetType | null;
+  stream: NotificationStream;
+  target_href: string;
+  target_id: string;
+  target_type: NotificationTargetType;
+  team_id: string;
+  title: string;
+};
+
+type ExistingSystemChatMessageRow = {
+  channel_id: string;
+  created_at: Date | string;
+  id: string;
 };
 
 const SYSTEM_BOT_EMAIL = "orf-system@orf.local";
@@ -56,71 +99,105 @@ const SYSTEM_BOT_NAME = "ORF 系统通知";
 const SYSTEM_ANNOUNCEMENT_CHANNEL_NAME = "orf-system-announcements";
 const SYSTEM_ANNOUNCEMENT_TITLE = "系统公告";
 const PERSONAL_NOTIFICATION_TITLE = "我的系统通知";
+const DELIVERY_RETRY_BASE_MS = 60_000;
+const DELIVERY_RETRY_MAX_MS = 30 * 60_000;
 
 function iso(value: Date | string | null | undefined) {
   if (!value) return null;
   return value instanceof Date ? value.toISOString() : value;
 }
 
-function uniqueRecipients(recipientUserIds: string[], actorUserId?: string | null) {
-  const actor = actorUserId?.trim();
-  return Array.from(new Set(recipientUserIds.map((id) => id.trim()).filter(Boolean))).filter((id) => id !== actor);
-}
-
-function notificationBody(input: Pick<NotificationEventInput, "body" | "targetHref" | "title">) {
-  const title = input.title.trim();
-  const body = input.body.trim();
-  const targetHref = input.targetHref.trim();
-  const content = body ? `**${title}**\n\n${body}` : `**${title}**`;
-  return targetHref ? `${content}\n\n[打开目标](${targetHref})` : content;
-}
-
-function systemMetadata(input: NotificationEventInput, recipientUserId?: string | null): ChatMessageSystemMetadata {
+function metadataInputFromDelivery(row: NotificationDeliveryEventRow): NotificationMetadataInput {
   return {
-    actorName: input.actorName.trim(),
-    actorUserId: input.actorUserId?.trim() || null,
-    kind: input.kind,
-    metadata: input.metadata ?? {},
-    notificationEventId: makeId("system-notification"),
-    recipientUserId: recipientUserId ?? null,
-    replyTargetId: input.replyTargetId ?? null,
-    replyTargetType: input.replyTargetType ?? null,
-    stream: input.stream,
-    targetHref: input.targetHref,
-    targetId: input.targetId,
-    targetTitle: input.metadata?.targetTitle ?? input.title,
-    targetType: input.targetType,
-    title: input.title.trim(),
+    actorName: row.actor_name,
+    actorUserId: row.actor_user_id,
+    body: row.body,
+    kind: row.kind,
+    metadata: row.metadata ?? {},
+    replyTargetId: row.reply_target_id,
+    replyTargetType: row.reply_target_type,
+    stream: row.stream,
+    targetHref: row.target_href,
+    targetId: row.target_id,
+    targetType: row.target_type,
+    title: row.title,
   };
 }
 
-function toNotification(row: SystemChatMessageProjectionRow, userId: string): AppNotification {
-  const metadata = row.system_metadata ?? {};
-  const createdAt = iso(row.created_at) ?? nowIso();
-  const lastReadAt = iso(row.last_read_at);
-  const readAt = lastReadAt && Date.parse(lastReadAt) >= Date.parse(createdAt) ? lastReadAt : null;
+function toNotification(row: NotificationEventRow): AppNotification {
   return {
     id: row.id,
-    kind: metadata.kind ?? "feedback.created",
-    recipientUserId: metadata.recipientUserId ?? row.recipient_user_id ?? userId,
-    actorUserId: metadata.actorUserId ?? row.actor_user_id ?? null,
-    actorName: metadata.actorName ?? row.actor_name ?? SYSTEM_BOT_NAME,
-    title: metadata.title ?? row.title ?? row.target_title ?? "系统消息",
+    kind: row.kind,
+    recipientUserId: row.recipient_user_id,
+    actorUserId: row.actor_user_id,
+    actorName: row.actor_name || SYSTEM_BOT_NAME,
+    title: row.title,
     body: row.body,
-    stream: metadata.stream ?? row.channel_system_kind,
-    targetType: metadata.targetType ?? row.target_type ?? "feedback",
-    targetId: metadata.targetId ?? row.target_id ?? "",
-    targetHref: metadata.targetHref ?? row.target_href ?? "/chat",
-    replyTargetType: metadata.replyTargetType ?? row.reply_target_type ?? null,
-    replyTargetId: metadata.replyTargetId ?? row.reply_target_id ?? null,
-    readAt,
-    createdAt,
-    metadata: metadata.metadata ?? {},
+    stream: row.stream,
+    targetType: row.target_type,
+    targetId: row.target_id,
+    targetHref: row.target_href,
+    replyTargetType: row.reply_target_type,
+    replyTargetId: row.reply_target_id,
+    readAt: iso(row.read_at),
+    createdAt: iso(row.created_at) ?? nowIso(),
+    metadata: row.metadata ?? {},
+  };
+}
+
+function deliveryErrorText(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.slice(0, 500);
+}
+
+function nextDeliveryRetryAt(attempts: number) {
+  const delayMs = Math.min(DELIVERY_RETRY_MAX_MS, Math.max(DELIVERY_RETRY_BASE_MS, attempts * DELIVERY_RETRY_BASE_MS));
+  return new Date(Date.now() + delayMs).toISOString();
+}
+
+async function findExistingSystemBotActor(teamId: string): Promise<ChatActor | null> {
+  const { rows } = await pool.query<{ id: string; name: string; role: string | null }>(
+    `
+      SELECT u.id, u.name, tm.role
+      FROM chat_channels c
+      INNER JOIN users u ON u.id = c.created_by
+      LEFT JOIN team_members tm ON tm.team_id = c.team_id AND tm.user_id = u.id
+      WHERE c.team_id = $1
+        AND c.system_kind IS NOT NULL
+        AND c.created_by IS NOT NULL
+        AND c.archived_at IS NULL
+        AND COALESCE(u.status, 'active') = 'active'
+      ORDER BY (tm.team_id IS NOT NULL) DESC, c.created_at ASC, c.id ASC
+      LIMIT 1
+    `,
+    [teamId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  await pool.query(
+    `
+      INSERT INTO team_members (team_id, user_id, role)
+      VALUES ($1, $2, 'member')
+      ON CONFLICT (team_id, user_id) DO NOTHING
+    `,
+    [teamId, row.id],
+  );
+  return {
+    id: row.id,
+    name: row.name || SYSTEM_BOT_NAME,
+    role: row.role === "admin" ? "admin" : "member",
+    scope: runtimeScope(teamId),
+    canCreatePrivateChannel: true,
+    canCreatePublicChannel: true,
+    canManageAnyChannel: false,
+    canManageAnyMembers: false,
+    canRead: true,
+    canWrite: true,
   };
 }
 
 async function ensureSystemBotActor(teamId: string) {
-  return ensureOrfChatBotActor({
+  return await findExistingSystemBotActor(teamId) ?? ensureOrfChatBotActor({
     botEmail: SYSTEM_BOT_EMAIL,
     botName: SYSTEM_BOT_NAME,
     teamId,
@@ -161,7 +238,6 @@ async function ensureTeamAnnouncementChannel(input: { actor: ChatActor; teamId: 
           purpose = EXCLUDED.purpose,
           header = EXCLUDED.header,
           updated_at = EXCLUDED.updated_at
-      RETURNING id
     `,
     [
       channelId,
@@ -169,7 +245,7 @@ async function ensureTeamAnnouncementChannel(input: { actor: ChatActor; teamId: 
       SYSTEM_ANNOUNCEMENT_CHANNEL_NAME,
       SYSTEM_ANNOUNCEMENT_TITLE,
       "全体可见的系统公告和公共业务事件",
-      "系统事件以普通聊天消息进入这个频道。",
+      "系统通知事件投影到这个频道；通知事实以 notification_events 为准。",
       input.actor.id,
       now,
     ],
@@ -254,7 +330,7 @@ async function ensurePersonalNotificationChannel(input: { actor: ChatActor; reci
       input.recipientUserId,
       PERSONAL_NOTIFICATION_TITLE,
       "只投递给你的系统通知和业务提醒",
-      "系统事件以普通聊天消息进入这个私聊。",
+      "系统通知事件投影到这个会话；通知事实以 notification_events 为准。",
       input.actor.id,
       now,
     ],
@@ -334,56 +410,156 @@ async function markActorRead(input: { actorUserId?: string | null; channelId: st
   );
 }
 
-export async function createNotificationEvent(input: NotificationEventInput): Promise<AppNotification[]> {
-  const teamId = input.teamId;
-  const actor = await ensureSystemBotActor(teamId);
-  const body = notificationBody(input);
-  const notifications: AppNotification[] = [];
+async function insertNotificationEvent(input: NotificationEventInput, eventId: string, createdAt: string, recipients: NotificationRecipientFact[]) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `
+        INSERT INTO notification_events (
+          id, team_id, stream, actor_user_id, actor_name, kind, title, body,
+          target_type, target_id, target_href, reply_target_type, reply_target_id,
+          created_at, metadata
+        )
+        VALUES ($1, $2, $3::notification_stream, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb)
+      `,
+      [
+        eventId,
+        input.teamId,
+        input.stream,
+        input.actorUserId?.trim() || null,
+        input.actorName.trim(),
+        input.kind,
+        input.title.trim(),
+        input.body.trim(),
+        input.targetType,
+        input.targetId,
+        input.targetHref,
+        input.replyTargetType ?? null,
+        input.replyTargetId ?? null,
+        createdAt,
+        JSON.stringify(input.metadata ?? {}),
+      ],
+    );
 
-  if (input.stream === "teamAnnouncement") {
-    const channelId = await ensureTeamAnnouncementChannel({ actor, teamId });
-    const metadata = systemMetadata(input);
-    const result = await sendChatMessage({ body, channelId, source: "system", systemMetadata: metadata }, actor);
-    if (result.status !== "ok") {
-      throw new Error(`System chat announcement delivery failed with status ${result.status}`);
+    if (recipients.length > 0) {
+      const receiptRows = await client.query<NotificationReceiptRow>(
+        `
+          WITH input_recipients AS (
+            SELECT *
+            FROM unnest($3::uuid[], $4::timestamptz[]) AS item(user_id, read_at)
+          )
+          INSERT INTO notification_receipts (event_id, recipient_user_id, read_at, delivered_at)
+          SELECT $1, u.id, input_recipients.read_at, $5
+          FROM input_recipients
+          INNER JOIN users u ON u.id = input_recipients.user_id
+          INNER JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = $2
+          WHERE COALESCE(u.status, 'active') = 'active'
+          ON CONFLICT (event_id, recipient_user_id) DO NOTHING
+          RETURNING recipient_user_id::text, read_at, delivered_at
+        `,
+        [eventId, input.teamId, recipients.map((recipient) => recipient.userId), recipients.map((recipient) => recipient.readAt), createdAt],
+      );
+
+      if (input.stream === "personalNotification" && receiptRows.rows.length > 0) {
+        await client.query(
+          `
+            WITH input_deliveries AS (
+              SELECT *
+              FROM unnest($2::text[], $3::uuid[]) AS item(id, recipient_user_id)
+            )
+            INSERT INTO notification_deliveries (
+              id, event_id, recipient_user_id, channel, status, attempts,
+              created_at, updated_at
+            )
+            SELECT id, $1, recipient_user_id, 'chat', 'pending', 0, $4, $4
+            FROM input_deliveries
+            ON CONFLICT DO NOTHING
+          `,
+          [
+            eventId,
+            receiptRows.rows.map((row) => notificationChatDeliveryId(eventId, row.recipient_user_id)),
+            receiptRows.rows.map((row) => row.recipient_user_id),
+            createdAt,
+          ],
+        );
+      }
     }
-    await markActorRead({
-      actorUserId: input.actorUserId,
-      channelId,
-      messageId: result.message.id,
-      readAt: result.message.createdAt,
-    });
+
+    if (input.stream === "teamAnnouncement") {
+      await client.query(
+        `
+          INSERT INTO notification_deliveries (
+            id, event_id, recipient_user_id, channel, status, attempts,
+            created_at, updated_at
+          )
+          VALUES ($1, $2, null, 'chat', 'pending', 0, $3, $3)
+          ON CONFLICT DO NOTHING
+        `,
+        [notificationChatDeliveryId(eventId), eventId, createdAt],
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function listNotificationsForEvent(eventId: string): Promise<AppNotification[]> {
+  const { rows } = await pool.query<NotificationEventRow>(
+    `
+      SELECT
+        e.id,
+        e.team_id,
+        e.stream,
+        e.actor_user_id::text,
+        e.actor_name,
+        e.kind,
+        e.title,
+        e.body,
+        e.target_type,
+        e.target_id,
+        e.target_href,
+        e.reply_target_type,
+        e.reply_target_id,
+        e.created_at,
+        e.metadata,
+        r.recipient_user_id::text,
+        r.read_at,
+        r.delivered_at
+      FROM notification_events e
+      INNER JOIN notification_receipts r ON r.event_id = e.id
+      WHERE e.id = $1
+      ORDER BY r.delivered_at DESC, r.recipient_user_id
+    `,
+    [eventId],
+  );
+  return rows.map(toNotification);
+}
+
+export async function createNotificationEvent(input: NotificationEventInput): Promise<AppNotification[]> {
+  const createdAt = nowIso();
+  const recipients = resolveNotificationRecipients({
+    actorUserId: input.actorUserId,
+    createdAt,
+    recipientUserIds: input.recipientUserIds,
+    stream: input.stream,
+  });
+  if (input.stream === "personalNotification" && recipients.length === 0) {
     return [];
   }
 
-  const recipientUserIds = uniqueRecipients(input.recipientUserIds, input.actorUserId);
-  for (const recipientUserId of recipientUserIds) {
-    const channelId = await ensurePersonalNotificationChannel({ actor, recipientUserId, teamId });
-    if (!channelId) continue;
-    const metadata = systemMetadata(input, recipientUserId);
-    const result = await sendChatMessage({ body, channelId, source: "system", systemMetadata: metadata }, actor);
-    if (result.status !== "ok") {
-      throw new Error(`System chat notification delivery failed with status ${result.status}`);
-    }
-    notifications.push({
-      id: result.message.id,
-      kind: input.kind,
-      recipientUserId,
-      actorUserId: input.actorUserId?.trim() || null,
-      actorName: input.actorName.trim(),
-      title: input.title.trim(),
-      body: result.message.body,
-      stream: input.stream,
-      targetType: input.targetType,
-      targetId: input.targetId,
-      targetHref: input.targetHref,
-      replyTargetType: input.replyTargetType ?? null,
-      replyTargetId: input.replyTargetId ?? null,
-      readAt: null,
-      createdAt: result.message.createdAt,
-      metadata: input.metadata ?? {},
-    });
+  const eventId = makeId("nevt");
+  await insertNotificationEvent(input, eventId, createdAt, recipients);
+  const notifications = await listNotificationsForEvent(eventId);
+  for (const notification of notifications) {
+    publishRealtimeNotification(input.teamId, notification);
   }
+  await flushNotificationChatDeliveriesForEvent(eventId).catch(() => undefined);
   return notifications;
 }
 
@@ -457,87 +633,87 @@ export async function getUserNameById(userId: string | null | undefined): Promis
   return rows[0]?.name ?? "";
 }
 
-async function systemChatMessageProjection(input: { messageId: string; userId: string; scope: RuntimeScope }) {
+async function notificationReceiptProjection(input: { notificationId: string; userId: string; scope: RuntimeScope }) {
   const teamId = runtimeScopeStorageId(input.scope);
-  const { rows } = await pool.query<SystemChatMessageProjectionRow>(
+  const { rows } = await pool.query<NotificationEventRow>(
     `
       SELECT
-        m.id,
-        m.channel_id,
-        m.body,
-        m.created_at,
-        m.system_metadata,
-        c.system_kind AS channel_system_kind,
-        cm.user_id::text AS recipient_user_id,
-        cm.last_read_at,
-        m.system_metadata->>'notificationEventId' AS notification_event_id,
-        m.system_metadata->>'actorName' AS actor_name,
-        m.system_metadata->>'actorUserId' AS actor_user_id,
-        m.system_metadata->>'title' AS title,
-        m.system_metadata->>'targetType' AS target_type,
-        m.system_metadata->>'targetId' AS target_id,
-        m.system_metadata->>'targetHref' AS target_href,
-        m.system_metadata->>'targetTitle' AS target_title,
-        m.system_metadata->>'replyTargetType' AS reply_target_type,
-        m.system_metadata->>'replyTargetId' AS reply_target_id
-      FROM chat_messages m
-      INNER JOIN chat_channels c ON c.id = m.channel_id
-      INNER JOIN chat_channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
-      WHERE m.team_id = $1
-        AND m.source = 'system'
-        AND m.root_message_id IS NULL
-        AND m.deleted_at IS NULL
-        AND c.system_kind IS NOT NULL
-        AND (m.id = $3 OR m.system_metadata->>'notificationEventId' = $3)
+        e.id,
+        e.team_id,
+        e.stream,
+        e.actor_user_id::text,
+        e.actor_name,
+        e.kind,
+        e.title,
+        e.body,
+        e.target_type,
+        e.target_id,
+        e.target_href,
+        e.reply_target_type,
+        e.reply_target_id,
+        e.created_at,
+        e.metadata,
+        r.recipient_user_id::text,
+        r.read_at,
+        r.delivered_at
+      FROM notification_events e
+      INNER JOIN notification_receipts r ON r.event_id = e.id AND r.recipient_user_id = $2
+      WHERE e.team_id = $1
+        AND (
+          e.id = $3
+          OR EXISTS (
+            SELECT 1
+            FROM chat_messages m
+            WHERE m.team_id = e.team_id
+              AND m.source = 'system'
+              AND m.system_metadata->>'notificationEventId' = e.id
+              AND m.id = $3
+          )
+        )
       LIMIT 1
     `,
-    [teamId, input.userId, input.messageId],
+    [teamId, input.userId, input.notificationId],
   );
   return rows[0] ?? null;
 }
 
 export async function listNotificationsForUser(userId: string, scope: RuntimeScope, limit = 50): Promise<AppNotification[]> {
   const teamId = runtimeScopeStorageId(scope);
-  const { rows } = await pool.query<SystemChatMessageProjectionRow>(
+  const { rows } = await pool.query<NotificationEventRow>(
     `
       SELECT
-        m.id,
-        m.channel_id,
-        m.body,
-        m.created_at,
-        m.system_metadata,
-        c.system_kind AS channel_system_kind,
-        cm.user_id::text AS recipient_user_id,
-        cm.last_read_at,
-        m.system_metadata->>'notificationEventId' AS notification_event_id,
-        m.system_metadata->>'actorName' AS actor_name,
-        m.system_metadata->>'actorUserId' AS actor_user_id,
-        m.system_metadata->>'title' AS title,
-        m.system_metadata->>'targetType' AS target_type,
-        m.system_metadata->>'targetId' AS target_id,
-        m.system_metadata->>'targetHref' AS target_href,
-        m.system_metadata->>'targetTitle' AS target_title,
-        m.system_metadata->>'replyTargetType' AS reply_target_type,
-        m.system_metadata->>'replyTargetId' AS reply_target_id
-      FROM chat_messages m
-      INNER JOIN chat_channels c ON c.id = m.channel_id
-      INNER JOIN chat_channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
-      WHERE m.team_id = $1
-        AND m.source = 'system'
-        AND m.root_message_id IS NULL
-        AND m.deleted_at IS NULL
-        AND c.system_kind IS NOT NULL
-      ORDER BY m.created_at DESC, m.id DESC
+        e.id,
+        e.team_id,
+        e.stream,
+        e.actor_user_id::text,
+        e.actor_name,
+        e.kind,
+        e.title,
+        e.body,
+        e.target_type,
+        e.target_id,
+        e.target_href,
+        e.reply_target_type,
+        e.reply_target_id,
+        e.created_at,
+        e.metadata,
+        r.recipient_user_id::text,
+        r.read_at,
+        r.delivered_at
+      FROM notification_events e
+      INNER JOIN notification_receipts r ON r.event_id = e.id AND r.recipient_user_id = $2
+      WHERE e.team_id = $1
+      ORDER BY r.delivered_at DESC, e.created_at DESC, e.id DESC
       LIMIT $3
     `,
     [teamId, userId, Math.max(1, Math.min(100, limit))],
   );
-  return rows.map((row) => toNotification(row, userId));
+  return rows.map(toNotification);
 }
 
 export async function getNotificationForUser(notificationId: string, userId: string, scope: RuntimeScope): Promise<AppNotification | null> {
-  const row = await systemChatMessageProjection({ messageId: notificationId, scope, userId });
-  return row ? toNotification(row, userId) : null;
+  const row = await notificationReceiptProjection({ notificationId, scope, userId });
+  return row ? toNotification(row) : null;
 }
 
 export async function getUnreadNotificationCount(userId: string, scope: RuntimeScope): Promise<number> {
@@ -545,16 +721,11 @@ export async function getUnreadNotificationCount(userId: string, scope: RuntimeS
   const { rows } = await pool.query<{ count: number }>(
     `
       SELECT count(*)::int AS count
-      FROM chat_messages m
-      INNER JOIN chat_channels c ON c.id = m.channel_id
-      INNER JOIN chat_channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
-      WHERE m.team_id = $1
-        AND m.source = 'system'
-        AND m.root_message_id IS NULL
-        AND m.deleted_at IS NULL
-        AND c.system_kind IS NOT NULL
-        AND m.author_user_id <> $2
-        AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+      FROM notification_receipts r
+      INNER JOIN notification_events e ON e.id = r.event_id
+      WHERE e.team_id = $1
+        AND r.recipient_user_id = $2
+        AND r.read_at IS NULL
     `,
     [teamId, userId],
   );
@@ -562,101 +733,259 @@ export async function getUnreadNotificationCount(userId: string, scope: RuntimeS
 }
 
 export async function markNotificationRead(notificationId: string, userId: string, scope: RuntimeScope): Promise<AppNotification | null> {
-  const row = await systemChatMessageProjection({ messageId: notificationId, scope, userId });
+  const row = await notificationReceiptProjection({ notificationId, scope, userId });
   if (!row) return null;
   const readAt = nowIso();
   await pool.query(
     `
-      UPDATE chat_channel_members
-      SET last_viewed_at = $3,
-          last_read_at = CASE WHEN last_read_at IS NULL OR last_read_at < $4::timestamptz THEN $4 ELSE last_read_at END,
-          last_read_message_id = CASE WHEN last_read_at IS NULL OR last_read_at < $4::timestamptz THEN $5 ELSE last_read_message_id END,
-          manually_unread = false
-      WHERE channel_id = $1
-        AND user_id = $2
+      UPDATE notification_receipts
+      SET read_at = $3
+      WHERE event_id = $1
+        AND recipient_user_id = $2
     `,
-    [row.channel_id, userId, readAt, row.created_at, row.id],
+    [row.id, userId, readAt],
   );
-  return toNotification({ ...row, last_read_at: row.created_at }, userId);
+  return toNotification({ ...row, read_at: readAt });
 }
 
 export async function markNotificationUnread(notificationId: string, userId: string, scope: RuntimeScope): Promise<AppNotification | null> {
-  const row = await systemChatMessageProjection({ messageId: notificationId, scope, userId });
+  const row = await notificationReceiptProjection({ notificationId, scope, userId });
   if (!row) return null;
-  const teamId = runtimeScopeStorageId(scope);
-  const previous = await pool.query<{ created_at: Date | string; id: string }>(
-    `
-      SELECT id, created_at
-      FROM chat_messages
-      WHERE team_id = $1
-        AND channel_id = $2
-        AND root_message_id IS NULL
-        AND deleted_at IS NULL
-        AND created_at < $3
-      ORDER BY created_at DESC, id DESC
-      LIMIT 1
-    `,
-    [teamId, row.channel_id, row.created_at],
-  );
   await pool.query(
     `
-      UPDATE chat_channel_members
-      SET last_read_at = $3,
-          last_read_message_id = $4,
-          manually_unread = true
-      WHERE channel_id = $1
-        AND user_id = $2
+      UPDATE notification_receipts
+      SET read_at = null
+      WHERE event_id = $1
+        AND recipient_user_id = $2
     `,
-    [row.channel_id, userId, previous.rows[0]?.created_at ?? null, previous.rows[0]?.id ?? null],
+    [row.id, userId],
   );
-  return toNotification({ ...row, last_read_at: null }, userId);
+  return toNotification({ ...row, read_at: null });
 }
 
-export async function markAllNotificationsRead(userId: string, scope: RuntimeScope): Promise<number> {
+export async function markAllNotificationsRead(userId: string, scope: RuntimeScope, stream?: NotificationStream): Promise<number> {
   const teamId = runtimeScopeStorageId(scope);
-  const { rows } = await pool.query<{ channel_id: string; latest_created_at: Date | string; latest_message_id: string; unread_count: number }>(
+  const readAt = nowIso();
+  const { rows } = await pool.query<{ count: number }>(
     `
-      WITH unread AS (
-        SELECT m.channel_id, m.id, m.created_at
-        FROM chat_messages m
-        INNER JOIN chat_channels c ON c.id = m.channel_id
-        INNER JOIN chat_channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
-        WHERE m.team_id = $1
-          AND m.source = 'system'
-          AND m.root_message_id IS NULL
-          AND m.deleted_at IS NULL
-          AND c.system_kind IS NOT NULL
-          AND m.author_user_id <> $2
-          AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
-      ),
-      latest AS (
-        SELECT DISTINCT ON (channel_id)
-          channel_id,
-          id AS latest_message_id,
-          created_at AS latest_created_at,
-          count(*) OVER (PARTITION BY channel_id)::int AS unread_count
-        FROM unread
-        ORDER BY channel_id, created_at DESC, id DESC
+      WITH updated AS (
+        UPDATE notification_receipts r
+        SET read_at = $3
+        FROM notification_events e
+        WHERE e.id = r.event_id
+          AND e.team_id = $1
+          AND r.recipient_user_id = $2
+          AND r.read_at IS NULL
+          AND ($4::text IS NULL OR e.stream::text = $4)
+        RETURNING r.event_id
       )
-      SELECT * FROM latest
+      SELECT count(*)::int AS count
+      FROM updated
     `,
-    [teamId, userId],
+    [teamId, userId, readAt, stream ?? null],
+  );
+  return Number(rows[0]?.count ?? 0);
+}
+
+async function findExistingSystemChatMessageForDelivery(row: NotificationDeliveryEventRow): Promise<ExistingSystemChatMessageRow | null> {
+  const recipientFilter = row.stream === "personalNotification"
+    ? "AND c.system_kind = 'personalNotification' AND c.system_recipient_user_id = $3"
+    : "AND c.system_kind = 'teamAnnouncement'";
+  const params = row.stream === "personalNotification"
+    ? [row.team_id, row.event_id, row.delivery_recipient_user_id]
+    : [row.team_id, row.event_id];
+  const { rows } = await pool.query<ExistingSystemChatMessageRow>(
+    `
+      SELECT m.id, m.channel_id, m.created_at
+      FROM chat_messages m
+      INNER JOIN chat_channels c ON c.id = m.channel_id
+      WHERE m.team_id = $1
+        AND m.source = 'system'
+        AND m.root_message_id IS NULL
+        AND m.deleted_at IS NULL
+        AND m.system_metadata->>'notificationEventId' = $2
+        ${recipientFilter}
+      ORDER BY m.created_at ASC, m.id ASC
+      LIMIT 1
+    `,
+    params,
+  );
+  return rows[0] ?? null;
+}
+
+async function loadNotificationDeliveryEvent(deliveryId: string): Promise<NotificationDeliveryEventRow | null> {
+  const { rows } = await pool.query<NotificationDeliveryEventRow>(
+    `
+      SELECT
+        d.id AS delivery_id,
+        d.recipient_user_id::text AS delivery_recipient_user_id,
+        d.status AS delivery_status,
+        d.attempts,
+        e.id AS event_id,
+        e.team_id,
+        e.stream,
+        e.actor_user_id::text,
+        e.actor_name,
+        e.kind,
+        e.title,
+        e.body,
+        e.target_type,
+        e.target_id,
+        e.target_href,
+        e.reply_target_type,
+        e.reply_target_id,
+        e.created_at AS event_created_at,
+        e.metadata
+      FROM notification_deliveries d
+      INNER JOIN notification_events e ON e.id = d.event_id
+      WHERE d.id = $1
+        AND d.channel = 'chat'
+      LIMIT 1
+    `,
+    [deliveryId],
+  );
+  return rows[0] ?? null;
+}
+
+async function markNotificationDeliveryDelivered(input: {
+  channelId: string;
+  deliveredAt: string;
+  deliveryId: string;
+  messageId: string;
+}) {
+  await pool.query(
+    `
+      UPDATE notification_deliveries
+      SET status = 'delivered',
+          destination_id = $2,
+          message_id = $3,
+          attempts = attempts + 1,
+          last_error = null,
+          next_attempt_at = null,
+          delivered_at = $4,
+          updated_at = $4
+      WHERE id = $1
+    `,
+    [input.deliveryId, input.channelId, input.messageId, input.deliveredAt],
+  );
+}
+
+async function markNotificationDeliveryFailed(input: { attempts: number; deliveryId: string; error: unknown }) {
+  const now = nowIso();
+  await pool.query(
+    `
+      UPDATE notification_deliveries
+      SET status = 'failed',
+          attempts = attempts + 1,
+          last_error = $2,
+          next_attempt_at = $3,
+          updated_at = $4
+      WHERE id = $1
+    `,
+    [input.deliveryId, deliveryErrorText(input.error), nextDeliveryRetryAt(input.attempts + 1), now],
+  );
+}
+
+async function deliverNotificationChatDelivery(deliveryId: string): Promise<"delivered" | "failed" | "skipped"> {
+  const row = await loadNotificationDeliveryEvent(deliveryId);
+  if (!row || row.delivery_status === "delivered") return "skipped";
+  try {
+    const existing = await findExistingSystemChatMessageForDelivery(row);
+    if (existing) {
+      await markNotificationDeliveryDelivered({
+        channelId: existing.channel_id,
+        deliveredAt: iso(existing.created_at) ?? nowIso(),
+        deliveryId,
+        messageId: existing.id,
+      });
+      return "delivered";
+    }
+
+    const actor = await ensureSystemBotActor(row.team_id);
+    const metadataInput = metadataInputFromDelivery(row);
+    const body = formatNotificationChatBody(metadataInput);
+    let channelId: string | null;
+    if (row.stream === "teamAnnouncement") {
+      channelId = await ensureTeamAnnouncementChannel({ actor, teamId: row.team_id });
+    } else {
+      const recipientUserId = row.delivery_recipient_user_id?.trim();
+      channelId = recipientUserId ? await ensurePersonalNotificationChannel({ actor, recipientUserId, teamId: row.team_id }) : null;
+    }
+    if (!channelId) {
+      throw new Error("Notification chat delivery has no active destination channel");
+    }
+
+    const metadata = buildNotificationSystemMetadata(metadataInput, row.event_id, row.delivery_recipient_user_id);
+    const result = await sendChatMessage({
+      body,
+      channelId,
+      createdAt: iso(row.event_created_at) ?? nowIso(),
+      source: "system",
+      systemMetadata: metadata,
+    }, actor);
+    if (result.status !== "ok") {
+      throw new Error(`System chat delivery failed with status ${result.status}`);
+    }
+
+    await markNotificationDeliveryDelivered({
+      channelId,
+      deliveredAt: result.message.createdAt,
+      deliveryId,
+      messageId: result.message.id,
+    });
+    if (row.stream === "teamAnnouncement") {
+      await markActorRead({
+        actorUserId: row.actor_user_id,
+        channelId,
+        messageId: result.message.id,
+        readAt: result.message.createdAt,
+      });
+    }
+    return "delivered";
+  } catch (error) {
+    await markNotificationDeliveryFailed({ attempts: row.attempts, deliveryId, error }).catch(() => undefined);
+    return "failed";
+  }
+}
+
+async function flushNotificationChatDeliveriesForEvent(eventId: string) {
+  const { rows } = await pool.query<{ id: string }>(
+    `
+      SELECT id
+      FROM notification_deliveries
+      WHERE event_id = $1
+        AND channel = 'chat'
+        AND status <> 'delivered'
+      ORDER BY created_at ASC, id ASC
+    `,
+    [eventId],
   );
   for (const row of rows) {
-    await pool.query(
-      `
-        UPDATE chat_channel_members
-        SET last_viewed_at = $3,
-            last_read_at = CASE WHEN last_read_at IS NULL OR last_read_at < $4::timestamptz THEN $4 ELSE last_read_at END,
-            last_read_message_id = CASE WHEN last_read_at IS NULL OR last_read_at < $4::timestamptz THEN $5 ELSE last_read_message_id END,
-            manually_unread = false
-        WHERE channel_id = $1
-          AND user_id = $2
-      `,
-      [row.channel_id, userId, nowIso(), row.latest_created_at, row.latest_message_id],
-    );
+    await deliverNotificationChatDelivery(row.id);
   }
-  return rows.reduce((sum, row) => sum + Number(row.unread_count), 0);
+}
+
+export async function flushPendingNotificationChatDeliveries(limit = 50) {
+  const { rows } = await pool.query<{ id: string }>(
+    `
+      SELECT id
+      FROM notification_deliveries
+      WHERE channel = 'chat'
+        AND status IN ('pending', 'failed')
+        AND (next_attempt_at IS NULL OR next_attempt_at <= now())
+      ORDER BY created_at ASC, id ASC
+      LIMIT $1
+    `,
+    [Math.max(1, Math.min(200, limit))],
+  );
+  let delivered = 0;
+  let failed = 0;
+  for (const row of rows) {
+    const result = await deliverNotificationChatDelivery(row.id);
+    if (result === "delivered") delivered += 1;
+    if (result === "failed") failed += 1;
+  }
+  return { attempted: rows.length, delivered, failed };
 }
 
 export async function getSystemChatActorForUser(userId: string, scope: RuntimeScope): Promise<ChatActor | null> {

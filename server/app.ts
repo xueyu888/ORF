@@ -8,6 +8,7 @@ import { assertRuntimeDatabaseSchema, databaseSchemaMismatchPayload, isDatabaseS
 import { env } from "./env";
 import { startClientUpdatePushScheduler } from "./clientUpdates/clientUpdatePushScheduler";
 import { registerOptionalIntegrations } from "./integrations";
+import { startNotificationDeliveryScheduler } from "./notifications/notificationDeliveryScheduler";
 import { registerSettingsRoutes } from "./routes/settingsRoutes";
 import { registerNotificationRoutes } from "./routes/notificationRoutes";
 import { registerSystemConversationRoutes } from "./routes/systemConversationRoutes";
@@ -116,9 +117,11 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   registerPermissionRoutes(app);
 
   const stopClientUpdatePushScheduler = startClientUpdatePushScheduler(app.log);
+  const stopNotificationDeliveryScheduler = startNotificationDeliveryScheduler(app.log);
   const stopWorkLogReminderScheduler = startWorkLogReminderScheduler(app.log);
   app.addHook("onClose", async () => {
     stopClientUpdatePushScheduler();
+    stopNotificationDeliveryScheduler();
     stopWorkLogReminderScheduler();
   });
 

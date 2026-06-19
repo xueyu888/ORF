@@ -788,6 +788,37 @@ export const chatMessages = pgTable(
   }),
 );
 
+export const notificationDeliveries = pgTable(
+  "notification_deliveries",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => notificationEvents.id, { onDelete: "cascade" }),
+    recipientUserId: uuid("recipient_user_id").references(() => users.id, { onDelete: "cascade" }),
+    channel: text("channel").notNull(),
+    status: text("status").notNull().default("pending"),
+    destinationId: text("destination_id"),
+    messageId: text("message_id").references(() => chatMessages.id, { onDelete: "set null" }),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    nextAttemptAt: timestamp("next_attempt_at", { mode: "string", withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { mode: "string", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    eventChannel: index("notification_deliveries_event_channel_idx").on(table.eventId, table.channel),
+    retry: index("notification_deliveries_retry_idx").on(table.channel, table.status, table.nextAttemptAt),
+    teamChatOnce: uniqueIndex("notification_deliveries_team_chat_unique")
+      .on(table.eventId, table.channel)
+      .where(sql`recipient_user_id IS NULL`),
+    userChatOnce: uniqueIndex("notification_deliveries_user_chat_unique")
+      .on(table.eventId, table.recipientUserId, table.channel)
+      .where(sql`recipient_user_id IS NOT NULL`),
+  }),
+);
+
 export const chatMessageReactions = pgTable(
   "chat_message_reactions",
   {

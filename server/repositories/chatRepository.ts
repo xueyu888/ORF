@@ -140,6 +140,7 @@ async function findActiveDirectChannelIdByMemberIds(teamId: string, memberIds: s
         LEFT JOIN chat_messages msg ON msg.channel_id = c.id
         WHERE c.team_id = $1
           AND c.type = 'direct'
+          AND c.system_kind IS NULL
           AND c.archived_at IS NULL
         GROUP BY c.id
       )
@@ -167,8 +168,8 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
           c.id,
           c.team_id,
           c.type,
-          c.name,
           c.system_kind,
+          c.name,
           c.system_recipient_user_id,
           c.display_name,
           c.purpose,
@@ -221,8 +222,8 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
       )
       SELECT id, team_id, type, name, system_kind, system_recipient_user_id, display_name, purpose, header, created_by, archived_by, created_at, updated_at, archived_at
       FROM ranked_channels
-      WHERE NOT (type = 'direct' AND member_count <> 2)
-        AND NOT (type = 'direct' AND direct_duplicate_rank > 1)
+      WHERE NOT (type = 'direct' AND system_kind IS NULL AND member_count <> 2)
+        AND NOT (type = 'direct' AND system_kind IS NULL AND direct_duplicate_rank > 1)
         AND NOT (type = 'public' AND message_count = 0 AND empty_duplicate_rank > 1)
       ORDER BY current_favorite DESC, type, updated_at DESC, lower(display_name)
     `,
@@ -414,6 +415,7 @@ async function hasReadableChannel(actor: ChatActor, channelId: string) {
         SELECT
           c.id,
           c.type,
+          c.system_kind,
           (
             SELECT count(*)::int
             FROM chat_channel_members member_count
@@ -428,7 +430,7 @@ async function hasReadableChannel(actor: ChatActor, channelId: string) {
       )
       SELECT id
       FROM readable_channel
-      WHERE NOT (type = 'direct' AND member_count <> 2)
+      WHERE NOT (type = 'direct' AND system_kind IS NULL AND member_count <> 2)
       LIMIT 1
     `,
     [storageTeamId(actor), actor.id, channelId],
@@ -966,6 +968,7 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
           c.id,
           c.team_id,
           c.type,
+          c.system_kind,
           c.name,
           c.display_name,
           c.updated_at,
@@ -1012,8 +1015,8 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
       displayable_channels AS (
         SELECT id, manually_unread
         FROM ranked_channels
-        WHERE NOT (type = 'direct' AND member_count <> 2)
-          AND NOT (type = 'direct' AND direct_duplicate_rank > 1)
+        WHERE NOT (type = 'direct' AND system_kind IS NULL AND member_count <> 2)
+          AND NOT (type = 'direct' AND system_kind IS NULL AND direct_duplicate_rank > 1)
           AND NOT (type = 'public' AND message_count = 0 AND empty_duplicate_rank > 1)
       ),
       message_unread AS (

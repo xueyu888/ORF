@@ -185,6 +185,27 @@ export function validateNotificationConversationSchema(snapshot: { columns: Runt
     }
   }
 
+  const deliveryColumns = columnsByTable.get("notification_deliveries") ?? new Map();
+  for (const columnName of [
+    "id",
+    "event_id",
+    "recipient_user_id",
+    "channel",
+    "status",
+    "destination_id",
+    "message_id",
+    "attempts",
+    "last_error",
+    "next_attempt_at",
+    "delivered_at",
+    "created_at",
+    "updated_at",
+  ]) {
+    if (!deliveryColumns.has(columnName)) {
+      errors.push(`notification_deliveries.${columnName} is missing.`);
+    }
+  }
+
   return errors;
 }
 
@@ -407,7 +428,7 @@ export async function assertRuntimeDatabaseSchema() {
           is_nullable as "isNullable"
         from information_schema.columns
         where table_schema = current_schema()
-          and table_name in ('notification_events', 'notification_receipts')
+          and table_name in ('notification_events', 'notification_receipts', 'notification_deliveries')
       `,
     ),
     pool.query<RuntimeTableColumn>(

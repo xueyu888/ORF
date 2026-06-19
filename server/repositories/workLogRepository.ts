@@ -16,7 +16,7 @@ import {
 } from "../../src/domain/orfWorkLogs";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { db } from "../db/client";
-import { chatChannelMembers, chatChannels, chatMessages, objectives, teamMembers, users, workLogCategories, workLogEntries } from "../db/schema";
+import { notificationEvents, notificationReceipts, objectives, teamMembers, users, workLogCategories, workLogEntries } from "../db/schema";
 import { publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
 import type { AuthenticatedOrfUser } from "../auth/accessPolicy";
 import type { RuntimeScope } from "./runtimeScope";
@@ -903,15 +903,12 @@ export async function listWorkLogReminderRecipients(teamId: string, workDate: st
       )`,
       sql`not exists (
         select 1
-        from ${chatMessages}
-        inner join ${chatChannels} on ${chatChannels.id} = ${chatMessages.channelId}
-        inner join ${chatChannelMembers} on ${chatChannelMembers.channelId} = ${chatChannels.id}
-        where ${chatMessages.teamId} = ${teamMembers.teamId}
-          and ${chatChannelMembers.userId} = ${users.id}
-          and ${chatChannels.systemKind} = 'personalNotification'
-          and ${chatMessages.source} = 'system'
-          and ${chatMessages.systemMetadata}->>'kind' = 'worklog.reminder'
-          and ${chatMessages.systemMetadata}->>'targetId' = ${targetId}
+        from ${notificationEvents}
+        inner join ${notificationReceipts} on ${notificationReceipts.eventId} = ${notificationEvents.id}
+        where ${notificationEvents.teamId} = ${teamMembers.teamId}
+          and ${notificationReceipts.recipientUserId} = ${users.id}
+          and ${notificationEvents.kind} = 'worklog.reminder'
+          and ${notificationEvents.targetId} = ${targetId}
       )`,
     ))
     .orderBy(asc(users.name), asc(users.id));

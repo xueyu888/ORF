@@ -94,7 +94,8 @@ export async function markSystemConversationMessageUnread(
 }
 
 export async function markSystemConversationRead(_conversationId: SystemConversationId, userId: string, scope: RuntimeScope) {
-  return markAllNotificationsRead(userId, scope);
+  const config = systemConversationConfigs[_conversationId];
+  return markAllNotificationsRead(userId, scope, config.stream);
 }
 
 function replyParentMessageIdForNotification(message: SystemConversationMessage) {
