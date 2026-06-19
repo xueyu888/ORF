@@ -2,6 +2,7 @@ import { clsx } from "clsx";
 import { Ban, CheckCircle2, ChevronDown, Edit3, Plus, Search, Trash2, X, XCircle } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { Button, IconButton } from "../components/ui";
+import { userAccountLifecycleActions } from "../domain/userAccountLifecycle";
 import { UserAvatar } from "../components/UserAvatar";
 import { useOrf } from "../state/OrfProvider";
 import type { OrfUser, UserRole } from "../types/orf";
@@ -54,6 +55,7 @@ export function MembersPage() {
     currentUser,
     deleteUser,
     disableUser,
+    enableUser,
     notify,
     rejectRegistrationRequest,
     state,
@@ -161,6 +163,20 @@ export function MembersPage() {
     setProcessingUserId(null);
   };
 
+  const handleEnable = async (user: OrfUser) => {
+    if (processingUserId) {
+      return;
+    }
+
+    if (!window.confirm(`启用用户「${user.name}」？`)) {
+      return;
+    }
+
+    setProcessingUserId(user.id);
+    await enableUser(user.id);
+    setProcessingUserId(null);
+  };
+
   const handleDelete = async (user: OrfUser) => {
     if (isCurrentUser(user) || processingUserId) {
       return;
@@ -226,8 +242,10 @@ export function MembersPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((user) => (
-                  <tr key={user.id}>
+                {users.map((user) => {
+                  const lifecycleActions = userAccountLifecycleActions(user.status);
+                  return (
+                    <tr key={user.id}>
                     <td>
                       <div className="orf-user-name-cell">
                         <UserAvatar avatarUrl={user.avatarUrl} className="orf-user-row-avatar" name={user.name} size="md" />
@@ -255,7 +273,7 @@ export function MembersPage() {
                           <Edit3 className="h-4 w-4" />
                           编辑
                         </Button>
-                        {user.status === "pending" ? (
+                        {lifecycleActions.includes("approve") ? (
                           <>
                             <Button size="sm" type="button" disabled={processingUserId === user.id} onClick={() => void handleApprove(user)}>
                               <CheckCircle2 className="h-4 w-4" />
@@ -266,6 +284,18 @@ export function MembersPage() {
                               拒绝
                             </Button>
                           </>
+                        ) : lifecycleActions.includes("enable") ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            disabled={processingUserId === user.id}
+                            title="启用"
+                            onClick={() => void handleEnable(user)}
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                            启用
+                          </Button>
                         ) : (
                           <Button
                             type="button"
@@ -292,8 +322,9 @@ export function MembersPage() {
                         </Button>
                       </div>
                     </td>
-                  </tr>
-                ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
 

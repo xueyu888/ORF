@@ -170,6 +170,7 @@ interface OrfContextValue {
   updateUser: (userId: string, input: { name: string; email: string; role: UserRole }) => Promise<boolean>;
   deleteUser: (userId: string) => Promise<boolean>;
   disableUser: (userId: string) => Promise<boolean>;
+  enableUser: (userId: string) => Promise<boolean>;
   approveRegistrationRequest: (userId: string) => Promise<boolean>;
   rejectRegistrationRequest: (userId: string) => Promise<boolean>;
   updateRolePermissionRules: (role: UserRole, rules: OrfState["permissionRules"]) => Promise<boolean>;
