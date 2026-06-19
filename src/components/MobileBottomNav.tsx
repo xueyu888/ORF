@@ -10,7 +10,7 @@ const mobileBottomNavItems = mobileBottomNavLabels
   .filter((item) => item !== undefined);
 
 export function MobileBottomNav() {
-  const { chatUnreadSummary, currentUser, unreadNotificationCount } = useOrf();
+  const { chatUnreadSummary, currentUser } = useOrf();
   const visibleItems = mobileBottomNavItems.filter((item) => canShowFrontendPath(currentUser, item.path));
 
   if (visibleItems.length === 0) {
@@ -21,7 +21,7 @@ export function MobileBottomNav() {
     <nav className="orf-mobile-bottom-nav" aria-label="移动端导航">
       {visibleItems.map((item) => {
         const badgeCount = item.path === "/chat"
-          ? chatUnreadSummary.totalUnreadCount + unreadNotificationCount
+          ? chatUnreadSummary.totalUnreadCount
           : 0;
         const badgeText = badgeCount > 99 ? "99+" : String(badgeCount);
         const ariaLabel = badgeCount > 0 ? `${item.label}，${badgeCount} 条未读` : item.label;

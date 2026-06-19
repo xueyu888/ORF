@@ -4,7 +4,7 @@ import { Bell, CheckCheck, ChevronDown, Hash, Megaphone, MessageSquare, Plus, Re
 import type { KeyboardEvent } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { isChatConversation } from "../../domain/chatConversation";
-import type { ChatChannel, ChatUser, SystemConversationId, SystemConversationSummary } from "../../types/orf";
+import type { ChatChannel, ChatUser } from "../../types/orf";
 import { chatChannelDisplayLabel, chatChannelSearchText, chatDirectPeer } from "./chatChannelPresentation";
 import { formatPresence } from "./chatPresence";
 import { currentMembership, isUnreadChannel, sortUnreadChannels } from "./chatModels";
@@ -19,7 +19,6 @@ export type ChatSidebarCreateCommand = {
 
 type ChatSidebarProps = {
   activeChannelId: string | null;
-  activeSystemConversationId?: SystemConversationId | null;
   channels: ChatChannel[];
   createCommands: ChatSidebarCreateCommand[];
   currentUserId?: string;
@@ -28,17 +27,14 @@ type ChatSidebarProps = {
   onMarkUnreadChannelsRead: (channelIds: string[]) => void;
   onOpenChannel: (channelId: string) => void;
   onPreviewChannel: (channelId: string) => void;
-  onOpenSystemConversation: (conversationId: SystemConversationId) => void;
   query: string;
   setQuery: (value: string) => void;
   markingUnreadChannelsRead: boolean;
-  systemConversations: SystemConversationSummary[];
   users: ChatUser[];
 };
 
 export function ChatSidebar({
   activeChannelId,
-  activeSystemConversationId,
   channels,
   createCommands,
   currentUserId,
@@ -47,19 +43,16 @@ export function ChatSidebar({
   onMarkUnreadChannelsRead,
   onOpenChannel,
   onPreviewChannel,
-  onOpenSystemConversation,
   query,
   setQuery,
   markingUnreadChannelsRead,
-  systemConversations,
   users,
 }: ChatSidebarProps) {
   const normalizedQuery = query.trim().toLowerCase();
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
-  const filteredSystemConversations = systemConversations.filter((conversation) => (
-    `${conversation.title} ${conversation.description}`.toLowerCase().includes(normalizedQuery)
-  ));
-  const filteredChannels = channels.filter((channel) => chatChannelSearchText(channel, currentUserId, usersById).toLowerCase().includes(normalizedQuery));
+  const visibleChannels = channels.filter((channel) => chatChannelSearchText(channel, currentUserId, usersById).toLowerCase().includes(normalizedQuery));
+  const filteredSystemChannels = visibleChannels.filter((channel) => channel.systemKind);
+  const filteredChannels = visibleChannels.filter((channel) => !channel.systemKind);
   const matchedUsers = searchChatUsers(users, query, { excludeUserId: currentUserId });
   const unreadChannels = sortUnreadChannels(filteredChannels.filter((channel) => isUnreadChannel(channel, currentUserId)));
   const unreadChannelIds = new Set(unreadChannels.map((channel) => channel.id));
@@ -93,10 +86,13 @@ export function ChatSidebar({
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索频道、私信或成员" />
       </label>
       <div className="orf-chat-channel-groups">
-        <SystemConversationGroup
-          activeConversationId={activeSystemConversationId ?? null}
-          conversations={filteredSystemConversations}
-          onOpenConversation={onOpenSystemConversation}
+        <SystemChannelGroup
+          activeChannelId={activeChannelId}
+          channels={filteredSystemChannels}
+          currentUserId={currentUserId}
+          onOpenChannel={onOpenChannel}
+          onPreviewChannel={onPreviewChannel}
+          usersById={usersById}
         />
         {matchedUsers.length > 0 && (
           <UserResultGroup
@@ -121,7 +117,7 @@ export function ChatSidebar({
             usersById={usersById}
           />
         ))}
-        {normalizedQuery && filteredSystemConversations.length === 0 && filteredChannels.length === 0 && matchedUsers.length === 0 && (
+        {normalizedQuery && filteredSystemChannels.length === 0 && filteredChannels.length === 0 && matchedUsers.length === 0 && (
           <div className="orf-chat-sidebar-empty">没有匹配的频道、私信或成员</div>
         )}
       </div>
@@ -271,16 +267,22 @@ function ChatSidebarCreateMenu({ commands }: { commands: ChatSidebarCreateComman
   );
 }
 
-function SystemConversationGroup({
-  activeConversationId,
-  conversations,
-  onOpenConversation,
+function SystemChannelGroup({
+  activeChannelId,
+  channels,
+  currentUserId,
+  onOpenChannel,
+  onPreviewChannel,
+  usersById,
 }: {
-  activeConversationId: SystemConversationId | null;
-  conversations: SystemConversationSummary[];
-  onOpenConversation: (conversationId: SystemConversationId) => void;
+  activeChannelId: string | null;
+  channels: ChatChannel[];
+  currentUserId?: string;
+  onOpenChannel: (channelId: string) => void;
+  onPreviewChannel: (channelId: string) => void;
+  usersById: Map<string, ChatUser>;
 }) {
-  if (conversations.length === 0) return null;
+  if (channels.length === 0) return null;
   return (
     <section className="orf-chat-channel-group">
       <div className="orf-chat-channel-group-title">
@@ -289,23 +291,27 @@ function SystemConversationGroup({
           系统
         </span>
       </div>
-      {conversations.map((conversation) => {
-        const Icon = conversation.id === "teamAnnouncements" ? Megaphone : Bell;
-        const badgeText = conversation.unreadCount > 99 ? "99+" : String(conversation.unreadCount);
+      {channels.map((channel) => {
+        const Icon = channel.systemKind === "teamAnnouncement" ? Megaphone : Bell;
+        const label = chatChannelDisplayLabel(channel, currentUserId, usersById);
+        const unreadCount = channel.unreadCount + channel.threadUnreadCount;
+        const badgeText = unreadCount > 99 ? "99+" : String(unreadCount);
         return (
           <button
             type="button"
             className={clsx(
               "orf-chat-channel-item",
               "orf-chat-system-conversation-item",
-              conversation.id === activeConversationId && "orf-chat-channel-item-active",
+              channel.id === activeChannelId && "orf-chat-channel-item-active",
             )}
-            key={conversation.id}
-            onClick={() => onOpenConversation(conversation.id)}
+            key={channel.id}
+            onFocus={() => onPreviewChannel(channel.id)}
+            onMouseEnter={() => onPreviewChannel(channel.id)}
+            onClick={() => onOpenChannel(channel.id)}
           >
             <Icon className="h-4 w-4" />
-            <span className="truncate">{conversation.title}</span>
-            {conversation.unreadCount > 0 && (
+            <span className="truncate">{label}</span>
+            {unreadCount > 0 && (
               <span className="orf-chat-channel-badges">
                 <b>{badgeText}</b>
               </span>
