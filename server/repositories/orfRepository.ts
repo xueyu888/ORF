@@ -36,6 +36,10 @@ import {
   uncertaintyScoreFor,
 } from "../../src/domain/orfSettlement";
 import {
+  calculateObjectiveReestimateDueAt,
+  resolveObjectiveReestimateWindowSync,
+} from "../../src/domain/orfReestimateWindow";
+import {
   isObjectiveAssignedChallenger,
   isObjectiveChallenger,
   objectiveChallengerUserIds,
@@ -147,8 +151,6 @@ const nextIdCounter = () => {
   return idCounter.toString(36);
 };
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${nextIdCounter()}-${randomUUID()}`;
-const HALF_DAY_MS = 12 * 60 * 60 * 1000;
-const MAX_CONFIRMATION_HALVES = 18;
 function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
 }
@@ -166,21 +168,6 @@ function extractCommentAttachmentIds(body: string) {
     }
   }
   return Array.from(ids);
-}
-
-function confirmationDueAt(finalDueAt: string | null, acceptedAt: string) {
-  if (!finalDueAt) return null;
-
-  const finalDueDate = new Date(`${finalDueAt}T23:59:00`);
-  const acceptedDate = new Date(acceptedAt);
-  if (Number.isNaN(finalDueDate.getTime()) || Number.isNaN(acceptedDate.getTime())) return null;
-
-  const remainingMs = finalDueDate.getTime() - acceptedDate.getTime();
-  if (remainingMs < HALF_DAY_MS) return null;
-
-  const roundedHalfDays = Math.round((remainingMs * 0.3) / HALF_DAY_MS);
-  const confirmationHalves = Math.min(MAX_CONFIRMATION_HALVES, Math.max(1, roundedHalfDays));
-  return new Date(acceptedDate.getTime() + confirmationHalves * HALF_DAY_MS).toISOString();
 }
 
 function addDays(value: string, days: number) {
@@ -1096,7 +1083,7 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
     }
 
     const acceptedAt = nowIso();
-    const nextConfirmationDueAt = confirmationDueAt(objective.finalDueAt, acceptedAt);
+    const nextConfirmationDueAt = calculateObjectiveReestimateDueAt(objective.finalDueAt, acceptedAt);
     if (!nextConfirmationDueAt) {
       return { status: "invalidDueDate" as const };
     }
@@ -1323,7 +1310,7 @@ export async function approveObjectiveChallengeApplication(
     if (!application) return { status: "notFound" as const };
 
     const acceptedAt = nowIso();
-    const nextConfirmationDueAt = confirmationDueAt(objective.finalDueAt, acceptedAt);
+    const nextConfirmationDueAt = calculateObjectiveReestimateDueAt(objective.finalDueAt, acceptedAt);
     if (!nextConfirmationDueAt) return { status: "invalid" as const };
     const applicant = application.applicantUserId
       ? (await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, [application.applicantUserId]))[0] ?? null
@@ -3514,6 +3501,12 @@ export async function updateObjectiveDetails(
       if (deadlineChange.status === "invalidDate") return { status: "invalid" as const };
       if (deadlineChange.status === "locked" || deadlineChange.status === "frozenMustExtend") return { status: "locked" as const };
       update.finalDueAt = input.finalDueAt;
+
+      const reestimateWindowSync = resolveObjectiveReestimateWindowSync(objective, input.finalDueAt);
+      if (reestimateWindowSync.status === "invalid") return { status: "invalid" as const };
+      if (reestimateWindowSync.status === "updated") {
+        update.confirmationDueAt = reestimateWindowSync.confirmationDueAt;
+      }
     }
 
     const updated = await tx

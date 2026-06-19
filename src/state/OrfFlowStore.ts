@@ -5,6 +5,7 @@ import {
   objectiveLifecycleInitialState,
   objectiveLifecycleTransitions,
 } from "../domain/orfLifecycle";
+import { calculateObjectiveReestimateDueAt } from "../domain/orfReestimateWindow";
 import {
   isObjectiveChallenger,
   objectiveParticipantSnapshot,
@@ -74,26 +75,9 @@ const userNameForId = (state: OrfState, userId: string | null | undefined, fallb
 const userIdForName = (state: OrfState, name: string | null | undefined) => state.users.find((user) => user.name === name?.trim())?.id ?? null;
 const userIdsForNames = (state: OrfState, names: Array<string | null | undefined>) => participantUserIdsForNames(userIdByNameMap(state.users), names);
 const latestDate = (values: Array<string | undefined | null>) => values.filter(Boolean).sort().at(-1) ?? "";
-const HALF_DAY_MS = 12 * 60 * 60 * 1000;
-const MAX_CONFIRMATION_HALVES = 18;
 
 const addDays = (value: string, days: number) => {
   return addCalendarDays(value, days);
-};
-
-const confirmationDueAt = (finalDueAt: string | undefined, acceptedAt: string) => {
-  if (!finalDueAt) return null;
-
-  const finalDueDate = new Date(`${finalDueAt}T23:59:00`);
-  const acceptedDate = new Date(acceptedAt);
-  if (Number.isNaN(finalDueDate.getTime()) || Number.isNaN(acceptedDate.getTime())) return null;
-
-  const remainingMs = finalDueDate.getTime() - acceptedDate.getTime();
-  if (remainingMs < HALF_DAY_MS) return null;
-
-  const roundedHalfDays = Math.round((remainingMs * 0.3) / HALF_DAY_MS);
-  const confirmationHalves = Math.min(MAX_CONFIRMATION_HALVES, Math.max(1, roundedHalfDays));
-  return new Date(acceptedDate.getTime() + confirmationHalves * HALF_DAY_MS).toISOString();
 };
 const uncertaintyScore = uncertaintyScoreFor;
 const taskStatusForChecklist = (checklist: Task["checklist"], fallback: TaskStatus): TaskStatus => {
@@ -761,7 +745,7 @@ export class OrfFlowStore {
     }
 
     const now = currentTime();
-    const nextConfirmationDueAt = confirmationDueAt(objective.finalDueAt, now);
+    const nextConfirmationDueAt = calculateObjectiveReestimateDueAt(objective.finalDueAt, now);
     if (!nextConfirmationDueAt) {
       return state;
     }

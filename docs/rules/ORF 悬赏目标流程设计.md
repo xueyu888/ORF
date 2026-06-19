@@ -80,9 +80,9 @@
 - 同一目标的正式挑战者可以共同新增、编辑、勾选、移动和删除目标下的任务与子任务，并维护评论，用来拆解执行动作和协作记录；任务不挂到指标下，执行人和创建人不形成私有所有权。
 - 目标至少已有一个指标，且每个指标都已校准积分等级后，指挥官才能冻结目标。
 
-`Objective.finalDueAt` 是目标截止日期的唯一事实源。只有指挥官可以修改：`candidate/open/applying/recruiting/reestimating` 可正常调整；`frozen` 只允许因延期等异常原因把日期延后；`submitted/accepted/settled/closed` 不允许修改。冻结后延后截止日期不重开指标重估，也不改变 `confirmationDueAt`。
+`Objective.finalDueAt` 是目标截止日期的唯一事实源。只有指挥官可以修改：`candidate/open/applying/recruiting/reestimating` 可正常调整；`frozen` 只允许因延期等异常原因把日期延后；`submitted/accepted/settled/closed` 不允许修改。目标仍处于 `reestimating` 且最终截止日期实际变更时，`Objective.confirmationDueAt` 按挑战接受时间和新的最终截止日期重新计算；冻结后延后截止日期不重开指标重估，也不改变 `confirmationDueAt`。
 
-冻结后指标口径稳定，不再退回 `reestimating`。`confirmationDueAt` 到期后同样停止指标调整，不做续期。
+冻结后指标口径稳定，不再退回 `reestimating`。`confirmationDueAt` 到期后同样停止指标调整，不提供独立续期入口。
 
 ## 征召与申请
 
