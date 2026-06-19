@@ -7,6 +7,8 @@ import type {
   ChatChannelType,
   ChatMessageContext,
   ChatMessage,
+  ChatMessageSource,
+  ChatMessageSystemMetadata,
   ChatReaction,
   ChatSearchResult,
   ChatThread,
@@ -166,6 +168,8 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
           c.team_id,
           c.type,
           c.name,
+          c.system_kind,
+          c.system_recipient_user_id,
           c.display_name,
           c.purpose,
           c.header,
@@ -215,7 +219,7 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
           ) AS direct_duplicate_rank
         FROM visible_channels
       )
-      SELECT id, team_id, type, name, display_name, purpose, header, created_by, archived_by, created_at, updated_at, archived_at
+      SELECT id, team_id, type, name, system_kind, system_recipient_user_id, display_name, purpose, header, created_by, archived_by, created_at, updated_at, archived_at
       FROM ranked_channels
       WHERE NOT (type = 'direct' AND member_count <> 2)
         AND NOT (type = 'direct' AND direct_duplicate_rank > 1)
@@ -377,6 +381,8 @@ async function buildChannels(rows: ChannelRow[], actor: ChatActor): Promise<Chat
       id: row.id,
       type: row.type,
       name: row.name,
+      systemKind: row.system_kind,
+      systemRecipientUserId: row.system_recipient_user_id,
       displayName: displayNameForChannel(row, members, usersById, actor),
       purpose: row.purpose,
       header: row.header,
@@ -439,7 +445,7 @@ async function getChannelRow(actor: ChatActor, channelId: string) {
   const teamId = storageTeamId(actor);
   const { rows } = await pool.query<ChannelRow>(
     `
-      SELECT id, team_id, type, name, display_name, purpose, header, created_by, archived_by, created_at, updated_at, archived_at
+      SELECT id, team_id, type, name, system_kind, system_recipient_user_id, display_name, purpose, header, created_by, archived_by, created_at, updated_at, archived_at
       FROM chat_channels
       WHERE team_id = $1 AND id = $2
       LIMIT 1
@@ -610,7 +616,7 @@ async function sendChatMessagePush(input: {
     actorUserId: input.actor.id,
     channel: input.channel,
     recipientUserIds: input.recipientUserIds,
-  });
+  }).filter((userId) => userId !== input.message.system?.actorUserId);
   if (recipientUserIds.length === 0) return;
 
   const preview = chatNotificationPreviewText(input.message);
@@ -843,6 +849,8 @@ async function buildMessages(rows: MessageRow[], actor: ChatActor): Promise<Chat
         avatarObjectKey: row.author_avatar_object_key,
         avatarUpdatedAt: iso(row.author_avatar_updated_at),
       }),
+      source: row.source ?? "user",
+      system: row.source === "system" ? row.system_metadata ?? {} : null,
       body: deleted ? "" : row.body,
       rootMessageId: row.root_message_id,
       parentMessageId: row.parent_message_id,
@@ -868,7 +876,7 @@ async function getMessageById(actor: ChatActor, messageId: string) {
     `
       SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
              u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
-             m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
+             m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
       FROM chat_messages m
       INNER JOIN users u ON u.id = m.author_user_id
       WHERE m.team_id = $1 AND m.id = $2
@@ -886,7 +894,7 @@ async function getRawMessage(actor: ChatActor, messageId: string) {
     `
       SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
              u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
-             m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
+             m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
       FROM chat_messages m
       INNER JOIN users u ON u.id = m.author_user_id
       WHERE m.team_id = $1 AND m.id = $2
@@ -1096,7 +1104,7 @@ export async function listChatMessages(input: { before?: string; channelId: stri
       FROM (
         SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
                u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
-               m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
+               m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
         FROM chat_messages m
         INNER JOIN users u ON u.id = m.author_user_id
         WHERE m.team_id = $1
@@ -1137,7 +1145,7 @@ export async function getChatMessageContext(
       WITH ordered_roots AS (
         SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
                u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
-               m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by,
+               m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by,
                row_number() OVER (ORDER BY m.created_at ASC, m.id ASC) AS rn,
                count(*) OVER () AS total_count
         FROM chat_messages m
@@ -1214,7 +1222,7 @@ export async function getChatThread(rootMessageId: string, actor: ChatActor): Pr
     `
       SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
              u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
-             m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
+             m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
       FROM chat_messages m
       INNER JOIN users u ON u.id = m.author_user_id
       WHERE m.team_id = $1
@@ -1272,6 +1280,8 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
     channel_header: string;
     channel_name: string | null;
     channel_purpose: string;
+    channel_system_kind: ChatChannel["systemKind"];
+    channel_system_recipient_user_id: string | null;
     channel_type: ChatChannelType;
     channel_updated_at: Date | string;
     following: boolean;
@@ -1283,8 +1293,9 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
       SELECT root.id, root.channel_id, root.author_user_id, u.name AS author_name,
              u.avatar_object_key AS author_avatar_object_key, u.avatar_updated_at AS author_avatar_updated_at,
              root.body, root.root_message_id, root.parent_message_id,
-             root.created_at, root.updated_at, root.edited_at, root.deleted_at, root.deleted_by,
-             c.type AS channel_type, c.name AS channel_name, c.display_name AS channel_display_name,
+             root.source, root.system_metadata, root.created_at, root.updated_at, root.edited_at, root.deleted_at, root.deleted_by,
+             c.type AS channel_type, c.name AS channel_name, c.system_kind AS channel_system_kind,
+             c.system_recipient_user_id AS channel_system_recipient_user_id, c.display_name AS channel_display_name,
              c.purpose AS channel_purpose, c.header AS channel_header, c.created_by AS channel_created_by,
              c.created_at AS channel_created_at, c.updated_at AS channel_updated_at, c.archived_at AS channel_archived_at,
              f.following, f.last_viewed_at AS thread_last_viewed_at,
@@ -1341,6 +1352,8 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
     body: row.body,
     root_message_id: row.root_message_id,
     parent_message_id: row.parent_message_id,
+    source: row.source,
+    system_metadata: row.system_metadata,
     created_at: row.created_at,
     updated_at: row.updated_at,
     edited_at: row.edited_at,
@@ -1351,6 +1364,8 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
     id: row.channel_id,
     type: row.channel_type,
     name: row.channel_name,
+    system_kind: row.channel_system_kind ?? null,
+    system_recipient_user_id: row.channel_system_recipient_user_id,
     display_name: row.channel_display_name,
     purpose: row.channel_purpose,
     header: row.channel_header,
@@ -1533,6 +1548,7 @@ export async function updateChatChannel(
   const metadataChanged =
     input.displayName !== undefined || input.header !== undefined || input.name !== undefined || input.purpose !== undefined;
   if (metadataChanged) {
+    if (channel.systemKind) return { status: "forbidden" };
     const isDirect = channel.type === "direct";
     if (isDirect && (input.displayName !== undefined || input.name !== undefined || input.purpose !== undefined)) {
       return { status: "forbidden" };
@@ -1580,6 +1596,7 @@ export async function archiveChatChannel(channelId: string, actor: ChatActor): P
   if (!actor.canRead) return { status: "forbidden" };
   const channel = await getVisibleChannel(actor, channelId);
   if (!channel) return { status: "notFound" };
+  if (channel.systemKind) return { status: "forbidden" };
   if (channel.type === "direct" || channel.name === DEFAULT_PUBLIC_CHANNEL_NAME) return { status: "forbidden" };
   if (!(await canManageChannel(actor, channelId))) return { status: "forbidden" };
 
@@ -1605,6 +1622,7 @@ export async function addChatChannelMembers(
   if (!actor.canRead) return { status: "forbidden" };
   const channel = await getVisibleChannel(actor, channelId);
   if (!channel) return { status: "notFound" };
+  if (channel.systemKind) return { status: "forbidden" };
   if (channel.type !== "private") return { status: "forbidden" };
   if (!(await canManageChannel(actor, channelId))) return { status: "forbidden" };
 
@@ -1630,6 +1648,7 @@ export async function removeChatChannelMember(
   if (!actor.canRead) return { status: "forbidden" };
   const channel = await getVisibleChannel(actor, channelId);
   if (!channel) return { status: "notFound" };
+  if (channel.systemKind) return { status: "forbidden" };
   if (channel.type !== "private") return { status: "forbidden" };
   const selfLeave = userId === actor.id;
   if (!selfLeave && !(await canManageChannel(actor, channelId))) return { status: "forbidden" };
@@ -1654,7 +1673,16 @@ export async function removeChatChannelMember(
 }
 
 export async function sendChatMessage(
-  input: { attachmentIds?: string[]; body: string; channelId: string; parentMessageId?: string | null; rootMessageId?: string | null },
+  input: {
+    attachmentIds?: string[];
+    body: string;
+    channelId: string;
+    createdAt?: string;
+    parentMessageId?: string | null;
+    rootMessageId?: string | null;
+    source?: ChatMessageSource;
+    systemMetadata?: ChatMessageSystemMetadata;
+  },
   actor: ChatActor,
   options: { onSideEffectError?: ChatMessageSideEffectErrorHandler } = {},
 ): Promise<Outcome<{ channel: ChatChannel; message: ChatMessage }>> {
@@ -1665,6 +1693,9 @@ export async function sendChatMessage(
   const channel = await getVisibleChannel(actor, input.channelId);
   if (!channel) return { status: "notFound" };
   if (channel.archivedAt) return { status: "forbidden" };
+  const source = input.source ?? "user";
+  if (channel.systemKind && source !== "system") return { status: "forbidden" };
+  const systemMetadata = source === "system" ? input.systemMetadata ?? {} : {};
 
   const teamId = storageTeamId(actor);
   let rootMessageId = input.rootMessageId?.trim() || null;
@@ -1685,7 +1716,7 @@ export async function sendChatMessage(
   }
 
   const messageId = makeId("chat-message");
-  const now = nowIso();
+  const now = input.createdAt ?? nowIso();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -1712,10 +1743,13 @@ export async function sendChatMessage(
 
     await client.query(
       `
-        INSERT INTO chat_messages (id, team_id, channel_id, author_user_id, body, root_message_id, parent_message_id, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+        INSERT INTO chat_messages (
+          id, team_id, channel_id, author_user_id, source, system_metadata, body,
+          root_message_id, parent_message_id, created_at, updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $10)
       `,
-      [messageId, teamId, input.channelId, actor.id, body, rootMessageId, parentMessageId, now],
+      [messageId, teamId, input.channelId, actor.id, source, JSON.stringify(systemMetadata), body, rootMessageId, parentMessageId, now],
     );
     if (attachmentIds.length > 0) {
       await client.query(
@@ -1777,6 +1811,7 @@ export async function updateChatMessage(
   if (!channel) return { status: "notFound" };
   const message = await getRawMessage(actor, input.messageId);
   if (!message || message.channel_id !== input.channelId || message.deleted_at) return { status: "notFound" };
+  if (message.source === "system") return { status: "forbidden" };
   if (message.author_user_id !== actor.id) return { status: "forbidden" };
 
   await pool.query("UPDATE chat_messages SET body = $3, updated_at = $4, edited_at = $4 WHERE id = $1 AND channel_id = $2", [
@@ -1810,6 +1845,7 @@ export async function deleteChatMessage(
   if (!channel) return { status: "notFound" };
   const message = await getRawMessage(actor, input.messageId);
   if (!message || message.channel_id !== input.channelId || message.deleted_at) return { status: "notFound" };
+  if (message.source === "system") return { status: "forbidden" };
   const mayManage = await canManageChannel(actor, input.channelId);
   if (message.author_user_id !== actor.id && !mayManage) return { status: "forbidden" };
 
@@ -1961,7 +1997,7 @@ export async function listPinnedChatMessages(channelId: string, actor: ChatActor
     `
       SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
              u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
-             m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
+             m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
       FROM chat_message_pins p
       INNER JOIN chat_messages m ON m.id = p.message_id
       INNER JOIN users u ON u.id = m.author_user_id
@@ -1985,7 +2021,7 @@ export async function listSavedChatMessages(actor: ChatActor): Promise<Outcome<{
     `
       SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
              u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
-             m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by,
+             m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by,
              c.id AS channel_id_for_channel
       FROM chat_message_saves s
       INNER JOIN chat_messages m ON m.id = s.message_id
@@ -2427,6 +2463,8 @@ export async function searchChatMessages(
     channel_header: string;
     channel_name: string | null;
     channel_purpose: string;
+    channel_system_kind: ChatChannel["systemKind"];
+    channel_system_recipient_user_id: string | null;
     channel_type: ChatChannelType;
     channel_updated_at: Date | string;
   };
@@ -2434,8 +2472,9 @@ export async function searchChatMessages(
     `
       SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
              u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
-             m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by,
-             c.type AS channel_type, c.name AS channel_name, c.display_name AS channel_display_name, c.purpose AS channel_purpose,
+             m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by,
+             c.type AS channel_type, c.name AS channel_name, c.system_kind AS channel_system_kind,
+             c.system_recipient_user_id AS channel_system_recipient_user_id, c.display_name AS channel_display_name, c.purpose AS channel_purpose,
              c.header AS channel_header, c.created_by AS channel_created_by, c.created_at AS channel_created_at,
              c.updated_at AS channel_updated_at, c.archived_at AS channel_archived_at
       FROM chat_messages m
@@ -2462,6 +2501,8 @@ export async function searchChatMessages(
     body: row.body,
     root_message_id: row.root_message_id,
     parent_message_id: row.parent_message_id,
+    source: row.source,
+    system_metadata: row.system_metadata,
     created_at: row.created_at,
     updated_at: row.updated_at,
     edited_at: row.edited_at,
@@ -2473,6 +2514,8 @@ export async function searchChatMessages(
     id: row.channel_id,
     type: row.channel_type,
     name: row.channel_name,
+    system_kind: row.channel_system_kind ?? null,
+    system_recipient_user_id: row.channel_system_recipient_user_id,
     display_name: row.channel_display_name,
     purpose: row.channel_purpose,
     header: row.channel_header,

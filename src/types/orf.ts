@@ -28,6 +28,8 @@ export type NotificationKind =
   | "worklog.reminder";
 export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog";
 export type NotificationStream = "personalNotification" | "teamAnnouncement";
+export type ChatSystemKind = NotificationStream;
+export type ChatMessageSource = "user" | "system";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
@@ -94,6 +96,23 @@ export interface AppNotification {
   readAt?: string | null;
   createdAt: string;
   metadata: Record<string, string>;
+}
+
+export interface ChatMessageSystemMetadata {
+  actorName?: string;
+  actorUserId?: string | null;
+  kind?: NotificationKind;
+  metadata?: Record<string, string>;
+  notificationEventId?: string;
+  recipientUserId?: string | null;
+  replyTargetId?: string | null;
+  replyTargetType?: CommentTargetType | null;
+  stream?: NotificationStream;
+  targetHref?: string;
+  targetId?: string;
+  targetTitle?: string;
+  targetType?: NotificationTargetType;
+  title?: string;
 }
 
 export const SYSTEM_CONVERSATION_IDS = ["teamAnnouncements", "personalNotifications"] as const;
@@ -625,6 +644,8 @@ export interface ChatChannel {
   id: string;
   type: ChatChannelType;
   name?: string | null;
+  systemKind?: ChatSystemKind | null;
+  systemRecipientUserId?: string | null;
   displayName: string;
   purpose: string;
   header: string;
@@ -665,6 +686,8 @@ export interface ChatMessage {
   authorUserId: string;
   authorName: string;
   authorAvatarUrl?: string | null;
+  source: ChatMessageSource;
+  system?: ChatMessageSystemMetadata | null;
   body: string;
   rootMessageId?: string | null;
   parentMessageId?: string | null;

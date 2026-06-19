@@ -8,6 +8,9 @@ import type {
   ChatChannelMember,
   ChatChannelType,
   ChatMemberRole,
+  ChatMessageSource,
+  ChatMessageSystemMetadata,
+  ChatSystemKind,
   ChatUser,
   UserRole,
   UserStatus,
@@ -47,6 +50,8 @@ export type ChannelRow = {
   id: string;
   name: string | null;
   purpose: string;
+  system_kind: ChatSystemKind | null;
+  system_recipient_user_id: string | null;
   type: ChatChannelType;
   updated_at: Date | string;
 };
@@ -78,6 +83,8 @@ export type MessageRow = {
   id: string;
   parent_message_id: string | null;
   root_message_id: string | null;
+  source: ChatMessageSource;
+  system_metadata: ChatMessageSystemMetadata | null;
   updated_at: Date | string;
 };
 
@@ -248,6 +255,9 @@ export function toChannelMember(row: ChannelMemberRow): ChatChannelMember {
 
 export function displayNameForChannel(row: ChannelRow, members: ChatChannelMember[], usersById: Map<string, ChatUser>, actor: ChatActor) {
   if (row.type !== "direct") {
+    return row.display_name;
+  }
+  if (row.system_kind) {
     return row.display_name;
   }
   return chatConversationDisplayName({

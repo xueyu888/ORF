@@ -3,6 +3,9 @@ import { bigint, boolean, date, index, integer, jsonb, pgEnum, pgTable, primaryK
 import type {
   BountySource,
   ChallengeApplication,
+  ChatMessageSource,
+  ChatMessageSystemMetadata,
+  ChatSystemKind,
   CommentTargetType,
   ContributionAllocation,
   LootResultClaim,
@@ -706,6 +709,8 @@ export const chatChannels = pgTable(
       .references(() => teams.id, { onDelete: "cascade" }),
     type: chatChannelTypeEnum("type").notNull(),
     name: text("name"),
+    systemKind: text("system_kind").$type<ChatSystemKind>(),
+    systemRecipientUserId: uuid("system_recipient_user_id").references(() => users.id, { onDelete: "cascade" }),
     displayName: text("display_name").notNull(),
     purpose: text("purpose").notNull().default(""),
     header: text("header").notNull().default(""),
@@ -719,6 +724,12 @@ export const chatChannels = pgTable(
     teamType: index("chat_channels_team_type_idx").on(table.teamId, table.type),
     teamUpdated: index("chat_channels_team_updated_idx").on(table.teamId, table.updatedAt),
     teamNameUnique: uniqueIndex("chat_channels_team_name_unique").on(table.teamId, table.name),
+    teamSystemAnnouncementUnique: uniqueIndex("chat_channels_team_system_announcement_unique")
+      .on(table.teamId, table.systemKind)
+      .where(sql`system_kind = 'teamAnnouncement'`),
+    teamSystemPersonalUnique: uniqueIndex("chat_channels_team_system_personal_unique")
+      .on(table.teamId, table.systemKind, table.systemRecipientUserId)
+      .where(sql`system_kind = 'personalNotification'`),
   }),
 );
 
@@ -759,6 +770,8 @@ export const chatMessages = pgTable(
     authorUserId: uuid("author_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    source: text("source").$type<ChatMessageSource>().notNull().default("user"),
+    systemMetadata: jsonb("system_metadata").$type<ChatMessageSystemMetadata>().notNull().default({}),
     body: text("body").notNull(),
     rootMessageId: text("root_message_id"),
     parentMessageId: text("parent_message_id"),

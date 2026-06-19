@@ -443,9 +443,10 @@ export function ChatMessageItem({
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const moreMenuInitialFocusRef = useRef<"first" | "last" | null>(null);
   const deliveryStatus = chatMessageDeliveryStatus(message);
-  const canMutate = !deliveryStatus && message.authorUserId === currentUserId && !message.deletedAt;
+  const isSystemMessage = message.source === "system";
+  const canMutate = !isSystemMessage && !deliveryStatus && message.authorUserId === currentUserId && !message.deletedAt;
   const canUseServerActions = !deliveryStatus && !message.deletedAt;
-  const canDeleteMessage = canMutate || (canDeleteAnyMessage && canUseServerActions);
+  const canDeleteMessage = !isSystemMessage && (canMutate || (canDeleteAnyMessage && canUseServerActions));
   const visibleReactions = message.reactions.filter((reaction) => isVisibleChatReactionEmoji(reaction.emojiName));
   const transformPastedFeedbackText = useCallback(
     (text: string) => formatPastedFeedbackLinks(text, feedbackItems ?? []),

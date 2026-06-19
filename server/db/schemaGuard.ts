@@ -188,6 +188,32 @@ export function validateNotificationConversationSchema(snapshot: { columns: Runt
   return errors;
 }
 
+export function validateSystemChatNotificationSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const errors: string[] = [];
+  const columnsByTable = snapshot.columns.reduce((map, column) => {
+    const columns = map.get(column.tableName) ?? new Map<string, RuntimeTableColumn>();
+    columns.set(column.columnName, column);
+    map.set(column.tableName, columns);
+    return map;
+  }, new Map<string, Map<string, RuntimeTableColumn>>());
+
+  const channelColumns = columnsByTable.get("chat_channels") ?? new Map();
+  for (const columnName of ["system_kind", "system_recipient_user_id"]) {
+    if (!channelColumns.has(columnName)) {
+      errors.push(`chat_channels.${columnName} is missing.`);
+    }
+  }
+
+  const messageColumns = columnsByTable.get("chat_messages") ?? new Map();
+  for (const columnName of ["source", "system_metadata"]) {
+    if (!messageColumns.has(columnName)) {
+      errors.push(`chat_messages.${columnName} is missing.`);
+    }
+  }
+
+  return errors;
+}
+
 export function validateGitLabOrfChatIntegrationSchema(snapshot: { columns: RuntimeTableColumn[] }) {
   const errors: string[] = [];
   const columnsByTable = snapshot.columns.reduce((map, column) => {
@@ -279,6 +305,7 @@ export async function assertRuntimeDatabaseSchema() {
     feedbackStatusResult,
     notificationStreamResult,
     notificationConversationColumnsResult,
+    systemChatNotificationColumnsResult,
     gitLabOrfChatColumnsResult,
     gitHubOrfChatColumnsResult,
   ] = await Promise.all([
@@ -391,6 +418,18 @@ export async function assertRuntimeDatabaseSchema() {
           is_nullable as "isNullable"
         from information_schema.columns
         where table_schema = current_schema()
+          and table_name in ('chat_channels', 'chat_messages')
+          and column_name in ('system_kind', 'system_recipient_user_id', 'source', 'system_metadata')
+      `,
+    ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
           and table_name in ('gitlab_orf_project_channels', 'gitlab_orf_event_deliveries')
       `,
     ),
@@ -445,6 +484,9 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateNotificationConversationSchema({
       columns: notificationConversationColumnsResult.rows,
+    }),
+    ...validateSystemChatNotificationSchema({
+      columns: systemChatNotificationColumnsResult.rows,
     }),
     ...validateGitLabOrfChatIntegrationSchema({
       columns: gitLabOrfChatColumnsResult.rows,
