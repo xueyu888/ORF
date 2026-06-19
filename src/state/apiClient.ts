@@ -114,6 +114,38 @@ export type ChatThreadsResponse = { status?: "ok"; threads: ChatThreadSummary[] 
 export type ChatAttachmentUploadResponse = { status?: "ok"; attachment: ChatAttachment };
 export type ChatMentionableUsersResponse = { status?: "ok"; users: ChatUser[] };
 export type ChatSearchResponse = { status?: "ok"; results: ChatSearchResult[] };
+export type GitLabOrfChatConfigStatus = {
+  accessTokenConfigured: boolean;
+  channelType: "public" | "private";
+  enabled: boolean;
+  gitlabUrlConfigured: boolean;
+  groupPath: string;
+  webhookSecretConfigured: boolean;
+  webhookUrlConfigured: boolean;
+};
+export type GitLabOrfChatChannelOption = {
+  displayName: string;
+  id: string;
+  memberCount: number;
+  name: string | null;
+  type: "public" | "private";
+};
+export type GitLabOrfChatProjectBinding = {
+  channelDisplayName: string | null;
+  channelId: string | null;
+  channelType: "public" | "private" | null;
+  lastSeenAt: string | null;
+  projectId: string;
+  projectPath: string;
+  projectUrl: string;
+  source: "gitlab" | "mapping";
+};
+export type GitLabOrfChatSettingsData = {
+  channels: GitLabOrfChatChannelOption[];
+  config: GitLabOrfChatConfigStatus;
+  gitlabProjectListError: string | null;
+  projects: GitLabOrfChatProjectBinding[];
+};
 export type WorkLogObjectivesResponse = {
   categories: WorkLogCategoryOption[];
   classificationSuggestionEnabled: boolean;
@@ -703,6 +735,38 @@ export async function saveChatSettings(input: Pick<ChatSettingsData, "attachment
     body: JSON.stringify(input),
   });
   return response.data;
+}
+
+export async function getGitLabOrfChatSettings() {
+  const response = await apiJson<ApiEnvelope<GitLabOrfChatSettingsData>>("/api/settings/gitlab-orf-chat");
+  return response.data;
+}
+
+export async function saveGitLabOrfProjectChannel(input: {
+  channelId: string;
+  projectId: string;
+  projectPath: string;
+  projectUrl: string;
+}) {
+  const response = await apiJson<ApiEnvelope<GitLabOrfChatSettingsData>>(
+    `/api/settings/gitlab-orf-chat/projects/${encodeURIComponent(input.projectId)}/channel`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        channelId: input.channelId,
+        projectPath: input.projectPath,
+        projectUrl: input.projectUrl,
+      }),
+    },
+  );
+  return response.data;
+}
+
+export async function reconcileGitLabOrfChatSettings() {
+  const response = await apiJson<ApiEnvelope<{ settings: GitLabOrfChatSettingsData }>>("/api/settings/gitlab-orf-chat/reconcile", {
+    method: "POST",
+  });
+  return response.data.settings;
 }
 
 export async function uploadVisualBackground(scene: VisualBackgroundScene, file: File) {

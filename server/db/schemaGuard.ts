@@ -188,6 +188,85 @@ export function validateNotificationConversationSchema(snapshot: { columns: Runt
   return errors;
 }
 
+export function validateGitLabOrfChatIntegrationSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const errors: string[] = [];
+  const columnsByTable = snapshot.columns.reduce((map, column) => {
+    const columns = map.get(column.tableName) ?? new Map<string, RuntimeTableColumn>();
+    columns.set(column.columnName, column);
+    map.set(column.tableName, columns);
+    return map;
+  }, new Map<string, Map<string, RuntimeTableColumn>>());
+
+  const projectColumns = columnsByTable.get("gitlab_orf_project_channels") ?? new Map();
+  for (const columnName of [
+    "team_id",
+    "gitlab_project_id",
+    "gitlab_project_path",
+    "gitlab_project_url",
+    "chat_channel_id",
+    "created_at",
+    "updated_at",
+    "last_seen_at",
+  ]) {
+    if (!projectColumns.has(columnName)) {
+      errors.push(`gitlab_orf_project_channels.${columnName} is missing.`);
+    }
+  }
+
+  const deliveryColumns = columnsByTable.get("gitlab_orf_event_deliveries") ?? new Map();
+  for (const columnName of [
+    "team_id",
+    "external_event_key",
+    "gitlab_project_id",
+    "event_type",
+    "chat_channel_id",
+    "chat_message_id",
+    "status",
+    "error",
+    "received_at",
+    "delivered_at",
+    "updated_at",
+  ]) {
+    if (!deliveryColumns.has(columnName)) {
+      errors.push(`gitlab_orf_event_deliveries.${columnName} is missing.`);
+    }
+  }
+
+  return errors;
+}
+
+export function validateGitHubOrfChatIntegrationSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const errors: string[] = [];
+  const columnsByTable = snapshot.columns.reduce((map, column) => {
+    const columns = map.get(column.tableName) ?? new Map<string, RuntimeTableColumn>();
+    columns.set(column.columnName, column);
+    map.set(column.tableName, columns);
+    return map;
+  }, new Map<string, Map<string, RuntimeTableColumn>>());
+
+  const deliveryColumns = columnsByTable.get("github_orf_chat_deliveries") ?? new Map();
+  for (const columnName of [
+    "delivery_key",
+    "repository",
+    "event_type",
+    "subject",
+    "external_id",
+    "channel_id",
+    "source",
+    "status",
+    "chat_message_id",
+    "error",
+    "created_at",
+    "updated_at",
+  ]) {
+    if (!deliveryColumns.has(columnName)) {
+      errors.push(`github_orf_chat_deliveries.${columnName} is missing.`);
+    }
+  }
+
+  return errors;
+}
+
 export async function assertRuntimeDatabaseSchema() {
   const { pool } = await import("./client");
   const [
@@ -200,6 +279,8 @@ export async function assertRuntimeDatabaseSchema() {
     feedbackStatusResult,
     notificationStreamResult,
     notificationConversationColumnsResult,
+    gitLabOrfChatColumnsResult,
+    gitHubOrfChatColumnsResult,
   ] = await Promise.all([
     pool.query<RuntimeSchemaColumn>(
       `
@@ -302,6 +383,28 @@ export async function assertRuntimeDatabaseSchema() {
           and table_name in ('notification_events', 'notification_receipts')
       `,
     ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name in ('gitlab_orf_project_channels', 'gitlab_orf_event_deliveries')
+      `,
+    ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'github_orf_chat_deliveries'
+      `,
+    ),
   ]);
   const commentTargetTypeResult = await pool.query<{ label: string }>(
     `
@@ -342,6 +445,12 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateNotificationConversationSchema({
       columns: notificationConversationColumnsResult.rows,
+    }),
+    ...validateGitLabOrfChatIntegrationSchema({
+      columns: gitLabOrfChatColumnsResult.rows,
+    }),
+    ...validateGitHubOrfChatIntegrationSchema({
+      columns: gitHubOrfChatColumnsResult.rows,
     }),
   ];
 

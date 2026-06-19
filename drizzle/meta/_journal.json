@@ -272,7 +272,7 @@
       "idx": 38,
       "version": "7",
       "when": 1781022000000,
-      "tag": "0038_mattermost_chat_import_mappings",
+      "tag": "0038_chat_import_mappings",
       "breakpoints": true
     },
     {
@@ -385,6 +385,20 @@
       "version": "7",
       "when": 1781510000000,
       "tag": "0054_notification_events_and_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1781511000000,
+      "tag": "0055_gitlab_orf_chat_integration",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1781512000000,
+      "tag": "0056_github_orf_chat_deliveries",
       "breakpoints": true
     }
   ]

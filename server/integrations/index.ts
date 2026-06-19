@@ -1,10 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import { registerGitHubMattermostSync } from "./github-mattermost-sync";
-import { registerGitLabMattermostWebhookReconciler } from "./gitlab-mattermost-webhook-reconciler";
-import { registerMattermostJiraReminder } from "./mattermost-jira-reminder";
+import { registerGitHubOrfChatSync } from "./github-orf-chat";
+import { registerGitLabOrfChatIntegration } from "./gitlab-orf-chat";
 
 export function registerOptionalIntegrations(app: FastifyInstance) {
-  registerGitLabMattermostWebhookReconciler(app);
-  registerGitHubMattermostSync(app);
-  registerMattermostJiraReminder(app);
+  registerGitLabOrfChatIntegration(app);
+  registerGitHubOrfChatSync(app);
 }

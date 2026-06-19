@@ -902,3 +902,75 @@ export const chatImportMappings = pgTable(
     target: index("chat_import_mappings_target_idx").on(table.teamId, table.targetTable, table.targetId),
   }),
 );
+
+export const gitLabOrfProjectChannels = pgTable(
+  "gitlab_orf_project_channels",
+  {
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    gitlabProjectId: text("gitlab_project_id").notNull(),
+    gitlabProjectPath: text("gitlab_project_path").notNull(),
+    gitlabProjectUrl: text("gitlab_project_url").notNull().default(""),
+    chatChannelId: text("chat_channel_id")
+      .notNull()
+      .references(() => chatChannels.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.gitlabProjectId] }),
+    teamPathUnique: uniqueIndex("gitlab_orf_project_channels_team_path_unique").on(table.teamId, table.gitlabProjectPath),
+    teamChannelUnique: uniqueIndex("gitlab_orf_project_channels_team_channel_unique").on(table.teamId, table.chatChannelId),
+    channel: index("gitlab_orf_project_channels_channel_idx").on(table.chatChannelId),
+  }),
+);
+
+export const gitLabOrfEventDeliveries = pgTable(
+  "gitlab_orf_event_deliveries",
+  {
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    externalEventKey: text("external_event_key").notNull(),
+    gitlabProjectId: text("gitlab_project_id").notNull(),
+    eventType: text("event_type").notNull(),
+    chatChannelId: text("chat_channel_id").references(() => chatChannels.id, { onDelete: "set null" }),
+    chatMessageId: text("chat_message_id").references(() => chatMessages.id, { onDelete: "set null" }),
+    status: text("status").$type<"reserved" | "delivered" | "failed" | "ignored">().notNull(),
+    error: text("error"),
+    receivedAt: timestamp("received_at", { mode: "string", withTimezone: true }).notNull(),
+    deliveredAt: timestamp("delivered_at", { mode: "string", withTimezone: true }),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.externalEventKey] }),
+    project: index("gitlab_orf_event_deliveries_project_idx").on(table.teamId, table.gitlabProjectId, table.receivedAt),
+    status: index("gitlab_orf_event_deliveries_status_idx").on(table.teamId, table.status, table.updatedAt),
+  }),
+);
+
+export const gitHubOrfChatDeliveries = pgTable(
+  "github_orf_chat_deliveries",
+  {
+    deliveryKey: text("delivery_key").primaryKey(),
+    repository: text("repository").notNull(),
+    eventType: text("event_type").$type<"push" | "issue" | "issues-snapshot">().notNull(),
+    subject: text("subject").notNull(),
+    externalId: text("external_id").notNull(),
+    channelId: text("channel_id")
+      .notNull()
+      .references(() => chatChannels.id, { onDelete: "cascade" }),
+    source: text("source").$type<"webhook" | "api-poll" | "git-poll">().notNull(),
+    status: text("status").$type<"reserved" | "delivered" | "failed">().notNull().default("reserved"),
+    chatMessageId: text("chat_message_id").references(() => chatMessages.id, { onDelete: "set null" }),
+    error: text("error"),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    repositoryEvent: index("github_orf_chat_deliveries_repo_event_idx").on(table.repository, table.eventType, table.subject, table.createdAt),
+    status: index("github_orf_chat_deliveries_status_idx").on(table.status, table.updatedAt),
+  }),
+);
