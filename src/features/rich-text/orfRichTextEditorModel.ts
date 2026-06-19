@@ -17,6 +17,12 @@ export type OrfRichTextEditResult = {
   selection: OrfRichTextTextRange;
 };
 
+export type OrfRichTextBlockInsertResult = {
+  insertedRange: OrfRichTextTextRange;
+  markdown: string;
+  selection: number;
+};
+
 export const ORF_RICH_TEXT_BLOCK_LABELS: Record<OrfRichTextBlockKind, string> = {
   bullet: "无序列表",
   heading: "标题",
@@ -66,15 +72,18 @@ export function replaceOrfMarkdownRange(markdown: string, range: OrfRichTextText
   return `${markdown.slice(0, normalizedRange.from)}${value}${markdown.slice(normalizedRange.to)}`;
 }
 
-export function nextOrfBlockMarkdownInsert(markdown: string, selection: OrfRichTextTextRange, block: string) {
+export function nextOrfBlockMarkdownInsert(markdown: string, selection: OrfRichTextTextRange, block: string): OrfRichTextBlockInsertResult {
   const range = normalizeRange(selection);
   const before = markdown.slice(0, range.from);
   const after = markdown.slice(range.to);
   const prefix = !before.trim() ? "" : before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
   const suffix = !after.trim() ? "" : after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n";
+  const insertedStart = before.length + prefix.length;
+  const insertedEnd = insertedStart + block.length;
   return {
+    insertedRange: { from: insertedStart, to: insertedEnd },
     markdown: `${before}${prefix}${block}${suffix}${after}`,
-    selection: before.length + prefix.length + block.length,
+    selection: insertedEnd,
   };
 }
 

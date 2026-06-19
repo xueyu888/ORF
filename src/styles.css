@@ -11868,6 +11868,22 @@ body[data-dragging-floating="true"] {
   white-space: normal;
 }
 
+.orf-comment-attachment-missing,
+.orf-rich-text-viewer-attachment-missing {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  border: 1px solid rgba(218, 224, 232, 0.9);
+  border-radius: 7px;
+  background: rgba(248, 250, 252, 0.9);
+  color: #667085;
+  padding: 2px 7px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+  vertical-align: baseline;
+}
+
 .orf-comment-attachment-preview-button {
   display: block;
   max-width: 100%;

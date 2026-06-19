@@ -15,6 +15,10 @@ import type {
   UserRole,
   UserStatus,
 } from "../../src/types/orf";
+import {
+  matchOrfMentionMarkdownTokens,
+  orfMentionMarkdownTokensToPlainText,
+} from "../../src/features/rich-text/orfRichTextTokens";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScopeStorageId } from "./runtimeScope";
@@ -129,7 +133,6 @@ export const DEFAULT_PUBLIC_CHANNEL_DISPLAY_NAME = "ORF 全员频道";
 export const CHAT_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
 export { CHAT_DIRECT_MEMBER_COUNT };
 
-const CHAT_MENTION_TOKEN_PATTERN = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)/g;
 const CHAT_BROADCAST_MENTION_PATTERN = /(^|[^A-Za-z0-9_@.])@(all|channel|here|所有人)(?=$|[^A-Za-z0-9_])/gi;
 export const CHAT_BROADCAST_MENTION_SQL_PATTERN = "(^|[^A-Za-z0-9_@.])@(all|channel|here|所有人)($|[^A-Za-z0-9_])";
 
@@ -271,11 +274,9 @@ export function displayNameForChannel(row: ChannelRow, members: ChatChannelMembe
 
 export function extractMentionUserIds(body: string) {
   const ids = new Set<string>();
-  let match: RegExpExecArray | null;
-  CHAT_MENTION_TOKEN_PATTERN.lastIndex = 0;
-  while ((match = CHAT_MENTION_TOKEN_PATTERN.exec(body)) !== null) {
-    const rawUserId = match[2] ? decodeURIComponent(match[2]) : "";
-    if (rawUserId.trim()) ids.add(rawUserId.trim());
+  for (const match of matchOrfMentionMarkdownTokens(body)) {
+    const userId = match.reference.userId.trim();
+    if (userId) ids.add(userId);
   }
   return Array.from(ids);
 }
@@ -286,8 +287,7 @@ export function hasChatBroadcastMention(body: string) {
 }
 
 export function previewText(body: string) {
-  return body
-    .replace(CHAT_MENTION_TOKEN_PATTERN, (_match, label) => `@${String(label).trim() || "成员"}`)
+  return orfMentionMarkdownTokensToPlainText(body)
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 160);

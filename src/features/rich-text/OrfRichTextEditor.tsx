@@ -26,6 +26,7 @@ import {
   type OrfRichTextTextRange,
 } from "./orfRichTextEditorModel";
 import {
+  type OrfAttachmentReference,
   orfMentionMarkdown,
   orfRichTextHasMeaningfulContent,
   orfRichTextMentionLabel,
@@ -63,6 +64,16 @@ export type OrfRichTextImageUploadResult = {
 };
 export type OrfRichTextAttachmentUploadResult = OrfRichTextImageUploadResult;
 
+export type OrfRichTextAttachmentInsert = {
+  range: {
+    from: number;
+    to: number;
+  };
+  reference: OrfAttachmentReference;
+  text: string;
+  upload: OrfRichTextAttachmentUploadResult;
+};
+
 export type OrfRichTextEditorActions = {
   focus: () => void;
   focusEnd: () => void;
@@ -84,6 +95,7 @@ export type OrfRichTextEditorProps = {
   currentUserId: string;
   disabled?: boolean;
   excludeCurrentUserFromMentions?: boolean;
+  formatAttachmentText?: (reference: OrfAttachmentReference, upload: OrfRichTextAttachmentUploadResult) => string;
   footer?: ReactNode;
   formatMentionText?: (user: OrfRichTextMentionUser, label: string) => string;
   idleHint?: string;
@@ -92,6 +104,7 @@ export type OrfRichTextEditorProps = {
   onBusyChange?: (busy: boolean) => void;
   onChange: (markdown: string) => void;
   onErrorChange?: (message: string) => void;
+  onAttachmentInsert?: (insert: OrfRichTextAttachmentInsert) => void;
   onFilesInsert?: (files: File[]) => boolean | void;
   onKeyDown?: (event: KeyboardEvent, actions: OrfRichTextEditorActions) => boolean | void;
   onMentionInsert?: (insert: OrfRichTextMentionInsert) => void;
@@ -170,6 +183,7 @@ export function OrfRichTextEditor({
   currentUserId,
   disabled = false,
   excludeCurrentUserFromMentions = true,
+  formatAttachmentText,
   footer,
   formatMentionText,
   idleHint,
@@ -178,6 +192,7 @@ export function OrfRichTextEditor({
   onBusyChange,
   onChange,
   onErrorChange,
+  onAttachmentInsert,
   onFilesInsert,
   onKeyDown,
   onMentionInsert,
@@ -195,6 +210,7 @@ export function OrfRichTextEditor({
   const mentionOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const disabledRef = useRef(disabled);
+  const formatAttachmentTextRef = useRef(formatAttachmentText);
   const formatMentionTextRef = useRef(formatMentionText);
   const markdownRef = useRef(value);
   const lastAppliedMarkdownRef = useRef(value);
@@ -202,6 +218,7 @@ export function OrfRichTextEditor({
   const onBusyChangeRef = useRef(onBusyChange);
   const onChangeRef = useRef(onChange);
   const onErrorChangeRef = useRef(onErrorChange);
+  const onAttachmentInsertRef = useRef(onAttachmentInsert);
   const onFilesInsertRef = useRef(onFilesInsert);
   const onKeyDownRef = useRef(onKeyDown);
   const onMentionInsertRef = useRef(onMentionInsert);
@@ -307,12 +324,6 @@ export function OrfRichTextEditor({
     emitMarkdown(nextMarkdown, range.from + text.length);
   }, [emitMarkdown]);
 
-  const insertBlockMarkdown = useCallback((block: string) => {
-    const range = textRangeForTextarea(textareaRef.current);
-    const next = nextOrfBlockMarkdownInsert(markdownRef.current, range, block);
-    emitMarkdown(next.markdown, next.selection);
-  }, [emitMarkdown]);
-
   const actions = useMemo<OrfRichTextEditorActions>(() => ({
     focus: () => textareaRef.current?.focus(),
     focusEnd: () => focusSelection(markdownRef.current.length),
@@ -352,6 +363,14 @@ export function OrfRichTextEditor({
   useEffect(() => {
     onErrorChangeRef.current = onErrorChange;
   }, [onErrorChange]);
+
+  useEffect(() => {
+    formatAttachmentTextRef.current = formatAttachmentText;
+  }, [formatAttachmentText]);
+
+  useEffect(() => {
+    onAttachmentInsertRef.current = onAttachmentInsert;
+  }, [onAttachmentInsert]);
 
   useEffect(() => {
     onFilesInsertRef.current = onFilesInsert;
@@ -433,12 +452,20 @@ export function OrfRichTextEditor({
         onErrorChangeRef.current?.(uploadAttachmentHandler ? "附件上传失败" : "图片上传失败");
         return;
       }
-      insertBlockMarkdown(upload.markdown);
+      const attachmentText = formatAttachmentTextRef.current?.(attachment, upload) ?? upload.markdown;
+      const next = nextOrfBlockMarkdownInsert(markdownRef.current, textRangeForTextarea(textareaRef.current), attachmentText);
+      emitMarkdown(next.markdown, next.selection);
+      onAttachmentInsertRef.current?.({
+        range: next.insertedRange,
+        reference: attachment,
+        text: attachmentText,
+        upload,
+      });
     } finally {
       setUploadingAttachment(false);
       onBusyChangeRef.current?.(false);
     }
-  }, [insertBlockMarkdown]);
+  }, [emitMarkdown]);
 
   useEffect(() => {
     uploadAttachmentRef.current = (file: File) => {

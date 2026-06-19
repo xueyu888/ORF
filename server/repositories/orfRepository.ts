@@ -99,6 +99,10 @@ import { runtimeScope, runtimeScopeStorageId } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
 import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
 import { addCalendarDays, isDateOnlyString, localDateString } from "../../src/utils/date";
+import {
+  matchOrfAttachmentMarkdownTokens,
+  matchOrfMentionMarkdownTokens,
+} from "../../src/features/rich-text/orfRichTextTokens";
 import { publishRealtimeSystemBroadcast } from "../realtime/realtimeEventBus";
 import { publishObjectiveInvalidation, publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { objectStorage } from "../storage/objectStorage";
@@ -145,8 +149,6 @@ const nextIdCounter = () => {
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${nextIdCounter()}-${randomUUID()}`;
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
 const MAX_CONFIRMATION_HALVES = 18;
-const COMMENT_ATTACHMENT_TOKEN_PATTERN = /!\[[^\]\n]*\]\(orf-attachment:([A-Za-z0-9_-]+)\)/g;
-const COMMENT_MENTION_TOKEN_PATTERN = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)/g;
 function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
 }
@@ -158,9 +160,9 @@ function nullableTrimmedText(value: string | null | undefined) {
 
 function extractCommentAttachmentIds(body: string) {
   const ids = new Set<string>();
-  for (const match of body.matchAll(COMMENT_ATTACHMENT_TOKEN_PATTERN)) {
-    if (match[1]) {
-      ids.add(match[1]);
+  for (const match of matchOrfAttachmentMarkdownTokens(body)) {
+    if (match.reference.kind === "attached") {
+      ids.add(match.reference.attachmentId);
     }
   }
   return Array.from(ids);
@@ -614,15 +616,9 @@ async function notifyMemberOfObjectiveAlignmentReview(input: {
 
 function extractCommentMentionUserIds(body: string) {
   const userIds: string[] = [];
-  for (const match of body.matchAll(COMMENT_MENTION_TOKEN_PATTERN)) {
-    const rawUserId = match[2]?.trim();
-    if (!rawUserId) continue;
-
-    try {
-      userIds.push(decodeURIComponent(rawUserId));
-    } catch {
-      userIds.push(rawUserId);
-    }
+  for (const match of matchOrfMentionMarkdownTokens(body)) {
+    const userId = match.reference.userId.trim();
+    if (userId) userIds.push(userId);
   }
   return Array.from(new Set(userIds));
 }

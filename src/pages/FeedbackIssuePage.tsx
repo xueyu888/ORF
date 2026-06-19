@@ -154,7 +154,7 @@ export function FeedbackIssuePage() {
     setDraft(emptyCommentDraft());
     setDraftMode({ type: "default" });
     setEditState({
-      draft: commentDraftFromStoredBody(entry.message.body),
+      draft: commentDraftFromStoredBody(entry.message.body, mentionUsersById),
       messageId: entry.message.id,
       threadId: entry.thread.id,
     });

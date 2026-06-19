@@ -14,6 +14,7 @@ import {
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
 import { feedbackIssueHref } from "../features/feedback/model/feedbackIssue";
+import { validOrfRichTextDraftAttachments } from "../features/rich-text/orfRichTextDraft";
 import { useOrf } from "../state/OrfProvider";
 import type { Impact } from "../types/orf";
 import { impactLabel } from "../utils/labels";
@@ -46,7 +47,12 @@ export function FeedbackCreatePage() {
   const pendingPreviewUrlsRef = useRef(new Set<string>());
 
   const body = serializeCommentDraft(draft).trim();
-  const referencedAttachments = pendingAttachments.filter((attachment) => body.includes(`orf-pending-attachment:${attachment.id}`));
+  const referencedPendingAttachmentIds = new Set(
+    validOrfRichTextDraftAttachments(draft).flatMap((attachment) => (
+      attachment.kind === "pending" ? [attachment.pendingAttachmentId] : []
+    )),
+  );
+  const referencedAttachments = pendingAttachments.filter((attachment) => referencedPendingAttachmentIds.has(attachment.id));
 
   useEffect(() => () => {
     for (const previewUrl of pendingPreviewUrlsRef.current) {
