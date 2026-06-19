@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
+import { Button, IconButton } from "../components/ui";
 import {
   findSavedCredentialAccountByEmail,
   forgetSavedCredentialByEmail,
@@ -303,15 +304,15 @@ export function AuthPage() {
                     {account.displayName && <small>{account.email}</small>}
                   </span>
                 </button>
-                <button
-                  className="orf-auth-saved-remove"
+                <IconButton
+                  className="orf-auth-saved-remove-action"
+                  icon={Trash2}
+                  label={`删除已记住账号 ${account.email}`}
+                  size="sm"
+                  variant="danger"
                   type="button"
-                  aria-label={`删除已记住账号 ${account.email}`}
-                  title="删除已记住账号"
                   onClick={() => void deleteSavedAccount(account)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                />
               </div>
             ))}
           </div>
@@ -395,11 +396,11 @@ export function AuthPage() {
             </p>
           )}
 
-          <button className="orf-auth-submit" type="submit" disabled={!authReady || submitting}>
+          <Button className="orf-auth-submit-action" size="lg" type="submit" disabled={!authReady || submitting}>
             <Sparkles className="h-5 w-5" />
             <span>{submitting ? busyLabel : primaryLabel}</span>
             <Sparkles className="h-5 w-5" />
-          </button>
+          </Button>
         </form>
 
         <div className="orf-auth-separator" aria-hidden="true">
@@ -408,14 +409,15 @@ export function AuthPage() {
           <span />
         </div>
 
-        <button
-          className="orf-auth-secondary"
+        <Button
+          className="orf-auth-mode-switch"
+          variant="secondary"
           type="button"
           disabled={!authReady || submitting}
           onClick={() => setMode((value) => (value === "login" ? "register" : "login"))}
         >
           {switchLabel}
-        </button>
+        </Button>
       </section>
     </main>
   );

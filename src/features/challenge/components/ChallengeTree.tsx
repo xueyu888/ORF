@@ -9,6 +9,7 @@ import { FantasySelectMenu, type FantasySelectOption } from "../../../components
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
 import { UserAvatar } from "../../../components/UserAvatar";
+import { Button, IconButton, actionButtonClassName } from "../../../components/ui";
 import {
   canRequestObjectiveAlignment,
   isOpenObjectiveAlignmentRequest,
@@ -224,26 +225,24 @@ function ProjectHeader({
       </div>
       <div className="orf-project-header-actions">
         {canManageProjects && !project.isUnassigned && project.projectId && (
-          <button
-            aria-label={`删除项目${project.name}`}
-            className="orf-project-delete-button"
-            title="删除项目"
+          <IconButton
+            icon={Trash2}
+            label={`删除项目${project.name}`}
+            size="sm"
+            variant="danger"
             type="button"
             onClick={handleDeleteProject}
-          >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-          </button>
+          />
         )}
         {canCreateObjective && (
-          <button
-            aria-label={project.isUnassigned ? "新增未归属目标" : `在${project.name}中新增目标`}
-            className="orf-project-add-button"
-            title={project.isUnassigned ? "新增未归属目标" : "新增目标"}
+          <IconButton
+            icon={Plus}
+            label={project.isUnassigned ? "新增未归属目标" : `在${project.name}中新增目标`}
+            size="sm"
+            variant="secondary"
             type="button"
             onClick={() => onAddObjective(project.projectId)}
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-          </button>
+          />
         )}
       </div>
     </div>
@@ -438,7 +437,7 @@ function ObjectivePanel({
         />
         <ProgressValue value={group.objective.progress} />
         {workbenchAction ? (
-          <Link className="orf-row-loot-action orf-control orf-primary-action inline-flex items-center justify-center gap-2 px-3 font-semibold" to={workbenchAction.to}>
+          <Link className={actionButtonClassName({ className: "orf-row-loot-action", size: "sm", variant: "primary" })} to={workbenchAction.to}>
             {workbenchAction.label}
           </Link>
         ) : null}
@@ -461,10 +460,10 @@ function ObjectivePanel({
                 {application.reason && <span className="orf-objective-application-reason">{application.reason}</span>}
               </span>
               <span className="orf-objective-application-actions">
-                <button type="button" className="orf-objective-application-approve" onClick={() => void handlers.onApproveApplication(group.objective.id, application.id)}>
+                <button type="button" className={actionButtonClassName({ size: "sm", variant: "primary" })} onClick={() => void handlers.onApproveApplication(group.objective.id, application.id)}>
                   通过
                 </button>
-                <button type="button" className="orf-objective-application-reject" onClick={() => void handlers.onRejectApplication(group.objective.id, application.id)}>
+                <button type="button" className={actionButtonClassName({ size: "sm", variant: "danger" })} onClick={() => void handlers.onRejectApplication(group.objective.id, application.id)}>
                   拒绝
                 </button>
               </span>
@@ -503,7 +502,7 @@ function ObjectivePanel({
                 {request.kind === "reestimateCompletion" ? (
                   <button
                     type="button"
-                    className="orf-objective-application-approve"
+                    className={actionButtonClassName({ size: "sm", variant: "primary" })}
                     disabled={freezeReadiness.status !== "ready"}
                     title={freezeReadiness.status === "ready" ? "重估完成并冻结目标" : freezeUnavailableMessage}
                     onClick={() => void handlers.onReviewAlignment(group.objective.id, request.id, { status: "completed" })}
@@ -511,13 +510,13 @@ function ObjectivePanel({
                     完成并冻结
                   </button>
                 ) : (
-                  <Link className="orf-objective-application-approve" to={`/tasks/objectives/${group.objective.id}/loot`}>
+                  <Link className={actionButtonClassName({ size: "sm", variant: "primary" })} to={`/tasks/objectives/${group.objective.id}/loot`}>
                     去验收
                   </Link>
                 )}
                 <button
                   type="button"
-                  className="orf-objective-application-reject"
+                  className={actionButtonClassName({ size: "sm", variant: "danger" })}
                   onClick={() =>
                     void handlers.onReviewAlignment(group.objective.id, request.id, {
                       status: "needsWork",
@@ -635,7 +634,7 @@ function AlignmentActionButton({
 }) {
   return (
     <button
-      className="orf-row-loot-action orf-control orf-secondary-action inline-flex items-center justify-center gap-2 px-3 font-semibold"
+      className={actionButtonClassName({ className: "orf-row-loot-action", size: "sm", variant: "secondary" })}
       type="button"
       title="申请与指挥官对齐，请约时间并定好会议室"
       onClick={() =>
@@ -730,9 +729,7 @@ function ObjectiveProjectMenu({
             placeholder="新建并放入"
             value={newProjectName}
           />
-          <button disabled={saving || !newProjectName.trim()} type="button" onClick={() => void createAndAssign()}>
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
+          <IconButton icon={Plus} label="新建并放入项目" disabled={saving || !newProjectName.trim()} size="sm" type="button" onClick={() => void createAndAssign()} />
         </span>
       </span>
     </span>
@@ -757,28 +754,28 @@ function ObjectiveFlowAction({
 
   if (handlers.canPublishObjective(objective) && canPublishObjectiveByFlow(objective)) {
     actions.push(
-      <button className="orf-flow-action-button orf-flow-action-secondary" disabled={disabled} type="button" title={disabled ? "完成目标标题后可发布" : "发布到悬赏大厅"} onClick={() => void handlers.onPublishObjective(objective.id)}>
+      <Button size="sm" variant="secondary" disabled={disabled} type="button" title={disabled ? "完成目标标题后可发布" : "发布到悬赏大厅"} onClick={() => void handlers.onPublishObjective(objective.id)}>
         <Send className="h-3.5 w-3.5" />
         发布
-      </button>,
+      </Button>,
     );
   }
 
   if (handlers.canRecruitObjective(objective)) {
     actions.push(
-      <button className="orf-flow-action-button orf-flow-action-secondary" disabled={disabled} type="button" title={disabled ? "完成目标标题后可征召" : "征召挑战者"} onClick={() => handlers.onRecruitObjective(objective.id)}>
+      <Button size="sm" variant="secondary" disabled={disabled} type="button" title={disabled ? "完成目标标题后可征召" : "征召挑战者"} onClick={() => handlers.onRecruitObjective(objective.id)}>
         <UserPlus className="h-3.5 w-3.5" />
         征召
-      </button>,
+      </Button>,
     );
   }
 
   if (freezeReadiness.status === "ready") {
     actions.push(
-      <button className="orf-flow-action-button orf-flow-action-primary" disabled={disabled} type="button" title={disabled ? "完成目标标题后可冻结" : "重估完成并冻结目标"} onClick={() => void handlers.onFreezeObjective(objective.id)}>
+      <Button size="sm" disabled={disabled} type="button" title={disabled ? "完成目标标题后可冻结" : "重估完成并冻结目标"} onClick={() => void handlers.onFreezeObjective(objective.id)}>
         <CheckCircle2 className="h-3.5 w-3.5" />
         冻结
-      </button>,
+      </Button>,
     );
   }
 

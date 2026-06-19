@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { Link } from "react-router-dom";
 import { ImagePreviewDialog, type ImagePreview } from "../../../components/ImagePreviewDialog";
+import { IconButton } from "../../../components/ui";
 import { UserAvatar } from "../../../components/UserAvatar";
 import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
 import type { CommentAttachment, CommentMessage, CommentTargetType, CommentThread, OrfUser } from "../../../types/orf";
@@ -227,17 +228,13 @@ export function CommentPanel({
         <div className="orf-comment-box">
           <div className="orf-comment-panel-header orf-drag-handle" {...panelDrag.handleProps}>
             <div className="orf-comment-context-title" title={targetTitle}>{targetTitle}</div>
-            <button type="button" className="orf-comment-icon-button" aria-label="关闭评论窗口" title="关闭" onClick={onClose}>
-              <X className="h-4 w-4" />
-            </button>
+            <IconButton icon={X} label="关闭评论窗口" size="sm" type="button" onClick={onClose} />
           </div>
           <div className="orf-comment-view">
             {activeRootEntry ? (
               <div className="orf-comment-reply-detail-view">
                 <div className="orf-comment-detail-header">
-                  <button type="button" className="orf-comment-icon-button" aria-label="返回外层评论列表" title="返回" onClick={() => { setActiveRootMessageId(null); resetDraft(); }}>
-                    <ArrowLeft className="h-4 w-4" />
-                  </button>
+                  <IconButton icon={ArrowLeft} label="返回外层评论列表" size="sm" type="button" onClick={() => { setActiveRootMessageId(null); resetDraft(); }} />
                   <span>回复详情</span>
                 </div>
                 <div className="orf-comment-fixed-root">
@@ -399,17 +396,11 @@ function CommentMessageRow({
           <span className="orf-comment-author-name">{message.author}</span>
           <div className="orf-comment-meta">
             <time dateTime={createdTime.dateTime} title={createdTime.title}>{createdTime.label}</time>
-            <button type="button" className="orf-comment-icon-button" aria-label="回复评论" title="回复" onClick={(event) => { event.stopPropagation(); onReply(message); }}>
-              <Reply className="h-3.5 w-3.5" />
-            </button>
+            <IconButton icon={Reply} label="回复评论" size="sm" type="button" onClick={(event) => { event.stopPropagation(); onReply(message); }} />
             {canManageMessage && (
               <>
-                <button type="button" className="orf-comment-icon-button orf-comment-icon-button-danger" aria-label="删除评论" title="删除" onClick={(event) => { event.stopPropagation(); deleteMessage(); }}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-                <button type="button" className="orf-comment-icon-button" aria-label="编辑评论" title="编辑" onClick={(event) => { event.stopPropagation(); onEdit(threadId, message); }}>
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
+                <IconButton icon={Trash2} label="删除评论" size="sm" type="button" variant="danger" onClick={(event) => { event.stopPropagation(); deleteMessage(); }} />
+                <IconButton icon={Pencil} label="编辑评论" size="sm" type="button" onClick={(event) => { event.stopPropagation(); onEdit(threadId, message); }} />
               </>
             )}
           </div>
@@ -650,20 +641,17 @@ export function CommentDraftFields({
         footer={
           <>
         {onCancel && (
-          <button type="button" className="orf-comment-icon-button" aria-label={cancelLabel} title={cancelLabel} onClick={onCancel}>
-            <X className="h-4 w-4" />
-          </button>
+          <IconButton icon={X} label={cancelLabel} size="sm" type="button" onClick={onCancel} />
         )}
         {showSubmitButton && (
-          <button
+          <IconButton
             type="submit"
-            className="orf-comment-send-button"
+            icon={Send}
+            label={submitLabel}
+            size="sm"
+            variant="primary"
             disabled={!orfRichTextHasMeaningfulContent(markdownValue) || uploadingImage}
-            aria-label={submitLabel}
-            title={submitLabel}
-          >
-            <Send className="h-4 w-4" />
-          </button>
+          />
         )}
           </>
         }

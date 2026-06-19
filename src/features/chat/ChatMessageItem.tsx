@@ -2,7 +2,7 @@ import { clsx } from "clsx";
 import { Bookmark, ChevronDown, ChevronUp, Copy, Edit3, EyeOff, FileText, Link as LinkIcon, type LucideIcon, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
 import { type CSSProperties, type KeyboardEvent, type MouseEvent, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { IconButton } from "../../components/ui";
+import { Button, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser, Feedback } from "../../types/orf";
 import { formatPastedFeedbackLinks } from "../feedback/model/feedbackIssue";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
@@ -665,10 +665,10 @@ export function ChatMessageItem({
               transformPastedText={transformPastedFeedbackText}
             />
             <div className="orf-chat-inline-edit-actions">
-              <button type="button" onClick={onCancelEdit}>取消</button>
-              <button disabled={editSaving || !editDraft.text.trim()} type="button" onClick={() => void saveEdit(editDraft)}>
+              <Button size="sm" type="button" variant="secondary" onClick={onCancelEdit}>取消</Button>
+              <Button size="sm" disabled={editSaving || !editDraft.text.trim()} type="button" onClick={() => void saveEdit(editDraft)}>
                 {editSaving ? "保存中" : "保存"}
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
@@ -679,15 +679,13 @@ export function ChatMessageItem({
               <div className="orf-chat-delivery-status" role="alert">
                 <span>发送失败</span>
                 {onRetryPending && (
-                  <button type="button" onClick={() => onRetryPending(message)}>
+                  <Button size="sm" type="button" variant="secondary" onClick={() => onRetryPending(message)}>
                     <RotateCcw className="h-3.5 w-3.5" />
                     重试
-                  </button>
+                  </Button>
                 )}
                 {onRemovePending && (
-                  <button type="button" onClick={() => onRemovePending(message)} aria-label="移除失败消息">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  <IconButton icon={X} label="移除失败消息" size="sm" type="button" variant="danger" onClick={() => onRemovePending(message)} />
                 )}
               </div>
             )}

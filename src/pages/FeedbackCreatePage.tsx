@@ -2,6 +2,7 @@ import { ArrowLeft, Check, Paperclip } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Button } from "../components/ui";
 import { UserAvatar } from "../components/UserAvatar";
 import { BountyEmptyState } from "../features/bounty-hall/BountyHallSkin";
 import {
@@ -181,10 +182,10 @@ export function FeedbackCreatePage() {
         </aside>
 
         <div className="feedback-create-submit-row">
-          <button className="feedback-create-submit" disabled={submitting} type="submit">
+          <Button disabled={submitting} type="submit">
             <Check aria-hidden="true" />
             {submitting ? "创建中..." : "创建 issue"}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

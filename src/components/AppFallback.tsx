@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
+import { Button } from "./ui";
 
 export type AppFallbackContent = {
   title: string;
@@ -41,10 +42,10 @@ export function AppFallbackPage({ description, detail, title }: AppFallbackConte
           <h1>{title}</h1>
           <p>{description}</p>
           {detail && <pre>{detail}</pre>}
-          <button className="orf-control orf-primary-action inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold" type="button" onClick={reloadApp}>
+          <Button type="button" onClick={reloadApp}>
             <RefreshCw className="h-4 w-4" />
             重新加载
-          </button>
+          </Button>
         </div>
       </section>
     </main>

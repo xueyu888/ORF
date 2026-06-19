@@ -22,6 +22,7 @@ import {
   type VisualBackgroundSwitchTrigger,
 } from "../state/apiClient";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
+import { Button } from "../components/ui";
 import { useOrf } from "../state/OrfProvider";
 import { dispatchVisualBackgroundChanged } from "../utils/visualBackgrounds";
 
@@ -168,10 +169,10 @@ function ChatSettingSection() {
           <h2>聊天设置</h2>
           <p>配置聊天附件上传上限。</p>
         </div>
-        <button type="button" className="orf-settings-default-button" disabled={isSaveDisabled} onClick={() => void handleSave()}>
+        <Button type="button" size="sm" disabled={isSaveDisabled} onClick={() => void handleSave()}>
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
           保存
-        </button>
+        </Button>
       </div>
 
       <div className="orf-settings-background-controls" aria-label="聊天设置">
@@ -297,10 +298,10 @@ function GitLabOrfChatSettingSection() {
           <h2>GitLab 聊天绑定</h2>
           <p>配置 GitLab project 对应的 ORF 聊天频道。</p>
         </div>
-        <button type="button" className="orf-settings-default-button" disabled={!isReconcileConfigured || isReconcileRunning} onClick={() => void handleReconcile()}>
+        <Button type="button" size="sm" variant="secondary" disabled={!isReconcileConfigured || isReconcileRunning} onClick={() => void handleReconcile()}>
           {isReconcileRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           收敛
-        </button>
+        </Button>
       </div>
 
       <div className="orf-settings-gitlab-body">
@@ -357,10 +358,10 @@ function GitLabOrfChatSettingSection() {
                           </option>
                         ))}
                       </select>
-                      <button type="button" className="orf-settings-default-button" disabled={!changed || isSaving} onClick={() => void handleSave(project)}>
+                      <Button type="button" size="sm" disabled={!changed || isSaving} onClick={() => void handleSave(project)}>
                         {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link className="h-4 w-4" />}
                         绑定
-                      </button>
+                      </Button>
                     </div>
                     <div className="orf-settings-gitlab-binding-state" role="cell">
                       {project.channelId ? project.channelDisplayName ?? project.channelId : "未绑定"}
@@ -617,10 +618,10 @@ function BackgroundSettingSection({
           <p>{description}</p>
         </div>
         <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={(event) => void handleFileSelected(event)} />
-        <button type="button" className="orf-settings-upload-button" disabled={isUploading} onClick={() => fileInputRef.current?.click()}>
+        <Button type="button" size="sm" variant="secondary" disabled={isUploading} onClick={() => fileInputRef.current?.click()}>
           {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
           {isUploading ? "上传中" : "上传图片"}
-        </button>
+        </Button>
       </div>
 
       <div className="orf-settings-background-controls" aria-label={`${title}切换设置`}>
@@ -732,10 +733,10 @@ function BackgroundSettingSection({
           <div className="orf-settings-selected-text">
             {(uploadErrorMessage || setDefaultErrorMessage) && <span>{uploadErrorMessage ?? setDefaultErrorMessage}</span>}
           </div>
-          <button type="button" className="orf-settings-default-button" disabled={isSetDefaultButtonDisabled} onClick={() => void handleSetDefault()}>
+          <Button type="button" size="sm" disabled={isSetDefaultButtonDisabled} onClick={() => void handleSetDefault()}>
             {setDefaultStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
             设为默认
-          </button>
+          </Button>
         </div>
       </div>
     </section>

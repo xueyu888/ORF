@@ -1073,18 +1073,20 @@ function WorkLogHistoryList({
                         剩 {entry.remainingEstimatePercent}%
                       </span>
                     )}
-                  <button
+                  <Button
                     type="button"
-                    className="work-logs-history-edit"
+                    size="sm"
+                    variant="secondary"
                     aria-label={`编辑日志：${workLogEntryTargetLabel(entry)}`}
                     onClick={() => onEdit(entry)}
                   >
                     <PencilLine className="h-4 w-4" />
                     编辑
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    className="work-logs-history-delete"
+                    size="sm"
+                    variant="danger"
                     aria-label={`删除日志：${workLogEntryTargetLabel(entry)}`}
                     disabled={deletingEntryId === entry.id}
                     onClick={() => onDelete(entry)}
@@ -1095,7 +1097,7 @@ function WorkLogHistoryList({
                       <Trash2 className="h-4 w-4" />
                     )}
                     删除
-                  </button>
+                  </Button>
                 </div>
               </div>
               <WorkLogMarkdown body={entry.bodyMarkdown} />

@@ -185,14 +185,14 @@ export function AppShell() {
             </button>
           </div>
           {!isBountyHall && canCreateFeedback && (
-            <Button className="orf-topbar-action-button h-8 px-2.5 text-xs" variant="secondary" onClick={() => navigate("/feedback/new")}>
+            <Button className="orf-topbar-action-button" size="sm" variant="secondary" onClick={() => navigate("/feedback/new")}>
               <MessageSquarePlus className="h-4 w-4" />
               新建反馈
             </Button>
           )}
           <div className="orf-topbar-actions ml-auto flex shrink-0 items-center gap-1.5">
             {canCreateObjective && (
-              <Button className="orf-topbar-action-button h-8 px-2.5 text-xs" onClick={() => navigate("/tasks?create=objective")}>
+              <Button className="orf-topbar-action-button" size="sm" onClick={() => navigate("/tasks?create=objective")}>
                 <Flag className="h-4 w-4" />
                 新建目标
               </Button>

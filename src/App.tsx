@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { AppFallbackPage } from "./components/AppFallback";
+import { Button } from "./components/ui";
 import { canShowFrontend, canShowFrontendPath, type FrontendVisibilityKey } from "./config/frontendVisibility";
 import { systemManagementPages } from "./config/navigation";
 import { useOrf } from "./state/OrfProvider";
@@ -183,9 +184,9 @@ function ApprovalPendingScreen({ onLogout, status }: { onLogout: () => void; sta
           <h1 className="orf-auth-loading-title">{stateCopy.title}</h1>
           <div className="orf-auth-loading-copy">{stateCopy.copy}</div>
         </div>
-        <button className="orf-control orf-secondary-action mt-4 inline-flex justify-center border px-4 py-2 text-sm font-medium" type="button" onClick={onLogout}>
+        <Button className="mt-4" type="button" variant="secondary" onClick={onLogout}>
           退出登录
-        </button>
+        </Button>
       </div>
     </main>
   );

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { type ChangeEvent, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatPastedFeedbackLinks } from "../feedback/model/feedbackIssue";
+import { IconButton } from "../../components/ui";
 import { uploadChatAttachment } from "../../state/apiClient";
 import type { ChatAttachment, ChatUser, Feedback } from "../../types/orf";
 import { formatFileSize } from "./chatFormat";
@@ -287,15 +288,17 @@ export function ChatComposer({
         toolbarEnd={({ submit: submitDraft, submitting }) => (
           <>
             {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
-            <button
+            <IconButton
               type="button"
-              className="orf-chat-send-button"
+              icon={Send}
+              label={hasSendableDraft ? "发送" : "输入内容或添加附件后发送"}
               disabled={disabled || uploading || failedUploads > 0 || submitting || !hasSendableDraft}
+              loading={submitting}
+              size="sm"
+              variant="primary"
               onClick={submitDraft}
               title={hasSendableDraft ? "发送" : "输入内容或添加附件后发送"}
-            >
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </button>
+            />
             <input multiple hidden ref={fileRef} type="file" onChange={handleFiles} />
           </>
         )}

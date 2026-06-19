@@ -3,6 +3,7 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
+import { Button } from "../components/ui";
 import { AttachmentPreview, ChannelModal, ConversationModal, DeleteMessageDialog } from "../features/chat/ChatDialogs";
 import { ChatHeader } from "../features/chat/ChatHeader";
 import {
@@ -984,15 +985,15 @@ export function ChatPage() {
       <div className="orf-chat-empty-page">
         <span>{bootstrapError ?? "聊天中心加载失败。"}</span>
         {bootstrapError === chatPresenceProtocolUpgradeMessage && (
-          <button className="orf-control orf-secondary-action inline-flex items-center gap-2 border px-3 py-2 text-sm font-medium" type="button" onClick={handleOpenUpdateCenter}>
+          <Button type="button" variant="secondary" onClick={handleOpenUpdateCenter}>
             <RefreshCw className="h-4 w-4" />
             打开版本与更新
-          </button>
+          </Button>
         )}
-        <button className="orf-control orf-secondary-action inline-flex items-center gap-2 border px-3 py-2 text-sm font-medium" type="button" onClick={handleRetryBootstrap}>
+        <Button type="button" variant="secondary" onClick={handleRetryBootstrap}>
           <RefreshCw className="h-4 w-4" />
           重新加载
-        </button>
+        </Button>
       </div>
     );
   }

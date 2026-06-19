@@ -881,7 +881,7 @@
   justify-content: flex-end;
 }
 
-.bounty-row-actions .bounty-action {
+.bounty-row-actions .orf-action-button {
   min-height: 36px;
   min-width: 92px;
   border-radius: 10px;
@@ -889,14 +889,14 @@
   font-size: 13px;
 }
 
-.bounty-row-actions .bounty-action-primary,
-.bounty-row-actions .bounty-action-blue {
+.bounty-row-actions .orf-action-button-primary,
+.bounty-row-actions .orf-action-button-blue {
   box-shadow:
     0 6px 14px rgba(34, 80, 119, 0.2),
     inset 0 1px 0 rgba(236, 253, 255, 0.46);
 }
 
-.bounty-row-actions .bounty-action-secondary {
+.bounty-row-actions .orf-action-button-secondary {
   box-shadow:
     0 6px 12px rgba(31, 49, 74, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.72);
@@ -1086,103 +1086,6 @@
   opacity: 0.8;
 }
 
-.bounty-action,
-.bounty-link-button,
-.bounty-clear-button {
-  display: inline-flex;
-  min-height: 42px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 999px;
-  cursor: pointer;
-  font-weight: 950;
-  line-height: 1;
-  text-decoration: none;
-  transition:
-    transform 0.16s ease,
-    filter 0.16s ease,
-    box-shadow 0.16s ease;
-  white-space: nowrap;
-}
-
-.bounty-action {
-  min-width: 104px;
-  padding: 0 18px;
-}
-
-.bounty-action svg,
-.bounty-link-button svg {
-  width: 17px;
-  height: 17px;
-}
-
-.bounty-action-primary,
-.bounty-action-blue {
-  border: 1px solid rgba(111, 163, 208, 0.46);
-  background:
-    linear-gradient(180deg, #55a9dc 0%, #2f7eb4 52%, #285f99 100%);
-  box-shadow:
-    0 8px 0 #1f527a,
-    0 14px 20px rgba(34, 80, 119, 0.2),
-    inset 0 1px 0 rgba(236, 253, 255, 0.5);
-  color: #f7fdff;
-  text-shadow: 0 1px 0 rgba(19, 43, 72, 0.42);
-}
-
-.bounty-action-secondary,
-.bounty-link-button,
-.bounty-clear-button {
-  border: 1px solid rgba(126, 179, 207, 0.38);
-  background:
-    linear-gradient(180deg, rgba(235, 225, 206, 0.78), rgba(216, 203, 181, 0.62));
-  box-shadow:
-    0 6px 0 rgba(126, 179, 207, 0.22),
-    0 11px 18px rgba(31, 49, 74, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.76);
-  color: #526376;
-}
-
-.bounty-action-dark {
-  background: linear-gradient(180deg, #50637a, #33455e);
-  box-shadow: 0 7px 0 #25364c;
-  color: #fffdf4;
-}
-
-.bounty-action-danger {
-  background: linear-gradient(180deg, #d77272, #a9464c);
-  box-shadow: 0 7px 0 #7d343a;
-  color: #fffdf4;
-}
-
-.bounty-action-ghost {
-  min-width: 0;
-  border: 1px solid rgba(112, 137, 156, 0.26);
-  background: rgba(217, 205, 184, 0.54);
-  color: #526376;
-  box-shadow: none;
-}
-
-.bounty-action:hover,
-.bounty-link-button:hover,
-.bounty-clear-button:hover,
-.bounty-icon-button:hover {
-  filter: brightness(1.04);
-  transform: translateY(-1px);
-}
-
-.bounty-action:disabled {
-  cursor: not-allowed;
-  filter: grayscale(0.2) opacity(0.72);
-  transform: none;
-}
-
-.bounty-link-button {
-  min-width: 0;
-  padding: 0 16px;
-}
-
 .bounty-contribution-compact {
   gap: 7px;
   color: #526376;
@@ -1192,36 +1095,6 @@
   color: #24445f;
   font-size: 18px;
   line-height: 1;
-}
-
-.bounty-clear-button {
-  min-height: 34px;
-  padding: 0 14px;
-  font-size: 13px;
-}
-
-.bounty-icon-button {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  border: 1px solid rgba(126, 179, 207, 0.38);
-  border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(235, 225, 206, 0.8), rgba(216, 203, 181, 0.64));
-  box-shadow:
-    0 6px 0 rgba(126, 179, 207, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.74);
-  color: #526376;
-  cursor: pointer;
-  transition:
-    transform 0.16s ease,
-    filter 0.16s ease;
-}
-
-.bounty-icon-button svg {
-  width: 19px;
-  height: 19px;
 }
 
 .bounty-badge {
@@ -1623,7 +1496,7 @@
   padding-top: 20px;
 }
 
-.feedback-issue-detail-actions .bounty-action {
+.feedback-issue-detail-actions .orf-action-button {
   min-width: 0;
   min-height: 40px;
   border-radius: 12px;
@@ -1633,13 +1506,13 @@
   text-shadow: none;
 }
 
-.feedback-issue-detail-actions .bounty-action svg {
+.feedback-issue-detail-actions .orf-action-button svg {
   width: 16px;
   height: 16px;
 }
 
-.feedback-issue-detail-actions .bounty-action-primary,
-.feedback-issue-detail-actions .bounty-action-blue {
+.feedback-issue-detail-actions .orf-action-button-primary,
+.feedback-issue-detail-actions .orf-action-button-blue {
   border: 1px solid rgba(69, 143, 188, 0.42);
   background:
     linear-gradient(180deg, rgba(74, 161, 206, 0.95), rgba(45, 119, 171, 0.95));
@@ -1649,7 +1522,7 @@
   color: #f8fdff;
 }
 
-.feedback-issue-detail-actions .bounty-action-secondary {
+.feedback-issue-detail-actions .orf-action-button-secondary {
   border: 1px solid rgba(126, 179, 207, 0.34);
   background:
     linear-gradient(180deg, rgba(238, 230, 212, 0.86), rgba(219, 209, 188, 0.72));
@@ -1720,33 +1593,14 @@
   font-weight: 950;
 }
 
-.feedback-issue-reply-action {
-  display: inline-flex;
+.feedback-issue-comment-header .orf-action-button {
   min-height: 28px;
-  align-items: center;
-  gap: 5px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(216, 237, 240, 0.64);
-  color: #316d82;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 950;
   margin-left: auto;
-  padding: 0 9px;
+  font-size: 12px;
 }
 
-.feedback-issue-reply-action + .feedback-issue-reply-action {
+.feedback-issue-comment-header .orf-action-button + .orf-action-button {
   margin-left: 0;
-}
-
-.feedback-issue-reply-action svg {
-  width: 13px;
-  height: 13px;
-}
-
-.feedback-issue-reply-action:hover {
-  background: rgba(190, 226, 232, 0.82);
 }
 
 .feedback-issue-comment-body {
@@ -2029,17 +1883,6 @@
   font-weight: 500;
 }
 
-.feedback-create-body-field .orf-comment-icon-button {
-  border-color: transparent;
-  background: transparent;
-  color: #54708d;
-}
-
-.feedback-create-body-field .orf-comment-icon-button:hover {
-  background: rgba(216, 237, 240, 0.68);
-  color: #2f6f87;
-}
-
 .feedback-create-attachment-strip {
   display: flex;
   flex-wrap: wrap;
@@ -2076,36 +1919,6 @@
   grid-column: 1;
   justify-content: flex-end;
   padding-top: 6px;
-}
-
-.feedback-create-submit {
-  display: inline-flex;
-  min-height: 36px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid rgba(47, 140, 195, 0.42);
-  border-radius: 6px;
-  background: linear-gradient(180deg, var(--bh-blue), var(--bh-blue-2));
-  color: #fff;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
-  padding: 0 14px;
-}
-
-.feedback-create-submit:hover {
-  background: linear-gradient(180deg, #3197ce, #24588f);
-}
-
-.feedback-create-submit:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.feedback-create-submit svg {
-  width: 15px;
-  height: 15px;
 }
 
 .feedback-create-sidebar {
@@ -2400,7 +2213,7 @@
     justify-content: stretch;
   }
 
-  .feedback-create-submit {
+  .feedback-create-submit-row .orf-action-button {
     width: 100%;
   }
 
@@ -2490,8 +2303,7 @@
     flex-direction: column;
   }
 
-  .bounty-action,
-  .bounty-link-button {
+  .bounty-hall-page .orf-action-button {
     width: 100%;
   }
 
@@ -2539,7 +2351,7 @@
     flex-direction: column;
   }
 
-  .bounty-row-actions .bounty-action {
+  .bounty-row-actions .orf-action-button {
     width: 100%;
   }
 
@@ -2559,10 +2371,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bounty-action,
-  .bounty-link-button,
-  .bounty-clear-button,
-  .bounty-icon-button {
+  .bounty-hall-page .orf-action-button {
     transition: none;
   }
 }
@@ -2769,7 +2578,7 @@
   font-size: 13px;
 }
 
-.orf-workbench-surface .bounty-clear-button,
+.orf-workbench-surface .bounty-list-summary .orf-action-button,
 .orf-workbench-surface .feedback-reset-button {
   min-height: 32px;
   border: 1px solid rgba(255, 255, 255, 0.32);
@@ -2921,7 +2730,7 @@
   gap: 6px;
 }
 
-.orf-workbench-surface .bounty-row-actions .bounty-action,
+.orf-workbench-surface .bounty-row-actions .orf-action-button,
 .orf-workbench-surface .bounty-action-note {
   min-height: 30px;
   min-width: 84px;
@@ -2930,16 +2739,15 @@
   padding: 0 10px;
 }
 
-.orf-workbench-surface .bounty-action,
-.orf-workbench-surface .bounty-link-button {
+.orf-workbench-surface .orf-action-button {
   min-height: 34px;
   border-radius: 999px;
   font-size: 13px;
   padding: 0 14px;
 }
 
-.orf-workbench-surface .bounty-action-primary,
-.orf-workbench-surface .bounty-action-blue {
+.orf-workbench-surface .orf-action-button-primary,
+.orf-workbench-surface .orf-action-button-blue {
   border: 1px solid rgba(255, 255, 255, 0.34);
   background:
     linear-gradient(180deg, rgba(219, 234, 254, 0.42), rgba(235, 249, 255, 0.18)),
@@ -2949,8 +2757,7 @@
   text-shadow: none;
 }
 
-.orf-workbench-surface .bounty-action-secondary,
-.orf-workbench-surface .bounty-link-button,
+.orf-workbench-surface .orf-action-button-secondary,
 .orf-workbench-surface .bounty-action-note {
   border: 1px solid rgba(255, 255, 255, 0.28);
   background: rgba(255, 255, 255, 0.13);
@@ -3079,9 +2886,8 @@
     min-height: 44px;
   }
 
-  .orf-workbench-surface .bounty-action,
-  .orf-workbench-surface .bounty-link-button,
-  .orf-workbench-surface .bounty-row-actions .bounty-action,
+  .orf-workbench-surface .orf-action-button,
+  .orf-workbench-surface .bounty-row-actions .orf-action-button,
   .orf-workbench-surface .bounty-action-note {
     width: 100%;
   }

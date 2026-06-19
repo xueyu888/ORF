@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import { Loader2, type LucideIcon } from "lucide-react";
 import { clsx } from "clsx";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { FeedbackStatus, Priority, TaskStatus, WorkStatus } from "../types/orf";
@@ -35,38 +35,66 @@ export function Card({
   return <div className={clsx("orf-card", interactive && "orf-card-hover", className)}>{children}</div>;
 }
 
+export type ButtonVariant = "primary" | "secondary" | "blue" | "dark" | "ghost" | "danger";
+export type ButtonSize = "sm" | "md" | "lg";
+
+export function actionButtonClassName({
+  className,
+  iconOnly,
+  size = "md",
+  variant = "primary",
+}: {
+  className?: string;
+  iconOnly?: boolean;
+  size?: ButtonSize;
+  variant?: ButtonVariant;
+}) {
+  return clsx(
+    "orf-control orf-action-button",
+    `orf-action-button-${variant}`,
+    `orf-action-button-${size}`,
+    iconOnly && "orf-action-icon-button",
+    className,
+  );
+}
+
 export function Button({
   children,
   className,
+  loading,
+  size = "md",
   variant = "primary",
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "ghost" | "danger" }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean; size?: ButtonSize; variant?: ButtonVariant }) {
   return (
     <button
       {...props}
-      className={clsx(
-        "orf-control inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium transition",
-        variant === "primary" && "orf-primary-action",
-        variant === "secondary" && "border orf-secondary-action",
-        variant === "ghost" && "orf-ghost-action",
-        variant === "danger" && "orf-danger-action",
-        className,
-      )}
+      disabled={props.disabled || loading}
+      className={actionButtonClassName({ className, size, variant })}
     >
-      {children}
+      {loading ? "处理中..." : children}
     </button>
   );
 }
 
-export function IconButton({ icon: Icon, label, className, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { icon: LucideIcon; label: string }) {
+export function IconButton({
+  icon: Icon,
+  label,
+  className,
+  loading,
+  size = "md",
+  variant = "ghost",
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { icon: LucideIcon; label: string; loading?: boolean; size?: ButtonSize; variant?: ButtonVariant }) {
   return (
     <button
       {...props}
       aria-label={label}
+      disabled={props.disabled || loading}
       title={label}
-      className={clsx("orf-control orf-ghost-action inline-flex h-9 w-9 items-center justify-center transition", className)}
+      className={actionButtonClassName({ className, iconOnly: true, size, variant })}
     >
-      <Icon className="h-4 w-4" />
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
     </button>
   );
 }

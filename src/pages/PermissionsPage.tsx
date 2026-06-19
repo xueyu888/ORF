@@ -1,6 +1,7 @@
 import { clsx } from "clsx";
 import { Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Button } from "../components/ui";
 import { permissionDefinitions, rolePermissionKeys, type PermissionKey } from "../config/permissions";
 import { useOrf } from "../state/OrfProvider";
 import type { PermissionRule, UserRole } from "../types/orf";
@@ -92,15 +93,15 @@ export function PermissionsPage() {
                 <strong>{selectedRolePermissionCount}</strong>权限
               </span>
             </div>
-            <button
+            <Button
               type="button"
-              className="orf-role-permission-save-button"
+              size="sm"
               disabled={selectedRole === "admin" || !selectedRoleHasDraftChanges || isSavingPermissions}
               onClick={() => void handleSaveRolePermissions()}
             >
               <Save className="h-4 w-4" />
               {isSavingPermissions ? "保存中" : "保存角色权限"}
-            </button>
+            </Button>
           </div>
         </div>
 
