@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { type ChangeEvent, type CSSProperties, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, IconButton } from "../../components/ui";
+import { VisualBackgroundSlot } from "../../components/VisualBackgroundSlot";
 import { visualSkinPageSlots, visualSkinSlotByScene, visualSkinSlots, type VisualSkinPreviewShape } from "../../config/visualSkinSlots";
 import {
   defaultVisualBackgroundConfig,
@@ -671,6 +672,7 @@ function VisualSkinPreview({
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
+  const frameRatio = useRuntimePreviewFrameRatio(previewShape);
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (!image) return;
@@ -699,10 +701,11 @@ function VisualSkinPreview({
     }
   };
 
-  const imageStyle = {
+  const previewStyle = {
     "--orf-skin-image-x": `${placement.offsetX}%`,
     "--orf-skin-image-y": `${placement.offsetY}%`,
     "--orf-skin-image-scale": placement.scale,
+    "--orf-skin-preview-frame-ratio": `${frameRatio} / 1`,
     "--orf-skin-preview-overlay-opacity": overlayOpacity,
   } as CSSProperties;
 
@@ -720,19 +723,147 @@ function VisualSkinPreview({
         onPointerCancel={stopDrag}
       >
         {image ? (
-          <img className="orf-skin-preview-image" src={image.url} alt="" draggable={false} style={imageStyle} />
+          <img className="orf-skin-preview-image" src={image.url} alt="" draggable={false} style={previewStyle} />
         ) : (
           <div className="orf-skin-preview-empty">暂无图片</div>
         )}
         <div
           ref={frameRef}
           className={clsx("orf-skin-preview-frame", `orf-skin-preview-frame-${previewShape}`)}
-          style={imageStyle}
+          data-preview-ratio={frameRatio.toFixed(6)}
+          style={previewStyle}
           aria-hidden="true"
-        />
+        >
+          <VisualBackgroundSlot
+            frameClassName="orf-skin-preview-frame-crop"
+            imageClassName="orf-skin-preview-frame-image"
+            imageUrl={image?.url ?? null}
+            placement={placement}
+          />
+          <span className="orf-skin-preview-frame-overlay" aria-hidden="true" />
+        </div>
       </div>
     </div>
   );
+}
+
+const fallbackPreviewFrameRatios: Record<VisualSkinPreviewShape, number> = {
+  login: 16 / 9,
+  page: 16 / 9,
+  sidebar: 260 / 900,
+  topbar: (1600 - 260) / 60,
+};
+
+function useRuntimePreviewFrameRatio(previewShape: VisualSkinPreviewShape) {
+  const [ratio, setRatio] = useState(() => fallbackPreviewFrameRatios[previewShape]);
+
+  useEffect(() => {
+    let animationFrameId: number | null = null;
+    const observedElements = new Set<Element>();
+    const observedSelectors = [
+      ".orf-main-content-skin-frame",
+      ".orf-sidebar-background-frame",
+      ".orf-sidebar",
+      ".orf-topbar-skin-frame",
+      ".orf-topbar",
+    ] as const;
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => scheduleMeasure());
+
+    const measure = () => {
+      setRatio(measureRuntimePreviewFrameRatio(previewShape));
+    };
+    const scheduleMeasure = () => {
+      if (animationFrameId !== null) return;
+      animationFrameId = window.requestAnimationFrame(() => {
+        animationFrameId = null;
+        measure();
+      });
+    };
+    const observe = (selector: string) => {
+      const element = document.querySelector(selector);
+      if (element && observer && !observedElements.has(element)) {
+        observer.observe(element);
+        observedElements.add(element);
+      }
+    };
+    const observeRuntimeFrames = () => {
+      for (const selector of observedSelectors) {
+        observe(selector);
+      }
+    };
+    const mutationObserver = typeof MutationObserver === "undefined"
+      ? null
+      : new MutationObserver(() => {
+          observeRuntimeFrames();
+          scheduleMeasure();
+        });
+
+    measure();
+    observeRuntimeFrames();
+    mutationObserver?.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("resize", scheduleMeasure);
+
+    return () => {
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+      observer?.disconnect();
+      mutationObserver?.disconnect();
+      window.removeEventListener("resize", scheduleMeasure);
+    };
+  }, [previewShape]);
+
+  return ratio;
+}
+
+function measureRuntimePreviewFrameRatio(previewShape: VisualSkinPreviewShape) {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return fallbackPreviewFrameRatios[previewShape];
+  }
+
+  if (previewShape === "login") {
+    return clampAspectRatio(window.innerWidth / Math.max(1, window.innerHeight), fallbackPreviewFrameRatios.login);
+  }
+
+  if (previewShape === "topbar") {
+    return clampAspectRatio(readElementAspectRatio(".orf-topbar-skin-frame") ?? readElementAspectRatio(".orf-topbar"), fallbackPreviewFrameRatios.topbar);
+  }
+
+  if (previewShape === "sidebar") {
+    return clampAspectRatio(
+      readElementAspectRatio(".orf-sidebar-background-frame") ?? readElementAspectRatio(".orf-sidebar"),
+      fallbackPreviewFrameRatios.sidebar,
+    );
+  }
+
+  const sidebarWidth = readVisibleElementRect(".orf-sidebar-background-frame")?.width ?? readVisibleElementRect(".orf-sidebar")?.width ?? 0;
+  const topbarHeight = readVisibleElementRect(".orf-topbar-skin-frame")?.height ?? readVisibleElementRect(".orf-topbar")?.height ?? readCssPixelVariable("--orf-topbar-height", 60);
+  const bodyWidth = Math.max(1, window.innerWidth - sidebarWidth);
+  const visiblePageHeight = Math.max(1, window.innerHeight - topbarHeight);
+  return clampAspectRatio(bodyWidth / visiblePageHeight, fallbackPreviewFrameRatios.page);
+}
+
+function readElementAspectRatio(selector: string) {
+  const rect = readVisibleElementRect(selector);
+  return rect ? rect.width / rect.height : null;
+}
+
+function readVisibleElementRect(selector: string) {
+  const element = document.querySelector(selector);
+  if (!element) return null;
+  const rect = element.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return null;
+  return rect;
+}
+
+function readCssPixelVariable(name: string, fallback: number) {
+  const parsed = Number.parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue(name));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function clampAspectRatio(value: number | null | undefined, fallback: number) {
+  if (!value || !Number.isFinite(value)) return fallback;
+  return clamp(value, 0.18, 36);
 }
 
 function SkinSlider({
