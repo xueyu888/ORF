@@ -5,6 +5,7 @@ import brandLogo from "../assets/brand/orf-logo.png";
 import { orfAssetLibrary } from "../config/assetLibrary";
 import { canShowFrontend, canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
+import type { VisualBackgroundPlacement } from "../domain/settings/visualBackgrounds";
 import { useOrf } from "../state/OrfProvider";
 import { ImagePreviewDialog } from "./ImagePreviewDialog";
 import { Avatar } from "./ui";
@@ -20,11 +21,13 @@ const sidebarGroups = [
 }));
 
 export function Sidebar({
+  backgroundPlacement,
   backgroundUrl,
   collapsed,
   onCollapsedChange,
   onOpenClientUpdateCenter,
 }: {
+  backgroundPlacement: VisualBackgroundPlacement;
   backgroundUrl: string;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
@@ -84,8 +87,9 @@ export function Sidebar({
   }
 
   const sidebarStyle = {
-    "--orf-sidebar-bg-position": sidebarBackground.position,
-    "--orf-sidebar-bg-transform": "scale(1.03)",
+    "--orf-sidebar-bg-x": `${backgroundPlacement.offsetX}%`,
+    "--orf-sidebar-bg-y": `${backgroundPlacement.offsetY}%`,
+    "--orf-sidebar-bg-scale": backgroundPlacement.scale,
     "--orf-sidebar-bg-filter": sidebarBackground.filter,
     "--orf-sidebar-bg-overlay": sidebarBackground.overlay,
   } as CSSProperties;

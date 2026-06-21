@@ -11,8 +11,14 @@ import {
   type UserDisplayPreferences,
   userDisplayPreferencesPatchSchema,
 } from "../../src/domain/settings/personalPreferences";
-import { canonicalVisualBackgroundScene } from "../../src/domain/settings/visualBackgrounds";
 import {
+  acceptsLegacyAppBackgroundScene,
+  visualBackgroundScenes,
+  type AnyVisualBackgroundScene,
+  type VisualBackgroundScene as CanonicalBackgroundScene,
+} from "../../src/domain/settings/visualBackgrounds";
+import {
+  backgroundSceneSchema,
   backgroundSceneConfigSchema,
   isSupportedVisualBackgroundImage,
   listVisualBackgrounds,
@@ -35,6 +41,7 @@ export type UserPreferences = {
   chatTheme: ChatTheme;
   display: UserDisplayPreferences;
   appBackground: BackgroundSceneConfig | null;
+  backgrounds: Partial<Record<CanonicalBackgroundScene, BackgroundSceneConfig | null>>;
   notificationDisplay: {
     toastEnabled: boolean;
   };
@@ -50,6 +57,7 @@ export const userPreferencesPatchSchema = z.object({
   chatTheme: chatThemeSchema.optional(),
   display: userDisplayPreferencesPatchSchema.optional(),
   appBackground: backgroundSceneConfigSchema.nullable().optional(),
+  backgrounds: z.record(z.string(), backgroundSceneConfigSchema.nullable()).optional(),
   notificationDisplay: z.object({ toastEnabled: z.boolean().optional() }).optional(),
 });
 
@@ -65,16 +73,16 @@ function userPreferencesPath(userId: string) {
   return path.join(userSettingsDir(userId), "preferences.json");
 }
 
-function personalBackgroundDir(userId: string) {
-  return path.join(userSettingsDir(userId), "backgrounds", "app_background");
+function personalBackgroundDir(userId: string, scene: AnyVisualBackgroundScene) {
+  return path.join(userSettingsDir(userId), "backgrounds", scene);
 }
 
-function personalBackgroundUrl(fileName: string) {
-  return `/settings/backgrounds/app_background/personal/${encodeURIComponent(fileName)}`;
+function personalBackgroundUrl(scene: AnyVisualBackgroundScene, fileName: string) {
+  return `/settings/backgrounds/${scene}/personal/${encodeURIComponent(fileName)}`;
 }
 
-function personalBackgroundId(fileName: string) {
-  return `app_background/personal/${fileName}`;
+function personalBackgroundId(scene: AnyVisualBackgroundScene, fileName: string) {
+  return `${scene}/personal/${fileName}`;
 }
 
 function defaultUserPreferences(userId: string): UserPreferences {
@@ -85,6 +93,7 @@ function defaultUserPreferences(userId: string): UserPreferences {
     chatTheme: defaultChatTheme,
     display: normalizeUserDisplayPreferences(null),
     appBackground: null,
+    backgrounds: {},
     notificationDisplay: {
       toastEnabled: true,
     },
@@ -96,6 +105,34 @@ function normalizeChatTheme(input: unknown): ChatTheme {
   return parsed.success ? parsed.data : defaultChatTheme;
 }
 
+function normalizeBackgroundPreference(input: unknown) {
+  const parsed = backgroundSceneConfigSchema.safeParse(input);
+  return parsed.success ? parsed.data : null;
+}
+
+function normalizeUserBackgroundPreferences(input: Partial<UserPreferences> | null | undefined) {
+  const backgrounds: Partial<Record<CanonicalBackgroundScene, BackgroundSceneConfig | null>> = {};
+  const rawBackgrounds = input?.backgrounds && typeof input.backgrounds === "object" ? input.backgrounds : {};
+
+  for (const scene of visualBackgroundScenes) {
+    if (Object.prototype.hasOwnProperty.call(rawBackgrounds, scene)) {
+      backgrounds[scene] = rawBackgrounds[scene] ? normalizeBackgroundPreference(rawBackgrounds[scene]) : null;
+    }
+  }
+
+  const legacyAppBackground = normalizeBackgroundPreference(input?.appBackground);
+  if (legacyAppBackground) {
+    if (backgrounds.sidebar_background === undefined) {
+      backgrounds.sidebar_background = legacyAppBackground;
+    }
+    if (backgrounds.topbar_background === undefined) {
+      backgrounds.topbar_background = legacyAppBackground;
+    }
+  }
+
+  return backgrounds;
+}
+
 function normalizeUserPreferences(userId: string, input: Partial<UserPreferences> | null | undefined): UserPreferences {
   const fallback = defaultUserPreferences(userId);
   const defaultLandingPath =
@@ -104,6 +141,7 @@ function normalizeUserPreferences(userId: string, input: Partial<UserPreferences
       : input?.defaultLandingPath === null
         ? null
         : fallback.defaultLandingPath;
+  const backgrounds = normalizeUserBackgroundPreferences(input);
 
   return {
     userId,
@@ -111,7 +149,8 @@ function normalizeUserPreferences(userId: string, input: Partial<UserPreferences
     sidebarCollapsed: typeof input?.sidebarCollapsed === "boolean" ? input.sidebarCollapsed : input?.sidebarCollapsed === null ? null : fallback.sidebarCollapsed,
     chatTheme: normalizeChatTheme(input?.chatTheme),
     display: normalizeUserDisplayPreferences(input?.display),
-    appBackground: input?.appBackground ? backgroundSceneConfigSchema.parse(input.appBackground) : null,
+    appBackground: backgrounds.sidebar_background ?? null,
+    backgrounds,
     notificationDisplay: {
       toastEnabled: input?.notificationDisplay?.toastEnabled ?? fallback.notificationDisplay.toastEnabled,
     },
@@ -254,65 +293,89 @@ function parsePersonalBackgroundId(id: string) {
   }
 
   const [sceneRaw, scopeRaw, ...fileNameParts] = decodedId.split("/");
-  const scene = canonicalVisualBackgroundScene(z.enum(["app_background", "sidebar_background"]).parse(sceneRaw));
+  const scene = backgroundSceneSchema.parse(sceneRaw);
+  const storageScene: AnyVisualBackgroundScene = sceneRaw === "app_background" ? "app_background" : scene;
   const fileName = fileNameParts.join("/");
 
-  if (scene !== "app_background" || scopeRaw !== "personal" || !fileName || fileName.includes("/") || fileName.includes("\\") || path.basename(fileName) !== fileName) {
+  if (scopeRaw !== "personal" || !fileName || fileName.includes("/") || fileName.includes("\\") || path.basename(fileName) !== fileName) {
     throw new Error("background not found");
   }
 
-  return { fileName };
+  return { scene, storageScene, fileName };
 }
 
-async function scanPersonalBackgrounds(userId: string) {
-  const directory = personalBackgroundDir(userId);
-  await mkdir(directory, { recursive: true });
-  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
-
-  return Promise.all(
-    entries
-      .filter((entry) => entry.isFile() && imageExtensions.has(path.extname(entry.name).toLowerCase()))
-      .sort((first, second) => first.name.localeCompare(second.name))
-      .map(async (entry) => {
-        const filePath = path.join(directory, entry.name);
-        const fileStat = await stat(filePath);
-        const id = personalBackgroundId(entry.name);
-        return {
-          id,
-          scene: "app_background",
-          fileName: entry.name,
-          url: personalBackgroundUrl(entry.name),
-          fileKey: id,
-          mimeType: mimeTypeFromFileName(entry.name),
-          fileSize: fileStat.size,
-          isDefault: false,
-          createdAt: fileStat.birthtime.toISOString(),
-        } satisfies VisualBackgroundImage;
-      }),
-  );
+function personalStorageScenes(scene: CanonicalBackgroundScene): AnyVisualBackgroundScene[] {
+  const sharedScenes = visualBackgroundScenes.filter((candidate) => candidate !== scene);
+  const legacyScenes: AnyVisualBackgroundScene[] = acceptsLegacyAppBackgroundScene(scene) ? ["app_background"] : [];
+  return [scene, ...sharedScenes, ...legacyScenes];
 }
 
-async function assertAccessibleAppBackground(userId: string, id: string) {
+function isBackgroundUsableForScene(input: { scene: CanonicalBackgroundScene; storageScene: AnyVisualBackgroundScene }, scene: CanonicalBackgroundScene) {
+  if ((visualBackgroundScenes as readonly string[]).includes(input.storageScene)) {
+    return true;
+  }
+  return input.storageScene === "app_background" && acceptsLegacyAppBackgroundScene(scene);
+}
+
+async function scanPersonalBackgrounds(userId: string, scene: CanonicalBackgroundScene) {
+  const images: VisualBackgroundImage[] = [];
+
+  for (const storageScene of personalStorageScenes(scene)) {
+    const directory = personalBackgroundDir(userId, storageScene);
+    await mkdir(directory, { recursive: true });
+    const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+    images.push(
+      ...(await Promise.all(
+        entries
+          .filter((entry) => entry.isFile() && imageExtensions.has(path.extname(entry.name).toLowerCase()))
+          .sort((first, second) => first.name.localeCompare(second.name))
+          .map(async (entry) => {
+            const filePath = path.join(directory, entry.name);
+            const fileStat = await stat(filePath);
+            const id = personalBackgroundId(storageScene, entry.name);
+            return {
+              id,
+              scene,
+              fileName: entry.name,
+              url: personalBackgroundUrl(storageScene, entry.name),
+              fileKey: id,
+              mimeType: mimeTypeFromFileName(entry.name),
+              fileSize: fileStat.size,
+              isDefault: false,
+              createdAt: fileStat.birthtime.toISOString(),
+            } satisfies VisualBackgroundImage;
+          }),
+      )),
+    );
+  }
+
+  return images;
+}
+
+async function assertAccessibleBackground(userId: string, scene: CanonicalBackgroundScene, id: string) {
   const decodedId = decodeURIComponent(id);
-  if (decodedId.startsWith("app_background/personal/") || decodedId.startsWith("sidebar_background/personal/")) {
+  if (decodedId.includes("/personal/")) {
     const parsed = parsePersonalBackgroundId(decodedId);
-    const filePath = path.join(personalBackgroundDir(userId), parsed.fileName);
+    if (!isBackgroundUsableForScene(parsed, scene)) {
+      throw new Error("background not found");
+    }
+    const filePath = path.join(personalBackgroundDir(userId, parsed.storageScene), parsed.fileName);
     const fileStat = await stat(filePath).catch(() => null);
     if (!fileStat?.isFile()) {
       throw new Error("background not found");
     }
-    return personalBackgroundId(parsed.fileName);
+    return personalBackgroundId(parsed.storageScene, parsed.fileName);
   }
 
   const parsed = parseBackgroundId(decodedId);
   const fileStat = await stat(parsed.filePath).catch(() => null);
-  if (!fileStat?.isFile() || parsed.scene !== "app_background" || parsed.scope === "personal") {
+  if (!fileStat?.isFile() || !isBackgroundUsableForScene(parsed, scene) || parsed.scope === "personal") {
     throw new Error("background not found");
   }
   return `${parsed.storageScene}/${parsed.storageScope}/${parsed.fileName}`;
 }
 
-async function normalizePersonalBackgroundConfig(userId: string, config: BackgroundSceneConfig | null) {
+async function normalizePersonalBackgroundConfig(userId: string, scene: CanonicalBackgroundScene, config: BackgroundSceneConfig | null) {
   if (!config) {
     return null;
   }
@@ -323,7 +386,7 @@ async function normalizePersonalBackgroundConfig(userId: string, config: Backgro
 
   return {
     ...config,
-    fixedBackgroundId: config.fixedBackgroundId ? await assertAccessibleAppBackground(userId, config.fixedBackgroundId) : null,
+    fixedBackgroundId: config.fixedBackgroundId ? await assertAccessibleBackground(userId, scene, config.fixedBackgroundId) : null,
   } satisfies BackgroundSceneConfig;
 }
 
@@ -353,20 +416,32 @@ export async function saveUserPreferences(userId: string, patch: z.infer<typeof 
       };
     }
     if (input.appBackground !== undefined) {
-      preferences.appBackground = await normalizePersonalBackgroundConfig(userId, input.appBackground);
+      const legacyConfig = await normalizePersonalBackgroundConfig(userId, "sidebar_background", input.appBackground);
+      preferences.backgrounds.sidebar_background = legacyConfig;
+      preferences.backgrounds.topbar_background = legacyConfig
+        ? await normalizePersonalBackgroundConfig(userId, "topbar_background", input.appBackground)
+        : null;
     }
+    if (input.backgrounds) {
+      for (const [sceneRaw, config] of Object.entries(input.backgrounds)) {
+        const scene = backgroundSceneSchema.parse(sceneRaw);
+        preferences.backgrounds[scene] = await normalizePersonalBackgroundConfig(userId, scene, config);
+      }
+    }
+    preferences.appBackground = preferences.backgrounds.sidebar_background ?? null;
     return preferences;
   });
 }
 
-export async function listPersonalBackgrounds(userId: string): Promise<PersonalBackgroundsData> {
+export async function listPersonalBackgrounds(userId: string, sceneInput: CanonicalBackgroundScene = "sidebar_background"): Promise<PersonalBackgroundsData> {
+  const scene = backgroundSceneSchema.parse(sceneInput);
   const [systemBackgrounds, preferences, personalImages] = await Promise.all([
-    listVisualBackgrounds("app_background"),
+    listVisualBackgrounds(scene),
     readUserPreferences(userId),
-    scanPersonalBackgrounds(userId),
+    scanPersonalBackgrounds(userId, scene),
   ]);
   const list = [...systemBackgrounds.list, ...personalImages];
-  const personalConfig = preferences.appBackground;
+  const personalConfig = preferences.backgrounds[scene] ?? null;
   const personalFixedExists = personalConfig?.fixedBackgroundId ? list.some((image) => image.id === personalConfig.fixedBackgroundId) : false;
   const config = personalConfig && (personalConfig.mode !== "fixed" || personalFixedExists)
     ? { ...personalConfig, fixedBackgroundId: personalFixedExists ? personalConfig.fixedBackgroundId : null }
@@ -376,7 +451,7 @@ export async function listPersonalBackgrounds(userId: string): Promise<PersonalB
     : systemBackgrounds.config.fixedBackgroundId;
 
   return {
-    scene: "app_background",
+    scene,
     config: {
       ...config,
       fixedBackgroundId,
@@ -386,7 +461,8 @@ export async function listPersonalBackgrounds(userId: string): Promise<PersonalB
   };
 }
 
-export async function saveUploadedPersonalBackground(input: { userId: string; fileName: string; mimeType: string; buffer: Buffer }) {
+export async function saveUploadedPersonalBackground(input: { userId: string; scene: CanonicalBackgroundScene; fileName: string; mimeType: string; buffer: Buffer }) {
+  const scene = backgroundSceneSchema.parse(input.scene);
   if (!isSupportedVisualBackgroundImage(input.mimeType, input.buffer)) {
     throw new Error("invalid file type");
   }
@@ -394,22 +470,22 @@ export async function saveUploadedPersonalBackground(input: { userId: string; fi
     throw new Error("file too large");
   }
 
-  const existing = await scanPersonalBackgrounds(input.userId);
+  const existing = await scanPersonalBackgrounds(input.userId, scene);
   if (existing.length >= maxPersonalBackgroundsPerUser) {
     throw new Error("personal background quota exceeded");
   }
 
-  const directory = personalBackgroundDir(input.userId);
+  const directory = personalBackgroundDir(input.userId, scene);
   await mkdir(directory, { recursive: true });
   const { fileName, filePath } = await writeUniqueUploadFile(directory, sanitizeFileName(input.fileName, input.mimeType), input.buffer);
   const fileStat = await stat(filePath);
-  const id = personalBackgroundId(fileName);
+  const id = personalBackgroundId(scene, fileName);
 
   return {
     id,
-    scene: "app_background",
+    scene,
     fileName,
-    url: personalBackgroundUrl(fileName),
+    url: personalBackgroundUrl(scene, fileName),
     fileKey: id,
     mimeType: input.mimeType,
     fileSize: fileStat.size,
@@ -420,17 +496,25 @@ export async function saveUploadedPersonalBackground(input: { userId: string; fi
 
 export async function deletePersonalBackground(userId: string, id: string) {
   const parsed = parsePersonalBackgroundId(id);
-  const filePath = path.join(personalBackgroundDir(userId), parsed.fileName);
+  const filePath = path.join(personalBackgroundDir(userId, parsed.storageScene), parsed.fileName);
   const fileStat = await stat(filePath).catch(() => null);
   if (!fileStat?.isFile()) {
     throw new Error("background not found");
   }
   await unlink(filePath);
 
-  const deletedId = personalBackgroundId(parsed.fileName);
+  const deletedId = personalBackgroundId(parsed.storageScene, parsed.fileName);
   await updateUserPreferences(userId, (preferences) => {
     if (preferences.appBackground?.fixedBackgroundId === deletedId) {
       preferences.appBackground = null;
+    }
+    for (const scene of visualBackgroundScenes) {
+      const config = preferences.backgrounds[scene];
+      if (!config) continue;
+      delete config.placements[deletedId];
+      if (config.fixedBackgroundId === deletedId) {
+        preferences.backgrounds[scene] = null;
+      }
     }
   });
 
@@ -438,13 +522,8 @@ export async function deletePersonalBackground(userId: string, id: string) {
 }
 
 export async function getPersonalBackgroundFile(userId: string, sceneRaw: string, scopeRaw: string, fileName: string) {
-  const scene = canonicalVisualBackgroundScene(z.enum(["app_background", "sidebar_background"]).parse(sceneRaw));
-  if (scene !== "app_background" || scopeRaw !== "personal") {
-    throw new Error("background not found");
-  }
-
-  const parsed = parsePersonalBackgroundId(`app_background/personal/${fileName}`);
-  const filePath = path.join(personalBackgroundDir(userId), parsed.fileName);
+  const parsed = parsePersonalBackgroundId(`${sceneRaw}/${scopeRaw}/${fileName}`);
+  const filePath = path.join(personalBackgroundDir(userId, parsed.storageScene), parsed.fileName);
   const fileStat = await stat(filePath);
   if (!fileStat.isFile()) {
     throw new Error("background not found");

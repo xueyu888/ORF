@@ -203,10 +203,11 @@ export function registerSettingsRoutes(app: FastifyInstance) {
     }
 
     try {
+      const query = visualBackgroundQuerySchema.partial().parse(request.query);
       return {
         code: 0,
         message: "ok",
-        data: await listPersonalBackgrounds(user.id),
+        data: await listPersonalBackgrounds(user.id, query.scene ?? "sidebar_background"),
       };
     } catch (error) {
       const mapped = personalSettingsError(error);
@@ -221,9 +222,13 @@ export function registerSettingsRoutes(app: FastifyInstance) {
     }
 
     try {
+      let scene: z.infer<typeof backgroundSceneSchema> = "sidebar_background";
       let file: { fileName: string; mimeType: string; buffer: Buffer } | null = null;
 
       for await (const part of request.parts({ limits: { fileSize: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES, files: 1 } })) {
+        if (part.type === "field" && part.fieldname === "scene") {
+          scene = backgroundSceneSchema.parse(part.value);
+        }
         if (part.type === "file" && part.fieldname === "file") {
           file = {
             fileName: part.filename,
@@ -237,7 +242,7 @@ export function registerSettingsRoutes(app: FastifyInstance) {
         return reply.code(400).send({ code: 40002, message: "file is required", data: null });
       }
 
-      const data = await saveUploadedPersonalBackground({ userId: context.user.id, ...file });
+      const data = await saveUploadedPersonalBackground({ userId: context.user.id, scene, ...file });
       publishSettingsInvalidation({ actorUserId: context.user.id, scope: context.scope, targetId: `personal:${context.user.id}` });
       return {
         code: 0,
@@ -397,6 +402,12 @@ export function registerSettingsRoutes(app: FastifyInstance) {
   app.get("/api/settings/visual/backgrounds", async (request, reply) => {
     try {
       const query = visualBackgroundQuerySchema.parse(request.query);
+      if (query.scene !== "login_background") {
+        const user = await requireApiUser(request, reply);
+        if (!user) {
+          return reply;
+        }
+      }
       return {
         code: 0,
         message: "ok",

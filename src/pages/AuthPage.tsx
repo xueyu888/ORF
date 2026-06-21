@@ -1,6 +1,6 @@
 import { Check, Eye, EyeOff, LockKeyhole, Mail, Sparkles, Trash2, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
 import { Button, IconButton } from "../components/ui";
@@ -15,6 +15,11 @@ import {
 } from "../features/auth/credentialMemory";
 import { getUserPreferences, getVisualBackgrounds } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
+import {
+  defaultVisualBackgroundPlacement,
+  type VisualBackgroundPlacement,
+} from "../domain/settings/visualBackgrounds";
+import { readCachedLoginBackgroundPreview } from "../utils/loginBackgroundCache";
 import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
 
 type AuthMode = "login" | "register";
@@ -22,6 +27,7 @@ type AuthMode = "login" | "register";
 type AuthHeroOption = {
   id: string;
   label: string;
+  placement: VisualBackgroundPlacement;
   src: string;
 };
 
@@ -34,7 +40,7 @@ const authHeroModules = import.meta.glob("../assets/auth/*.{png,jpg,jpeg,webp,av
 const authHeroOptions: AuthHeroOption[] = Object.entries(authHeroModules)
   .map(([path, src]) => {
     const label = path.split("/").at(-1) ?? path;
-    return { id: path, label, src };
+    return { id: path, label, placement: defaultVisualBackgroundPlacement, src };
   })
   .sort((first, second) => {
     if (first.label === defaultAuthHeroFile) {
@@ -52,8 +58,19 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function AuthPage() {
   const navigate = useNavigate();
   const { authReady, isApproved, isAuthenticated, loginWithPassword, notify, registerWithPassword } = useOrf();
+  const [cachedHero] = useState<AuthHeroOption | null>(() => {
+    const cached = readCachedLoginBackgroundPreview();
+    return cached
+      ? {
+          id: `cached-login-background:${cached.userId}`,
+          label: "本机登录页",
+          placement: cached.placement,
+          src: cached.dataUrl,
+        }
+      : null;
+  });
   const [mode, setMode] = useState<AuthMode>("login");
-  const [selectedHeroId, setSelectedHeroId] = useState(() => authHeroOptions[0]?.id ?? "");
+  const [selectedHeroId, setSelectedHeroId] = useState(() => cachedHero?.id ?? authHeroOptions[0]?.id ?? "");
   const [configuredHeroOptions, setConfiguredHeroOptions] = useState<AuthHeroOption[]>([]);
   const [savedCredentialAccounts, setSavedCredentialAccounts] = useState<SavedCredentialAccount[]>([]);
   const [credentialProvider, setCredentialProvider] = useState<"browser" | "desktop">("browser");
@@ -151,15 +168,21 @@ export function AuthPage() {
           const options = data.list.map((background) => ({
             id: background.id,
             label: background.fileName,
+            placement: data.config.placements[background.id] ?? defaultVisualBackgroundPlacement,
             src: background.url,
           }));
-          setConfiguredHeroOptions(options);
-          setSelectedHeroId(pickVisualBackground(data)?.id ?? options[0]?.id ?? "");
+          const visibleOptions = cachedHero ? [cachedHero, ...options] : options;
+          setConfiguredHeroOptions(visibleOptions);
+          if (cachedHero) {
+            setSelectedHeroId(cachedHero.id);
+            return;
+          }
+          setSelectedHeroId(pickVisualBackground(data)?.image.id ?? options[0]?.id ?? "");
 
           const intervalMs = visualBackgroundIntervalMs(data);
           if (intervalMs) {
             intervalId = window.setInterval(() => {
-              setSelectedHeroId(pickVisualBackground(data)?.id ?? options[0]?.id ?? "");
+              setSelectedHeroId(pickVisualBackground(data)?.image.id ?? options[0]?.id ?? "");
             }, intervalMs);
           }
         })
@@ -174,7 +197,7 @@ export function AuthPage() {
       unsubscribe();
       clearRotationTimer();
     };
-  }, []);
+  }, [cachedHero]);
 
   useEffect(() => {
     setAuthError("");
@@ -250,13 +273,20 @@ export function AuthPage() {
   const primaryLabel = mode === "login" ? "Sign In" : "Create Account";
   const switchLabel = mode === "login" ? "Register" : "Sign In";
   const busyLabel = mode === "login" ? "Signing In" : "Creating";
-  const heroOptions = configuredHeroOptions.length > 0 ? configuredHeroOptions : authHeroOptions;
+  const heroOptions = configuredHeroOptions.length > 0 ? configuredHeroOptions : cachedHero ? [cachedHero, ...authHeroOptions] : authHeroOptions;
   const selectedHero = heroOptions.find((option) => option.id === selectedHeroId) ?? heroOptions[0];
   const rememberLabel = credentialProvider === "desktop" ? "记住到本机" : "让浏览器记住";
+  const selectedHeroStyle = selectedHero
+    ? {
+        "--orf-auth-hero-x": `${selectedHero.placement.offsetX}%`,
+        "--orf-auth-hero-y": `${selectedHero.placement.offsetY}%`,
+        "--orf-auth-hero-scale": selectedHero.placement.scale,
+      } as CSSProperties
+    : undefined;
 
   return (
     <main className="orf-auth-page">
-      {selectedHero && <img className="orf-auth-hero" src={selectedHero.src} alt="" aria-hidden="true" draggable={false} />}
+      {selectedHero && <img className="orf-auth-hero" src={selectedHero.src} alt="" aria-hidden="true" draggable={false} style={selectedHeroStyle} />}
       {heroOptions.length > 1 && <span className="orf-auth-top-gradient" aria-hidden="true" />}
       {heroOptions.length > 1 && (
         <div className="orf-auth-hero-switch-zone" aria-label="选择登录页背景">

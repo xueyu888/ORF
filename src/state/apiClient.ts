@@ -29,9 +29,23 @@ import type {
 } from "../types/orf";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
 import type { ChatTheme, UserDisplayPreferences } from "../domain/settings/personalPreferences";
-import type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
+import type {
+  VisualBackgroundConfig,
+  VisualBackgroundMode,
+  VisualBackgroundPlacement,
+  VisualBackgroundScene,
+  VisualBackgroundSwitchOrder,
+  VisualBackgroundSwitchTrigger,
+} from "../domain/settings/visualBackgrounds";
 import type { ClientReleaseInfo } from "../features/client-updates/clientUpdateModel";
-export type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
+export type {
+  VisualBackgroundConfig,
+  VisualBackgroundMode,
+  VisualBackgroundPlacement,
+  VisualBackgroundScene,
+  VisualBackgroundSwitchOrder,
+  VisualBackgroundSwitchTrigger,
+} from "../domain/settings/visualBackgrounds";
 export type { BountyHallData, BountyHallItem, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
@@ -172,16 +186,6 @@ export type WorkLogEntrySaveInput = {
   objectiveId?: string | null;
   remainingEstimatePercent?: number | null;
 };
-export type VisualBackgroundMode = "fixed" | "switchable";
-export type VisualBackgroundSwitchTrigger = "on_open" | "interval";
-export type VisualBackgroundSwitchOrder = "sequential" | "random";
-export type VisualBackgroundConfig = {
-  mode: VisualBackgroundMode;
-  fixedBackgroundId: string | null;
-  switchTrigger: VisualBackgroundSwitchTrigger;
-  switchOrder: VisualBackgroundSwitchOrder;
-  switchIntervalMinutes: number;
-};
 export type VisualBackgroundImage = {
   id: string;
   scene: VisualBackgroundScene;
@@ -209,11 +213,12 @@ export type UserPreferences = {
   chatTheme: ChatTheme;
   display: UserDisplayPreferences;
   appBackground: VisualBackgroundConfig | null;
+  backgrounds: Partial<Record<VisualBackgroundScene, VisualBackgroundConfig | null>>;
   notificationDisplay: {
     toastEnabled: boolean;
   };
 };
-export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "appBackground">> & {
+export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "appBackground" | "backgrounds">> & {
   notificationDisplay?: Partial<UserPreferences["notificationDisplay"]>;
 };
 export type PersonalBackgroundsData = VisualBackgroundsData & {
@@ -868,13 +873,14 @@ export async function saveUserPreferences(input: UserPreferencesPatch) {
   return response.data;
 }
 
-export async function getPersonalBackgrounds() {
-  const response = await apiJson<ApiEnvelope<PersonalBackgroundsData>>("/api/settings/personal/backgrounds");
+export async function getPersonalBackgrounds(scene: VisualBackgroundScene = "sidebar_background") {
+  const response = await apiJson<ApiEnvelope<PersonalBackgroundsData>>(`/api/settings/personal/backgrounds?scene=${encodeURIComponent(scene)}`);
   return response.data;
 }
 
-export async function uploadPersonalBackground(file: File) {
+export async function uploadPersonalBackground(scene: VisualBackgroundScene, file: File) {
   const formData = new FormData();
+  formData.set("scene", scene);
   formData.set("file", file);
 
   const response = await apiJson<ApiEnvelope<VisualBackgroundImage>>("/api/settings/personal/backgrounds", {

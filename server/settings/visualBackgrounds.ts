@@ -4,8 +4,12 @@ import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import {
+  acceptsLegacyAppBackgroundScene,
   canonicalVisualBackgroundScene,
   canonicalVisualBackgroundScope,
+  defaultVisualBackgroundConfig,
+  normalizeVisualBackgroundPlacement,
+  visualBackgroundPlacementLimits,
   legacyVisualBackgroundScenes,
   legacyVisualBackgroundScopes,
   visualBackgroundScenes,
@@ -31,13 +35,26 @@ export const backgroundScopePathSchema = z.enum(anyBackgroundScopes);
 export const backgroundModeSchema = z.enum(["fixed", "switchable"]);
 export const backgroundSwitchTriggerSchema = z.enum(["on_open", "interval"]);
 export const backgroundSwitchOrderSchema = z.enum(["sequential", "random"]);
-export const backgroundSceneConfigSchema = z.object({
-  mode: backgroundModeSchema,
-  fixedBackgroundId: z.string().nullable(),
-  switchTrigger: backgroundSwitchTriggerSchema,
-  switchOrder: backgroundSwitchOrderSchema,
-  switchIntervalMinutes: z.coerce.number().int().min(1).max(1440),
+export const backgroundPlacementSchema = z.object({
+  offsetX: z.coerce.number().min(visualBackgroundPlacementLimits.offsetMin).max(visualBackgroundPlacementLimits.offsetMax),
+  offsetY: z.coerce.number().min(visualBackgroundPlacementLimits.offsetMin).max(visualBackgroundPlacementLimits.offsetMax),
+  scale: z.coerce.number().min(visualBackgroundPlacementLimits.scaleMin).max(visualBackgroundPlacementLimits.scaleMax),
 });
+export const backgroundSceneConfigSchema = z
+  .object({
+    mode: backgroundModeSchema,
+    fixedBackgroundId: z.string().nullable(),
+    switchTrigger: backgroundSwitchTriggerSchema,
+    switchOrder: backgroundSwitchOrderSchema,
+    switchIntervalMinutes: z.coerce.number().int().min(1).max(1440),
+    placements: z.record(z.string(), backgroundPlacementSchema).optional().default({}),
+  })
+  .transform((config) => ({
+    ...config,
+    placements: Object.fromEntries(
+      Object.entries(config.placements).map(([backgroundId, placement]) => [backgroundId, normalizeVisualBackgroundPlacement(placement)]),
+    ),
+  }));
 export type BackgroundScene = z.infer<typeof backgroundSceneSchema>;
 export type BackgroundSceneConfig = z.infer<typeof backgroundSceneConfigSchema>;
 export type BackgroundScope = CanonicalBackgroundScope;
@@ -78,22 +95,12 @@ const backgroundsRoot = path.join(settingsRoot, "backgrounds");
 
 const emptyVisualSettings = (): VisualSettings => ({
   visual: {
-    backgrounds: {
-      login_background: defaultBackgroundConfig(),
-      app_background: defaultBackgroundConfig(),
-    },
+    backgrounds: Object.fromEntries(visualBackgroundScenes.map((scene) => [scene, defaultVisualBackgroundConfig()])) as Record<
+      CanonicalBackgroundScene,
+      BackgroundSceneConfig
+    >,
   },
 });
-
-function defaultBackgroundConfig(): BackgroundSceneConfig {
-  return {
-    mode: "fixed",
-    fixedBackgroundId: null,
-    switchTrigger: "on_open",
-    switchOrder: "random",
-    switchIntervalMinutes: 10,
-  };
-}
 
 function sceneDir(scene: AnyVisualBackgroundScene, scope: AnyVisualBackgroundScope) {
   return path.join(backgroundsRoot, scene, scope);
@@ -229,7 +236,7 @@ async function ensureBackgroundDirectories() {
 }
 
 function normalizeBackgroundConfig(input: LegacyBackgroundConfig | null | undefined): BackgroundSceneConfig {
-  const fallback = defaultBackgroundConfig();
+  const fallback = defaultVisualBackgroundConfig();
   const legacyFixedBackgroundId = typeof input?.defaultBackgroundId === "string" ? input.defaultBackgroundId : null;
   const fixedBackgroundId = typeof input?.fixedBackgroundId === "string" ? input.fixedBackgroundId : legacyFixedBackgroundId;
 
@@ -239,16 +246,18 @@ function normalizeBackgroundConfig(input: LegacyBackgroundConfig | null | undefi
     switchTrigger: input?.switchTrigger ?? fallback.switchTrigger,
     switchOrder: input?.switchOrder ?? fallback.switchOrder,
     switchIntervalMinutes: input?.switchIntervalMinutes ?? fallback.switchIntervalMinutes,
+    placements: input?.placements ?? fallback.placements,
   });
 }
 
 function normalizeVisualSettings(input: RawSystemSettingsFile | null | undefined): VisualSettings {
   const settings = emptyVisualSettings();
   for (const scene of visualBackgroundScenes) {
-    const legacyScene = scene === "app_background" ? "sidebar_background" : scene;
+    const legacyAppConfig = acceptsLegacyAppBackgroundScene(scene)
+      ? (input?.visual?.backgrounds?.app_background as LegacyBackgroundConfig | undefined)
+      : undefined;
     settings.visual.backgrounds[scene] = normalizeBackgroundConfig(
-      (input?.visual?.backgrounds?.[scene] as LegacyBackgroundConfig | undefined) ??
-        (input?.visual?.backgrounds?.[legacyScene] as LegacyBackgroundConfig | undefined),
+      (input?.visual?.backgrounds?.[scene] as LegacyBackgroundConfig | undefined) ?? legacyAppConfig,
     );
   }
   return settings;
@@ -260,7 +269,9 @@ async function readVisualSettings() {
 }
 
 function storageSceneNames(scene: CanonicalBackgroundScene): AnyVisualBackgroundScene[] {
-  return scene === "app_background" ? ["app_background", "sidebar_background"] : [scene];
+  const sharedScenes = visualBackgroundScenes.filter((candidate) => candidate !== scene);
+  const legacyScenes: AnyVisualBackgroundScene[] = acceptsLegacyAppBackgroundScene(scene) ? ["app_background"] : [];
+  return [scene, ...sharedScenes, ...legacyScenes];
 }
 
 function storageScopeNames(scope: CanonicalBackgroundScope): AnyVisualBackgroundScope[] {
@@ -404,6 +415,13 @@ async function assertBackgroundExists(id: string) {
   return parsed;
 }
 
+function isBackgroundUsableForScene(parsed: ParsedBackgroundId, scene: CanonicalBackgroundScene) {
+  if ((visualBackgroundScenes as readonly string[]).includes(parsed.storageScene)) {
+    return true;
+  }
+  return parsed.storageScene === "app_background" && acceptsLegacyAppBackgroundScene(scene);
+}
+
 export async function saveVisualBackgroundConfig(scene: BackgroundScene, input: BackgroundSceneConfig) {
   const config = backgroundSceneConfigSchema.parse(input);
   if (config.mode === "fixed" && !config.fixedBackgroundId) {
@@ -416,7 +434,7 @@ export async function saveVisualBackgroundConfig(scene: BackgroundScene, input: 
     if (fixedBackground.scope === "personal") {
       throw new Error("background not found");
     }
-    if (fixedBackground.scene !== scene) {
+    if (!isBackgroundUsableForScene(fixedBackground, scene)) {
       throw new Error("background not found");
     }
     fixedBackgroundId = `${fixedBackground.storageScene}/${fixedBackground.storageScope}/${fixedBackground.fileName}`;

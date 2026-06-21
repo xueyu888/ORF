@@ -1,7 +1,18 @@
+import {
+  defaultVisualBackgroundPlacement,
+  normalizeVisualBackgroundPlacement,
+  type VisualBackgroundPlacement,
+} from "../domain/settings/visualBackgrounds";
 import type { VisualBackgroundImage, VisualBackgroundScene, VisualBackgroundsData } from "../state/apiClient";
 
 const rotationStoragePrefix = "orf.visualBackgroundRotation";
 const visualBackgroundChangedEvent = "orf:visual-background-changed";
+
+export type VisualBackgroundSelection = {
+  image: VisualBackgroundImage;
+  placement: VisualBackgroundPlacement;
+  url: string;
+};
 
 function rotationStorageKey(scene: VisualBackgroundScene) {
   return `${rotationStoragePrefix}.${scene}`;
@@ -33,18 +44,34 @@ function nextSwitchableIndex(data: VisualBackgroundsData) {
   return (readStoredIndex(data.scene) + 1) % data.list.length;
 }
 
-export function pickVisualBackground(data: VisualBackgroundsData): VisualBackgroundImage | null {
+export function placementForVisualBackground(data: VisualBackgroundsData, imageId: string | null | undefined) {
+  return imageId ? normalizeVisualBackgroundPlacement(data.config.placements[imageId]) : defaultVisualBackgroundPlacement;
+}
+
+export function pickVisualBackground(data: VisualBackgroundsData): VisualBackgroundSelection | null {
+  let image: VisualBackgroundImage | null = null;
   if (data.config.mode === "fixed") {
-    return fixedBackground(data);
+    image = fixedBackground(data);
+  } else {
+    const nextIndex = nextSwitchableIndex(data);
+    if (nextIndex >= 0) {
+      image = data.list[nextIndex] ?? null;
+    }
   }
 
-  const nextIndex = nextSwitchableIndex(data);
-  if (nextIndex < 0) {
+  if (!image) {
     return null;
   }
 
-  writeStoredIndex(data.scene, nextIndex);
-  return data.list[nextIndex] ?? null;
+  if (data.config.mode !== "fixed") {
+    writeStoredIndex(data.scene, data.list.findIndex((background) => background.id === image?.id));
+  }
+
+  return {
+    image,
+    placement: placementForVisualBackground(data, image.id),
+    url: image.url,
+  };
 }
 
 export function visualBackgroundIntervalMs(data: VisualBackgroundsData) {

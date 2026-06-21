@@ -8,8 +8,9 @@ import { GlobalModals } from "./GlobalModals";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { Toasts } from "./Toasts";
 import { breadcrumb } from "./appShellBreadcrumb";
-import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
+import { orfAssetLibrary } from "../config/assetLibrary";
 import { hasPermission } from "../config/permissions";
+import { pageVisualBackgroundSceneForPath } from "../config/visualSkinSlots";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { SystemBroadcastBanner } from "../features/notifications/components/SystemBroadcastBanner";
 import { ClientUpdateCenterDialog } from "../features/client-updates/ClientUpdateCenterDialog";
@@ -21,9 +22,11 @@ import { isDesktopShellAvailable, setDesktopWorkbenchZoomLevel } from "../featur
 import { applyDisplayPreferencesToDocument, nextWorkbenchZoomLevel } from "../features/display/displayPreferences";
 import { useVisualBackground } from "../hooks/useVisualBackground";
 import { defaultChatTheme, defaultUserDisplayPreferences, type ChatTheme, type UserDisplayPreferences } from "../domain/settings/personalPreferences";
+import { defaultVisualBackgroundPlacement, type VisualBackgroundPlacement } from "../domain/settings/visualBackgrounds";
 import { getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import { dispatchPersonalPreferencesChanged, subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
+import type { VisualBackgroundSelection } from "../utils/visualBackgrounds";
 
 export function AppShell() {
   const location = useLocation();
@@ -35,7 +38,10 @@ export function AppShell() {
   const [chatTheme, setChatTheme] = useState<ChatTheme>(defaultChatTheme);
   const [displayPreferences, setDisplayPreferences] = useState<UserDisplayPreferences>(defaultUserDisplayPreferences);
   const [clientUpdateCenter, setClientUpdateCenter] = useState<{ notice?: string; open: boolean }>({ open: false });
-  const sidebarBackground = useVisualBackground("app_background");
+  const pageBackgroundScene = pageVisualBackgroundSceneForPath(location.pathname);
+  const sidebarBackground = useVisualBackground("sidebar_background");
+  const topbarBackground = useVisualBackground("topbar_background");
+  const pageBackground = useVisualBackground(pageBackgroundScene);
 
   useEffect(() => {
     setDesktopChromeEnabled(isDesktopShellAvailable());
@@ -136,11 +142,12 @@ export function AppShell() {
     return () => window.removeEventListener(clientUpdateCenterOpenEvent, handleOpenClientUpdateCenter);
   }, []);
 
-  const sidebarBackgroundUrl =
-    sidebarBackground.status === "ready" ? sidebarBackground.url : orfAssetLibrary.sidebar.characterGuideBackground.src;
-  const shellStyle = {
-    "--orf-app-chrome-bg-image": toCssImageUrl(sidebarBackgroundUrl),
-  } as CSSProperties;
+  const sidebarBackgroundUrl = sidebarBackground.status === "ready" ? sidebarBackground.url : orfAssetLibrary.sidebar.characterGuideBackground.src;
+  const sidebarBackgroundPlacement = sidebarBackground.status === "ready"
+    ? sidebarBackground.selection.placement
+    : { ...defaultVisualBackgroundPlacement, scale: 1.03 };
+  const topbarSelection = topbarBackground.status === "ready" ? topbarBackground.selection : null;
+  const pageSelection = pageBackground.status === "ready" ? pageBackground.selection : null;
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
   const isBountyHall = location.pathname.startsWith("/bounties");
@@ -156,16 +163,17 @@ export function AppShell() {
       data-display-contrast={displayPreferences.contrast}
       data-display-density={displayPreferences.density}
       data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
-      style={shellStyle}
     >
       <Sidebar
         backgroundUrl={sidebarBackgroundUrl}
+        backgroundPlacement={sidebarBackgroundPlacement}
         collapsed={sidebarCollapsed}
         onCollapsedChange={handleSidebarCollapsedChange}
         onOpenClientUpdateCenter={() => setClientUpdateCenter({ open: true })}
       />
       <div className="orf-shell-body min-w-0 flex-1">
         <header className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-2">
+          <VisualBackgroundImageLayer className="orf-topbar-skin-layer" selection={topbarSelection} />
           <div className="orf-topbar-title orf-text-primary min-w-[160px] font-semibold tracking-tight" role="heading" aria-level={1}>
             {isBountyHall && (
               <span className="orf-topbar-title-icon" aria-hidden="true">
@@ -203,6 +211,7 @@ export function AppShell() {
         <SystemBroadcastBanner broadcasts={systemBroadcasts} onDismiss={dismissSystemBroadcast} />
         <ClientUpdateNotice />
         <main className="orf-main-content">
+          <VisualBackgroundImageLayer className="orf-main-content-skin-layer" selection={pageSelection} />
           <Outlet />
         </main>
       </div>
@@ -217,5 +226,27 @@ export function AppShell() {
       <GlobalModals />
       <Toasts />
     </div>
+  );
+}
+
+function backgroundPlacementStyle(placement: VisualBackgroundPlacement) {
+  return {
+    "--orf-visual-bg-x": `${placement.offsetX}%`,
+    "--orf-visual-bg-y": `${placement.offsetY}%`,
+    "--orf-visual-bg-scale": placement.scale,
+  } as CSSProperties;
+}
+
+function VisualBackgroundImageLayer({ className, selection }: { className: string; selection: VisualBackgroundSelection | null }) {
+  if (!selection) return null;
+  return (
+    <img
+      className={className}
+      src={selection.url}
+      alt=""
+      aria-hidden="true"
+      draggable={false}
+      style={backgroundPlacementStyle(selection.placement)}
+    />
   );
 }
