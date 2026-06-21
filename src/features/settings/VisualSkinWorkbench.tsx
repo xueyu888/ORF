@@ -60,6 +60,38 @@ function isPersonalBackground(id: string | null | undefined) {
   return Boolean(id?.includes("/personal/"));
 }
 
+function backgroundSourceInfo(id: string) {
+  let decodedId = id;
+  try {
+    decodedId = decodeURIComponent(id);
+  } catch {
+    decodedId = id;
+  }
+  const [sceneRaw, scopeRaw] = decodedId.split("/");
+  const slotLabel = sceneRaw === "app_background"
+    ? "旧版外壳"
+    : visualSkinSlots.find((item) => item.scene === sceneRaw)?.label ?? "未知槽位";
+  const scopeLabel = scopeRaw === "personal"
+    ? "个人图库"
+    : scopeRaw === "default"
+      ? "内置图库"
+      : scopeRaw === "user"
+        ? "旧系统图库"
+        : "系统图库";
+  const scopeBadge = scopeRaw === "personal"
+    ? "个人"
+    : scopeRaw === "default"
+      ? "内置"
+      : scopeRaw === "user"
+        ? "旧版"
+        : "系统";
+  return {
+    detailLabel: `${scopeLabel} / ${slotLabel}`,
+    scopeBadge,
+    slotLabel,
+  };
+}
+
 function placementFromConfig(config: VisualBackgroundConfig, imageId: string | null | undefined) {
   return imageId ? normalizeVisualBackgroundPlacement(config.placements[imageId]) : defaultVisualBackgroundPlacement;
 }
@@ -111,6 +143,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
 
   const slot = visualSkinSlotByScene(scene);
   const selectedBackground = backgroundList.find((background) => background.id === selectedBackgroundId) ?? null;
+  const selectedBackgroundSource = selectedBackground ? backgroundSourceInfo(selectedBackground.id) : null;
   const persistedPlacement = data ? placementForVisualBackground(data, selectedBackgroundId) : defaultVisualBackgroundPlacement;
   const isPageSlot = slot.kind === "page";
   const effectivePageTargetScenes = isPageSlot ? pageApplyTargets(scene, pageTargetScenes) : [];
@@ -542,8 +575,13 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
               <span>图库</span>
             </div>
             {selectedBackground && (
-              <span className="orf-skin-selected-file">
-                {isPersonalBackground(selectedBackground.id) ? "个人" : "系统"} / {selectedBackground.fileName}
+              <span
+                className="orf-skin-selected-file"
+                title={`应用到：${slot.label}；来源：${selectedBackgroundSource?.detailLabel ?? "未知图库"}；${selectedBackground.fileName}`}
+              >
+                <span>应用到：{slot.label}</span>
+                <span>来源：{selectedBackgroundSource?.detailLabel ?? "未知图库"}</span>
+                <span className="orf-skin-selected-file-name">{selectedBackground.fileName}</span>
               </span>
             )}
           </div>
@@ -559,17 +597,21 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
             {backgroundList.map((background) => {
               const selected = selectedBackgroundId === background.id;
               const current = data?.config.fixedBackgroundId === background.id;
+              const source = backgroundSourceInfo(background.id);
               return (
                 <button
                   key={background.id}
                   type="button"
                   className={clsx("orf-skin-gallery-card", selected && "orf-skin-gallery-card-selected")}
+                  aria-label={`${background.fileName}，来源：${source.detailLabel}`}
+                  title={`${background.fileName} / 来源：${source.detailLabel}`}
                   onClick={() => selectBackground(background.id)}
                 >
                   <img src={background.url} alt={background.fileName} draggable={false} />
                   <span className="orf-skin-gallery-card-badges">
                     {current && <span>当前</span>}
-                    {isPersonalBackground(background.id) && <span>个人</span>}
+                    <span>{source.scopeBadge}</span>
+                    <span>{source.slotLabel}</span>
                   </span>
                 </button>
               );

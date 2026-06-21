@@ -210,8 +210,16 @@ export function AppShell() {
         </header>
         <SystemBroadcastBanner broadcasts={systemBroadcasts} onDismiss={dismissSystemBroadcast} />
         <ClientUpdateNotice />
-        <main className="orf-main-content">
-          <VisualBackgroundImageLayer className="orf-main-content-skin-layer" selection={pageSelection} />
+        <main
+          className="orf-main-content"
+          data-page-scene={pageBackgroundScene}
+          data-page-skin={pageSelection ? "true" : "false"}
+        >
+          <VisualBackgroundImageLayer
+            className="orf-main-content-skin-layer"
+            frameClassName="orf-main-content-skin-frame"
+            selection={pageSelection}
+          />
           <Outlet />
         </main>
       </div>
@@ -237,9 +245,17 @@ function backgroundPlacementStyle(placement: VisualBackgroundPlacement) {
   } as CSSProperties;
 }
 
-function VisualBackgroundImageLayer({ className, selection }: { className: string; selection: VisualBackgroundSelection | null }) {
+function VisualBackgroundImageLayer({
+  className,
+  frameClassName,
+  selection,
+}: {
+  className: string;
+  frameClassName?: string;
+  selection: VisualBackgroundSelection | null;
+}) {
   if (!selection) return null;
-  return (
+  const image = (
     <img
       className={className}
       src={selection.url}
@@ -249,4 +265,8 @@ function VisualBackgroundImageLayer({ className, selection }: { className: strin
       style={backgroundPlacementStyle(selection.placement)}
     />
   );
+  if (frameClassName) {
+    return <span className={frameClassName} aria-hidden="true">{image}</span>;
+  }
+  return image;
 }
