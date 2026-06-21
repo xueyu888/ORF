@@ -37,7 +37,7 @@ export const backgroundPersonalUnauthenticatedCase = {
   Setup: {
     description: "记录系统背景原状态，保持未登录浏览器运行态",
     steps: [
-      { source: { caseStepId: "Setup-1", method: "api" }, id: "system_backgrounds.snapshot", title: "记录当前系统 `login_background` 和 `app_background` 背景列表与配置快照", object: "api.visual_backgrounds", operator: "snapshot", params: { saveAs: "backgroundSnapshot" } },
+      { source: { caseStepId: "Setup-1", method: "api" }, id: "system_backgrounds.snapshot", title: "记录当前系统 `login_background` 和 `topbar_background` 背景列表与配置快照", object: "api.visual_backgrounds", operator: "snapshot", params: { saveAs: "backgroundSnapshot" } },
       { source: { caseStepId: "Setup-2", method: "playwright" }, id: "browser.clear", title: "移除当前浏览器中的残留登录态", object: "browser", operator: "clear_state" },
       { source: { caseStepId: "Setup-3", method: "playwright" }, id: "page.goto.auth", title: "打开 ORF 登录页", object: "page", operator: "goto", params: { path: "/auth" } },
       { source: { caseStepId: "Setup-4", method: "api" }, id: "session.unauthenticated", title: "当前会话 应为 未登录", object: "auth.session", operator: "unauthenticated" },
@@ -49,34 +49,34 @@ export const backgroundPersonalUnauthenticatedCase = {
     assertions: [
       { source: { caseStepId: "S0-1", method: "api" }, id: "session.unauthenticated", title: "当前会话 应为 未登录", object: "auth.session", operator: "unauthenticated" },
       { source: { caseStepId: "S0-2", method: "playwright" }, id: "url.auth", title: "当前页面 应为 登录页", object: "page.url", operator: "match", params: { pattern: "/auth$" } },
-      { source: { caseStepId: "S0-3", method: "api" }, id: "system_backgrounds.unchanged", title: "当前系统 `login_background` 和 `app_background` 背景列表与配置 应等于 系统背景配置快照", object: "api.visual_backgrounds", operator: "unchanged", params: { snapshotFrom: "runtime.backgroundSnapshot" } },
+      { source: { caseStepId: "S0-3", method: "api" }, id: "system_backgrounds.unchanged", title: "当前系统 `login_background` 和 `topbar_background` 背景列表与配置 应等于 系统背景配置快照", object: "api.visual_backgrounds", operator: "unchanged", params: { snapshotFrom: "runtime.backgroundSnapshot" } },
     ],
   },
 
   Action: {
     description: "未登录用户直接提交个人背景偏好写请求",
     steps: [
-      { source: { caseStepId: "Action-1", method: "api" }, id: "personal_background_config.submit", title: "未登录用户直接提交个人 AppShell 皮肤偏好", object: "api.personal_background_config", operator: "submit", params: { configFrom: "runtime.backgroundSnapshot.app_background.config", saveAs: "personalBackgroundConfigResult" } },
+      { source: { caseStepId: "Action-1", method: "api" }, id: "personal_background_config.submit", title: "未登录用户直接提交个人 侧边栏皮肤偏好", object: "api.personal_background_config", operator: "submit", params: { configFrom: "runtime.backgroundSnapshot.sidebar_background.config", saveAs: "personalBackgroundConfigResult" } },
     ],
   },
 
   S1: {
     description: "个人背景偏好写入被拒绝，系统背景配置保持不变",
     assertions: [
-      { source: { caseStepId: "S1-1", method: "api" }, id: "personal_background_config.unauthenticated", title: "保存个人 AppShell 皮肤偏好结果状态码 应为 401 或等价未认证错误", object: "api.personal_background_config", operator: "unauthenticated", params: { resultFrom: "runtime.personalBackgroundConfigResult" } },
+      { source: { caseStepId: "S1-1", method: "api" }, id: "personal_background_config.unauthenticated", title: "保存个人 侧边栏皮肤偏好结果状态码 应为 401 或等价未认证错误", object: "api.personal_background_config", operator: "unauthenticated", params: { resultFrom: "runtime.personalBackgroundConfigResult" } },
       { source: { caseStepId: "S1-2", method: "api" }, id: "session.unauthenticated", title: "当前会话 应为 未登录", object: "auth.session", operator: "unauthenticated" },
-      { source: { caseStepId: "S1-3", method: "api" }, id: "system_backgrounds.unchanged", title: "当前系统 `login_background` 和 `app_background` 背景列表与配置 应等于 系统背景配置快照", object: "api.visual_backgrounds", operator: "unchanged", params: { snapshotFrom: "runtime.backgroundSnapshot" } },
+      { source: { caseStepId: "S1-3", method: "api" }, id: "system_backgrounds.unchanged", title: "当前系统 `login_background` 和 `topbar_background` 背景列表与配置 应等于 系统背景配置快照", object: "api.visual_backgrounds", operator: "unchanged", params: { snapshotFrom: "runtime.backgroundSnapshot" } },
     ],
   },
 
   Clean: {
     description: "恢复系统背景，清空页面会话状态",
     steps: [
-      { source: { caseStepId: "Clean-1", method: "api" }, id: "system_backgrounds.restore_snapshot", title: "若已记录系统背景配置快照，恢复系统 `login_background` 和 `app_background` 背景列表与配置", object: "api.visual_backgrounds", operator: "restore_snapshot", params: { snapshotFrom: "runtime.backgroundSnapshot", optional: true } },
+      { source: { caseStepId: "Clean-1", method: "api" }, id: "system_backgrounds.restore_snapshot", title: "若已记录系统背景配置快照，恢复系统 `login_background` 和 `topbar_background` 背景列表与配置", object: "api.visual_backgrounds", operator: "restore_snapshot", params: { snapshotFrom: "runtime.backgroundSnapshot", optional: true } },
       { source: { caseStepId: "Clean-2", method: "api" }, id: "auth.logout", title: "注销当前登录会话", object: "auth", operator: "logout" },
       { source: { caseStepId: "Clean-3", method: "playwright" }, id: "page.runtime.stop", title: "离开当前 ORF 前端页面", object: "page.runtime", operator: "stop" },
       { source: { caseStepId: "Clean-4", method: "playwright" }, id: "browser.clear", title: "移除当前浏览器中的残留登录态", object: "browser", operator: "clear_state" },
-      { source: { caseStepId: "Clean-5", method: "api" }, id: "system_backgrounds.unchanged", title: "系统 `login_background` 和 `app_background` 背景列表与配置 应等于 系统背景配置快照", object: "api.visual_backgrounds", operator: "unchanged", params: { snapshotFrom: "runtime.backgroundSnapshot", optional: true, releaseLock: true } },
+      { source: { caseStepId: "Clean-5", method: "api" }, id: "system_backgrounds.unchanged", title: "系统 `login_background` 和 `topbar_background` 背景列表与配置 应等于 系统背景配置快照", object: "api.visual_backgrounds", operator: "unchanged", params: { snapshotFrom: "runtime.backgroundSnapshot", optional: true, releaseLock: true } },
     ],
   },
 } satisfies StateCaseSpec<BackgroundPersonalUnauthenticatedCaseData>;

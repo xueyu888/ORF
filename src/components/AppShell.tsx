@@ -24,8 +24,8 @@ import { applyDisplayPreferencesToDocument, nextWorkbenchZoomLevel } from "../fe
 import { useVisualBackground } from "../hooks/useVisualBackground";
 import { defaultChatTheme, defaultUserDisplayPreferences, type ChatTheme, type UserDisplayPreferences } from "../domain/settings/personalPreferences";
 import {
+  defaultVisualBackgroundCrop,
   defaultVisualBackgroundOverlayOpacity,
-  defaultVisualBackgroundPlacement,
 } from "../domain/settings/visualBackgrounds";
 import { getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
@@ -147,9 +147,9 @@ export function AppShell() {
   }, []);
 
   const sidebarBackgroundUrl = sidebarBackground.status === "ready" ? sidebarBackground.url : orfAssetLibrary.sidebar.characterGuideBackground.src;
-  const sidebarBackgroundPlacement = sidebarBackground.status === "ready"
-    ? sidebarBackground.selection.placement
-    : { ...defaultVisualBackgroundPlacement, scale: 1.03 };
+  const sidebarBackgroundCrop = sidebarBackground.status === "ready"
+    ? sidebarBackground.selection.crop
+    : { ...defaultVisualBackgroundCrop, zoom: 1.03 };
   const sidebarBackgroundOverlayOpacity = sidebarBackground.status === "ready"
     ? sidebarBackground.selection.overlayOpacity
     : defaultVisualBackgroundOverlayOpacity;
@@ -173,7 +173,7 @@ export function AppShell() {
     >
       <Sidebar
         backgroundUrl={sidebarBackgroundUrl}
-        backgroundPlacement={sidebarBackgroundPlacement}
+        backgroundCrop={sidebarBackgroundCrop}
         backgroundOverlayOpacity={sidebarBackgroundOverlayOpacity}
         collapsed={sidebarCollapsed}
         onCollapsedChange={handleSidebarCollapsedChange}
@@ -189,7 +189,7 @@ export function AppShell() {
             frameClassName="orf-topbar-skin-frame"
             imageClassName="orf-topbar-skin-layer"
             imageUrl={topbarSelection?.url ?? null}
-            placement={topbarSelection?.placement ?? defaultVisualBackgroundPlacement}
+            crop={topbarSelection?.crop ?? defaultVisualBackgroundCrop}
           />
           <div className="orf-topbar-title orf-text-primary min-w-[160px] font-semibold tracking-tight" role="heading" aria-level={1}>
             {isBountyHall && (
@@ -237,7 +237,7 @@ export function AppShell() {
             frameClassName="orf-main-content-skin-frame"
             imageClassName="orf-main-content-skin-layer"
             imageUrl={pageSelection?.url ?? null}
-            placement={pageSelection?.placement ?? defaultVisualBackgroundPlacement}
+            crop={pageSelection?.crop ?? defaultVisualBackgroundCrop}
           />
           <Outlet />
         </main>

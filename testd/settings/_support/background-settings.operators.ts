@@ -25,6 +25,7 @@ import {
   sameVisualBackgroundConfig,
   saveVisualBackgroundConfigAsCurrentUser,
   savePersonalBackgroundConfigAsCurrentUser,
+  selectSkinWorkbenchSlot,
   selectPersonalBackgroundFromSettingsPage,
   selectSystemBackgroundFromSettingsPage,
   setSelectedSystemBackgroundAsDefaultFromSettingsPage,
@@ -104,7 +105,7 @@ export function createBackgroundSettingsOperators<
         await expect.poll(async () => {
           const result = await readPersonalBackgroundsAsCurrentUser(ctx.page);
           const data = readPersonalOrSystemBackgroundData(result);
-          return "preferences" in (data ?? {}) ? data.preferences.appBackground?.fixedBackgroundId ?? null : null;
+          return "preferences" in (data ?? {}) ? data.preferences.backgrounds.sidebar_background?.fixedBackgroundId ?? null : null;
         }).toBe(background.id);
       },
     },
@@ -183,7 +184,7 @@ export function createBackgroundSettingsOperators<
 
     "api.personal_background_config": {
       generate_new: async ({ params }) =>
-        generateDifferentBackgroundConfig(requiredBackgroundSnapshots(params, "snapshot"), "app_background"),
+        generateDifferentBackgroundConfig(requiredBackgroundSnapshots(params, "snapshot"), "sidebar_background"),
 
       submit: async ({ ctx, params }) =>
         savePersonalBackgroundConfigAsCurrentUser(
@@ -233,7 +234,6 @@ export function createBackgroundSettingsOperators<
     "page.personal_background": {
       current_visible: async ({ ctx, params }) => {
         const background = requiredVisualBackgroundImage(params, "background");
-        await expect(ctx.page.getByText(`个人上传：${background.fileName}`)).toBeVisible();
         await expect(backgroundCard(ctx.page, background).getByText("当前", { exact: true })).toBeVisible();
       },
     },
@@ -256,8 +256,9 @@ export function createBackgroundSettingsOperators<
       default_visible: async ({ ctx, params }) => {
         const scene = requiredScene(params, "scene");
         const background = requiredVisualBackgroundImage(params, "background");
+        await selectSkinWorkbenchSlot(ctx.page, "system", scene);
         await expect(systemBackgroundSection(ctx.page, scene)).toBeVisible();
-        await expect(systemBackgroundCard(ctx.page, scene, background).getByText("默认", { exact: true })).toBeVisible();
+        await expect(systemBackgroundCard(ctx.page, scene, background).getByText("当前", { exact: true })).toBeVisible();
       },
     },
 
@@ -281,7 +282,7 @@ function currentUserSettingsIcon(ctx: BackgroundSettingsTestContext) {
 }
 
 function backgroundCard(page: BackgroundSettingsTestContext["page"], background: VisualBackgroundImage) {
-  return page.locator(".orf-settings-background-card", {
+  return page.locator(".orf-skin-gallery-card", {
     has: page.getByRole("img", { name: background.fileName, exact: true }),
   });
 }
@@ -291,19 +292,22 @@ function systemBackgroundCard(
   scene: VisualBackgroundScene,
   background: VisualBackgroundImage,
 ) {
-  return systemBackgroundSection(page, scene).locator(".orf-settings-background-card", {
+  return systemBackgroundSection(page, scene).locator(".orf-skin-gallery-card", {
     has: page.getByRole("img", { name: background.fileName, exact: true }),
   });
 }
 
 function systemBackgroundSection(page: BackgroundSettingsTestContext["page"], scene: VisualBackgroundScene) {
-  return page.locator(".orf-settings-background-section", {
+  return page.locator('.orf-skin-workbench[data-scope="system"]', {
     has: page.getByRole("heading", { name: sceneTitle(scene), exact: true }),
   });
 }
 
 function sceneTitle(scene: VisualBackgroundScene) {
-  return scene === "login_background" ? "登录页面背景设置" : "AppShell 皮肤设置";
+  if (scene === "login_background") return "登录页";
+  if (scene === "topbar_background") return "顶部栏";
+  if (scene === "sidebar_background") return "侧边栏";
+  return scene;
 }
 
 function requiredBackgroundSnapshots(params: StepParams, key: string): BackgroundSnapshots {
@@ -320,11 +324,13 @@ function maybeBackgroundSnapshots(params: StepParams, key: string): BackgroundSn
     typeof value !== "object" ||
     value === null ||
     typeof (value as BackgroundSnapshots).login_background !== "object" ||
-    typeof (value as BackgroundSnapshots).app_background !== "object" ||
+    typeof (value as BackgroundSnapshots).sidebar_background !== "object" ||
+    typeof (value as BackgroundSnapshots).topbar_background !== "object" ||
     typeof (value as BackgroundSnapshots).systemSettingsFile !== "object" ||
     typeof (value as BackgroundSnapshots).legacySystemSettingsFile !== "object" ||
     typeof (value as BackgroundSnapshots).loginBackgroundSystemDirectory !== "object" ||
-    typeof (value as BackgroundSnapshots).appBackgroundSystemDirectory !== "object" ||
+    typeof (value as BackgroundSnapshots).sidebarBackgroundSystemDirectory !== "object" ||
+    typeof (value as BackgroundSnapshots).topbarBackgroundSystemDirectory !== "object" ||
     typeof (value as BackgroundSnapshots).lockOwner !== "string"
   ) {
     return null;
@@ -384,8 +390,8 @@ function requiredVisualBackgroundImage(params: StepParams, key: string): VisualB
 
 function requiredScene(params: StepParams, key: string): VisualBackgroundScene {
   const value = requiredString(params, key);
-  if (value === "login_background" || value === "app_background") {
+  if (value === "login_background" || value === "topbar_background" || value === "sidebar_background") {
     return value;
   }
-  throw new Error(`参数 ${key} 必须是 login_background 或 app_background`);
+  throw new Error(`参数 ${key} 必须是 login_background、topbar_background 或 sidebar_background`);
 }

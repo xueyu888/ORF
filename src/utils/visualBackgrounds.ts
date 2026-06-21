@@ -1,7 +1,7 @@
 import {
-  defaultVisualBackgroundPlacement,
-  normalizeVisualBackgroundPlacement,
-  type VisualBackgroundPlacement,
+  defaultVisualBackgroundCrop,
+  normalizeVisualBackgroundCrop,
+  type VisualBackgroundCrop,
 } from "../domain/settings/visualBackgrounds";
 import type { VisualBackgroundImage, VisualBackgroundScene, VisualBackgroundsData } from "../state/apiClient";
 
@@ -9,9 +9,9 @@ const rotationStoragePrefix = "orf.visualBackgroundRotation";
 const visualBackgroundChangedEvent = "orf:visual-background-changed";
 
 export type VisualBackgroundSelection = {
+  crop: VisualBackgroundCrop;
   image: VisualBackgroundImage;
   overlayOpacity: number;
-  placement: VisualBackgroundPlacement;
   url: string;
 };
 
@@ -45,8 +45,8 @@ function nextSwitchableIndex(data: VisualBackgroundsData) {
   return (readStoredIndex(data.scene) + 1) % data.list.length;
 }
 
-export function placementForVisualBackground(data: VisualBackgroundsData, imageId: string | null | undefined) {
-  return imageId ? normalizeVisualBackgroundPlacement(data.config.placements[imageId]) : defaultVisualBackgroundPlacement;
+export function cropForVisualBackground(data: VisualBackgroundsData, imageId: string | null | undefined) {
+  return imageId ? normalizeVisualBackgroundCrop(data.config.crops[imageId]) : defaultVisualBackgroundCrop;
 }
 
 export function pickVisualBackground(data: VisualBackgroundsData): VisualBackgroundSelection | null {
@@ -69,9 +69,9 @@ export function pickVisualBackground(data: VisualBackgroundsData): VisualBackgro
   }
 
   return {
+    crop: cropForVisualBackground(data, image.id),
     image,
     overlayOpacity: data.config.overlayOpacity,
-    placement: placementForVisualBackground(data, image.id),
     url: image.url,
   };
 }

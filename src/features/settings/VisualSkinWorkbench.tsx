@@ -18,13 +18,13 @@ import { VisualBackgroundSlot } from "../../components/VisualBackgroundSlot";
 import { visualSkinPageSlots, visualSkinSlotByScene, visualSkinSlots, type VisualSkinPreviewShape } from "../../config/visualSkinSlots";
 import {
   defaultVisualBackgroundConfig,
-  defaultVisualBackgroundPlacement,
-  normalizeVisualBackgroundPlacement,
+  defaultVisualBackgroundCrop,
+  normalizeVisualBackgroundCrop,
   normalizeVisualBackgroundOverlayOpacity,
+  visualBackgroundCropLimits,
   visualBackgroundOverlayLimits,
-  visualBackgroundPlacementLimits,
   type VisualBackgroundConfig,
-  type VisualBackgroundPlacement,
+  type VisualBackgroundCrop,
   type PageVisualBackgroundScene,
   type VisualBackgroundScene,
 } from "../../domain/settings/visualBackgrounds";
@@ -43,7 +43,7 @@ import {
 } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
 import { cacheLoginBackgroundPreview, clearCachedLoginBackgroundPreview } from "../../utils/loginBackgroundCache";
-import { dispatchVisualBackgroundChanged, placementForVisualBackground } from "../../utils/visualBackgrounds";
+import { cropForVisualBackground, dispatchVisualBackgroundChanged } from "../../utils/visualBackgrounds";
 
 type RequestStatus = "idle" | "loading" | "success" | "error";
 type SkinScope = "personal" | "system";
@@ -55,8 +55,8 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function placementEquals(first: VisualBackgroundPlacement, second: VisualBackgroundPlacement) {
-  return first.offsetX === second.offsetX && first.offsetY === second.offsetY && first.scale === second.scale;
+function cropEquals(first: VisualBackgroundCrop, second: VisualBackgroundCrop) {
+  return first.centerX === second.centerX && first.centerY === second.centerY && first.zoom === second.zoom;
 }
 
 function isPersonalBackground(id: string | null | undefined) {
@@ -95,17 +95,19 @@ function backgroundSourceInfo(id: string) {
   };
 }
 
-function placementFromConfig(config: VisualBackgroundConfig, imageId: string | null | undefined) {
-  return imageId ? normalizeVisualBackgroundPlacement(config.placements[imageId]) : defaultVisualBackgroundPlacement;
+function cropFromConfig(config: VisualBackgroundConfig, imageId: string | null | undefined) {
+  return imageId ? normalizeVisualBackgroundCrop(config.crops[imageId]) : defaultVisualBackgroundCrop;
 }
 
-function configWithPlacement(config: VisualBackgroundConfig, imageId: string, placement: VisualBackgroundPlacement): VisualBackgroundConfig {
+function configWithCrop(config: VisualBackgroundConfig, imageId: string, crop: VisualBackgroundCrop): VisualBackgroundConfig {
   return {
     ...config,
+    version: 2,
+    fitMode: "cover-crop",
     fixedBackgroundId: imageId,
-    placements: {
-      ...config.placements,
-      [imageId]: normalizeVisualBackgroundPlacement(placement),
+    crops: {
+      ...config.crops,
+      [imageId]: normalizeVisualBackgroundCrop(crop),
     },
   };
 }
@@ -143,7 +145,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
   const [backgroundList, setBackgroundList] = useState<VisualBackgroundImage[]>([]);
   const [draftConfig, setDraftConfig] = useState<VisualBackgroundConfig>(() => defaultVisualBackgroundConfig());
   const [selectedBackgroundId, setSelectedBackgroundId] = useState<string | null>(null);
-  const [draftPlacement, setDraftPlacement] = useState<VisualBackgroundPlacement>(defaultVisualBackgroundPlacement);
+  const [draftCrop, setDraftCrop] = useState<VisualBackgroundCrop>(defaultVisualBackgroundCrop);
   const [loadStatus, setLoadStatus] = useState<RequestStatus>("idle");
   const [saveStatus, setSaveStatus] = useState<RequestStatus>("idle");
   const [uploadStatus, setUploadStatus] = useState<RequestStatus>("idle");
@@ -154,7 +156,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
   const slot = visualSkinSlotByScene(scene);
   const selectedBackground = backgroundList.find((background) => background.id === selectedBackgroundId) ?? null;
   const selectedBackgroundSource = selectedBackground ? backgroundSourceInfo(selectedBackground.id) : null;
-  const persistedPlacement = data ? placementForVisualBackground(data, selectedBackgroundId) : defaultVisualBackgroundPlacement;
+  const persistedCrop = data ? cropForVisualBackground(data, selectedBackgroundId) : defaultVisualBackgroundCrop;
   const isPageSlot = slot.kind === "page";
   const effectivePageTargetScenes = isPageSlot ? pageApplyTargets(scene, pageTargetScenes) : [];
   const pageTargetsDirty = isPageSlot && !sameSceneSet(effectivePageTargetScenes, [scene]);
@@ -167,7 +169,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
         draftConfig.switchOrder !== data.config.switchOrder ||
         draftConfig.switchIntervalMinutes !== data.config.switchIntervalMinutes ||
         draftConfig.overlayOpacity !== data.config.overlayOpacity ||
-        !placementEquals(draftPlacement, persistedPlacement)),
+        !cropEquals(draftCrop, persistedCrop)),
   );
   const busy = loadStatus === "loading" || saveStatus === "loading" || uploadStatus === "loading" || deleteStatus === "loading";
   const canSave = Boolean(selectedBackgroundId && (dirty || pageTargetsDirty) && !busy);
@@ -187,7 +189,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
     setBackgroundList(nextData.list);
     setDraftConfig(nextData.config);
     setSelectedBackgroundId(nextSelectedId);
-    setDraftPlacement(placementFromConfig(nextData.config, nextSelectedId));
+    setDraftCrop(cropFromConfig(nextData.config, nextSelectedId));
   }, []);
 
   const loadScene = useCallback(async () => {
@@ -197,7 +199,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
     setBackgroundList([]);
     setSelectedBackgroundId(null);
     setDraftConfig(defaultVisualBackgroundConfig());
-    setDraftPlacement(defaultVisualBackgroundPlacement);
+    setDraftCrop(defaultVisualBackgroundCrop);
     try {
       const nextData = scope === "system" ? await getVisualBackgrounds(scene) : await getPersonalBackgrounds(scene);
       applyLoadedData(nextData);
@@ -219,13 +221,13 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
 
   const selectBackground = (id: string) => {
     setSelectedBackgroundId(id);
-    setDraftPlacement(placementFromConfig(draftConfig, id));
+    setDraftCrop(cropFromConfig(draftConfig, id));
   };
 
-  const updatePlacement = (nextPlacement: VisualBackgroundPlacement) => {
-    const normalized = normalizeVisualBackgroundPlacement(nextPlacement);
-    setDraftPlacement(normalized);
-    setDraftConfig((current) => selectedBackgroundId ? configWithPlacement(current, selectedBackgroundId, normalized) : current);
+  const updateCrop = (nextCrop: VisualBackgroundCrop) => {
+    const normalized = normalizeVisualBackgroundCrop(nextCrop);
+    setDraftCrop(normalized);
+    setDraftConfig((current) => selectedBackgroundId ? configWithCrop(current, selectedBackgroundId, normalized) : current);
   };
 
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -245,8 +247,8 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
       const uploaded = scope === "system" ? await uploadVisualBackground(scene, file) : await uploadPersonalBackground(scene, file);
       setBackgroundList((current) => [...current, uploaded]);
       setSelectedBackgroundId(uploaded.id);
-      setDraftPlacement(defaultVisualBackgroundPlacement);
-      setDraftConfig((current) => configWithPlacement(current, uploaded.id, defaultVisualBackgroundPlacement));
+      setDraftCrop(defaultVisualBackgroundCrop);
+      setDraftConfig((current) => configWithCrop(current, uploaded.id, defaultVisualBackgroundCrop));
       setUploadStatus("success");
       notify("图片已上传");
     } catch (error) {
@@ -259,13 +261,15 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
 
   const handleSave = async () => {
     if (!selectedBackgroundId || !selectedBackground || !canSave) return;
-    const nextConfig = configWithPlacement(
+    const nextConfig = configWithCrop(
       {
         ...draftConfig,
+        version: 2,
+        fitMode: "cover-crop",
         switchIntervalMinutes: clamp(draftConfig.switchIntervalMinutes, 1, 1440),
       },
       selectedBackgroundId,
-      draftPlacement,
+      draftCrop,
     );
 
     setSaveStatus("loading");
@@ -291,7 +295,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
           await cacheLoginBackgroundPreview({
             userId: currentUser.id,
             imageUrl: selectedBackground.url,
-            placement: draftPlacement,
+            crop: draftCrop,
           }).catch(() => undefined);
         }
       }
@@ -430,11 +434,11 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
 
         <div className="orf-skin-stage-row">
           <VisualSkinPreview
+            crop={draftCrop}
             image={selectedBackground}
             overlayOpacity={draftConfig.overlayOpacity}
-            placement={draftPlacement}
             previewShape={slot.previewShape}
-            onPlacementChange={updatePlacement}
+            onCropChange={updateCrop}
           />
 
           <div className="orf-skin-inspector">
@@ -501,29 +505,34 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
                 <span>位置</span>
               </div>
               <SkinSlider
-                label="横向"
-                max={visualBackgroundPlacementLimits.offsetMax}
-                min={visualBackgroundPlacementLimits.offsetMin}
-                value={draftPlacement.offsetX}
-                onChange={(value) => updatePlacement({ ...draftPlacement, offsetX: value })}
-              />
-              <SkinSlider
-                label="纵向"
-                max={visualBackgroundPlacementLimits.offsetMax}
-                min={visualBackgroundPlacementLimits.offsetMin}
-                value={draftPlacement.offsetY}
-                onChange={(value) => updatePlacement({ ...draftPlacement, offsetY: value })}
-              />
-              <SkinSlider
-                label="缩放"
-                max={visualBackgroundPlacementLimits.scaleMax}
-                min={visualBackgroundPlacementLimits.scaleMin}
+                label="横向焦点"
+                max={visualBackgroundCropLimits.centerMax}
+                min={visualBackgroundCropLimits.centerMin}
                 step={0.01}
-                value={draftPlacement.scale}
-                onChange={(value) => updatePlacement({ ...draftPlacement, scale: value })}
+                value={draftCrop.centerX}
+                format={(value) => `${Math.round(value * 100)}%`}
+                onChange={(value) => updateCrop({ ...draftCrop, centerX: value })}
+              />
+              <SkinSlider
+                label="纵向焦点"
+                max={visualBackgroundCropLimits.centerMax}
+                min={visualBackgroundCropLimits.centerMin}
+                step={0.01}
+                value={draftCrop.centerY}
+                format={(value) => `${Math.round(value * 100)}%`}
+                onChange={(value) => updateCrop({ ...draftCrop, centerY: value })}
+              />
+              <SkinSlider
+                label="放大"
+                max={visualBackgroundCropLimits.zoomMax}
+                min={visualBackgroundCropLimits.zoomMin}
+                step={0.01}
+                value={draftCrop.zoom}
+                format={(value) => `${Math.round(value * 100)}%`}
+                onChange={(value) => updateCrop({ ...draftCrop, zoom: value })}
               />
               <div className="orf-skin-mini-actions">
-                <Button type="button" variant="ghost" size="sm" disabled={busy || !selectedBackgroundId} onClick={() => updatePlacement(defaultVisualBackgroundPlacement)}>
+                <Button type="button" variant="ghost" size="sm" disabled={busy || !selectedBackgroundId} onClick={() => updateCrop(defaultVisualBackgroundCrop)}>
                   <RotateCcw className="h-4 w-4" />
                   重置
                 </Button>
@@ -657,16 +666,16 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
 }
 
 function VisualSkinPreview({
+  crop,
   image,
-  onPlacementChange,
+  onCropChange,
   overlayOpacity,
-  placement,
   previewShape,
 }: {
+  crop: VisualBackgroundCrop;
   image: VisualBackgroundImage | null;
-  onPlacementChange: (placement: VisualBackgroundPlacement) => void;
+  onCropChange: (crop: VisualBackgroundCrop) => void;
   overlayOpacity: number;
-  placement: VisualBackgroundPlacement;
   previewShape: VisualSkinPreviewShape;
 }) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
@@ -685,13 +694,13 @@ function VisualSkinPreview({
     const frame = frameRef.current;
     if (!drag || !frame || drag.pointerId !== event.pointerId) return;
     const rect = frame.getBoundingClientRect();
-    const deltaX = ((event.clientX - drag.x) / Math.max(1, rect.width)) * 100;
-    const deltaY = ((event.clientY - drag.y) / Math.max(1, rect.height)) * 100;
+    const deltaX = (event.clientX - drag.x) / Math.max(1, rect.width);
+    const deltaY = (event.clientY - drag.y) / Math.max(1, rect.height);
     dragRef.current = { ...drag, x: event.clientX, y: event.clientY };
-    onPlacementChange({
-      ...placement,
-      offsetX: clamp(placement.offsetX + deltaX, visualBackgroundPlacementLimits.offsetMin, visualBackgroundPlacementLimits.offsetMax),
-      offsetY: clamp(placement.offsetY + deltaY, visualBackgroundPlacementLimits.offsetMin, visualBackgroundPlacementLimits.offsetMax),
+    onCropChange({
+      ...crop,
+      centerX: clamp(crop.centerX - deltaX / Math.max(1, crop.zoom), visualBackgroundCropLimits.centerMin, visualBackgroundCropLimits.centerMax),
+      centerY: clamp(crop.centerY - deltaY / Math.max(1, crop.zoom), visualBackgroundCropLimits.centerMin, visualBackgroundCropLimits.centerMax),
     });
   };
 
@@ -719,12 +728,22 @@ function VisualSkinPreview({
         onPointerUp={stopDrag}
         onPointerCancel={stopDrag}
       >
+        {image && (
+          <img
+            className="orf-skin-preview-canvas-image"
+            src={image.url}
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            style={visualSkinPreviewCanvasImageStyle(crop)}
+          />
+        )}
         {image ? (
           <VisualBackgroundSlot
             frameClassName={clsx("orf-skin-preview-image-frame", `orf-skin-preview-image-frame-${previewShape}`)}
             imageClassName="orf-skin-preview-image"
             imageUrl={image.url}
-            placement={placement}
+            crop={crop}
           />
         ) : (
           <div className="orf-skin-preview-empty">暂无图片</div>
@@ -741,6 +760,14 @@ function VisualSkinPreview({
       </div>
     </div>
   );
+}
+
+function visualSkinPreviewCanvasImageStyle(crop: VisualBackgroundCrop) {
+  return {
+    "--orf-skin-preview-canvas-shift-x": `${(0.5 - crop.centerX) * 100}%`,
+    "--orf-skin-preview-canvas-shift-y": `${(0.5 - crop.centerY) * 100}%`,
+    "--orf-skin-preview-canvas-zoom": crop.zoom,
+  } as CSSProperties;
 }
 
 const fallbackPreviewFrameRatios: Record<VisualSkinPreviewShape, number> = {

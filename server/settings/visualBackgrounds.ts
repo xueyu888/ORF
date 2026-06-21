@@ -8,10 +8,10 @@ import {
   canonicalVisualBackgroundScene,
   canonicalVisualBackgroundScope,
   defaultVisualBackgroundConfig,
+  normalizeVisualBackgroundCrop,
   normalizeVisualBackgroundOverlayOpacity,
-  normalizeVisualBackgroundPlacement,
+  visualBackgroundCropLimits,
   visualBackgroundOverlayLimits,
-  visualBackgroundPlacementLimits,
   legacyVisualBackgroundScenes,
   legacyVisualBackgroundScopes,
   visualBackgroundScenes,
@@ -37,27 +37,42 @@ export const backgroundScopePathSchema = z.enum(anyBackgroundScopes);
 export const backgroundModeSchema = z.enum(["fixed", "switchable"]);
 export const backgroundSwitchTriggerSchema = z.enum(["on_open", "interval"]);
 export const backgroundSwitchOrderSchema = z.enum(["sequential", "random"]);
-export const backgroundPlacementSchema = z.object({
-  offsetX: z.coerce.number().min(visualBackgroundPlacementLimits.offsetMin).max(visualBackgroundPlacementLimits.offsetMax),
-  offsetY: z.coerce.number().min(visualBackgroundPlacementLimits.offsetMin).max(visualBackgroundPlacementLimits.offsetMax),
-  scale: z.coerce.number().min(visualBackgroundPlacementLimits.scaleMin).max(visualBackgroundPlacementLimits.scaleMax),
-});
+export const backgroundFitModeSchema = z.enum(["cover-crop"]);
+export const backgroundCropSchema = z
+  .object({
+    centerX: z.coerce.number().min(visualBackgroundCropLimits.centerMin).max(visualBackgroundCropLimits.centerMax).optional(),
+    centerY: z.coerce.number().min(visualBackgroundCropLimits.centerMin).max(visualBackgroundCropLimits.centerMax).optional(),
+    zoom: z.coerce.number().min(visualBackgroundCropLimits.zoomMin).max(visualBackgroundCropLimits.zoomMax).optional(),
+    offsetX: z.coerce.number().min(-100).max(100).optional(),
+    offsetY: z.coerce.number().min(-100).max(100).optional(),
+    scale: z.coerce.number().min(0.5).max(visualBackgroundCropLimits.zoomMax).optional(),
+  })
+  .transform((crop) => normalizeVisualBackgroundCrop(crop));
 const backgroundOverlayOpacitySchema = z.coerce.number().min(visualBackgroundOverlayLimits.opacityMin).max(visualBackgroundOverlayLimits.opacityMax);
 export const backgroundSceneConfigSchema = z
   .object({
+    version: z.literal(2).optional(),
+    fitMode: backgroundFitModeSchema.optional(),
     mode: backgroundModeSchema,
     fixedBackgroundId: z.string().nullable(),
     overlayOpacity: backgroundOverlayOpacitySchema.optional(),
     switchTrigger: backgroundSwitchTriggerSchema,
     switchOrder: backgroundSwitchOrderSchema,
     switchIntervalMinutes: z.coerce.number().int().min(1).max(1440),
-    placements: z.record(z.string(), backgroundPlacementSchema).optional().default({}),
+    crops: z.record(z.string(), backgroundCropSchema).optional(),
+    placements: z.record(z.string(), backgroundCropSchema).optional(),
   })
   .transform((config) => ({
-    ...config,
+    version: 2 as const,
+    fitMode: "cover-crop" as const,
+    mode: config.mode,
+    fixedBackgroundId: config.fixedBackgroundId,
     overlayOpacity: normalizeVisualBackgroundOverlayOpacity(config.overlayOpacity),
-    placements: Object.fromEntries(
-      Object.entries(config.placements).map(([backgroundId, placement]) => [backgroundId, normalizeVisualBackgroundPlacement(placement)]),
+    switchTrigger: config.switchTrigger,
+    switchOrder: config.switchOrder,
+    switchIntervalMinutes: config.switchIntervalMinutes,
+    crops: Object.fromEntries(
+      Object.entries(config.crops ?? config.placements ?? {}).map(([backgroundId, crop]) => [backgroundId, normalizeVisualBackgroundCrop(crop)]),
     ),
   }));
 export type BackgroundScene = z.infer<typeof backgroundSceneSchema>;
@@ -84,6 +99,7 @@ type VisualSettings = {
 
 type LegacyBackgroundConfig = Partial<BackgroundSceneConfig> & {
   defaultBackgroundId?: unknown;
+  placements?: unknown;
 };
 
 type ParsedBackgroundId = {
@@ -252,7 +268,7 @@ function normalizeBackgroundConfig(input: LegacyBackgroundConfig | null | undefi
     switchTrigger: input?.switchTrigger ?? fallback.switchTrigger,
     switchOrder: input?.switchOrder ?? fallback.switchOrder,
     switchIntervalMinutes: input?.switchIntervalMinutes ?? fallback.switchIntervalMinutes,
-    placements: input?.placements ?? fallback.placements,
+    crops: input?.crops ?? input?.placements ?? fallback.crops,
   });
 }
 

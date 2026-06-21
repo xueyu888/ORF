@@ -1,7 +1,7 @@
 import {
-  defaultVisualBackgroundPlacement,
-  normalizeVisualBackgroundPlacement,
-  type VisualBackgroundPlacement,
+  defaultVisualBackgroundCrop,
+  normalizeVisualBackgroundCrop,
+  type VisualBackgroundCrop,
 } from "../domain/settings/visualBackgrounds";
 
 const storageKey = "orf.loginBackgroundPreview.v1";
@@ -9,10 +9,14 @@ const previewMaxWidth = 1800;
 const previewMaxHeight = 1200;
 
 export type CachedLoginBackgroundPreview = {
+  crop: VisualBackgroundCrop;
   dataUrl: string;
-  placement: VisualBackgroundPlacement;
   updatedAt: string;
   userId: string;
+};
+
+type LegacyCachedLoginBackgroundPreview = Partial<CachedLoginBackgroundPreview> & {
+  placement?: unknown;
 };
 
 function canUseStorage() {
@@ -44,13 +48,13 @@ export function readCachedLoginBackgroundPreview(): CachedLoginBackgroundPreview
   try {
     const raw = window.localStorage.getItem(storageKey);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<CachedLoginBackgroundPreview>;
+    const parsed = JSON.parse(raw) as LegacyCachedLoginBackgroundPreview;
     if (!parsed.userId || !parsed.dataUrl || !parsed.updatedAt) return null;
     return {
       userId: parsed.userId,
       dataUrl: parsed.dataUrl,
       updatedAt: parsed.updatedAt,
-      placement: normalizeVisualBackgroundPlacement(parsed.placement ?? defaultVisualBackgroundPlacement),
+      crop: normalizeVisualBackgroundCrop(parsed.crop ?? parsed.placement ?? defaultVisualBackgroundCrop),
     };
   } catch {
     return null;
@@ -58,8 +62,8 @@ export function readCachedLoginBackgroundPreview(): CachedLoginBackgroundPreview
 }
 
 export async function cacheLoginBackgroundPreview(input: {
+  crop: VisualBackgroundCrop;
   imageUrl: string;
-  placement: VisualBackgroundPlacement;
   userId: string;
 }) {
   if (!canUseStorage()) return;
@@ -75,7 +79,7 @@ export async function cacheLoginBackgroundPreview(input: {
     userId: input.userId,
     dataUrl: canvas.toDataURL("image/jpeg", 0.86),
     updatedAt: new Date().toISOString(),
-    placement: normalizeVisualBackgroundPlacement(input.placement),
+    crop: normalizeVisualBackgroundCrop(input.crop),
   };
   window.localStorage.setItem(storageKey, JSON.stringify(preview));
 }

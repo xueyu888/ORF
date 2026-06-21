@@ -4,7 +4,7 @@ import type { BackgroundPersonalCaseData } from "./_support/background-permissio
 function createBackgroundPersonalCase(data: BackgroundPersonalCaseData) {
   return {
     id: `settings.background-personal.${data.role}`,
-    title: `设置页面修改背景-${data.role === "admin" ? "管理员" : "普通成员"}可以切换个人 AppShell 皮肤`,
+    title: `设置页面修改背景-${data.role === "admin" ? "管理员" : "普通成员"}可以切换个人 侧边栏皮肤`,
     model: STATE_CASE_MODEL,
     tags: ["settings", "visual-background", "personal", data.role],
 
@@ -29,7 +29,7 @@ function createBackgroundPersonalCase(data: BackgroundPersonalCaseData) {
     Setup: {
       description: "准备当前角色账号，记录系统和个人背景原状态，登录后进入悬赏大厅",
       steps: [
-        { source: { caseStepId: "Setup-1", method: "api" }, id: "system_backgrounds.snapshot", title: "记录当前系统 `login_background` 和 `app_background` 背景列表与配置快照", object: "api.visual_backgrounds", operator: "snapshot", params: { saveAs: "backgroundSnapshot" } },
+        { source: { caseStepId: "Setup-1", method: "api" }, id: "system_backgrounds.snapshot", title: "记录当前系统 `login_background` 和 `topbar_background` 背景列表与配置快照", object: "api.visual_backgrounds", operator: "snapshot", params: { saveAs: "backgroundSnapshot" } },
         { source: { caseStepId: "Setup-2", method: "api" }, id: "ory.identity.upsert", title: "准备当前角色对应邮箱、使用固定测试密码的登录身份", object: "ory.identity", operator: "upsert_password", params: { emailFrom: "data.email", nameFrom: "data.name", passwordFrom: "data.password", saveAs: "identity" } },
         { source: { caseStepId: "Setup-3", method: "prisma" }, id: "db.user_record.upsert", title: "准备当前角色对应邮箱、状态为 `active` 的用户记录", object: "db.user_record", operator: "upsert", params: { emailFrom: "data.email", nameFrom: "data.name", status: "active", identityIdFrom: "runtime.identity.id", saveAs: "userRecord" } },
         { source: { caseStepId: "Setup-4", method: "prisma" }, id: "db.membership.upsert", title: "准备当前用户的默认团队成员关系，角色为当前用例参数角色", object: "db.default_team_membership", operator: "upsert", params: { emailFrom: "data.email", roleFrom: "data.role", saveAs: "currentUser" } },
@@ -39,7 +39,7 @@ function createBackgroundPersonalCase(data: BackgroundPersonalCaseData) {
         { source: { caseStepId: "Setup-8", method: "playwright" }, id: "page.goto.auth", title: "打开 ORF 登录页", object: "page", operator: "goto", params: { path: "/auth" } },
         { source: { caseStepId: "Setup-9", method: "playwright" }, id: "fill.email", title: "在邮箱输入框输入当前用户固定测试邮箱", object: "page", operator: "fill", params: { label: "Email", valueFrom: "data.email" } },
         { source: { caseStepId: "Setup-10", method: "playwright" }, id: "fill.password", title: "在密码输入框输入当前用户固定测试密码", object: "page", operator: "fill", params: { label: "Password", exact: true, valueFrom: "data.password" } },
-        { source: { caseStepId: "Setup-11", method: "playwright" }, id: "click.sign_in", title: "点击 \"Sign In\" 登录操作", object: "page", operator: "click", params: { role: "button", name: "Sign In" } },
+        { source: { caseStepId: "Setup-11", method: "playwright" }, id: "click.sign_in", title: "点击 \"Sign In\" 登录操作", object: "page.login_form", operator: "submit" },
         { source: { caseStepId: "Setup-12", method: "api" }, id: "session.authenticated", title: "当前会话 应为 已登录", object: "auth.session", operator: "authenticated" },
         { source: { caseStepId: "Setup-13", method: "api" }, id: "session.email", title: "当前会话用户邮箱 应为 当前用户固定测试邮箱", object: "auth.session.user_email", operator: "equals", params: { emailFrom: "data.email" } },
         { source: { caseStepId: "Setup-14", method: "api" }, id: "session.role", title: "当前会话用户角色 应为 当前用例参数角色", object: "auth.session.user_role", operator: "equals", params: { roleFrom: "data.role" } },
@@ -62,18 +62,18 @@ function createBackgroundPersonalCase(data: BackgroundPersonalCaseData) {
         { source: { caseStepId: "S0-9", method: "playwright" }, id: "personal_settings_menu_item.visible", title: "用户菜单中的 \"个人设置\" 操作 应可见", object: "page.user_menu_item", operator: "visible", params: { name: "个人设置" } },
         { source: { caseStepId: "S0-10", method: "playwright" }, id: "url.bounties", title: "当前页面 应为 悬赏大厅", object: "page.url", operator: "match", params: { pattern: "/bounties$" } },
         { source: { caseStepId: "S0-11", method: "api" }, id: "personal_backgrounds.readable", title: "当前用户读取个人背景列表和个人偏好结果 应成功", object: "api.personal_backgrounds", operator: "readable" },
-        { source: { caseStepId: "S0-12", method: "api" }, id: "system_backgrounds.unchanged", title: "当前系统 `login_background` 和 `app_background` 背景列表与配置 应等于 系统背景配置快照", object: "api.visual_backgrounds", operator: "unchanged", params: { snapshotFrom: "runtime.backgroundSnapshot" } },
+        { source: { caseStepId: "S0-12", method: "api" }, id: "system_backgrounds.unchanged", title: "当前系统 `login_background` 和 `topbar_background` 背景列表与配置 应等于 系统背景配置快照", object: "api.visual_backgrounds", operator: "unchanged", params: { snapshotFrom: "runtime.backgroundSnapshot" } },
       ],
     },
 
     Action: {
-      description: "当前用户进入个人设置，上传候选皮肤并切换当前个人 AppShell 皮肤",
+      description: "当前用户进入个人设置，上传候选皮肤并切换当前个人 侧边栏皮肤",
       steps: [
         { source: { caseStepId: "Action-1", method: "playwright" }, id: "personal_settings_menu_item.click", title: "点击 用户菜单中的 \"个人设置\" 操作", object: "page.user_menu_item", operator: "click", params: { name: "个人设置" } },
-        { source: { caseStepId: "Action-2", method: "playwright" }, id: "personal_background.upload_first", title: "在个人设置的 AppShell 皮肤上传入口上传本用例第一个个人 AppShell 皮肤图片", object: "page.personal_settings", operator: "upload_background", params: { fileNameFrom: "data.firstPersonalBackgroundFileName", saveAs: "firstPersonalBackground" } },
-        { source: { caseStepId: "Action-3", method: "playwright" }, id: "personal_background.upload_second", title: "在个人设置的 AppShell 皮肤上传入口上传本用例第二个个人 AppShell 皮肤图片", object: "page.personal_settings", operator: "upload_background", params: { fileNameFrom: "data.secondPersonalBackgroundFileName", saveAs: "secondPersonalBackground" } },
-        { source: { caseStepId: "Action-4", method: "playwright" }, id: "personal_background.select_first", title: "在 AppShell 皮肤列表中选择本用例第一个个人 AppShell 皮肤图片", object: "page.personal_settings", operator: "select_background", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
-        { source: { caseStepId: "Action-5", method: "playwright" }, id: "personal_background.use_selected", title: "点击 \"设为我的背景\" 操作，将本用例第一个个人 AppShell 皮肤图片设为本人 AppShell 皮肤", object: "page.personal_settings", operator: "use_selected_background", params: { backgroundFrom: "runtime.firstPersonalBackground", saveAs: "personalBackgroundUpdateResult" } },
+        { source: { caseStepId: "Action-2", method: "playwright" }, id: "personal_background.upload_first", title: "在个人设置的 侧边栏皮肤上传入口上传本用例第一个个人 侧边栏皮肤图片", object: "page.personal_settings", operator: "upload_background", params: { fileNameFrom: "data.firstPersonalBackgroundFileName", saveAs: "firstPersonalBackground" } },
+        { source: { caseStepId: "Action-3", method: "playwright" }, id: "personal_background.upload_second", title: "在个人设置的 侧边栏皮肤上传入口上传本用例第二个个人 侧边栏皮肤图片", object: "page.personal_settings", operator: "upload_background", params: { fileNameFrom: "data.secondPersonalBackgroundFileName", saveAs: "secondPersonalBackground" } },
+        { source: { caseStepId: "Action-4", method: "playwright" }, id: "personal_background.select_first", title: "在 侧边栏皮肤列表中选择本用例第一个个人 侧边栏皮肤图片", object: "page.personal_settings", operator: "select_background", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
+        { source: { caseStepId: "Action-5", method: "playwright" }, id: "personal_background.use_selected", title: "点击 \"保存\" 操作，将本用例第一个个人 侧边栏皮肤图片保存为本人 侧边栏皮肤", object: "page.personal_settings", operator: "use_selected_background", params: { backgroundFrom: "runtime.firstPersonalBackground", saveAs: "personalBackgroundUpdateResult" } },
       ],
     },
 
@@ -81,13 +81,13 @@ function createBackgroundPersonalCase(data: BackgroundPersonalCaseData) {
       description: "当前用户个人背景已切换，系统背景配置保持不变",
       assertions: [
         { source: { caseStepId: "S1-1", method: "playwright" }, id: "url.personal_settings", title: "当前页面 应为 个人设置页面", object: "page.url", operator: "match", params: { pattern: "/settings$" } },
-        { source: { caseStepId: "S1-2", method: "playwright" }, id: "personal_settings.visible", title: "当前页面 应显示 `个人设置`", object: "page.main_heading", operator: "visible", params: { name: "个人设置" } },
-        { source: { caseStepId: "S1-3", method: "playwright" }, id: "post_login_background.visible", title: "当前页面 应显示 `我的 AppShell 皮肤`", object: "page", operator: "visible", params: { role: "heading", name: "我的 AppShell 皮肤", exact: true } },
-        { source: { caseStepId: "S1-4", method: "api" }, id: "personal_backgrounds.contains_first", title: "当前用户个人背景列表 应包含 本用例第一个个人 AppShell 皮肤图片", object: "api.personal_backgrounds", operator: "contains_background", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
-        { source: { caseStepId: "S1-5", method: "api" }, id: "personal_backgrounds.contains_second", title: "当前用户个人背景列表 应包含 本用例第二个个人 AppShell 皮肤图片", object: "api.personal_backgrounds", operator: "contains_background", params: { backgroundFrom: "runtime.secondPersonalBackground" } },
-        { source: { caseStepId: "S1-6", method: "api" }, id: "personal_background.preference_fixed", title: "当前用户个人背景偏好 `appBackground.fixedBackgroundId` 应为 本用例第一个个人 AppShell 皮肤图片", object: "api.personal_backgrounds", operator: "preference_fixed_background", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
-        { source: { caseStepId: "S1-7", method: "playwright" }, id: "personal_background.current_visible", title: "AppShell 皮肤区域 应显示 本用例第一个个人 AppShell 皮肤图片为 当前背景", object: "page.personal_background", operator: "current_visible", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
-        { source: { caseStepId: "S1-8", method: "api" }, id: "system_backgrounds.unchanged", title: "当前系统 `login_background` 和 `app_background` 背景列表与配置 应等于 系统背景配置快照", object: "api.visual_backgrounds", operator: "unchanged", params: { snapshotFrom: "runtime.backgroundSnapshot" } },
+        { source: { caseStepId: "S1-2", method: "playwright" }, id: "personal_settings.visible", title: "当前页面 应显示 `个人设置`", object: "page", operator: "visible", params: { text: "个人设置", exact: true } },
+        { source: { caseStepId: "S1-3", method: "playwright" }, id: "post_login_background.visible", title: "当前页面 应显示 `侧边栏`", object: "page", operator: "visible", params: { role: "heading", name: "侧边栏", exact: true } },
+        { source: { caseStepId: "S1-4", method: "api" }, id: "personal_backgrounds.contains_first", title: "当前用户个人背景列表 应包含 本用例第一个个人 侧边栏皮肤图片", object: "api.personal_backgrounds", operator: "contains_background", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
+        { source: { caseStepId: "S1-5", method: "api" }, id: "personal_backgrounds.contains_second", title: "当前用户个人背景列表 应包含 本用例第二个个人 侧边栏皮肤图片", object: "api.personal_backgrounds", operator: "contains_background", params: { backgroundFrom: "runtime.secondPersonalBackground" } },
+        { source: { caseStepId: "S1-6", method: "api" }, id: "personal_background.preference_fixed", title: "当前用户个人背景偏好 `backgrounds.sidebar_background.fixedBackgroundId` 应为 本用例第一个个人 侧边栏皮肤图片", object: "api.personal_backgrounds", operator: "preference_fixed_background", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
+        { source: { caseStepId: "S1-7", method: "playwright" }, id: "personal_background.current_visible", title: "侧边栏皮肤区域 应显示 本用例第一个个人 侧边栏皮肤图片为 当前背景", object: "page.personal_background", operator: "current_visible", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
+        { source: { caseStepId: "S1-8", method: "api" }, id: "system_backgrounds.unchanged", title: "当前系统 `login_background` 和 `topbar_background` 背景列表与配置 应等于 系统背景配置快照", object: "api.visual_backgrounds", operator: "unchanged", params: { snapshotFrom: "runtime.backgroundSnapshot" } },
         { source: { caseStepId: "S1-9", method: "api" }, id: "session.authenticated", title: "当前会话 应为 已登录", object: "auth.session", operator: "authenticated" },
         { source: { caseStepId: "S1-10", method: "api" }, id: "session.email", title: "当前会话用户邮箱 应为 当前用户固定测试邮箱", object: "auth.session.user_email", operator: "equals", params: { emailFrom: "data.email" } },
         { source: { caseStepId: "S1-11", method: "api" }, id: "session.role", title: "当前会话用户角色 应为 当前用例参数角色", object: "auth.session.user_role", operator: "equals", params: { roleFrom: "data.role" } },
@@ -99,7 +99,7 @@ function createBackgroundPersonalCase(data: BackgroundPersonalCaseData) {
       description: "恢复个人设置和系统背景，删除当前用户账号和页面会话状态",
       steps: [
         { source: { caseStepId: "Clean-1", method: "api" }, id: "personal_settings.restore_snapshot", title: "若已记录当前用户个人设置快照，恢复当前用户个人设置和个人背景目录", object: "api.personal_settings", operator: "restore_snapshot", params: { snapshotFrom: "runtime.personalSettingsSnapshot", optional: true } },
-        { source: { caseStepId: "Clean-2", method: "api" }, id: "system_backgrounds.restore_snapshot", title: "若已记录系统背景配置快照，恢复系统 `login_background` 和 `app_background` 背景列表与配置", object: "api.visual_backgrounds", operator: "restore_snapshot", params: { snapshotFrom: "runtime.backgroundSnapshot", optional: true } },
+        { source: { caseStepId: "Clean-2", method: "api" }, id: "system_backgrounds.restore_snapshot", title: "若已记录系统背景配置快照，恢复系统 `login_background` 和 `topbar_background` 背景列表与配置", object: "api.visual_backgrounds", operator: "restore_snapshot", params: { snapshotFrom: "runtime.backgroundSnapshot", optional: true } },
         { source: { caseStepId: "Clean-3", method: "api" }, id: "auth.logout", title: "注销当前登录会话", object: "auth", operator: "logout" },
         { source: { caseStepId: "Clean-4", method: "playwright" }, id: "page.runtime.stop", title: "离开当前 ORF 前端页面", object: "page.runtime", operator: "stop" },
         { source: { caseStepId: "Clean-5", method: "playwright" }, id: "browser.clear", title: "移除当前浏览器中的残留登录态", object: "browser", operator: "clear_state" },
@@ -107,7 +107,7 @@ function createBackgroundPersonalCase(data: BackgroundPersonalCaseData) {
         { source: { caseStepId: "Clean-7", method: "api" }, id: "ory.identity.delete", title: "删除当前用户固定测试邮箱对应的登录身份", object: "ory.identity", operator: "delete_by_email", params: { emailFrom: "data.email" } },
         { source: { caseStepId: "Clean-8", method: "prisma" }, id: "db.user.delete_memberships", title: "删除当前用户固定测试邮箱对应的默认团队成员关系", object: "db.user", operator: "delete_memberships", params: { emailFrom: "data.email" } },
         { source: { caseStepId: "Clean-9", method: "prisma" }, id: "db.user.delete", title: "删除当前用户固定测试邮箱对应的用户记录", object: "db.user", operator: "delete", params: { emailFrom: "data.email" } },
-        { source: { caseStepId: "Clean-10", method: "api" }, id: "system_backgrounds.unchanged", title: "系统 `login_background` 和 `app_background` 背景列表与配置 应等于 系统背景配置快照", object: "api.visual_backgrounds", operator: "unchanged", params: { snapshotFrom: "runtime.backgroundSnapshot", optional: true, releaseLock: true } },
+        { source: { caseStepId: "Clean-10", method: "api" }, id: "system_backgrounds.unchanged", title: "系统 `login_background` 和 `topbar_background` 背景列表与配置 应等于 系统背景配置快照", object: "api.visual_backgrounds", operator: "unchanged", params: { snapshotFrom: "runtime.backgroundSnapshot", optional: true, releaseLock: true } },
         { source: { caseStepId: "Clean-11", method: "api" }, id: "ory.identity.absent", title: "当前用户固定测试邮箱对应的登录身份 应不存在", object: "ory.identity", operator: "absent", params: { emailFrom: "data.email" } },
         { source: { caseStepId: "Clean-12", method: "prisma" }, id: "db.user.absent", title: "当前用户固定测试邮箱对应的用户记录 应不存在", object: "db.user", operator: "absent", params: { emailFrom: "data.email" } },
       ],

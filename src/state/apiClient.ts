@@ -31,8 +31,9 @@ import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, TaskMana
 import type { ChatTheme, UserDisplayPreferences } from "../domain/settings/personalPreferences";
 import type {
   VisualBackgroundConfig,
+  VisualBackgroundCrop,
+  VisualBackgroundFitMode,
   VisualBackgroundMode,
-  VisualBackgroundPlacement,
   VisualBackgroundScene,
   VisualBackgroundSwitchOrder,
   VisualBackgroundSwitchTrigger,
@@ -40,8 +41,9 @@ import type {
 import type { ClientReleaseInfo } from "../features/client-updates/clientUpdateModel";
 export type {
   VisualBackgroundConfig,
+  VisualBackgroundCrop,
+  VisualBackgroundFitMode,
   VisualBackgroundMode,
-  VisualBackgroundPlacement,
   VisualBackgroundScene,
   VisualBackgroundSwitchOrder,
   VisualBackgroundSwitchTrigger,

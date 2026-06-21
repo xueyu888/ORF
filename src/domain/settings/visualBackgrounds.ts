@@ -39,28 +39,31 @@ export type AnyVisualBackgroundScope = VisualBackgroundScope | LegacyVisualBackg
 export type VisualBackgroundMode = "fixed" | "switchable";
 export type VisualBackgroundSwitchTrigger = "on_open" | "interval";
 export type VisualBackgroundSwitchOrder = "sequential" | "random";
+export type VisualBackgroundFitMode = "cover-crop";
 
-export type VisualBackgroundPlacement = {
-  offsetX: number;
-  offsetY: number;
-  scale: number;
+export type VisualBackgroundCrop = {
+  centerX: number;
+  centerY: number;
+  zoom: number;
 };
 
 export type VisualBackgroundConfig = {
+  version: 2;
+  fitMode: VisualBackgroundFitMode;
   mode: VisualBackgroundMode;
   fixedBackgroundId: string | null;
   overlayOpacity: number;
   switchTrigger: VisualBackgroundSwitchTrigger;
   switchOrder: VisualBackgroundSwitchOrder;
   switchIntervalMinutes: number;
-  placements: Record<string, VisualBackgroundPlacement>;
+  crops: Record<string, VisualBackgroundCrop>;
 };
 
-export const visualBackgroundPlacementLimits = {
-  offsetMin: -100,
-  offsetMax: 100,
-  scaleMin: 0.5,
-  scaleMax: 3,
+export const visualBackgroundCropLimits = {
+  centerMin: 0,
+  centerMax: 1,
+  zoomMin: 1,
+  zoomMax: 3,
 } as const;
 
 export const visualBackgroundOverlayLimits = {
@@ -68,10 +71,10 @@ export const visualBackgroundOverlayLimits = {
   opacityMax: 1,
 } as const;
 
-export const defaultVisualBackgroundPlacement: VisualBackgroundPlacement = {
-  offsetX: 0,
-  offsetY: 0,
-  scale: 1,
+export const defaultVisualBackgroundCrop: VisualBackgroundCrop = {
+  centerX: 0.5,
+  centerY: 0.5,
+  zoom: 1,
 };
 
 export const defaultVisualBackgroundOverlayOpacity = 0.58;
@@ -98,11 +101,31 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
   return Math.max(min, Math.min(max, parsed));
 }
 
-export function normalizeVisualBackgroundPlacement(input: Partial<VisualBackgroundPlacement> | null | undefined): VisualBackgroundPlacement {
+function hasNewCropShape(input: unknown): input is Partial<VisualBackgroundCrop> {
+  return typeof input === "object" && input !== null && ("centerX" in input || "centerY" in input || "zoom" in input);
+}
+
+function legacyPlacementToCrop(input: { offsetX?: unknown; offsetY?: unknown; scale?: unknown }): VisualBackgroundCrop {
+  const offsetX = clampNumber(input.offsetX, -100, 100, 0);
+  const offsetY = clampNumber(input.offsetY, -100, 100, 0);
+  const legacyScale = clampNumber(input.scale, 0.5, visualBackgroundCropLimits.zoomMax, defaultVisualBackgroundCrop.zoom);
+
   return {
-    offsetX: clampNumber(input?.offsetX, visualBackgroundPlacementLimits.offsetMin, visualBackgroundPlacementLimits.offsetMax, defaultVisualBackgroundPlacement.offsetX),
-    offsetY: clampNumber(input?.offsetY, visualBackgroundPlacementLimits.offsetMin, visualBackgroundPlacementLimits.offsetMax, defaultVisualBackgroundPlacement.offsetY),
-    scale: clampNumber(input?.scale, visualBackgroundPlacementLimits.scaleMin, visualBackgroundPlacementLimits.scaleMax, defaultVisualBackgroundPlacement.scale),
+    centerX: clampNumber(0.5 + offsetX / 200, visualBackgroundCropLimits.centerMin, visualBackgroundCropLimits.centerMax, defaultVisualBackgroundCrop.centerX),
+    centerY: clampNumber(0.5 + offsetY / 200, visualBackgroundCropLimits.centerMin, visualBackgroundCropLimits.centerMax, defaultVisualBackgroundCrop.centerY),
+    zoom: clampNumber(Math.max(visualBackgroundCropLimits.zoomMin, legacyScale), visualBackgroundCropLimits.zoomMin, visualBackgroundCropLimits.zoomMax, defaultVisualBackgroundCrop.zoom),
+  };
+}
+
+export function normalizeVisualBackgroundCrop(input: Partial<VisualBackgroundCrop> | Record<string, unknown> | null | undefined): VisualBackgroundCrop {
+  if (!hasNewCropShape(input)) {
+    return legacyPlacementToCrop(input ?? {});
+  }
+
+  return {
+    centerX: clampNumber(input.centerX, visualBackgroundCropLimits.centerMin, visualBackgroundCropLimits.centerMax, defaultVisualBackgroundCrop.centerX),
+    centerY: clampNumber(input.centerY, visualBackgroundCropLimits.centerMin, visualBackgroundCropLimits.centerMax, defaultVisualBackgroundCrop.centerY),
+    zoom: clampNumber(input.zoom, visualBackgroundCropLimits.zoomMin, visualBackgroundCropLimits.zoomMax, defaultVisualBackgroundCrop.zoom),
   };
 }
 
@@ -112,12 +135,14 @@ export function normalizeVisualBackgroundOverlayOpacity(input: unknown): number 
 
 export function defaultVisualBackgroundConfig(): VisualBackgroundConfig {
   return {
+    version: 2,
+    fitMode: "cover-crop",
     mode: "fixed",
     fixedBackgroundId: null,
     overlayOpacity: defaultVisualBackgroundOverlayOpacity,
     switchTrigger: "on_open",
     switchOrder: "random",
     switchIntervalMinutes: 10,
-    placements: {},
+    crops: {},
   };
 }

@@ -33,11 +33,13 @@ export type DirectorySnapshot = {
 
 export type BackgroundSnapshots = {
   login_background: VisualBackgroundsData;
-  app_background: VisualBackgroundsData;
+  sidebar_background: VisualBackgroundsData;
+  topbar_background: VisualBackgroundsData;
   systemSettingsFile: FileSnapshot;
   legacySystemSettingsFile: FileSnapshot;
   loginBackgroundSystemDirectory: DirectorySnapshot;
-  appBackgroundSystemDirectory: DirectorySnapshot;
+  sidebarBackgroundSystemDirectory: DirectorySnapshot;
+  topbarBackgroundSystemDirectory: DirectorySnapshot;
   lockOwner: string;
 };
 
@@ -55,7 +57,7 @@ export type ApiAttemptResult = {
 export type PersonalBackgroundUploadResult = VisualBackgroundImage;
 
 export type VisualBackgroundConfigByScene = {
-  scene: "login_background" | "app_background";
+  scene: "login_background" | "sidebar_background" | "topbar_background";
   config: VisualBackgroundConfig;
 };
 

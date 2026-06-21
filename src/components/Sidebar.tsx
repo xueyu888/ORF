@@ -5,7 +5,7 @@ import brandLogo from "../assets/brand/orf-logo.png";
 import { orfAssetLibrary } from "../config/assetLibrary";
 import { canShowFrontend, canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
-import type { VisualBackgroundPlacement } from "../domain/settings/visualBackgrounds";
+import type { VisualBackgroundCrop } from "../domain/settings/visualBackgrounds";
 import { useOrf } from "../state/OrfProvider";
 import { ImagePreviewDialog } from "./ImagePreviewDialog";
 import { VisualBackgroundSlot } from "./VisualBackgroundSlot";
@@ -22,14 +22,14 @@ const sidebarGroups = [
 }));
 
 export function Sidebar({
-  backgroundPlacement,
+  backgroundCrop,
   backgroundOverlayOpacity,
   backgroundUrl,
   collapsed,
   onCollapsedChange,
   onOpenClientUpdateCenter,
 }: {
-  backgroundPlacement: VisualBackgroundPlacement;
+  backgroundCrop: VisualBackgroundCrop;
   backgroundOverlayOpacity: number;
   backgroundUrl: string;
   collapsed: boolean;
@@ -109,7 +109,7 @@ export function Sidebar({
         imageFilter={sidebarBackground.filter}
         imageUrl={backgroundImageUrl}
         onImageError={() => setFailedBackgroundUrl(backgroundImageUrl)}
-        placement={backgroundPlacement}
+        crop={backgroundCrop}
       />
       <div className="orf-sidebar-brand flex items-center justify-between border-b px-4">
         <div className="orf-sidebar-brand-main flex items-center gap-2.5">

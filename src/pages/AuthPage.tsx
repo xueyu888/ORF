@@ -17,8 +17,8 @@ import {
 import { getUserPreferences, getVisualBackgrounds } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import {
-  defaultVisualBackgroundPlacement,
-  type VisualBackgroundPlacement,
+  defaultVisualBackgroundCrop,
+  type VisualBackgroundCrop,
 } from "../domain/settings/visualBackgrounds";
 import { readCachedLoginBackgroundPreview } from "../utils/loginBackgroundCache";
 import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
@@ -26,9 +26,9 @@ import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroun
 type AuthMode = "login" | "register";
 
 type AuthHeroOption = {
+  crop: VisualBackgroundCrop;
   id: string;
   label: string;
-  placement: VisualBackgroundPlacement;
   src: string;
 };
 
@@ -41,7 +41,7 @@ const authHeroModules = import.meta.glob("../assets/auth/*.{png,jpg,jpeg,webp,av
 const authHeroOptions: AuthHeroOption[] = Object.entries(authHeroModules)
   .map(([path, src]) => {
     const label = path.split("/").at(-1) ?? path;
-    return { id: path, label, placement: defaultVisualBackgroundPlacement, src };
+    return { id: path, label, crop: defaultVisualBackgroundCrop, src };
   })
   .sort((first, second) => {
     if (first.label === defaultAuthHeroFile) {
@@ -65,7 +65,7 @@ export function AuthPage() {
       ? {
           id: `cached-login-background:${cached.userId}`,
           label: "本机登录页",
-          placement: cached.placement,
+          crop: cached.crop,
           src: cached.dataUrl,
         }
       : null;
@@ -169,7 +169,7 @@ export function AuthPage() {
           const options = data.list.map((background) => ({
             id: background.id,
             label: background.fileName,
-            placement: data.config.placements[background.id] ?? defaultVisualBackgroundPlacement,
+            crop: data.config.crops[background.id] ?? defaultVisualBackgroundCrop,
             src: background.url,
           }));
           const visibleOptions = cachedHero ? [cachedHero, ...options] : options;
@@ -284,7 +284,7 @@ export function AuthPage() {
         frameClassName="orf-auth-hero-frame"
         imageClassName="orf-auth-hero-image"
         imageUrl={selectedHero?.src ?? null}
-        placement={selectedHero?.placement ?? defaultVisualBackgroundPlacement}
+        crop={selectedHero?.crop ?? defaultVisualBackgroundCrop}
       />
       {heroOptions.length > 1 && <span className="orf-auth-top-gradient" aria-hidden="true" />}
       {heroOptions.length > 1 && (

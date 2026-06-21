@@ -1,24 +1,24 @@
 import { type CSSProperties } from "react";
-import type { VisualBackgroundPlacement } from "../domain/settings/visualBackgrounds";
+import type { VisualBackgroundCrop } from "../domain/settings/visualBackgrounds";
 
 type VisualBackgroundSlotProps = {
+  crop: VisualBackgroundCrop;
   frameClassName: string;
   imageClassName?: string;
   imageFilter?: string;
   imageUrl: string | null;
   loading?: "eager" | "lazy";
   onImageError?: () => void;
-  placement: VisualBackgroundPlacement;
 };
 
 export function VisualBackgroundSlot({
+  crop,
   frameClassName,
   imageClassName,
   imageFilter,
   imageUrl,
   loading = "eager",
   onImageError,
-  placement,
 }: VisualBackgroundSlotProps) {
   if (!imageUrl) return null;
 
@@ -33,24 +33,17 @@ export function VisualBackgroundSlot({
         loading={loading}
         decoding="async"
         onError={onImageError}
-        style={visualBackgroundSlotStyle(placement, imageFilter)}
+        style={visualBackgroundSlotStyle(crop, imageFilter)}
       />
     </span>
   );
 }
 
-function visualBackgroundSlotStyle(placement: VisualBackgroundPlacement, imageFilter?: string) {
-  const effectiveScale = placement.scale;
-  const panX = (placement.offsetX * (effectiveScale - 1)) / 2;
-  const panY = (placement.offsetY * (effectiveScale - 1)) / 2;
-
+function visualBackgroundSlotStyle(crop: VisualBackgroundCrop, imageFilter?: string) {
   return {
-    "--orf-visual-bg-effective-scale": effectiveScale,
+    "--orf-visual-bg-center-x": `${crop.centerX * 100}%`,
+    "--orf-visual-bg-center-y": `${crop.centerY * 100}%`,
     "--orf-visual-bg-filter": imageFilter,
-    "--orf-visual-bg-object-x": `${50 + placement.offsetX / 2}%`,
-    "--orf-visual-bg-object-y": `${50 + placement.offsetY / 2}%`,
-    "--orf-visual-bg-pan-x": `${panX}%`,
-    "--orf-visual-bg-pan-y": `${panY}%`,
-    "--orf-visual-bg-requested-scale": placement.scale,
+    "--orf-visual-bg-zoom": crop.zoom,
   } as CSSProperties;
 }

@@ -10,6 +10,7 @@ import type {
   VisualBackgroundsData,
   VisualBackgroundScene,
 } from "../../../src/state/apiClient";
+import { defaultVisualBackgroundCrop } from "../../../src/domain/settings/visualBackgrounds";
 import type {
   ApiAttemptResult,
   BackgroundSnapshots,
@@ -23,7 +24,8 @@ const settingsRoot = path.join(process.cwd(), "public", "settings");
 const systemSettingsPath = path.join(settingsRoot, "system", "settings.json");
 const legacySystemSettingsPath = path.join(settingsRoot, "user", "settings.json");
 const loginBackgroundSystemDir = path.join(settingsRoot, "backgrounds", "login_background", "system");
-const appBackgroundSystemDir = path.join(settingsRoot, "backgrounds", "app_background", "system");
+const sidebarBackgroundSystemDir = path.join(settingsRoot, "backgrounds", "sidebar_background", "system");
+const topbarBackgroundSystemDir = path.join(settingsRoot, "backgrounds", "topbar_background", "system");
 const backgroundSettingsLockDir = path.join(process.cwd(), ".artifacts", "testd-background-settings.lock");
 const backgroundSettingsLockTimeoutMs = 45_000;
 const staleBackgroundSettingsLockMs = 120_000;
@@ -37,11 +39,13 @@ export async function readBackgroundSnapshots(): Promise<BackgroundSnapshots> {
   const lockOwner = await acquireBackgroundSettingsLock();
   return {
     login_background: normalizeBackgrounds(await listVisualBackgrounds("login_background")),
-    app_background: normalizeBackgrounds(await listVisualBackgrounds("app_background")),
+    sidebar_background: normalizeBackgrounds(await listVisualBackgrounds("sidebar_background")),
+    topbar_background: normalizeBackgrounds(await listVisualBackgrounds("topbar_background")),
     systemSettingsFile: await readTextFileSnapshot(systemSettingsPath),
     legacySystemSettingsFile: await readTextFileSnapshot(legacySystemSettingsPath),
     loginBackgroundSystemDirectory: await readDirectorySnapshot(loginBackgroundSystemDir),
-    appBackgroundSystemDirectory: await readDirectorySnapshot(appBackgroundSystemDir),
+    sidebarBackgroundSystemDirectory: await readDirectorySnapshot(sidebarBackgroundSystemDir),
+    topbarBackgroundSystemDirectory: await readDirectorySnapshot(topbarBackgroundSystemDir),
     lockOwner,
   };
 }
@@ -55,7 +59,8 @@ export async function restoreBackgroundSnapshots(snapshot: BackgroundSnapshots) 
   await restoreTextFileSnapshot(systemSettingsPath, snapshot.systemSettingsFile);
   await restoreTextFileSnapshot(legacySystemSettingsPath, snapshot.legacySystemSettingsFile);
   await restoreDirectorySnapshot(loginBackgroundSystemDir, snapshot.loginBackgroundSystemDirectory);
-  await restoreDirectorySnapshot(appBackgroundSystemDir, snapshot.appBackgroundSystemDirectory);
+  await restoreDirectorySnapshot(sidebarBackgroundSystemDir, snapshot.sidebarBackgroundSystemDirectory);
+  await restoreDirectorySnapshot(topbarBackgroundSystemDir, snapshot.topbarBackgroundSystemDirectory);
 }
 
 export async function releaseBackgroundSettingsSnapshot(snapshot: BackgroundSnapshots) {
@@ -83,14 +88,14 @@ export async function readVisualBackgroundsAsCurrentUser(page: Page, scene: Visu
   }, scene);
 }
 
-export async function readPersonalBackgroundsAsCurrentUser(page: Page): Promise<ApiAttemptResult> {
-  return page.evaluate(async () => {
-    const response = await fetch("/api/settings/personal/backgrounds", { credentials: "include" });
+export async function readPersonalBackgroundsAsCurrentUser(page: Page, scene: VisualBackgroundScene = "sidebar_background"): Promise<ApiAttemptResult> {
+  return page.evaluate(async (targetScene) => {
+    const response = await fetch(`/api/settings/personal/backgrounds?scene=${encodeURIComponent(targetScene)}`, { credentials: "include" });
     return {
       status: response.status,
       body: await response.json().catch(() => null),
     };
-  });
+  }, scene);
 }
 
 export async function saveVisualBackgroundConfigAsCurrentUser(
@@ -119,20 +124,21 @@ export async function saveVisualBackgroundConfigAsCurrentUser(
 export async function savePersonalBackgroundConfigAsCurrentUser(
   page: Page,
   config: VisualBackgroundConfig,
+  scene: VisualBackgroundScene = "sidebar_background",
 ): Promise<ApiAttemptResult> {
-  return page.evaluate(async (nextConfig) => {
+  return page.evaluate(async ({ nextConfig, targetScene }) => {
     const response = await fetch("/api/settings/personal/preferences", {
       method: "PUT",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ appBackground: nextConfig }),
+      body: JSON.stringify({ backgrounds: { [targetScene]: nextConfig } }),
     });
 
     return {
       status: response.status,
       body: await response.json().catch(() => null),
     };
-  }, config);
+  }, { nextConfig: config, targetScene: scene });
 }
 
 function waitForPersonalPreferenceResponse(page: Page, timeout?: number): Promise<ApiAttemptResult> {
@@ -153,6 +159,7 @@ export async function uploadPersonalBackgroundFromSettingsPage(
   page: Page,
   fileName: string,
 ): Promise<PersonalBackgroundUploadResult> {
+  await selectSkinWorkbenchSlot(page, "personal", "sidebar_background");
   const uploadResponsePromise = page
     .waitForResponse((response) => {
       return response.request().method().toUpperCase() === "POST" && response.url().endsWith("/api/settings/personal/backgrounds");
@@ -162,8 +169,6 @@ export async function uploadPersonalBackgroundFromSettingsPage(
       body: await response.json().catch(() => null),
     }));
 
-  const preferenceResponsePromise = waitForPersonalPreferenceResponse(page);
-
   await page.locator('input[type="file"][accept="image/*"]').setInputFiles({
     name: fileName,
     mimeType: "image/png",
@@ -171,28 +176,26 @@ export async function uploadPersonalBackgroundFromSettingsPage(
   });
 
   const uploadResult = await uploadResponsePromise;
-  await preferenceResponsePromise;
 
   const uploaded = readVisualBackgroundImageFromResult(uploadResult);
   if (!uploaded) {
     throw new Error("个人背景上传结果中缺少背景图片");
   }
-  await expect(page.getByText(`个人上传：${uploaded.fileName}`)).toBeVisible();
-  await expect(page.getByRole("button", { name: "上传", exact: true })).toBeEnabled();
+  await expect(skinGalleryCard(page, uploaded, "personal")).toBeVisible();
+  await expect(skinWorkbench(page, "personal").getByRole("button", { name: "上传", exact: true })).toBeEnabled();
   return uploaded;
 }
 
 export async function selectPersonalBackgroundFromSettingsPage(page: Page, background: VisualBackgroundImage) {
-  const card = personalBackgroundCard(page, background);
-  const selectedText = page.locator(".orf-settings-selected-text").getByText(`个人上传：${background.fileName}`, { exact: true });
-  const useSelectedButton = page.getByRole("button", { name: "设为我的背景", exact: true });
+  await selectSkinWorkbenchSlot(page, "personal", "sidebar_background");
+  const card = skinGalleryCard(page, background, "personal");
+  const selectedText = skinWorkbench(page, "personal").locator(".orf-skin-selected-file").getByText(background.fileName, { exact: true });
 
   await expect(card).toBeVisible();
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     await card.click();
     try {
       await expect(selectedText).toBeVisible({ timeout: 1_000 });
-      await expect(useSelectedButton).toBeEnabled({ timeout: 1_000 });
       return;
     } catch (error) {
       if (attempt === 5) {
@@ -207,16 +210,16 @@ export async function useSelectedPersonalBackgroundFromSettingsPage(
   page: Page,
   background: VisualBackgroundImage,
 ): Promise<ApiAttemptResult> {
-  const useSelectedButton = page.getByRole("button", { name: "设为我的背景", exact: true });
+  const saveButton = skinWorkbench(page, "personal").getByRole("button", { name: "保存", exact: true });
   let lastError: unknown = null;
 
   for (let attempt = 1; attempt <= 4; attempt += 1) {
     await selectPersonalBackgroundFromSettingsPage(page, background);
-    await expect(useSelectedButton).toBeEnabled({ timeout: 1_000 });
+    await expect(saveButton).toBeEnabled({ timeout: 1_000 });
 
     const preferenceResponsePromise = waitForPersonalPreferenceResponse(page, 3_000);
     try {
-      await useSelectedButton.click();
+      await saveButton.click();
       return await preferenceResponsePromise;
     } catch (error) {
       lastError = error;
@@ -236,7 +239,8 @@ export async function uploadSystemBackgroundFromSettingsPage(
   scene: VisualBackgroundScene,
   fileName: string,
 ): Promise<VisualBackgroundImage> {
-  const section = systemBackgroundSection(page, scene);
+  await selectSkinWorkbenchSlot(page, "system", scene);
+  const section = skinWorkbench(page, "system");
   const uploadResponsePromise = page
     .waitForResponse((response) => {
       return response.request().method().toUpperCase() === "POST" && response.url().endsWith("/api/settings/visual/backgrounds");
@@ -257,8 +261,8 @@ export async function uploadSystemBackgroundFromSettingsPage(
   if (!uploaded) {
     throw new Error("系统背景上传结果中缺少背景图片");
   }
-  await expect(systemBackgroundCard(page, scene, uploaded)).toBeVisible();
-  await expect(section.getByRole("button", { name: "上传图片", exact: true })).toBeEnabled();
+  await expect(skinGalleryCard(page, uploaded, "system")).toBeVisible();
+  await expect(section.getByRole("button", { name: "上传", exact: true })).toBeEnabled();
   return uploaded;
 }
 
@@ -267,61 +271,62 @@ export async function selectSystemBackgroundFromSettingsPage(
   scene: VisualBackgroundScene,
   background: VisualBackgroundImage,
 ) {
-  await systemBackgroundCard(page, scene, background).click();
+  await selectSkinWorkbenchSlot(page, "system", scene);
+  const section = skinWorkbench(page, "system");
+  const card = skinGalleryCard(page, background, "system");
+  const selectedText = section.locator(".orf-skin-selected-file-name").getByText(background.fileName, { exact: true });
+
+  await expect(card).toBeVisible();
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    await card.click();
+    try {
+      await expect(selectedText).toBeVisible({ timeout: 1_000 });
+      return;
+    } catch (error) {
+      if (attempt === 5) {
+        throw error;
+      }
+      await page.waitForTimeout(200);
+    }
+  }
 }
 
 export async function setSelectedSystemBackgroundAsDefaultFromSettingsPage(
   page: Page,
   scene: VisualBackgroundScene,
 ): Promise<ApiAttemptResult> {
-  const section = systemBackgroundSection(page, scene);
-  const defaultButton = section.getByRole("button", { name: "设为默认", exact: true });
+  await selectSkinWorkbenchSlot(page, "system", scene);
+  const section = skinWorkbench(page, "system");
+  const saveButton = section.getByRole("button", { name: "保存", exact: true });
 
-  if (await defaultButton.isEnabled()) {
-    const defaultResponsePromise = page
-      .waitForResponse((response) => {
-        return (
-          response.request().method().toUpperCase() === "PUT" &&
-          response.url().includes("/api/settings/visual/backgrounds/") &&
-          response.url().endsWith("/default")
-        );
-      })
-      .then(async (response): Promise<ApiAttemptResult> => ({
-        status: response.status(),
-        body: await response.json().catch(() => null),
-      }));
+  await expect(saveButton).toBeEnabled();
+  const configResponsePromise = page
+    .waitForResponse((response) => {
+      return response.request().method().toUpperCase() === "PUT" && response.url().endsWith("/api/settings/visual/background-config");
+    })
+    .then(async (response): Promise<ApiAttemptResult> => ({
+      status: response.status(),
+      body: await response.json().catch(() => null),
+    }));
 
-    await defaultButton.click();
-    return defaultResponsePromise;
-  }
-
-  const fixedModeButton = section.getByRole("button", { name: "固定背景", exact: true });
-  if (await fixedModeButton.isEnabled()) {
-    const configResponsePromise = page
-      .waitForResponse((response) => {
-        return response.request().method().toUpperCase() === "PUT" && response.url().endsWith("/api/settings/visual/background-config");
-      })
-      .then(async (response): Promise<ApiAttemptResult> => ({
-        status: response.status(),
-        body: await response.json().catch(() => null),
-      }));
-
-    await fixedModeButton.click();
-    return configResponsePromise;
-  }
-
-  const current = await readVisualBackgroundsAsCurrentUser(page, scene);
-  return { status: current.status, body: current.body };
+  await saveButton.click();
+  return configResponsePromise;
 }
 
 export function generateDifferentBackgroundConfig(snapshot: BackgroundSnapshots, scene: VisualBackgroundScene): VisualBackgroundConfig {
   const current = snapshot[scene].config;
   return {
+    ...current,
+    version: 2,
+    fitMode: "cover-crop",
     mode: "switchable",
     fixedBackgroundId: current.fixedBackgroundId,
     switchTrigger: current.switchTrigger === "interval" ? "on_open" : "interval",
     switchOrder: current.switchOrder === "random" ? "sequential" : "random",
     switchIntervalMinutes: current.switchIntervalMinutes >= 1440 ? 1 : current.switchIntervalMinutes + 1,
+    crops: current.fixedBackgroundId
+      ? { ...current.crops, [current.fixedBackgroundId]: current.crops[current.fixedBackgroundId] ?? defaultVisualBackgroundCrop }
+      : current.crops,
   };
 }
 
@@ -386,37 +391,45 @@ function normalizeBackgrounds(input: Awaited<ReturnType<typeof listVisualBackgro
 async function readCurrentBackgrounds() {
   return {
     login_background: normalizeBackgrounds(await listVisualBackgrounds("login_background")),
-    app_background: normalizeBackgrounds(await listVisualBackgrounds("app_background")),
+    sidebar_background: normalizeBackgrounds(await listVisualBackgrounds("sidebar_background")),
+    topbar_background: normalizeBackgrounds(await listVisualBackgrounds("topbar_background")),
   };
 }
 
 function visibleBackgroundSnapshot(snapshot: BackgroundSnapshots) {
   return {
     login_background: snapshot.login_background,
-    app_background: snapshot.app_background,
+    sidebar_background: snapshot.sidebar_background,
+    topbar_background: snapshot.topbar_background,
   };
 }
 
-function personalBackgroundCard(page: Page, background: VisualBackgroundImage) {
-  return page.locator(".orf-settings-background-card", {
+export function skinWorkbench(page: Page, scope: "personal" | "system") {
+  return page.locator(`.orf-skin-workbench[data-scope="${scope}"]`);
+}
+
+export async function selectSkinWorkbenchSlot(page: Page, scope: "personal" | "system", scene: VisualBackgroundScene) {
+  const workbench = skinWorkbench(page, scope);
+  await expect(workbench).toBeVisible();
+  const label = slotLabel(scene);
+  await workbench.locator(".orf-skin-slot-rail").getByRole("button", { name: label, exact: true }).click();
+  await expect(workbench.locator(".orf-skin-editor-title").getByRole("heading", { name: label, exact: true })).toBeVisible();
+  await expect(workbench.locator(".orf-skin-gallery")).toHaveAttribute("data-loading", "false");
+}
+
+function skinGalleryCard(page: Page, background: VisualBackgroundImage, scope?: "personal" | "system") {
+  const root = scope ? skinWorkbench(page, scope) : page.locator("body");
+  return root.locator(".orf-skin-gallery-card", {
     has: page.getByRole("img", { name: background.fileName, exact: true }),
   });
 }
 
-function systemBackgroundCard(page: Page, scene: VisualBackgroundScene, background: VisualBackgroundImage) {
-  return systemBackgroundSection(page, scene).locator(".orf-settings-background-card", {
-    has: page.getByRole("img", { name: background.fileName, exact: true }),
-  });
-}
-
-function systemBackgroundSection(page: Page, scene: VisualBackgroundScene) {
-  return page.locator(".orf-settings-background-section", {
-    has: page.getByRole("heading", { name: sceneTitle(scene), exact: true }),
-  });
-}
-
-function sceneTitle(scene: VisualBackgroundScene) {
-  return scene === "login_background" ? "登录页面背景设置" : "AppShell 皮肤设置";
+function slotLabel(scene: VisualBackgroundScene) {
+  if (scene === "login_background") return "登录页";
+  if (scene === "topbar_background") return "顶部栏";
+  if (scene === "sidebar_background") return "侧边栏";
+  if (scene === "page_bounties_background") return "悬赏大厅";
+  return scene;
 }
 
 async function readTextFileSnapshot(filePath: string): Promise<FileSnapshot> {

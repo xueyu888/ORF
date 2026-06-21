@@ -511,7 +511,7 @@ export async function deletePersonalBackground(userId: string, id: string) {
     for (const scene of visualBackgroundScenes) {
       const config = preferences.backgrounds[scene];
       if (!config) continue;
-      delete config.placements[deletedId];
+      delete config.crops[deletedId];
       if (config.fixedBackgroundId === deletedId) {
         preferences.backgrounds[scene] = null;
       }
