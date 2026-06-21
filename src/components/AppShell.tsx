@@ -22,7 +22,11 @@ import { isDesktopShellAvailable, setDesktopWorkbenchZoomLevel } from "../featur
 import { applyDisplayPreferencesToDocument, nextWorkbenchZoomLevel } from "../features/display/displayPreferences";
 import { useVisualBackground } from "../hooks/useVisualBackground";
 import { defaultChatTheme, defaultUserDisplayPreferences, type ChatTheme, type UserDisplayPreferences } from "../domain/settings/personalPreferences";
-import { defaultVisualBackgroundPlacement, type VisualBackgroundPlacement } from "../domain/settings/visualBackgrounds";
+import {
+  defaultVisualBackgroundOverlayOpacity,
+  defaultVisualBackgroundPlacement,
+  type VisualBackgroundPlacement,
+} from "../domain/settings/visualBackgrounds";
 import { getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import { dispatchPersonalPreferencesChanged, subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
@@ -146,6 +150,9 @@ export function AppShell() {
   const sidebarBackgroundPlacement = sidebarBackground.status === "ready"
     ? sidebarBackground.selection.placement
     : { ...defaultVisualBackgroundPlacement, scale: 1.03 };
+  const sidebarBackgroundOverlayOpacity = sidebarBackground.status === "ready"
+    ? sidebarBackground.selection.overlayOpacity
+    : defaultVisualBackgroundOverlayOpacity;
   const topbarSelection = topbarBackground.status === "ready" ? topbarBackground.selection : null;
   const pageSelection = pageBackground.status === "ready" ? pageBackground.selection : null;
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
@@ -167,12 +174,17 @@ export function AppShell() {
       <Sidebar
         backgroundUrl={sidebarBackgroundUrl}
         backgroundPlacement={sidebarBackgroundPlacement}
+        backgroundOverlayOpacity={sidebarBackgroundOverlayOpacity}
         collapsed={sidebarCollapsed}
         onCollapsedChange={handleSidebarCollapsedChange}
         onOpenClientUpdateCenter={() => setClientUpdateCenter({ open: true })}
       />
       <div className="orf-shell-body min-w-0 flex-1">
-        <header className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-2">
+        <header
+          className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-2"
+          data-topbar-skin={topbarSelection ? "true" : "false"}
+          style={backgroundOverlayStyle(topbarSelection)}
+        >
           <VisualBackgroundImageLayer className="orf-topbar-skin-layer" selection={topbarSelection} />
           <div className="orf-topbar-title orf-text-primary min-w-[160px] font-semibold tracking-tight" role="heading" aria-level={1}>
             {isBountyHall && (
@@ -214,6 +226,7 @@ export function AppShell() {
           className="orf-main-content"
           data-page-scene={pageBackgroundScene}
           data-page-skin={pageSelection ? "true" : "false"}
+          style={backgroundOverlayStyle(pageSelection)}
         >
           <VisualBackgroundImageLayer
             className="orf-main-content-skin-layer"
@@ -242,6 +255,12 @@ function backgroundPlacementStyle(placement: VisualBackgroundPlacement) {
     "--orf-visual-bg-x": `${placement.offsetX}%`,
     "--orf-visual-bg-y": `${placement.offsetY}%`,
     "--orf-visual-bg-scale": placement.scale,
+  } as CSSProperties;
+}
+
+function backgroundOverlayStyle(selection: VisualBackgroundSelection | null) {
+  return {
+    "--orf-visual-bg-overlay-opacity": selection?.overlayOpacity ?? defaultVisualBackgroundOverlayOpacity,
   } as CSSProperties;
 }
 

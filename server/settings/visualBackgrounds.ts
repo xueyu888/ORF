@@ -8,7 +8,9 @@ import {
   canonicalVisualBackgroundScene,
   canonicalVisualBackgroundScope,
   defaultVisualBackgroundConfig,
+  normalizeVisualBackgroundOverlayOpacity,
   normalizeVisualBackgroundPlacement,
+  visualBackgroundOverlayLimits,
   visualBackgroundPlacementLimits,
   legacyVisualBackgroundScenes,
   legacyVisualBackgroundScopes,
@@ -40,10 +42,12 @@ export const backgroundPlacementSchema = z.object({
   offsetY: z.coerce.number().min(visualBackgroundPlacementLimits.offsetMin).max(visualBackgroundPlacementLimits.offsetMax),
   scale: z.coerce.number().min(visualBackgroundPlacementLimits.scaleMin).max(visualBackgroundPlacementLimits.scaleMax),
 });
+const backgroundOverlayOpacitySchema = z.coerce.number().min(visualBackgroundOverlayLimits.opacityMin).max(visualBackgroundOverlayLimits.opacityMax);
 export const backgroundSceneConfigSchema = z
   .object({
     mode: backgroundModeSchema,
     fixedBackgroundId: z.string().nullable(),
+    overlayOpacity: backgroundOverlayOpacitySchema.optional(),
     switchTrigger: backgroundSwitchTriggerSchema,
     switchOrder: backgroundSwitchOrderSchema,
     switchIntervalMinutes: z.coerce.number().int().min(1).max(1440),
@@ -51,6 +55,7 @@ export const backgroundSceneConfigSchema = z
   })
   .transform((config) => ({
     ...config,
+    overlayOpacity: normalizeVisualBackgroundOverlayOpacity(config.overlayOpacity),
     placements: Object.fromEntries(
       Object.entries(config.placements).map(([backgroundId, placement]) => [backgroundId, normalizeVisualBackgroundPlacement(placement)]),
     ),
@@ -243,6 +248,7 @@ function normalizeBackgroundConfig(input: LegacyBackgroundConfig | null | undefi
   return backgroundSceneConfigSchema.parse({
     mode: input?.mode ?? fallback.mode,
     fixedBackgroundId,
+    overlayOpacity: input?.overlayOpacity ?? fallback.overlayOpacity,
     switchTrigger: input?.switchTrigger ?? fallback.switchTrigger,
     switchOrder: input?.switchOrder ?? fallback.switchOrder,
     switchIntervalMinutes: input?.switchIntervalMinutes ?? fallback.switchIntervalMinutes,

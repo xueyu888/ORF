@@ -19,6 +19,8 @@ import {
   defaultVisualBackgroundConfig,
   defaultVisualBackgroundPlacement,
   normalizeVisualBackgroundPlacement,
+  normalizeVisualBackgroundOverlayOpacity,
+  visualBackgroundOverlayLimits,
   visualBackgroundPlacementLimits,
   type VisualBackgroundConfig,
   type VisualBackgroundPlacement,
@@ -107,6 +109,13 @@ function configWithPlacement(config: VisualBackgroundConfig, imageId: string, pl
   };
 }
 
+function configWithOverlayOpacity(config: VisualBackgroundConfig, overlayOpacity: number): VisualBackgroundConfig {
+  return {
+    ...config,
+    overlayOpacity: normalizeVisualBackgroundOverlayOpacity(overlayOpacity),
+  };
+}
+
 function pageApplyMode(scene: VisualBackgroundScene, scenes: readonly PageVisualBackgroundScene[]) {
   if (scenes.length === visualSkinPageSlots.length) return "all";
   if (scenes.length === 1 && scenes[0] === scene) return "current";
@@ -156,6 +165,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
         draftConfig.switchTrigger !== data.config.switchTrigger ||
         draftConfig.switchOrder !== data.config.switchOrder ||
         draftConfig.switchIntervalMinutes !== data.config.switchIntervalMinutes ||
+        draftConfig.overlayOpacity !== data.config.overlayOpacity ||
         !placementEquals(draftPlacement, persistedPlacement)),
   );
   const busy = loadStatus === "loading" || saveStatus === "loading" || uploadStatus === "loading" || deleteStatus === "loading";
@@ -361,6 +371,10 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
     setDraftConfig((current) => ({ ...current, switchIntervalMinutes: clamp(value, 1, 1440) }));
   };
 
+  const setOverlayOpacity = (value: number) => {
+    setDraftConfig((current) => configWithOverlayOpacity(current, value));
+  };
+
   return (
     <section className="orf-skin-workbench" data-scope={scope}>
       <aside className="orf-skin-slot-rail" aria-label="皮肤槽位">
@@ -416,6 +430,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
         <div className="orf-skin-stage-row">
           <VisualSkinPreview
             image={selectedBackground}
+            overlayOpacity={draftConfig.overlayOpacity}
             placement={draftPlacement}
             previewShape={slot.previewShape}
             onPlacementChange={updatePlacement}
@@ -527,6 +542,22 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
             <div className="orf-skin-inspector-section">
               <div className="orf-skin-inspector-title">
                 <SlidersHorizontal className="h-4 w-4" />
+                <span>蒙层</span>
+              </div>
+              <SkinSlider
+                label="强度"
+                max={visualBackgroundOverlayLimits.opacityMax}
+                min={visualBackgroundOverlayLimits.opacityMin}
+                step={0.01}
+                value={draftConfig.overlayOpacity}
+                format={(value) => `${Math.round(value * 100)}%`}
+                onChange={setOverlayOpacity}
+              />
+            </div>
+
+            <div className="orf-skin-inspector-section">
+              <div className="orf-skin-inspector-title">
+                <SlidersHorizontal className="h-4 w-4" />
                 <span>切换</span>
               </div>
               <SegmentedControl
@@ -627,11 +658,13 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
 function VisualSkinPreview({
   image,
   onPlacementChange,
+  overlayOpacity,
   placement,
   previewShape,
 }: {
   image: VisualBackgroundImage | null;
   onPlacementChange: (placement: VisualBackgroundPlacement) => void;
+  overlayOpacity: number;
   placement: VisualBackgroundPlacement;
   previewShape: VisualSkinPreviewShape;
 }) {
@@ -670,6 +703,7 @@ function VisualSkinPreview({
     "--orf-skin-image-x": `${placement.offsetX}%`,
     "--orf-skin-image-y": `${placement.offsetY}%`,
     "--orf-skin-image-scale": placement.scale,
+    "--orf-skin-preview-overlay-opacity": overlayOpacity,
   } as CSSProperties;
 
   return (
@@ -690,7 +724,12 @@ function VisualSkinPreview({
         ) : (
           <div className="orf-skin-preview-empty">暂无图片</div>
         )}
-        <div ref={frameRef} className={clsx("orf-skin-preview-frame", `orf-skin-preview-frame-${previewShape}`)} aria-hidden="true" />
+        <div
+          ref={frameRef}
+          className={clsx("orf-skin-preview-frame", `orf-skin-preview-frame-${previewShape}`)}
+          style={imageStyle}
+          aria-hidden="true"
+        />
       </div>
     </div>
   );
@@ -704,8 +743,10 @@ function SkinSlider({
   onChange,
   step = 1,
   value,
+  format,
 }: {
   disabled?: boolean;
+  format?: (value: number) => string;
   label: string;
   max: number;
   min: number;
@@ -725,7 +766,7 @@ function SkinSlider({
         disabled={disabled}
         onChange={(event) => onChange(Number(event.target.value))}
       />
-      <output>{step < 1 ? value.toFixed(2) : Math.round(value)}</output>
+      <output>{format ? format(value) : step < 1 ? value.toFixed(2) : Math.round(value)}</output>
     </label>
   );
 }

@@ -22,12 +22,14 @@ const sidebarGroups = [
 
 export function Sidebar({
   backgroundPlacement,
+  backgroundOverlayOpacity,
   backgroundUrl,
   collapsed,
   onCollapsedChange,
   onOpenClientUpdateCenter,
 }: {
   backgroundPlacement: VisualBackgroundPlacement;
+  backgroundOverlayOpacity: number;
   backgroundUrl: string;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
@@ -92,6 +94,7 @@ export function Sidebar({
     "--orf-sidebar-bg-scale": backgroundPlacement.scale,
     "--orf-sidebar-bg-filter": sidebarBackground.filter,
     "--orf-sidebar-bg-overlay": sidebarBackground.overlay,
+    "--orf-sidebar-bg-overlay-opacity": backgroundOverlayOpacity,
   } as CSSProperties;
 
   return (

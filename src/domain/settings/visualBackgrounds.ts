@@ -49,6 +49,7 @@ export type VisualBackgroundPlacement = {
 export type VisualBackgroundConfig = {
   mode: VisualBackgroundMode;
   fixedBackgroundId: string | null;
+  overlayOpacity: number;
   switchTrigger: VisualBackgroundSwitchTrigger;
   switchOrder: VisualBackgroundSwitchOrder;
   switchIntervalMinutes: number;
@@ -62,11 +63,18 @@ export const visualBackgroundPlacementLimits = {
   scaleMax: 3,
 } as const;
 
+export const visualBackgroundOverlayLimits = {
+  opacityMin: 0,
+  opacityMax: 1,
+} as const;
+
 export const defaultVisualBackgroundPlacement: VisualBackgroundPlacement = {
   offsetX: 0,
   offsetY: 0,
   scale: 1,
 };
+
+export const defaultVisualBackgroundOverlayOpacity = 0.58;
 
 export function canonicalVisualBackgroundScene(scene: AnyVisualBackgroundScene): VisualBackgroundScene {
   return scene === "app_background" ? "sidebar_background" : scene;
@@ -98,10 +106,15 @@ export function normalizeVisualBackgroundPlacement(input: Partial<VisualBackgrou
   };
 }
 
+export function normalizeVisualBackgroundOverlayOpacity(input: unknown): number {
+  return clampNumber(input, visualBackgroundOverlayLimits.opacityMin, visualBackgroundOverlayLimits.opacityMax, defaultVisualBackgroundOverlayOpacity);
+}
+
 export function defaultVisualBackgroundConfig(): VisualBackgroundConfig {
   return {
     mode: "fixed",
     fixedBackgroundId: null,
+    overlayOpacity: defaultVisualBackgroundOverlayOpacity,
     switchTrigger: "on_open",
     switchOrder: "random",
     switchIntervalMinutes: 10,

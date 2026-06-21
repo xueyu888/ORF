@@ -10,6 +10,7 @@ const visualBackgroundChangedEvent = "orf:visual-background-changed";
 
 export type VisualBackgroundSelection = {
   image: VisualBackgroundImage;
+  overlayOpacity: number;
   placement: VisualBackgroundPlacement;
   url: string;
 };
@@ -69,6 +70,7 @@ export function pickVisualBackground(data: VisualBackgroundsData): VisualBackgro
 
   return {
     image,
+    overlayOpacity: data.config.overlayOpacity,
     placement: placementForVisualBackground(data, image.id),
     url: image.url,
   };
