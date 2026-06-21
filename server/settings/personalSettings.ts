@@ -51,6 +51,8 @@ export type PersonalBackgroundsData = Awaited<ReturnType<typeof listVisualBackgr
   preferences: UserPreferences;
 };
 
+type StoredUserPreferences = Omit<UserPreferences, "appBackground">;
+
 export const userPreferencesPatchSchema = z.object({
   defaultLandingPath: z.string().nullable().optional(),
   sidebarCollapsed: z.boolean().nullable().optional(),
@@ -181,12 +183,17 @@ async function writeUserPreferences(preferences: UserPreferences) {
   const tempPath = `${targetPath}.${process.pid}.${Date.now().toString(36)}.${randomUUID()}.tmp`;
 
   try {
-    await writeFile(tempPath, `${JSON.stringify(preferences, null, 2)}\n`, "utf8");
+    await writeFile(tempPath, `${JSON.stringify(storedUserPreferences(preferences), null, 2)}\n`, "utf8");
     await rename(tempPath, targetPath);
   } catch (error) {
     await rm(tempPath, { force: true }).catch(() => undefined);
     throw error;
   }
+}
+
+function storedUserPreferences(preferences: UserPreferences): StoredUserPreferences {
+  const { appBackground: _legacyProjection, ...stored } = preferences;
+  return stored;
 }
 
 async function updateUserPreferences<T>(userId: string, mutator: (preferences: UserPreferences) => T | Promise<T>) {
@@ -416,11 +423,7 @@ export async function saveUserPreferences(userId: string, patch: z.infer<typeof 
       };
     }
     if (input.appBackground !== undefined) {
-      const legacyConfig = await normalizePersonalBackgroundConfig(userId, "sidebar_background", input.appBackground);
-      preferences.backgrounds.sidebar_background = legacyConfig;
-      preferences.backgrounds.topbar_background = legacyConfig
-        ? await normalizePersonalBackgroundConfig(userId, "topbar_background", input.appBackground)
-        : null;
+      throw new Error("invalid preference");
     }
     if (input.backgrounds) {
       for (const [sceneRaw, config] of Object.entries(input.backgrounds)) {
@@ -505,9 +508,6 @@ export async function deletePersonalBackground(userId: string, id: string) {
 
   const deletedId = personalBackgroundId(parsed.storageScene, parsed.fileName);
   await updateUserPreferences(userId, (preferences) => {
-    if (preferences.appBackground?.fixedBackgroundId === deletedId) {
-      preferences.appBackground = null;
-    }
     for (const scene of visualBackgroundScenes) {
       const config = preferences.backgrounds[scene];
       if (!config) continue;
@@ -516,6 +516,7 @@ export async function deletePersonalBackground(userId: string, id: string) {
         preferences.backgrounds[scene] = null;
       }
     }
+    preferences.appBackground = preferences.backgrounds.sidebar_background ?? null;
   });
 
   return { id: deletedId };

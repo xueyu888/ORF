@@ -701,10 +701,7 @@ function VisualSkinPreview({
     }
   };
 
-  const previewStyle = {
-    "--orf-skin-image-x": `${placement.offsetX}%`,
-    "--orf-skin-image-y": `${placement.offsetY}%`,
-    "--orf-skin-image-scale": placement.scale,
+  const previewFrameStyle = {
     "--orf-skin-preview-frame-ratio": `${frameRatio} / 1`,
     "--orf-skin-preview-overlay-opacity": overlayOpacity,
   } as CSSProperties;
@@ -723,7 +720,12 @@ function VisualSkinPreview({
         onPointerCancel={stopDrag}
       >
         {image ? (
-          <img className="orf-skin-preview-image" src={image.url} alt="" draggable={false} style={previewStyle} />
+          <VisualBackgroundSlot
+            frameClassName={clsx("orf-skin-preview-image-frame", `orf-skin-preview-image-frame-${previewShape}`)}
+            imageClassName="orf-skin-preview-image"
+            imageUrl={image.url}
+            placement={placement}
+          />
         ) : (
           <div className="orf-skin-preview-empty">暂无图片</div>
         )}
@@ -731,15 +733,9 @@ function VisualSkinPreview({
           ref={frameRef}
           className={clsx("orf-skin-preview-frame", `orf-skin-preview-frame-${previewShape}`)}
           data-preview-ratio={frameRatio.toFixed(6)}
-          style={previewStyle}
+          style={previewFrameStyle}
           aria-hidden="true"
         >
-          <VisualBackgroundSlot
-            frameClassName="orf-skin-preview-frame-crop"
-            imageClassName="orf-skin-preview-frame-image"
-            imageUrl={image?.url ?? null}
-            placement={placement}
-          />
           <span className="orf-skin-preview-frame-overlay" aria-hidden="true" />
         </div>
       </div>

@@ -1,8 +1,9 @@
 import { Check, Eye, EyeOff, LockKeyhole, Mail, Sparkles, Trash2, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
+import { VisualBackgroundSlot } from "../components/VisualBackgroundSlot";
 import { Button, IconButton } from "../components/ui";
 import {
   findSavedCredentialAccountByEmail,
@@ -276,17 +277,15 @@ export function AuthPage() {
   const heroOptions = configuredHeroOptions.length > 0 ? configuredHeroOptions : cachedHero ? [cachedHero, ...authHeroOptions] : authHeroOptions;
   const selectedHero = heroOptions.find((option) => option.id === selectedHeroId) ?? heroOptions[0];
   const rememberLabel = credentialProvider === "desktop" ? "记住到本机" : "让浏览器记住";
-  const selectedHeroStyle = selectedHero
-    ? {
-        "--orf-auth-hero-x": `${selectedHero.placement.offsetX}%`,
-        "--orf-auth-hero-y": `${selectedHero.placement.offsetY}%`,
-        "--orf-auth-hero-scale": selectedHero.placement.scale,
-      } as CSSProperties
-    : undefined;
 
   return (
     <main className="orf-auth-page">
-      {selectedHero && <img className="orf-auth-hero" src={selectedHero.src} alt="" aria-hidden="true" draggable={false} style={selectedHeroStyle} />}
+      <VisualBackgroundSlot
+        frameClassName="orf-auth-hero-frame"
+        imageClassName="orf-auth-hero-image"
+        imageUrl={selectedHero?.src ?? null}
+        placement={selectedHero?.placement ?? defaultVisualBackgroundPlacement}
+      />
       {heroOptions.length > 1 && <span className="orf-auth-top-gradient" aria-hidden="true" />}
       {heroOptions.length > 1 && (
         <div className="orf-auth-hero-switch-zone" aria-label="选择登录页背景">

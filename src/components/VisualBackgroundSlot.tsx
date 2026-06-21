@@ -40,7 +40,7 @@ export function VisualBackgroundSlot({
 }
 
 function visualBackgroundSlotStyle(placement: VisualBackgroundPlacement, imageFilter?: string) {
-  const effectiveScale = Math.max(1, placement.scale);
+  const effectiveScale = placement.scale;
   const panX = (placement.offsetX * (effectiveScale - 1)) / 2;
   const panY = (placement.offsetY * (effectiveScale - 1)) / 2;
 

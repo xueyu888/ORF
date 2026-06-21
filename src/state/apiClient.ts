@@ -212,13 +212,14 @@ export type UserPreferences = {
   sidebarCollapsed: boolean | null;
   chatTheme: ChatTheme;
   display: UserDisplayPreferences;
+  /** Compatibility projection for legacy clients. New writes must use backgrounds[scene]. */
   appBackground: VisualBackgroundConfig | null;
   backgrounds: Partial<Record<VisualBackgroundScene, VisualBackgroundConfig | null>>;
   notificationDisplay: {
     toastEnabled: boolean;
   };
 };
-export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "appBackground" | "backgrounds">> & {
+export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "backgrounds">> & {
   notificationDisplay?: Partial<UserPreferences["notificationDisplay"]>;
 };
 export type PersonalBackgroundsData = VisualBackgroundsData & {

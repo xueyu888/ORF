@@ -1584,18 +1584,11 @@ button:disabled {
   user-select: none;
 }
 
-.orf-auth-hero {
-  position: absolute;
+.orf-auth-hero-frame {
   z-index: -3;
-  top: calc(50% + var(--orf-auth-hero-y, 0%));
-  left: calc(50% + var(--orf-auth-hero-x, 0%));
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  transform: translate3d(-50%, -50%, 0) scale(var(--orf-auth-hero-scale, 1));
-  transform-origin: center;
-  pointer-events: none;
+}
+
+.orf-auth-hero-image {
   -webkit-user-drag: none;
 }
 
@@ -2136,10 +2129,6 @@ button:disabled {
   .orf-auth-page {
     justify-content: center;
     padding: 40px 24px;
-  }
-
-  .orf-auth-hero {
-    object-position: 62% center;
   }
 
   .orf-auth-page::before {
@@ -2824,20 +2813,38 @@ button:disabled {
   cursor: grabbing;
 }
 
-.orf-skin-preview-image {
+.orf-skin-preview-image-frame {
   position: absolute;
-  top: calc(50% + var(--orf-skin-image-y, 0%));
-  left: calc(50% + var(--orf-skin-image-x, 0%));
+  inset: auto;
+  top: 50%;
+  left: 50%;
   z-index: 0;
+  overflow: visible;
+  width: min(78%, 720px);
+  aspect-ratio: var(--orf-skin-preview-frame-ratio, 16 / 9);
+  transform: translate3d(-50%, -50%, 0);
+}
+
+.orf-skin-preview-image-frame-login,
+.orf-skin-preview-image-frame-page {
+  width: min(78%, 720px);
+  aspect-ratio: var(--orf-skin-preview-frame-ratio, 16 / 9);
+}
+
+.orf-skin-preview-image-frame-topbar {
+  width: min(94%, 1000px);
+  aspect-ratio: var(--orf-skin-preview-frame-ratio, 22 / 1);
+}
+
+.orf-skin-preview-image-frame-sidebar {
   width: auto;
-  height: auto;
-  max-width: 88%;
-  max-height: 88%;
-  object-fit: contain;
-  transform: translate3d(-50%, -50%, 0) scale(var(--orf-skin-image-scale, 1));
-  transform-origin: center;
+  height: min(86%, 520px);
+  aspect-ratio: var(--orf-skin-preview-frame-ratio, 260 / 900);
+}
+
+.orf-skin-preview-image {
   user-select: none;
-  pointer-events: none;
+  -webkit-user-drag: none;
 }
 
 .orf-skin-preview-frame {
@@ -2858,10 +2865,6 @@ button:disabled {
     0 14px 32px rgba(15, 35, 58, 0.22);
   transform: translate3d(-50%, -50%, 0);
   pointer-events: none;
-}
-
-.orf-skin-preview-frame-crop {
-  z-index: 0;
 }
 
 .orf-skin-preview-frame-overlay {
