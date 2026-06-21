@@ -269,57 +269,42 @@ export function MembersPage() {
                     </td>
                     <td>
                       <div className="orf-user-actions orf-user-actions-text">
-                        <Button size="sm" type="button" variant="secondary" onClick={() => openEditDialog(user)}>
-                          <Edit3 className="h-4 w-4" />
-                          编辑
-                        </Button>
+                        <IconButton icon={Edit3} label="编辑用户" size="sm" type="button" variant="secondary" onClick={() => openEditDialog(user)} />
                         {lifecycleActions.includes("approve") ? (
                           <>
-                            <Button size="sm" type="button" disabled={processingUserId === user.id} onClick={() => void handleApprove(user)}>
-                              <CheckCircle2 className="h-4 w-4" />
-                              通过
-                            </Button>
-                            <Button size="sm" type="button" variant="danger" disabled={processingUserId === user.id} onClick={() => void handleReject(user)}>
-                              <XCircle className="h-4 w-4" />
-                              拒绝
-                            </Button>
+                            <IconButton icon={CheckCircle2} label="通过用户" size="sm" type="button" disabled={processingUserId === user.id} onClick={() => void handleApprove(user)} />
+                            <IconButton icon={XCircle} label="拒绝用户" size="sm" type="button" variant="danger" disabled={processingUserId === user.id} onClick={() => void handleReject(user)} />
                           </>
                         ) : lifecycleActions.includes("enable") ? (
-                          <Button
+                          <IconButton
+                            icon={CheckCircle2}
+                            label="启用用户"
                             type="button"
                             size="sm"
                             variant="secondary"
                             disabled={processingUserId === user.id}
-                            title="启用"
                             onClick={() => void handleEnable(user)}
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                            启用
-                          </Button>
+                          />
                         ) : (
-                          <Button
+                          <IconButton
+                            icon={Ban}
+                            label={isCurrentUser(user) ? "不能停用自己" : "停用用户"}
                             type="button"
                             size="sm"
                             variant="danger"
                             disabled={isCurrentUser(user) || processingUserId === user.id || user.status === "disabled"}
-                            title={isCurrentUser(user) ? "不能停用自己" : "停用"}
                             onClick={() => void handleDisable(user)}
-                          >
-                            <Ban className="h-4 w-4" />
-                            停用
-                          </Button>
+                          />
                         )}
-                        <Button
+                        <IconButton
+                          icon={Trash2}
+                          label={isCurrentUser(user) ? "不能删除自己" : "删除用户"}
                           type="button"
                           size="sm"
                           variant="danger"
                           disabled={isCurrentUser(user) || processingUserId === user.id}
-                          title={isCurrentUser(user) ? "不能删除自己" : "删除"}
                           onClick={() => void handleDelete(user)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          删除
-                        </Button>
+                        />
                       </div>
                     </td>
                     </tr>

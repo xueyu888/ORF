@@ -3632,16 +3632,46 @@ button:disabled {
 .orf-user-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .orf-user-actions-text {
-  max-width: 230px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
+.orf-user-actions .orf-action-icon-button.orf-action-button-sm {
+  width: 30px;
+  min-width: 30px;
+  height: 26px;
+  min-height: 26px;
+  border-radius: 0;
+  clip-path: var(--orf-control-cut);
+  padding: 0;
+  box-shadow: none;
+}
+
+.orf-user-actions .orf-action-button svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.35;
+}
+
+.orf-user-actions .orf-action-button-secondary {
+  border-color: rgba(47, 143, 168, 0.24);
+  background: rgba(82, 215, 246, 0.14);
+  color: #2b5f78;
+}
+
+.orf-user-actions .orf-action-button-danger {
+  border-color: rgba(169, 70, 76, 0.26);
+  background: rgba(215, 114, 114, 0.16);
+  color: #a9464c;
+}
+
+.orf-user-table th:last-child,
 .orf-user-table td:last-child {
-  white-space: normal;
+  width: 1%;
+  white-space: nowrap;
 }
 
 .orf-user-role-select:has(select:disabled) {
