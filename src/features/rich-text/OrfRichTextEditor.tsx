@@ -246,6 +246,7 @@ export function OrfRichTextEditor({
 
   const activeBlockState = useMemo(() => getOrfRichTextBlockState(markdown, selectionRange), [markdown, selectionRange]);
   const activeBlockKind = activeBlockState.kind;
+  const uploadButtonLabel = onUploadAttachment ? "添加图片或附件" : "添加图片";
   const footerHint = uploadingAttachment
     ? "附件上传中..."
     : activeBlockKind === "paragraph"
@@ -735,7 +736,7 @@ export function OrfRichTextEditor({
         </ToolbarButton>
         {(onUploadAttachment || onUploadImage) && (
           <>
-            <ToolbarButton disabled={disabled || uploadingAttachment} label={onUploadAttachment ? "添加附件" : "添加图片"} onClick={() => fileInputRef.current?.click()}>
+            <ToolbarButton disabled={disabled || uploadingAttachment} label={uploadButtonLabel} onClick={() => fileInputRef.current?.click()}>
               {onUploadAttachment ? <Paperclip className="h-4 w-4" /> : <ImagePlus className="h-4 w-4" />}
             </ToolbarButton>
             <input
