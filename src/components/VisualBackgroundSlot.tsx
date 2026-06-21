@@ -4,6 +4,7 @@ import type { VisualBackgroundCrop } from "../domain/settings/visualBackgrounds"
 type VisualBackgroundSlotProps = {
   crop: VisualBackgroundCrop;
   frameClassName: string;
+  frameStyle?: CSSProperties;
   imageClassName?: string;
   imageFilter?: string;
   imageUrl: string | null;
@@ -14,6 +15,7 @@ type VisualBackgroundSlotProps = {
 export function VisualBackgroundSlot({
   crop,
   frameClassName,
+  frameStyle,
   imageClassName,
   imageFilter,
   imageUrl,
@@ -23,7 +25,7 @@ export function VisualBackgroundSlot({
   if (!imageUrl) return null;
 
   return (
-    <span className={["orf-visual-bg-slot", frameClassName].filter(Boolean).join(" ")} aria-hidden="true">
+    <span className={["orf-visual-bg-slot", frameClassName].filter(Boolean).join(" ")} style={frameStyle} aria-hidden="true">
       <img
         className={["orf-visual-bg-slot-image", imageClassName].filter(Boolean).join(" ")}
         src={imageUrl}

@@ -682,6 +682,12 @@ function VisualSkinPreview({
   const frameRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const frameRatio = useRuntimePreviewFrameRatio(previewShape);
+  const surfaceSize = useElementSize(surfaceRef);
+  const [sourceImageSize, setSourceImageSize] = useState<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    setSourceImageSize(null);
+  }, [image?.url]);
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (!image) return;
@@ -711,9 +717,14 @@ function VisualSkinPreview({
   };
 
   const previewFrameStyle = {
-    "--orf-skin-preview-frame-ratio": `${frameRatio} / 1`,
+    ...visualSkinPreviewFrameBoxStyle(previewShape, frameRatio, surfaceSize),
     "--orf-skin-preview-overlay-opacity": overlayOpacity,
   } as CSSProperties;
+  const previewImageFrameStyle = visualSkinPreviewFrameBoxStyle(previewShape, frameRatio, surfaceSize);
+  const sourceFrameRatio = sourceImageSize
+    ? sourceImageSize.width / Math.max(1, sourceImageSize.height)
+    : fallbackPreviewFrameRatios[previewShape];
+  const sourceFrameStyle = visualSkinPreviewSourceFrameStyle(crop, sourceFrameRatio, surfaceSize);
 
   return (
     <div className="orf-skin-preview-shell">
@@ -729,18 +740,29 @@ function VisualSkinPreview({
         onPointerCancel={stopDrag}
       >
         {image && (
-          <img
-            className="orf-skin-preview-canvas-image"
-            src={image.url}
-            alt=""
+          <div
+            className="orf-skin-preview-source-frame"
             aria-hidden="true"
-            draggable={false}
-            style={visualSkinPreviewCanvasImageStyle(crop)}
-          />
+            style={sourceFrameStyle}
+          >
+            <img
+              className="orf-skin-preview-canvas-image"
+              src={image.url}
+              alt=""
+              draggable={false}
+              onLoad={(event) => {
+                const { naturalWidth, naturalHeight } = event.currentTarget;
+                if (naturalWidth > 0 && naturalHeight > 0) {
+                  setSourceImageSize({ width: naturalWidth, height: naturalHeight });
+                }
+              }}
+            />
+          </div>
         )}
         {image ? (
           <VisualBackgroundSlot
             frameClassName={clsx("orf-skin-preview-image-frame", `orf-skin-preview-image-frame-${previewShape}`)}
+            frameStyle={previewImageFrameStyle}
             imageClassName="orf-skin-preview-image"
             imageUrl={image.url}
             crop={crop}
@@ -762,12 +784,108 @@ function VisualSkinPreview({
   );
 }
 
-function visualSkinPreviewCanvasImageStyle(crop: VisualBackgroundCrop) {
-  return {
+type ElementSize = {
+  width: number;
+  height: number;
+};
+
+type PreviewFitLimits = {
+  heightFraction: number;
+  maxHeight: number;
+  maxWidth: number;
+  widthFraction: number;
+};
+
+function useElementSize(ref: { current: HTMLElement | null }) {
+  const [size, setSize] = useState<ElementSize | null>(null);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const updateSize = () => {
+      const rect = element.getBoundingClientRect();
+      const nextSize = { width: rect.width, height: rect.height };
+      setSize((current) => (
+        current && Math.abs(current.width - nextSize.width) < 0.5 && Math.abs(current.height - nextSize.height) < 0.5
+          ? current
+          : nextSize
+      ));
+    };
+
+    updateSize();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateSize);
+      return () => window.removeEventListener("resize", updateSize);
+    }
+
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(element);
+    window.addEventListener("resize", updateSize);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateSize);
+    };
+  }, [ref]);
+
+  return size;
+}
+
+function visualSkinPreviewSourceFrameStyle(crop: VisualBackgroundCrop, sourceRatio: number, surfaceSize: ElementSize | null) {
+  const transformStyle = {
     "--orf-skin-preview-canvas-shift-x": `${(0.5 - crop.centerX) * 100}%`,
     "--orf-skin-preview-canvas-shift-y": `${(0.5 - crop.centerY) * 100}%`,
     "--orf-skin-preview-canvas-zoom": crop.zoom,
+    "--orf-skin-preview-source-ratio": `${sourceRatio} / 1`,
   } as CSSProperties;
+
+  if (!surfaceSize) return transformStyle;
+
+  const fitted = fitPreviewRect(sourceRatio, surfaceSize, {
+    heightFraction: 0.86,
+    maxHeight: 560,
+    maxWidth: 920,
+    widthFraction: 0.86,
+  });
+
+  return {
+    ...transformStyle,
+    ...fitted,
+  } as CSSProperties;
+}
+
+function visualSkinPreviewFrameBoxStyle(previewShape: VisualSkinPreviewShape, frameRatio: number, surfaceSize: ElementSize | null) {
+  const boxStyle = {
+    "--orf-skin-preview-frame-ratio": `${frameRatio} / 1`,
+  } as CSSProperties;
+
+  if (!surfaceSize) return boxStyle;
+
+  return {
+    ...boxStyle,
+    ...fitPreviewRect(frameRatio, surfaceSize, previewFrameFitLimits[previewShape]),
+  } as CSSProperties;
+}
+
+const previewFrameFitLimits: Record<VisualSkinPreviewShape, PreviewFitLimits> = {
+  login: { widthFraction: 0.78, heightFraction: 0.86, maxWidth: 720, maxHeight: 560 },
+  page: { widthFraction: 0.78, heightFraction: 0.86, maxWidth: 720, maxHeight: 560 },
+  sidebar: { widthFraction: 0.78, heightFraction: 0.86, maxWidth: 720, maxHeight: 520 },
+  topbar: { widthFraction: 0.94, heightFraction: 0.86, maxWidth: 1000, maxHeight: 560 },
+};
+
+function fitPreviewRect(ratio: number, surfaceSize: ElementSize, limits: PreviewFitLimits) {
+  const maxWidth = Math.min(surfaceSize.width * limits.widthFraction, limits.maxWidth);
+  const maxHeight = Math.min(surfaceSize.height * limits.heightFraction, limits.maxHeight);
+  const normalizedRatio = Math.max(0.01, ratio);
+  const fitByHeight = maxWidth / Math.max(1, maxHeight) > normalizedRatio;
+
+  return {
+    width: fitByHeight ? maxHeight * normalizedRatio : maxWidth,
+    height: fitByHeight ? maxHeight : maxWidth / normalizedRatio,
+  };
 }
 
 const fallbackPreviewFrameRatios: Record<VisualSkinPreviewShape, number> = {
