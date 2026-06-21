@@ -2,6 +2,7 @@ import { Flag, MessageSquarePlus, Search, Shield } from "lucide-react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
+import { VisualBackgroundSlot } from "./VisualBackgroundSlot";
 import { Button } from "./ui";
 import { CommandMenu } from "./CommandMenu";
 import { GlobalModals } from "./GlobalModals";
@@ -25,7 +26,6 @@ import { defaultChatTheme, defaultUserDisplayPreferences, type ChatTheme, type U
 import {
   defaultVisualBackgroundOverlayOpacity,
   defaultVisualBackgroundPlacement,
-  type VisualBackgroundPlacement,
 } from "../domain/settings/visualBackgrounds";
 import { getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
@@ -185,7 +185,12 @@ export function AppShell() {
           data-topbar-skin={topbarSelection ? "true" : "false"}
           style={backgroundOverlayStyle(topbarSelection)}
         >
-          <VisualBackgroundImageLayer className="orf-topbar-skin-layer" selection={topbarSelection} />
+          <VisualBackgroundSlot
+            frameClassName="orf-topbar-skin-frame"
+            imageClassName="orf-topbar-skin-layer"
+            imageUrl={topbarSelection?.url ?? null}
+            placement={topbarSelection?.placement ?? defaultVisualBackgroundPlacement}
+          />
           <div className="orf-topbar-title orf-text-primary min-w-[160px] font-semibold tracking-tight" role="heading" aria-level={1}>
             {isBountyHall && (
               <span className="orf-topbar-title-icon" aria-hidden="true">
@@ -228,10 +233,11 @@ export function AppShell() {
           data-page-skin={pageSelection ? "true" : "false"}
           style={backgroundOverlayStyle(pageSelection)}
         >
-          <VisualBackgroundImageLayer
-            className="orf-main-content-skin-layer"
+          <VisualBackgroundSlot
             frameClassName="orf-main-content-skin-frame"
-            selection={pageSelection}
+            imageClassName="orf-main-content-skin-layer"
+            imageUrl={pageSelection?.url ?? null}
+            placement={pageSelection?.placement ?? defaultVisualBackgroundPlacement}
           />
           <Outlet />
         </main>
@@ -250,42 +256,8 @@ export function AppShell() {
   );
 }
 
-function backgroundPlacementStyle(placement: VisualBackgroundPlacement) {
-  return {
-    "--orf-visual-bg-x": `${placement.offsetX}%`,
-    "--orf-visual-bg-y": `${placement.offsetY}%`,
-    "--orf-visual-bg-scale": placement.scale,
-  } as CSSProperties;
-}
-
 function backgroundOverlayStyle(selection: VisualBackgroundSelection | null) {
   return {
     "--orf-visual-bg-overlay-opacity": selection?.overlayOpacity ?? defaultVisualBackgroundOverlayOpacity,
   } as CSSProperties;
-}
-
-function VisualBackgroundImageLayer({
-  className,
-  frameClassName,
-  selection,
-}: {
-  className: string;
-  frameClassName?: string;
-  selection: VisualBackgroundSelection | null;
-}) {
-  if (!selection) return null;
-  const image = (
-    <img
-      className={className}
-      src={selection.url}
-      alt=""
-      aria-hidden="true"
-      draggable={false}
-      style={backgroundPlacementStyle(selection.placement)}
-    />
-  );
-  if (frameClassName) {
-    return <span className={frameClassName} aria-hidden="true">{image}</span>;
-  }
-  return image;
 }

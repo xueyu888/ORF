@@ -8,6 +8,7 @@ import { navItems } from "../config/navigation";
 import type { VisualBackgroundPlacement } from "../domain/settings/visualBackgrounds";
 import { useOrf } from "../state/OrfProvider";
 import { ImagePreviewDialog } from "./ImagePreviewDialog";
+import { VisualBackgroundSlot } from "./VisualBackgroundSlot";
 import { Avatar } from "./ui";
 
 const navItemByLabel = new Map(navItems.map((item) => [item.label, item]));
@@ -89,10 +90,6 @@ export function Sidebar({
   }
 
   const sidebarStyle = {
-    "--orf-sidebar-bg-x": `${backgroundPlacement.offsetX}%`,
-    "--orf-sidebar-bg-y": `${backgroundPlacement.offsetY}%`,
-    "--orf-sidebar-bg-scale": backgroundPlacement.scale,
-    "--orf-sidebar-bg-filter": sidebarBackground.filter,
     "--orf-sidebar-bg-overlay": sidebarBackground.overlay,
     "--orf-sidebar-bg-overlay-opacity": backgroundOverlayOpacity,
   } as CSSProperties;
@@ -106,14 +103,13 @@ export function Sidebar({
       style={sidebarStyle}
       aria-label="主导航"
     >
-      <img
-        className="orf-sidebar-background-image"
-        src={backgroundImageUrl}
-        alt=""
-        aria-hidden="true"
-        loading="eager"
-        decoding="async"
-        onError={() => setFailedBackgroundUrl(backgroundImageUrl)}
+      <VisualBackgroundSlot
+        frameClassName="orf-sidebar-background-frame"
+        imageClassName="orf-sidebar-background-image"
+        imageFilter={sidebarBackground.filter}
+        imageUrl={backgroundImageUrl}
+        onImageError={() => setFailedBackgroundUrl(backgroundImageUrl)}
+        placement={backgroundPlacement}
       />
       <div className="orf-sidebar-brand flex items-center justify-between border-b px-4">
         <div className="orf-sidebar-brand-main flex items-center gap-2.5">
