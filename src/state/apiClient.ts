@@ -24,6 +24,7 @@ import type {
   WorkLogClassificationSuggestion,
   WorkLogEntry,
   WorkLogObjectiveOption,
+  WorkLogReminderState,
   WorkLogReport,
   WorkLogReportScope,
 } from "../types/orf";
@@ -177,6 +178,7 @@ export type WorkLogObjectivesResponse = {
 export type WorkLogDayResponse = { entries: WorkLogEntry[] };
 export type WorkLogActivityResponse = { entries: WorkLogActivityItem[] };
 export type WorkLogReportResponse = { report: WorkLogReport };
+export type WorkLogReminderStateResponse = { reminder: WorkLogReminderState };
 export type WorkLogClassificationSuggestionResponse = {
   suggestion: WorkLogClassificationSuggestion | null;
 };
@@ -721,6 +723,16 @@ export async function getChatUnreadSummary() {
 
 export async function getWorkLogObjectives() {
   return apiJson<WorkLogObjectivesResponse>("/api/work-logs/objectives");
+}
+
+export async function getWorkLogReminderState() {
+  return apiJson<WorkLogReminderStateResponse>("/api/work-logs/reminder-state");
+}
+
+export async function snoozeWorkLogReminder() {
+  return apiJson<WorkLogReminderStateResponse>("/api/work-logs/reminder-state/snooze", {
+    method: "POST",
+  });
 }
 
 export async function suggestWorkLogClassification(input: { bodyMarkdown: string }) {

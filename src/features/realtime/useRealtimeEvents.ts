@@ -6,6 +6,8 @@ import type {
   OrfReadModelInvalidation,
   RealtimeEvent,
   SystemBroadcast,
+  WorkLogReminderRequiredRealtimeEvent,
+  WorkLogReminderResolvedRealtimeEvent,
 } from "../../types/realtime";
 import { getRealtimeClientId } from "./realtimeClientId";
 
@@ -15,6 +17,8 @@ type RealtimeEventOptions = {
   onChatEvent?: (event: ChatRealtimeEvent) => void;
   onClientUpdateAvailable?: (update: ClientUpdateAvailable) => void;
   onConnectionRestored?: () => void;
+  onWorkLogReminderRequired?: (event: WorkLogReminderRequiredRealtimeEvent) => void;
+  onWorkLogReminderResolved?: (event: WorkLogReminderResolvedRealtimeEvent) => void;
   onReadModelInvalidation: (invalidation: OrfReadModelInvalidation) => void;
   onNotification: (notification: AppNotification) => void;
 };
@@ -25,6 +29,8 @@ export function useRealtimeEvents({
   onChatEvent,
   onClientUpdateAvailable,
   onConnectionRestored,
+  onWorkLogReminderRequired,
+  onWorkLogReminderResolved,
   onNotification,
   onReadModelInvalidation,
 }: RealtimeEventOptions) {
@@ -32,6 +38,8 @@ export function useRealtimeEvents({
   const onChatEventRef = useRef(onChatEvent);
   const onClientUpdateAvailableRef = useRef(onClientUpdateAvailable);
   const onConnectionRestoredRef = useRef(onConnectionRestored);
+  const onWorkLogReminderRequiredRef = useRef(onWorkLogReminderRequired);
+  const onWorkLogReminderResolvedRef = useRef(onWorkLogReminderResolved);
   const onNotificationRef = useRef(onNotification);
   const onReadModelInvalidationRef = useRef(onReadModelInvalidation);
 
@@ -54,6 +62,14 @@ export function useRealtimeEvents({
   useEffect(() => {
     onConnectionRestoredRef.current = onConnectionRestored;
   }, [onConnectionRestored]);
+
+  useEffect(() => {
+    onWorkLogReminderRequiredRef.current = onWorkLogReminderRequired;
+  }, [onWorkLogReminderRequired]);
+
+  useEffect(() => {
+    onWorkLogReminderResolvedRef.current = onWorkLogReminderResolved;
+  }, [onWorkLogReminderResolved]);
 
   useEffect(() => {
     onReadModelInvalidationRef.current = onReadModelInvalidation;
@@ -97,6 +113,18 @@ export function useRealtimeEvents({
         onReadModelInvalidationRef.current(payload.invalidation);
       }
     };
+    const handleWorkLogReminderRequired = (event: MessageEvent<string>) => {
+      const payload = parseRealtimeEvent(event.data);
+      if (payload?.kind === "worklog.reminder.required") {
+        onWorkLogReminderRequiredRef.current?.(payload);
+      }
+    };
+    const handleWorkLogReminderResolved = (event: MessageEvent<string>) => {
+      const payload = parseRealtimeEvent(event.data);
+      if (payload?.kind === "worklog.reminder.resolved") {
+        onWorkLogReminderResolvedRef.current?.(payload);
+      }
+    };
     const handleOpen = () => {
       if (!connectionHadError) return;
       connectionHadError = false;
@@ -113,6 +141,8 @@ export function useRealtimeEvents({
     source.addEventListener("chat.event", handleChatEvent);
     source.addEventListener("client.update.available", handleClientUpdateAvailable);
     source.addEventListener("orf.read-model.invalidated", handleReadModelInvalidation);
+    source.addEventListener("worklog.reminder.required", handleWorkLogReminderRequired);
+    source.addEventListener("worklog.reminder.resolved", handleWorkLogReminderResolved);
     return () => {
       source.removeEventListener("open", handleOpen);
       source.removeEventListener("error", handleError);
@@ -121,6 +151,8 @@ export function useRealtimeEvents({
       source.removeEventListener("chat.event", handleChatEvent);
       source.removeEventListener("client.update.available", handleClientUpdateAvailable);
       source.removeEventListener("orf.read-model.invalidated", handleReadModelInvalidation);
+      source.removeEventListener("worklog.reminder.required", handleWorkLogReminderRequired);
+      source.removeEventListener("worklog.reminder.resolved", handleWorkLogReminderResolved);
       source.close();
     };
   }, [enabled]);

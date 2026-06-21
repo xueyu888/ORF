@@ -16,11 +16,12 @@ import {
 } from "../../src/domain/orfWorkLogs";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { db } from "../db/client";
-import { notificationEvents, notificationReceipts, objectives, teamMembers, users, workLogCategories, workLogEntries } from "../db/schema";
+import { objectives, teamMembers, users, workLogCategories, workLogEntries } from "../db/schema";
 import { publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
 import type { AuthenticatedOrfUser } from "../auth/accessPolicy";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScopeStorageId } from "./runtimeScope";
+import { reconcileWorkLogReminderState } from "../workLogs/workLogReminderState";
 
 export type WorkLogDayEntryInput = {
   bodyMarkdown: string;
@@ -62,11 +63,6 @@ export type WorkLogReportQuery = {
   to: string;
 };
 
-export type WorkLogReminderRecipient = {
-  id: string;
-  name: string;
-};
-
 const nowIso = () => new Date().toISOString();
 const makeWorkLogId = () => `worklog-${Date.now()}-${Math.random().toString(16).slice(2)}-${randomUUID()}`;
 const makeWorkLogCategoryId = () => `worklog-category-${Date.now()}-${Math.random().toString(16).slice(2)}-${randomUUID()}`;
@@ -77,10 +73,6 @@ function normalizeWorkLogCategoryDisplayName(value: string) {
 
 function normalizeWorkLogCategoryNameKey(value: string) {
   return normalizeWorkLogCategoryDisplayName(value).toLocaleLowerCase();
-}
-
-export function workLogReminderTargetId(workDate: string) {
-  return `work-log-reminder-${workDate}`;
 }
 
 function toWorkLogEntry(row: typeof workLogEntries.$inferSelect): WorkLogEntry {
@@ -102,6 +94,16 @@ function toWorkLogEntry(row: typeof workLogEntries.$inferSelect): WorkLogEntry {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+function reconcileReminderAfterWorkLogChange(teamId: string, userId: string) {
+  void reconcileWorkLogReminderState({
+    publishRealtime: true,
+    teamId,
+    userId,
+  }).catch((error) => {
+    console.warn("[work-log] reminder state reconciliation failed", { teamId, userId }, error);
+  });
 }
 
 function normalizeWorkLogEntryInput(user: AuthenticatedOrfUser, input: WorkLogDayEntryInput) {
@@ -404,6 +406,7 @@ export async function createMyWorkLogEntry(
     reason: "workLog.changed",
     target: { id: `${user.id}:${workDate}`, type: "workLog" },
   });
+  reconcileReminderAfterWorkLogChange(storageScopeId, user.id);
 
   return { status: "ok", entries: await listMyWorkLogDay(user.id, scope, workDate) };
 }
@@ -486,6 +489,7 @@ export async function updateMyWorkLogEntry(
     reason: "workLog.changed",
     target: { id: `${user.id}:${existing.workDate}`, type: "workLog" },
   });
+  reconcileReminderAfterWorkLogChange(storageScopeId, user.id);
 
   return { status: "ok", entries: await listMyWorkLogDay(user.id, scope, existing.workDate) };
 }
@@ -517,6 +521,7 @@ export async function deleteMyWorkLogEntry(
     reason: "workLog.changed",
     target: { id: `${user.id}:${existing.workDate}`, type: "workLog" },
   });
+  reconcileReminderAfterWorkLogChange(storageScopeId, user.id);
 
   return { status: "ok", entries: await listMyWorkLogDay(user.id, scope, existing.workDate) };
 }
@@ -868,50 +873,4 @@ export async function getWorkLogReport(
       totalDurationMinutes,
     },
   };
-}
-
-export async function listWorkLogReminderRecipients(teamId: string, workDate: string): Promise<WorkLogReminderRecipient[]> {
-  const targetId = workLogReminderTargetId(workDate);
-  const rows = await db
-    .select({ id: users.id, name: users.name })
-    .from(teamMembers)
-    .innerJoin(users, eq(teamMembers.userId, users.id))
-    .where(and(
-      eq(teamMembers.teamId, teamId),
-      eq(users.status, "active"),
-      or(
-        eq(teamMembers.role, "admin"),
-        and(
-          eq(teamMembers.role, "member"),
-          or(
-            inArray(users.name, [...unscopedWorkLogMemberNameList]),
-            sql`exists (
-              select 1
-              from ${objectives}
-              where ${objectives.teamId} = ${teamMembers.teamId}
-                and ${objectives.challengerUserIds} ? (${users.id})::text
-            )`,
-          ),
-        ),
-      ),
-      sql`not exists (
-        select 1
-        from ${workLogEntries}
-        where ${workLogEntries.teamId} = ${teamMembers.teamId}
-          and ${workLogEntries.authorUserId} = ${users.id}
-          and ${workLogEntries.workDate} = ${workDate}
-      )`,
-      sql`not exists (
-        select 1
-        from ${notificationEvents}
-        inner join ${notificationReceipts} on ${notificationReceipts.eventId} = ${notificationEvents.id}
-        where ${notificationEvents.teamId} = ${teamMembers.teamId}
-          and ${notificationReceipts.recipientUserId} = ${users.id}
-          and ${notificationEvents.kind} = 'worklog.reminder'
-          and ${notificationEvents.targetId} = ${targetId}
-      )`,
-    ))
-    .orderBy(asc(users.name), asc(users.id));
-
-  return rows;
 }

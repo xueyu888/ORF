@@ -131,6 +131,7 @@ export function WorkLogsPage() {
     dismissSystemBroadcast,
     notify,
     readModelInvalidations,
+    refreshWorkLogReminderState,
     systemBroadcasts,
   } = useOrf();
   const [selectedDate, setSelectedDate] = useState(() =>
@@ -367,6 +368,7 @@ export function WorkLogsPage() {
       setClassificationSuggestion(null);
       void loadActivity(activityExpanded);
       void loadReport(reportMonth, reportScope);
+      void refreshWorkLogReminderState().catch(() => undefined);
       systemBroadcasts
         .filter(
           (broadcast) => broadcast.notificationKind === "worklog.reminder",
@@ -397,6 +399,7 @@ export function WorkLogsPage() {
       }
       void loadActivity(activityExpanded);
       void loadReport(reportMonth, reportScope);
+      void refreshWorkLogReminderState().catch(() => undefined);
       notify("工作日志已删除");
     } catch (deleteError) {
       setError(

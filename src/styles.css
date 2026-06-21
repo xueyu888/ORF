@@ -4781,22 +4781,6 @@ button:disabled {
   color: #0e7490;
 }
 
-.orf-system-broadcast[data-tone="workLogReminder"] {
-  border-color: rgba(68, 124, 93, 0.32);
-  background:
-    linear-gradient(
-      90deg,
-      rgba(240, 253, 244, 0.94),
-      rgba(238, 251, 255, 0.9) 54%,
-      rgba(255, 248, 232, 0.9)
-    ),
-    rgba(240, 253, 244, 0.94);
-}
-
-.orf-system-broadcast[data-tone="workLogReminder"] .orf-system-broadcast-icon {
-  color: #168250;
-}
-
 .orf-system-broadcast-icon {
   width: 18px;
   height: 18px;
@@ -4856,6 +4840,178 @@ button:disabled {
 @media (prefers-reduced-motion: reduce) {
   .orf-system-broadcast-marquee {
     animation: none;
+  }
+}
+
+.work-log-reminder-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.32);
+  backdrop-filter: blur(2px);
+}
+
+.work-log-reminder-modal {
+  position: relative;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 16px;
+  width: min(520px, 100%);
+  padding: 22px;
+  border: 1px solid rgba(15, 118, 110, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #172033;
+  box-shadow: 0 24px 72px rgba(15, 23, 42, 0.28);
+}
+
+.work-log-reminder-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid rgba(71, 85, 105, 0.16);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.86);
+  color: #475569;
+}
+
+.work-log-reminder-modal-close:hover {
+  background: #ecfeff;
+  color: #0f766e;
+}
+
+.work-log-reminder-modal-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 8px;
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.work-log-reminder-modal-content {
+  min-width: 0;
+  padding-right: 28px;
+}
+
+.work-log-reminder-modal-content h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.work-log-reminder-modal-content p {
+  margin: 8px 0 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.work-log-reminder-date-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.work-log-reminder-date-list button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(15, 118, 110, 0.24);
+  border-radius: 8px;
+  background: #f0fdfa;
+  color: #0f766e;
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.work-log-reminder-date-list button:hover {
+  background: #ccfbf1;
+}
+
+.work-log-reminder-modal-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.work-log-reminder-primary,
+.work-log-reminder-secondary {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.work-log-reminder-primary {
+  border: 1px solid #0f766e;
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.work-log-reminder-primary:hover {
+  background: #115e59;
+}
+
+.work-log-reminder-secondary {
+  border: 1px solid rgba(71, 85, 105, 0.18);
+  background: #f8fafc;
+  color: #334155;
+}
+
+.work-log-reminder-secondary:hover {
+  background: #e2e8f0;
+}
+
+.work-log-reminder-primary:disabled,
+.work-log-reminder-secondary:disabled,
+.work-log-reminder-modal-close:disabled {
+  cursor: wait;
+  opacity: 0.64;
+}
+
+@media (max-width: 640px) {
+  .work-log-reminder-modal-backdrop {
+    align-items: end;
+    padding: 16px;
+  }
+
+  .work-log-reminder-modal {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 20px;
+  }
+
+  .work-log-reminder-modal-content {
+    padding-right: 0;
+  }
+
+  .work-log-reminder-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .work-log-reminder-primary,
+  .work-log-reminder-secondary {
+    width: 100%;
   }
 }
 

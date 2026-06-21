@@ -314,6 +314,38 @@ export function validateGitHubOrfChatIntegrationSchema(snapshot: { columns: Runt
   return errors;
 }
 
+export function validateWorkLogReminderStateSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const errors: string[] = [];
+  const columnsByName = new Map(snapshot.columns.map((column) => [column.columnName, column]));
+  for (const columnName of [
+    "team_id",
+    "user_id",
+    "status",
+    "window_start_date",
+    "window_end_date",
+    "required_dates",
+    "missing_dates",
+    "snooze_count",
+    "created_at",
+    "updated_at",
+  ]) {
+    const column = columnsByName.get(columnName);
+    if (!column) {
+      errors.push(`work_log_reminder_states.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`work_log_reminder_states.${columnName} must be NOT NULL.`);
+    }
+  }
+
+  for (const columnName of ["last_reminded_at", "next_remind_at", "notification_event_id", "resolved_at"]) {
+    if (!columnsByName.has(columnName)) {
+      errors.push(`work_log_reminder_states.${columnName} is missing.`);
+    }
+  }
+
+  return errors;
+}
+
 export async function assertRuntimeDatabaseSchema() {
   const { pool } = await import("./client");
   const [
@@ -329,6 +361,7 @@ export async function assertRuntimeDatabaseSchema() {
     systemChatNotificationColumnsResult,
     gitLabOrfChatColumnsResult,
     gitHubOrfChatColumnsResult,
+    workLogReminderStateColumnsResult,
   ] = await Promise.all([
     pool.query<RuntimeSchemaColumn>(
       `
@@ -465,6 +498,17 @@ export async function assertRuntimeDatabaseSchema() {
           and table_name = 'github_orf_chat_deliveries'
       `,
     ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'work_log_reminder_states'
+      `,
+    ),
   ]);
   const commentTargetTypeResult = await pool.query<{ label: string }>(
     `
@@ -514,6 +558,9 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateGitHubOrfChatIntegrationSchema({
       columns: gitHubOrfChatColumnsResult.rows,
+    }),
+    ...validateWorkLogReminderStateSchema({
+      columns: workLogReminderStateColumnsResult.rows,
     }),
   ];
 

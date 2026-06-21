@@ -20,6 +20,7 @@ import type {
   OrfStage,
   ResultAcceptedResult,
   UserStatus,
+  WorkLogReminderStatus,
 } from "../../src/types/orf";
 
 export const workStatusEnum = pgEnum("work_status", ["On Track", "At Risk", "Blocked", "Draft"]);
@@ -372,6 +373,35 @@ export const notificationReceipts = pgTable(
     pk: primaryKey({ columns: [table.eventId, table.recipientUserId] }),
     recipientDeliveredAt: index("notification_receipts_recipient_delivered_at_idx").on(table.recipientUserId, table.deliveredAt),
     recipientUnread: index("notification_receipts_recipient_unread_idx").on(table.recipientUserId, table.readAt),
+  }),
+);
+
+export const workLogReminderStates = pgTable(
+  "work_log_reminder_states",
+  {
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").$type<WorkLogReminderStatus>().notNull(),
+    windowStartDate: date("window_start_date", { mode: "string" }).notNull(),
+    windowEndDate: date("window_end_date", { mode: "string" }).notNull(),
+    requiredDates: jsonb("required_dates").$type<string[]>().notNull().default([]),
+    missingDates: jsonb("missing_dates").$type<string[]>().notNull().default([]),
+    lastRemindedAt: timestamp("last_reminded_at", { mode: "string", withTimezone: true }),
+    nextRemindAt: timestamp("next_remind_at", { mode: "string", withTimezone: true }),
+    snoozeCount: integer("snooze_count").notNull().default(0),
+    notificationEventId: text("notification_event_id").references(() => notificationEvents.id, { onDelete: "set null" }),
+    resolvedAt: timestamp("resolved_at", { mode: "string", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.userId] }),
+    statusNextRemindAt: index("work_log_reminder_states_status_next_remind_at_idx").on(table.status, table.nextRemindAt),
+    notificationEvent: index("work_log_reminder_states_notification_event_idx").on(table.notificationEventId),
   }),
 );
 

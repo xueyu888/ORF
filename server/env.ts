@@ -60,11 +60,15 @@ const envSchema = z.object({
   CHAT_MODEL_API_URL: optionalUrl,
   CHAT_MODEL_API_KEY: z.string().trim().optional().default(""),
   CHAT_MODEL_NAME: z.string().trim().optional().default(""),
-  ORF_WORK_LOG_REMINDER_ENABLED: booleanString("true"),
+  ORF_WORK_LOG_REMINDER_ENABLED: booleanString("false"),
   ORF_WORK_LOG_REMINDER_TIME_ZONE: z.string().trim().min(1).default("Asia/Shanghai"),
   ORF_WORK_LOG_REMINDER_HOUR: z.coerce.number().int().min(0).max(23).default(17),
   ORF_WORK_LOG_REMINDER_MINUTE: z.coerce.number().int().min(0).max(59).default(20),
+  ORF_WORK_LOG_REMINDER_END_HOUR: z.coerce.number().int().min(0).max(24).default(24),
+  ORF_WORK_LOG_REMINDER_END_MINUTE: z.coerce.number().int().min(0).max(59).default(0),
   ORF_WORK_LOG_REMINDER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(60 * 1000),
+  ORF_WORK_LOG_REMINDER_SNOOZE_MINUTES: z.coerce.number().int().positive().default(10),
+  ORF_WORK_LOG_REMINDER_WINDOW_DAYS: z.coerce.number().int().positive().max(31).default(7),
 }).transform((value, context) => {
   const databaseUrl = value.DATABASE_URL ?? value.REMOTE_DATABASE_URL;
 
@@ -73,6 +77,14 @@ const envSchema = z.object({
       code: "custom",
       message: "DATABASE_URL or REMOTE_DATABASE_URL is required",
       path: ["DATABASE_URL"],
+    });
+    return z.NEVER;
+  }
+  if (value.ORF_WORK_LOG_REMINDER_END_HOUR === 24 && value.ORF_WORK_LOG_REMINDER_END_MINUTE !== 0) {
+    context.addIssue({
+      code: "custom",
+      message: "ORF_WORK_LOG_REMINDER_END_MINUTE must be 0 when ORF_WORK_LOG_REMINDER_END_HOUR is 24",
+      path: ["ORF_WORK_LOG_REMINDER_END_MINUTE"],
     });
     return z.NEVER;
   }

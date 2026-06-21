@@ -30,6 +30,7 @@ export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" |
 export type NotificationStream = "personalNotification" | "teamAnnouncement";
 export type ChatSystemKind = NotificationStream;
 export type ChatMessageSource = "user" | "system";
+export type WorkLogReminderStatus = "active" | "resolved";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
@@ -96,6 +97,21 @@ export interface AppNotification {
   readAt?: string | null;
   createdAt: string;
   metadata: Record<string, string>;
+}
+
+export interface WorkLogReminderState {
+  id: string;
+  status: WorkLogReminderStatus;
+  windowStartDate: string;
+  windowEndDate: string;
+  requiredDates: string[];
+  missingDates: string[];
+  lastRemindedAt?: string | null;
+  nextRemindAt?: string | null;
+  snoozeCount: number;
+  resolvedAt?: string | null;
+  updatedAt: string;
+  shouldRemindNow: boolean;
 }
 
 export interface ChatMessageSystemMetadata {
