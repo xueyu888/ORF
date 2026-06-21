@@ -52,14 +52,6 @@
         "switchIntervalMinutes": 10,
         "placements": {}
       },
-      "page_chat_background": {
-        "mode": "fixed",
-        "fixedBackgroundId": null,
-        "switchTrigger": "on_open",
-        "switchOrder": "random",
-        "switchIntervalMinutes": 10,
-        "placements": {}
-      },
       "page_feedback_background": {
         "mode": "fixed",
         "fixedBackgroundId": null,

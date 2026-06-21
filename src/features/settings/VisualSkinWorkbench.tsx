@@ -72,6 +72,8 @@ function backgroundSourceInfo(id: string) {
   const [sceneRaw, scopeRaw] = decodedId.split("/");
   const slotLabel = sceneRaw === "app_background"
     ? "旧版外壳"
+    : sceneRaw === "page_chat_background"
+      ? "旧聊天页"
     : visualSkinSlots.find((item) => item.scene === sceneRaw)?.label ?? "未知槽位";
   const scopeLabel = scopeRaw === "personal"
     ? "个人图库"

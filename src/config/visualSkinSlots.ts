@@ -18,7 +18,6 @@ export const visualSkinSlots = [
   { scene: "page_bounties_background", label: "悬赏大厅", group: "页面", kind: "page", previewShape: "page" },
   { scene: "page_tasks_background", label: "我的挑战", group: "页面", kind: "page", previewShape: "page" },
   { scene: "page_work_logs_background", label: "工作日志", group: "页面", kind: "page", previewShape: "page" },
-  { scene: "page_chat_background", label: "聊天", group: "页面", kind: "page", previewShape: "page" },
   { scene: "page_feedback_background", label: "反馈", group: "页面", kind: "page", previewShape: "page" },
   { scene: "page_reports_background", label: "统计", group: "页面", kind: "page", previewShape: "page" },
   { scene: "page_system_background", label: "系统管理", group: "页面", kind: "page", previewShape: "page" },
@@ -35,12 +34,12 @@ export function visualSkinSlotByScene(scene: VisualBackgroundScene) {
   return visualSkinSlots.find((slot) => slot.scene === scene) ?? visualSkinSlots[0];
 }
 
-export function pageVisualBackgroundSceneForPath(pathname: string): PageVisualBackgroundScene {
+export function pageVisualBackgroundSceneForPath(pathname: string): PageVisualBackgroundScene | null {
+  if (pathname.startsWith("/chat")) return null;
   if (pathname.startsWith("/tasks/objectives/") && pathname.endsWith("/loot")) return "page_loot_background";
   if (pathname.startsWith("/bounties")) return "page_bounties_background";
   if (pathname.startsWith("/tasks")) return "page_tasks_background";
   if (pathname.startsWith("/work-logs")) return "page_work_logs_background";
-  if (pathname.startsWith("/chat")) return "page_chat_background";
   if (pathname.startsWith("/feedback")) return "page_feedback_background";
   if (pathname.startsWith("/reports")) return "page_reports_background";
   if (pathname.startsWith("/system")) return "page_system_background";

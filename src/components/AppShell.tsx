@@ -1,4 +1,4 @@
-import { Flag, MessageSquarePlus, Search, Shield } from "lucide-react";
+import { Flag, Loader2, MessageSquarePlus, Search, Shield } from "lucide-react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
@@ -42,10 +42,19 @@ export function AppShell() {
   const [chatTheme, setChatTheme] = useState<ChatTheme>(defaultChatTheme);
   const [displayPreferences, setDisplayPreferences] = useState<UserDisplayPreferences>(defaultUserDisplayPreferences);
   const [clientUpdateCenter, setClientUpdateCenter] = useState<{ notice?: string; open: boolean }>({ open: false });
-  const pageBackgroundScene = pageVisualBackgroundSceneForPath(location.pathname);
+  const [pendingShellPath, setPendingShellPath] = useState<string | null>(null);
+  const shellRoutePending = pendingShellPath !== null && pendingShellPath !== location.pathname;
+  const shellDisplayPath = pendingShellPath ?? location.pathname;
+  const isRouteChatPage = location.pathname.startsWith("/chat");
+  const isChatPage = isRouteChatPage || pendingShellPath?.startsWith("/chat") === true;
+  const pageBackgroundScene = isChatPage ? null : pageVisualBackgroundSceneForPath(location.pathname);
   const sidebarBackground = useVisualBackground("sidebar_background");
   const topbarBackground = useVisualBackground("topbar_background");
   const pageBackground = useVisualBackground(pageBackgroundScene);
+
+  useEffect(() => {
+    setPendingShellPath(null);
+  }, [location.pathname]);
 
   useEffect(() => {
     setDesktopChromeEnabled(isDesktopShellAvailable());
@@ -92,6 +101,10 @@ export function AppShell() {
   const handleSidebarCollapsedChange = useCallback((collapsed: boolean) => {
     setSidebarCollapsed(collapsed);
     void saveUserPreferences({ sidebarCollapsed: collapsed }).catch(() => undefined);
+  }, []);
+
+  const handleShellNavigationIntent = useCallback((path: string) => {
+    setPendingShellPath(path.startsWith("/chat") ? path : null);
   }, []);
 
   const saveDisplayPreferences = useCallback((nextPreferences: UserDisplayPreferences) => {
@@ -154,11 +167,10 @@ export function AppShell() {
     ? sidebarBackground.selection.overlayOpacity
     : defaultVisualBackgroundOverlayOpacity;
   const topbarSelection = topbarBackground.status === "ready" ? topbarBackground.selection : null;
-  const pageSelection = pageBackground.status === "ready" ? pageBackground.selection : null;
+  const pageSelection = pageBackgroundScene && pageBackground.status === "ready" ? pageBackground.selection : null;
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
-  const isBountyHall = location.pathname.startsWith("/bounties");
-  const isChatPage = location.pathname.startsWith("/chat");
+  const isBountyHall = !isChatPage && shellDisplayPath.startsWith("/bounties");
 
   return (
     <div
@@ -177,6 +189,7 @@ export function AppShell() {
         backgroundOverlayOpacity={sidebarBackgroundOverlayOpacity}
         collapsed={sidebarCollapsed}
         onCollapsedChange={handleSidebarCollapsedChange}
+        onNavigateIntent={handleShellNavigationIntent}
         onOpenClientUpdateCenter={() => setClientUpdateCenter({ open: true })}
       />
       <div className="orf-shell-body min-w-0 flex-1">
@@ -197,7 +210,7 @@ export function AppShell() {
                 <Shield className="h-4 w-4" />
               </span>
             )}
-            <span>{breadcrumb(location.pathname)}</span>
+            <span>{breadcrumb(shellDisplayPath)}</span>
           </div>
           <div className="relative min-w-[180px] max-w-xl flex-1">
             <Search className="orf-text-muted pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
@@ -229,7 +242,7 @@ export function AppShell() {
         <ClientUpdateNotice />
         <main
           className="orf-main-content"
-          data-page-scene={pageBackgroundScene}
+          data-page-scene={pageBackgroundScene ?? "none"}
           data-page-skin={pageSelection ? "true" : "false"}
           style={backgroundOverlayStyle(pageSelection)}
         >
@@ -239,11 +252,18 @@ export function AppShell() {
             imageUrl={pageSelection?.url ?? null}
             crop={pageSelection?.crop ?? defaultVisualBackgroundCrop}
           />
-          <Outlet />
+          {shellRoutePending && isChatPage ? (
+            <div className="orf-chat-loading" role="status">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <span>正在打开聊天中心</span>
+            </div>
+          ) : (
+            <Outlet />
+          )}
         </main>
       </div>
       <CommandMenu open={commandOpen} onClose={() => setCommandOpen(false)} />
-      <MobileBottomNav />
+      <MobileBottomNav onNavigateIntent={handleShellNavigationIntent} />
       <ClientReleaseNotesDialog />
       <ClientUpdateCenterDialog
         notice={clientUpdateCenter.notice}

@@ -20,7 +20,7 @@ function loadVisualBackgrounds(scene: VisualBackgroundScene) {
   return scene === "login_background" ? getVisualBackgrounds(scene) : getPersonalBackgrounds(scene);
 }
 
-export function useVisualBackground(scene: VisualBackgroundScene) {
+export function useVisualBackground(scene: VisualBackgroundScene | null) {
   const [background, setBackground] = useState<VisualBackgroundLoadState>({ status: "loading", selection: null, url: null, error: null });
 
   useEffect(() => {
@@ -35,6 +35,12 @@ export function useVisualBackground(scene: VisualBackgroundScene) {
     };
 
     const loadBackground = () => {
+      if (!scene) {
+        clearRotationTimer();
+        setBackground({ status: "empty", selection: null, url: null, error: null });
+        return;
+      }
+
       clearRotationTimer();
       setBackground((current) => (current.status === "ready" ? current : { status: "loading", selection: null, url: null, error: null }));
 
@@ -70,7 +76,7 @@ export function useVisualBackground(scene: VisualBackgroundScene) {
     };
 
     loadBackground();
-    const unsubscribe = subscribeVisualBackgroundChanged(scene, loadBackground);
+    const unsubscribe = scene ? subscribeVisualBackgroundChanged(scene, loadBackground) : () => undefined;
 
     return () => {
       cancelled = true;

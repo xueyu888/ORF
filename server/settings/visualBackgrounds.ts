@@ -13,10 +13,12 @@ import {
   visualBackgroundCropLimits,
   visualBackgroundOverlayLimits,
   legacyVisualBackgroundScenes,
+  legacyVisualBackgroundStorageScenes,
   legacyVisualBackgroundScopes,
   visualBackgroundScenes,
   visualBackgroundScopes,
   type AnyVisualBackgroundScene,
+  type AnyVisualBackgroundStorageScene,
   type AnyVisualBackgroundScope,
   type VisualBackgroundScene as CanonicalBackgroundScene,
   type VisualBackgroundScope as CanonicalBackgroundScope,
@@ -28,10 +30,15 @@ const allowedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "imag
 const maxUploadSize = 10 * 1024 * 1024;
 
 const anyBackgroundScenes = [...visualBackgroundScenes, ...legacyVisualBackgroundScenes] as [AnyVisualBackgroundScene, ...AnyVisualBackgroundScene[]];
+const storageBackgroundScenes = [...anyBackgroundScenes, ...legacyVisualBackgroundStorageScenes] as [
+  AnyVisualBackgroundStorageScene,
+  ...AnyVisualBackgroundStorageScene[],
+];
 const anyBackgroundScopes = [...visualBackgroundScopes, ...legacyVisualBackgroundScopes] as [AnyVisualBackgroundScope, ...AnyVisualBackgroundScope[]];
 
 export const backgroundSceneSchema = z.enum(anyBackgroundScenes).transform(canonicalVisualBackgroundScene);
-export const backgroundScenePathSchema = z.enum(anyBackgroundScenes);
+export const backgroundScenePathSchema = z.enum(storageBackgroundScenes);
+export const backgroundStorageScenePathSchema = z.enum(storageBackgroundScenes);
 const backgroundScopeSchema = z.enum(anyBackgroundScopes).transform(canonicalVisualBackgroundScope);
 export const backgroundScopePathSchema = z.enum(anyBackgroundScopes);
 export const backgroundModeSchema = z.enum(["fixed", "switchable"]);
@@ -103,9 +110,9 @@ type LegacyBackgroundConfig = Partial<BackgroundSceneConfig> & {
 };
 
 type ParsedBackgroundId = {
-  scene: CanonicalBackgroundScene;
+  scene: CanonicalBackgroundScene | null;
   scope: CanonicalBackgroundScope;
-  storageScene: AnyVisualBackgroundScene;
+  storageScene: AnyVisualBackgroundStorageScene;
   storageScope: AnyVisualBackgroundScope;
   fileName: string;
   filePath: string;
@@ -123,11 +130,11 @@ const emptyVisualSettings = (): VisualSettings => ({
   },
 });
 
-function sceneDir(scene: AnyVisualBackgroundScene, scope: AnyVisualBackgroundScope) {
+function sceneDir(scene: AnyVisualBackgroundStorageScene, scope: AnyVisualBackgroundScope) {
   return path.join(backgroundsRoot, scene, scope);
 }
 
-function sceneUrl(scene: AnyVisualBackgroundScene, scope: AnyVisualBackgroundScope, fileName: string) {
+function sceneUrl(scene: AnyVisualBackgroundStorageScene, scope: AnyVisualBackgroundScope, fileName: string) {
   return `/settings/backgrounds/${scene}/${scope}/${encodeURIComponent(fileName)}`;
 }
 
@@ -290,10 +297,10 @@ async function readVisualSettings() {
   return normalizeVisualSettings(await readSystemSettingsFile());
 }
 
-function storageSceneNames(scene: CanonicalBackgroundScene): AnyVisualBackgroundScene[] {
+function storageSceneNames(scene: CanonicalBackgroundScene): AnyVisualBackgroundStorageScene[] {
   const sharedScenes = visualBackgroundScenes.filter((candidate) => candidate !== scene);
   const legacyScenes: AnyVisualBackgroundScene[] = acceptsLegacyAppBackgroundScene(scene) ? ["app_background"] : [];
-  return [scene, ...sharedScenes, ...legacyScenes];
+  return [scene, ...sharedScenes, ...legacyVisualBackgroundStorageScenes, ...legacyScenes];
 }
 
 function storageScopeNames(scope: CanonicalBackgroundScope): AnyVisualBackgroundScope[] {
@@ -367,9 +374,10 @@ export function parseBackgroundId(id: string): ParsedBackgroundId {
   }
 
   const [sceneRaw, scopeRaw, ...fileNameParts] = decodedId.split("/");
-  const scene = backgroundSceneSchema.parse(sceneRaw);
+  const parsedScene = backgroundSceneSchema.safeParse(sceneRaw);
+  const scene = parsedScene.success ? parsedScene.data : null;
   const scope = backgroundScopeSchema.parse(scopeRaw);
-  const storageScene = z.enum(anyBackgroundScenes).parse(sceneRaw);
+  const storageScene = backgroundStorageScenePathSchema.parse(sceneRaw);
   const storageScope = z.enum(anyBackgroundScopes).parse(scopeRaw);
   const fileName = fileNameParts.join("/");
 
@@ -387,7 +395,7 @@ export function parseBackgroundId(id: string): ParsedBackgroundId {
   };
 }
 
-export async function getVisualBackgroundFile(scene: AnyVisualBackgroundScene, scope: AnyVisualBackgroundScope, fileName: string) {
+export async function getVisualBackgroundFile(scene: AnyVisualBackgroundStorageScene, scope: AnyVisualBackgroundScope, fileName: string) {
   const parsed = parseBackgroundId(`${scene}/${scope}/${fileName}`);
   const fileStat = await stat(parsed.filePath);
   if (!fileStat.isFile()) {
@@ -441,6 +449,9 @@ function isBackgroundUsableForScene(parsed: ParsedBackgroundId, scene: Canonical
   if ((visualBackgroundScenes as readonly string[]).includes(parsed.storageScene)) {
     return true;
   }
+  if ((legacyVisualBackgroundStorageScenes as readonly string[]).includes(parsed.storageScene)) {
+    return true;
+  }
   return parsed.storageScene === "app_background" && acceptsLegacyAppBackgroundScene(scene);
 }
 
@@ -483,21 +494,25 @@ export async function setDefaultVisualBackground(id: string) {
   if (parsed.scope === "personal") {
     throw new Error("background not found");
   }
+  if (!parsed.scene) {
+    throw new Error("background not found");
+  }
+  const scene = parsed.scene;
 
   return updateSystemSettingsFile((rawSettings) => {
     const settings = normalizeVisualSettings(rawSettings);
     rawSettings.visual = rawSettings.visual ?? {};
     rawSettings.visual.backgrounds = rawSettings.visual.backgrounds ?? {};
-    rawSettings.visual.backgrounds[parsed.scene] = {
-      ...settings.visual.backgrounds[parsed.scene],
+    rawSettings.visual.backgrounds[scene] = {
+      ...settings.visual.backgrounds[scene],
       mode: "fixed",
       fixedBackgroundId: `${parsed.storageScene}/${parsed.storageScope}/${parsed.fileName}`,
     };
 
     return {
-      id: (rawSettings.visual.backgrounds[parsed.scene] as BackgroundSceneConfig).fixedBackgroundId,
-      scene: parsed.scene,
-      config: rawSettings.visual.backgrounds[parsed.scene] as BackgroundSceneConfig,
+      id: (rawSettings.visual.backgrounds[scene] as BackgroundSceneConfig).fixedBackgroundId,
+      scene,
+      config: rawSettings.visual.backgrounds[scene] as BackgroundSceneConfig,
       isDefault: true,
     };
   });

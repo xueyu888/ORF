@@ -8,7 +8,6 @@ export const pageVisualBackgroundScenes = [
   "page_bounties_background",
   "page_tasks_background",
   "page_work_logs_background",
-  "page_chat_background",
   "page_feedback_background",
   "page_reports_background",
   "page_system_background",
@@ -24,6 +23,7 @@ export const visualBackgroundScenes = [
 ] as const;
 
 export const legacyVisualBackgroundScenes = ["app_background"] as const;
+export const legacyVisualBackgroundStorageScenes = ["page_chat_background"] as const;
 export const visualBackgroundScopes = ["default", "system", "personal"] as const;
 export const legacyVisualBackgroundScopes = ["user"] as const;
 
@@ -31,7 +31,9 @@ export type AppChromeVisualBackgroundScene = (typeof appChromeVisualBackgroundSc
 export type PageVisualBackgroundScene = (typeof pageVisualBackgroundScenes)[number];
 export type VisualBackgroundScene = (typeof visualBackgroundScenes)[number];
 export type LegacyVisualBackgroundScene = (typeof legacyVisualBackgroundScenes)[number];
+export type LegacyVisualBackgroundStorageScene = (typeof legacyVisualBackgroundStorageScenes)[number];
 export type AnyVisualBackgroundScene = VisualBackgroundScene | LegacyVisualBackgroundScene;
+export type AnyVisualBackgroundStorageScene = VisualBackgroundScene | LegacyVisualBackgroundScene | LegacyVisualBackgroundStorageScene;
 export type VisualBackgroundScope = (typeof visualBackgroundScopes)[number];
 export type LegacyVisualBackgroundScope = (typeof legacyVisualBackgroundScopes)[number];
 export type AnyVisualBackgroundScope = VisualBackgroundScope | LegacyVisualBackgroundScope;

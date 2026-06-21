@@ -13,11 +13,13 @@ import {
 } from "../../src/domain/settings/personalPreferences";
 import {
   acceptsLegacyAppBackgroundScene,
+  legacyVisualBackgroundStorageScenes,
   visualBackgroundScenes,
-  type AnyVisualBackgroundScene,
+  type AnyVisualBackgroundStorageScene,
   type VisualBackgroundScene as CanonicalBackgroundScene,
 } from "../../src/domain/settings/visualBackgrounds";
 import {
+  backgroundStorageScenePathSchema,
   backgroundSceneSchema,
   backgroundSceneConfigSchema,
   isSupportedVisualBackgroundImage,
@@ -75,15 +77,15 @@ function userPreferencesPath(userId: string) {
   return path.join(userSettingsDir(userId), "preferences.json");
 }
 
-function personalBackgroundDir(userId: string, scene: AnyVisualBackgroundScene) {
+function personalBackgroundDir(userId: string, scene: AnyVisualBackgroundStorageScene) {
   return path.join(userSettingsDir(userId), "backgrounds", scene);
 }
 
-function personalBackgroundUrl(scene: AnyVisualBackgroundScene, fileName: string) {
+function personalBackgroundUrl(scene: AnyVisualBackgroundStorageScene, fileName: string) {
   return `/settings/backgrounds/${scene}/personal/${encodeURIComponent(fileName)}`;
 }
 
-function personalBackgroundId(scene: AnyVisualBackgroundScene, fileName: string) {
+function personalBackgroundId(scene: AnyVisualBackgroundStorageScene, fileName: string) {
   return `${scene}/personal/${fileName}`;
 }
 
@@ -300,8 +302,9 @@ function parsePersonalBackgroundId(id: string) {
   }
 
   const [sceneRaw, scopeRaw, ...fileNameParts] = decodedId.split("/");
-  const scene = backgroundSceneSchema.parse(sceneRaw);
-  const storageScene: AnyVisualBackgroundScene = sceneRaw === "app_background" ? "app_background" : scene;
+  const parsedScene = backgroundSceneSchema.safeParse(sceneRaw);
+  const scene = parsedScene.success ? parsedScene.data : null;
+  const storageScene = backgroundStorageScenePathSchema.parse(sceneRaw);
   const fileName = fileNameParts.join("/");
 
   if (scopeRaw !== "personal" || !fileName || fileName.includes("/") || fileName.includes("\\") || path.basename(fileName) !== fileName) {
@@ -311,14 +314,17 @@ function parsePersonalBackgroundId(id: string) {
   return { scene, storageScene, fileName };
 }
 
-function personalStorageScenes(scene: CanonicalBackgroundScene): AnyVisualBackgroundScene[] {
+function personalStorageScenes(scene: CanonicalBackgroundScene): AnyVisualBackgroundStorageScene[] {
   const sharedScenes = visualBackgroundScenes.filter((candidate) => candidate !== scene);
-  const legacyScenes: AnyVisualBackgroundScene[] = acceptsLegacyAppBackgroundScene(scene) ? ["app_background"] : [];
-  return [scene, ...sharedScenes, ...legacyScenes];
+  const legacyScenes = acceptsLegacyAppBackgroundScene(scene) ? ["app_background" as const] : [];
+  return [scene, ...sharedScenes, ...legacyVisualBackgroundStorageScenes, ...legacyScenes];
 }
 
-function isBackgroundUsableForScene(input: { scene: CanonicalBackgroundScene; storageScene: AnyVisualBackgroundScene }, scene: CanonicalBackgroundScene) {
+function isBackgroundUsableForScene(input: { scene: CanonicalBackgroundScene | null; storageScene: AnyVisualBackgroundStorageScene }, scene: CanonicalBackgroundScene) {
   if ((visualBackgroundScenes as readonly string[]).includes(input.storageScene)) {
+    return true;
+  }
+  if ((legacyVisualBackgroundStorageScenes as readonly string[]).includes(input.storageScene)) {
     return true;
   }
   return input.storageScene === "app_background" && acceptsLegacyAppBackgroundScene(scene);

@@ -6704,6 +6704,10 @@ button:disabled {
   padding: 0;
 }
 
+.orf-app-shell[data-chat-page="true"] .orf-main-content::before {
+  background: linear-gradient(180deg, #f7fafc 0%, #edf3f7 100%);
+}
+
 .orf-app-shell[data-bounty-hall="true"] .orf-main-content {
   background: transparent;
 }
