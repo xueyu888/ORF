@@ -24,7 +24,7 @@ const TESTD_RECOVERY_ONLY_ENV = "TESTD_RECOVERY_ONLY";
 const REPORT_RETENTION_DAYS_ENV = "TESTD_REPORT_RETENTION_DAYS";
 const DEFAULT_REPORT_RETENTION_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const SUITE_ORDER = ["isolated", "permissions", "settings"];
+const SUITE_ORDER = ["isolated", "permissions"];
 
 type StageStatus = "passed" | "failed";
 type CaseStatus = TestResult["status"];
