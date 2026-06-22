@@ -178,7 +178,7 @@ function memberRow(page: Page, email: string) {
 }
 
 function editButton(page: Page, email: string) {
-  return memberRow(page, email).getByRole("button", { name: "编辑", exact: true });
+  return memberRow(page, email).getByRole("button", { name: "编辑用户", exact: true });
 }
 
 function nameInput(page: Page) {

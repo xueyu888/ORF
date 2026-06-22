@@ -58,11 +58,11 @@ export const feedbackImageUploadOperators = {
     },
     contains_image_reference: async ({ ctx, params }) => {
       const fileName = requiredString(params, "fileName");
-      await expect(descriptionInput(ctx.page)).toHaveValue(new RegExp(`!\\[${escapeRegExp(fileName)}\\]\\(orf-pending-attachment:`));
+      await expect(descriptionInput(ctx.page)).toHaveValue(new RegExp(`附件：${escapeRegExp(fileName)}`));
     },
     contains_attachment_reference: async ({ ctx, params }) => {
       const fileName = requiredString(params, "fileName");
-      await expect(descriptionInput(ctx.page)).toHaveValue(new RegExp(`!\\[${escapeRegExp(fileName)}\\]\\(orf-pending-attachment:`));
+      await expect(descriptionInput(ctx.page)).toHaveValue(new RegExp(`附件：${escapeRegExp(fileName)}`));
     },
     not_contains_file_reference: async ({ ctx, params }) => {
       await expect(descriptionInput(ctx.page)).not.toHaveValue(new RegExp(escapeRegExp(requiredString(params, "fileName"))));
@@ -119,7 +119,7 @@ function descriptionInput(page: Page) {
 }
 
 function addImageButton(page: Page) {
-  return createFeedbackForm(page).getByRole("button", { name: "添加附件" });
+  return createFeedbackForm(page).getByRole("button", { name: "添加图片或附件" });
 }
 
 function addImageFileInput(page: Page) {

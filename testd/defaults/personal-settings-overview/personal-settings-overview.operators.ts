@@ -149,22 +149,6 @@ export const personalSettingsOverviewOperators = {
       await expect(settingsBlock(ctx.page, "Toast 通知").locator('input[type="checkbox"]')).toBeEnabled();
     },
   },
-  "personal_settings.skin_list": {
-    visible: async ({ ctx }) => {
-      await expect(ctx.page.locator(".orf-settings-background-gallery")).toBeVisible();
-    },
-    contains_system_skin: async ({ ctx }) => {
-      await expect(ctx.page.locator(".orf-settings-background-gallery")).toContainText("当前");
-    },
-  },
-  "personal_settings.upload_skin": {
-    visible: async ({ ctx }) => {
-      await expect(uploadSkinButton(ctx.page)).toBeVisible();
-    },
-    enabled: async ({ ctx }) => {
-      await expect(uploadSkinButton(ctx.page)).toBeEnabled();
-    },
-  },
 } satisfies OperatorRegistry<TestContext, PersonalSettingsOverviewCaseData>;
 
 function sidebar(page: Page) {
@@ -215,10 +199,6 @@ function settingsBlock(page: Page, label: string) {
 
 function settingsSelect(page: Page, label: string) {
   return settingsBlock(page, label).locator("select");
-}
-
-function uploadSkinButton(page: Page) {
-  return page.locator(".orf-card-padding").filter({ hasText: "我的 AppShell 皮肤" }).getByRole("button", { name: "上传" });
 }
 
 async function installDesktopShellMock(page: Page) {

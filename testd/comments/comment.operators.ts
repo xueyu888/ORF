@@ -617,12 +617,12 @@ export const commentOperators = {
     },
 
     image_button_enabled: async ({ ctx }) => {
-      await expect(commentPanel(ctx.page).getByRole("button", { name: "添加附件" })).toBeEnabled();
+      await expect(commentPanel(ctx.page).getByRole("button", { name: "添加图片或附件" })).toBeEnabled();
     },
 
     choose_image: async ({ ctx, params }) => {
       const file = requiredMockImageFile(params, "file");
-      await expect(commentPanel(ctx.page).getByRole("button", { name: "添加附件" })).toBeEnabled();
+      await expect(commentPanel(ctx.page).getByRole("button", { name: "添加图片或附件" })).toBeEnabled();
       return performWithCapturedResponse(
         captureCommentResponse(ctx.page, "POST", "/api/comments/attachments"),
         () =>
@@ -636,7 +636,7 @@ export const commentOperators = {
 
     choose_file: async ({ ctx, params }) => {
       const file = requiredMockImageFile(params, "file");
-      await expect(commentPanel(ctx.page).getByRole("button", { name: "添加附件" })).toBeEnabled();
+      await expect(commentPanel(ctx.page).getByRole("button", { name: "添加图片或附件" })).toBeEnabled();
       await commentPanel(ctx.page).locator('input[type="file"]').setInputFiles({
         buffer: file.buffer,
         mimeType: file.mimeType,

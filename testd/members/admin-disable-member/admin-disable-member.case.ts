@@ -58,7 +58,7 @@ export const adminDisableMemberCase = {
       { source: { caseStepId: "S0-2", method: "playwright" }, id: "url.members", title: "当前页面 应为 成员管理页面", object: "page.url", operator: "match", params: { pattern: "/system/members$" } },
       { source: { caseStepId: "S0-3", method: "playwright" }, id: "page.disable_member.visible", title: "成员管理列表 应显示 可停用成员", object: "page.member_row", operator: "visible", params: { textFrom: "data.memberEmail" } },
       { source: { caseStepId: "S0-4", method: "playwright" }, id: "page.disable_member.status_active", title: "可停用成员 的状态 应显示为 `启用`", object: "page.member_row", operator: "status_visible", params: { textFrom: "data.memberEmail", statusText: "启用" } },
-      { source: { caseStepId: "S0-5", method: "playwright" }, id: "page.disable_member.action_visible", title: "可停用成员 的 \"停用\" 操作 应可见", object: "page.member_row", operator: "disable_visible", params: { textFrom: "data.memberEmail" } },
+      { source: { caseStepId: "S0-5", method: "playwright" }, id: "page.disable_member.action_visible", title: "可停用成员 的 \"停用用户\" 操作 应可见", object: "page.member_row", operator: "disable_visible", params: { textFrom: "data.memberEmail" } },
       { source: { caseStepId: "S0-6", method: "prisma" }, id: "db.disable_member.active", title: "可停用成员 的状态 应为 `active`", object: "db.user", operator: "matches", params: { userIdFrom: "data.memberUserId", emailFrom: "data.memberEmail", roleFrom: "data.memberRole", status: "active" } },
     ],
   },
@@ -66,7 +66,7 @@ export const adminDisableMemberCase = {
   Action: {
     description: "管理员停用可停用成员",
     steps: [
-      { source: { caseStepId: "Action-1", method: "playwright" }, id: "page.disable_member.disable", title: "点击 可停用成员 的 \"停用\" 操作并确认停用", object: "page.member_row", operator: "disable", params: { textFrom: "data.memberEmail", userIdFrom: "data.memberUserId", saveAs: "disableUserResponse" } },
+      { source: { caseStepId: "Action-1", method: "playwright" }, id: "page.disable_member.disable", title: "点击 可停用成员 的 \"停用用户\" 操作并确认停用", object: "page.member_row", operator: "disable", params: { textFrom: "data.memberEmail", userIdFrom: "data.memberUserId", saveAs: "disableUserResponse" } },
     ],
   },
 

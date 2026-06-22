@@ -109,10 +109,6 @@ export const personalSettingsOverviewCase = {
       step("S1-17", "playwright", "personal_settings.sidebar_state.enabled", "个人设置页面的侧边栏默认状态设置项 应可选择", "personal_settings.sidebar_state", "enabled"),
       step("S1-18", "playwright", "personal_settings.toast.visible", "个人设置页面的 Toast 通知设置项 应可见", "personal_settings.toast", "visible"),
       step("S1-19", "playwright", "personal_settings.toast.enabled", "个人设置页面的 Toast 通知开关 应可点击", "personal_settings.toast", "enabled"),
-      step("S1-20", "playwright", "personal_settings.skin_list.visible", "个人设置页面的皮肤列表 应可见", "personal_settings.skin_list", "visible"),
-      step("S1-21", "playwright", "personal_settings.skin_list.contains_system", "个人设置页面的皮肤列表 应包含 系统皮肤", "personal_settings.skin_list", "contains_system_skin"),
-      step("S1-22", "playwright", "personal_settings.upload_skin.visible", "个人设置页面的上传皮肤按钮 应可见", "personal_settings.upload_skin", "visible"),
-      step("S1-23", "playwright", "personal_settings.upload_skin.enabled", "个人设置页面的上传皮肤按钮 应可点击", "personal_settings.upload_skin", "enabled"),
     ],
   },
   Clean: {

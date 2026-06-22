@@ -41,11 +41,11 @@ export const adminEditMemberOperators = {
     },
 
     edit_visible: async ({ ctx, params }) => {
-      await expect(memberRow(ctx, requiredString(params, "text")).getByRole("button", { name: "编辑" })).toBeVisible();
+      await expect(memberRow(ctx, requiredString(params, "text")).getByRole("button", { name: "编辑用户", exact: true })).toBeVisible();
     },
 
     edit: async ({ ctx, params }) => {
-      await memberRow(ctx, requiredString(params, "text")).getByRole("button", { name: "编辑" }).click();
+      await memberRow(ctx, requiredString(params, "text")).getByRole("button", { name: "编辑用户", exact: true }).click();
     },
   },
 

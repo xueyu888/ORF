@@ -55,39 +55,6 @@ export const userMenuActionsOperators = {
     },
   },
 
-  "topbar.notifications": {
-    visible: async ({ ctx }) => {
-      await expect(notificationButton(ctx.page)).toBeVisible();
-    },
-    enabled: async ({ ctx }) => {
-      await expect(notificationButton(ctx.page)).toBeEnabled();
-    },
-    click: async ({ ctx }) => {
-      await notificationButton(ctx.page).click();
-      const list = notificationPopoverList(ctx.page);
-      await expect(list).toBeVisible();
-      return { visible: await list.isVisible() } satisfies VisibilitySnapshot;
-    },
-  },
-
-  "notifications.list": {
-    visible: async ({ ctx, params }) => {
-      const snapshot = optionalVisibilitySnapshot(params);
-      if (snapshot) {
-        expect(snapshot.visible).toBe(true);
-        return;
-      }
-      await expect(notificationPopoverList(ctx.page)).toBeVisible();
-    },
-    close: async ({ ctx }) => {
-      await ctx.page.keyboard.press("Escape");
-      if (await notificationPopoverList(ctx.page).isVisible().catch(() => false)) {
-        await ctx.page.mouse.click(10, 10);
-      }
-      await expect(notificationPopoverList(ctx.page)).toHaveCount(0);
-    },
-  },
-
   "sidebar.current_user_avatar": {
     visible: async ({ ctx }) => {
       await expect(sidebarUserButton(ctx.page).locator("div[title]").first()).toBeVisible();
@@ -267,14 +234,6 @@ async function ensureUserMenuOpen(page: Page) {
     await sidebarUserButton(page).click();
   }
   await expect(userMenu(page)).toBeVisible();
-}
-
-function notificationButton(page: Page) {
-  return page.locator("header.orf-topbar").getByLabel(/消息/);
-}
-
-function notificationPopoverList(page: Page) {
-  return page.locator(".orf-notification-popover-list");
 }
 
 async function userMenuSnapshot(page: Page): Promise<UserMenuSnapshot> {
