@@ -300,6 +300,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     [receiveNotification],
   );
   const receiveRealtimeBroadcast = useCallback((broadcast: SystemBroadcast) => {
+    if (isClientUpdateSystemBroadcast(broadcast)) {
+      return;
+    }
     setSystemBroadcasts((items) => enqueueSystemBroadcast(items, broadcast));
   }, []);
   const receiveReadModelInvalidation = useCallback((invalidation: OrfReadModelInvalidation) => {
@@ -577,6 +580,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       />
     </OrfContext.Provider>
   );
+}
+
+function isClientUpdateSystemBroadcast(broadcast: SystemBroadcast) {
+  return broadcast.tone === "clientUpdate";
 }
 
 export function useOrf() {
