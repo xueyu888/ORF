@@ -1,51 +1,22 @@
 import { clsx } from "clsx";
-import { Check, Image, Loader2, MessageSquare, MousePointerClick, Shuffle, Timer, ToggleLeft, Upload } from "lucide-react";
-import { type ChangeEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { Check, GitBranch, Link, Loader2, MessageSquare, RefreshCw, Upload } from "lucide-react";
+import { type KeyboardEvent, useEffect, useState } from "react";
 import {
+  getGitLabOrfChatSettings,
   getChatSettings,
-  getVisualBackgrounds,
+  reconcileGitLabOrfChatSettings as requestReconcileGitLabOrfChatSettings,
   saveChatSettings as requestSaveChatSettings,
-  saveVisualBackgroundConfig as requestSaveVisualBackgroundConfig,
-  setDefaultVisualBackground as requestSetDefaultVisualBackground,
-  uploadVisualBackground,
+  saveGitLabOrfProjectChannel as requestSaveGitLabOrfProjectChannel,
   type ChatSettingsData,
-  type VisualBackgroundConfig,
-  type VisualBackgroundImage,
-  type VisualBackgroundMode,
-  type VisualBackgroundScene,
-  type VisualBackgroundSwitchOrder,
-  type VisualBackgroundSwitchTrigger,
+  type GitLabOrfChatProjectBinding,
+  type GitLabOrfChatSettingsData,
 } from "../state/apiClient";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
+import { Button } from "../components/ui";
 import { useOrf } from "../state/OrfProvider";
-import { dispatchVisualBackgroundChanged } from "../utils/visualBackgrounds";
+import { VisualSkinWorkbench } from "../features/settings/VisualSkinWorkbench";
 
 type RequestStatus = "idle" | "loading" | "success" | "error";
-
-const backgroundSections: Array<{
-  scene: VisualBackgroundScene;
-  title: string;
-  description: string;
-}> = [
-  {
-    scene: "login_background",
-    title: "登录页面背景设置",
-    description: "自定义登录页面的背景。",
-  },
-  {
-    scene: "app_background",
-    title: "AppShell 皮肤设置",
-    description: "自定义登录后侧边栏和顶部栏的系统默认皮肤。",
-  },
-];
-
-const defaultVisualBackgroundConfig: VisualBackgroundConfig = {
-  mode: "fixed",
-  fixedBackgroundId: null,
-  switchTrigger: "on_open",
-  switchOrder: "random",
-  switchIntervalMinutes: 10,
-};
 
 const bytesPerGb = 1024 * 1024 * 1024;
 
@@ -76,9 +47,8 @@ export function SystemSettingsPage() {
 
         <div className="orf-settings-sections">
           <ChatSettingSection />
-          {backgroundSections.map((section) => (
-            <BackgroundSettingSection key={section.scene} {...section} />
-          ))}
+          <GitLabOrfChatSettingSection />
+          <VisualSkinWorkbench scope="system" />
         </div>
       </section>
     </div>
@@ -162,10 +132,10 @@ function ChatSettingSection() {
           <h2>聊天设置</h2>
           <p>配置聊天附件上传上限。</p>
         </div>
-        <button type="button" className="orf-settings-default-button" disabled={isSaveDisabled} onClick={() => void handleSave()}>
+        <Button type="button" size="sm" disabled={isSaveDisabled} onClick={() => void handleSave()}>
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
           保存
-        </button>
+        </Button>
       </div>
 
       <div className="orf-settings-background-controls" aria-label="聊天设置">
@@ -205,232 +175,82 @@ function ChatSettingSection() {
   );
 }
 
-function BackgroundSettingSection({
-  scene,
-  title,
-  description,
-}: {
-  scene: VisualBackgroundScene;
-  title: string;
-  description: string;
-}) {
+function GitLabOrfChatSettingSection() {
   const { notify, readModelInvalidations } = useOrf();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [backgroundList, setBackgroundList] = useState<VisualBackgroundImage[]>([]);
-  const [backgroundConfig, setBackgroundConfig] = useState<VisualBackgroundConfig>(defaultVisualBackgroundConfig);
-  const [intervalInputValue, setIntervalInputValue] = useState(String(defaultVisualBackgroundConfig.switchIntervalMinutes));
-  const [selectedBackgroundId, setSelectedBackgroundId] = useState<string | null>(null);
-  const [listQueryStatus, setListQueryStatus] = useState<RequestStatus>("idle");
-  const [listQueryErrorMessage, setListQueryErrorMessage] = useState<string | null>(null);
-  const [uploadStatus, setUploadStatus] = useState<RequestStatus>("idle");
-  const [uploadErrorMessage, setUploadErrorMessage] = useState<string | null>(null);
-  const [configSaveStatus, setConfigSaveStatus] = useState<RequestStatus>("idle");
-  const [configErrorMessage, setConfigErrorMessage] = useState<string | null>(null);
-  const [setDefaultStatus, setSetDefaultStatus] = useState<RequestStatus>("idle");
-  const [setDefaultErrorMessage, setSetDefaultErrorMessage] = useState<string | null>(null);
-
-  const fixedBackgroundId = backgroundConfig.fixedBackgroundId;
-  const isConfigSaving = configSaveStatus === "loading";
-  const areSwitchSettingsDisabled = backgroundConfig.mode === "fixed" || isConfigSaving;
-  const isIntervalSettingDisabled = areSwitchSettingsDisabled || backgroundConfig.switchTrigger === "on_open";
-  const isSetDefaultButtonDisabled =
-    backgroundConfig.mode !== "fixed" || !selectedBackgroundId || selectedBackgroundId === fixedBackgroundId || setDefaultStatus === "loading" || isConfigSaving;
-  const isUploading = uploadStatus === "loading";
   const settingsInvalidationKey = readModelInvalidationKey(readModelInvalidations, "settings");
+  const [settings, setSettings] = useState<GitLabOrfChatSettingsData | null>(null);
+  const [draftChannelIds, setDraftChannelIds] = useState<Record<string, string>>({});
+  const [queryStatus, setQueryStatus] = useState<RequestStatus>("idle");
+  const [queryErrorMessage, setQueryErrorMessage] = useState<string | null>(null);
+  const [savingProjectId, setSavingProjectId] = useState<string | null>(null);
+  const [reconcileStatus, setReconcileStatus] = useState<RequestStatus>("idle");
 
-  useEffect(() => {
-    if (!configErrorMessage) {
-      return undefined;
-    }
+  const isReconcileConfigured = Boolean(
+    settings?.config.enabled &&
+      settings.config.gitlabUrlConfigured &&
+      settings.config.accessTokenConfigured &&
+      settings.config.webhookUrlConfigured &&
+      settings.config.webhookSecretConfigured,
+  );
+  const isReconcileRunning = reconcileStatus === "loading";
 
-    const timeoutId = window.setTimeout(() => {
-      setConfigErrorMessage(null);
-    }, 5000);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [configErrorMessage]);
+  const applySettings = (data: GitLabOrfChatSettingsData) => {
+    setSettings(data);
+    setDraftChannelIds(Object.fromEntries(data.projects.map((project) => [project.projectId, project.channelId ?? ""])));
+  };
 
   useEffect(() => {
     let cancelled = false;
-
-    setListQueryStatus("loading");
-    setListQueryErrorMessage(null);
-
-    void getVisualBackgrounds(scene)
+    setQueryStatus("loading");
+    setQueryErrorMessage(null);
+    void getGitLabOrfChatSettings()
       .then((data) => {
-        if (cancelled) {
-          return;
-        }
-
-        setBackgroundList(data.list);
-        setBackgroundConfig(data.config);
-        setIntervalInputValue(String(data.config.switchIntervalMinutes));
-        setSelectedBackgroundId((current) =>
-          current && data.list.some((background) => background.id === current) ? current : data.config.fixedBackgroundId,
-        );
-        setListQueryStatus("success");
+        if (cancelled) return;
+        applySettings(data);
+        setQueryStatus("success");
       })
       .catch((error) => {
-        if (cancelled) {
-          return;
-        }
-        setListQueryStatus("error");
-        setListQueryErrorMessage(error instanceof Error ? error.message : "背景列表加载失败");
+        if (cancelled) return;
+        setQueryStatus("error");
+        setQueryErrorMessage(error instanceof Error ? error.message : "GitLab 聊天绑定加载失败");
       });
-
     return () => {
       cancelled = true;
     };
-  }, [scene, settingsInvalidationKey]);
+  }, [settingsInvalidationKey]);
 
-  const handleFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
-    event.target.value = "";
-
-    if (!file || isUploading) {
-      return;
-    }
-
-    if (!file.type.startsWith("image/")) {
-      const message = "仅支持上传图片文件";
-      setUploadStatus("error");
-      setUploadErrorMessage(message);
-      notify(message);
-      return;
-    }
-
-    setUploadStatus("loading");
-    setUploadErrorMessage(null);
+  const handleReconcile = async () => {
+    if (!isReconcileConfigured || isReconcileRunning) return;
+    setReconcileStatus("loading");
     try {
-      const uploaded = await uploadVisualBackground(scene, file);
-      setBackgroundList((current) => [...current, uploaded]);
-      setSelectedBackgroundId(uploaded.id);
-      setUploadStatus("success");
-      dispatchVisualBackgroundChanged(scene);
-      notify("背景图片已上传");
+      const data = await requestReconcileGitLabOrfChatSettings();
+      applySettings(data);
+      setReconcileStatus("success");
+      notify("GitLab 项目频道已收敛");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "上传失败";
-      setUploadStatus("error");
-      setUploadErrorMessage(message);
+      const message = error instanceof Error ? error.message : "GitLab 项目频道收敛失败";
+      setReconcileStatus("error");
       notify(message);
     }
   };
 
-  const persistBackgroundConfig = async (nextConfig: VisualBackgroundConfig) => {
-    const previousConfig = backgroundConfig;
-    const fixedId = nextConfig.fixedBackgroundId ?? selectedBackgroundId ?? backgroundList[0]?.id ?? null;
-    if (!fixedId) {
-      const message = "请先上传或选择背景图片";
-      setConfigSaveStatus("error");
-      setConfigErrorMessage(message);
-      notify(message);
-      return;
-    }
-
-    const configToSave = {
-      ...nextConfig,
-      fixedBackgroundId: fixedId,
-      switchIntervalMinutes: Math.max(1, Math.min(1440, nextConfig.switchIntervalMinutes)),
-    };
-
-    setConfigSaveStatus("loading");
-    setConfigErrorMessage(null);
-    setBackgroundConfig(configToSave);
+  const handleSave = async (project: GitLabOrfChatProjectBinding) => {
+    const channelId = draftChannelIds[project.projectId] ?? "";
+    if (!channelId || channelId === project.channelId || savingProjectId) return;
+    setSavingProjectId(project.projectId);
     try {
-      const result = await requestSaveVisualBackgroundConfig(scene, configToSave);
-      setBackgroundConfig(result.config);
-      setIntervalInputValue(String(result.config.switchIntervalMinutes));
-      setBackgroundList((current) => current.map((background) => ({ ...background, isDefault: background.id === result.config.fixedBackgroundId })));
-      setConfigSaveStatus("success");
-      dispatchVisualBackgroundChanged(scene);
+      const data = await requestSaveGitLabOrfProjectChannel({
+        channelId,
+        projectId: project.projectId,
+        projectPath: project.projectPath,
+        projectUrl: project.projectUrl,
+      });
+      applySettings(data);
+      notify("GitLab 频道绑定已保存");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "保存设置失败";
-      setBackgroundConfig(previousConfig);
-      setIntervalInputValue(String(previousConfig.switchIntervalMinutes));
-      setConfigSaveStatus("error");
-      setConfigErrorMessage(message);
-      notify(message);
-    }
-  };
-
-  const handleModeChange = (mode: VisualBackgroundMode) => {
-    if (mode === backgroundConfig.mode || isConfigSaving) {
-      return;
-    }
-
-    void persistBackgroundConfig({
-      ...backgroundConfig,
-      mode,
-      fixedBackgroundId: backgroundConfig.fixedBackgroundId ?? selectedBackgroundId ?? backgroundList[0]?.id ?? null,
-    });
-  };
-
-  const handleTriggerChange = (switchTrigger: VisualBackgroundSwitchTrigger) => {
-    if (areSwitchSettingsDisabled || switchTrigger === backgroundConfig.switchTrigger) {
-      return;
-    }
-
-    void persistBackgroundConfig({ ...backgroundConfig, switchTrigger });
-  };
-
-  const handleOrderChange = (switchOrder: VisualBackgroundSwitchOrder) => {
-    if (areSwitchSettingsDisabled || switchOrder === backgroundConfig.switchOrder) {
-      return;
-    }
-
-    void persistBackgroundConfig({ ...backgroundConfig, switchOrder });
-  };
-
-  const handleIntervalCommit = () => {
-    if (isIntervalSettingDisabled) {
-      return;
-    }
-
-    const parsedValue = Number.parseInt(intervalInputValue, 10);
-    if (!Number.isFinite(parsedValue) || parsedValue < 1) {
-      const message = "切换间隔至少 1 分钟";
-      setConfigSaveStatus("error");
-      setConfigErrorMessage(message);
-      notify(message);
-      setIntervalInputValue(String(backgroundConfig.switchIntervalMinutes));
-      return;
-    }
-
-    const clampedValue = Math.min(1440, parsedValue);
-    setIntervalInputValue(String(clampedValue));
-    if (clampedValue === backgroundConfig.switchIntervalMinutes) {
-      return;
-    }
-
-    void persistBackgroundConfig({ ...backgroundConfig, switchIntervalMinutes: clampedValue });
-  };
-
-  const handleIntervalKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
-      event.currentTarget.blur();
-    }
-  };
-
-  const handleSetDefault = async () => {
-    if (!selectedBackgroundId || isSetDefaultButtonDisabled) {
-      return;
-    }
-
-    setSetDefaultStatus("loading");
-    setSetDefaultErrorMessage(null);
-    try {
-      const result = await requestSetDefaultVisualBackground(selectedBackgroundId);
-      setBackgroundConfig(result.config);
-      setIntervalInputValue(String(result.config.switchIntervalMinutes));
-      setBackgroundList((current) => current.map((background) => ({ ...background, isDefault: background.id === result.id })));
-      setSetDefaultStatus("success");
-      dispatchVisualBackgroundChanged(scene);
-      notify("默认背景已更新");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "设置默认失败";
-      setSetDefaultStatus("error");
-      setSetDefaultErrorMessage(message);
-      notify(message);
+      notify(error instanceof Error ? error.message : "GitLab 频道绑定保存失败");
+    } finally {
+      setSavingProjectId(null);
     }
   };
 
@@ -438,160 +258,88 @@ function BackgroundSettingSection({
     <section className="orf-settings-background-section">
       <div className="orf-settings-section-header">
         <div>
-          <h2>{title}</h2>
-          <p>{description}</p>
+          <h2>GitLab 聊天绑定</h2>
+          <p>配置 GitLab project 对应的 ORF 聊天频道。</p>
         </div>
-        <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={(event) => void handleFileSelected(event)} />
-        <button type="button" className="orf-settings-upload-button" disabled={isUploading} onClick={() => fileInputRef.current?.click()}>
-          {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          {isUploading ? "上传中" : "上传图片"}
-        </button>
+        <Button type="button" size="sm" variant="secondary" disabled={!isReconcileConfigured || isReconcileRunning} onClick={() => void handleReconcile()}>
+          {isReconcileRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          收敛
+        </Button>
       </div>
 
-      <div className="orf-settings-background-controls" aria-label={`${title}切换设置`}>
-        <div className="orf-settings-background-label">
-          <ToggleLeft className="h-5 w-5" />
-          <span>背景模式</span>
-        </div>
-        <div className="orf-settings-control-field">
-          <SegmentedButtonGroup
-            disabled={isConfigSaving}
-            value={backgroundConfig.mode}
-            options={[
-              { value: "fixed", label: "固定背景" },
-              { value: "switchable", label: "可切换背景" },
-            ]}
-            onChange={(value) => handleModeChange(value as VisualBackgroundMode)}
-          />
-        </div>
+      <div className="orf-settings-gitlab-body">
+        {queryStatus === "loading" && <div className="orf-settings-background-state">加载中...</div>}
+        {queryStatus === "error" && <div className="orf-settings-background-state">{queryErrorMessage ?? "GitLab 聊天绑定加载失败"}</div>}
+        {settings && (
+          <>
+            <div className="orf-settings-gitlab-summary" aria-label="GitLab 集成配置状态">
+              <GitLabStatusBadge label="集成" active={settings.config.enabled} />
+              <GitLabStatusBadge label="GitLab" active={settings.config.gitlabUrlConfigured} />
+              <GitLabStatusBadge label="Token" active={settings.config.accessTokenConfigured} />
+              <GitLabStatusBadge label="Webhook" active={settings.config.webhookUrlConfigured && settings.config.webhookSecretConfigured} />
+              <span className="orf-settings-gitlab-group">Group: {settings.config.groupPath}</span>
+              <span className="orf-settings-gitlab-group">默认: {settings.config.channelType === "public" ? "公开频道" : "私有频道"}</span>
+            </div>
 
-        <div className="orf-settings-background-label">
-          <MousePointerClick className="h-5 w-5" />
-          <span>触发方式</span>
-        </div>
-        <div className="orf-settings-control-field">
-          <SegmentedButtonGroup
-            disabled={areSwitchSettingsDisabled}
-            value={backgroundConfig.switchTrigger}
-            options={[
-              { value: "on_open", label: "打开时切换" },
-              { value: "interval", label: "定时切换" },
-            ]}
-            onChange={(value) => handleTriggerChange(value as VisualBackgroundSwitchTrigger)}
-          />
-        </div>
+            {settings.gitlabProjectListError && <div className="orf-settings-inline-error">{settings.gitlabProjectListError}</div>}
 
-        <div className="orf-settings-background-label">
-          <Shuffle className="h-5 w-5" />
-          <span>切换规则</span>
-        </div>
-        <div className="orf-settings-control-field">
-          <SegmentedButtonGroup
-            disabled={areSwitchSettingsDisabled}
-            value={backgroundConfig.switchOrder}
-            options={[
-              { value: "sequential", label: "顺序切换" },
-              { value: "random", label: "随机切换" },
-            ]}
-            onChange={(value) => handleOrderChange(value as VisualBackgroundSwitchOrder)}
-          />
-        </div>
-
-        <div className="orf-settings-background-label">
-          <Timer className="h-5 w-5" />
-          <span>切换间隔</span>
-        </div>
-        <div className="orf-settings-control-field orf-settings-interval-field">
-          <input
-            className="orf-settings-number-input"
-            type="number"
-            min={1}
-            max={1440}
-            value={intervalInputValue}
-            disabled={isIntervalSettingDisabled}
-            onChange={(event) => setIntervalInputValue(event.target.value)}
-            onBlur={handleIntervalCommit}
-            onKeyDown={handleIntervalKeyDown}
-          />
-          <select className="orf-settings-unit-select" value="minutes" disabled={isIntervalSettingDisabled} onChange={() => undefined}>
-            <option value="minutes">分钟</option>
-          </select>
-          {configErrorMessage && <span className="orf-settings-inline-error">{configErrorMessage}</span>}
-        </div>
-      </div>
-
-      <div className="orf-settings-background-body">
-        <div className="orf-settings-background-label">
-          <Image className="h-5 w-5" />
-          <span>背景预览</span>
-        </div>
-
-        <div className="orf-settings-background-gallery" data-loading={listQueryStatus === "loading" ? "true" : "false"}>
-          {listQueryStatus === "loading" && <div className="orf-settings-background-state">加载中...</div>}
-          {listQueryStatus === "error" && <div className="orf-settings-background-state">{listQueryErrorMessage ?? "背景列表加载失败"}</div>}
-          {listQueryStatus === "success" && backgroundList.length === 0 && <div className="orf-settings-background-state">暂无背景图片，请先上传。</div>}
-          {listQueryStatus === "success" &&
-            backgroundList.map((background) => {
-              const selected = selectedBackgroundId === background.id;
-              const isDefault = fixedBackgroundId === background.id;
-              return (
-                <button
-                  key={background.id}
-                  type="button"
-                  className={clsx("orf-settings-background-card", selected && "orf-settings-background-card-selected")}
-                  onClick={() => setSelectedBackgroundId(background.id)}
-                >
-                  <img src={background.url} alt={background.fileName} draggable={false} />
-                  {isDefault && (
-                    <span className="orf-settings-background-default">
-                      <Check className="h-3.5 w-3.5" />
-                      默认
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-        </div>
-
-        <div className="orf-settings-background-actions">
-          <div className="orf-settings-selected-text">
-            {(uploadErrorMessage || setDefaultErrorMessage) && <span>{uploadErrorMessage ?? setDefaultErrorMessage}</span>}
-          </div>
-          <button type="button" className="orf-settings-default-button" disabled={isSetDefaultButtonDisabled} onClick={() => void handleSetDefault()}>
-            {setDefaultStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            设为默认
-          </button>
-        </div>
+            <div className="orf-settings-gitlab-table" role="table" aria-label="GitLab project 频道绑定">
+              <div className="orf-settings-gitlab-row orf-settings-gitlab-head" role="row">
+                <span role="columnheader">Project</span>
+                <span role="columnheader">频道</span>
+                <span role="columnheader">状态</span>
+              </div>
+              {settings.projects.length === 0 && <div className="orf-settings-background-state">暂无 GitLab project。</div>}
+              {settings.projects.map((project) => {
+                const draftChannelId = draftChannelIds[project.projectId] ?? "";
+                const changed = Boolean(draftChannelId && draftChannelId !== (project.channelId ?? ""));
+                const isSaving = savingProjectId === project.projectId;
+                return (
+                  <div className="orf-settings-gitlab-row" role="row" key={project.projectId}>
+                    <div className="orf-settings-gitlab-project" role="cell">
+                      <GitBranch className="h-4 w-4" />
+                      <div>
+                        {project.projectUrl ? (
+                          <a href={project.projectUrl} target="_blank" rel="noreferrer">{project.projectPath}</a>
+                        ) : (
+                          <span>{project.projectPath}</span>
+                        )}
+                        <small>{project.projectId}</small>
+                      </div>
+                    </div>
+                    <div className="orf-settings-gitlab-channel-control" role="cell">
+                      <select
+                        className="orf-settings-gitlab-select"
+                        value={draftChannelId}
+                        disabled={settings.channels.length === 0 || isSaving}
+                        onChange={(event) => setDraftChannelIds((current) => ({ ...current, [project.projectId]: event.target.value }))}
+                      >
+                        <option value="">未绑定</option>
+                        {settings.channels.map((channel) => (
+                          <option key={channel.id} value={channel.id}>
+                            {channel.displayName} · {channel.type === "public" ? "公开" : "私有"} · {channel.memberCount}
+                          </option>
+                        ))}
+                      </select>
+                      <Button type="button" size="sm" disabled={!changed || isSaving} onClick={() => void handleSave(project)}>
+                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link className="h-4 w-4" />}
+                        绑定
+                      </Button>
+                    </div>
+                    <div className="orf-settings-gitlab-binding-state" role="cell">
+                      {project.channelId ? project.channelDisplayName ?? project.channelId : "未绑定"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
     </section>
   );
 }
 
-function SegmentedButtonGroup({
-  disabled,
-  onChange,
-  options,
-  value,
-}: {
-  disabled?: boolean;
-  onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
-  value: string;
-}) {
-  return (
-    <div className="orf-settings-segmented" aria-disabled={disabled ? "true" : "false"}>
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          className={clsx(value === option.value && "orf-settings-segmented-active")}
-          disabled={disabled}
-          onClick={() => onChange(option.value)}
-        >
-          <span>{option.label}</span>
-          {value === option.value && <Check className="h-4 w-4" />}
-        </button>
-      ))}
-    </div>
-  );
+function GitLabStatusBadge({ active, label }: { active: boolean; label: string }) {
+  return <span className={clsx("orf-settings-gitlab-badge", active && "orf-settings-gitlab-badge-active")}>{label}</span>;
 }

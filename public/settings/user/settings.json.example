@@ -6,14 +6,16 @@
         "fixedBackgroundId": null,
         "switchTrigger": "on_open",
         "switchOrder": "random",
-        "switchIntervalMinutes": 10
+        "switchIntervalMinutes": 10,
+        "placements": {}
       },
       "sidebar_background": {
         "mode": "fixed",
         "fixedBackgroundId": null,
         "switchTrigger": "on_open",
         "switchOrder": "random",
-        "switchIntervalMinutes": 10
+        "switchIntervalMinutes": 10,
+        "placements": {}
       }
     }
   }

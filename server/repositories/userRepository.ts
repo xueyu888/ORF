@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { OrfUser, UserRole } from "../../src/types/orf";
+import { canEnableUserAccount } from "../../src/domain/userAccountLifecycle";
 import { deleteOryIdentity, updateOryIdentityEmail } from "../auth/ory";
 import { db } from "../db/client";
 import {
@@ -74,6 +75,22 @@ async function assertMembershipExists(scope: RuntimeScope, userId: string) {
   if (!membership) {
     throw Object.assign(new Error("User not found"), { statusCode: 404 });
   }
+}
+
+async function getScopedUserStatus(scope: RuntimeScope, userId: string) {
+  const storageScopeId = runtimeScopeStorageId(scope);
+  const [membership] = await db
+    .select({ status: users.status })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, storageScopeId), eq(teamMembers.userId, userId)))
+    .limit(1);
+
+  if (!membership) {
+    throw Object.assign(new Error("User not found"), { statusCode: 404 });
+  }
+
+  return membership.status;
 }
 
 async function getScopedUserRecord(scope: RuntimeScope, userId: string) {
@@ -363,7 +380,7 @@ export async function createScopedUser(scope: RuntimeScope, actorUserId: string,
       .limit(1);
 
     if (matchedMembership) {
-      assertCanChangeRole(actorUserId, matchedUser.id, normalized.role);
+      throw Object.assign(new Error("User already exists"), { statusCode: 409 });
     }
   }
 
@@ -491,6 +508,15 @@ export async function disableScopedUser(scope: RuntimeScope, actorUserId: string
     throw Object.assign(new Error("Admin cannot delete self"), { statusCode: 409 });
   }
   await db.update(users).set({ status: "disabled" }).where(eq(users.id, userId));
+  return getScopedUsers(scope);
+}
+
+export async function enableScopedUser(scope: RuntimeScope, userId: string): Promise<OrfUser[]> {
+  const status = await getScopedUserStatus(scope, userId);
+  if (!canEnableUserAccount(status)) {
+    throw Object.assign(new Error("User is not disabled"), { statusCode: 409 });
+  }
+  await db.update(users).set({ status: "active" }).where(eq(users.id, userId));
   return getScopedUsers(scope);
 }
 

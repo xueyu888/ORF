@@ -7,6 +7,22 @@ export type ChatComposerHistoryState = {
   restoreDraft: ChatDraft | null;
 };
 
+export type ChatAttachmentUploadProgress = {
+  bytesPerSecond: number | null;
+  loadedBytes: number;
+  percent: number | null;
+  startedAtMs: number;
+  totalBytes: number | null;
+  updatedAtMs: number;
+};
+
+export type ChatAttachmentUploadProgressInput = {
+  loadedBytes: number;
+  percent: number | null;
+  recordedAtMs?: number;
+  totalBytes: number | null;
+};
+
 export type ChatAttachmentDraftItem =
   | {
       clientId: string;
@@ -31,6 +47,7 @@ export type ChatAttachmentDraftItem =
       fileName: string;
       fileSize: number;
       mimeType: string;
+      progress: ChatAttachmentUploadProgress;
       status: "uploading";
     };
 
@@ -39,6 +56,32 @@ export const emptyComposerHistory: ChatComposerHistoryState = { cursorIndex: nul
 
 function createAttachmentClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `chat-attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function currentUploadClockMs() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function createInitialUploadProgress(fileSize: number, nowMs = currentUploadClockMs()): ChatAttachmentUploadProgress {
+  return {
+    bytesPerSecond: null,
+    loadedBytes: 0,
+    percent: fileSize > 0 ? 0 : null,
+    startedAtMs: nowMs,
+    totalBytes: fileSize > 0 ? fileSize : null,
+    updatedAtMs: nowMs,
+  };
+}
+
+function deriveUploadSpeed(previous: ChatAttachmentUploadProgress, loadedBytes: number, updatedAtMs: number) {
+  const elapsedMs = updatedAtMs - previous.updatedAtMs;
+  const loadedDelta = loadedBytes - previous.loadedBytes;
+  if (elapsedMs <= 0 || loadedDelta < 0) return previous.bytesPerSecond;
+
+  const instantBytesPerSecond = (loadedDelta / elapsedMs) * 1000;
+  if (!Number.isFinite(instantBytesPerSecond) || instantBytesPerSecond <= 0) return previous.bytesPerSecond;
+  if (previous.bytesPerSecond === null) return instantBytesPerSecond;
+  return previous.bytesPerSecond * 0.65 + instantBytesPerSecond * 0.35;
 }
 
 function cloneDraft(draft: ChatDraft): ChatDraft {
@@ -90,8 +133,35 @@ export function createAttachmentDraftItem(file: File): ChatAttachmentDraftItem {
     fileName: file.name,
     fileSize: file.size,
     mimeType: file.type || "application/octet-stream",
+    progress: createInitialUploadProgress(file.size),
     status: "uploading",
   };
+}
+
+export function progressAttachmentDraftItem(
+  items: ChatAttachmentDraftItem[],
+  clientId: string,
+  progress: ChatAttachmentUploadProgressInput,
+) {
+  return items.map((item) => (
+    item.clientId === clientId && item.status === "uploading"
+      ? (() => {
+          const loadedBytes = Math.max(0, progress.loadedBytes);
+          const updatedAtMs = progress.recordedAtMs ?? currentUploadClockMs();
+          return {
+            ...item,
+            progress: {
+              bytesPerSecond: deriveUploadSpeed(item.progress, loadedBytes, updatedAtMs),
+              loadedBytes,
+              percent: progress.percent === null ? null : Math.max(0, Math.min(100, progress.percent)),
+              startedAtMs: item.progress.startedAtMs,
+              totalBytes: progress.totalBytes === null ? null : Math.max(0, progress.totalBytes),
+              updatedAtMs,
+            },
+          };
+        })()
+      : item
+  ));
 }
 
 export function completeAttachmentDraftItem(items: ChatAttachmentDraftItem[], clientId: string, attachment: ChatAttachment) {
@@ -134,6 +204,7 @@ export function retryAttachmentDraftItem(items: ChatAttachmentDraftItem[], clien
           fileName: item.fileName,
           fileSize: item.fileSize,
           mimeType: item.mimeType,
+          progress: createInitialUploadProgress(item.fileSize),
           status: "uploading" as const,
         }
       : item

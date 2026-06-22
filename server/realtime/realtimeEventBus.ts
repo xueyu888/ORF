@@ -6,6 +6,7 @@ import type {
   RealtimeEvent,
   SystemBroadcast,
 } from "../../src/types/realtime";
+import type { WorkLogReminderState } from "../../src/types/orf";
 import { connectRealtimePresence, disconnectRealtimePresence } from "./presenceRegistry";
 
 type RealtimeSubscriber = {
@@ -136,6 +137,24 @@ export function publishRealtimeClientUpdateAvailable(teamId: string, update: Cli
     kind: "client.update.available",
     createdAt: nowIso(),
     update,
+  });
+}
+
+export function publishRealtimeWorkLogReminderRequired(teamId: string, userId: string, reminder: WorkLogReminderState) {
+  publishRealtimeEventToUser(teamId, userId, {
+    id: makeEventId("worklog-reminder-required-event"),
+    kind: "worklog.reminder.required",
+    createdAt: nowIso(),
+    reminder,
+  });
+}
+
+export function publishRealtimeWorkLogReminderResolved(teamId: string, userId: string, reminder: WorkLogReminderState) {
+  publishRealtimeEventToUser(teamId, userId, {
+    id: makeEventId("worklog-reminder-resolved-event"),
+    kind: "worklog.reminder.resolved",
+    createdAt: nowIso(),
+    reminder,
   });
 }
 

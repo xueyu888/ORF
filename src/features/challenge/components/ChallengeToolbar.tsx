@@ -1,6 +1,7 @@
 import { CalendarDays, Filter, FolderKanban, Plus, UserRound } from "lucide-react";
 import { useState } from "react";
 import { FantasySelectMenu, type FantasySelectOption } from "../../../components/FantasySelectMenu";
+import { Button, IconButton } from "../../../components/ui";
 import {
   challengeStatusFilterOptions,
   type ChallengeCycleFilter,
@@ -99,15 +100,13 @@ export function ChallengeToolbar({
                 placeholder="项目名"
                 value={newProjectName}
               />
-              <button aria-label="创建项目" disabled={creating || !newProjectName.trim()} type="submit">
-                <Plus className="h-4 w-4" aria-hidden="true" />
-              </button>
+              <IconButton icon={Plus} label="创建项目" disabled={creating || !newProjectName.trim()} size="sm" type="submit" />
             </form>
           ) : (
-            <button className="orf-toolbar-project-create-button orf-floating-control" type="button" onClick={() => setCreateOpen(true)}>
+            <Button size="sm" variant="secondary" type="button" onClick={() => setCreateOpen(true)}>
               <Plus className="h-4 w-4" aria-hidden="true" />
               项目
-            </button>
+            </Button>
           )
         )}
         <FantasySelectMenu

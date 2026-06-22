@@ -17,6 +17,11 @@ import {
   isWorkLogClassificationSuggestionConfigured,
   suggestWorkLogClassification,
 } from "../workLogs/workLogClassificationSuggestion";
+import {
+  reconcileWorkLogReminderState,
+  snoozeWorkLogReminderState,
+} from "../workLogs/workLogReminderState";
+import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 
 const dateSchema = z.string().refine(isDateOnlyString, "Expected YYYY-MM-DD date");
 
@@ -87,6 +92,35 @@ function workLogSaveFailureMessage(reason: string) {
 }
 
 export function registerWorkLogRoutes(app: FastifyInstance) {
+  app.get("/api/work-logs/reminder-state", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    return {
+      reminder: await reconcileWorkLogReminderState({
+        publishRealtime: true,
+        teamId: runtimeScopeStorageId(context.scope),
+        userId: context.user.id,
+      }),
+    };
+  });
+
+  app.post("/api/work-logs/reminder-state/snooze", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    return {
+      reminder: await snoozeWorkLogReminderState({
+        teamId: runtimeScopeStorageId(context.scope),
+        userId: context.user.id,
+      }),
+    };
+  });
+
   app.get("/api/work-logs/objectives", async (request, reply) => {
     const context = await requireUserScopeContext(request, reply);
     if (!context) {

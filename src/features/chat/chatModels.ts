@@ -219,6 +219,8 @@ export function createPendingChatMessage(input: {
     authorUserId: input.author.id,
     authorName: input.author.name,
     authorAvatarUrl: input.author.avatarUrl,
+    source: "user",
+    system: null,
     body: input.body,
     rootMessageId: input.rootMessageId ?? null,
     parentMessageId: input.parentMessageId ?? null,

@@ -38,7 +38,7 @@ export function DashboardPage() {
     <PageScaffold
       title="ORF 仪表盘"
       subtitle="面向大模型应用的目标驱动执行工作台"
-      action={<div className="orf-control border orf-secondary-action px-3 py-2 text-sm font-medium">{summary.latestCycle ?? "暂无周期"}</div>}
+      action={<div className="orf-status-tag orf-accent-soft px-3 py-2 text-sm font-medium">{summary.latestCycle ?? "暂无周期"}</div>}
     >
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard title="进行中的目标" value={`${summary.activeObjectives.length}`} delta={`${visibleObjectives.length} 个目标总数`} icon={Target} />

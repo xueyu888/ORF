@@ -1,4 +1,4 @@
-import { Hash, Lock, MessageSquare } from "lucide-react";
+import { Bell, Hash, Lock, Megaphone, MessageSquare } from "lucide-react";
 import {
   chatConversationDisplayName,
   chatConversationSearchText,
@@ -8,12 +8,15 @@ import {
 import type { ChatChannel, ChatUser } from "../../types/orf";
 
 export function channelIcon(channel: ChatChannel) {
+  if (channel.systemKind === "teamAnnouncement") return Megaphone;
+  if (channel.systemKind === "personalNotification") return Bell;
   if (channel.type === "public") return Hash;
   if (channel.type === "private") return Lock;
   return MessageSquare;
 }
 
 export function chatChannelDisplayLabel(channel: ChatChannel, currentUserId: string | undefined, usersById: ReadonlyMap<string, ChatUser>) {
+  if (channel.systemKind) return channel.displayName;
   if (!isChatConversation(channel)) return channel.displayName;
   return chatConversationDisplayName({
     currentUserId,
@@ -25,6 +28,7 @@ export function chatChannelDisplayLabel(channel: ChatChannel, currentUserId: str
 }
 
 export function chatChannelSearchText(channel: ChatChannel, currentUserId: string | undefined, usersById: ReadonlyMap<string, ChatUser>) {
+  if (channel.systemKind) return `${channel.displayName} ${channel.name ?? ""} ${channel.purpose}`.trim();
   if (!isChatConversation(channel)) return `${channel.displayName} ${channel.name ?? ""}`.trim();
   return chatConversationSearchText({
     currentUserId,
@@ -45,6 +49,7 @@ export function chatChannelAvatarUsers(channel: ChatChannel, currentUserId: stri
 }
 
 export function chatDirectPeer(channel: ChatChannel, currentUserId: string | undefined, usersById: ReadonlyMap<string, ChatUser>) {
+  if (channel.systemKind) return null;
   if (channel.type !== "direct") return null;
   const visibleMembers = chatConversationVisibleMembers({
     currentUserId,

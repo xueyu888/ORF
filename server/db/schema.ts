@@ -3,9 +3,14 @@ import { bigint, boolean, date, index, integer, jsonb, pgEnum, pgTable, primaryK
 import type {
   BountySource,
   ChallengeApplication,
+  ChatMessageSource,
+  ChatMessageSystemMetadata,
+  ChatSystemKind,
+  CommentTargetType,
   ContributionAllocation,
   LootResultClaim,
   NotificationKind,
+  NotificationStream,
   NotificationTargetType,
   ObjectiveAlignmentRequestKind,
   ObjectiveAlignmentRequestStatus,
@@ -15,6 +20,7 @@ import type {
   OrfStage,
   ResultAcceptedResult,
   UserStatus,
+  WorkLogReminderStatus,
 } from "../../src/types/orf";
 
 export const workStatusEnum = pgEnum("work_status", ["On Track", "At Risk", "Blocked", "Draft"]);
@@ -30,6 +36,7 @@ export const commentTargetTypeEnum = pgEnum("comment_target_type", ["objective",
 export const commentStatusEnum = pgEnum("comment_status", ["open", "resolved"]);
 export const chatChannelTypeEnum = pgEnum("chat_channel_type", ["public", "private", "direct"]);
 export const chatMemberRoleEnum = pgEnum("chat_member_role", ["owner", "admin", "member"]);
+export const notificationStreamEnum = pgEnum("notification_stream", ["personalNotification", "teamAnnouncement"]);
 export const teams = pgTable("teams", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -320,6 +327,81 @@ export const notifications = pgTable(
     recipientCreatedAt: index("notifications_recipient_created_at_idx").on(table.recipientUserId, table.createdAt),
     recipientUnread: index("notifications_recipient_unread_idx").on(table.recipientUserId, table.readAt),
     teamCreatedAt: index("notifications_team_created_at_idx").on(table.teamId, table.createdAt),
+  }),
+);
+
+export const notificationEvents = pgTable(
+  "notification_events",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    stream: notificationStreamEnum("stream").$type<NotificationStream>().notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    actorName: text("actor_name").notNull().default(""),
+    kind: text("kind").$type<NotificationKind>().notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    targetType: text("target_type").$type<NotificationTargetType>().notNull(),
+    targetId: text("target_id").notNull(),
+    targetHref: text("target_href").notNull(),
+    replyTargetType: commentTargetTypeEnum("reply_target_type").$type<CommentTargetType>(),
+    replyTargetId: text("reply_target_id"),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    metadata: jsonb("metadata").$type<Record<string, string>>().notNull().default({}),
+  },
+  (table) => ({
+    streamCreatedAt: index("notification_events_stream_created_at_idx").on(table.teamId, table.stream, table.createdAt),
+    target: index("notification_events_target_idx").on(table.teamId, table.targetType, table.targetId),
+  }),
+);
+
+export const notificationReceipts = pgTable(
+  "notification_receipts",
+  {
+    eventId: text("event_id")
+      .notNull()
+      .references(() => notificationEvents.id, { onDelete: "cascade" }),
+    recipientUserId: uuid("recipient_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    readAt: timestamp("read_at", { mode: "string", withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.eventId, table.recipientUserId] }),
+    recipientDeliveredAt: index("notification_receipts_recipient_delivered_at_idx").on(table.recipientUserId, table.deliveredAt),
+    recipientUnread: index("notification_receipts_recipient_unread_idx").on(table.recipientUserId, table.readAt),
+  }),
+);
+
+export const workLogReminderStates = pgTable(
+  "work_log_reminder_states",
+  {
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").$type<WorkLogReminderStatus>().notNull(),
+    windowStartDate: date("window_start_date", { mode: "string" }).notNull(),
+    windowEndDate: date("window_end_date", { mode: "string" }).notNull(),
+    requiredDates: jsonb("required_dates").$type<string[]>().notNull().default([]),
+    missingDates: jsonb("missing_dates").$type<string[]>().notNull().default([]),
+    lastRemindedAt: timestamp("last_reminded_at", { mode: "string", withTimezone: true }),
+    nextRemindAt: timestamp("next_remind_at", { mode: "string", withTimezone: true }),
+    snoozeCount: integer("snooze_count").notNull().default(0),
+    notificationEventId: text("notification_event_id").references(() => notificationEvents.id, { onDelete: "set null" }),
+    resolvedAt: timestamp("resolved_at", { mode: "string", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.userId] }),
+    statusNextRemindAt: index("work_log_reminder_states_status_next_remind_at_idx").on(table.status, table.nextRemindAt),
+    notificationEvent: index("work_log_reminder_states_notification_event_idx").on(table.notificationEventId),
   }),
 );
 
@@ -657,6 +739,8 @@ export const chatChannels = pgTable(
       .references(() => teams.id, { onDelete: "cascade" }),
     type: chatChannelTypeEnum("type").notNull(),
     name: text("name"),
+    systemKind: text("system_kind").$type<ChatSystemKind>(),
+    systemRecipientUserId: uuid("system_recipient_user_id").references(() => users.id, { onDelete: "cascade" }),
     displayName: text("display_name").notNull(),
     purpose: text("purpose").notNull().default(""),
     header: text("header").notNull().default(""),
@@ -670,6 +754,12 @@ export const chatChannels = pgTable(
     teamType: index("chat_channels_team_type_idx").on(table.teamId, table.type),
     teamUpdated: index("chat_channels_team_updated_idx").on(table.teamId, table.updatedAt),
     teamNameUnique: uniqueIndex("chat_channels_team_name_unique").on(table.teamId, table.name),
+    teamSystemAnnouncementUnique: uniqueIndex("chat_channels_team_system_announcement_unique")
+      .on(table.teamId, table.systemKind)
+      .where(sql`system_kind = 'teamAnnouncement'`),
+    teamSystemPersonalUnique: uniqueIndex("chat_channels_team_system_personal_unique")
+      .on(table.teamId, table.systemKind, table.systemRecipientUserId)
+      .where(sql`system_kind = 'personalNotification'`),
   }),
 );
 
@@ -710,6 +800,8 @@ export const chatMessages = pgTable(
     authorUserId: uuid("author_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    source: text("source").$type<ChatMessageSource>().notNull().default("user"),
+    systemMetadata: jsonb("system_metadata").$type<ChatMessageSystemMetadata>().notNull().default({}),
     body: text("body").notNull(),
     rootMessageId: text("root_message_id"),
     parentMessageId: text("parent_message_id"),
@@ -723,6 +815,37 @@ export const chatMessages = pgTable(
     channelCreated: index("chat_messages_channel_created_idx").on(table.channelId, table.createdAt),
     rootCreated: index("chat_messages_root_created_idx").on(table.rootMessageId, table.createdAt),
     teamCreated: index("chat_messages_team_created_idx").on(table.teamId, table.createdAt),
+  }),
+);
+
+export const notificationDeliveries = pgTable(
+  "notification_deliveries",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => notificationEvents.id, { onDelete: "cascade" }),
+    recipientUserId: uuid("recipient_user_id").references(() => users.id, { onDelete: "cascade" }),
+    channel: text("channel").notNull(),
+    status: text("status").notNull().default("pending"),
+    destinationId: text("destination_id"),
+    messageId: text("message_id").references(() => chatMessages.id, { onDelete: "set null" }),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    nextAttemptAt: timestamp("next_attempt_at", { mode: "string", withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { mode: "string", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    eventChannel: index("notification_deliveries_event_channel_idx").on(table.eventId, table.channel),
+    retry: index("notification_deliveries_retry_idx").on(table.channel, table.status, table.nextAttemptAt),
+    teamChatOnce: uniqueIndex("notification_deliveries_team_chat_unique")
+      .on(table.eventId, table.channel)
+      .where(sql`recipient_user_id IS NULL`),
+    userChatOnce: uniqueIndex("notification_deliveries_user_chat_unique")
+      .on(table.eventId, table.recipientUserId, table.channel)
+      .where(sql`recipient_user_id IS NOT NULL`),
   }),
 );
 
@@ -851,5 +974,77 @@ export const chatImportMappings = pgTable(
   (table) => ({
     pk: primaryKey({ columns: [table.teamId, table.sourceSystem, table.sourceKind, table.sourceId] }),
     target: index("chat_import_mappings_target_idx").on(table.teamId, table.targetTable, table.targetId),
+  }),
+);
+
+export const gitLabOrfProjectChannels = pgTable(
+  "gitlab_orf_project_channels",
+  {
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    gitlabProjectId: text("gitlab_project_id").notNull(),
+    gitlabProjectPath: text("gitlab_project_path").notNull(),
+    gitlabProjectUrl: text("gitlab_project_url").notNull().default(""),
+    chatChannelId: text("chat_channel_id")
+      .notNull()
+      .references(() => chatChannels.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.gitlabProjectId] }),
+    teamPathUnique: uniqueIndex("gitlab_orf_project_channels_team_path_unique").on(table.teamId, table.gitlabProjectPath),
+    teamChannelUnique: uniqueIndex("gitlab_orf_project_channels_team_channel_unique").on(table.teamId, table.chatChannelId),
+    channel: index("gitlab_orf_project_channels_channel_idx").on(table.chatChannelId),
+  }),
+);
+
+export const gitLabOrfEventDeliveries = pgTable(
+  "gitlab_orf_event_deliveries",
+  {
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    externalEventKey: text("external_event_key").notNull(),
+    gitlabProjectId: text("gitlab_project_id").notNull(),
+    eventType: text("event_type").notNull(),
+    chatChannelId: text("chat_channel_id").references(() => chatChannels.id, { onDelete: "set null" }),
+    chatMessageId: text("chat_message_id").references(() => chatMessages.id, { onDelete: "set null" }),
+    status: text("status").$type<"reserved" | "delivered" | "failed" | "ignored">().notNull(),
+    error: text("error"),
+    receivedAt: timestamp("received_at", { mode: "string", withTimezone: true }).notNull(),
+    deliveredAt: timestamp("delivered_at", { mode: "string", withTimezone: true }),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.externalEventKey] }),
+    project: index("gitlab_orf_event_deliveries_project_idx").on(table.teamId, table.gitlabProjectId, table.receivedAt),
+    status: index("gitlab_orf_event_deliveries_status_idx").on(table.teamId, table.status, table.updatedAt),
+  }),
+);
+
+export const gitHubOrfChatDeliveries = pgTable(
+  "github_orf_chat_deliveries",
+  {
+    deliveryKey: text("delivery_key").primaryKey(),
+    repository: text("repository").notNull(),
+    eventType: text("event_type").$type<"push" | "issue" | "issues-snapshot">().notNull(),
+    subject: text("subject").notNull(),
+    externalId: text("external_id").notNull(),
+    channelId: text("channel_id")
+      .notNull()
+      .references(() => chatChannels.id, { onDelete: "cascade" }),
+    source: text("source").$type<"webhook" | "api-poll" | "git-poll">().notNull(),
+    status: text("status").$type<"reserved" | "delivered" | "failed">().notNull().default("reserved"),
+    chatMessageId: text("chat_message_id").references(() => chatMessages.id, { onDelete: "set null" }),
+    error: text("error"),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    repositoryEvent: index("github_orf_chat_deliveries_repo_event_idx").on(table.repository, table.eventType, table.subject, table.createdAt),
+    status: index("github_orf_chat_deliveries_status_idx").on(table.status, table.updatedAt),
   }),
 );

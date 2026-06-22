@@ -1,6 +1,12 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { API_AUTHENTICATION_EXPIRED_EVENT, getChatUnreadSummary, getUserPreferences } from "./apiClient";
+import {
+  API_AUTHENTICATION_EXPIRED_EVENT,
+  getChatUnreadSummary,
+  getUserPreferences,
+  getWorkLogReminderState,
+  snoozeWorkLogReminder as snoozeWorkLogReminderRequest,
+} from "./apiClient";
 import { shouldLoadInitialTaskManagementReadModel } from "./orfDataLoading";
 import { loadEmptyOrfStateSnapshot } from "./orfStateSnapshot";
 import { useOrfDataState } from "./orfProviderData";
@@ -33,6 +39,7 @@ import type { AppAttentionState } from "../features/interaction/appAttentionStat
 import { useAppAttentionState } from "../features/interaction/useAppAttentionState";
 import { syncDesktopChatUnreadCount } from "../features/desktop/desktopShellRuntime";
 import { registerOrfPushNotifications, revokeOrfPushNotifications } from "../features/push/orfPushRegistration";
+import { GlobalWorkLogReminderModal } from "../features/work-logs/GlobalWorkLogReminderModal";
 import {
   isSafeChatNotificationTargetPath,
   prepareNativeChatNotifications,
@@ -62,6 +69,7 @@ import type {
   CommentAttachmentUploadResult,
   UncertaintyLevel,
   UserRole,
+  WorkLogReminderState,
 } from "../types/orf";
 
 type ModalType = "newResult" | "recruitChallengers" | null;
@@ -107,9 +115,9 @@ interface OrfContextValue {
   appAttentionState: AppAttentionState;
   modal: ModalState;
   toasts: ToastMessage[];
-  notifications: AppNotification[];
   readModelInvalidations: OrfReadModelInvalidation[];
   systemBroadcasts: SystemBroadcast[];
+  workLogReminderState: WorkLogReminderState | null;
   chatUnreadSummary: ChatUnreadSummary;
   unreadNotificationCount: number;
   openModal: (modal: ModalState) => void;
@@ -119,11 +127,9 @@ interface OrfContextValue {
   dismissSystemBroadcast: (id: string) => void;
   resetState: () => void;
   refreshChatUnreadSummary: () => Promise<void>;
+  refreshWorkLogReminderState: () => Promise<void>;
   refreshNotifications: () => Promise<void>;
-  markNotificationRead: (notificationId: string) => Promise<boolean>;
-  markAllNotificationsRead: () => Promise<boolean>;
-  deleteNotifications: (notificationIds: string[]) => Promise<boolean>;
-  clearAllNotifications: () => Promise<boolean>;
+  snoozeWorkLogReminder: () => Promise<void>;
   createObjective: (input: CreateObjectiveInput) => Promise<Objective | null>;
   createProject: (input: { name: string }) => Promise<OrfState["projects"][number] | null>;
   deleteProject: (projectId: string) => Promise<boolean>;
@@ -175,6 +181,7 @@ interface OrfContextValue {
   updateUser: (userId: string, input: { name: string; email: string; role: UserRole }) => Promise<boolean>;
   deleteUser: (userId: string) => Promise<boolean>;
   disableUser: (userId: string) => Promise<boolean>;
+  enableUser: (userId: string) => Promise<boolean>;
   approveRegistrationRequest: (userId: string) => Promise<boolean>;
   rejectRegistrationRequest: (userId: string) => Promise<boolean>;
   updateRolePermissionRules: (role: UserRole, rules: OrfState["permissionRules"]) => Promise<boolean>;
@@ -214,6 +221,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [readModelInvalidations, setReadModelInvalidations] = useState<OrfReadModelInvalidation[]>([]);
   const [systemBroadcasts, setSystemBroadcasts] = useState<SystemBroadcast[]>([]);
+  const [workLogReminderState, setWorkLogReminderState] = useState<WorkLogReminderState | null>(null);
   const [chatUnreadSummary, setChatUnreadSummary] = useState<ChatUnreadSummary>(emptyChatUnreadSummary);
   const notifiedChatMessageIdsRef = useRef<string[]>([]);
   const notify = useCallback((message: string) => {
@@ -231,16 +239,11 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const isAdmin = currentUser?.role === "admin";
   const loadTaskManagementData = shouldLoadInitialTaskManagementReadModel(location.pathname);
   const {
-    clearAllNotifications,
-    clearNotifications,
-    deleteNotifications,
-    markAllNotificationsRead,
-    markNotificationRead,
-    notifications,
     receiveNotification,
     refreshNotifications,
+    resetNotificationState,
     unreadNotificationCount,
-  } = useNotificationState(businessMutationFailureMessage, notify);
+  } = useNotificationState();
   const {
     applyCommentThread,
     applyRemovedCommentThread,
@@ -252,12 +255,12 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   } = useOrfDataState({
     authReady,
     authUserId,
-    clearNotifications,
     currentUserRole,
     isApproved,
     isAuthenticated,
     loadTaskManagementData,
     refreshNotifications,
+    resetNotificationState,
     setState,
   });
   useEffect(() => {
@@ -304,6 +307,14 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   }, []);
   const receiveClientUpdateAvailable = useCallback((update: ClientUpdateAvailable) => {
     requestClientUpdateCheck({ releaseVersion: update.releaseVersion });
+  }, []);
+  const refreshWorkLogReminderState = useCallback(async () => {
+    const response = await getWorkLogReminderState();
+    setWorkLogReminderState(response.reminder);
+  }, []);
+  const snoozeWorkLogReminder = useCallback(async () => {
+    const response = await snoozeWorkLogReminderRequest();
+    setWorkLogReminderState(response.reminder);
   }, []);
   const refreshChatUnreadSummary = useCallback(async () => {
     const summary = await getChatUnreadSummary();
@@ -363,6 +374,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     onConnectionRestored: publishChatRealtimeConnectionRestored,
     onNotification: receiveRealtimeNotification,
     onReadModelInvalidation: receiveReadModelInvalidation,
+    onWorkLogReminderRequired: (event) => setWorkLogReminderState(event.reminder),
+    onWorkLogReminderResolved: (event) => setWorkLogReminderState(event.reminder),
   });
 
   useEffect(() => {
@@ -370,6 +383,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       setChatUnreadSummary(emptyChatUnreadSummary);
       setReadModelInvalidations([]);
       setSystemBroadcasts([]);
+      setWorkLogReminderState(null);
     }
   }, [isApproved, isAuthenticated]);
 
@@ -382,6 +396,11 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     if (!authReady || !isAuthenticated || !isApproved) return;
     void refreshChatUnreadSummary().catch(() => undefined);
   }, [authReady, isApproved, isAuthenticated, refreshChatUnreadSummary]);
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !isApproved) return;
+    void refreshWorkLogReminderState().catch(() => undefined);
+  }, [authReady, isApproved, isAuthenticated, refreshWorkLogReminderState]);
 
   useEffect(() => {
     void refreshAuthSession();
@@ -492,9 +511,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       appAttentionState,
       modal,
       toasts,
-      notifications,
       readModelInvalidations,
       systemBroadcasts,
+      workLogReminderState,
       chatUnreadSummary,
       unreadNotificationCount,
       openModal: setModal,
@@ -508,11 +527,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           .catch((error) => notify(businessMutationFailureMessage(error, "重新加载数据失败")));
       },
       refreshChatUnreadSummary,
+      refreshWorkLogReminderState,
       refreshNotifications,
-      markNotificationRead,
-      markAllNotificationsRead,
-      deleteNotifications,
-      clearAllNotifications,
+      snoozeWorkLogReminder,
       ...objectiveActions,
       ...resultActions,
       ...taskActions,
@@ -532,28 +549,34 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       isApproved,
       isAuthenticated,
       modal,
-      clearAllNotifications,
-      deleteNotifications,
-      markAllNotificationsRead,
-      markNotificationRead,
       notify,
-      notifications,
       objectiveActions,
       readModelInvalidations,
       resultActions,
       feedbackActions,
       refreshChatUnreadSummary,
+      refreshWorkLogReminderState,
       refreshNotifications,
       refreshTaskManagementData,
       systemBroadcasts,
+      snoozeWorkLogReminder,
       taskActions,
       toasts,
       unreadNotificationCount,
+      workLogReminderState,
       userActions,
     ],
   );
 
-  return <OrfContext.Provider value={value}>{children}</OrfContext.Provider>;
+  return (
+    <OrfContext.Provider value={value}>
+      {children}
+      <GlobalWorkLogReminderModal
+        reminder={workLogReminderState}
+        onSnooze={snoozeWorkLogReminder}
+      />
+    </OrfContext.Provider>
+  );
 }
 
 export function useOrf() {

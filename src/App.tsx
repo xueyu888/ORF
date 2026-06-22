@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { AppFallbackPage } from "./components/AppFallback";
+import { Button } from "./components/ui";
 import { canShowFrontend, canShowFrontendPath, type FrontendVisibilityKey } from "./config/frontendVisibility";
 import { systemManagementPages } from "./config/navigation";
 import { useOrf } from "./state/OrfProvider";
@@ -20,7 +21,6 @@ const FeedbackIssuePage = lazyNamed(() => import("./pages/FeedbackIssuePage"), "
 const GenshinUIKitPreviewPage = lazyNamed(() => import("./features/genshin-ui-kit"), "GenshinUIKitPreviewPage");
 const LootSubmitPage = lazyNamed(() => import("./pages/LootSubmitPage"), "LootSubmitPage");
 const MembersPage = lazyNamed(() => import("./pages/MembersPage"), "MembersPage");
-const NotificationsPage = lazyNamed(() => import("./pages/NotificationsPage"), "NotificationsPage");
 const PermissionsPage = lazyNamed(() => import("./pages/PermissionsPage"), "PermissionsPage");
 const PersonalSettingsPage = lazyNamed(() => import("./pages/PersonalSettingsPage"), "PersonalSettingsPage");
 const ReportsPage = lazyNamed(() => import("./pages/ReportsPage"), "ReportsPage");
@@ -41,13 +41,14 @@ export function App() {
         <Route path="work-logs" element={<LazyRoute><WorkLogsPage /></LazyRoute>} />
         <Route path="tasks/objectives/:objectiveId/loot" element={<LazyRoute><LootSubmitPage /></LazyRoute>} />
         <Route path="chat" element={<LazyRoute><ChatPage /></LazyRoute>} />
+        <Route path="chat/system/:systemConversationId" element={<LazyRoute><ChatPage /></LazyRoute>} />
         <Route path="chat/:channelId" element={<LazyRoute><ChatPage /></LazyRoute>} />
         <Route path="fantasy-ui" element={<LazyRoute><FantasyUiPreviewPage /></LazyRoute>} />
         <Route path="genshin-ui-kit" element={<LazyRoute><GenshinUIKitPreviewPage /></LazyRoute>} />
         <Route path="feedback" element={<LazyRoute><FeedbackInboxPage /></LazyRoute>} />
         <Route path="feedback/new" element={<LazyRoute><FeedbackCreatePage /></LazyRoute>} />
         <Route path="feedback/:feedbackId" element={<LazyRoute><FeedbackIssuePage /></LazyRoute>} />
-        <Route path="notifications" element={<LazyRoute><NotificationsPage /></LazyRoute>} />
+        <Route path="notifications" element={<Navigate to="/chat/system/personalNotifications" replace />} />
         <Route path="strategy-map" element={<LazyRoute><StrategyMapPage /></LazyRoute>} />
         <Route path="ai-evaluation" element={<LazyRoute><AIEvaluationPage /></LazyRoute>} />
         <Route path="reports" element={<LazyRoute><ReportsPage /></LazyRoute>} />
@@ -183,9 +184,9 @@ function ApprovalPendingScreen({ onLogout, status }: { onLogout: () => void; sta
           <h1 className="orf-auth-loading-title">{stateCopy.title}</h1>
           <div className="orf-auth-loading-copy">{stateCopy.copy}</div>
         </div>
-        <button className="orf-control orf-secondary-action mt-4 inline-flex justify-center border px-4 py-2 text-sm font-medium" type="button" onClick={onLogout}>
+        <Button className="mt-4" type="button" variant="secondary" onClick={onLogout}>
           退出登录
-        </button>
+        </Button>
       </div>
     </main>
   );

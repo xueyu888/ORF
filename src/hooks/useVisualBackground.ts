@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { getPersonalBackgrounds, getVisualBackgrounds, type VisualBackgroundScene } from "../state/apiClient";
-import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
+import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs, type VisualBackgroundSelection } from "../utils/visualBackgrounds";
 
 type VisualBackgroundLoadState =
-  | { status: "loading"; url: null; error: null }
-  | { status: "ready"; url: string; error: null }
-  | { status: "error"; url: null; error: Error };
+  | { status: "loading"; selection: null; url: null; error: null }
+  | { status: "ready"; selection: VisualBackgroundSelection; url: string; error: null }
+  | { status: "empty"; selection: null; url: null; error: null }
+  | { status: "error"; selection: null; url: null; error: Error };
 
 function visualBackgroundError(scene: VisualBackgroundScene, error: unknown) {
   if (error instanceof Error) {
@@ -15,21 +16,12 @@ function visualBackgroundError(scene: VisualBackgroundScene, error: unknown) {
   return new Error(`Failed to load ${scene} visual background`);
 }
 
-function requiredVisualBackgroundUrl(scene: VisualBackgroundScene, data: Awaited<ReturnType<typeof getVisualBackgrounds>>) {
-  const background = pickVisualBackground(data);
-  if (!background) {
-    throw new Error(`No visual background image is configured for ${scene}`);
-  }
-
-  return background.url;
-}
-
 function loadVisualBackgrounds(scene: VisualBackgroundScene) {
-  return scene === "app_background" ? getPersonalBackgrounds() : getVisualBackgrounds(scene);
+  return scene === "login_background" ? getVisualBackgrounds(scene) : getPersonalBackgrounds(scene);
 }
 
-export function useVisualBackground(scene: VisualBackgroundScene) {
-  const [background, setBackground] = useState<VisualBackgroundLoadState>({ status: "loading", url: null, error: null });
+export function useVisualBackground(scene: VisualBackgroundScene | null) {
+  const [background, setBackground] = useState<VisualBackgroundLoadState>({ status: "loading", selection: null, url: null, error: null });
 
   useEffect(() => {
     let cancelled = false;
@@ -43,15 +35,22 @@ export function useVisualBackground(scene: VisualBackgroundScene) {
     };
 
     const loadBackground = () => {
+      if (!scene) {
+        clearRotationTimer();
+        setBackground({ status: "empty", selection: null, url: null, error: null });
+        return;
+      }
+
       clearRotationTimer();
-      setBackground((current) => (current.status === "ready" ? current : { status: "loading", url: null, error: null }));
+      setBackground((current) => (current.status === "ready" ? current : { status: "loading", selection: null, url: null, error: null }));
 
       const applyBackground = (data: Awaited<ReturnType<typeof getVisualBackgrounds>>) => {
-        try {
-          setBackground({ status: "ready", url: requiredVisualBackgroundUrl(scene, data), error: null });
-        } catch (error) {
-          setBackground({ status: "error", url: null, error: visualBackgroundError(scene, error) });
+        const selection = pickVisualBackground(data);
+        if (!selection) {
+          setBackground({ status: "empty", selection: null, url: null, error: null });
+          return;
         }
+        setBackground({ status: "ready", selection, url: selection.url, error: null });
       };
 
       void loadVisualBackgrounds(scene)
@@ -71,13 +70,13 @@ export function useVisualBackground(scene: VisualBackgroundScene) {
         })
         .catch((error) => {
           if (!cancelled) {
-            setBackground({ status: "error", url: null, error: visualBackgroundError(scene, error) });
+            setBackground({ status: "error", selection: null, url: null, error: visualBackgroundError(scene, error) });
           }
         });
     };
 
     loadBackground();
-    const unsubscribe = subscribeVisualBackgroundChanged(scene, loadBackground);
+    const unsubscribe = scene ? subscribeVisualBackgroundChanged(scene, loadBackground) : () => undefined;
 
     return () => {
       cancelled = true;

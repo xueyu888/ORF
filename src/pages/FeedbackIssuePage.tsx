@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ImagePreviewDialog, type ImagePreview } from "../components/ImagePreviewDialog";
+import { Button } from "../components/ui";
 import { UserAvatar } from "../components/UserAvatar";
 import { hasPermission } from "../config/permissions";
 import { BountyBadge, BountyButton, BountyEmptyState } from "../features/bounty-hall/BountyHallSkin";
@@ -153,7 +154,7 @@ export function FeedbackIssuePage() {
     setDraft(emptyCommentDraft());
     setDraftMode({ type: "default" });
     setEditState({
-      draft: commentDraftFromStoredBody(entry.message.body),
+      draft: commentDraftFromStoredBody(entry.message.body, mentionUsersById),
       messageId: entry.message.id,
       threadId: entry.thread.id,
     });
@@ -244,15 +245,15 @@ export function FeedbackIssuePage() {
                     <strong>{message.author}</strong>
                     <time dateTime={message.createdAt} title={commentTimeDisplay(message.createdAt).title}>{commentTimeDisplay(message.createdAt).label}</time>
                     {canManageFeedbackComment(message, currentUser, canManageAllComments) && (
-                      <button type="button" className="feedback-issue-reply-action" onClick={() => startEdit({ message, thread })}>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => startEdit({ message, thread })}>
                         <Pencil aria-hidden="true" />
                         编辑
-                      </button>
+                      </Button>
                     )}
-                    <button type="button" className="feedback-issue-reply-action" onClick={() => startReply(message)}>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => startReply(message)}>
                       <Reply aria-hidden="true" />
                       回复
-                    </button>
+                    </Button>
                   </div>
                   <div className="feedback-issue-comment-body">
                     {editState?.messageId === message.id ? (
@@ -355,16 +356,16 @@ function OriginalFeedbackCard({
           <strong>{authorName}</strong>
           <time dateTime={message?.createdAt ?? feedback.createdAt} title={createdAt.title}>{createdAt.label}</time>
           {entry && canManageFeedbackComment(entry.message, currentUser, canManageAllComments) && (
-            <button type="button" className="feedback-issue-reply-action" onClick={() => onStartEdit(entry)}>
+            <Button type="button" size="sm" variant="ghost" onClick={() => onStartEdit(entry)}>
               <Pencil aria-hidden="true" />
               编辑
-            </button>
+            </Button>
           )}
           {message && (
-            <button type="button" className="feedback-issue-reply-action" onClick={() => onReply(message)}>
+            <Button type="button" size="sm" variant="ghost" onClick={() => onReply(message)}>
               <Reply aria-hidden="true" />
               回复
-            </button>
+            </Button>
           )}
         </div>
         <div className="feedback-issue-comment-body">

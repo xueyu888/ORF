@@ -11,23 +11,44 @@ import type {
   ChatThreadSummary,
   ChatUnreadSummary,
   ChatUser,
+  CommentThread,
   CommentAttachmentUploadResult,
   CommentTargetType,
   OrfState,
   OrfUser,
+  SystemConversationId,
+  SystemConversationMessage,
+  SystemConversationSummary,
   WorkLogActivityItem,
   WorkLogCategoryOption,
   WorkLogClassificationSuggestion,
   WorkLogEntry,
   WorkLogObjectiveOption,
+  WorkLogReminderState,
   WorkLogReport,
   WorkLogReportScope,
 } from "../types/orf";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
 import type { ChatTheme, UserDisplayPreferences } from "../domain/settings/personalPreferences";
-import type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
+import type {
+  VisualBackgroundConfig,
+  VisualBackgroundCrop,
+  VisualBackgroundFitMode,
+  VisualBackgroundMode,
+  VisualBackgroundScene,
+  VisualBackgroundSwitchOrder,
+  VisualBackgroundSwitchTrigger,
+} from "../domain/settings/visualBackgrounds";
 import type { ClientReleaseInfo } from "../features/client-updates/clientUpdateModel";
-export type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
+export type {
+  VisualBackgroundConfig,
+  VisualBackgroundCrop,
+  VisualBackgroundFitMode,
+  VisualBackgroundMode,
+  VisualBackgroundScene,
+  VisualBackgroundSwitchOrder,
+  VisualBackgroundSwitchTrigger,
+} from "../domain/settings/visualBackgrounds";
 export type { BountyHallData, BountyHallItem, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
@@ -38,17 +59,24 @@ export type NotificationsResponse = {
   notifications: AppNotification[];
   unreadCount: number;
 };
-export type NotificationReadResponse = {
+export type SystemConversationsResponse = {
+  conversations: SystemConversationSummary[];
+};
+export type SystemConversationMessagesResponse = {
+  conversation: SystemConversationSummary;
+  messages: SystemConversationMessage[];
+};
+export type SystemConversationMessageStateResponse = {
+  conversations: SystemConversationSummary[];
   notification: AppNotification;
-  unreadCount: number;
 };
-export type NotificationsReadAllResponse = {
+export type SystemConversationReadAllResponse = {
+  conversations: SystemConversationSummary[];
   updated: number;
-  unreadCount: number;
 };
-export type NotificationsDeleteResponse = {
-  deleted: number;
-  unreadCount: number;
+export type SystemConversationReplyResponse = {
+  commentThread: CommentThread | null;
+  ok: true;
 };
 export type ClientUpdateReleaseResponse = {
   release: ClientReleaseInfo;
@@ -103,6 +131,45 @@ export type ChatThreadsResponse = { status?: "ok"; threads: ChatThreadSummary[] 
 export type ChatAttachmentUploadResponse = { status?: "ok"; attachment: ChatAttachment };
 export type ChatMentionableUsersResponse = { status?: "ok"; users: ChatUser[] };
 export type ChatSearchResponse = { status?: "ok"; results: ChatSearchResult[] };
+export type ApiUploadProgress = {
+  lengthComputable: boolean;
+  loadedBytes: number;
+  percent: number | null;
+  timestampMs: number;
+  totalBytes: number | null;
+};
+export type GitLabOrfChatConfigStatus = {
+  accessTokenConfigured: boolean;
+  channelType: "public" | "private";
+  enabled: boolean;
+  gitlabUrlConfigured: boolean;
+  groupPath: string;
+  webhookSecretConfigured: boolean;
+  webhookUrlConfigured: boolean;
+};
+export type GitLabOrfChatChannelOption = {
+  displayName: string;
+  id: string;
+  memberCount: number;
+  name: string | null;
+  type: "public" | "private";
+};
+export type GitLabOrfChatProjectBinding = {
+  channelDisplayName: string | null;
+  channelId: string | null;
+  channelType: "public" | "private" | null;
+  lastSeenAt: string | null;
+  projectId: string;
+  projectPath: string;
+  projectUrl: string;
+  source: "gitlab" | "mapping";
+};
+export type GitLabOrfChatSettingsData = {
+  channels: GitLabOrfChatChannelOption[];
+  config: GitLabOrfChatConfigStatus;
+  gitlabProjectListError: string | null;
+  projects: GitLabOrfChatProjectBinding[];
+};
 export type WorkLogObjectivesResponse = {
   categories: WorkLogCategoryOption[];
   classificationSuggestionEnabled: boolean;
@@ -111,6 +178,7 @@ export type WorkLogObjectivesResponse = {
 export type WorkLogDayResponse = { entries: WorkLogEntry[] };
 export type WorkLogActivityResponse = { entries: WorkLogActivityItem[] };
 export type WorkLogReportResponse = { report: WorkLogReport };
+export type WorkLogReminderStateResponse = { reminder: WorkLogReminderState };
 export type WorkLogClassificationSuggestionResponse = {
   suggestion: WorkLogClassificationSuggestion | null;
 };
@@ -121,16 +189,6 @@ export type WorkLogEntrySaveInput = {
   durationMinutes?: number | null;
   objectiveId?: string | null;
   remainingEstimatePercent?: number | null;
-};
-export type VisualBackgroundMode = "fixed" | "switchable";
-export type VisualBackgroundSwitchTrigger = "on_open" | "interval";
-export type VisualBackgroundSwitchOrder = "sequential" | "random";
-export type VisualBackgroundConfig = {
-  mode: VisualBackgroundMode;
-  fixedBackgroundId: string | null;
-  switchTrigger: VisualBackgroundSwitchTrigger;
-  switchOrder: VisualBackgroundSwitchOrder;
-  switchIntervalMinutes: number;
 };
 export type VisualBackgroundImage = {
   id: string;
@@ -158,12 +216,14 @@ export type UserPreferences = {
   sidebarCollapsed: boolean | null;
   chatTheme: ChatTheme;
   display: UserDisplayPreferences;
+  /** Compatibility projection for legacy clients. New writes must use backgrounds[scene]. */
   appBackground: VisualBackgroundConfig | null;
+  backgrounds: Partial<Record<VisualBackgroundScene, VisualBackgroundConfig | null>>;
   notificationDisplay: {
     toastEnabled: boolean;
   };
 };
-export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "appBackground">> & {
+export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "backgrounds">> & {
   notificationDisplay?: Partial<UserPreferences["notificationDisplay"]>;
 };
 export type PersonalBackgroundsData = VisualBackgroundsData & {
@@ -225,6 +285,18 @@ async function readErrorPayload(response: Response) {
   }
 }
 
+function parseXhrPayload(xhr: XMLHttpRequest) {
+  const contentType = xhr.getResponseHeader("content-type") ?? "";
+  const text = typeof xhr.responseText === "string" ? xhr.responseText : "";
+  if (!contentType.includes("application/json")) return text;
+
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return text;
+  }
+}
+
 export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body && !headers.has("Content-Type") && !(init.body instanceof FormData)) {
@@ -250,6 +322,44 @@ export async function apiRequest(path: string, init?: RequestInit): Promise<void
   await apiJson<unknown>(path, init);
 }
 
+function uploadFormDataJson<T>(
+  path: string,
+  formData: FormData,
+  options: { method?: "POST" | "PUT" | "PATCH"; onProgress?: (progress: ApiUploadProgress) => void } = {},
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method ?? "POST", path);
+    xhr.withCredentials = true;
+
+    if (options.onProgress) {
+      xhr.upload.onprogress = (event) => {
+        const totalBytes = event.lengthComputable && event.total > 0 ? event.total : null;
+        options.onProgress?.({
+          lengthComputable: event.lengthComputable,
+          loadedBytes: event.loaded,
+          percent: totalBytes ? Math.max(0, Math.min(100, (event.loaded / totalBytes) * 100)) : null,
+          timestampMs: globalThis.performance?.now?.() ?? Date.now(),
+          totalBytes,
+        });
+      };
+    }
+
+    xhr.onload = () => {
+      const payload = parseXhrPayload(xhr);
+      if (xhr.status < 200 || xhr.status >= 300) {
+        emitAuthenticationExpired(path, xhr.status);
+        reject(new ApiError(xhr.status, path, apiErrorMessage(payload, xhr.status, path)));
+        return;
+      }
+      resolve(payload as T);
+    };
+    xhr.onerror = () => reject(new ApiError(0, path, "网络请求失败"));
+    xhr.onabort = () => reject(new ApiError(0, path, "上传已取消"));
+    xhr.send(formData);
+  });
+}
+
 export async function getBountyHallData() {
   return apiJson<BountyHallData>("/api/bounties");
 }
@@ -265,6 +375,50 @@ export async function getMyChallengesData(scope: MyChallengesScope) {
 
 export async function getNotifications() {
   return apiJson<NotificationsResponse>("/api/notifications");
+}
+
+export async function getSystemConversations() {
+  return apiJson<SystemConversationsResponse>("/api/chat/system-conversations");
+}
+
+export async function getSystemConversationMessages(input: { conversationId: SystemConversationId; limit?: number }) {
+  const query = new URLSearchParams();
+  if (input.limit) query.set("limit", String(input.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiJson<SystemConversationMessagesResponse>(
+    `/api/chat/system-conversations/${encodeURIComponent(input.conversationId)}/messages${suffix}`,
+  );
+}
+
+export async function markSystemConversationMessageReadRequest(input: { conversationId: SystemConversationId; messageId: string }) {
+  return apiJson<SystemConversationMessageStateResponse>(
+    `/api/chat/system-conversations/${encodeURIComponent(input.conversationId)}/messages/${encodeURIComponent(input.messageId)}/read`,
+    { method: "PATCH" },
+  );
+}
+
+export async function markSystemConversationMessageUnreadRequest(input: { conversationId: SystemConversationId; messageId: string }) {
+  return apiJson<SystemConversationMessageStateResponse>(
+    `/api/chat/system-conversations/${encodeURIComponent(input.conversationId)}/messages/${encodeURIComponent(input.messageId)}/unread`,
+    { method: "PATCH" },
+  );
+}
+
+export async function markSystemConversationReadRequest(conversationId: SystemConversationId) {
+  return apiJson<SystemConversationReadAllResponse>(
+    `/api/chat/system-conversations/${encodeURIComponent(conversationId)}/read-all`,
+    { method: "PATCH" },
+  );
+}
+
+export async function replyToSystemConversationMessageRequest(input: { body: string; conversationId: SystemConversationId; messageId: string }) {
+  return apiJson<SystemConversationReplyResponse>(
+    `/api/chat/system-conversations/${encodeURIComponent(input.conversationId)}/messages/${encodeURIComponent(input.messageId)}/replies`,
+    {
+      method: "POST",
+      body: JSON.stringify({ body: input.body }),
+    },
+  );
 }
 
 export async function getLatestClientUpdateRelease(signal?: AbortSignal) {
@@ -315,25 +469,6 @@ export async function revokePushVendorDeviceRequest(input: Pick<PushVendorDevice
     method: "POST",
     body: JSON.stringify(input),
   });
-}
-
-export async function markNotificationReadRequest(notificationId: string) {
-  return apiJson<NotificationReadResponse>(`/api/notifications/${encodeURIComponent(notificationId)}/read`, { method: "PATCH" });
-}
-
-export async function markAllNotificationsReadRequest() {
-  return apiJson<NotificationsReadAllResponse>("/api/notifications/read-all", { method: "PATCH" });
-}
-
-export async function deleteNotificationsRequest(notificationIds: string[]) {
-  return apiJson<NotificationsDeleteResponse>("/api/notifications/bulk-delete", {
-    method: "POST",
-    body: JSON.stringify({ notificationIds }),
-  });
-}
-
-export async function clearAllNotificationsRequest() {
-  return apiJson<NotificationsDeleteResponse>("/api/notifications", { method: "DELETE" });
 }
 
 export async function uploadCommentAttachment(input: { file: File; targetId: string; targetType: CommentTargetType }) {
@@ -553,13 +688,14 @@ export async function setChatThreadFollowRequest(rootMessageId: string, followin
   });
 }
 
-export async function uploadChatAttachment(input: { channelId: string; file: File }) {
+export async function uploadChatAttachment(input: { channelId: string; file: File; onProgress?: (progress: ApiUploadProgress) => void }) {
   const formData = new FormData();
   formData.set("file", input.file);
-  return apiJson<ChatAttachmentUploadResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/attachments`, {
-    method: "POST",
-    body: formData,
-  });
+  return uploadFormDataJson<ChatAttachmentUploadResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/attachments`,
+    formData,
+    { onProgress: input.onProgress },
+  );
 }
 
 export async function getChatMentionableUsers(channelId: string) {
@@ -587,6 +723,16 @@ export async function getChatUnreadSummary() {
 
 export async function getWorkLogObjectives() {
   return apiJson<WorkLogObjectivesResponse>("/api/work-logs/objectives");
+}
+
+export async function getWorkLogReminderState() {
+  return apiJson<WorkLogReminderStateResponse>("/api/work-logs/reminder-state");
+}
+
+export async function snoozeWorkLogReminder() {
+  return apiJson<WorkLogReminderStateResponse>("/api/work-logs/reminder-state/snooze", {
+    method: "POST",
+  });
 }
 
 export async function suggestWorkLogClassification(input: { bodyMarkdown: string }) {
@@ -669,6 +815,38 @@ export async function saveChatSettings(input: Pick<ChatSettingsData, "attachment
   return response.data;
 }
 
+export async function getGitLabOrfChatSettings() {
+  const response = await apiJson<ApiEnvelope<GitLabOrfChatSettingsData>>("/api/settings/gitlab-orf-chat");
+  return response.data;
+}
+
+export async function saveGitLabOrfProjectChannel(input: {
+  channelId: string;
+  projectId: string;
+  projectPath: string;
+  projectUrl: string;
+}) {
+  const response = await apiJson<ApiEnvelope<GitLabOrfChatSettingsData>>(
+    `/api/settings/gitlab-orf-chat/projects/${encodeURIComponent(input.projectId)}/channel`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        channelId: input.channelId,
+        projectPath: input.projectPath,
+        projectUrl: input.projectUrl,
+      }),
+    },
+  );
+  return response.data;
+}
+
+export async function reconcileGitLabOrfChatSettings() {
+  const response = await apiJson<ApiEnvelope<{ settings: GitLabOrfChatSettingsData }>>("/api/settings/gitlab-orf-chat/reconcile", {
+    method: "POST",
+  });
+  return response.data.settings;
+}
+
 export async function uploadVisualBackground(scene: VisualBackgroundScene, file: File) {
   const formData = new FormData();
   formData.set("scene", scene);
@@ -710,13 +888,14 @@ export async function saveUserPreferences(input: UserPreferencesPatch) {
   return response.data;
 }
 
-export async function getPersonalBackgrounds() {
-  const response = await apiJson<ApiEnvelope<PersonalBackgroundsData>>("/api/settings/personal/backgrounds");
+export async function getPersonalBackgrounds(scene: VisualBackgroundScene = "sidebar_background") {
+  const response = await apiJson<ApiEnvelope<PersonalBackgroundsData>>(`/api/settings/personal/backgrounds?scene=${encodeURIComponent(scene)}`);
   return response.data;
 }
 
-export async function uploadPersonalBackground(file: File) {
+export async function uploadPersonalBackground(scene: VisualBackgroundScene, file: File) {
   const formData = new FormData();
+  formData.set("scene", scene);
   formData.set("file", file);
 
   const response = await apiJson<ApiEnvelope<VisualBackgroundImage>>("/api/settings/personal/backgrounds", {

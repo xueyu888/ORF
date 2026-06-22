@@ -49,7 +49,3 @@ export const orfAssetLibrary = {
     },
   },
 } as const;
-
-export function toCssImageUrl(src: string) {
-  return `url("${src}")`;
-}

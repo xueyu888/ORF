@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageScaffold } from "../components/PageScaffold";
-import { Card, EmptyState, ProgressBar, StatusBadge } from "../components/ui";
+import { Card, EmptyState, ProgressBar, StatusBadge, actionButtonClassName } from "../components/ui";
 import { buildStrategyMap, type StrategyNode } from "../features/strategy/model/strategyMap";
 import { useOrf } from "../state/OrfProvider";
 
@@ -35,7 +35,7 @@ export function StrategyMapPage() {
             {selected.owner && <Info label="执行人" value={selected.owner} />}
             {selected.status && <div className="flex items-center justify-between rounded-md orf-surface-muted p-3"><span className="orf-text-muted">状态</span><StatusBadge status={selected.status} /></div>}
             {typeof selected.progress === "number" && <div className="rounded-md orf-surface-muted p-3"><div className="mb-2 flex justify-between text-xs orf-text-muted"><span>进度</span><span>{selected.progress}%</span></div><ProgressBar value={selected.progress} /></div>}
-            {selected.path && <Link to={selected.path} className="orf-primary-action rounded-md px-3 py-2 text-center text-sm font-medium">打开</Link>}
+            {selected.path && <Link to={selected.path} className={actionButtonClassName({ variant: "primary" })}>打开</Link>}
           </div>
         </Card>
       </div>

@@ -5,6 +5,10 @@ export type RuntimeSchemaColumn = {
   isNullable: NullableFlag | string;
 };
 
+export type RuntimeTableColumn = RuntimeSchemaColumn & {
+  tableName: string;
+};
+
 export type RuntimeSchemaConstraint = {
   constraintName: string;
   definition: string;
@@ -139,6 +143,209 @@ export function validateFeedbackCommentTargetSchema(snapshot: RuntimeEnumSnapsho
   return snapshot.labels.includes("feedback") ? [] : ["comment_target_type enum must include feedback."];
 }
 
+export function validateNotificationStreamEnum(snapshot: RuntimeEnumSnapshot) {
+  const labels = snapshot.labels.join(",");
+  return labels === "personalNotification,teamAnnouncement"
+    ? []
+    : [`notification_stream enum must be exactly personalNotification,teamAnnouncement; got ${labels}.`];
+}
+
+export function validateNotificationConversationSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const errors: string[] = [];
+  const columnsByTable = snapshot.columns.reduce((map, column) => {
+    const columns = map.get(column.tableName) ?? new Map<string, RuntimeTableColumn>();
+    columns.set(column.columnName, column);
+    map.set(column.tableName, columns);
+    return map;
+  }, new Map<string, Map<string, RuntimeTableColumn>>());
+
+  const eventColumns = columnsByTable.get("notification_events") ?? new Map();
+  for (const columnName of [
+    "id",
+    "team_id",
+    "stream",
+    "kind",
+    "title",
+    "body",
+    "target_type",
+    "target_id",
+    "target_href",
+    "created_at",
+    "metadata",
+  ]) {
+    if (!eventColumns.has(columnName)) {
+      errors.push(`notification_events.${columnName} is missing.`);
+    }
+  }
+
+  const receiptColumns = columnsByTable.get("notification_receipts") ?? new Map();
+  for (const columnName of ["event_id", "recipient_user_id", "delivered_at", "read_at"]) {
+    if (!receiptColumns.has(columnName)) {
+      errors.push(`notification_receipts.${columnName} is missing.`);
+    }
+  }
+
+  const deliveryColumns = columnsByTable.get("notification_deliveries") ?? new Map();
+  for (const columnName of [
+    "id",
+    "event_id",
+    "recipient_user_id",
+    "channel",
+    "status",
+    "destination_id",
+    "message_id",
+    "attempts",
+    "last_error",
+    "next_attempt_at",
+    "delivered_at",
+    "created_at",
+    "updated_at",
+  ]) {
+    if (!deliveryColumns.has(columnName)) {
+      errors.push(`notification_deliveries.${columnName} is missing.`);
+    }
+  }
+
+  return errors;
+}
+
+export function validateSystemChatNotificationSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const errors: string[] = [];
+  const columnsByTable = snapshot.columns.reduce((map, column) => {
+    const columns = map.get(column.tableName) ?? new Map<string, RuntimeTableColumn>();
+    columns.set(column.columnName, column);
+    map.set(column.tableName, columns);
+    return map;
+  }, new Map<string, Map<string, RuntimeTableColumn>>());
+
+  const channelColumns = columnsByTable.get("chat_channels") ?? new Map();
+  for (const columnName of ["system_kind", "system_recipient_user_id"]) {
+    if (!channelColumns.has(columnName)) {
+      errors.push(`chat_channels.${columnName} is missing.`);
+    }
+  }
+
+  const messageColumns = columnsByTable.get("chat_messages") ?? new Map();
+  for (const columnName of ["source", "system_metadata"]) {
+    if (!messageColumns.has(columnName)) {
+      errors.push(`chat_messages.${columnName} is missing.`);
+    }
+  }
+
+  return errors;
+}
+
+export function validateGitLabOrfChatIntegrationSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const errors: string[] = [];
+  const columnsByTable = snapshot.columns.reduce((map, column) => {
+    const columns = map.get(column.tableName) ?? new Map<string, RuntimeTableColumn>();
+    columns.set(column.columnName, column);
+    map.set(column.tableName, columns);
+    return map;
+  }, new Map<string, Map<string, RuntimeTableColumn>>());
+
+  const projectColumns = columnsByTable.get("gitlab_orf_project_channels") ?? new Map();
+  for (const columnName of [
+    "team_id",
+    "gitlab_project_id",
+    "gitlab_project_path",
+    "gitlab_project_url",
+    "chat_channel_id",
+    "created_at",
+    "updated_at",
+    "last_seen_at",
+  ]) {
+    if (!projectColumns.has(columnName)) {
+      errors.push(`gitlab_orf_project_channels.${columnName} is missing.`);
+    }
+  }
+
+  const deliveryColumns = columnsByTable.get("gitlab_orf_event_deliveries") ?? new Map();
+  for (const columnName of [
+    "team_id",
+    "external_event_key",
+    "gitlab_project_id",
+    "event_type",
+    "chat_channel_id",
+    "chat_message_id",
+    "status",
+    "error",
+    "received_at",
+    "delivered_at",
+    "updated_at",
+  ]) {
+    if (!deliveryColumns.has(columnName)) {
+      errors.push(`gitlab_orf_event_deliveries.${columnName} is missing.`);
+    }
+  }
+
+  return errors;
+}
+
+export function validateGitHubOrfChatIntegrationSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const errors: string[] = [];
+  const columnsByTable = snapshot.columns.reduce((map, column) => {
+    const columns = map.get(column.tableName) ?? new Map<string, RuntimeTableColumn>();
+    columns.set(column.columnName, column);
+    map.set(column.tableName, columns);
+    return map;
+  }, new Map<string, Map<string, RuntimeTableColumn>>());
+
+  const deliveryColumns = columnsByTable.get("github_orf_chat_deliveries") ?? new Map();
+  for (const columnName of [
+    "delivery_key",
+    "repository",
+    "event_type",
+    "subject",
+    "external_id",
+    "channel_id",
+    "source",
+    "status",
+    "chat_message_id",
+    "error",
+    "created_at",
+    "updated_at",
+  ]) {
+    if (!deliveryColumns.has(columnName)) {
+      errors.push(`github_orf_chat_deliveries.${columnName} is missing.`);
+    }
+  }
+
+  return errors;
+}
+
+export function validateWorkLogReminderStateSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const errors: string[] = [];
+  const columnsByName = new Map(snapshot.columns.map((column) => [column.columnName, column]));
+  for (const columnName of [
+    "team_id",
+    "user_id",
+    "status",
+    "window_start_date",
+    "window_end_date",
+    "required_dates",
+    "missing_dates",
+    "snooze_count",
+    "created_at",
+    "updated_at",
+  ]) {
+    const column = columnsByName.get(columnName);
+    if (!column) {
+      errors.push(`work_log_reminder_states.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`work_log_reminder_states.${columnName} must be NOT NULL.`);
+    }
+  }
+
+  for (const columnName of ["last_reminded_at", "next_remind_at", "notification_event_id", "resolved_at"]) {
+    if (!columnsByName.has(columnName)) {
+      errors.push(`work_log_reminder_states.${columnName} is missing.`);
+    }
+  }
+
+  return errors;
+}
+
 export async function assertRuntimeDatabaseSchema() {
   const { pool } = await import("./client");
   const [
@@ -149,6 +356,12 @@ export async function assertRuntimeDatabaseSchema() {
     feedbackColumnsResult,
     evidenceColumnsResult,
     feedbackStatusResult,
+    notificationStreamResult,
+    notificationConversationColumnsResult,
+    systemChatNotificationColumnsResult,
+    gitLabOrfChatColumnsResult,
+    gitHubOrfChatColumnsResult,
+    workLogReminderStateColumnsResult,
   ] = await Promise.all([
     pool.query<RuntimeSchemaColumn>(
       `
@@ -229,6 +442,73 @@ export async function assertRuntimeDatabaseSchema() {
         order by e.enumsortorder
       `,
     ),
+    pool.query<{ label: string }>(
+      `
+        select e.enumlabel as "label"
+        from pg_enum e
+        join pg_type t on t.oid = e.enumtypid
+        join pg_namespace nsp on nsp.oid = t.typnamespace
+        where nsp.nspname = current_schema()
+          and t.typname = 'notification_stream'
+        order by e.enumsortorder
+      `,
+    ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name in ('notification_events', 'notification_receipts', 'notification_deliveries')
+      `,
+    ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name in ('chat_channels', 'chat_messages')
+          and column_name in ('system_kind', 'system_recipient_user_id', 'source', 'system_metadata')
+      `,
+    ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name in ('gitlab_orf_project_channels', 'gitlab_orf_event_deliveries')
+      `,
+    ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'github_orf_chat_deliveries'
+      `,
+    ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'work_log_reminder_states'
+      `,
+    ),
   ]);
   const commentTargetTypeResult = await pool.query<{ label: string }>(
     `
@@ -263,6 +543,24 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateFeedbackCommentTargetSchema({
       labels: commentTargetTypeResult.rows.map((row) => row.label),
+    }),
+    ...validateNotificationStreamEnum({
+      labels: notificationStreamResult.rows.map((row) => row.label),
+    }),
+    ...validateNotificationConversationSchema({
+      columns: notificationConversationColumnsResult.rows,
+    }),
+    ...validateSystemChatNotificationSchema({
+      columns: systemChatNotificationColumnsResult.rows,
+    }),
+    ...validateGitLabOrfChatIntegrationSchema({
+      columns: gitLabOrfChatColumnsResult.rows,
+    }),
+    ...validateGitHubOrfChatIntegrationSchema({
+      columns: gitHubOrfChatColumnsResult.rows,
+    }),
+    ...validateWorkLogReminderStateSchema({
+      columns: workLogReminderStateColumnsResult.rows,
     }),
   ];
 

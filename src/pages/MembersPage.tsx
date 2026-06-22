@@ -1,6 +1,8 @@
 import { clsx } from "clsx";
 import { Ban, CheckCircle2, ChevronDown, Edit3, Plus, Search, Trash2, X, XCircle } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
+import { Button, IconButton } from "../components/ui";
+import { userAccountLifecycleActions } from "../domain/userAccountLifecycle";
 import { UserAvatar } from "../components/UserAvatar";
 import { useOrf } from "../state/OrfProvider";
 import type { OrfUser, UserRole } from "../types/orf";
@@ -53,6 +55,7 @@ export function MembersPage() {
     currentUser,
     deleteUser,
     disableUser,
+    enableUser,
     notify,
     rejectRegistrationRequest,
     state,
@@ -160,6 +163,20 @@ export function MembersPage() {
     setProcessingUserId(null);
   };
 
+  const handleEnable = async (user: OrfUser) => {
+    if (processingUserId) {
+      return;
+    }
+
+    if (!window.confirm(`启用用户「${user.name}」？`)) {
+      return;
+    }
+
+    setProcessingUserId(user.id);
+    await enableUser(user.id);
+    setProcessingUserId(null);
+  };
+
   const handleDelete = async (user: OrfUser) => {
     if (isCurrentUser(user) || processingUserId) {
       return;
@@ -205,10 +222,10 @@ export function MembersPage() {
                   <strong>{roles.length}</strong>角色
                 </span>
               </div>
-              <button type="button" className="orf-user-add-button" onClick={openAddDialog}>
+              <Button size="sm" type="button" onClick={openAddDialog}>
                 <Plus className="h-5 w-5" />
                 新增用户
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -225,8 +242,10 @@ export function MembersPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((user) => (
-                  <tr key={user.id}>
+                {users.map((user) => {
+                  const lifecycleActions = userAccountLifecycleActions(user.status);
+                  return (
+                    <tr key={user.id}>
                     <td>
                       <div className="orf-user-name-cell">
                         <UserAvatar avatarUrl={user.avatarUrl} className="orf-user-row-avatar" name={user.name} size="md" />
@@ -250,47 +269,47 @@ export function MembersPage() {
                     </td>
                     <td>
                       <div className="orf-user-actions orf-user-actions-text">
-                        <button type="button" onClick={() => openEditDialog(user)}>
-                          <Edit3 className="h-4 w-4" />
-                          编辑
-                        </button>
-                        {user.status === "pending" ? (
+                        <IconButton icon={Edit3} label="编辑用户" size="sm" type="button" variant="secondary" onClick={() => openEditDialog(user)} />
+                        {lifecycleActions.includes("approve") ? (
                           <>
-                            <button type="button" disabled={processingUserId === user.id} onClick={() => void handleApprove(user)}>
-                              <CheckCircle2 className="h-4 w-4" />
-                              通过
-                            </button>
-                            <button type="button" className="orf-user-delete-action" disabled={processingUserId === user.id} onClick={() => void handleReject(user)}>
-                              <XCircle className="h-4 w-4" />
-                              拒绝
-                            </button>
+                            <IconButton icon={CheckCircle2} label="通过用户" size="sm" type="button" disabled={processingUserId === user.id} onClick={() => void handleApprove(user)} />
+                            <IconButton icon={XCircle} label="拒绝用户" size="sm" type="button" variant="danger" disabled={processingUserId === user.id} onClick={() => void handleReject(user)} />
                           </>
-                        ) : (
-                          <button
+                        ) : lifecycleActions.includes("enable") ? (
+                          <IconButton
+                            icon={CheckCircle2}
+                            label="启用用户"
                             type="button"
-                            className="orf-user-delete-action"
+                            size="sm"
+                            variant="secondary"
+                            disabled={processingUserId === user.id}
+                            onClick={() => void handleEnable(user)}
+                          />
+                        ) : (
+                          <IconButton
+                            icon={Ban}
+                            label={isCurrentUser(user) ? "不能停用自己" : "停用用户"}
+                            type="button"
+                            size="sm"
+                            variant="danger"
                             disabled={isCurrentUser(user) || processingUserId === user.id || user.status === "disabled"}
-                            title={isCurrentUser(user) ? "不能停用自己" : "停用"}
                             onClick={() => void handleDisable(user)}
-                          >
-                            <Ban className="h-4 w-4" />
-                            停用
-                          </button>
+                          />
                         )}
-                        <button
+                        <IconButton
+                          icon={Trash2}
+                          label={isCurrentUser(user) ? "不能删除自己" : "删除用户"}
                           type="button"
-                          className="orf-user-delete-action"
+                          size="sm"
+                          variant="danger"
                           disabled={isCurrentUser(user) || processingUserId === user.id}
-                          title={isCurrentUser(user) ? "不能删除自己" : "删除"}
                           onClick={() => void handleDelete(user)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          删除
-                        </button>
+                        />
                       </div>
                     </td>
-                  </tr>
-                ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
 
@@ -311,9 +330,7 @@ export function MembersPage() {
           >
             <div className="orf-user-dialog-header">
               <h2 id="orf-user-dialog-title">{dialog.mode === "edit" ? "编辑用户" : "新增用户"}</h2>
-              <button type="button" aria-label="关闭" disabled={submitting} onClick={closeDialog}>
-                <X className="h-5 w-5" />
-              </button>
+              <IconButton disabled={submitting} icon={X} label="关闭" size="sm" type="button" onClick={closeDialog} />
             </div>
             <label>
               <span>姓名</span>
@@ -337,12 +354,12 @@ export function MembersPage() {
               </select>
             </label>
             <div className="orf-user-dialog-actions">
-              <button type="button" disabled={submitting} onClick={closeDialog}>
+              <Button type="button" variant="secondary" disabled={submitting} onClick={closeDialog}>
                 取消
-              </button>
-              <button type="submit" disabled={submitting}>
+              </Button>
+              <Button type="submit" disabled={submitting}>
                 {submitting ? "保存中" : dialog.mode === "edit" ? "保存" : "新增用户"}
-              </button>
+              </Button>
             </div>
           </form>
         </div>

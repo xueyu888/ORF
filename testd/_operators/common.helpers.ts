@@ -89,6 +89,20 @@ export async function clearBrowserState(page: Page) {
 }
 
 export async function readBrowserSession(page: Page): Promise<BrowserSession> {
+  if (!page.url().startsWith("about:")) {
+    try {
+      return await page.evaluate(async () => {
+        const response = await fetch("/api/auth/session", { credentials: "include" });
+        return {
+          status: response.status,
+          body: await response.json(),
+        };
+      });
+    } catch {
+      // Fall through to the request context when the page cannot execute a same-origin fetch.
+    }
+  }
+
   const response = await page.request.get("/api/auth/session");
   return {
     status: response.status(),

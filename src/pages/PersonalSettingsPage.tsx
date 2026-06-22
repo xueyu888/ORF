@@ -1,5 +1,4 @@
-import { clsx } from "clsx";
-import { BellRing, Check, Contrast, Image, Loader2, Moon, Power, RotateCcw, Trash2, Type, Upload } from "lucide-react";
+import { BellRing, Contrast, Loader2, Moon, Power, RotateCcw, Trash2, Type, Upload } from "lucide-react";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { PageScaffold } from "../components/PageScaffold";
@@ -15,37 +14,25 @@ import {
   type DesktopShellLaunchAtLoginResult,
 } from "../features/desktop/desktopShellRuntime";
 import {
-  deletePersonalBackground,
-  getPersonalBackgrounds,
+  getUserPreferences,
   saveUserPreferences,
-  uploadPersonalBackground,
-  type PersonalBackgroundsData,
   type UserPreferences,
-  type VisualBackgroundConfig,
 } from "../state/apiClient";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useOrf } from "../state/OrfProvider";
-import { dispatchVisualBackgroundChanged } from "../utils/visualBackgrounds";
 import { dispatchPersonalPreferencesChanged } from "../utils/personalPreferences";
+import { VisualSkinWorkbench } from "../features/settings/VisualSkinWorkbench";
 
 type RequestStatus = "idle" | "loading" | "success" | "error";
 type DesktopLaunchAtLoginStatus = RequestStatus | "unsupported";
 type NativeNotificationTestResult = Awaited<ReturnType<typeof sendNativeChatNotification>>;
 
-const defaultPersonalBackgroundConfig: VisualBackgroundConfig = {
-  mode: "fixed",
-  fixedBackgroundId: null,
-  switchTrigger: "on_open",
-  switchOrder: "random",
-  switchIntervalMinutes: 10,
-};
-
 const landingOptions = [
   { label: "悬赏大厅", value: "/bounties" },
   { label: "我的挑战", value: "/tasks" },
+  { label: "聊天", value: "/chat" },
   { label: "反馈", value: "/feedback" },
   { label: "统计", value: "/reports" },
-  { label: "消息", value: "/notifications" },
 ];
 
 const chatThemeOptions: Array<{ label: string; value: ChatTheme }> = [
@@ -67,13 +54,8 @@ const displayDensityOptions: Array<{ label: string; value: UserDisplayPreference
 export function PersonalSettingsPage() {
   const { currentUser, deleteCurrentUserAvatar, notify, readModelInvalidations, uploadCurrentUserAvatar } = useOrf();
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
-  const [backgrounds, setBackgrounds] = useState<PersonalBackgroundsData | null>(null);
-  const [selectedBackgroundId, setSelectedBackgroundId] = useState<string | null>(null);
-  const [loadStatus, setLoadStatus] = useState<RequestStatus>("idle");
   const [saveStatus, setSaveStatus] = useState<RequestStatus>("idle");
-  const [uploadStatus, setUploadStatus] = useState<RequestStatus>("idle");
   const [avatarStatus, setAvatarStatus] = useState<RequestStatus>("idle");
   const [notificationTestStatus, setNotificationTestStatus] = useState<RequestStatus>("idle");
   const [launchAtLoginStatus, setLaunchAtLoginStatus] = useState<DesktopLaunchAtLoginStatus>("idle");
@@ -86,18 +68,14 @@ export function PersonalSettingsPage() {
     : null;
 
   const loadSettings = async () => {
-    setLoadStatus("loading");
     setErrorMessage(null);
     try {
-      const data = await getPersonalBackgrounds();
-      setPreferences(data.preferences);
-      setBackgrounds(data);
-      setSelectedBackgroundId(data.config.fixedBackgroundId);
-      setLoadStatus("success");
+      const data = await getUserPreferences();
+      setPreferences(data);
     } catch (error) {
       const message = error instanceof Error ? error.message : "个人设置加载失败";
-      setLoadStatus("error");
       setErrorMessage(message);
+      notify(message);
     }
   };
 
@@ -171,43 +149,6 @@ export function PersonalSettingsPage() {
     await savePreferencePatch({ display: defaultUserDisplayPreferences }, "界面显示已恢复默认");
   };
 
-  const handleFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
-    event.target.value = "";
-    if (!file || uploadStatus === "loading") {
-      return;
-    }
-    if (!file.type.startsWith("image/")) {
-      const message = "仅支持上传图片文件";
-      setErrorMessage(message);
-      notify(message);
-      return;
-    }
-
-    setUploadStatus("loading");
-    setErrorMessage(null);
-    try {
-      const uploaded = await uploadPersonalBackground(file);
-      const nextConfig = {
-        ...(backgrounds?.config ?? defaultPersonalBackgroundConfig),
-        mode: "fixed",
-        fixedBackgroundId: uploaded.id,
-      } satisfies VisualBackgroundConfig;
-      const saved = await savePreferencePatch({ appBackground: nextConfig }, "个人背景已上传");
-      if (saved) {
-        await loadSettings();
-        setSelectedBackgroundId(uploaded.id);
-        dispatchVisualBackgroundChanged("app_background");
-      }
-      setUploadStatus("success");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "上传失败";
-      setUploadStatus("error");
-      setErrorMessage(message);
-      notify(message);
-    }
-  };
-
   const handleAvatarSelected = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     event.target.value = "";
@@ -244,30 +185,6 @@ export function PersonalSettingsPage() {
     }
     if (!ok) {
       setErrorMessage("头像删除失败");
-    }
-  };
-
-  const handleUseSelectedBackground = async () => {
-    if (!selectedBackgroundId) {
-      return;
-    }
-    const nextConfig = {
-      ...(backgrounds?.config ?? defaultPersonalBackgroundConfig),
-      mode: "fixed",
-      fixedBackgroundId: selectedBackgroundId,
-    } satisfies VisualBackgroundConfig;
-    const saved = await savePreferencePatch({ appBackground: nextConfig }, "个人背景已更新");
-    if (saved) {
-      await loadSettings();
-      dispatchVisualBackgroundChanged("app_background");
-    }
-  };
-
-  const handleUseSystemDefault = async () => {
-    const saved = await savePreferencePatch({ appBackground: null }, "已使用系统默认背景");
-    if (saved) {
-      await loadSettings();
-      dispatchVisualBackgroundChanged("app_background");
     }
   };
 
@@ -344,27 +261,6 @@ export function PersonalSettingsPage() {
     });
   };
 
-  const handleDeleteSelectedBackground = async () => {
-    if (!selectedBackgroundId || !isPersonalBackground(selectedBackgroundId)) {
-      return;
-    }
-
-    setSaveStatus("loading");
-    setErrorMessage(null);
-    try {
-      await deletePersonalBackground(selectedBackgroundId);
-      await loadSettings();
-      dispatchVisualBackgroundChanged("app_background");
-      setSaveStatus("success");
-      notify("个人背景已删除");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "个人背景删除失败";
-      setSaveStatus("error");
-      setErrorMessage(message);
-      notify(message);
-    }
-  };
-
   const sidebarPreference =
     preferences?.sidebarCollapsed === null || preferences?.sidebarCollapsed === undefined
       ? "system"
@@ -372,9 +268,7 @@ export function PersonalSettingsPage() {
         ? "collapsed"
         : "expanded";
   const displayPreferences = preferences?.display ?? defaultUserDisplayPreferences;
-  const selectedBackground = backgrounds?.list.find((background) => background.id === selectedBackgroundId) ?? null;
-  const canUseSelected = Boolean(selectedBackgroundId && selectedBackgroundId !== preferences?.appBackground?.fixedBackgroundId);
-  const busy = saveStatus === "loading" || uploadStatus === "loading" || avatarStatus === "loading";
+  const busy = saveStatus === "loading" || avatarStatus === "loading";
   const launchAtLoginDisabled = launchAtLoginStatus === "idle" || launchAtLoginStatus === "loading" || launchAtLoginStatus === "unsupported";
   const launchAtLoginDescription = launchAtLoginStatus === "unsupported"
     ? "仅已安装 Win11 客户端可用。"
@@ -382,8 +276,8 @@ export function PersonalSettingsPage() {
 
   return (
     <PageScaffold title="个人设置" subtitle="管理当前登录用户的偏好。">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
-        <div className="grid content-start gap-4">
+      <div className="grid gap-4">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <Card className="orf-card-padding">
             <div className="flex items-start gap-4">
               {avatarPreview ? (
@@ -588,80 +482,15 @@ export function PersonalSettingsPage() {
                 onChange={(event) => void handleLaunchAtLoginChange(event.target.checked)}
               />
             </label>
+            {errorMessage && <div className="orf-settings-inline-error">{errorMessage}</div>}
           </Card>
         </div>
 
-        <Card className="orf-card-padding">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold orf-text-primary">我的 AppShell 皮肤</h2>
-              <p className="mt-1 text-sm orf-text-secondary">选择侧边栏和顶部栏使用的系统皮肤或本人上传皮肤。</p>
-            </div>
-            <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={(event) => void handleFileSelected(event)} />
-            <Button type="button" variant="secondary" disabled={busy} onClick={() => fileInputRef.current?.click()}>
-              {uploadStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              上传
-            </Button>
-          </div>
-
-          {loadStatus === "loading" && <div className="orf-settings-background-state">加载中...</div>}
-          {loadStatus === "error" && <div className="orf-settings-background-state">{errorMessage ?? "个人设置加载失败"}</div>}
-          {loadStatus === "success" && backgrounds && (
-            <>
-              <div className="orf-settings-background-gallery" data-loading="false">
-                {backgrounds.list.map((background) => {
-                  const selected = selectedBackgroundId === background.id;
-                  return (
-                    <button
-                      key={background.id}
-                      type="button"
-                      className={clsx("orf-settings-background-card", selected && "orf-settings-background-card-selected")}
-                      onClick={() => setSelectedBackgroundId(background.id)}
-                    >
-                      <img src={background.url} alt={background.fileName} draggable={false} />
-                      {background.isDefault && (
-                        <span className="orf-settings-background-default">
-                          <Check className="h-3.5 w-3.5" />
-                          当前
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="orf-settings-background-actions">
-                <div className="orf-settings-selected-text">
-                  {errorMessage && <span>{errorMessage}</span>}
-                  {!errorMessage && selectedBackground && (
-                    <span>{isPersonalBackground(selectedBackground.id) ? "个人上传" : "系统背景"}：{selectedBackground.fileName}</span>
-                  )}
-                </div>
-                <div className="flex flex-wrap justify-end gap-2">
-                  <Button type="button" variant="ghost" disabled={!preferences || busy || preferences.appBackground === null} onClick={() => void handleUseSystemDefault()}>
-                    使用系统默认
-                  </Button>
-                  <Button type="button" variant="secondary" disabled={busy || !isPersonalBackground(selectedBackgroundId)} onClick={() => void handleDeleteSelectedBackground()}>
-                    <Trash2 className="h-4 w-4" />
-                    删除
-                  </Button>
-                  <Button type="button" disabled={busy || !canUseSelected} onClick={() => void handleUseSelectedBackground()}>
-                    {saveStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Image className="h-4 w-4" />}
-                    设为我的背景
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-        </Card>
+        <VisualSkinWorkbench scope="personal" />
       </div>
       {avatarPreviewOpen && avatarPreview && <ImagePreviewDialog preview={avatarPreview} onClose={() => setAvatarPreviewOpen(false)} />}
     </PageScaffold>
   );
-}
-
-function isPersonalBackground(id: string | null | undefined) {
-  return Boolean(id?.includes("/personal/"));
 }
 
 function range(start: number, end: number) {

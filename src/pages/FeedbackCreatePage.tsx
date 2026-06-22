@@ -2,6 +2,7 @@ import { ArrowLeft, Check, Paperclip } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Button } from "../components/ui";
 import { UserAvatar } from "../components/UserAvatar";
 import { BountyEmptyState } from "../features/bounty-hall/BountyHallSkin";
 import {
@@ -13,6 +14,7 @@ import {
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
 import { feedbackIssueHref } from "../features/feedback/model/feedbackIssue";
+import { validOrfRichTextDraftAttachments } from "../features/rich-text/orfRichTextDraft";
 import { useOrf } from "../state/OrfProvider";
 import type { Impact } from "../types/orf";
 import { impactLabel } from "../utils/labels";
@@ -45,7 +47,12 @@ export function FeedbackCreatePage() {
   const pendingPreviewUrlsRef = useRef(new Set<string>());
 
   const body = serializeCommentDraft(draft).trim();
-  const referencedAttachments = pendingAttachments.filter((attachment) => body.includes(`orf-pending-attachment:${attachment.id}`));
+  const referencedPendingAttachmentIds = new Set(
+    validOrfRichTextDraftAttachments(draft).flatMap((attachment) => (
+      attachment.kind === "pending" ? [attachment.pendingAttachmentId] : []
+    )),
+  );
+  const referencedAttachments = pendingAttachments.filter((attachment) => referencedPendingAttachmentIds.has(attachment.id));
 
   useEffect(() => () => {
     for (const previewUrl of pendingPreviewUrlsRef.current) {
@@ -181,10 +188,10 @@ export function FeedbackCreatePage() {
         </aside>
 
         <div className="feedback-create-submit-row">
-          <button className="feedback-create-submit" disabled={submitting} type="submit">
+          <Button disabled={submitting} type="submit">
             <Check aria-hidden="true" />
             {submitting ? "创建中..." : "创建 issue"}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

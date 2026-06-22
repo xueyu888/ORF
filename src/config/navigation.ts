@@ -1,6 +1,5 @@
 import {
   BarChart3,
-  Bell,
   CheckSquare,
   Flag,
   Inbox,
@@ -19,7 +18,6 @@ export const navItems = [
   { label: "工作日志", path: "/work-logs", icon: NotebookPen },
   { label: "聊天", path: "/chat", icon: MessagesSquare },
   { label: "反馈", path: "/feedback", icon: Inbox },
-  { label: "消息", path: "/notifications", icon: Bell },
   { label: "统计", path: "/reports", icon: BarChart3 },
   { label: "系统管理", path: "/system", icon: Settings },
 ];

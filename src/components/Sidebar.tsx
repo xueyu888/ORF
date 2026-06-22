@@ -1,12 +1,21 @@
 import { Eye, Info, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { NavLink } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
 import { orfAssetLibrary } from "../config/assetLibrary";
 import { canShowFrontend, canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
+import type { VisualBackgroundCrop } from "../domain/settings/visualBackgrounds";
 import { useOrf } from "../state/OrfProvider";
 import { ImagePreviewDialog } from "./ImagePreviewDialog";
+import { VisualBackgroundSlot } from "./VisualBackgroundSlot";
 import { Avatar } from "./ui";
 
 const navItemByLabel = new Map(navItems.map((item) => [item.label, item]));
@@ -20,14 +29,20 @@ const sidebarGroups = [
 }));
 
 export function Sidebar({
+  backgroundCrop,
+  backgroundOverlayOpacity,
   backgroundUrl,
   collapsed,
   onCollapsedChange,
+  onNavigateIntent,
   onOpenClientUpdateCenter,
 }: {
+  backgroundCrop: VisualBackgroundCrop;
+  backgroundOverlayOpacity: number;
   backgroundUrl: string;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  onNavigateIntent?: (path: string) => void;
   onOpenClientUpdateCenter: () => void;
 }) {
   const { chatUnreadSummary, currentUser, logout } = useOrf();
@@ -84,10 +99,8 @@ export function Sidebar({
   }
 
   const sidebarStyle = {
-    "--orf-sidebar-bg-position": sidebarBackground.position,
-    "--orf-sidebar-bg-transform": "scale(1.03)",
-    "--orf-sidebar-bg-filter": sidebarBackground.filter,
     "--orf-sidebar-bg-overlay": sidebarBackground.overlay,
+    "--orf-sidebar-bg-overlay-opacity": backgroundOverlayOpacity,
   } as CSSProperties;
 
   return (
@@ -99,14 +112,13 @@ export function Sidebar({
       style={sidebarStyle}
       aria-label="主导航"
     >
-      <img
-        className="orf-sidebar-background-image"
-        src={backgroundImageUrl}
-        alt=""
-        aria-hidden="true"
-        loading="eager"
-        decoding="async"
-        onError={() => setFailedBackgroundUrl(backgroundImageUrl)}
+      <VisualBackgroundSlot
+        frameClassName="orf-sidebar-background-frame"
+        imageClassName="orf-sidebar-background-image"
+        imageFilter={sidebarBackground.filter}
+        imageUrl={backgroundImageUrl}
+        onImageError={() => setFailedBackgroundUrl(backgroundImageUrl)}
+        crop={backgroundCrop}
       />
       <div className="orf-sidebar-brand flex items-center justify-between border-b px-4">
         <div className="orf-sidebar-brand-main flex items-center gap-2.5">
@@ -135,6 +147,7 @@ export function Sidebar({
                 <SidebarLink
                   key={item.path}
                   item={item}
+                  onNavigateIntent={onNavigateIntent}
                   unreadCount={item.path === "/chat" ? chatUnreadSummary.totalUnreadCount : 0}
                 />
               ))}
@@ -223,21 +236,29 @@ export function Sidebar({
 function SidebarLink({
   item,
   label = item.label,
+  onNavigateIntent,
   unreadCount = 0,
 }: {
   item: (typeof navItems)[number];
   label?: string;
+  onNavigateIntent?: (path: string) => void;
   unreadCount?: number;
 }) {
   const visibleUnreadCount = Math.max(0, unreadCount);
   const unreadBadgeText = visibleUnreadCount > 99 ? "99+" : String(visibleUnreadCount);
   const ariaLabel = visibleUnreadCount > 0 ? `${label}，${visibleUnreadCount} 条未读聊天消息` : label;
+  const handleNavigateIntent = (event: ReactMouseEvent<HTMLAnchorElement> | ReactPointerEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    onNavigateIntent?.(item.path);
+  };
 
   return (
     <NavLink
       to={item.path}
       title={ariaLabel}
       aria-label={ariaLabel}
+      onClick={handleNavigateIntent}
+      onPointerDown={handleNavigateIntent}
       className={({ isActive }) =>
         [
           "orf-sidebar-link flex items-center transition",

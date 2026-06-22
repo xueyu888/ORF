@@ -3,8 +3,8 @@
   --bh-deep: #1c2c43;
   --bh-ink: #26384f;
   --bh-muted: #6b7280;
-  --bh-paper: rgba(238, 228, 208, 0.78);
-  --bh-paper-2: rgba(229, 216, 192, 0.76);
+  --bh-paper: rgba(238, 228, 208, 0.58);
+  --bh-paper-2: rgba(229, 216, 192, 0.58);
   --bh-line: rgba(151, 123, 83, 0.28);
   --bh-gold: #b98a38;
   --bh-gold-2: #f0d27a;
@@ -14,20 +14,37 @@
   --bh-green: #58a870;
   --bh-pink: #a88bdd;
   --bh-shadow: 0 22px 50px rgba(41, 49, 62, 0.15);
-  --bh-glass-bg: rgba(236, 226, 205, 0.56);
-  --bh-glass-bg-strong: rgba(242, 233, 215, 0.66);
-  --bh-glass-bg-soft: rgba(225, 213, 191, 0.38);
+  --bh-glass-bg: rgba(236, 226, 205, 0.46);
+  --bh-glass-bg-strong: rgba(242, 233, 215, 0.58);
+  --bh-glass-bg-soft: rgba(225, 213, 191, 0.3);
   --bh-glass-line: rgba(88, 139, 166, 0.28);
   --bh-glass-shadow: 0 18px 42px rgba(41, 49, 62, 0.11), inset 0 1px 0 rgba(255, 251, 239, 0.36);
+  --bh-glass-filter: blur(18px) saturate(1.12);
 }
 
 .bounty-hall-page {
   position: relative;
   isolation: isolate;
   align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: calc(100vh - 144px);
   padding: 0;
   color: var(--bh-ink);
+}
+
+.bounty-hall-page > *,
+.bounty-hall-page > .grid > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.bounty-hall-page > .grid {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .bounty-hall-page button,
@@ -48,7 +65,8 @@
     linear-gradient(135deg, rgba(242, 232, 214, 0.68), rgba(224, 212, 189, 0.54) 56%, rgba(207, 215, 224, 0.34)),
     var(--bh-glass-bg);
   box-shadow: var(--bh-glass-shadow);
-  backdrop-filter: blur(14px) saturate(1.05);
+  -webkit-backdrop-filter: var(--bh-glass-filter);
+  backdrop-filter: var(--bh-glass-filter);
   padding: 8px 10px;
 }
 
@@ -202,11 +220,13 @@
   border: 1px solid var(--bh-glass-line);
   border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(240, 230, 211, 0.78), rgba(223, 211, 189, 0.66)),
+    linear-gradient(180deg, rgba(248, 241, 226, 0.52), rgba(224, 214, 195, 0.34)),
     var(--bh-paper);
   box-shadow:
     0 18px 34px rgba(31, 49, 74, 0.11),
     inset 0 0 0 1px rgba(255, 255, 255, 0.58);
+  -webkit-backdrop-filter: var(--bh-glass-filter);
+  backdrop-filter: var(--bh-glass-filter);
 }
 
 .bounty-panel::before,
@@ -300,18 +320,20 @@
   border: 1px solid var(--bh-glass-line);
   border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(240, 230, 211, 0.78), rgba(223, 211, 189, 0.68)),
+    linear-gradient(180deg, rgba(248, 241, 226, 0.52), rgba(224, 214, 195, 0.36)),
     var(--bh-paper);
   box-shadow:
     0 16px 30px rgba(31, 49, 74, 0.12),
     inset 0 0 0 1px rgba(255, 255, 255, 0.62);
   color: var(--bh-ink);
+  -webkit-backdrop-filter: var(--bh-glass-filter);
+  backdrop-filter: var(--bh-glass-filter);
 }
 
 .bounty-card-priority {
   border-color: rgba(111, 179, 211, 0.48);
   background:
-    linear-gradient(180deg, rgba(241, 231, 211, 0.82), rgba(222, 207, 181, 0.7)),
+    linear-gradient(180deg, rgba(242, 232, 214, 0.58), rgba(222, 207, 181, 0.42)),
     var(--bh-paper-2);
 }
 
@@ -489,7 +511,8 @@
     linear-gradient(180deg, rgba(230, 219, 199, 0.46), rgba(211, 199, 178, 0.3)),
     var(--bh-glass-bg-soft);
   box-shadow: var(--bh-glass-shadow);
-  backdrop-filter: blur(12px) saturate(1.04);
+  -webkit-backdrop-filter: var(--bh-glass-filter);
+  backdrop-filter: var(--bh-glass-filter);
 }
 
 .bounty-list-head,
@@ -881,7 +904,7 @@
   justify-content: flex-end;
 }
 
-.bounty-row-actions .bounty-action {
+.bounty-row-actions .orf-action-button {
   min-height: 36px;
   min-width: 92px;
   border-radius: 10px;
@@ -889,14 +912,14 @@
   font-size: 13px;
 }
 
-.bounty-row-actions .bounty-action-primary,
-.bounty-row-actions .bounty-action-blue {
+.bounty-row-actions .orf-action-button-primary,
+.bounty-row-actions .orf-action-button-blue {
   box-shadow:
     0 6px 14px rgba(34, 80, 119, 0.2),
     inset 0 1px 0 rgba(236, 253, 255, 0.46);
 }
 
-.bounty-row-actions .bounty-action-secondary {
+.bounty-row-actions .orf-action-button-secondary {
   box-shadow:
     0 6px 12px rgba(31, 49, 74, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.72);
@@ -920,13 +943,17 @@
 
 .bounty-toolbar {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  max-width: 100%;
   align-items: end;
   gap: 12px;
 }
 
 .bounty-toolbar-controls {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   flex-wrap: wrap;
   align-items: end;
   justify-content: flex-end;
@@ -945,7 +972,8 @@
     var(--bh-glass-bg);
   padding: 5px;
   box-shadow: var(--bh-glass-shadow);
-  backdrop-filter: blur(12px) saturate(1.04);
+  -webkit-backdrop-filter: var(--bh-glass-filter);
+  backdrop-filter: var(--bh-glass-filter);
 }
 
 .bounty-hall-tab {
@@ -1003,7 +1031,8 @@
     var(--bh-glass-bg);
   padding: 0 18px;
   box-shadow: var(--bh-glass-shadow);
-  backdrop-filter: blur(12px) saturate(1.04);
+  -webkit-backdrop-filter: var(--bh-glass-filter);
+  backdrop-filter: var(--bh-glass-filter);
 }
 
 .bounty-search-box svg {
@@ -1044,7 +1073,8 @@
     linear-gradient(180deg, rgba(232, 221, 201, 0.58), rgba(211, 199, 178, 0.36)),
     var(--bh-glass-bg);
   box-shadow: var(--bh-glass-shadow);
-  backdrop-filter: blur(12px) saturate(1.04);
+  -webkit-backdrop-filter: var(--bh-glass-filter);
+  backdrop-filter: var(--bh-glass-filter);
   color: #173767;
   font-weight: 900;
   padding: 0 16px;
@@ -1086,103 +1116,6 @@
   opacity: 0.8;
 }
 
-.bounty-action,
-.bounty-link-button,
-.bounty-clear-button {
-  display: inline-flex;
-  min-height: 42px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 999px;
-  cursor: pointer;
-  font-weight: 950;
-  line-height: 1;
-  text-decoration: none;
-  transition:
-    transform 0.16s ease,
-    filter 0.16s ease,
-    box-shadow 0.16s ease;
-  white-space: nowrap;
-}
-
-.bounty-action {
-  min-width: 104px;
-  padding: 0 18px;
-}
-
-.bounty-action svg,
-.bounty-link-button svg {
-  width: 17px;
-  height: 17px;
-}
-
-.bounty-action-primary,
-.bounty-action-blue {
-  border: 1px solid rgba(111, 163, 208, 0.46);
-  background:
-    linear-gradient(180deg, #55a9dc 0%, #2f7eb4 52%, #285f99 100%);
-  box-shadow:
-    0 8px 0 #1f527a,
-    0 14px 20px rgba(34, 80, 119, 0.2),
-    inset 0 1px 0 rgba(236, 253, 255, 0.5);
-  color: #f7fdff;
-  text-shadow: 0 1px 0 rgba(19, 43, 72, 0.42);
-}
-
-.bounty-action-secondary,
-.bounty-link-button,
-.bounty-clear-button {
-  border: 1px solid rgba(126, 179, 207, 0.38);
-  background:
-    linear-gradient(180deg, rgba(235, 225, 206, 0.78), rgba(216, 203, 181, 0.62));
-  box-shadow:
-    0 6px 0 rgba(126, 179, 207, 0.22),
-    0 11px 18px rgba(31, 49, 74, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.76);
-  color: #526376;
-}
-
-.bounty-action-dark {
-  background: linear-gradient(180deg, #50637a, #33455e);
-  box-shadow: 0 7px 0 #25364c;
-  color: #fffdf4;
-}
-
-.bounty-action-danger {
-  background: linear-gradient(180deg, #d77272, #a9464c);
-  box-shadow: 0 7px 0 #7d343a;
-  color: #fffdf4;
-}
-
-.bounty-action-ghost {
-  min-width: 0;
-  border: 1px solid rgba(112, 137, 156, 0.26);
-  background: rgba(217, 205, 184, 0.54);
-  color: #526376;
-  box-shadow: none;
-}
-
-.bounty-action:hover,
-.bounty-link-button:hover,
-.bounty-clear-button:hover,
-.bounty-icon-button:hover {
-  filter: brightness(1.04);
-  transform: translateY(-1px);
-}
-
-.bounty-action:disabled {
-  cursor: not-allowed;
-  filter: grayscale(0.2) opacity(0.72);
-  transform: none;
-}
-
-.bounty-link-button {
-  min-width: 0;
-  padding: 0 16px;
-}
-
 .bounty-contribution-compact {
   gap: 7px;
   color: #526376;
@@ -1192,36 +1125,6 @@
   color: #24445f;
   font-size: 18px;
   line-height: 1;
-}
-
-.bounty-clear-button {
-  min-height: 34px;
-  padding: 0 14px;
-  font-size: 13px;
-}
-
-.bounty-icon-button {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  border: 1px solid rgba(126, 179, 207, 0.38);
-  border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(235, 225, 206, 0.8), rgba(216, 203, 181, 0.64));
-  box-shadow:
-    0 6px 0 rgba(126, 179, 207, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.74);
-  color: #526376;
-  cursor: pointer;
-  transition:
-    transform 0.16s ease,
-    filter 0.16s ease;
-}
-
-.bounty-icon-button svg {
-  width: 19px;
-  height: 19px;
 }
 
 .bounty-badge {
@@ -1623,7 +1526,7 @@
   padding-top: 20px;
 }
 
-.feedback-issue-detail-actions .bounty-action {
+.feedback-issue-detail-actions .orf-action-button {
   min-width: 0;
   min-height: 40px;
   border-radius: 12px;
@@ -1633,13 +1536,13 @@
   text-shadow: none;
 }
 
-.feedback-issue-detail-actions .bounty-action svg {
+.feedback-issue-detail-actions .orf-action-button svg {
   width: 16px;
   height: 16px;
 }
 
-.feedback-issue-detail-actions .bounty-action-primary,
-.feedback-issue-detail-actions .bounty-action-blue {
+.feedback-issue-detail-actions .orf-action-button-primary,
+.feedback-issue-detail-actions .orf-action-button-blue {
   border: 1px solid rgba(69, 143, 188, 0.42);
   background:
     linear-gradient(180deg, rgba(74, 161, 206, 0.95), rgba(45, 119, 171, 0.95));
@@ -1649,7 +1552,7 @@
   color: #f8fdff;
 }
 
-.feedback-issue-detail-actions .bounty-action-secondary {
+.feedback-issue-detail-actions .orf-action-button-secondary {
   border: 1px solid rgba(126, 179, 207, 0.34);
   background:
     linear-gradient(180deg, rgba(238, 230, 212, 0.86), rgba(219, 209, 188, 0.72));
@@ -1720,33 +1623,14 @@
   font-weight: 950;
 }
 
-.feedback-issue-reply-action {
-  display: inline-flex;
+.feedback-issue-comment-header .orf-action-button {
   min-height: 28px;
-  align-items: center;
-  gap: 5px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(216, 237, 240, 0.64);
-  color: #316d82;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 950;
   margin-left: auto;
-  padding: 0 9px;
+  font-size: 12px;
 }
 
-.feedback-issue-reply-action + .feedback-issue-reply-action {
+.feedback-issue-comment-header .orf-action-button + .orf-action-button {
   margin-left: 0;
-}
-
-.feedback-issue-reply-action svg {
-  width: 13px;
-  height: 13px;
-}
-
-.feedback-issue-reply-action:hover {
-  background: rgba(190, 226, 232, 0.82);
 }
 
 .feedback-issue-comment-body {
@@ -2029,17 +1913,6 @@
   font-weight: 500;
 }
 
-.feedback-create-body-field .orf-comment-icon-button {
-  border-color: transparent;
-  background: transparent;
-  color: #54708d;
-}
-
-.feedback-create-body-field .orf-comment-icon-button:hover {
-  background: rgba(216, 237, 240, 0.68);
-  color: #2f6f87;
-}
-
 .feedback-create-attachment-strip {
   display: flex;
   flex-wrap: wrap;
@@ -2076,36 +1949,6 @@
   grid-column: 1;
   justify-content: flex-end;
   padding-top: 6px;
-}
-
-.feedback-create-submit {
-  display: inline-flex;
-  min-height: 36px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid rgba(47, 140, 195, 0.42);
-  border-radius: 6px;
-  background: linear-gradient(180deg, var(--bh-blue), var(--bh-blue-2));
-  color: #fff;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
-  padding: 0 14px;
-}
-
-.feedback-create-submit:hover {
-  background: linear-gradient(180deg, #3197ce, #24588f);
-}
-
-.feedback-create-submit:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.feedback-create-submit svg {
-  width: 15px;
-  height: 15px;
 }
 
 .feedback-create-sidebar {
@@ -2360,7 +2203,7 @@
   }
 
   .bounty-toolbar {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .bounty-toolbar-controls {
@@ -2400,7 +2243,7 @@
     justify-content: stretch;
   }
 
-  .feedback-create-submit {
+  .feedback-create-submit-row .orf-action-button {
     width: 100%;
   }
 
@@ -2490,8 +2333,7 @@
     flex-direction: column;
   }
 
-  .bounty-action,
-  .bounty-link-button {
+  .bounty-hall-page .orf-action-button {
     width: 100%;
   }
 
@@ -2539,7 +2381,7 @@
     flex-direction: column;
   }
 
-  .bounty-row-actions .bounty-action {
+  .bounty-row-actions .orf-action-button {
     width: 100%;
   }
 
@@ -2559,10 +2401,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bounty-action,
-  .bounty-link-button,
-  .bounty-clear-button,
-  .bounty-icon-button {
+  .bounty-hall-page .orf-action-button {
     transition: none;
   }
 }
@@ -2594,6 +2433,9 @@
 }
 
 .orf-workbench-surface .bounty-overview-band,
+.orf-workbench-surface .bounty-toolbar-panel,
+.orf-workbench-surface .bounty-panel,
+.orf-workbench-surface .bounty-card,
 .orf-workbench-surface .bounty-list-table,
 .orf-workbench-surface .bounty-hall-tabs,
 .orf-workbench-surface .bounty-search-box,
@@ -2605,6 +2447,7 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(235, 249, 255, 0.16)),
     var(--bh-glass-bg);
   box-shadow: var(--bh-glass-shadow);
+  -webkit-backdrop-filter: var(--bh-glass-filter);
   backdrop-filter: blur(18px) saturate(1.14);
 }
 
@@ -2665,13 +2508,18 @@
 }
 
 .orf-workbench-surface .bounty-toolbar {
-  grid-template-columns: minmax(280px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
 }
 
 .orf-workbench-surface .bounty-toolbar-panel,
 .orf-workbench-surface .feedback-issue-toolbar {
   min-width: 0;
+}
+
+.orf-workbench-surface .bounty-toolbar-panel {
+  border-radius: 12px;
+  padding: 8px;
 }
 
 .orf-workbench-surface .feedback-issue-toolbar {
@@ -2769,7 +2617,7 @@
   font-size: 13px;
 }
 
-.orf-workbench-surface .bounty-clear-button,
+.orf-workbench-surface .bounty-list-summary .orf-action-button,
 .orf-workbench-surface .feedback-reset-button {
   min-height: 32px;
   border: 1px solid rgba(255, 255, 255, 0.32);
@@ -2921,7 +2769,7 @@
   gap: 6px;
 }
 
-.orf-workbench-surface .bounty-row-actions .bounty-action,
+.orf-workbench-surface .bounty-row-actions .orf-action-button,
 .orf-workbench-surface .bounty-action-note {
   min-height: 30px;
   min-width: 84px;
@@ -2930,16 +2778,15 @@
   padding: 0 10px;
 }
 
-.orf-workbench-surface .bounty-action,
-.orf-workbench-surface .bounty-link-button {
+.orf-workbench-surface .orf-action-button {
   min-height: 34px;
   border-radius: 999px;
   font-size: 13px;
   padding: 0 14px;
 }
 
-.orf-workbench-surface .bounty-action-primary,
-.orf-workbench-surface .bounty-action-blue {
+.orf-workbench-surface .orf-action-button-primary,
+.orf-workbench-surface .orf-action-button-blue {
   border: 1px solid rgba(255, 255, 255, 0.34);
   background:
     linear-gradient(180deg, rgba(219, 234, 254, 0.42), rgba(235, 249, 255, 0.18)),
@@ -2949,8 +2796,7 @@
   text-shadow: none;
 }
 
-.orf-workbench-surface .bounty-action-secondary,
-.orf-workbench-surface .bounty-link-button,
+.orf-workbench-surface .orf-action-button-secondary,
 .orf-workbench-surface .bounty-action-note {
   border: 1px solid rgba(255, 255, 255, 0.28);
   background: rgba(255, 255, 255, 0.13);
@@ -3041,7 +2887,7 @@
 
 @media (max-width: 920px) {
   .orf-workbench-surface .bounty-toolbar {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .orf-workbench-surface .bounty-toolbar-controls {
@@ -3079,9 +2925,37 @@
     min-height: 44px;
   }
 
-  .orf-workbench-surface .bounty-action,
-  .orf-workbench-surface .bounty-link-button,
-  .orf-workbench-surface .bounty-row-actions .bounty-action,
+  .bounty-hall-page .bounty-hall-tabs {
+    gap: 3px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .bounty-hall-page .bounty-hall-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .bounty-hall-page .bounty-hall-tab,
+  .orf-workbench-surface .bounty-hall-tab,
+  .orf-workbench-surface .feedback-issue-state-button {
+    min-width: 0;
+    gap: 4px;
+    padding: 0 6px;
+    font-size: 12px;
+  }
+
+  .bounty-hall-page .bounty-hall-tab strong,
+  .orf-workbench-surface .bounty-hall-tab strong,
+  .orf-workbench-surface .feedback-issue-state-button strong {
+    min-width: 20px;
+    height: 18px;
+    padding: 0 5px;
+    font-size: 11px;
+    line-height: 18px;
+  }
+
+  .orf-workbench-surface .orf-action-button,
+  .orf-workbench-surface .bounty-row-actions .orf-action-button,
   .orf-workbench-surface .bounty-action-note {
     width: 100%;
   }
@@ -3091,7 +2965,4 @@
     padding: 12px;
   }
 
-  .orf-workbench-surface .feedback-issue-state-button {
-    padding: 0 6px;
-  }
 }

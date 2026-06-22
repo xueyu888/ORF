@@ -136,6 +136,18 @@ export function useOrfProviderUserActions({
           return false;
         }
       },
+      enableUser: async (userId: string) => {
+        try {
+          const data = await apiJson<UsersResponse>(`/api/users/${encodeURIComponent(userId)}/enable`, { method: "PATCH" });
+          setState((current) => mergeUsers(current, data));
+          notify("用户已启用");
+          return true;
+        } catch (error) {
+          notify(userMutationFailureMessage(error, "用户启用失败"));
+          void refreshUsers().catch(() => undefined);
+          return false;
+        }
+      },
       approveRegistrationRequest: async (userId: string) => {
         try {
           const data = await apiJson<UsersResponse>(`/api/registration-requests/${encodeURIComponent(userId)}/approve`, { method: "PATCH" });

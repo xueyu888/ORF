@@ -1,13 +1,15 @@
-import type { AppNotification, ChatChannel, ChatMessage, NotificationKind } from "./orf";
+import type { AppNotification, ChatChannel, ChatMessage, NotificationKind, WorkLogReminderState } from "./orf";
 
 export type RealtimeEventKind =
   | "notification.created"
   | "system.broadcast"
   | "orf.read-model.invalidated"
   | "chat.event"
-  | "client.update.available";
+  | "client.update.available"
+  | "worklog.reminder.required"
+  | "worklog.reminder.resolved";
 
-export type SystemBroadcastTone = "bounty" | "clientUpdate" | "workLogReminder";
+export type SystemBroadcastTone = "bounty" | "clientUpdate";
 export type OrfReadModel = "taskManagement" | "bountyHall" | "users" | "permissions" | "notifications" | "settings" | "workLogs";
 export type OrfReadModelInvalidationReason =
   | "objective.created"
@@ -133,9 +135,25 @@ export interface ClientUpdateAvailableRealtimeEvent {
   update: ClientUpdateAvailable;
 }
 
+export interface WorkLogReminderRequiredRealtimeEvent {
+  id: string;
+  kind: "worklog.reminder.required";
+  createdAt: string;
+  reminder: WorkLogReminderState;
+}
+
+export interface WorkLogReminderResolvedRealtimeEvent {
+  id: string;
+  kind: "worklog.reminder.resolved";
+  createdAt: string;
+  reminder: WorkLogReminderState;
+}
+
 export type RealtimeEvent =
   | NotificationRealtimeEvent
   | SystemBroadcastRealtimeEvent
   | OrfReadModelInvalidatedRealtimeEvent
   | ChatRealtimeEvent
-  | ClientUpdateAvailableRealtimeEvent;
+  | ClientUpdateAvailableRealtimeEvent
+  | WorkLogReminderRequiredRealtimeEvent
+  | WorkLogReminderResolvedRealtimeEvent;

@@ -45,12 +45,12 @@ async function buildPresenceActivityPayload(lastInteractionAt: string | null): P
 interface OrfDataStateOptions {
   authReady: boolean;
   authUserId: string | null;
-  clearNotifications: () => void;
   currentUserRole: UserRole | null;
   isApproved: boolean;
   isAuthenticated: boolean;
   loadTaskManagementData: boolean;
   refreshNotifications: () => Promise<void>;
+  resetNotificationState: () => void;
   setState: Dispatch<SetStateAction<OrfState>>;
 }
 
@@ -122,12 +122,12 @@ function removeCommentThread(state: OrfState, threadId: string): OrfState {
 export function useOrfDataState({
   authReady,
   authUserId,
-  clearNotifications,
   currentUserRole,
   isApproved,
   isAuthenticated,
   loadTaskManagementData,
   refreshNotifications,
+  resetNotificationState,
   setState,
 }: OrfDataStateOptions) {
   const [dataReady, setDataReady] = useState(false);
@@ -199,7 +199,7 @@ export function useOrfDataState({
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
-      clearNotifications();
+      resetNotificationState();
       setDataReady(false);
       return;
     }
@@ -253,12 +253,12 @@ export function useOrfDataState({
     applyTaskManagementData,
     applyUsers,
     authReady,
-    clearNotifications,
     currentUserRole,
     isAuthenticated,
     isApproved,
     loadTaskManagementData,
     refreshNotifications,
+    resetNotificationState,
   ]);
 
   useEffect(() => {

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { type ChangeEvent, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatPastedFeedbackLinks } from "../feedback/model/feedbackIssue";
+import { IconButton } from "../../components/ui";
 import { uploadChatAttachment } from "../../state/apiClient";
 import type { ChatAttachment, ChatUser, Feedback } from "../../types/orf";
 import { formatFileSize } from "./chatFormat";
@@ -20,6 +21,7 @@ import {
   failedDraftAttachmentCount,
   failAttachmentDraftItem,
   hasUploadingDraftAttachments,
+  progressAttachmentDraftItem,
   removeAttachmentDraftItem,
   retryAttachmentDraftItem,
   uploadedDraftAttachments,
@@ -97,6 +99,42 @@ export function ChatComposer({
     const nextItems = updater(attachmentDraftCacheRef.current.get(targetDraftStorageKey) ?? []);
     attachmentDraftCacheRef.current.set(targetDraftStorageKey, nextItems);
   };
+  const uploadProgressLabel = (item: ChatAttachmentDraftItem) => {
+    if (item.status !== "uploading") return "";
+    if (item.progress.percent === null) return "上传中";
+    const percent = Math.round(item.progress.percent);
+    return `${Math.max(0, Math.min(99, percent))}%`;
+  };
+  const uploadSpeedLabel = (bytesPerSecond: number | null) => (
+    bytesPerSecond === null
+      ? "速度计算中"
+      : bytesPerSecond < 1024
+        ? `${Math.max(1, Math.round(bytesPerSecond))} B/s`
+        : `${formatFileSize(bytesPerSecond)}/s`
+  );
+  const uploadedByteLabel = (item: ChatAttachmentDraftItem) => {
+    if (item.status !== "uploading") return formatFileSize(item.fileSize);
+    const loadedBytes = item.fileSize > 0 ? Math.min(item.fileSize, item.progress.loadedBytes) : item.progress.loadedBytes;
+    return `${formatFileSize(loadedBytes)} / ${formatFileSize(item.fileSize)}`;
+  };
+  const attachmentMetaLabel = (item: ChatAttachmentDraftItem) => {
+    if (item.status === "uploading") {
+      return `${uploadedByteLabel(item)} · ${uploadSpeedLabel(item.progress.bytesPerSecond)}`;
+    }
+    if (item.status === "failed") {
+      return `${formatFileSize(item.fileSize)} · ${item.error}`;
+    }
+    return formatFileSize(item.fileSize);
+  };
+  const attachmentStatusLabel = (item: ChatAttachmentDraftItem) => {
+    if (item.status === "uploading") return uploadProgressLabel(item);
+    if (item.status === "failed") return "失败";
+    return "已上传";
+  };
+  const uploadProgressTitle = (item: ChatAttachmentDraftItem) => {
+    if (item.status !== "uploading") return "";
+    return `${item.fileName} 上传进度：${uploadedByteLabel(item)}，${uploadSpeedLabel(item.progress.bytesPerSecond)}`;
+  };
 
   useEffect(() => {
     attachmentItemsRef.current = attachmentItems;
@@ -128,7 +166,18 @@ export function ChatComposer({
 
   const uploadDraftAttachment = async (clientId: string, file: File, uploadChannelId: string, uploadDraftStorageKey: string) => {
     try {
-      const response = await uploadChatAttachment({ channelId: uploadChannelId, file });
+      const response = await uploadChatAttachment({
+        channelId: uploadChannelId,
+        file,
+        onProgress: (progress) => {
+          updateAttachmentItemsForDraftKey(uploadDraftStorageKey, (items) => progressAttachmentDraftItem(items, clientId, {
+            loadedBytes: progress.loadedBytes,
+            percent: progress.percent,
+            totalBytes: progress.totalBytes,
+            recordedAtMs: progress.timestampMs,
+          }));
+        },
+      });
       updateAttachmentItemsForDraftKey(uploadDraftStorageKey, (items) => completeAttachmentDraftItem(items, clientId, response.attachment));
     } catch (uploadError) {
       const message = uploadError instanceof Error ? uploadError.message : "上传附件失败";
@@ -234,19 +283,44 @@ export function ChatComposer({
       {attachmentItems.length > 0 && (
         <div className="orf-chat-pending-attachments">
           {attachmentItems.map((item) => (
-            <span className={item.status === "failed" ? "orf-chat-pending-attachment-failed" : ""} key={item.clientId}>
-              {item.status === "uploading" ? <Loader2 className="h-4 w-4 animate-spin" /> : item.mimeType.startsWith("image/") ? <ImageIcon className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-              {item.fileName}
-              {item.status === "failed" && <small>{item.error}</small>}
-              {item.status === "uploading" && <small>上传中</small>}
-              {item.status === "failed" && (
-                <button type="button" onClick={() => retryUpload(item)} title="重试上传" aria-label="重试上传">
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </button>
+            <span
+              className={clsx(
+                "orf-chat-pending-attachment",
+                item.status === "failed" && "orf-chat-pending-attachment-failed",
+                item.status === "uploading" && "orf-chat-pending-attachment-uploading",
               )}
-              <button type="button" onClick={() => updateAttachmentItemsForDraftKey(draftStorageKey, (items) => removeAttachmentDraftItem(items, item.clientId))}>
-                <X className="h-3.5 w-3.5" />
-              </button>
+              key={item.clientId}
+              title={item.status === "uploading" ? uploadProgressTitle(item) : item.fileName}
+            >
+              <span className="orf-chat-pending-attachment-main">
+                {item.status === "uploading" ? <Loader2 className="h-4 w-4 animate-spin" /> : item.mimeType.startsWith("image/") ? <ImageIcon className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+                <span className="orf-chat-pending-attachment-name">{item.fileName}</span>
+                <small>{attachmentStatusLabel(item)}</small>
+              </span>
+              <span className="orf-chat-pending-attachment-actions">
+                {item.status === "failed" && (
+                  <button type="button" onClick={() => retryUpload(item)} title="重试上传" aria-label="重试上传">
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <button type="button" onClick={() => updateAttachmentItemsForDraftKey(draftStorageKey, (items) => removeAttachmentDraftItem(items, item.clientId))} title="移除附件" aria-label="移除附件">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </span>
+              <span className="orf-chat-pending-attachment-meta">{attachmentMetaLabel(item)}</span>
+              {item.status === "uploading" && (
+                <span
+                  className="orf-chat-pending-attachment-progress"
+                  data-indeterminate={item.progress.percent === null ? "true" : "false"}
+                  role="progressbar"
+                  aria-label={`${item.fileName} 上传进度`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={item.progress.percent === null ? undefined : Math.round(item.progress.percent)}
+                >
+                  <span style={{ width: item.progress.percent === null ? undefined : `${Math.max(2, Math.min(100, item.progress.percent))}%` }} />
+                </span>
+              )}
             </span>
           ))}
         </div>
@@ -287,15 +361,18 @@ export function ChatComposer({
         toolbarEnd={({ submit: submitDraft, submitting }) => (
           <>
             {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
-            <button
-              type="button"
+            <IconButton
               className="orf-chat-send-button"
+              type="button"
+              icon={Send}
+              label={hasSendableDraft ? "发送" : "输入内容或添加附件后发送"}
               disabled={disabled || uploading || failedUploads > 0 || submitting || !hasSendableDraft}
+              loading={submitting}
+              size="sm"
+              variant="primary"
               onClick={submitDraft}
               title={hasSendableDraft ? "发送" : "输入内容或添加附件后发送"}
-            >
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </button>
+            />
             <input multiple hidden ref={fileRef} type="file" onChange={handleFiles} />
           </>
         )}

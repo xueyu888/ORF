@@ -22,9 +22,15 @@ export type NotificationKind =
   | "feedback.created"
   | "feedback.commented"
   | "feedback.status.changed"
+  | "comment.reply.created"
+  | "comment.thread.status.changed"
   | "comment.mention.created"
   | "worklog.reminder";
 export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog";
+export type NotificationStream = "personalNotification" | "teamAnnouncement";
+export type ChatSystemKind = NotificationStream;
+export type ChatMessageSource = "user" | "system";
+export type WorkLogReminderStatus = "active" | "resolved";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
@@ -82,12 +88,90 @@ export interface AppNotification {
   actorName: string;
   title: string;
   body: string;
+  stream: NotificationStream;
   targetType: NotificationTargetType;
   targetId: string;
   targetHref: string;
+  replyTargetType?: CommentTargetType | null;
+  replyTargetId?: string | null;
   readAt?: string | null;
   createdAt: string;
   metadata: Record<string, string>;
+}
+
+export interface WorkLogReminderState {
+  id: string;
+  status: WorkLogReminderStatus;
+  windowStartDate: string;
+  windowEndDate: string;
+  requiredDates: string[];
+  missingDates: string[];
+  lastRemindedAt?: string | null;
+  nextRemindAt?: string | null;
+  snoozeCount: number;
+  resolvedAt?: string | null;
+  updatedAt: string;
+  shouldRemindNow: boolean;
+}
+
+export interface ChatMessageSystemMetadata {
+  actorName?: string;
+  actorUserId?: string | null;
+  kind?: NotificationKind;
+  metadata?: Record<string, string>;
+  notificationEventId?: string;
+  recipientUserId?: string | null;
+  replyTargetId?: string | null;
+  replyTargetType?: CommentTargetType | null;
+  stream?: NotificationStream;
+  targetHref?: string;
+  targetId?: string;
+  targetTitle?: string;
+  targetType?: NotificationTargetType;
+  title?: string;
+}
+
+export const SYSTEM_CONVERSATION_IDS = ["teamAnnouncements", "personalNotifications"] as const;
+export type SystemConversationId = (typeof SYSTEM_CONVERSATION_IDS)[number];
+
+export type SystemConversationDefinition = {
+  description: string;
+  id: SystemConversationId;
+  stream: NotificationStream;
+  title: string;
+};
+
+export const SYSTEM_CONVERSATION_DEFINITIONS: Record<SystemConversationId, SystemConversationDefinition> = {
+  teamAnnouncements: {
+    description: "全体可见的系统公告和公共事件",
+    id: "teamAnnouncements",
+    stream: "teamAnnouncement",
+    title: "系统公告",
+  },
+  personalNotifications: {
+    description: "只投递给你的系统通知和业务提醒",
+    id: "personalNotifications",
+    stream: "personalNotification",
+    title: "我的系统通知",
+  },
+};
+
+export function isSystemConversationId(value: string | undefined): value is SystemConversationId {
+  return typeof value === "string" && (SYSTEM_CONVERSATION_IDS as readonly string[]).includes(value);
+}
+
+export interface SystemConversationSummary {
+  id: SystemConversationId;
+  stream: NotificationStream;
+  title: string;
+  description: string;
+  unreadCount: number;
+  latestMessageAt?: string | null;
+  latestMessagePreview?: string | null;
+}
+
+export interface SystemConversationMessage extends AppNotification {
+  canReply: boolean;
 }
 
 export interface ActivityItem {
@@ -576,6 +660,8 @@ export interface ChatChannel {
   id: string;
   type: ChatChannelType;
   name?: string | null;
+  systemKind?: ChatSystemKind | null;
+  systemRecipientUserId?: string | null;
   displayName: string;
   purpose: string;
   header: string;
@@ -616,6 +702,8 @@ export interface ChatMessage {
   authorUserId: string;
   authorName: string;
   authorAvatarUrl?: string | null;
+  source: ChatMessageSource;
+  system?: ChatMessageSystemMetadata | null;
   body: string;
   rootMessageId?: string | null;
   parentMessageId?: string | null;

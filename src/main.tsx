@@ -46,7 +46,7 @@ function renderStaticFallback(target: HTMLElement, content: { title: string; des
     `<h1>${escapeHtml(content.title)}</h1>`,
     `<p>${escapeHtml(content.description)}</p>`,
     content.detail ? `<pre>${escapeHtml(content.detail)}</pre>` : "",
-    '<button class="orf-control orf-primary-action inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold" type="button" onclick="window.location.reload()">重新加载</button>',
+    '<button class="orf-control orf-action-button orf-action-button-primary orf-action-button-md" type="button" onclick="window.location.reload()">重新加载</button>',
     "</div>",
     "</section>",
     "</main>",

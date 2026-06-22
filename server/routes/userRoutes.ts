@@ -6,6 +6,7 @@ import {
   createScopedUser,
   deleteScopedUser,
   disableScopedUser,
+  enableScopedUser,
   getRegistrationRequests,
   getScopedUsers,
   recordUserOnlineActivity,
@@ -130,6 +131,18 @@ export function registerUserRoutes(app: FastifyInstance) {
 
     const params = userParamsSchema.parse(request.params);
     const users = await disableScopedUser(context.scope, context.user.id, params.userId);
+    publishUsersInvalidation(context.scope, context.user.id, params.userId);
+    return { users };
+  });
+
+  app.patch("/api/users/:userId/enable", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = userParamsSchema.parse(request.params);
+    const users = await enableScopedUser(context.scope, params.userId);
     publishUsersInvalidation(context.scope, context.user.id, params.userId);
     return { users };
   });
