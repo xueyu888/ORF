@@ -46,6 +46,7 @@ const envSchema = z.object({
   ORF_NOTIFICATION_DELIVERY_RETRY_INTERVAL_MS: z.coerce.number().int().positive().default(60 * 1000),
   ORF_CLIENT_UPDATE_BROADCAST_SECRET: optionalSecret,
   ORF_LOCAL_SETTLEMENT_SERVICE_URL: z.string().url().default("http://127.0.0.1:8799"),
+  ORF_LOCAL_SETTLEMENT_SERVICE_TOKEN: optionalSecret,
   ORF_LOCAL_SETTLEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
   ORF_LLM_BASE_URL: optionalUrl,
   ORF_LLM_API_KEY: z.string().trim().optional().default(""),

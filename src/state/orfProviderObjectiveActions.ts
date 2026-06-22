@@ -12,6 +12,7 @@ import {
 } from "./orfProviderMutationMessages";
 import type {
   ContributionAllocation,
+  ContributionReviewMetricScore,
   LootResultClaim,
   ObjectiveAcceptedResult,
   Objective,
@@ -53,7 +54,7 @@ export type ReviewObjectiveTrialReviewInput = {
   commanderFeedback: string;
 };
 export type SubmitContributionReviewInput =
-  | { allocations: ContributionAllocation[]; kind: "score" }
+  | { allocations: ContributionAllocation[]; kind: "score"; metricScores?: ContributionReviewMetricScore[] }
   | { abstentionReason: string; kind: "abstain" };
 export type RequestObjectiveAlignmentInput = {
   kind: ObjectiveAlignmentRequestKind;
@@ -355,14 +356,17 @@ export function useOrfProviderObjectiveActions({
                 objectiveId,
                 objectiveTitle: objective.title,
                 reviewer: currentUser.name,
+                reviewerUserId: currentUser.id,
               }
             : {
                 allocations: input.allocations,
                 challengers: objective.challengers,
                 kind: "score",
+                metricScores: input.metricScores,
                 objectiveId,
                 objectiveTitle: objective.title,
                 reviewer: currentUser.name,
+                reviewerUserId: currentUser.id,
               });
           notify("匿名互评已通过 ORF 提交到共享结算服务");
           return true;

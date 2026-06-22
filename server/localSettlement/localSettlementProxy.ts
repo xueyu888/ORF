@@ -32,12 +32,17 @@ export async function fetchLocalSettlementService(input: {
 }): Promise<LocalSettlementServiceResponse> {
   const controller = new AbortController();
   const timeout = globalThis.setTimeout(() => controller.abort(), env.ORF_LOCAL_SETTLEMENT_TIMEOUT_MS);
+  const headers: Record<string, string> = {};
+  if (input.body !== undefined) headers["content-type"] = "application/json";
+  if (env.ORF_LOCAL_SETTLEMENT_SERVICE_TOKEN) {
+    headers["x-orf-local-settlement-token"] = env.ORF_LOCAL_SETTLEMENT_SERVICE_TOKEN;
+  }
 
   let response: Response;
   try {
     response = await fetch(localSettlementTargetUrl(env.ORF_LOCAL_SETTLEMENT_SERVICE_URL, input.path), {
       body: input.body === undefined ? undefined : JSON.stringify(input.body),
-      headers: input.body === undefined ? undefined : { "content-type": "application/json" },
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
       method: input.method,
       signal: controller.signal,
     });
