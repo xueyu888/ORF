@@ -1,5 +1,6 @@
 import { ExternalLink, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Button, IconButton } from "../../components/ui";
 import { orfClientCurrentVersion } from "./clientUpdateConfig";
 import { getClientRelease } from "./clientUpdateApi";
 import { compareReleaseVersions, type ClientReleaseInfo } from "./clientUpdateModel";
@@ -70,9 +71,7 @@ export function ClientReleaseNotesDialog() {
             <p className="orf-client-release-notes-kicker">客户端已更新</p>
             <h2 id="orf-client-release-notes-title">ORF {release.version} 更新说明</h2>
           </div>
-          <button className="orf-client-release-notes-close" type="button" aria-label="关闭更新说明" onClick={close}>
-            <X className="h-4 w-4" />
-          </button>
+          <IconButton icon={X} label="关闭更新说明" size="sm" type="button" onClick={close} />
         </header>
 
         <div className="orf-client-release-notes-body">
@@ -84,13 +83,13 @@ export function ClientReleaseNotesDialog() {
         </div>
 
         <footer className="orf-client-release-notes-actions">
-          <button className="orf-client-release-notes-secondary" type="button" disabled={openingReleasePage} onClick={() => void openReleasePage()}>
+          <Button size="sm" variant="secondary" type="button" disabled={openingReleasePage} onClick={() => void openReleasePage()}>
             <ExternalLink className="h-3.5 w-3.5" />
             查看发布页
-          </button>
-          <button className="orf-client-release-notes-primary" type="button" onClick={close}>
+          </Button>
+          <Button size="sm" type="button" onClick={close}>
             知道了
-          </button>
+          </Button>
         </footer>
       </section>
     </div>

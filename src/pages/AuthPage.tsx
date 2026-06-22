@@ -3,6 +3,8 @@ import type { LucideIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
+import { VisualBackgroundSlot } from "../components/VisualBackgroundSlot";
+import { Button, IconButton } from "../components/ui";
 import {
   findSavedCredentialAccountByEmail,
   forgetSavedCredentialByEmail,
@@ -14,11 +16,17 @@ import {
 } from "../features/auth/credentialMemory";
 import { getUserPreferences, getVisualBackgrounds } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
+import {
+  defaultVisualBackgroundCrop,
+  type VisualBackgroundCrop,
+} from "../domain/settings/visualBackgrounds";
+import { readCachedLoginBackgroundPreview } from "../utils/loginBackgroundCache";
 import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
 
 type AuthMode = "login" | "register";
 
 type AuthHeroOption = {
+  crop: VisualBackgroundCrop;
   id: string;
   label: string;
   src: string;
@@ -33,7 +41,7 @@ const authHeroModules = import.meta.glob("../assets/auth/*.{png,jpg,jpeg,webp,av
 const authHeroOptions: AuthHeroOption[] = Object.entries(authHeroModules)
   .map(([path, src]) => {
     const label = path.split("/").at(-1) ?? path;
-    return { id: path, label, src };
+    return { id: path, label, crop: defaultVisualBackgroundCrop, src };
   })
   .sort((first, second) => {
     if (first.label === defaultAuthHeroFile) {
@@ -51,8 +59,19 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function AuthPage() {
   const navigate = useNavigate();
   const { authReady, isApproved, isAuthenticated, loginWithPassword, notify, registerWithPassword } = useOrf();
+  const [cachedHero] = useState<AuthHeroOption | null>(() => {
+    const cached = readCachedLoginBackgroundPreview();
+    return cached
+      ? {
+          id: `cached-login-background:${cached.userId}`,
+          label: "本机登录页",
+          crop: cached.crop,
+          src: cached.dataUrl,
+        }
+      : null;
+  });
   const [mode, setMode] = useState<AuthMode>("login");
-  const [selectedHeroId, setSelectedHeroId] = useState(() => authHeroOptions[0]?.id ?? "");
+  const [selectedHeroId, setSelectedHeroId] = useState(() => cachedHero?.id ?? authHeroOptions[0]?.id ?? "");
   const [configuredHeroOptions, setConfiguredHeroOptions] = useState<AuthHeroOption[]>([]);
   const [savedCredentialAccounts, setSavedCredentialAccounts] = useState<SavedCredentialAccount[]>([]);
   const [credentialProvider, setCredentialProvider] = useState<"browser" | "desktop">("browser");
@@ -150,15 +169,21 @@ export function AuthPage() {
           const options = data.list.map((background) => ({
             id: background.id,
             label: background.fileName,
+            crop: data.config.crops[background.id] ?? defaultVisualBackgroundCrop,
             src: background.url,
           }));
-          setConfiguredHeroOptions(options);
-          setSelectedHeroId(pickVisualBackground(data)?.id ?? options[0]?.id ?? "");
+          const visibleOptions = cachedHero ? [cachedHero, ...options] : options;
+          setConfiguredHeroOptions(visibleOptions);
+          if (cachedHero) {
+            setSelectedHeroId(cachedHero.id);
+            return;
+          }
+          setSelectedHeroId(pickVisualBackground(data)?.image.id ?? options[0]?.id ?? "");
 
           const intervalMs = visualBackgroundIntervalMs(data);
           if (intervalMs) {
             intervalId = window.setInterval(() => {
-              setSelectedHeroId(pickVisualBackground(data)?.id ?? options[0]?.id ?? "");
+              setSelectedHeroId(pickVisualBackground(data)?.image.id ?? options[0]?.id ?? "");
             }, intervalMs);
           }
         })
@@ -173,7 +198,7 @@ export function AuthPage() {
       unsubscribe();
       clearRotationTimer();
     };
-  }, []);
+  }, [cachedHero]);
 
   useEffect(() => {
     setAuthError("");
@@ -249,13 +274,18 @@ export function AuthPage() {
   const primaryLabel = mode === "login" ? "Sign In" : "Create Account";
   const switchLabel = mode === "login" ? "Register" : "Sign In";
   const busyLabel = mode === "login" ? "Signing In" : "Creating";
-  const heroOptions = configuredHeroOptions.length > 0 ? configuredHeroOptions : authHeroOptions;
+  const heroOptions = configuredHeroOptions.length > 0 ? configuredHeroOptions : cachedHero ? [cachedHero, ...authHeroOptions] : authHeroOptions;
   const selectedHero = heroOptions.find((option) => option.id === selectedHeroId) ?? heroOptions[0];
   const rememberLabel = credentialProvider === "desktop" ? "记住到本机" : "让浏览器记住";
 
   return (
     <main className="orf-auth-page">
-      {selectedHero && <img className="orf-auth-hero" src={selectedHero.src} alt="" aria-hidden="true" draggable={false} />}
+      <VisualBackgroundSlot
+        frameClassName="orf-auth-hero-frame"
+        imageClassName="orf-auth-hero-image"
+        imageUrl={selectedHero?.src ?? null}
+        crop={selectedHero?.crop ?? defaultVisualBackgroundCrop}
+      />
       {heroOptions.length > 1 && <span className="orf-auth-top-gradient" aria-hidden="true" />}
       {heroOptions.length > 1 && (
         <div className="orf-auth-hero-switch-zone" aria-label="选择登录页背景">
@@ -303,15 +333,15 @@ export function AuthPage() {
                     {account.displayName && <small>{account.email}</small>}
                   </span>
                 </button>
-                <button
-                  className="orf-auth-saved-remove"
+                <IconButton
+                  className="orf-auth-saved-remove-action"
+                  icon={Trash2}
+                  label={`删除已记住账号 ${account.email}`}
+                  size="sm"
+                  variant="danger"
                   type="button"
-                  aria-label={`删除已记住账号 ${account.email}`}
-                  title="删除已记住账号"
                   onClick={() => void deleteSavedAccount(account)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                />
               </div>
             ))}
           </div>
@@ -395,11 +425,11 @@ export function AuthPage() {
             </p>
           )}
 
-          <button className="orf-auth-submit" type="submit" disabled={!authReady || submitting}>
+          <Button className="orf-auth-submit-action" size="lg" type="submit" disabled={!authReady || submitting}>
             <Sparkles className="h-5 w-5" />
             <span>{submitting ? busyLabel : primaryLabel}</span>
             <Sparkles className="h-5 w-5" />
-          </button>
+          </Button>
         </form>
 
         <div className="orf-auth-separator" aria-hidden="true">
@@ -408,14 +438,15 @@ export function AuthPage() {
           <span />
         </div>
 
-        <button
-          className="orf-auth-secondary"
+        <Button
+          className="orf-auth-mode-switch"
+          variant="secondary"
           type="button"
           disabled={!authReady || submitting}
           onClick={() => setMode((value) => (value === "login" ? "register" : "login"))}
         >
           {switchLabel}
-        </button>
+        </Button>
       </section>
     </main>
   );

@@ -1,5 +1,6 @@
 import { Download, ExternalLink, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button, IconButton } from "../../components/ui";
 import type { ClientUpdateDecision } from "./clientUpdateModel";
 import {
   checkForClientUpdate,
@@ -126,17 +127,16 @@ export function ClientUpdateNotice() {
                 <p className="orf-client-update-dialog-kicker">发现新版本</p>
                 <h2 id="orf-client-update-dialog-title">ORF 客户端 {release.version} 可以更新</h2>
               </div>
-              <button
-                className="orf-client-update-dialog-close"
+              <IconButton
                 type="button"
-                aria-label="稍后提醒"
+                icon={X}
+                label="稍后提醒"
+                size="sm"
                 onClick={() => {
                   rememberPromptDismissedVersion(release.version);
                   setPromptDismissedVersions(readPromptDismissedVersions());
                 }}
-              >
-                <X className="h-4 w-4" />
-              </button>
+              />
             </header>
             <div className="orf-client-update-dialog-body">
               <p className="orf-client-update-dialog-summary">
@@ -150,34 +150,36 @@ export function ClientUpdateNotice() {
               {installMessage && <p className="orf-client-update-dialog-message">{installMessage}</p>}
             </div>
             <footer className="orf-client-update-dialog-actions">
-              <button
+              <Button
                 type="button"
-                className="orf-client-update-primary"
+                size="sm"
                 disabled={openingUrl !== null || installing}
                 onClick={() => void installUpdate()}
               >
                 <Download className="h-3.5 w-3.5" />
                 {installing ? "正在下载" : asset ? "下载并安装" : "打开发布页"}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="orf-client-update-secondary"
+                size="sm"
+                variant="secondary"
                 disabled={openingUrl !== null}
                 onClick={() => void openUrl(secondaryUrl)}
               >
                 <ExternalLink className="h-3.5 w-3.5" />
                 发布说明
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="orf-client-update-later"
+                size="sm"
+                variant="ghost"
                 onClick={() => {
                   rememberPromptDismissedVersion(release.version);
                   setPromptDismissedVersions(readPromptDismissedVersions());
                 }}
               >
                 稍后再说
-              </button>
+              </Button>
             </footer>
           </div>
         </section>
@@ -196,36 +198,35 @@ export function ClientUpdateNotice() {
           {installMessage && <div className="orf-client-update-message">{installMessage}</div>}
         </div>
         <div className="orf-client-update-actions">
-          <button
+          <Button
             type="button"
-            className="orf-client-update-primary"
+            size="sm"
             disabled={openingUrl !== null || installing}
             onClick={() => void installUpdate()}
           >
             <Download className="h-3.5 w-3.5" />
             {installing ? "正在下载" : asset ? "下载并安装" : "打开发布页"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="orf-client-update-secondary"
+            size="sm"
+            variant="secondary"
             disabled={openingUrl !== null}
             onClick={() => void openUrl(secondaryUrl)}
           >
             <ExternalLink className="h-3.5 w-3.5" />
             发布说明
-          </button>
-          <button
+          </Button>
+          <IconButton
             type="button"
-            className="orf-client-update-close"
-            aria-label="关闭本版本更新提醒"
-            title="关闭本版本更新提醒"
+            icon={X}
+            label="关闭本版本更新提醒"
+            size="sm"
             onClick={() => {
               rememberDismissedVersion(release.version);
               setDismissedVersions(readDismissedVersions());
             }}
-          >
-            <X className="h-4 w-4" />
-          </button>
+          />
         </div>
       </section>
     </>

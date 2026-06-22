@@ -131,7 +131,7 @@ orf backend
 orf frontend
 ```
 
-说明：当前 `.env` 中已启用 GitHub 提交和 Issues 同步到 Mattermost（`GITHUB_SYNC_ENABLED=true`，`GITHUB_ISSUES_SYNC_ENABLED=true`），提交同步监听所有分支。
+说明：当前 `.env` 可通过 `GITHUB_SYNC_ENABLED=true` 和 `GITHUB_ISSUES_SYNC_ENABLED=true` 把 GitHub 提交和 Issues 同步到 ORF 原生聊天频道，提交同步监听所有分支。
 
 ## Feedback
 

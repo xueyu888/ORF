@@ -64,7 +64,7 @@
 
 | 页面 | 状态 |
 | --- | --- |
-| 悬赏大厅 | 所有已通过用户可见 `open`、`applying`、`recruiting`、`reestimating` 的公开招募和参与状态；默认显示招募中目标，`reestimating` 或已有挑战者的目标自动进入已开始分组；奖励列只展示难度、分数和征召标记，不承载生命周期状态；参与列展示申请者、挑战者并高亮当前用户身份；操作列只表达当前用户可执行动作或暂无操作；active 普通成员可在冻结前申请公开目标或接受自己的征召；申请必须填写理由；通过后挑战者头像继续挂在大厅目标上；新悬赏发布写入消息中心并通过实时横幅广播提醒在线用户；指挥官/管理员完整显示大厅界面，但挑战动作被提示并阻断 |
+| 悬赏大厅 | 所有已通过用户可见 `open`、`applying`、`recruiting`、`reestimating` 的公开招募和参与状态；默认显示招募中目标，`reestimating` 或已有挑战者的目标自动进入已开始分组；奖励列只展示难度、分数和征召标记，不承载生命周期状态；参与列展示申请者、挑战者并高亮当前用户身份；操作列只表达当前用户可执行动作或暂无操作；active 普通成员可在冻结前申请公开目标或接受自己的征召；申请必须填写理由；通过后挑战者头像继续挂在大厅目标上；新悬赏发布写入聊天里的系统公告并通过实时横幅广播提醒在线用户；指挥官/管理员完整显示大厅界面，但挑战动作被提示并阻断 |
 | 我的挑战 / 挑战工作台 | 指挥官可见 `candidate` 和全量挑战，并可按正式挑战者筛选目标；成员只见 `Objective.challengerUserIds` 包含自己的 `reestimating`、`frozen`、`submitted`、`accepted`、`settled` |
 | 成员管理 | 注册待审核、启用、拒绝、停用 |
 | 统计 | `pointLedger` 结算后的成员积分 |
@@ -80,14 +80,14 @@
 - 同一目标的正式挑战者可以共同新增、编辑、勾选、移动和删除目标下的任务与子任务，并维护评论，用来拆解执行动作和协作记录；任务不挂到指标下，执行人和创建人不形成私有所有权。
 - 目标至少已有一个指标，且每个指标都已校准积分等级后，指挥官才能冻结目标。
 
-`Objective.finalDueAt` 是目标截止日期的唯一事实源。只有指挥官可以修改：`candidate/open/applying/recruiting/reestimating` 可正常调整；`frozen` 只允许因延期等异常原因把日期延后；`submitted/accepted/settled/closed` 不允许修改。冻结后延后截止日期不重开指标重估，也不改变 `confirmationDueAt`。
+`Objective.finalDueAt` 是目标截止日期的唯一事实源。只有指挥官可以修改：`candidate/open/applying/recruiting/reestimating` 可正常调整；`frozen` 只允许因延期等异常原因把日期延后；`submitted/accepted/settled/closed` 不允许修改。目标仍处于 `reestimating` 且最终截止日期实际变更时，`Objective.confirmationDueAt` 按挑战接受时间和新的最终截止日期重新计算；冻结后延后截止日期不重开指标重估，也不改变 `confirmationDueAt`。
 
-冻结后指标口径稳定，不再退回 `reestimating`。`confirmationDueAt` 到期后同样停止指标调整，不做续期。
+冻结后指标口径稳定，不再退回 `reestimating`。`confirmationDueAt` 到期后同样停止指标调整，不提供独立续期入口。
 
 ## 征召与申请
 
 - 查看悬赏大厅不等于拥有挑战动作权限。大厅列表和操作区对所有已通过用户开放；申请和接受动作只对符合条件的 active 普通成员生效。指挥官/管理员点击申请或接受时，前端必须用弹窗提示其不应申请挑战，后端也必须拒绝写入。
-- `Objective.publishedAt` 是目标发布到悬赏大厅的时间，发布动作写入一次；目标创建时间和后续更新时间不能作为大厅发起时间展示。发布动作同时生成 `objective.published` 系统通知，并向在线 active 用户发送 `system.broadcast`，分别用于消息中心记录、横幅广播和大厅刷新。
+- `Objective.publishedAt` 是目标发布到悬赏大厅的时间，发布动作写入一次；目标创建时间和后续更新时间不能作为大厅发起时间展示。发布动作同时生成 `objective.published` 系统通知，并向在线 active 用户发送 `system.broadcast`，分别用于聊天系统公告、横幅广播和大厅刷新。
 - 申请挑战只表达意愿，不直接成为挑战者；申请必须填写 `reason`，大厅和指挥官审核都读取同一条申请记录。
 - 申请挑战只允许 active 普通成员在 `open`、`applying`、`recruiting`、`reestimating` 发起；已是挑战者或已有 pending 申请不能重复申请。
 - 指挥官通过申请后，普通成员申请人成为挑战者，目标进入重估；该目标继续留在悬赏大厅，公开展示已通过挑战者和仍待处理的申请。

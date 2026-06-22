@@ -3,6 +3,7 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
+import { Button } from "../components/ui";
 import { AttachmentPreview, ChannelModal, ConversationModal, DeleteMessageDialog } from "../features/chat/ChatDialogs";
 import { ChatHeader } from "../features/chat/ChatHeader";
 import {
@@ -64,7 +65,18 @@ import {
   updateChatMessageRequest,
 } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-import type { ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback } from "../types/orf";
+import {
+  SYSTEM_CONVERSATION_DEFINITIONS,
+  isSystemConversationId,
+  type ChatBootstrap,
+  type ChatChannel,
+  type ChatMessage,
+  type ChatSearchResult,
+  type ChatThread,
+  type ChatThreadSummary,
+  type ChatUser,
+  type Feedback,
+} from "../types/orf";
 
 const chatFeedPrefetchDelayMs = 250;
 
@@ -74,6 +86,7 @@ function isChatGlobalShortcutEditableTarget(target: EventTarget | null) {
 
 function mentionableUsersForChannel(channel: ChatChannel | null, users: ChatUser[] | undefined) {
   if (!channel) return [];
+  if (channel.systemKind) return [];
   const allUsers = users ?? [];
   if (channel.type === "public") return allUsers;
   const memberIds = new Set(channel.members.map((member) => member.userId));
@@ -120,7 +133,11 @@ function mergeFeedbackReferences(...groups: Array<readonly FeedbackReference[]>)
 }
 
 export function ChatPage() {
-  const { channelId: routeChannelId } = useParams();
+  const routeParams = useParams();
+  const routeSystemConversationId = isSystemConversationId(routeParams.systemConversationId)
+    ? routeParams.systemConversationId
+    : null;
+  const routeChannelId = routeSystemConversationId ? undefined : routeParams.channelId;
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { appAttentionState, currentUser, notify, readModelInvalidations, refreshChatUnreadSummary, state } = useOrf();
@@ -151,8 +168,11 @@ export function ChatPage() {
     setAttachmentPreview((current) => current ? moveChatAttachmentPreviewImage(current, direction) : current);
   }, []);
   const mobileViewport = useChatMobileViewport();
+  const routeSystemChannel = routeSystemConversationId
+    ? channels.find((channel) => channel.systemKind === SYSTEM_CONVERSATION_DEFINITIONS[routeSystemConversationId].stream) ?? null
+    : null;
   const routeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : null;
-  const activeChannel = routeChannel ?? (!mobileViewport && !routeChannelId ? channels[0] ?? null : null);
+  const activeChannel = routeSystemConversationId ? routeSystemChannel : routeChannel ?? (!mobileViewport && !routeChannelId ? channels[0] ?? null : null);
   const focusMessageId = searchParams.get("message");
   const usersById = useMemo(() => new Map((bootstrap?.users ?? []).map((user) => [user.id, user])), [bootstrap?.users]);
   const activeMentionableUsers = useMemo(() => {
@@ -174,7 +194,7 @@ export function ChatPage() {
       membership?.role === "admin"
     );
   }, [bootstrap?.permissions.canManageAnyChannel, bootstrap?.permissions.canManageAnyMembers, currentUser?.id]);
-  const canManageActiveChannel = canManageChannel(activeChannel);
+  const canManageActiveChannel = activeChannel?.systemKind ? false : canManageChannel(activeChannel);
   const sidebarCreateCommands = useMemo<ChatSidebarCreateCommand[]>(() => {
     if (!bootstrap?.permissions.canRead) return [];
     const commands: ChatSidebarCreateCommand[] = [];
@@ -264,7 +284,7 @@ export function ChatPage() {
   const rightPanelMentionableUsers = useMemo(() => {
     return mentionableUsersForChannel(rightPanelChannel, bootstrap?.users);
   }, [rightPanelChannel, bootstrap?.users]);
-  const canManageRightPanelChannel = canManageChannel(rightPanelChannel);
+  const canManageRightPanelChannel = rightPanelChannel?.systemKind ? false : canManageChannel(rightPanelChannel);
 
   useEffect(() => {
     setChatNativeNotificationViewState({
@@ -541,6 +561,12 @@ export function ChatPage() {
   }, [activePanel, attachmentPreview, closePanel, deletingMessage, editingMessage, modal]);
 
   useEffect(() => {
+    if (routeSystemConversationId && activePanel) {
+      closePanel();
+    }
+  }, [activePanel, closePanel, routeSystemConversationId]);
+
+  useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setBootstrapError(null);
@@ -581,7 +607,22 @@ export function ChatPage() {
   }, []);
 
   useEffect(() => {
-    if (loading || channels.length === 0) return;
+    if (loading) return;
+    if (routeParams.systemConversationId && !routeSystemConversationId) {
+      navigate("/chat", { replace: true });
+      return;
+    }
+    if (routeSystemConversationId) {
+      if (routeSystemChannel) {
+        navigate(`/chat/${encodeURIComponent(routeSystemChannel.id)}`, { replace: true });
+      } else {
+        navigate("/chat", { replace: true });
+      }
+      return;
+    }
+    if (channels.length === 0) {
+      return;
+    }
     const routeChannelExists = routeChannelId ? channels.some((channel) => channel.id === routeChannelId) : false;
     if (mobileViewport) {
       if (routeChannelId && !routeChannelExists) {
@@ -592,7 +633,16 @@ export function ChatPage() {
     if (!routeChannelId || !routeChannelExists) {
       navigate(`/chat/${encodeURIComponent(channels[0].id)}`, { replace: true });
     }
-  }, [channels, loading, mobileViewport, navigate, routeChannelId]);
+  }, [
+    channels,
+    loading,
+    mobileViewport,
+    navigate,
+    routeChannelId,
+    routeParams.systemConversationId,
+    routeSystemConversationId,
+    routeSystemChannel,
+  ]);
 
   useEffect(() => {
     setDraftChannelIds(storedDraftChannelIds(channels));
@@ -684,6 +734,11 @@ export function ChatPage() {
         notify("当前用户不可用，无法发送消息");
         return;
       }
+      const sendChannel = channels.find((channel) => channel.id === channelId) ?? null;
+      if (sendChannel?.systemKind) {
+        notify("系统频道不支持发送普通消息");
+        return;
+      }
       const body = serializeDraft(draft);
       const pendingSend = {
         channelId,
@@ -729,6 +784,7 @@ export function ChatPage() {
       appendThreadReply,
       applyPendingMessageToFeed,
       currentUser,
+      channels,
       hasNewerMessages,
       notify,
       requestScrollToLatest,
@@ -924,25 +980,22 @@ export function ChatPage() {
     );
   }
 
-  if (!bootstrap?.permissions.canRead) {
-    if (!bootstrap) {
-      return (
-        <div className="orf-chat-empty-page">
-          <span>{bootstrapError ?? "聊天中心加载失败。"}</span>
-          {bootstrapError === chatPresenceProtocolUpgradeMessage && (
-            <button className="orf-control orf-secondary-action inline-flex items-center gap-2 border px-3 py-2 text-sm font-medium" type="button" onClick={handleOpenUpdateCenter}>
-              <RefreshCw className="h-4 w-4" />
-              打开版本与更新
-            </button>
-          )}
-          <button className="orf-control orf-secondary-action inline-flex items-center gap-2 border px-3 py-2 text-sm font-medium" type="button" onClick={handleRetryBootstrap}>
+  if (!bootstrap) {
+    return (
+      <div className="orf-chat-empty-page">
+        <span>{bootstrapError ?? "聊天中心加载失败。"}</span>
+        {bootstrapError === chatPresenceProtocolUpgradeMessage && (
+          <Button type="button" variant="secondary" onClick={handleOpenUpdateCenter}>
             <RefreshCw className="h-4 w-4" />
-            重新加载
-          </button>
-        </div>
-      );
-    }
-    return <div className="orf-chat-empty-page">当前账号没有聊天访问权限。</div>;
+            打开版本与更新
+          </Button>
+        )}
+        <Button type="button" variant="secondary" onClick={handleRetryBootstrap}>
+          <RefreshCw className="h-4 w-4" />
+          重新加载
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -1036,7 +1089,7 @@ export function ChatPage() {
             <ChatComposer
               attachmentMaxBytes={bootstrap.settings.attachmentMaxBytes}
               channelId={activeChannel.id}
-              disabled={!bootstrap.permissions.canWrite}
+              disabled={!bootstrap.permissions.canWrite || Boolean(activeChannel.systemKind)}
               feedbackItems={feedbackLinkItems}
               mentionableUsers={activeMentionableUsers}
               onDraftStateChange={handleDraftStateChange}
@@ -1048,7 +1101,7 @@ export function ChatPage() {
             />
           </>
         ) : (
-          <div className="orf-chat-empty-channel">还没有可用频道。</div>
+          <div className="orf-chat-empty-channel">选择一个频道、私信或系统会话。</div>
         )}
       </section>
       {activeChannel && activePanel && (

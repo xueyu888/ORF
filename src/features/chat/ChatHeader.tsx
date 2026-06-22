@@ -1,5 +1,5 @@
 import { Archive, ArrowLeft, Bell, BellOff, Bookmark, EyeOff, Info, Pin, Reply, Search, Star, UserPlus, Users } from "lucide-react";
-import { IconButton } from "../../components/ui";
+import { IconButton, actionButtonClassName } from "../../components/ui";
 import { isChatConversation } from "../../domain/chatConversation";
 import type { ChatChannel, ChatUser } from "../../types/orf";
 import { channelIcon, chatChannelDisplayLabel, chatChannelInfoLabel } from "./chatChannelPresentation";
@@ -81,7 +81,7 @@ export function ChatHeader({
         <IconButton icon={Bookmark} label="已保存消息" onClick={onSaved} />
         <button
           type="button"
-          className="orf-control orf-ghost-action orf-chat-header-thread-action inline-flex h-9 w-9 items-center justify-center transition"
+          className={actionButtonClassName({ className: "orf-chat-header-thread-action", iconOnly: true, variant: "ghost" })}
           title={channel.threadUnreadCount > 0 ? `话题收件箱，${channel.threadUnreadCount} 条未读` : "话题收件箱"}
           aria-label={channel.threadUnreadCount > 0 ? `话题收件箱，${channel.threadUnreadCount} 条未读` : "话题收件箱"}
           onClick={onThreads}

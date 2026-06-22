@@ -3,7 +3,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { FantasySelectMenu, type FantasySelectOption } from "../components/FantasySelectMenu";
 import { PageScaffold } from "../components/PageScaffold";
-import { Button, Card, Field } from "../components/ui";
+import { Button, Card, Field, actionButtonClassName } from "../components/ui";
 import { fetchLocalSettlementSummary, type LocalSettlementSummary } from "../services/localSettlementClient";
 import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { useOrf } from "../state/OrfProvider";
@@ -571,7 +571,7 @@ export function LootSubmitPage() {
       subtitle={`目标：${objective.title}`}
       action={
         <Link
-          className="orf-control orf-secondary-action inline-flex items-center gap-2 border px-3 py-2 text-sm font-medium"
+          className={actionButtonClassName({ variant: "secondary" })}
           to="/tasks"
         >
           <ArrowLeft className="h-4 w-4" />

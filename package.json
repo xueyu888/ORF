@@ -1,6 +1,6 @@
 {
   "name": "orf",
-  "version": "0.0.32",
+  "version": "0.0.35",
   "private": true,
   "description": "ORF project management tool built from ORF documentation.",
   "bin": {
@@ -49,8 +49,7 @@
     "db:migrate": "tsx scripts/migrate-db.ts",
     "db:push": "drizzle-kit push",
     "db:audit:leaderboard": "tsx scripts/audit-leaderboard-data.ts",
-    "chat:import:mattermost": "node scripts/with-public-ca.mjs tsx scripts/import-mattermost-chat.ts",
-    "gitlab:webhooks:reconcile": "node scripts/with-public-ca.mjs tsx scripts/reconcile-gitlab-mattermost-webhooks.ts",
+    "gitlab:orf-chat:reconcile": "node scripts/with-public-ca.mjs tsx scripts/reconcile-gitlab-orf-chat.ts",
     "notify:email": "tsx scripts/send-email-notification.ts",
     "push:diagnose": "node scripts/with-public-ca.mjs tsx scripts/diagnose-push.ts",
     "client:icons:generate": "node scripts/generate-client-icons.mjs",

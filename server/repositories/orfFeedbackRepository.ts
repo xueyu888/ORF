@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
+import { replaceOrfAttachmentMarkdownTokens } from "../../src/features/rich-text/orfRichTextTokens";
 import type { Feedback, FeedbackStatus, Impact } from "../../src/types/orf";
 import { localDateString } from "../../src/utils/date";
 import { db } from "../db/client";
@@ -12,10 +13,10 @@ import {
   type PreparedCommentAttachment,
 } from "./commentAttachmentRepository";
 import {
-  createNotifications,
   getActiveAdminNotificationRecipients,
   getActiveMemberNotificationRecipientsByIds,
 } from "./notificationRepository";
+import { publishNotificationEvent } from "../notifications/publisher";
 import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
 
@@ -108,20 +109,19 @@ function feedbackStatusNotificationTitle(status: FeedbackStatus) {
   return status === "Closed" ? "反馈已关闭" : "反馈已重新打开";
 }
 
-const pendingFeedbackAttachmentTokenPattern = /!\[([^\]\n]*)\]\(orf-pending-attachment:([A-Za-z0-9_-]+)\)/g;
-
 function buildInitialCommentBody(input: { body: string; uploads: Array<{ clientId: string; prepared: PreparedCommentAttachment }> }) {
   const uploadsByClientId = new Map(input.uploads.map((upload) => [upload.clientId, upload.prepared]));
   const usedClientIds = new Set<string>();
   const missingClientIds = new Set<string>();
-  const replaced = input.body.replace(pendingFeedbackAttachmentTokenPattern, (_token, _alt, clientId: string) => {
-    const upload = uploadsByClientId.get(clientId);
+  const replaced = replaceOrfAttachmentMarkdownTokens(input.body, (reference, token) => {
+    if (reference.kind !== "pending") return token;
+    const upload = uploadsByClientId.get(reference.pendingAttachmentId);
     if (!upload) {
-      missingClientIds.add(clientId);
+      missingClientIds.add(reference.pendingAttachmentId);
       return "";
     }
 
-    usedClientIds.add(clientId);
+    usedClientIds.add(reference.pendingAttachmentId);
     return upload.markdown;
   });
   if (missingClientIds.size > 0) {
@@ -177,7 +177,7 @@ async function notifyFeedbackCreated(input: {
   teamId: string;
   title: string;
 }) {
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: `${input.actorName} 创建了反馈「${input.title}」，处理人：${input.ownerName}。`,
@@ -209,7 +209,7 @@ async function notifyFeedbackStatusChanged(input: {
   title: string;
 }) {
   const action = input.status === "Closed" ? "关闭" : "重新打开";
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: `${input.actorName} ${action}了反馈「${input.title}」。`,

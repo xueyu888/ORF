@@ -1,5 +1,6 @@
 import { Download, ExternalLink, Info, RefreshCw, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Button, IconButton } from "../../components/ui";
 import {
   checkForClientUpdate,
   clientUpdateInstallMessage,
@@ -108,9 +109,7 @@ export function ClientUpdateCenterDialog({ notice, onClose, open }: { notice?: s
             <p className="orf-client-update-center-kicker">关于 ORF</p>
             <h2 id="orf-client-update-center-title">版本与更新</h2>
           </div>
-          <button className="orf-client-update-center-close" type="button" aria-label="关闭版本与更新" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </button>
+          <IconButton icon={X} label="关闭版本与更新" size="sm" type="button" onClick={onClose} />
         </header>
 
         <div className="orf-client-update-center-body">
@@ -161,26 +160,26 @@ export function ClientUpdateCenterDialog({ notice, onClose, open }: { notice?: s
         </div>
 
         <footer className="orf-client-update-center-actions">
-          <button className="orf-client-update-secondary" type="button" disabled={centerState.status === "checking"} onClick={() => void runCheck()}>
+          <Button size="sm" variant="secondary" type="button" disabled={centerState.status === "checking"} onClick={() => void runCheck()}>
             <RefreshCw className="h-3.5 w-3.5" />
             检查更新
-          </button>
+          </Button>
           {release && (
-            <button className="orf-client-update-secondary" type="button" disabled={openingUrl} onClick={() => void openReleasePage(release.htmlUrl)}>
+            <Button size="sm" variant="secondary" type="button" disabled={openingUrl} onClick={() => void openReleasePage(release.htmlUrl)}>
               <ExternalLink className="h-3.5 w-3.5" />
               发布说明
-            </button>
+            </Button>
           )}
           {decision && (
-            <button
-              className="orf-client-update-primary"
+            <Button
+              size="sm"
               type="button"
               disabled={!canInstall || installing || openingUrl}
               onClick={() => readyResult && void installUpdate(readyResult)}
             >
               <Download className="h-3.5 w-3.5" />
               {installing ? "正在下载" : canInstall ? "下载并安装" : "无需安装"}
-            </button>
+            </Button>
           )}
         </footer>
       </section>

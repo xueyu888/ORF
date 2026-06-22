@@ -5,6 +5,7 @@ import type { ReactElement, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { FantasySelectMenu, type FantasySelectOption } from "../../components/FantasySelectMenu";
+import { Button, IconButton, actionButtonClassName, type ButtonSize } from "../../components/ui";
 import "./bounty-hall-skin.css";
 
 type ButtonVariant = "primary" | "secondary" | "blue" | "dark" | "ghost" | "danger";
@@ -53,6 +54,7 @@ export function BountyButton({
   form,
   loading,
   onClick,
+  size = "md",
   type = "button",
   variant = "primary",
 }: {
@@ -62,41 +64,34 @@ export function BountyButton({
   form?: string;
   loading?: boolean;
   onClick?: () => void;
+  size?: ButtonSize;
   type?: "button" | "submit";
   variant?: ButtonVariant;
 }) {
   return (
-    <button
-      className={clsx("bounty-action", `bounty-action-${variant}`, className)}
-      disabled={disabled || loading}
-      form={form}
-      onClick={onClick}
-      type={type}
-    >
-      {loading ? "处理中..." : children}
-    </button>
+    <Button className={className} disabled={disabled} form={form} loading={loading} onClick={onClick} size={size} type={type} variant={variant}>
+      {children}
+    </Button>
   );
 }
 
 export function BountyIconButton({
+  className,
   icon: Icon,
   label,
   onClick,
 }: {
+  className?: string;
   icon: LucideIcon;
   label: string;
   onClick?: () => void;
 }) {
-  return (
-    <button className="bounty-icon-button" aria-label={label} title={label} onClick={onClick} type="button">
-      <Icon aria-hidden="true" />
-    </button>
-  );
+  return <IconButton className={className} icon={Icon} label={label} onClick={onClick} type="button" />;
 }
 
 export function BountyLinkButton({ children, className, to }: { children: ReactNode; className?: string; to: string }) {
   return (
-    <Link className={clsx("bounty-link-button", className)} to={to}>
+    <Link className={actionButtonClassName({ className, variant: "secondary" })} to={to}>
       {children}
     </Link>
   );
@@ -223,9 +218,7 @@ export function BountyDialog({
         aria-label={title}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <button className="bounty-icon-button bounty-modal-close" aria-label="关闭" onClick={onClose} type="button">
-          <X aria-hidden="true" />
-        </button>
+        <BountyIconButton className="bounty-modal-close" icon={X} label="关闭" onClick={onClose} />
         <span className="bounty-corner-mark bounty-corner-tl" aria-hidden="true" />
         <span className="bounty-corner-mark bounty-corner-br" aria-hidden="true" />
         <header className="bounty-modal-head">

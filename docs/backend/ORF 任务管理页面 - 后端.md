@@ -60,7 +60,7 @@
 不存在的 `:objectiveId` 必须返回 404；目标存在但当前状态不允许对应流程动作时返回 409。
 读取目标数据时，`challengerUserIds` / `assignedChallengerUserIds` 是身份事实源，`challengers` / `assignedChallengers` 是显示名投影并会去重、剔除已接受挑战者，`challengerProfiles` / `assignedChallengerProfiles` 是由同一身份集合派生的头像展示投影。旧数据或种子数据不能把已接受成员继续暴露为待响应征召。写入挑战者集合时，后端必须校验目标参与者是当前作用域内的 active 普通成员，管理员只负责审核、冻结、验收和异常处理。`GET /api/my-challenges?scope=mine` 的正式挑战树只返回当前用户已经进入 `challengerUserIds` 的目标；同响应里的 `pendingChallengeApplications` 只从 `Objective.challengeApplications[]` 派生当前用户 `pending` 申请，作为兼容投影保留，不改变目标归属、指标权限、任务权限或结算参与者。申请追踪的前端事实入口是悬赏大厅 `GET /api/bounties` 中的 `challengeApplications` 投影。悬赏大厅读取是发现能力，不是挑战动作；后端不能用用户角色把 `GET /api/bounties` 的列表清空，申请和接受接口必须独立校验角色与状态。指挥官/管理员可以看到完整大厅数据和前端操作区，但对应 mutation 必须拒绝写入。
 
-所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。行动项执行人必须是当前默认作用域内的 `active` 成员；前端不提供自由文本输入，空执行人由后端回落为当前用户。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。`Objective.finalDueAt` 是目标截止日期唯一事实源，只有指挥官可通过 `PATCH /api/objectives/:objectiveId` 修改；`candidate/open/applying/recruiting/reestimating` 可正常修改，`frozen` 只允许延后，`submitted/accepted/settled/closed` 返回 409。
+所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。行动项执行人必须是当前默认作用域内的 `active` 成员；前端不提供自由文本输入，空执行人由后端回落为当前用户。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。`Objective.finalDueAt` 是目标截止日期唯一事实源，只有指挥官可通过 `PATCH /api/objectives/:objectiveId` 修改；`candidate/open/applying/recruiting/reestimating` 可正常修改，`frozen` 只允许延后，`submitted/accepted/settled/closed` 返回 409。目标处于 `reestimating` 且 `finalDueAt` 实际变更时，后端必须用同一套重估窗口规则按 `acceptedAt + nextFinalDueAt` 重算并写入 `Objective.confirmationDueAt`；如果无法得到合法重估窗口，返回 400。
 
 项目归属 API 只改变目标聚合展示。`Project.name` 是项目名称事实源，`Objective.projectId` 是目标项目归属事实源且可为空；无项目目标是合法状态。创建目标时可以传入 `projectId`，也可以省略或传空；传入不存在或不属于当前默认作用域的项目必须返回 400。`PATCH /api/objectives/:objectiveId/project` 只允许指挥官调用，可以把目标放入项目、移动到其他项目或移出项目，不能改变目标生命周期、挑战者、指标、任务或积分。`DELETE /api/projects/:projectId` 只删除项目注册表记录，项目下目标统一置为未归属，不删除目标、指标、行动项或结算事实。
 
@@ -219,8 +219,8 @@ type ObjectiveFlowStatus =
 - 任务和子任务维护权限以 `Objective.challengerUserIds` 为身份边界；同一目标正式挑战者可以共同新增、编辑、勾选、移动和删除目标下任务与子任务，旁观成员返回 403，指挥官/管理员可维护任意目标任务。
 - `Task.assignee` 不表达所有权，`Task.createdBy` / `updatedBy` 只作为审计字段返回给前端和测试，不能参与维护授权判断；`Task.definitionContributorUserIds` 只表达谁定义过行动项，读模型派生的 `definitionContributorProfiles` 用于行动项定义者头像组展示。
 - 任务 ID 必须使用带单调计数和 UUID 后缀的 `ORF-*` 形式；同一毫秒内的并发创建不能因为时间戳或伪随机数相同而撞主键。
-- 当前不开放退回重估；重估截止后停止调整，不续期。
-- 截止日期修改只写 `Objective.finalDueAt`；冻结后只能延后，不重开重估，也不修改 `confirmationDueAt`。
+- 当前不开放退回重估；重估截止后停止调整，不提供独立续期入口。
+- 截止日期修改以 `Objective.finalDueAt` 为唯一输入；目标仍处于 `reestimating` 且日期实际变更时同步重算 `confirmationDueAt`，冻结后只能延后，不重开重估，也不修改 `confirmationDueAt`。
 - 任务、子任务和评论允许在挑战协作中维护，但不自动推导验收或结算。
 - 评论线程标题必须由后端根据真实目标、指标、任务或子任务解析；客户端提交的 `targetTitle` 只能作为兼容字段，不能覆盖真实标题。
 - 评论回复的 `replyToMessageId` 必须属于同一评论线程，`replyToAuthor` 由后端用真实消息作者回填，不能信任客户端提交值。

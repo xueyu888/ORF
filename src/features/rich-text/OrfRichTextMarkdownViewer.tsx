@@ -395,8 +395,12 @@ function defaultRenderMention(reference: OrfMentionReference, key: string, users
   );
 }
 
-function defaultRenderAttachment(_reference: OrfAttachmentReference, key: string, token: string) {
-  return <span key={key}>{token}</span>;
+function defaultRenderAttachment(reference: OrfAttachmentReference, key: string) {
+  return (
+    <span key={key} className="orf-rich-text-viewer-attachment-missing">
+      附件不可用：{reference.alt}
+    </span>
+  );
 }
 
 type InlineRenderContext = Required<Pick<OrfRichTextMarkdownViewerProps, "renderPlainText">> & {

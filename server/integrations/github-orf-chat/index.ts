@@ -6,17 +6,20 @@ import { Readable } from "node:stream";
 import { promisify } from "node:util";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { hasMattermostChannelPostConfig, MattermostClient, type MattermostChannelPostConfig } from "../mattermost";
+import { getDefaultRuntimeScope, runtimeScopeStorageId } from "../../repositories/runtimeScope";
+import {
+  ensureOrfChatBotActor,
+  ensureOrfChatChannelMembership,
+  ensureOrfChatNamedChannel,
+  sendOrfChatMessage,
+} from "../orf-chat-delivery";
 
 const execFileAsync = promisify(execFile);
 const gitFieldSeparator = "\x1f";
 const gitRecordSeparator = "\x1e";
-const githubWebhookMaxBodyBytes = 1024 * 1024;
-const githubPushNotificationPropsKey = "github_sync_key";
-const githubPushNotificationPropsType = "github_push";
-const githubPushNotificationLedgerTableName = "github_mattermost_push_notifications";
+const githubDeliveryLedgerTableName = "github_orf_chat_deliveries";
 
-let githubPushNotificationLedgerReady: Promise<void> | null = null;
+let githubDeliveryLedgerReady: Promise<void> | null = null;
 
 const optionalNonEmptyString = z
   .string()
@@ -26,30 +29,29 @@ const optionalNonEmptyString = z
     return trimmed || undefined;
   })
   .pipe(z.string().min(1).optional());
-const defaultTrueBooleanEnvSchema = z.enum(["true", "false"]).default("true").transform((value) => value === "true");
+const booleanEnvSchema = z.enum(["true", "false"]).default("false").transform((value) => value === "true");
 
 const configSchema = z.object({
-  MATTERMOST_URL: z.string().url().optional(),
-  MATTERMOST_LOGIN_ID: z.string().optional(),
-  MATTERMOST_PASSWORD: z.string().optional(),
-  MATTERMOST_BOT_TOKEN: optionalNonEmptyString,
-  GITHUB_MATTERMOST_BOT_TOKEN: optionalNonEmptyString,
-  GITHUB_MATTERMOST_LOGIN_ID: optionalNonEmptyString,
-  GITHUB_MATTERMOST_PASSWORD: optionalNonEmptyString,
-  GITHUB_MATTERMOST_REQUIRE_BOT: defaultTrueBooleanEnvSchema,
-  MATTERMOST_CHANNEL_ID: z.string().optional(),
-  MATTERMOST_PUSH_CHANNEL_ID: z.string().optional(),
-  GITHUB_MATTERMOST_CHANNEL_ID: z.string().optional(),
+  GITHUB_ORF_CHAT_ENABLED: booleanEnvSchema,
+  GITHUB_ORF_CHAT_CHANNEL_ID: optionalNonEmptyString,
+  GITHUB_ORF_CHAT_CHANNEL_NAME: optionalNonEmptyString.default("github"),
+  GITHUB_ORF_CHAT_CHANNEL_DISPLAY_NAME: optionalNonEmptyString.default("GitHub"),
+  GITHUB_ORF_CHAT_CHANNEL_TYPE: z.enum(["public", "private"]).default("public"),
+  GITHUB_ORF_CHAT_CHANNEL_PURPOSE: optionalNonEmptyString.default("GitHub repository activity"),
+  GITHUB_ORF_CHAT_CHANNEL_HEADER: optionalNonEmptyString.default("GitHub repository activity"),
+  GITHUB_ORF_CHAT_BOT_NAME: optionalNonEmptyString.default("GitHub"),
+  GITHUB_ORF_CHAT_BOT_EMAIL: optionalNonEmptyString.default("github@orf.local"),
+  GITHUB_ORF_CHAT_WEBHOOK_MAX_BODY_BYTES: z.coerce.number().int().positive().default(1024 * 1024),
   GITHUB_REPOSITORY_FULL_NAME: z.string().default("xueyu888/ORF"),
   GITHUB_WEBHOOK_SECRET: z.string().min(16).optional(),
-  GITHUB_SYNC_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+  GITHUB_SYNC_ENABLED: booleanEnvSchema,
   GITHUB_SYNC_BRANCH: z.string().default("*"),
   GITHUB_SYNC_INTERVAL_SECONDS: z.coerce.number().int().positive().default(60),
   GITHUB_SYNC_LOOKBACK: z.coerce.number().int().positive().default(20),
   GITHUB_SYNC_STATE_FILE: z.string().default(".artifacts/github-sync-state.json"),
   GITHUB_SYNC_GIT_REMOTE: z.string().trim().min(1).default("origin"),
   GITHUB_SYNC_GIT_CWD: z.string().trim().min(1).optional(),
-  GITHUB_ISSUES_SYNC_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+  GITHUB_ISSUES_SYNC_ENABLED: booleanEnvSchema,
   GITHUB_ISSUES_SYNC_INTERVAL_SECONDS: z.coerce.number().int().positive().default(300),
   GITHUB_ISSUES_SYNC_LOOKBACK: z.coerce.number().int().positive().default(50),
   GITHUB_API_URL: z.string().url().default("https://api.github.com"),
@@ -157,25 +159,23 @@ const syncStateSchema = z.record(
   syncStateEntrySchema,
 );
 
-export type GitHubMattermostSyncConfig = z.infer<typeof configSchema>;
+export type GitHubOrfChatConfig = z.infer<typeof configSchema>;
 export type GitHubPushPayload = z.infer<typeof githubPushPayloadSchema>;
 export type GitHubIssue = z.infer<typeof githubApiIssueSchema>;
 type GitHubApiCommit = z.infer<typeof githubApiCommitSchema>;
 type GitRemoteHead = { name: string; sha: string };
 type SyncState = z.infer<typeof syncStateSchema>;
-type GitHubMattermostChannelConfig = Pick<
-  GitHubMattermostSyncConfig,
-  "GITHUB_MATTERMOST_CHANNEL_ID" | "MATTERMOST_PUSH_CHANNEL_ID" | "MATTERMOST_CHANNEL_ID"
->;
-type GitHubPushNotificationSource = "webhook" | "api-poll" | "git-poll";
-type GitHubPushNotificationContext = {
-  syncKey: string;
+type GitHubDeliverySource = "webhook" | "api-poll" | "git-poll";
+type GitHubDeliveryEventType = "push" | "issue" | "issues-snapshot";
+type GitHubDeliveryContext = {
+  deliveryKey: string;
+  eventType: GitHubDeliveryEventType;
+  externalId: string;
   repository: string;
-  ref: string;
-  afterSha: string;
-  source: GitHubPushNotificationSource;
+  source: GitHubDeliverySource;
+  subject: string;
 };
-type MattermostPostResult = {
+type OrfChatPostResult = {
   posted: boolean;
   duplicate: boolean;
   channelId: string;
@@ -192,16 +192,12 @@ class GitHubApiError extends Error {
   }
 }
 
-export function readGitHubMattermostSyncConfig(env: NodeJS.ProcessEnv = process.env) {
+export function readGitHubOrfChatConfig(env: NodeJS.ProcessEnv = process.env) {
   return configSchema.parse(env);
 }
 
 function readConfig() {
-  return readGitHubMattermostSyncConfig();
-}
-
-export function resolveGitHubMattermostChannelId(config: GitHubMattermostChannelConfig) {
-  return config.GITHUB_MATTERMOST_CHANNEL_ID || config.MATTERMOST_PUSH_CHANNEL_ID || config.MATTERMOST_CHANNEL_ID;
+  return readGitHubOrfChatConfig();
 }
 
 function shortSha(sha: string | undefined) {
@@ -228,43 +224,97 @@ function stablePushSha(sha: string | undefined) {
   return sha;
 }
 
-export function gitHubPushNotificationSyncKey(input: { repository: string; ref: string; afterSha: string | undefined }) {
+export function gitHubPushDeliveryKey(input: { repository: string; ref: string; afterSha: string | undefined }) {
   return `github-push:${input.repository}:${input.ref}:${stablePushSha(input.afterSha)}`;
 }
 
-function gitHubPushPayloadNotificationContext(payload: GitHubPushPayload): GitHubPushNotificationContext {
+export function gitHubIssueDeliveryKey(input: {
+  action: string;
+  issueNumber: number;
+  occurrence: string | undefined;
+  repository: string;
+}) {
+  return `github-issue:${input.repository}:${input.issueNumber}:${input.action}:${input.occurrence ?? "unknown"}`;
+}
+
+function issueOccurrence(issue: GitHubIssue) {
+  return issue.updated_at || issue.created_at || issue.state || "unknown";
+}
+
+function gitHubPushPayloadDeliveryContext(payload: GitHubPushPayload): GitHubDeliveryContext {
   const ref = refName(payload.ref);
   const afterSha = stablePushSha(payload.after);
 
   return {
-    syncKey: gitHubPushNotificationSyncKey({
+    deliveryKey: gitHubPushDeliveryKey({
       repository: payload.repository.full_name,
       ref,
       afterSha,
     }),
+    eventType: "push",
+    externalId: afterSha,
     repository: payload.repository.full_name,
-    ref,
-    afterSha,
     source: "webhook",
+    subject: ref,
   };
 }
 
-function gitHubPolledPushNotificationContext(input: {
+function gitHubPolledPushDeliveryContext(input: {
   repository: string;
   branch: string;
   afterSha: string;
-  source: Exclude<GitHubPushNotificationSource, "webhook">;
-}): GitHubPushNotificationContext {
+  source: Exclude<GitHubDeliverySource, "webhook">;
+}): GitHubDeliveryContext {
+  const afterSha = stablePushSha(input.afterSha);
   return {
-    syncKey: gitHubPushNotificationSyncKey({
+    deliveryKey: gitHubPushDeliveryKey({
       repository: input.repository,
       ref: input.branch,
       afterSha: input.afterSha,
     }),
+    eventType: "push",
+    externalId: afterSha,
     repository: input.repository,
-    ref: input.branch,
-    afterSha: stablePushSha(input.afterSha),
     source: input.source,
+    subject: input.branch,
+  };
+}
+
+function gitHubIssueWebhookDeliveryContext(payload: z.infer<typeof githubIssuesWebhookPayloadSchema>): GitHubDeliveryContext {
+  const occurrence = issueOccurrence(payload.issue);
+  return {
+    deliveryKey: gitHubIssueDeliveryKey({
+      action: payload.action,
+      issueNumber: payload.issue.number,
+      occurrence,
+      repository: payload.repository.full_name,
+    }),
+    eventType: "issue",
+    externalId: occurrence,
+    repository: payload.repository.full_name,
+    source: "webhook",
+    subject: `#${payload.issue.number}:${payload.action}`,
+  };
+}
+
+function gitHubIssuesSnapshotDeliveryContext(input: {
+  issues: GitHubIssue[];
+  mode: "current" | "new";
+  repository: string;
+}): GitHubDeliveryContext {
+  const snapshotIssueNumbers = issueNumbers(input.issues).join(",");
+  const latestOccurrence = input.issues
+    .map(issueOccurrence)
+    .sort()
+    .at(-1) ?? "empty";
+
+  return {
+    deliveryKey: `github-issues:${input.repository}:${input.mode}:${snapshotIssueNumbers}:${latestOccurrence}`,
+    eventType: "issues-snapshot",
+    externalId: latestOccurrence,
+    repository: input.repository,
+    source: "api-poll",
+    subject: `${input.mode}:${snapshotIssueNumbers || "empty"}`,
   };
 }
 
@@ -356,44 +406,19 @@ export function formatGitHubIssuesMessage(input: { repository: string; issues: G
   return [`#### GitHub issues: [${input.repository}](${repoUrl})`, summary, issueLines.join("\n")].join("\n\n");
 }
 
-function gitHubMattermostIntegrationEnabled(config: GitHubMattermostSyncConfig) {
-  return Boolean(config.GITHUB_SYNC_ENABLED || config.GITHUB_ISSUES_SYNC_ENABLED || config.GITHUB_WEBHOOK_SECRET);
+function gitHubOrfChatIntegrationEnabled(config: GitHubOrfChatConfig) {
+  return Boolean(config.GITHUB_ORF_CHAT_ENABLED || config.GITHUB_SYNC_ENABLED || config.GITHUB_ISSUES_SYNC_ENABLED || config.GITHUB_WEBHOOK_SECRET);
 }
 
-export function assertGitHubMattermostConfig(config: GitHubMattermostSyncConfig) {
-  const targetConfig = githubMattermostChannelPostConfig(config);
-  const missing: string[] = [];
-
-  if (!targetConfig.MATTERMOST_URL) {
-    missing.push("MATTERMOST_URL");
-  }
-
-  if (!targetConfig.MATTERMOST_CHANNEL_ID) {
-    missing.push("GITHUB_MATTERMOST_CHANNEL_ID or MATTERMOST_PUSH_CHANNEL_ID or MATTERMOST_CHANNEL_ID");
-  }
-
-  if (!targetConfig.MATTERMOST_ACCESS_TOKEN && !(targetConfig.MATTERMOST_LOGIN_ID && targetConfig.MATTERMOST_PASSWORD)) {
-    missing.push("GITHUB_MATTERMOST_BOT_TOKEN or MATTERMOST_BOT_TOKEN or GITHUB_MATTERMOST_LOGIN_ID/GITHUB_MATTERMOST_PASSWORD");
-  }
-
-  if (missing.length > 0) {
-    throw new Error(`GitHub Mattermost sync is enabled but required environment is missing: ${missing.join(", ")}`);
-  }
+function webhookConfigured(config: GitHubOrfChatConfig) {
+  return Boolean(gitHubOrfChatIntegrationEnabled(config) && config.GITHUB_WEBHOOK_SECRET);
 }
 
-function hasMattermostConfig(config: GitHubMattermostSyncConfig) {
-  return hasMattermostChannelPostConfig(githubMattermostChannelPostConfig(config));
-}
-
-function webhookConfigured(config: GitHubMattermostSyncConfig) {
-  return Boolean(hasMattermostConfig(config) && config.GITHUB_WEBHOOK_SECRET);
-}
-
-function pollingConfigured(config: GitHubMattermostSyncConfig) {
+function pollingConfigured(config: GitHubOrfChatConfig) {
   return config.GITHUB_SYNC_ENABLED;
 }
 
-function issuePollingConfigured(config: GitHubMattermostSyncConfig) {
+function issuePollingConfigured(config: GitHubOrfChatConfig) {
   return config.GITHUB_ISSUES_SYNC_ENABLED;
 }
 
@@ -422,7 +447,7 @@ function webhookPayloadTooLargeError() {
   return error;
 }
 
-function requireWebhookSignature(config: GitHubMattermostSyncConfig, request: FastifyRequest, reply: FastifyReply) {
+function requireWebhookSignature(config: GitHubOrfChatConfig, request: FastifyRequest, reply: FastifyReply) {
   if (!config.GITHUB_WEBHOOK_SECRET) {
     reply.code(503).send({ error: "GitHub webhook secret is not configured" });
     return false;
@@ -443,188 +468,190 @@ function requireWebhookSignature(config: GitHubMattermostSyncConfig, request: Fa
   return true;
 }
 
-export function resolveGitHubMattermostPostConfig(config: GitHubMattermostSyncConfig): MattermostChannelPostConfig {
-  return {
-    MATTERMOST_URL: config.MATTERMOST_URL,
-    MATTERMOST_ACCESS_TOKEN: config.GITHUB_MATTERMOST_BOT_TOKEN ?? config.MATTERMOST_BOT_TOKEN,
-    MATTERMOST_LOGIN_ID: config.GITHUB_MATTERMOST_LOGIN_ID,
-    MATTERMOST_PASSWORD: config.GITHUB_MATTERMOST_PASSWORD,
-    MATTERMOST_CHANNEL_ID: resolveGitHubMattermostChannelId(config),
-  };
-}
-
-function githubMattermostChannelPostConfig(config: GitHubMattermostSyncConfig): MattermostChannelPostConfig {
-  return resolveGitHubMattermostPostConfig(config);
-}
-
 async function getDbPool() {
   const { pool } = await import("../../db/client");
   return pool;
 }
 
-async function ensureGitHubPushNotificationLedger() {
-  if (!githubPushNotificationLedgerReady) {
-    githubPushNotificationLedgerReady = (async () => {
+async function ensureGitHubDeliveryLedger() {
+  if (!githubDeliveryLedgerReady) {
+    githubDeliveryLedgerReady = (async () => {
       const pool = await getDbPool();
       await pool.query(`
-        create table if not exists ${githubPushNotificationLedgerTableName} (
-          sync_key text primary key,
+        create table if not exists ${githubDeliveryLedgerTableName} (
+          delivery_key text primary key,
           repository text not null,
-          ref_name text not null,
-          after_sha text not null,
-          channel_id text not null,
+          event_type text not null,
+          subject text not null,
+          external_id text not null,
+          channel_id text not null references chat_channels(id) on delete cascade,
           source text not null,
           status text not null default 'reserved',
-          mattermost_post_id text,
+          chat_message_id text references chat_messages(id) on delete set null,
           error text,
           created_at timestamptz not null default now(),
-          updated_at timestamptz not null default now()
+          updated_at timestamptz not null default now(),
+          constraint github_orf_chat_deliveries_status_check check (status in ('reserved', 'delivered', 'failed'))
         )
       `);
       await pool.query(`
-        create index if not exists github_mattermost_push_notifications_repo_ref_idx
-          on ${githubPushNotificationLedgerTableName} (repository, ref_name, created_at desc)
+        create index if not exists github_orf_chat_deliveries_repo_event_idx
+          on ${githubDeliveryLedgerTableName} (repository, event_type, subject, created_at desc)
       `);
     })().catch((error) => {
-      githubPushNotificationLedgerReady = null;
+      githubDeliveryLedgerReady = null;
       throw error;
     });
   }
 
-  await githubPushNotificationLedgerReady;
+  await githubDeliveryLedgerReady;
 }
 
-async function reserveGitHubPushNotification(context: GitHubPushNotificationContext, channelId: string) {
-  await ensureGitHubPushNotificationLedger();
+async function reserveGitHubDelivery(context: GitHubDeliveryContext, channelId: string) {
+  await ensureGitHubDeliveryLedger();
   const pool = await getDbPool();
   const result = await pool.query(
     `
-      insert into ${githubPushNotificationLedgerTableName} (
-        sync_key,
+      insert into ${githubDeliveryLedgerTableName} (
+        delivery_key,
         repository,
-        ref_name,
-        after_sha,
+        event_type,
+        subject,
+        external_id,
         channel_id,
         source,
         status,
         updated_at
       )
       values ($1, $2, $3, $4, $5, $6, 'reserved', now())
-      on conflict (sync_key) do update
+      on conflict (delivery_key) do update
       set channel_id = excluded.channel_id,
           source = excluded.source,
           status = 'reserved',
-          mattermost_post_id = null,
+          chat_message_id = null,
           error = null,
           updated_at = now()
-      where ${githubPushNotificationLedgerTableName}.status = 'failed'
+      where ${githubDeliveryLedgerTableName}.status = 'failed'
          or (
-           ${githubPushNotificationLedgerTableName}.status = 'reserved'
-           and ${githubPushNotificationLedgerTableName}.updated_at < now() - interval '10 minutes'
+           ${githubDeliveryLedgerTableName}.status = 'reserved'
+           and ${githubDeliveryLedgerTableName}.updated_at < now() - interval '10 minutes'
          )
-      returning sync_key
+      returning delivery_key
     `,
-    [context.syncKey, context.repository, context.ref, context.afterSha, channelId, context.source],
+    [context.deliveryKey, context.repository, context.eventType, context.subject, context.externalId, channelId, context.source],
   );
 
   return (result.rowCount ?? 0) > 0;
 }
 
-async function markGitHubPushNotificationPosted(syncKey: string, mattermostPostId: string | undefined) {
+async function markGitHubDeliveryDelivered(deliveryKey: string, chatMessageId: string | undefined) {
   const pool = await getDbPool();
   await pool.query(
     `
-      update ${githubPushNotificationLedgerTableName}
-      set status = 'posted',
-          mattermost_post_id = $2,
+      update ${githubDeliveryLedgerTableName}
+      set status = 'delivered',
+          chat_message_id = $2,
           error = null,
           updated_at = now()
-      where sync_key = $1
+      where delivery_key = $1
     `,
-    [syncKey, mattermostPostId ?? null],
+    [deliveryKey, chatMessageId ?? null],
   );
 }
 
-async function markGitHubPushNotificationFailed(syncKey: string, error: unknown) {
+async function markGitHubDeliveryFailed(deliveryKey: string, error: unknown) {
   const pool = await getDbPool();
   const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
   await pool.query(
     `
-      update ${githubPushNotificationLedgerTableName}
+      update ${githubDeliveryLedgerTableName}
       set status = 'failed',
           error = $2,
           updated_at = now()
-      where sync_key = $1
+      where delivery_key = $1
     `,
-    [syncKey, message.slice(0, 1000)],
+    [deliveryKey, message.slice(0, 1000)],
   );
 }
 
-async function postToMattermost(
-  config: GitHubMattermostSyncConfig,
+async function postToOrfChat(
+  config: GitHubOrfChatConfig,
   message: string,
-  pushNotificationContext?: GitHubPushNotificationContext,
-): Promise<MattermostPostResult> {
-  const targetConfig = githubMattermostChannelPostConfig(config);
-  const channelId = targetConfig.MATTERMOST_CHANNEL_ID;
-  if (!channelId) {
-    throw new Error("GitHub Mattermost target channel is not configured");
-  }
+  deliveryContext?: GitHubDeliveryContext,
+): Promise<OrfChatPostResult> {
+  const target = await resolveGitHubOrfChatTarget(config);
+  const channelId = target.channelId;
 
-  if (pushNotificationContext) {
-    const reserved = await reserveGitHubPushNotification(pushNotificationContext, channelId);
+  if (deliveryContext) {
+    const reserved = await reserveGitHubDelivery(deliveryContext, channelId);
     if (!reserved) {
       return { posted: false, duplicate: true, channelId };
     }
   }
 
-  const client = new MattermostClient(targetConfig);
   try {
-    const sender = await client.getCurrentUser();
-    if (config.GITHUB_MATTERMOST_REQUIRE_BOT && !sender.is_bot) {
-      throw new Error("GitHub Mattermost sync sender must be a bot user");
-    }
-
-    const post = await client.createPost(channelId, message, {
-      props: pushNotificationContext
-        ? {
-            [githubPushNotificationPropsKey]: pushNotificationContext.syncKey,
-            github_sync_type: githubPushNotificationPropsType,
-            github_repository: pushNotificationContext.repository,
-            github_ref: pushNotificationContext.ref,
-            github_after_sha: pushNotificationContext.afterSha,
-            github_source: pushNotificationContext.source,
-          }
-        : undefined,
+    const chatMessageId = await sendOrfChatMessage({
+      actor: target.actor,
+      body: message,
+      channelId,
     });
 
-    if (pushNotificationContext) {
-      const postId = z.object({ id: z.string().optional() }).passthrough().parse(post).id;
-      await markGitHubPushNotificationPosted(pushNotificationContext.syncKey, postId);
+    if (deliveryContext) {
+      await markGitHubDeliveryDelivered(deliveryContext.deliveryKey, chatMessageId);
     }
 
     return { posted: true, duplicate: false, channelId };
   } catch (error) {
-    if (pushNotificationContext) {
-      await markGitHubPushNotificationFailed(pushNotificationContext.syncKey, error).catch(() => undefined);
+    if (deliveryContext) {
+      await markGitHubDeliveryFailed(deliveryContext.deliveryKey, error).catch(() => undefined);
     }
     throw error;
   }
 }
 
-function syncStateKey(config: GitHubMattermostSyncConfig, branch: string) {
+async function resolveGitHubOrfChatTarget(config: GitHubOrfChatConfig) {
+  const scope = await getDefaultRuntimeScope();
+  if (!scope) {
+    throw new Error("GitHub ORF chat integration requires at least one ORF team");
+  }
+
+  const teamId = runtimeScopeStorageId(scope);
+  const actor = await ensureOrfChatBotActor({
+    botEmail: config.GITHUB_ORF_CHAT_BOT_EMAIL,
+    botName: config.GITHUB_ORF_CHAT_BOT_NAME,
+    teamId,
+  });
+
+  if (config.GITHUB_ORF_CHAT_CHANNEL_ID) {
+    await ensureOrfChatChannelMembership({ channelId: config.GITHUB_ORF_CHAT_CHANNEL_ID, teamId, userId: actor.id });
+    return { actor, channelId: config.GITHUB_ORF_CHAT_CHANNEL_ID, teamId };
+  }
+
+  const channel = await ensureOrfChatNamedChannel({
+    actor,
+    displayName: config.GITHUB_ORF_CHAT_CHANNEL_DISPLAY_NAME,
+    header: config.GITHUB_ORF_CHAT_CHANNEL_HEADER,
+    name: config.GITHUB_ORF_CHAT_CHANNEL_NAME,
+    purpose: config.GITHUB_ORF_CHAT_CHANNEL_PURPOSE,
+    teamId,
+    type: config.GITHUB_ORF_CHAT_CHANNEL_TYPE,
+  });
+  return { actor, channelId: channel.channelId, teamId };
+}
+
+function syncStateKey(config: GitHubOrfChatConfig, branch: string) {
   return `${config.GITHUB_REPOSITORY_FULL_NAME}:${branch}`;
 }
 
-function allBranchesStateKey(config: GitHubMattermostSyncConfig) {
+function allBranchesStateKey(config: GitHubOrfChatConfig) {
   return `${config.GITHUB_REPOSITORY_FULL_NAME}:*`;
 }
 
-function openIssuesStateKey(config: GitHubMattermostSyncConfig) {
+function openIssuesStateKey(config: GitHubOrfChatConfig) {
   return `${config.GITHUB_REPOSITORY_FULL_NAME}:issues:open`;
 }
 
-async function readSyncState(config: GitHubMattermostSyncConfig) {
+async function readSyncState(config: GitHubOrfChatConfig) {
   try {
     const raw = await readFile(config.GITHUB_SYNC_STATE_FILE, "utf8");
     return syncStateSchema.parse(JSON.parse(raw));
@@ -633,15 +660,15 @@ async function readSyncState(config: GitHubMattermostSyncConfig) {
   }
 }
 
-async function writeSyncState(config: GitHubMattermostSyncConfig, state: z.infer<typeof syncStateSchema>) {
+async function writeSyncState(config: GitHubOrfChatConfig, state: z.infer<typeof syncStateSchema>) {
   await mkdir(dirname(config.GITHUB_SYNC_STATE_FILE), { recursive: true });
   await writeFile(config.GITHUB_SYNC_STATE_FILE, JSON.stringify(state, null, 2), "utf8");
 }
 
-function githubApiHeaders(config: GitHubMattermostSyncConfig) {
+function githubApiHeaders(config: GitHubOrfChatConfig) {
   const headers: Record<string, string> = {
     accept: "application/vnd.github+json",
-    "user-agent": "ORF GitHub Mattermost Sync",
+    "user-agent": "ORF GitHub ORF chat Sync",
   };
 
   if (config.GITHUB_TOKEN) {
@@ -660,7 +687,7 @@ async function assertGitHubApiOk(response: Response, message: string) {
   throw new GitHubApiError(`${message} with HTTP ${response.status}`, response.status, body);
 }
 
-async function fetchGitHubBranches(config: GitHubMattermostSyncConfig) {
+async function fetchGitHubBranches(config: GitHubOrfChatConfig) {
   const url = new URL(`${config.GITHUB_API_URL}/repos/${config.GITHUB_REPOSITORY_FULL_NAME}/branches`);
   url.searchParams.set("per_page", "100");
 
@@ -670,7 +697,7 @@ async function fetchGitHubBranches(config: GitHubMattermostSyncConfig) {
   return githubApiBranchesSchema.parse(await response.json()).map((branch) => branch.name);
 }
 
-async function fetchLatestGitHubCommits(config: GitHubMattermostSyncConfig, branch: string) {
+async function fetchLatestGitHubCommits(config: GitHubOrfChatConfig, branch: string) {
   const url = new URL(`${config.GITHUB_API_URL}/repos/${config.GITHUB_REPOSITORY_FULL_NAME}/commits`);
   url.searchParams.set("sha", branch);
   url.searchParams.set("per_page", String(config.GITHUB_SYNC_LOOKBACK));
@@ -681,7 +708,7 @@ async function fetchLatestGitHubCommits(config: GitHubMattermostSyncConfig, bran
   return githubApiCommitsSchema.parse(await response.json());
 }
 
-async function fetchOpenGitHubIssues(config: GitHubMattermostSyncConfig) {
+async function fetchOpenGitHubIssues(config: GitHubOrfChatConfig) {
   const url = new URL(`${config.GITHUB_API_URL}/repos/${config.GITHUB_REPOSITORY_FULL_NAME}/issues`);
   url.searchParams.set("state", "open");
   url.searchParams.set("sort", "created");
@@ -702,7 +729,7 @@ function gitCommitUrl(repository: string, sha: string) {
   return `https://github.com/${repository}/commit/${sha}`;
 }
 
-async function runGit(config: GitHubMattermostSyncConfig, args: string[]) {
+async function runGit(config: GitHubOrfChatConfig, args: string[]) {
   const cwd = config.GITHUB_SYNC_GIT_CWD ?? process.cwd();
   const { stdout } = await execFileAsync("git", args, {
     cwd,
@@ -755,21 +782,21 @@ function parseGitLog(stdout: string, repository: string): GitHubApiCommit[] {
     });
 }
 
-async function fetchGitRemoteHeads(config: GitHubMattermostSyncConfig) {
+async function fetchGitRemoteHeads(config: GitHubOrfChatConfig) {
   const stdout = await runGit(config, ["ls-remote", "--heads", config.GITHUB_SYNC_GIT_REMOTE]);
   return parseGitRemoteHeads(stdout);
 }
 
-async function fetchGitRemoteObjects(config: GitHubMattermostSyncConfig) {
+async function fetchGitRemoteObjects(config: GitHubOrfChatConfig) {
   await runGit(config, ["fetch", "--quiet", "--prune", config.GITHUB_SYNC_GIT_REMOTE, "+refs/heads/*:refs/remotes/orf-github-sync/*"]);
 }
 
-async function fetchGitCommit(config: GitHubMattermostSyncConfig, sha: string) {
+async function fetchGitCommit(config: GitHubOrfChatConfig, sha: string) {
   const stdout = await runGit(config, ["show", "-s", `--format=%H%x1f%an%x1f%s%x1e`, sha]);
   return parseGitLog(stdout, config.GITHUB_REPOSITORY_FULL_NAME)[0];
 }
 
-async function fetchGitNewCommits(config: GitHubMattermostSyncConfig, lastSeenSha: string, latestSha: string) {
+async function fetchGitNewCommits(config: GitHubOrfChatConfig, lastSeenSha: string, latestSha: string) {
   try {
     const stdout = await runGit(config, [
       "log",
@@ -786,7 +813,7 @@ async function fetchGitNewCommits(config: GitHubMattermostSyncConfig, lastSeenSh
 
 async function syncGitHubBranchCommits(
   app: FastifyInstance,
-  config: GitHubMattermostSyncConfig,
+  config: GitHubOrfChatConfig,
   state: SyncState,
   branch: string,
   initializeOnly: boolean,
@@ -807,14 +834,14 @@ async function syncGitHubBranchCommits(
       return true;
     }
 
-    const result = await postToMattermost(
+    const result = await postToOrfChat(
       config,
       formatGitHubCommitSyncMessage({
         repository: config.GITHUB_REPOSITORY_FULL_NAME,
         branch,
         commits: [latestCommit],
       }),
-      gitHubPolledPushNotificationContext({
+      gitHubPolledPushDeliveryContext({
         repository: config.GITHUB_REPOSITORY_FULL_NAME,
         branch,
         afterSha: latestCommit.sha,
@@ -823,7 +850,7 @@ async function syncGitHubBranchCommits(
     );
     app.log.info(
       { repository: config.GITHUB_REPOSITORY_FULL_NAME, branch, count: 1, duplicate: result.duplicate },
-      result.duplicate ? "Skipped duplicate GitHub commit notification" : "Synced GitHub commits to Mattermost",
+      result.duplicate ? "Skipped duplicate GitHub commit notification" : "Synced GitHub commits to ORF chat",
     );
     return true;
   }
@@ -838,14 +865,14 @@ async function syncGitHubBranchCommits(
     return false;
   }
 
-  const result = await postToMattermost(
+  const result = await postToOrfChat(
     config,
     formatGitHubCommitSyncMessage({
       repository: config.GITHUB_REPOSITORY_FULL_NAME,
       branch,
       commits: newCommits,
     }),
-    gitHubPolledPushNotificationContext({
+    gitHubPolledPushDeliveryContext({
       repository: config.GITHUB_REPOSITORY_FULL_NAME,
       branch,
       afterSha: latestCommit.sha,
@@ -856,14 +883,14 @@ async function syncGitHubBranchCommits(
   state[key] = { lastSeenSha: latestCommit.sha };
   app.log.info(
     { repository: config.GITHUB_REPOSITORY_FULL_NAME, branch, count: newCommits.length, duplicate: result.duplicate },
-    result.duplicate ? "Skipped duplicate GitHub commit notification" : "Synced GitHub commits to Mattermost",
+    result.duplicate ? "Skipped duplicate GitHub commit notification" : "Synced GitHub commits to ORF chat",
   );
   return true;
 }
 
 async function syncGitBranchCommits(
   app: FastifyInstance,
-  config: GitHubMattermostSyncConfig,
+  config: GitHubOrfChatConfig,
   state: SyncState,
   head: GitRemoteHead,
   initializeOnly: boolean,
@@ -883,14 +910,14 @@ async function syncGitBranchCommits(
       return false;
     }
 
-    const result = await postToMattermost(
+    const result = await postToOrfChat(
       config,
       formatGitHubCommitSyncMessage({
         repository: config.GITHUB_REPOSITORY_FULL_NAME,
         branch: head.name,
         commits: [latestCommit],
       }),
-      gitHubPolledPushNotificationContext({
+      gitHubPolledPushDeliveryContext({
         repository: config.GITHUB_REPOSITORY_FULL_NAME,
         branch: head.name,
         afterSha: head.sha,
@@ -899,7 +926,7 @@ async function syncGitBranchCommits(
     );
     app.log.info(
       { repository: config.GITHUB_REPOSITORY_FULL_NAME, branch: head.name, count: 1, duplicate: result.duplicate },
-      result.duplicate ? "Skipped duplicate GitHub commit notification from git" : "Synced GitHub commits to Mattermost from git",
+      result.duplicate ? "Skipped duplicate GitHub commit notification from git" : "Synced GitHub commits to ORF chat from git",
     );
     return true;
   }
@@ -914,14 +941,14 @@ async function syncGitBranchCommits(
     return true;
   }
 
-  const result = await postToMattermost(
+  const result = await postToOrfChat(
     config,
     formatGitHubCommitSyncMessage({
       repository: config.GITHUB_REPOSITORY_FULL_NAME,
       branch: head.name,
       commits: newCommits,
     }),
-    gitHubPolledPushNotificationContext({
+    gitHubPolledPushDeliveryContext({
       repository: config.GITHUB_REPOSITORY_FULL_NAME,
       branch: head.name,
       afterSha: head.sha,
@@ -932,12 +959,12 @@ async function syncGitBranchCommits(
   state[key] = { lastSeenSha: head.sha };
   app.log.info(
     { repository: config.GITHUB_REPOSITORY_FULL_NAME, branch: head.name, count: newCommits.length, duplicate: result.duplicate },
-    result.duplicate ? "Skipped duplicate GitHub commit notification from git" : "Synced GitHub commits to Mattermost from git",
+    result.duplicate ? "Skipped duplicate GitHub commit notification from git" : "Synced GitHub commits to ORF chat from git",
   );
   return true;
 }
 
-async function syncGitHubCommitsViaApi(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
+async function syncGitHubCommitsViaApi(app: FastifyInstance, config: GitHubOrfChatConfig) {
   const branches = await fetchGitHubBranches(config);
   const state = await readSyncState(config);
   const allBranchesKey = allBranchesStateKey(config);
@@ -958,7 +985,7 @@ async function syncGitHubCommitsViaApi(app: FastifyInstance, config: GitHubMatte
   }
 }
 
-async function syncGitHubCommitsFromGit(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
+async function syncGitHubCommitsFromGit(app: FastifyInstance, config: GitHubOrfChatConfig) {
   const heads = await fetchGitRemoteHeads(config);
   await fetchGitRemoteObjects(config);
 
@@ -981,7 +1008,7 @@ async function syncGitHubCommitsFromGit(app: FastifyInstance, config: GitHubMatt
   }
 }
 
-async function syncGitHubCommits(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
+async function syncGitHubCommits(app: FastifyInstance, config: GitHubOrfChatConfig) {
   try {
     await syncGitHubCommitsViaApi(app, config);
   } catch (error) {
@@ -1013,7 +1040,7 @@ function sameIssueNumbers(left: number[] | undefined, right: number[]) {
   return left.every((value, index) => value === right[index]);
 }
 
-async function syncGitHubIssues(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
+async function syncGitHubIssues(app: FastifyInstance, config: GitHubOrfChatConfig) {
   const openIssues = await fetchOpenGitHubIssues(config);
   const state = await readSyncState(config);
   const key = openIssuesStateKey(config);
@@ -1023,15 +1050,23 @@ async function syncGitHubIssues(app: FastifyInstance, config: GitHubMattermostSy
 
   if (!entry.issueInitialized) {
     if (openIssues.length > 0) {
-      await postToMattermost(
+      const result = await postToOrfChat(
         config,
         formatGitHubIssuesMessage({
           repository: config.GITHUB_REPOSITORY_FULL_NAME,
           issues: openIssues,
           mode: "current",
         }),
+        gitHubIssuesSnapshotDeliveryContext({
+          repository: config.GITHUB_REPOSITORY_FULL_NAME,
+          issues: openIssues,
+          mode: "current",
+        }),
       );
-      app.log.info({ repository: config.GITHUB_REPOSITORY_FULL_NAME, count: openIssues.length }, "Synced current GitHub issues to Mattermost");
+      app.log.info(
+        { repository: config.GITHUB_REPOSITORY_FULL_NAME, count: openIssues.length, duplicate: result.duplicate },
+        result.duplicate ? "Skipped duplicate current GitHub issues notification" : "Synced current GitHub issues to ORF chat",
+      );
     }
 
     state[key] = { ...entry, openIssueNumbers: openNumbers, issueInitialized: true };
@@ -1041,15 +1076,23 @@ async function syncGitHubIssues(app: FastifyInstance, config: GitHubMattermostSy
 
   const newlyOpenIssues = openIssues.filter((issue) => !previousNumbers.has(issue.number));
   if (newlyOpenIssues.length > 0) {
-    await postToMattermost(
+    const result = await postToOrfChat(
       config,
       formatGitHubIssuesMessage({
         repository: config.GITHUB_REPOSITORY_FULL_NAME,
         issues: newlyOpenIssues,
         mode: "new",
       }),
+      gitHubIssuesSnapshotDeliveryContext({
+        repository: config.GITHUB_REPOSITORY_FULL_NAME,
+        issues: newlyOpenIssues,
+        mode: "new",
+      }),
     );
-    app.log.info({ repository: config.GITHUB_REPOSITORY_FULL_NAME, count: newlyOpenIssues.length }, "Synced new GitHub issues to Mattermost");
+    app.log.info(
+      { repository: config.GITHUB_REPOSITORY_FULL_NAME, count: newlyOpenIssues.length, duplicate: result.duplicate },
+      result.duplicate ? "Skipped duplicate new GitHub issues notification" : "Synced new GitHub issues to ORF chat",
+    );
   }
 
   if (newlyOpenIssues.length > 0 || !sameIssueNumbers(entry.openIssueNumbers, openNumbers)) {
@@ -1058,33 +1101,12 @@ async function syncGitHubIssues(app: FastifyInstance, config: GitHubMattermostSy
   }
 }
 
-async function assertGitHubMattermostSenderReady(config: GitHubMattermostSyncConfig) {
-  assertGitHubMattermostConfig(config);
-
-  const targetConfig = githubMattermostChannelPostConfig(config);
-  const channelId = targetConfig.MATTERMOST_CHANNEL_ID;
-  if (!channelId) {
-    throw new Error("GitHub Mattermost target channel is not configured");
-  }
-
-  const client = new MattermostClient(targetConfig);
-  const sender = await client.getCurrentUser();
-  if (config.GITHUB_MATTERMOST_REQUIRE_BOT && !sender.is_bot) {
-    throw new Error("GitHub Mattermost sync sender must be a bot user");
-  }
-
-  await client.getMyChannelMember(channelId);
-
-  return sender;
-}
-
-function startGitHubPolling(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
+function startGitHubPolling(app: FastifyInstance, config: GitHubOrfChatConfig) {
   if (!pollingConfigured(config)) {
     app.log.info(
       {
         enabled: config.GITHUB_SYNC_ENABLED,
         repository: config.GITHUB_REPOSITORY_FULL_NAME,
-        mattermostConfigured: hasMattermostConfig(config),
       },
       "GitHub push sync disabled",
     );
@@ -1119,31 +1141,35 @@ function startGitHubPolling(app: FastifyInstance, config: GitHubMattermostSyncCo
   });
 }
 
-function registerGitHubMattermostStartupValidation(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
+function registerGitHubOrfChatStartupValidation(app: FastifyInstance, config: GitHubOrfChatConfig) {
   if (!pollingConfigured(config) && !issuePollingConfigured(config)) {
     return;
   }
 
   app.addHook("onReady", async () => {
-    const sender = await assertGitHubMattermostSenderReady(config);
-    app.log.info(
-      {
-        repository: config.GITHUB_REPOSITORY_FULL_NAME,
-        sender: sender.username ?? sender.id,
-        channelId: resolveGitHubMattermostChannelId(config),
-      },
-      "GitHub Mattermost sender config verified",
-    );
+    void resolveGitHubOrfChatTarget(config)
+      .then((target) => {
+        app.log.info(
+          {
+            channelId: target.channelId,
+            repository: config.GITHUB_REPOSITORY_FULL_NAME,
+            sender: target.actor.name,
+          },
+          "GitHub ORF chat target ready",
+        );
+      })
+      .catch((error) => {
+        app.log.error(error, "GitHub ORF chat target validation failed");
+      });
   });
 }
 
-function startGitHubIssuesPolling(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
+function startGitHubIssuesPolling(app: FastifyInstance, config: GitHubOrfChatConfig) {
   if (!issuePollingConfigured(config)) {
     app.log.info(
       {
         enabled: config.GITHUB_ISSUES_SYNC_ENABLED,
         repository: config.GITHUB_REPOSITORY_FULL_NAME,
-        mattermostConfigured: hasMattermostConfig(config),
       },
       "GitHub issues sync disabled",
     );
@@ -1178,7 +1204,7 @@ function startGitHubIssuesPolling(app: FastifyInstance, config: GitHubMattermost
   });
 }
 
-function registerOptionalWebhook(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
+function registerOptionalWebhook(app: FastifyInstance, config: GitHubOrfChatConfig) {
   if (!webhookConfigured(config)) {
     return;
   }
@@ -1192,7 +1218,7 @@ function registerOptionalWebhook(app: FastifyInstance, config: GitHubMattermostS
     }
 
     const contentLength = Number(getHeaderValue(request.headers["content-length"]));
-    if (Number.isFinite(contentLength) && contentLength > githubWebhookMaxBodyBytes) {
+    if (Number.isFinite(contentLength) && contentLength > config.GITHUB_ORF_CHAT_WEBHOOK_MAX_BODY_BYTES) {
       throw webhookPayloadTooLargeError();
     }
 
@@ -1201,7 +1227,7 @@ function registerOptionalWebhook(app: FastifyInstance, config: GitHubMattermostS
     for await (const chunk of payload) {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       totalBytes += buffer.length;
-      if (totalBytes > githubWebhookMaxBodyBytes) {
+      if (totalBytes > config.GITHUB_ORF_CHAT_WEBHOOK_MAX_BODY_BYTES) {
         throw webhookPayloadTooLargeError();
       }
       chunks.push(buffer);
@@ -1231,7 +1257,7 @@ function registerOptionalWebhook(app: FastifyInstance, config: GitHubMattermostS
       return reply.code(202).send({ ok: true, ignored: true, repository: payload.repository.full_name });
     }
 
-    const result = await postToMattermost(config, formatGitHubPushMessage(payload), gitHubPushPayloadNotificationContext(payload));
+    const result = await postToOrfChat(config, formatGitHubPushMessage(payload), gitHubPushPayloadDeliveryContext(payload));
     return { ok: true, channelId: result.channelId, duplicate: result.duplicate };
   });
 
@@ -1258,25 +1284,27 @@ function registerOptionalWebhook(app: FastifyInstance, config: GitHubMattermostS
       return { ok: true, ignored: true, action: payload.action };
     }
 
-    const result = await postToMattermost(
+    const result = await postToOrfChat(
       config,
       formatGitHubIssuesMessage({
         repository: payload.repository.full_name,
         issues: [payload.issue],
         mode: "new",
       }),
+      gitHubIssueWebhookDeliveryContext(payload),
     );
-    return { ok: true, channelId: result.channelId };
+    return { ok: true, channelId: result.channelId, duplicate: result.duplicate };
   });
 }
 
-export function registerGitHubMattermostSync(app: FastifyInstance) {
+export function registerGitHubOrfChatSync(app: FastifyInstance) {
   const config = readConfig();
-  if (gitHubMattermostIntegrationEnabled(config)) {
-    assertGitHubMattermostConfig(config);
+  if (!gitHubOrfChatIntegrationEnabled(config)) {
+    app.log.info({ enabled: false, repository: config.GITHUB_REPOSITORY_FULL_NAME }, "GitHub ORF chat integration disabled");
+    return;
   }
   registerOptionalWebhook(app, config);
-  registerGitHubMattermostStartupValidation(app, config);
+  registerGitHubOrfChatStartupValidation(app, config);
   startGitHubPolling(app, config);
   startGitHubIssuesPolling(app, config);
 }

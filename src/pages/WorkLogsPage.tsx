@@ -131,6 +131,7 @@ export function WorkLogsPage() {
     dismissSystemBroadcast,
     notify,
     readModelInvalidations,
+    refreshWorkLogReminderState,
     systemBroadcasts,
   } = useOrf();
   const [selectedDate, setSelectedDate] = useState(() =>
@@ -367,6 +368,7 @@ export function WorkLogsPage() {
       setClassificationSuggestion(null);
       void loadActivity(activityExpanded);
       void loadReport(reportMonth, reportScope);
+      void refreshWorkLogReminderState().catch(() => undefined);
       systemBroadcasts
         .filter(
           (broadcast) => broadcast.notificationKind === "worklog.reminder",
@@ -397,6 +399,7 @@ export function WorkLogsPage() {
       }
       void loadActivity(activityExpanded);
       void loadReport(reportMonth, reportScope);
+      void refreshWorkLogReminderState().catch(() => undefined);
       notify("工作日志已删除");
     } catch (deleteError) {
       setError(
@@ -1073,18 +1076,20 @@ function WorkLogHistoryList({
                         剩 {entry.remainingEstimatePercent}%
                       </span>
                     )}
-                  <button
+                  <Button
                     type="button"
-                    className="work-logs-history-edit"
+                    size="sm"
+                    variant="secondary"
                     aria-label={`编辑日志：${workLogEntryTargetLabel(entry)}`}
                     onClick={() => onEdit(entry)}
                   >
                     <PencilLine className="h-4 w-4" />
                     编辑
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    className="work-logs-history-delete"
+                    size="sm"
+                    variant="danger"
                     aria-label={`删除日志：${workLogEntryTargetLabel(entry)}`}
                     disabled={deletingEntryId === entry.id}
                     onClick={() => onDelete(entry)}
@@ -1095,7 +1100,7 @@ function WorkLogHistoryList({
                       <Trash2 className="h-4 w-4" />
                     )}
                     删除
-                  </button>
+                  </Button>
                 </div>
               </div>
               <WorkLogMarkdown body={entry.bodyMarkdown} />

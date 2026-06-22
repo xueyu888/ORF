@@ -9,8 +9,9 @@ deployment mechanics outside ORF business modules.
 - 199.199.199.108 is prepared as a parallel target.
 - Final cutover requires a short write freeze, final database restore, object
   storage sync, Ory verification, and gateway health checks.
-- Mattermost keeps `8065` for web access. Its Calls port was moved away from
-  `8443`, so ORF can own the stable web entry.
+- ORF owns the stable web entry. External engineering activity is delivered
+  into ORF native chat through the backend integrations, not through a separate
+  chat runtime.
 
 ## Ports
 

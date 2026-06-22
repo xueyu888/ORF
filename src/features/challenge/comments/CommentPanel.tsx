@@ -4,15 +4,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { Link } from "react-router-dom";
 import { ImagePreviewDialog, type ImagePreview } from "../../../components/ImagePreviewDialog";
+import { IconButton } from "../../../components/ui";
 import { UserAvatar } from "../../../components/UserAvatar";
 import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
 import type { CommentAttachment, CommentMessage, CommentTargetType, CommentThread, OrfUser } from "../../../types/orf";
-import { OrfRichTextEditor, orfRichTextHasMeaningfulContent, type OrfRichTextAttachmentUploadResult } from "../../rich-text/OrfRichTextEditor";
+import { OrfRichTextDraftEditor } from "../../rich-text/OrfRichTextDraftEditor";
 import {
-  orfAttachmentMarkdown,
   type OrfAttachmentReference,
   type OrfMentionReference,
 } from "../../rich-text/orfRichTextMarkdown";
+import {
+  type OrfRichTextDraft,
+  createEmptyOrfRichTextDraft,
+  orfRichTextDraftFromStoredMarkdown,
+  orfRichTextDraftHasMeaningfulContent,
+  serializeOrfRichTextDraft,
+} from "../../rich-text/orfRichTextDraft";
+import type { OrfRichTextAttachmentUploadResult } from "../../rich-text/OrfRichTextEditor";
 import { OrfRichTextMarkdownViewer } from "../../rich-text/OrfRichTextMarkdownViewer";
 import { formatFileSize } from "../../../utils/fileSize";
 import { commentTimeDisplay } from "./commentTime";
@@ -29,9 +37,7 @@ type CommentEntry = {
 
 export type CommentMentionUser = Pick<OrfUser, "avatarUrl" | "email" | "id" | "name" | "role" | "status">;
 
-export type CommentDraft = {
-  body: string;
-};
+export type CommentDraft = OrfRichTextDraft;
 
 export type CommentDraftMode =
   | { type: "default" }
@@ -184,7 +190,7 @@ export function CommentPanel({
   const handleEdit = (threadId: string, message: CommentMessage) => {
     setSelectedMessageId(message.id);
     resetDraft();
-    setEditState({ draft: commentDraftFromStoredBody(message.body), messageId: message.id, threadId });
+    setEditState({ draft: commentDraftFromStoredBody(message.body, mentionUsersById), messageId: message.id, threadId });
   };
 
   const handleDelete = (threadId: string, messageId: string) => {
@@ -227,17 +233,13 @@ export function CommentPanel({
         <div className="orf-comment-box">
           <div className="orf-comment-panel-header orf-drag-handle" {...panelDrag.handleProps}>
             <div className="orf-comment-context-title" title={targetTitle}>{targetTitle}</div>
-            <button type="button" className="orf-comment-icon-button" aria-label="关闭评论窗口" title="关闭" onClick={onClose}>
-              <X className="h-4 w-4" />
-            </button>
+            <IconButton icon={X} label="关闭评论窗口" size="sm" type="button" onClick={onClose} />
           </div>
           <div className="orf-comment-view">
             {activeRootEntry ? (
               <div className="orf-comment-reply-detail-view">
                 <div className="orf-comment-detail-header">
-                  <button type="button" className="orf-comment-icon-button" aria-label="返回外层评论列表" title="返回" onClick={() => { setActiveRootMessageId(null); resetDraft(); }}>
-                    <ArrowLeft className="h-4 w-4" />
-                  </button>
+                  <IconButton icon={ArrowLeft} label="返回外层评论列表" size="sm" type="button" onClick={() => { setActiveRootMessageId(null); resetDraft(); }} />
                   <span>回复详情</span>
                 </div>
                 <div className="orf-comment-fixed-root">
@@ -399,17 +401,11 @@ function CommentMessageRow({
           <span className="orf-comment-author-name">{message.author}</span>
           <div className="orf-comment-meta">
             <time dateTime={createdTime.dateTime} title={createdTime.title}>{createdTime.label}</time>
-            <button type="button" className="orf-comment-icon-button" aria-label="回复评论" title="回复" onClick={(event) => { event.stopPropagation(); onReply(message); }}>
-              <Reply className="h-3.5 w-3.5" />
-            </button>
+            <IconButton icon={Reply} label="回复评论" size="sm" type="button" onClick={(event) => { event.stopPropagation(); onReply(message); }} />
             {canManageMessage && (
               <>
-                <button type="button" className="orf-comment-icon-button orf-comment-icon-button-danger" aria-label="删除评论" title="删除" onClick={(event) => { event.stopPropagation(); deleteMessage(); }}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-                <button type="button" className="orf-comment-icon-button" aria-label="编辑评论" title="编辑" onClick={(event) => { event.stopPropagation(); onEdit(threadId, message); }}>
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
+                <IconButton icon={Trash2} label="删除评论" size="sm" type="button" variant="danger" onClick={(event) => { event.stopPropagation(); deleteMessage(); }} />
+                <IconButton icon={Pencil} label="编辑评论" size="sm" type="button" onClick={(event) => { event.stopPropagation(); onEdit(threadId, message); }} />
               </>
             )}
           </div>
@@ -469,7 +465,7 @@ export function CommentBodyText({
     const attachment = reference.kind === "attached" ? attachmentsById.get(reference.attachmentId) : undefined;
     const alt = reference.alt;
     if (!attachment) {
-      return <span key={key}>{orfAttachmentMarkdown(reference)}</span>;
+      return <span key={key} className="orf-comment-attachment-missing">附件不可用：{alt}</span>;
     }
 
     return attachment.previewKind === "image" ? (
@@ -580,15 +576,15 @@ function CommentFileAttachmentCard({ attachment }: { attachment: CommentAttachme
 }
 
 export function emptyCommentDraft(): CommentDraft {
-  return { body: "" };
+  return createEmptyOrfRichTextDraft();
 }
 
-export function commentDraftFromStoredBody(body: string): CommentDraft {
-  return { body };
+export function commentDraftFromStoredBody(body: string, usersById?: ReadonlyMap<string, { name: string }>): CommentDraft {
+  return orfRichTextDraftFromStoredMarkdown(body, { usersById });
 }
 
 export function serializeCommentDraft(draft: CommentDraft) {
-  return draft.body;
+  return serializeOrfRichTextDraft(draft);
 }
 
 export function CommentDraftFields({
@@ -623,7 +619,7 @@ export function CommentDraftFields({
   const fieldRef = useRef<HTMLDivElement | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadError, setUploadError] = useState("");
-  const markdownValue = serializeCommentDraft(draft);
+  const draftHasContent = orfRichTextDraftHasMeaningfulContent(draft);
   const submitDraftFromEditor = () => {
     if (uploadingImage) return;
     fieldRef.current?.closest("form")?.requestSubmit();
@@ -631,39 +627,37 @@ export function CommentDraftFields({
 
   return (
     <div ref={fieldRef} className="orf-comment-rich-text-field">
-      <OrfRichTextEditor
+      <OrfRichTextDraftEditor
         autoFocus={autoFocus}
         currentUserId={currentUserId}
+        draft={draft}
         idleHint={uploadError || (idleHint ?? "Enter 发送，Shift + Enter 换行")}
         mentionableUsers={mentionableUsers}
         onBusyChange={setUploadingImage}
-        onChange={(markdown) => {
+        onDraftChange={(nextDraft) => {
           setUploadError("");
-          onDraftChange({ body: markdown });
+          onDraftChange(nextDraft);
         }}
         onErrorChange={setUploadError}
         onSubmitRequest={submitDraftFromEditor}
         onUploadAttachment={onUploadAttachment}
         placeholder={placeholder}
         submitOnEnter={submitOnEnter}
-        value={markdownValue}
         footer={
           <>
         {onCancel && (
-          <button type="button" className="orf-comment-icon-button" aria-label={cancelLabel} title={cancelLabel} onClick={onCancel}>
-            <X className="h-4 w-4" />
-          </button>
+          <IconButton icon={X} label={cancelLabel} size="sm" type="button" onClick={onCancel} />
         )}
         {showSubmitButton && (
-          <button
-            type="submit"
+          <IconButton
             className="orf-comment-send-button"
-            disabled={!orfRichTextHasMeaningfulContent(markdownValue) || uploadingImage}
-            aria-label={submitLabel}
-            title={submitLabel}
-          >
-            <Send className="h-4 w-4" />
-          </button>
+            type="submit"
+            icon={Send}
+            label={submitLabel}
+            size="sm"
+            variant="primary"
+            disabled={!draftHasContent || uploadingImage}
+          />
         )}
           </>
         }

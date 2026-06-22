@@ -29,12 +29,28 @@
 
 `remaining_estimate_percent` 和 `duration_minutes` 都只属于日志事实。前者不反向写入 `Objective.progress`，后者不参与强制工时核算；二者都不改变目标进度、验收、积分或结算。
 
+`work_log_reminder_states` 是工作日志欠账提醒状态事实源。它不记录日志是否完成，只记录某个用户当前欠账窗口、缺失日期、提醒状态和下一次可提醒时间：
+
+| 字段 | 含义 |
+| --- | --- |
+| `team_id` / `user_id` | 提醒状态归属，按团队和用户唯一 |
+| `status` | `active` 表示当前还有缺失日志；`resolved` 表示当前窗口已补齐或用户不再符合提醒条件 |
+| `window_start_date` / `window_end_date` | 本次欠账计算窗口 |
+| `required_dates` | 当前窗口内应填写日志的日期；当前基础设施暂按自然日计算，正式启用前必须改接团队日期覆盖和工作日志应填成员模型 |
+| `missing_dates` | 从 `work_log_entries` 派生出的缺失日期 |
+| `last_reminded_at` / `next_remind_at` | 最近一次弹窗提醒时间和下一次允许弹窗时间 |
+| `snooze_count` | 用户暂缓次数 |
+| `notification_event_id` | 单条系统通知入口回链；不作为欠账关闭事实源 |
+| `resolved_at` | 当前欠账状态解决时间 |
+
 ## API
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/work-logs/objectives` | 当前用户可填写日志的目标；管理员额外返回分类和智能分类开关 |
 | `POST` | `/api/work-logs/classification-suggestion` | 管理员根据正文获取一次智能分类建议 |
+| `GET` | `/api/work-logs/reminder-state` | 当前用户工作日志欠账提醒状态；`ORF_WORK_LOG_REMINDER_ENABLED=false` 时返回不提醒状态 |
+| `POST` | `/api/work-logs/reminder-state/snooze` | 当前用户将强提醒暂缓到 10 分钟后；提醒关闭时不产生提醒 |
 | `GET` | `/api/work-logs/my-day?date=YYYY-MM-DD` | 当前用户某天已提交日志 |
 | `POST` | `/api/work-logs/my-day/:date` | 当前用户给某天追加一条日志 |
 | `PATCH` | `/api/work-logs/entries/:entryId` | 当前用户修改自己的一条历史日志 |
@@ -163,10 +179,20 @@
 
 ## 提醒
 
-后端启动 `workLogReminderScheduler`，默认在 `Asia/Shanghai` 每天 `17:20` 检查：
+工作日志欠账提醒基础设施已经落地，但 `ORF_WORK_LOG_REMINDER_ENABLED` 默认关闭。正式启用前必须补齐两个事实源：
 
-- 当前团队 active 指挥官/管理员、当前临时 FAE 例外成员，或至少有一个可填写目标的 active 普通成员。
-- 用户当天尚未写日志。
-- 当天尚未收到过 `worklog.reminder` 通知。
+- 团队日期覆盖：默认周一到周五应填，节假日可覆盖为不应填，调休工作日可覆盖为应填。
+- 工作日志应填成员：注册用户或 `team_members` 成员不等于必须填写工作日志，提醒对象必须来自独立设置。
 
-满足条件时写入通知中心，并通过 SSE 向这些用户发送 `workLogReminder` sticky 横幅。提醒不创建日志、不改变目标、不影响进度、验收或积分。
+请假不是豁免日期；请假也应该通过 `work_log_entries` 记录成当天日志事实，便于以后回看。
+
+启用后，后端启动 `workLogReminderScheduler`，默认每分钟 reconcile 欠账提醒状态：
+
+- 当前团队 active 指挥官/管理员、当前临时 FAE 例外成员，或至少有一个可填写目标的 active 普通成员，才进入提醒计算；这是临时基础设施规则，正式启用前应替换为独立的工作日志应填成员设置。
+- `work_log_entries` 是日志是否补齐的唯一事实源；`work_log_reminder_states.missing_dates` 只能由它派生。
+- 当前基础设施 `required_dates` 使用最近 7 个自然日；当天只有到达 `Asia/Shanghai` 17:20 后才进入窗口。正式启用前应替换为“最近 7 个应填日期”。
+- 强提醒只在 17:20 到 24:00 前弹出；`next_remind_at <= now` 时通过 SSE 发送 `worklog.reminder.required`。
+- 用户点击“10 分钟后提醒”或关闭弹窗，只更新 `work_log_reminder_states.next_remind_at`，不创建新的通知事件。
+- 用户补齐缺失日期后，后端将状态更新为 `resolved`，通过 SSE 发送 `worklog.reminder.resolved`，前端弹窗自动关闭。
+
+系统通知中心只保留 `worklog.reminder` 作为单条入口。它记录“系统曾提醒你存在工作日志欠账”，不承载当前是否还需要继续弹窗；当前弹窗闭环只看 `work_log_reminder_states`。提醒不创建日志、不改变目标、不影响进度、验收或积分。

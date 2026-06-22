@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { canShowFrontend } from "../config/frontendVisibility";
 import { canApplyForObjectiveChallenge } from "../domain/orfLifecycle";
-import { BountyEmptyState } from "../features/bounty-hall/BountyHallSkin";
+import { BountyButton, BountyEmptyState } from "../features/bounty-hall/BountyHallSkin";
 import { BountyHallTabs } from "../features/bounty-hall/components/BountyHallTabs";
 import { BountyObjectiveList } from "../features/bounty-hall/components/BountyObjectiveList";
 import { BountyOverview } from "../features/bounty-hall/components/BountyOverview";
@@ -240,9 +240,9 @@ export function BountyHallPage() {
             悬赏目标 <span>{filteredHallItems.length}</span> 条
           </div>
           {hasFilters && (
-            <button className="bounty-clear-button" onClick={clearFilters}>
+            <BountyButton onClick={clearFilters} size="sm" variant="secondary">
               清空筛选
-            </button>
+            </BountyButton>
           )}
         </div>
 

@@ -47,7 +47,7 @@
 
 ## Secret Hygiene
 
-`.env.example` 只保留结构化示例和占位符，不提交真实数据库、Mattermost、GitHub、SMTP 或其他第三方凭据。真实环境变量写入本地 `.env` 或部署平台的密钥管理系统，`.env` 必须保持未跟踪状态。
+`.env.example` 只保留结构化示例和占位符，不提交真实数据库、GitHub、GitLab、SMTP 或其他第三方凭据。真实环境变量写入本地 `.env` 或部署平台的密钥管理系统，`.env` 必须保持未跟踪状态。
 
 成员本机接入共享 Ory / MinIO 时，使用根目录的 `orf-ory-minio-connect-*.tar.gz` 包里提供的安装脚本，把 `ORY_PUBLIC_URL`、`OBJECT_STORAGE_*` 和 `ORF_PUBLIC_CA_CERT` 统一写入 `.env`；不要手工猜 MinIO secret。
 

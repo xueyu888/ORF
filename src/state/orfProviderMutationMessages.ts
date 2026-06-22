@@ -24,6 +24,14 @@ export function userMutationFailureMessage(error: unknown, fallback: string) {
         return "已存在同名成员";
       }
 
+      if (error.message === "User already exists") {
+        return "已存在同邮箱成员，请直接编辑已有成员";
+      }
+
+      if (error.message === "User is not disabled") {
+        return "该用户当前不是停用状态";
+      }
+
       if (error.message === "User is referenced by ORF records") {
         return "该成员已被 ORF 业务记录引用，不能删除，请改为停用";
       }

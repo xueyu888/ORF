@@ -10,7 +10,7 @@ import {
 import { uncertaintyLevelOptions, uncertaintyScores } from "../domain/orfSettlement";
 import { useOrf } from "../state/OrfProvider";
 import type { UncertaintyLevel } from "../types/orf";
-import { Button, Field } from "./ui";
+import { Button, Field, IconButton } from "./ui";
 
 function ModalFrame({ title, children, size = "md" }: { title: string; children: ReactNode; size?: "md" | "lg" }) {
   const { closeModal } = useOrf();
@@ -32,9 +32,7 @@ function ModalFrame({ title, children, size = "md" }: { title: string; children:
       >
         <div className="orf-drag-handle flex items-center justify-between border-b orf-border px-6 py-4" {...drag.handleProps}>
           <div className="orf-text-primary text-base font-semibold">{title}</div>
-          <button aria-label="关闭" onClick={closeModal} className="orf-control orf-ghost-action inline-flex h-8 w-8 items-center justify-center">
-            <X className="h-4 w-4" />
-          </button>
+          <IconButton icon={X} label="关闭" onClick={closeModal} size="sm" />
         </div>
         <div className="min-h-0 overflow-y-auto p-6">{children}</div>
       </div>
