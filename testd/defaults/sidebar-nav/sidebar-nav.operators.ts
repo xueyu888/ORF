@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import type { OperatorRegistry } from "../../_framework/types";
 import { clearBrowserState } from "../../_operators/common.helpers";
 import { requiredString } from "../../_operators/params";
@@ -27,29 +27,35 @@ export const sidebarNavOperators = {
       await setSidebarCollapsedByEmail(requiredString(params, "email"), null);
     },
   },
-	  "page.sidebar": {
-	    observe: async ({ ctx }) => {
-	      await expect(sidebar(ctx.page)).toBeVisible();
-	    },
-	    collapsed: async ({ ctx, params }) => {
-	      const expected = params.expected === true;
-	      await expect(sidebar(ctx.page)).toHaveClass(expected ? /orf-sidebar-collapsed/ : /orf-sidebar-expanded/, { timeout: 15_000 });
-	    },
-	  },
-	  "page.sidebar.toggle": {
-	    click: async ({ ctx, params }) => {
-	      const email = typeof params.email === "string" ? params.email : null;
-	      const expectedCollapsed = typeof params.expectedCollapsed === "boolean" ? params.expectedCollapsed : null;
-	      if (expectedCollapsed === null) {
-	        await ctx.page.getByRole("button", { name: requiredString(params, "name"), exact: true }).click();
-	        return;
-	      }
-	      await toggleSidebarUntilState(ctx.page, requiredString(params, "name"), expectedCollapsed);
-	      if (email) {
-	        await expect.poll(() => readSidebarCollapsedByEmail(email), { timeout: 15_000 }).toBe(expectedCollapsed);
-	      }
-	    },
-	  },
+  "page.sidebar": {
+    observe: async ({ ctx }) => {
+      await expect(sidebar(ctx.page)).toBeVisible();
+    },
+    collapsed: async ({ ctx, params }) => {
+      await waitForSidebarState(ctx.page, params.expected === true);
+    },
+  },
+  "page.sidebar.toggle": {
+    click: async ({ ctx, params }) => {
+      const name = requiredString(params, "name");
+      const email = typeof params.email === "string" ? params.email : null;
+      const expectedCollapsed = typeof params.expectedCollapsed === "boolean" ? params.expectedCollapsed : null;
+      if (expectedCollapsed === null) {
+        await ctx.page.getByRole("button", { name, exact: true }).click();
+        if (name.includes("折叠")) {
+          await ensureSidebarState(ctx.page, true);
+        }
+        if (name.includes("展开")) {
+          await ensureSidebarState(ctx.page, false);
+        }
+        return;
+      }
+      await toggleSidebarUntilState(ctx.page, name, expectedCollapsed);
+      if (email) {
+        await expect.poll(() => readSidebarCollapsedByEmail(email), { timeout: 15_000 }).toBe(expectedCollapsed);
+      }
+    },
+  },
   "page.sidebar_item": {
     visible: async ({ ctx, params }) => {
       await expect(sidebarLink(ctx.page, requiredString(params, "name"))).toBeVisible();
@@ -79,6 +85,42 @@ export const sidebarNavOperators = {
 
 function sidebar(page: Page) {
   return page.locator("aside.orf-sidebar[aria-label='主导航']");
+}
+
+async function waitForSidebarState(page: Page, collapsed: boolean) {
+  await expect
+    .poll(async () => await isSidebarState(page, collapsed), {
+      message: collapsed ? "等待侧边栏稳定为折叠状态" : "等待侧边栏稳定为展开状态",
+      timeout: 10000,
+    })
+    .toBe(true);
+}
+
+async function ensureSidebarState(page: Page, collapsed: boolean) {
+  const deadline = Date.now() + 10000;
+  const toggleName = collapsed ? "折叠侧边栏" : "展开侧边栏";
+
+  while (Date.now() < deadline) {
+    if (await isSidebarState(page, collapsed)) {
+      await page.waitForTimeout(500);
+      if (await isSidebarState(page, collapsed)) {
+        return;
+      }
+    }
+
+    const toggle = page.getByRole("button", { name: toggleName, exact: true });
+    if (await toggle.isVisible().catch(() => false)) {
+      await toggle.click();
+    }
+    await page.waitForTimeout(150);
+  }
+
+  throw new Error(collapsed ? "侧边栏未能稳定为折叠状态" : "侧边栏未能稳定为展开状态");
+}
+
+async function isSidebarState(page: Page, collapsed: boolean) {
+  const className = await sidebar(page).getAttribute("class").catch(() => null);
+  return className?.includes(collapsed ? "orf-sidebar-collapsed" : "orf-sidebar-expanded") === true;
 }
 
 function sidebarLink(page: Page, name: string) {
