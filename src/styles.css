@@ -8956,6 +8956,150 @@ button.work-logs-team-cell:focus-visible {
   background: rgba(255, 255, 255, 0.62);
 }
 
+.orf-loot-peer-review-notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid rgba(45, 143, 179, 0.18);
+  border-radius: 8px;
+  background: rgba(226, 247, 252, 0.42);
+  color: var(--orf-text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+  padding: 9px 12px;
+}
+
+.orf-loot-peer-review-notice-warning {
+  border-color: rgba(204, 139, 38, 0.28);
+  background: rgba(255, 247, 224, 0.58);
+}
+
+.orf-loot-peer-review-notice-inline {
+  color: var(--orf-text-primary);
+  font-weight: 760;
+}
+
+.orf-loot-peer-review-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.orf-loot-peer-review-stats div {
+  border: 1px solid rgba(130, 148, 170, 0.18);
+  border-radius: 8px;
+  background: rgba(247, 251, 252, 0.7);
+  padding: 10px 12px;
+}
+
+.orf-loot-peer-review-stats span,
+.orf-loot-peer-review-allocation-row span,
+.orf-loot-peer-review-allocation-row em {
+  display: block;
+  color: var(--orf-text-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 760;
+}
+
+.orf-loot-peer-review-stats strong {
+  display: block;
+  color: var(--orf-text-primary);
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.orf-loot-peer-review-submissions {
+  display: grid;
+  gap: 10px;
+}
+
+.orf-loot-peer-review-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(130, 148, 170, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  padding: 12px;
+}
+
+.orf-loot-peer-review-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.orf-loot-peer-review-card-title {
+  color: var(--orf-text-primary);
+  font-size: 13px;
+  font-weight: 820;
+}
+
+.orf-loot-peer-review-card-meta,
+.orf-loot-peer-review-empty {
+  color: var(--orf-text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.orf-loot-peer-review-status {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border: 1px solid rgba(45, 143, 179, 0.2);
+  border-radius: 999px;
+  background: rgba(226, 247, 252, 0.5);
+  color: var(--orf-text-secondary);
+  font-size: 11px;
+  font-weight: 820;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+
+.orf-loot-peer-review-status-warning {
+  border-color: rgba(204, 139, 38, 0.28);
+  background: rgba(255, 247, 224, 0.7);
+  color: #9a5f05;
+}
+
+.orf-loot-peer-review-block-title {
+  color: var(--orf-text-primary);
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.orf-loot-peer-review-allocation-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 8px;
+}
+
+.orf-loot-peer-review-allocation-row div {
+  border: 1px solid rgba(130, 148, 170, 0.16);
+  border-radius: 8px;
+  background: rgba(247, 251, 252, 0.62);
+  padding: 9px 10px;
+}
+
+.orf-loot-peer-review-allocation-row strong {
+  display: block;
+  color: var(--orf-text-primary);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.orf-loot-peer-review-metric-table {
+  min-width: max(100%, 640px);
+}
+
+.orf-loot-peer-review-metric-table th:first-child,
+.orf-loot-peer-review-metric-table td:first-child {
+  min-width: 220px;
+  width: 34%;
+}
+
 .orf-loot-peer-review-matrix {
   background: rgba(247, 251, 252, 0.68);
 }

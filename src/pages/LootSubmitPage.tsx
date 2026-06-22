@@ -13,7 +13,12 @@ import {
   type ContributionReviewMatrixInputs,
   type ContributionReviewMatrixSummary,
 } from "../features/challenge/model/contributionReviewMatrix";
-import { fetchLocalSettlementSummary, type LocalSettlementSummary } from "../services/localSettlementClient";
+import {
+  fetchLocalSettlementSummary,
+  fetchMyLocalSettlementReview,
+  type LocalSettlementReview,
+  type LocalSettlementSummary,
+} from "../services/localSettlementClient";
 import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { useOrf } from "../state/OrfProvider";
 import {
@@ -37,6 +42,7 @@ import { resultDetailText } from "../domain/orfResultDetails";
 import { objectiveAcceptedResultFromReviews } from "../domain/orfSettlement";
 import type {
   ContributionAllocation,
+  ContributionReviewMetricScore,
   LootResultClaim,
   LootResultClaimStatus,
   ObjectiveLoot,
@@ -76,6 +82,7 @@ const CONTRIBUTION_REVIEW_DRAFT_STORAGE_PREFIX =
 const CONTRIBUTION_REVIEW_DRAFT_VERSION = 1;
 
 type ContributionReviewMode = "score" | "abstain";
+type ContributionReviewFormSource = "empty" | "localDraft" | "submittedReview" | "editing";
 
 type StoredContributionReviewDraft = {
   abstentionReason: string;
@@ -177,6 +184,91 @@ function parseContributionReviewDraftInputs(
   return inputs;
 }
 
+function contributionReviewMatrixInputsFromMetricScores(
+  metricScores: ContributionReviewMetricScore[],
+  targets: ContributionAllocationTarget[],
+): ContributionReviewMatrixInputs {
+  const inputs: ContributionReviewMatrixInputs = {};
+  for (const score of metricScores) {
+    const rowInputs: Record<string, string> = {};
+    for (const allocation of score.allocations) {
+      const target = targets.find((item) =>
+        allocation.memberUserId
+          ? item.memberUserId === allocation.memberUserId
+          : item.member === allocation.member,
+      );
+      if (!target) continue;
+      rowInputs[contributionTargetKey(target)] = formatContributionReviewPercent(
+        allocation.ratio * CONTRIBUTION_PERCENT_TOTAL,
+      );
+    }
+    inputs[score.metricId] = rowInputs;
+  }
+  return inputs;
+}
+
+function contributionReviewDraftFromLatestSubmission(input: {
+  objectiveTitle: string;
+  results: Result[];
+  review: LocalSettlementReview;
+  targets: ContributionAllocationTarget[];
+}): StoredContributionReviewDraft | null {
+  if (input.review.status === "abstained") {
+    return {
+      abstentionReason: input.review.abstentionReason,
+      matrixInputs: normalizeContributionReviewMatrixInputs({
+        current: {},
+        objectiveTitle: input.objectiveTitle,
+        results: input.results,
+        targets: input.targets,
+      }),
+      peerReviewMode: "abstain",
+      updatedAt: input.review.submittedAt,
+      version: CONTRIBUTION_REVIEW_DRAFT_VERSION,
+    };
+  }
+
+  if (!input.review.metricScores || input.review.metricScores.length === 0) {
+    return null;
+  }
+
+  return {
+    abstentionReason: "",
+    matrixInputs: normalizeContributionReviewMatrixInputs({
+      current: contributionReviewMatrixInputsFromMetricScores(
+        input.review.metricScores,
+        input.targets,
+      ),
+      objectiveTitle: input.objectiveTitle,
+      results: input.results,
+      targets: input.targets,
+    }),
+    peerReviewMode: "score",
+    updatedAt: input.review.submittedAt,
+    version: CONTRIBUTION_REVIEW_DRAFT_VERSION,
+  };
+}
+
+function emptyContributionReviewDraft(input: {
+  objectiveTitle: string;
+  results: Result[];
+  targets: ContributionAllocationTarget[];
+  updatedAt: string;
+}): StoredContributionReviewDraft {
+  return {
+    abstentionReason: "",
+    matrixInputs: normalizeContributionReviewMatrixInputs({
+      current: {},
+      objectiveTitle: input.objectiveTitle,
+      results: input.results,
+      targets: input.targets,
+    }),
+    peerReviewMode: "score",
+    updatedAt: input.updatedAt,
+    version: CONTRIBUTION_REVIEW_DRAFT_VERSION,
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -224,6 +316,18 @@ export function LootSubmitPage() {
     () => (objective ? objectiveChallengerTargets(objective) : []),
     [objective],
   );
+  const currentMemberId = currentUser?.id ?? "";
+  const currentMemberName = currentUser?.name ?? "";
+  const isChallenger = Boolean(
+    objective &&
+      currentUser?.role === "member" &&
+      isObjectiveChallenger(objective, currentMemberId),
+  );
+  const canPeerReview = Boolean(
+    objective &&
+      canSubmitObjectiveContributionReviewByFlow(objective) &&
+      isChallenger,
+  );
   const [body, setBody] = useState("");
   const [selfTestReportBody, setSelfTestReportBody] = useState("");
   const [claims, setClaims] = useState<
@@ -239,6 +343,14 @@ export function LootSubmitPage() {
   const [abstentionReason, setAbstentionReason] = useState("");
   const [activeContributionReviewDraftKey, setActiveContributionReviewDraftKey] =
     useState("");
+  const [contributionReviewFormSource, setContributionReviewFormSource] =
+    useState<ContributionReviewFormSource>("empty");
+  const [latestContributionReview, setLatestContributionReview] =
+    useState<LocalSettlementReview | null>(null);
+  const [latestContributionReviewError, setLatestContributionReviewError] =
+    useState("");
+  const [latestContributionReviewLoading, setLatestContributionReviewLoading] =
+    useState(false);
   const [resolutionInputs, setResolutionInputs] = useState<
     Record<string, string>
   >({});
@@ -297,11 +409,13 @@ export function LootSubmitPage() {
       setContributionMatrixInputs({});
       setPeerReviewMode("score");
       setAbstentionReason("");
+      setContributionReviewFormSource("empty");
       return;
     }
 
     const draft = readContributionReviewDraft(contributionReviewDraftKey);
     setActiveContributionReviewDraftKey(contributionReviewDraftKey);
+    setContributionReviewFormSource(draft ? "localDraft" : "empty");
     setContributionMatrixInputs(
       normalizeContributionReviewMatrixInputs({
         current: draft?.matrixInputs ?? {},
@@ -322,7 +436,8 @@ export function LootSubmitPage() {
   useEffect(() => {
     if (
       !contributionReviewDraftKey ||
-      activeContributionReviewDraftKey !== contributionReviewDraftKey
+      activeContributionReviewDraftKey !== contributionReviewDraftKey ||
+      contributionReviewFormSource === "empty"
     ) {
       return;
     }
@@ -338,6 +453,7 @@ export function LootSubmitPage() {
     abstentionReason,
     activeContributionReviewDraftKey,
     contributionMatrixInputs,
+    contributionReviewFormSource,
     contributionReviewDraftKey,
     peerReviewMode,
   ]);
@@ -377,6 +493,11 @@ export function LootSubmitPage() {
     canSettleObjectiveLootByFlow(objective) &&
     latestLoot &&
     usesLocalContributionSettlement,
+  );
+  const canLoadMyContributionReview = Boolean(
+    canPeerReview &&
+      objective &&
+      usesLocalContributionSettlement,
   );
   const reviewedResultValues = useMemo(
     () =>
@@ -435,6 +556,79 @@ export function LootSubmitPage() {
   ]);
 
   useEffect(() => {
+    if (!canLoadMyContributionReview || !objective) {
+      setLatestContributionReview(null);
+      setLatestContributionReviewError("");
+      setLatestContributionReviewLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLatestContributionReview(null);
+    setLatestContributionReviewError("");
+    setLatestContributionReviewLoading(true);
+    void fetchMyLocalSettlementReview({ objectiveId: objective.id })
+      .then((result) => {
+        if (cancelled) return;
+        setLatestContributionReview(result.review);
+      })
+      .catch((reviewError) => {
+        if (cancelled) return;
+        setLatestContributionReview(null);
+        setLatestContributionReviewError(
+          reviewError instanceof Error
+            ? reviewError.message
+            : "服务器最新匿名互评读取失败",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setLatestContributionReviewLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canLoadMyContributionReview, objective?.id]);
+
+  useEffect(() => {
+    if (
+      (contributionReviewFormSource !== "empty" &&
+        contributionReviewFormSource !== "localDraft") ||
+      !latestContributionReview ||
+      !objective ||
+      !contributionReviewDraftKey ||
+      activeContributionReviewDraftKey !== contributionReviewDraftKey
+    ) {
+      return;
+    }
+
+    const draft = contributionReviewDraftFromLatestSubmission({
+      objectiveTitle: objective.title,
+      results,
+      review: latestContributionReview,
+      targets: challengerAllocationTargets,
+    }) ?? emptyContributionReviewDraft({
+      objectiveTitle: objective.title,
+      results,
+      targets: challengerAllocationTargets,
+      updatedAt: latestContributionReview.submittedAt,
+    });
+
+    setContributionMatrixInputs(draft.matrixInputs);
+    setPeerReviewMode(draft.peerReviewMode);
+    setAbstentionReason(draft.abstentionReason);
+    setContributionReviewFormSource("submittedReview");
+  }, [
+    activeContributionReviewDraftKey,
+    challengerAllocationTargets,
+    contributionReviewDraftKey,
+    contributionReviewFormSource,
+    latestContributionReview,
+    objective,
+    results,
+  ]);
+
+  useEffect(() => {
     if (resolutionEdited) return;
     setResolutionInputs((current) =>
       settlementSummary
@@ -472,11 +666,6 @@ export function LootSubmitPage() {
     return <Navigate to="/tasks" replace />;
   }
 
-  const currentMemberId = currentUser?.id ?? "";
-  const currentMemberName = currentUser?.name ?? "";
-  const isChallenger =
-    currentUser?.role === "member" &&
-    isObjectiveChallenger(objective, currentMemberId);
   const canSubmit = canSubmitObjectiveLootByFlow(objective) && isChallenger;
   const canReview = Boolean(
     currentUser?.role === "admin" &&
@@ -498,9 +687,6 @@ export function LootSubmitPage() {
     currentUser,
     latestTrialReview,
   );
-  const canPeerReview =
-    canSubmitObjectiveContributionReviewByFlow(objective) && isChallenger;
-
   const resetResolutionInputsToDefaults = () => {
     setResolutionInputs(settlementDefaultInputs);
     setResolutionEdited(false);
@@ -726,7 +912,11 @@ export function LootSubmitPage() {
     try {
       const ok = await submitContributionReview(
         objective.id,
-        { allocations: result.allocations, kind: "score" },
+        {
+          allocations: result.allocations,
+          kind: "score",
+          metricScores: result.metricScores,
+        },
       );
       if (ok) {
         clearContributionReviewDraft(contributionReviewDraftKey);
@@ -742,6 +932,7 @@ export function LootSubmitPage() {
     targetKey: string,
     value: string,
   ) => {
+    setContributionReviewFormSource("editing");
     setContributionMatrixInputs((current) => ({
       ...current,
       [rowId]: {
@@ -1103,6 +1294,7 @@ export function LootSubmitPage() {
                     type="radio"
                     checked={peerReviewMode === "score"}
                     onChange={() => {
+                      setContributionReviewFormSource("editing");
                       setPeerReviewMode("score");
                       if (error) setError("");
                     }}
@@ -1116,6 +1308,7 @@ export function LootSubmitPage() {
                     type="radio"
                     checked={peerReviewMode === "abstain"}
                     onChange={() => {
+                      setContributionReviewFormSource("editing");
                       setPeerReviewMode("abstain");
                       if (error) setError("");
                     }}
@@ -1125,11 +1318,17 @@ export function LootSubmitPage() {
                   </span>
                 </label>
               </div>
+              <LatestContributionReviewNotice
+                loading={latestContributionReviewLoading}
+                review={latestContributionReview}
+                source={contributionReviewFormSource}
+                error={latestContributionReviewError}
+              />
               {peerReviewMode === "score" ? (
                 <>
                   <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs orf-text-secondary">
                     按指标填写每位目标挑战者的贡献百分比；每一行合计必须为
-                    100%。页面按指标权重自动汇总为目标最终贡献比例，并只提交最终比例。
+                    100%。页面按指标权重自动汇总为目标最终贡献比例，并把指标明细作为本次原始评价一并加密提交。
                   </div>
                   <ContributionReviewMatrixTable
                     currentMemberName={currentMemberName}
@@ -1144,6 +1343,7 @@ export function LootSubmitPage() {
                     placeholder="简述你大概做了什么，以及为什么无法判断其他人的贡献比例"
                     value={abstentionReason}
                     onChange={(event) => {
+                      setContributionReviewFormSource("editing");
                       setAbstentionReason(event.target.value);
                       if (error) setError("");
                     }}
@@ -1480,7 +1680,7 @@ function LocalSettlementSummaryView({
         )}
       </div>
       <div className="text-xs orf-text-secondary">
-        结算时通过 ORF 代理读取共享结算服务中的最新提交状态和原始评分，最终比例由指挥官在下方确认。
+        这里只在指挥官结算页展示共享结算服务里的最新提交状态、目标级评分和逐指标明细；挑战者页面不会读取其他人的评价。最终比例由指挥官在下方确认。
       </div>
       {loading && (
         <div className="text-xs orf-text-secondary">正在读取匿名互评数据。</div>
@@ -1492,8 +1692,19 @@ function LocalSettlementSummaryView({
       )}
       {summary ? (
         <>
-          <div className="text-xs orf-text-secondary">
-            已评分 {summary.reviewers.length} 人，已弃权 {summary.abstainedReviewers.length} 人，未提交 {summary.missingReviewers.length} 人。
+          <div className="orf-loot-peer-review-stats">
+            <div>
+              <span>已评分</span>
+              <strong>{summary.reviewers.length}</strong>
+            </div>
+            <div>
+              <span>已弃权</span>
+              <strong>{summary.abstainedReviewers.length}</strong>
+            </div>
+            <div>
+              <span>未提交</span>
+              <strong>{summary.missingReviewers.length}</strong>
+            </div>
           </div>
           <PeerReviewRawScoreTable summary={summary} targets={targets} />
         </>
@@ -1504,6 +1715,71 @@ function LocalSettlementSummaryView({
           </div>
         )
       )}
+    </div>
+  );
+}
+
+function LatestContributionReviewNotice({
+  error,
+  loading,
+  review,
+  source,
+}: {
+  error: string;
+  loading: boolean;
+  review: LocalSettlementReview | null;
+  source: ContributionReviewFormSource;
+}) {
+  if (loading) {
+    return (
+      <div className="orf-loot-peer-review-notice">
+        正在读取你对这个目标的服务器最新匿名互评；这里只会读取你的提交，不显示其他人的评价。
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="orf-loot-peer-review-notice orf-loot-peer-review-notice-warning">
+        服务器最新匿名互评读取失败：{error}
+      </div>
+    );
+  }
+
+  if (!review) {
+    return (
+      <div className="orf-loot-peer-review-notice">
+        暂未找到你对这个目标提交过的匿名互评；挑战者页面只显示自己的评价状态。
+      </div>
+    );
+  }
+
+  const submittedAt = formatSummaryTime(review.submittedAt);
+  if (review.status === "abstained") {
+    return (
+      <div className="orf-loot-peer-review-notice">
+        {source === "submittedReview" ? "已回填" : "检测到"}你在 {submittedAt} 提交的最新弃权说明；这里只显示你自己的最新提交。
+      </div>
+    );
+  }
+
+  if (review.metricScores && review.metricScores.length > 0) {
+    return (
+      <div className="orf-loot-peer-review-notice">
+        {source === "submittedReview" ? "已回填" : "检测到"}你在 {submittedAt} 提交的服务器最新逐指标评价；再次提交会成为新的最新评价。
+        <span className="orf-loot-peer-review-notice-inline">
+          最新目标比例：{formatAllocationInline(review.allocations)}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="orf-loot-peer-review-notice orf-loot-peer-review-notice-warning">
+      检测到你在 {submittedAt} 的服务器最新匿名互评，但那次只保存了目标最终比例，不能还原每个指标行；页面不会用本机旧草稿覆盖这条最新记录。
+      <span className="orf-loot-peer-review-notice-inline">
+        最新目标比例：{formatAllocationInline(review.allocations)}
+      </span>
     </div>
   );
 }
@@ -1645,134 +1921,167 @@ function PeerReviewRawScoreTable({
   const submissionByReviewer = submissionMap(summary);
   const rawAverageByMember = rawScoreAverageByMember(summary);
   return (
-    <div className="grid gap-2">
-      <div className="text-xs font-semibold orf-text-primary">提交与原始评分</div>
-      <div className="orf-loot-table-wrap">
-        <table className="orf-loot-table">
-          <thead className="orf-surface-muted orf-text-secondary">
-            <tr>
-              <th className="px-3 py-2 font-semibold">提交人</th>
-              <th className="px-3 py-2 font-semibold">状态</th>
-              <th className="px-3 py-2 font-semibold">提交时间</th>
-              <th className="px-3 py-2 font-semibold">说明</th>
-              {targets.map((target) => (
-                <th
-                  key={contributionTargetKey(target)}
-                  className="px-3 py-2 font-semibold"
-                >
-                  {target.member}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {targets.map((target) => {
-              const submission = submissionByReviewer.get(target.member);
-              if (!submission) {
-                return (
-                  <tr key={contributionTargetKey(target)} className="border-t orf-border">
-                    <td className="px-3 py-2 font-medium orf-text-primary">
-                      {target.member}
-                    </td>
-                    <td className="px-3 py-2 orf-text-secondary">未提交</td>
-                    <td className="px-3 py-2 orf-text-secondary">-</td>
-                    <td className="px-3 py-2 orf-text-secondary">-</td>
-                    {targets.map((allocationTarget) => (
-                      <td
-                        key={contributionTargetKey(allocationTarget)}
-                        className="px-3 py-2 orf-text-secondary"
-                      >
-                        -
-                      </td>
-                    ))}
-                  </tr>
-                );
-              }
-              if (submission.status === "abstained") {
-                return (
-                  <tr key={contributionTargetKey(target)} className="border-t orf-border">
-                    <td className="px-3 py-2 font-medium orf-text-primary">
-                      {target.member}
-                    </td>
-                    <td className="px-3 py-2 orf-text-secondary">已弃权</td>
-                    <td className="px-3 py-2 orf-text-secondary">
-                      {formatSummaryTime(submission.submittedAt)}
-                    </td>
-                    <td className="px-3 py-2 orf-text-secondary">
-                      {submission.abstentionReason}
-                    </td>
-                    {targets.map((allocationTarget) => (
-                      <td
-                        key={contributionTargetKey(allocationTarget)}
-                        className="px-3 py-2 orf-text-secondary"
-                      >
-                        -
-                      </td>
-                    ))}
-                  </tr>
-                );
-              }
-              const allocationByMember = new Map(
-                submission.allocations.map((allocation) => [
-                  allocation.member,
-                  allocation,
-                ]),
-              );
-              return (
-                <tr key={contributionTargetKey(target)} className="border-t orf-border">
-                  <td className="px-3 py-2 font-medium orf-text-primary">
-                    {target.member}
-                  </td>
-                  <td className="px-3 py-2 orf-text-secondary">已评分</td>
-                  <td className="px-3 py-2 orf-text-secondary">
-                    {formatSummaryTime(submission.submittedAt)}
-                  </td>
-                  <td className="px-3 py-2 orf-text-secondary">
-                    {submissionNote(submission)}
-                  </td>
-                  {targets.map((allocationTarget) => {
-                    const allocation = allocationByMember.get(allocationTarget.member);
-                    const rawAverage = rawAverageByMember.get(allocationTarget.member) ?? null;
-                    const rawDeviation = allocation && rawAverage !== null
-                      ? allocation.ratio - rawAverage
-                      : null;
-                    const rawDeviationWarning = rawDeviation !== null &&
-                      Math.abs(rawDeviation) >
-                        CONTRIBUTION_RATIO_WARNING_THRESHOLD;
-                    return (
-                      <td
-                        key={contributionTargetKey(allocationTarget)}
-                        className="px-3 py-2 orf-text-secondary"
-                      >
-                        {allocation ? (
-                          <div className="grid gap-1">
-                            <span className="font-medium orf-text-primary">
-                              {formatRatioPercent(allocation.ratio)}
-                            </span>
-                            {rawDeviation !== null && (
-                              <span
-                                className={
-                                  rawDeviationWarning
-                                    ? "orf-warning-text"
-                                    : "orf-text-secondary"
-                                }
-                              >
-                                较均值 {formatSignedRatioPercent(rawDeviation)}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="orf-warning-text">未覆盖</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+    <div className="orf-loot-peer-review-submissions">
+      {targets.map((target) => (
+        <PeerReviewSubmissionCard
+          key={contributionTargetKey(target)}
+          rawAverageByMember={rawAverageByMember}
+          reviewer={target}
+          submission={submissionByReviewer.get(target.member)}
+          targets={targets}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PeerReviewSubmissionCard({
+  rawAverageByMember,
+  reviewer,
+  submission,
+  targets,
+}: {
+  rawAverageByMember: Map<string, number>;
+  reviewer: ContributionAllocationTarget;
+  submission: LocalSettlementSubmission | undefined;
+  targets: ContributionAllocationTarget[];
+}) {
+  const statusLabel = !submission
+    ? "未提交"
+    : submission.status === "abstained"
+      ? "已弃权"
+      : submissionHasWarning(submission)
+        ? "有偏差"
+        : "已评分";
+  const statusClassName = submission?.status === "scored" && submissionHasWarning(submission)
+    ? "orf-loot-peer-review-status orf-loot-peer-review-status-warning"
+    : "orf-loot-peer-review-status";
+  return (
+    <section className="orf-loot-peer-review-card">
+      <div className="orf-loot-peer-review-card-header">
+        <div>
+          <div className="orf-loot-peer-review-card-title">{reviewer.member}</div>
+          <div className="orf-loot-peer-review-card-meta">
+            {submission ? formatSummaryTime(submission.submittedAt) : "等待提交"}
+          </div>
+        </div>
+        <span className={statusClassName}>{statusLabel}</span>
       </div>
+      {!submission ? (
+        <div className="orf-loot-peer-review-empty">这个成员还没有提交匿名互评。</div>
+      ) : submission.status === "abstained" ? (
+        <div className="orf-loot-peer-review-empty">{submission.abstentionReason}</div>
+      ) : (
+        <div className="grid gap-3">
+          <div className="orf-loot-peer-review-block-title">目标级评分</div>
+          <PeerReviewAllocationSummary
+            rawAverageByMember={rawAverageByMember}
+            submission={submission}
+            targets={targets}
+          />
+          {submission.metricScores && submission.metricScores.length > 0 ? (
+            <>
+              <div className="orf-loot-peer-review-block-title">逐指标评分</div>
+              <PeerReviewMetricScoreTable
+                metricScores={submission.metricScores}
+                targets={targets}
+              />
+            </>
+          ) : (
+            <div className="orf-loot-peer-review-empty">
+              这条旧提交只保存了目标最终比例，没有逐指标明细。
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PeerReviewAllocationSummary({
+  rawAverageByMember,
+  submission,
+  targets,
+}: {
+  rawAverageByMember: Map<string, number>;
+  submission: Extract<LocalSettlementSubmission, { status: "scored" }>;
+  targets: ContributionAllocationTarget[];
+}) {
+  const allocationByMember = new Map(
+    submission.allocations.map((allocation) => [allocation.member, allocation]),
+  );
+  return (
+    <div className="orf-loot-peer-review-allocation-row">
+      {targets.map((target) => {
+        const allocation = allocationByMember.get(target.member);
+        const rawAverage = rawAverageByMember.get(target.member) ?? null;
+        const rawDeviation = allocation && rawAverage !== null
+          ? allocation.ratio - rawAverage
+          : null;
+        const rawDeviationWarning = rawDeviation !== null &&
+          Math.abs(rawDeviation) > CONTRIBUTION_RATIO_WARNING_THRESHOLD;
+        return (
+          <div key={contributionTargetKey(target)}>
+            <span>{target.member}</span>
+            <strong>{allocation ? formatRatioPercent(allocation.ratio) : "-"}</strong>
+            {rawDeviation !== null && (
+              <em className={rawDeviationWarning ? "orf-warning-text" : ""}>
+                较均值 {formatSignedRatioPercent(rawDeviation)}
+              </em>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PeerReviewMetricScoreTable({
+  metricScores,
+  targets,
+}: {
+  metricScores: ContributionReviewMetricScore[];
+  targets: ContributionAllocationTarget[];
+}) {
+  return (
+    <div className="orf-loot-table-wrap">
+      <table className="orf-loot-table orf-loot-peer-review-metric-table">
+        <thead className="orf-surface-muted orf-text-secondary">
+          <tr>
+            <th className="px-3 py-2 font-semibold">指标</th>
+            {targets.map((target) => (
+              <th key={contributionTargetKey(target)} className="px-3 py-2 font-semibold">
+                {target.member}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {metricScores.map((metric) => {
+            const allocationByMember = new Map(
+              metric.allocations.map((allocation) => [allocation.member, allocation]),
+            );
+            return (
+              <tr key={metric.metricId}>
+                <td className="px-3 py-2">
+                  <div className="orf-loot-result-title">{metric.metricTitle}</div>
+                  <div className="orf-loot-result-meta">
+                    指标分 {metric.points ?? 0} · 权重 {formatContributionReviewPercent(metric.weightRatio * 100)}%
+                  </div>
+                </td>
+                {targets.map((target) => {
+                  const allocation = allocationByMember.get(target.member);
+                  return (
+                    <td key={contributionTargetKey(target)} className="px-3 py-2">
+                      {allocation ? formatRatioPercent(allocation.ratio) : "-"}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -1941,6 +2250,16 @@ type LocalSettlementSubmission = LocalSettlementSummary["submissions"][number];
 
 function submissionMap(summary: LocalSettlementSummary) {
   return new Map(summary.submissions.map((submission) => [submission.reviewer, submission]));
+}
+
+function formatAllocationInline(allocations: ContributionAllocation[]) {
+  return allocations.map((allocation) =>
+    `${allocation.member} ${formatRatioPercent(allocation.ratio)}`
+  ).join(" · ");
+}
+
+function submissionHasWarning(submission: Extract<LocalSettlementSubmission, { status: "scored" }>) {
+  return submission.allocations.some((allocation) => allocation.deviationWarning);
 }
 
 function rawScoreAverageByMember(summary: LocalSettlementSummary) {

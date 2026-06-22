@@ -1,6 +1,6 @@
 import { calibratedResultPoints } from "../../../domain/orfSettlement";
 import type { ContributionMemberTarget } from "../../../domain/orfObjectiveParticipants";
-import type { ContributionAllocation, Result } from "../../../types/orf";
+import type { ContributionAllocation, ContributionReviewMetricScore, Result } from "../../../types/orf";
 
 export const CONTRIBUTION_REVIEW_MATRIX_TOTAL_PERCENT = 100;
 export const CONTRIBUTION_REVIEW_MATRIX_PERCENT_TOLERANCE = 0.01;
@@ -38,6 +38,7 @@ export type ContributionReviewMatrixRow = {
 export type ContributionReviewMatrixSummary = {
   allocations: ContributionAllocation[];
   hasMetricRows: boolean;
+  metricScores: ContributionReviewMetricScore[];
   rows: ContributionReviewMatrixRow[];
   targetCells: ContributionReviewMatrixCell[];
   targetTotalPercent: number;
@@ -45,7 +46,7 @@ export type ContributionReviewMatrixSummary = {
 };
 
 export type ContributionReviewMatrixAllocationResult =
-  | { allocations: ContributionAllocation[]; status: "ok" }
+  | { allocations: ContributionAllocation[]; metricScores: ContributionReviewMetricScore[]; status: "ok" }
   | {
       error: string;
       status: "invalid";
@@ -116,6 +117,19 @@ export function buildContributionReviewMatrix(input: {
   return {
     allocations,
     hasMetricRows: input.results.length > 0,
+    metricScores: rows.map((row) => ({
+      allocations: row.cells.map((cell) => ({
+        member: cell.member,
+        memberUserId: cell.memberUserId,
+        ratio: (cell.percent ?? 0) / CONTRIBUTION_REVIEW_MATRIX_TOTAL_PERCENT,
+      })),
+      isFallbackObjectiveRow: row.isFallbackObjectiveRow,
+      metricDetail: row.detail,
+      metricId: row.id,
+      metricTitle: row.title,
+      points: row.points,
+      weightRatio: row.weightRatio,
+    })),
     rows,
     targetCells,
     targetTotalPercent: targetCells.reduce((sum, cell) => sum + (cell.percent ?? 0), 0),
@@ -136,7 +150,7 @@ export function contributionReviewMatrixToAllocations(
     };
   }
 
-  return { status: "ok", allocations: summary.allocations };
+  return { status: "ok", allocations: summary.allocations, metricScores: summary.metricScores };
 }
 
 export function formatContributionReviewPercent(value: number) {
