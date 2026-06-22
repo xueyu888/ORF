@@ -165,7 +165,6 @@ export async function fetchLocalSettlementSummary(input: { objectiveId: string; 
 
 export async function fetchMyLocalSettlementReview(input: { objectiveId: string }) {
   const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/reviews/current`, {
-    headers: { "content-type": "application/json" },
     method: "POST",
   });
   return response.json() as Promise<{ objectiveId: string; review: LocalSettlementReview | null }>;
