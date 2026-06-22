@@ -121,9 +121,9 @@ npm run push:diagnose -- --send-test --user-email <email>
 
 ## Win11 在线更新广播
 
-Win11 客户端没有后台系统 Push 通道。运行中的 Win11 客户端通过 `/api/events` SSE 接收在线实时事件。发布脚本在 `--watch` 确认 GitHub Release 和 Win11 安装包资产后，会用 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 调用 `POST /api/client-updates/broadcast-release`，按本次发布版本向在线作用域广播一次 `client.update.available`；新版客户端收到后立即触发已有更新检查。旧客户端不认识该专用事件，因此服务端同时发送兼容的 `system.broadcast` 横幅，提醒用户打开“版本与更新”检查。
+Win11 客户端没有后台系统 Push 通道。运行中的 Win11 客户端通过 `/api/events` SSE 接收在线实时事件。发布脚本在 `--watch` 确认 GitHub Release 和 Win11 安装包资产后，会用 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 调用 `POST /api/client-updates/broadcast-release`，按本次发布版本向在线作用域广播一次 `client.update.available`；新版客户端收到后立即触发已有更新检查，并由 `ClientUpdateNotice` 以应用内持久通知卡展示，直到用户处理或关闭本版本提醒。旧客户端不认识该专用事件，因此服务端同时发送兼容的 `system.broadcast` 横幅，提醒用户打开“版本与更新”检查；新版客户端会忽略这个兼容横幅，不再把客户端更新展示成 18 秒横幅。
 
-- 客户端更新的唯一事实源仍是 GitHub Release；实时事件只负责唤醒检查或展示横幅，不写入 `notifications` 表。
+- 客户端更新的唯一事实源仍是 GitHub Release；实时事件只负责唤醒检查或兼容旧客户端横幅，不写入 `notifications` 表。
 - 发布后广播按 tag 精确读取对应 Release，不依赖 `/api/client-updates/latest` 的短缓存，避免刚发布时误发旧版本。
 - 发布脚本广播和服务端定时发现共用同一套自动广播去重；同一 team 同一版本只自动广播一次，避免发布后下一轮定时器重复刷屏。
 - 服务端运行期间仍会定时发现带 Win11 安装包的新客户端版本，作为发布脚本未配置或广播失败后的在线兜底。

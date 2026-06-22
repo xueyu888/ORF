@@ -1,4 +1,4 @@
-import type { ContributionAllocation } from "../types/orf";
+import type { ContributionAllocation, ContributionReviewMetricScore } from "../types/orf";
 import { localSettlementProxyBasePath } from "../domain/orfLocalSettlement";
 
 type LocalSettlementPublicKey = {
@@ -38,8 +38,10 @@ export type LocalSettlementSummary = {
           deviationFromAverage: number | null;
           deviationWarning: boolean;
         }>;
+        metricScores?: ContributionReviewMetricScore[];
         receivedAt?: string;
         reviewer: string;
+        reviewerUserId?: string | null;
         status: "scored";
         submittedAt: string;
       }
@@ -47,11 +49,31 @@ export type LocalSettlementSummary = {
         abstentionReason: string;
         receivedAt?: string;
         reviewer: string;
+        reviewerUserId?: string | null;
         status: "abstained";
         submittedAt: string;
       }
   >;
 };
+
+export type LocalSettlementReview =
+  | {
+      allocations: ContributionAllocation[];
+      metricScores?: ContributionReviewMetricScore[];
+      receivedAt?: string;
+      reviewer: string;
+      reviewerUserId?: string | null;
+      status: "scored";
+      submittedAt: string;
+    }
+  | {
+      abstentionReason: string;
+      receivedAt?: string;
+      reviewer: string;
+      reviewerUserId?: string | null;
+      status: "abstained";
+      submittedAt: string;
+    };
 
 const localSettlementRequestTimeoutMs = 3000;
 
@@ -90,10 +112,11 @@ type LocalContributionReviewInputBase = {
   objectiveId: string;
   objectiveTitle?: string;
   reviewer: string;
+  reviewerUserId?: string | null;
 };
 
 export async function submitLocalEncryptedContributionReview(input: LocalContributionReviewInputBase & (
-  | { allocations: ContributionAllocation[]; kind: "score" }
+  | { allocations: ContributionAllocation[]; kind: "score"; metricScores?: ContributionReviewMetricScore[] }
   | { abstentionReason: string; kind: "abstain" }
 )) {
   await assertLocalSettlementAvailable();
@@ -106,6 +129,7 @@ export async function submitLocalEncryptedContributionReview(input: LocalContrib
         objectiveId: input.objectiveId,
         objectiveTitle: input.objectiveTitle,
         reviewer: input.reviewer,
+        reviewerUserId: input.reviewerUserId ?? null,
         submittedAt: new Date().toISOString(),
         version: 1,
       }
@@ -113,9 +137,11 @@ export async function submitLocalEncryptedContributionReview(input: LocalContrib
         allocations: input.allocations,
         challengers: input.challengers,
         kind: "score" as const,
+        metricScores: input.metricScores,
         objectiveId: input.objectiveId,
         objectiveTitle: input.objectiveTitle,
         reviewer: input.reviewer,
+        reviewerUserId: input.reviewerUserId ?? null,
         submittedAt: new Date().toISOString(),
         version: 1,
       };
@@ -135,6 +161,14 @@ export async function fetchLocalSettlementSummary(input: { objectiveId: string; 
     method: "POST",
   });
   return response.json() as Promise<LocalSettlementSummary>;
+}
+
+export async function fetchMyLocalSettlementReview(input: { objectiveId: string }) {
+  const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/reviews/current`, {
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  return response.json() as Promise<{ objectiveId: string; review: LocalSettlementReview | null }>;
 }
 
 async function fetchLocalSettlementPublicKey() {
