@@ -132,6 +132,42 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
     }
   });
 
+  app.post(`${localSettlementProxyBasePath}/objectives/:objectiveId/reviews/current`, async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) return reply;
+
+    const params = objectiveParamsSchema.parse(request.params);
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
+      return reply;
+    }
+
+    const objective = await settlementObjectiveInScope(params.objectiveId, context.scope);
+    if (!objective) return reply.code(404).send({ error: "Objective not found" });
+    if (
+      context.user.role !== "member" ||
+      !canSubmitObjectiveContributionReviewByFlow(objective) ||
+      !isObjectiveChallenger(objective, context.user.id)
+    ) {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const challengers = await contributionChallengerNames(objective);
+    if (!challengers) return reply.code(400).send({ error: "Invalid settlement participants" });
+    try {
+      return sendLocalSettlementResponse(
+        reply,
+        await fetchLocalSettlementService({
+          body: { challengers, reviewer: context.user.name, reviewerUserId: context.user.id },
+          method: "POST",
+          path: `/objectives/${encodeURIComponent(params.objectiveId)}/reviews/latest`,
+        }),
+      );
+    } catch (error) {
+      if (error instanceof LocalSettlementServiceUnavailableError) return sendLocalSettlementUnavailable(reply);
+      throw error;
+    }
+  });
+
   app.post(`${localSettlementProxyBasePath}/objectives/:objectiveId/summary`, async (request, reply) => {
     const context = await requireAdminContext(request, reply);
     if (!context) return reply;

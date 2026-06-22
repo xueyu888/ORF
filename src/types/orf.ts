@@ -420,6 +420,16 @@ export interface ContributionAllocation {
   ratio: number;
 }
 
+export interface ContributionReviewMetricScore {
+  allocations: ContributionAllocation[];
+  isFallbackObjectiveRow?: boolean;
+  metricDetail?: string;
+  metricId: string;
+  metricTitle: string;
+  points?: number;
+  weightRatio: number;
+}
+
 export interface ObjectiveContributionReview {
   id: string;
   objectiveId: string;
@@ -428,6 +438,7 @@ export interface ObjectiveContributionReview {
   allocations: ContributionAllocation[];
   abstentionReason?: string | null;
   kind?: "score" | "abstain";
+  metricScores?: ContributionReviewMetricScore[];
   submittedAt: string;
 }
 

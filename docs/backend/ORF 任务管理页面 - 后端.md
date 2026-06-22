@@ -148,7 +148,7 @@ type ObjectiveFlowStatus =
 }
 ```
 
-新前端不调用该接口。普通成员页面把 `0..100` 的百分比转换为 `0..1` 的标准比例后，通过 ORF 同源代理读取共享结算服务公钥，在浏览器本地加密，并提交到 `/api/local-settlement/objectives/:objectiveId/reviews`。
+新前端不调用该接口。普通成员页面把 `0..100` 的指标百分比汇总为 `0..1` 的目标级标准比例后，通过 ORF 同源代理读取共享结算服务公钥，在浏览器本地加密，并把目标级 `allocations` 和逐指标 `metricScores` 提交到 `/api/local-settlement/objectives/:objectiveId/reviews`。重新评价时，当前挑战者可通过 `/api/local-settlement/objectives/:objectiveId/reviews/current` 读取自己最新一版提交回填；历史旧提交若没有 `metricScores`，只能展示目标级比例。
 
 `POST /api/objectives/:objectiveId/trial-reviews` 使用与 `POST /api/objectives/:objectiveId/loot` 相同的请求体和指标主张校验。成功后写入 `objectiveTrialReviews`，不写入 `objectiveLoot`，不改变 `Objective.flowStatus` 和 `Objective.lootSubmittedAt`。同一目标只能有一条试验收记录。
 
@@ -188,7 +188,7 @@ type ObjectiveFlowStatus =
 }
 ```
 
-共享结算服务解密匿名互评并计算当前均值；ORF 后端通过同源代理读取提交状态、原始评分、弃权说明、偏离提醒和默认比例。指挥官结算时通过 `contributionResolution` 提供确认后的最终比例和说明。`contributionResolution.ratios[].memberUserId` 对应 `users.id`，是积分归属事实源；`member` 只作为展示名和旧请求兼容字段。单人目标也先进入 `accepted`，再由指挥官用 `100%` 比例确认结算。
+共享结算服务解密匿名互评并计算当前均值；ORF 后端通过同源代理读取提交状态、目标级原始评分、逐指标评分明细、弃权说明、偏离提醒和默认比例。指挥官结算时通过 `contributionResolution` 提供确认后的最终比例和说明。`contributionResolution.ratios[].memberUserId` 对应 `users.id`，是积分归属事实源；`member` 只作为展示名和旧请求兼容字段。单人目标也先进入 `accepted`，再由指挥官用 `100%` 比例确认结算。
 
 结算后后端写入：
 
