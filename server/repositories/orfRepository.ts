@@ -30,6 +30,7 @@ import type {
   UserRole,
 } from "../../src/types/orf";
 import {
+  allocateSettlementPoints,
   objectiveBasePointsForResults,
   planObjectiveAcceptance,
   planObjectiveSettlement,
@@ -3256,6 +3257,10 @@ export async function settleObjectiveLoot(
   if (contributionRatios.some((item) => !item.userId || !challengerUserIdSet.has(item.userId))) {
     return { status: "invalid" };
   }
+  const pointAllocations = allocateSettlementPoints({
+    contributionRatios,
+    settlementPoints: settlementPlan.settlementPoints,
+  });
   const createdAt = nowIso();
   const reason = input.reason?.trim() || input.contributionResolution?.reason.trim() || `目标结算：${objective.title}`;
 
@@ -3289,13 +3294,13 @@ export async function settleObjectiveLoot(
     await tx.delete(pointLedger).where(eq(pointLedger.objectiveId, objectiveId));
     if (contributionRatios.length > 0) {
       await tx.insert(pointLedger).values(
-        contributionRatios.map((item) => ({
+        pointAllocations.map((item) => ({
           id: makeId("points"),
           teamId: objective.teamId,
           objectiveId: objective.id,
           userId: item.userId,
           memberName: item.memberName,
-          points: Number((settlementPlan.settlementPoints * item.ratio).toFixed(2)),
+          points: item.points,
           reason,
           createdAt,
         })),

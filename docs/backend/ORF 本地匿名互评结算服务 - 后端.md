@@ -1,6 +1,6 @@
 # ORF 本地匿名互评结算服务 - 后端
 
-匿名互评原始数据不进入 ORF 数据库。前端在浏览器内用共享私有服务公钥加密互评 payload，然后提交到 ORF 同源代理；ORF 后端只做认证、权限校验和转发，不解密、不保存原始互评。共享私有服务追加保存同一 reviewer 对同一目标的历史提交；挑战者读模型和指挥官汇总读模型只投影每个 reviewer 的最新一条记录。指挥官验收页可通过 ORF 代理读取共享服务返回的最新原始提交明细，但这些明细不进入 ORF 业务数据库或普通读模型。
+匿名互评原始数据不进入 ORF 数据库。前端只提交当前用户填写的整数百分比矩阵或弃权说明；ORF 后端只做认证、目标权限、状态校验和代理，并按服务端目标指标、挑战者快照补齐矩阵元数据，不保存原始互评。共享私有服务是匿名互评草稿、提交历史、逐指标原始行、目标级汇总的唯一事实源；挑战者读模型只暴露本人草稿和本人最新提交，指挥官汇总读模型只投影每个 reviewer 的最新提交。
 
 ## 服务归属
 
@@ -15,7 +15,7 @@
 - 匿名互评原始数据收集、解密、保存和贡献比例汇总。
 - 本机聊天归档同步和查看器。
 
-ORF 仓库只保留浏览器侧加密和 ORF 后端代理契约，不再提供本地服务进程、聊天归档页面、聊天归档 API、归档同步任务或归档数据库表。
+ORF 仓库只保留 ORF 后端代理契约和前端提交页，不再提供本地服务进程、聊天归档页面、聊天归档 API、归档同步任务或归档数据库表。
 
 ## 后端配置
 
@@ -55,17 +55,21 @@ ORF 前端依赖以下 ORF 同源代理接口；ORF 后端再转发到共享私�
 | 前端同源 API | 私有服务路径 | 说明 |
 | --- | --- | --- |
 | `GET /api/local-settlement/health` | `GET /health` | 共享服务健康检查 |
-| `GET /api/local-settlement/public-key` | `GET /public-key` | 返回前端加密用公钥 |
-| `POST /api/local-settlement/objectives/:objectiveId/reviews` | `POST /reviews` | 目标挑战者提交加密匿名互评 envelope；私有服务要求 ORF 后端内部 token |
-| `POST /api/local-settlement/objectives/:objectiveId/reviews/current` | `POST /objectives/:objectiveId/reviews/latest` | 当前目标挑战者读取自己最新一版匿名互评，用于重新评价时回填；私有服务要求 ORF 后端内部 token |
+| `GET /api/local-settlement/public-key` | `GET /public-key` | 兼容旧加密提交链路；当前前端不再依赖 |
+| `POST /api/local-settlement/objectives/:objectiveId/reviews` | `POST /reviews` | 兼容旧加密提交链路；当前前端不再依赖 |
+| `GET /api/local-settlement/objectives/:objectiveId/reviews/me` | `POST /objectives/:objectiveId/reviews/me` | 当前目标挑战者读取本人服务器草稿和本人最新一版提交；私有服务要求 ORF 后端内部 token |
+| `PUT /api/local-settlement/objectives/:objectiveId/reviews/draft` | `PUT /objectives/:objectiveId/reviews/draft` | 当前目标挑战者自动保存一个覆盖式草稿；提交成功后清空 |
+| `DELETE /api/local-settlement/objectives/:objectiveId/reviews/draft` | `DELETE /objectives/:objectiveId/reviews/draft` | 清空当前目标挑战者的服务器草稿 |
+| `POST /api/local-settlement/objectives/:objectiveId/reviews/submit` | `POST /objectives/:objectiveId/reviews/submit` | 当前目标挑战者追加一条提交历史，并由私有服务从矩阵计算目标级贡献比例 |
+| `POST /api/local-settlement/objectives/:objectiveId/reviews/current` | `POST /objectives/:objectiveId/reviews/latest` | 兼容旧读取入口；新前端使用 `/reviews/me` |
 | `POST /api/local-settlement/objectives/:objectiveId/summary` | `POST /objectives/:objectiveId/summary` | 指挥官验收时读取提交状态、原始评分、均值、偏离提醒和默认贡献比例；私有服务要求 ORF 后端内部 token |
 
 `/objectives/:objectiveId/summary` 返回：
 
-- `submissions`：每个已提交成员的最新评分或弃权说明；新评分包含目标级 `allocations` 和逐指标 `metricScores`，历史旧评分可能只有目标级 `allocations`。
+- `submissions`：每个已提交成员的最新评分或弃权说明；新评分包含逐指标 `metricRows`、服务端派生的目标级 `allocations` 和逐指标 `metricScores`，历史旧评分可能只有目标级 `allocations`。
 - `missingReviewers` / `reviewers` / `abstainedReviewers`：提交状态分组。
-- `averages`：按当前已评分记录计算的成员均值、默认结算比例和相对均分偏离。
+- `averages`：按当前已评分记录计算的成员均值、默认结算比例和相对均分偏离；服务内部使用 `basisPoints=10000` 表达 `100.00%`，避免两位小数汇总丢失。
 - `ratios`：验收页默认填入的贡献比例。
 - `status`：`ready`、`missing`、`conflict` 只表示提示状态，不是验收阻塞条件。
 
-普通成员重新打开匿名互评页时，ORF 后端通过 `/reviews/current` 读取本人最新一版提交；如果该提交包含 `metricScores`，前端回填每个指标行；如果是旧提交且只有目标级 `allocations`，前端只能展示最新比例提示，不能伪造指标行，也不能用本机旧草稿覆盖服务器最新提交。ORF 后端代理读取 `/objectives/:objectiveId/summary` 产出的默认贡献比例和提示明细；目标进入已验收后，结算时只把指挥官确认后的公开比例写入 `pointLedger`。旧 `POST /api/objectives/:objectiveId/contribution-reviews` 后端接口返回 `410`，不能再写入原始匿名互评。
+普通成员重新打开匿名互评页时，ORF 后端通过 `/reviews/me` 读取本人服务器草稿和本人最新一版提交；草稿优先回填，提交成功后私有服务立即清空草稿。如果最新提交包含 `metricRows` 或 `metricScores`，前端可回填每个指标行；如果是旧提交且只有目标级 `allocations`，前端只能展示最新比例提示，不能伪造指标行。ORF 后端代理读取 `/objectives/:objectiveId/summary` 产出的默认贡献比例和提示明细；目标进入已验收后，结算时只把指挥官确认后的公开比例写入 `pointLedger`，并按 `pointUnits=100` 表示 `1.00` 积分，用最大余数法保证个人积分合计等于目标结算积分。旧 `POST /api/objectives/:objectiveId/contribution-reviews` 后端接口返回 `410`，不能再写入原始匿名互评。

@@ -95,7 +95,7 @@
 | `objectiveTrialReviews` | 目标试验收请求和指挥官反馈                                                                |
 | `pointLedger`           | 结算后的成员积分流水                                                                      |
 
-任务管理读模型不返回 `permissionRules`；当前用户权限由 `/api/me/access` 单独返回。ORF 读模型不返回匿名互评原始数据。新匿名互评原始数据只在浏览器和共享结算服务明文出现；ORF 后端只代理加密 envelope，并在指挥官验收页代理读取最新明细，不写入 ORF 读模型。`pointLedger` 是公开积分结果，普通成员和管理员都可以读取；普通成员读模型只收敛目标、指标、战利品、评论等私有业务对象。
+任务管理读模型不返回 `permissionRules`；当前用户权限由 `/api/me/access` 单独返回。ORF 读模型不返回匿名互评原始数据。新匿名互评原始数据、服务器草稿、提交历史和汇总计算只在共享结算服务中作为事实源；ORF 后端只认证、校验权限、按服务端事实补齐矩阵并代理请求，指挥官验收页通过代理读取最新明细，不写入 ORF 读模型。`pointLedger` 是公开积分结果，普通成员和管理员都可以读取；普通成员读模型只收敛目标、指标、战利品、评论等私有业务对象。
 
 `PATCH /api/objectives/:objectiveId/publish` 是候选目标进入悬赏大厅的唯一发布动作，必须写入 `Objective.publishedAt`，并为当前作用域 active 用户创建 `objective.published` 系统通知；持久化通知遵守“触发人不接收自己消息”的原则。通知写入后，后端还会通过 `/api/events` 发送 `system.broadcast`，让当前作用域所有在线 active 用户即时看到横幅并刷新大厅。后续申请、征召、审核、重估、编辑和冻结只能更新对应业务字段或 `updatedAt`，不能覆盖 `publishedAt`。
 
@@ -148,7 +148,7 @@ type ObjectiveFlowStatus =
 }
 ```
 
-新前端不调用该接口。普通成员页面把 `0..100` 的指标百分比汇总为 `0..1` 的目标级标准比例后，通过 ORF 同源代理读取共享结算服务公钥，在浏览器本地加密，并把目标级 `allocations` 和逐指标 `metricScores` 提交到 `/api/local-settlement/objectives/:objectiveId/reviews`。重新评价时，当前挑战者可通过 `/api/local-settlement/objectives/:objectiveId/reviews/current` 读取自己最新一版提交回填；历史旧提交若没有 `metricScores`，只能展示目标级比例。
+新前端不调用该接口。普通成员页面只提交逐指标 `0..100` 整数百分比矩阵到 `/api/local-settlement/objectives/:objectiveId/reviews/submit`，输入到一半自动保存到 `/api/local-settlement/objectives/:objectiveId/reviews/draft`。ORF 后端按服务端指标和挑战者事实补齐矩阵后转发给共享结算服务，由共享结算服务派生目标级 `allocations` 和逐指标 `metricScores`。重新评价时，当前挑战者可通过 `/api/local-settlement/objectives/:objectiveId/reviews/me` 读取自己的服务器草稿和最新一版提交回填；历史旧提交若没有 `metricRows` 或 `metricScores`，只能展示目标级比例。
 
 `POST /api/objectives/:objectiveId/trial-reviews` 使用与 `POST /api/objectives/:objectiveId/loot` 相同的请求体和指标主张校验。成功后写入 `objectiveTrialReviews`，不写入 `objectiveLoot`，不改变 `Objective.flowStatus` 和 `Objective.lootSubmittedAt`。同一目标只能有一条试验收记录。
 

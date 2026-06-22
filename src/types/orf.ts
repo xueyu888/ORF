@@ -415,9 +415,40 @@ export interface WorkLogReport {
 }
 
 export interface ContributionAllocation {
+  basisPoints?: number;
   member: string;
   memberUserId?: string | null;
   ratio: number;
+}
+
+export interface ContributionReviewPercentAllocation {
+  member: string;
+  memberUserId?: string | null;
+  percent: number;
+}
+
+export interface ContributionReviewMetricRow {
+  allocations: ContributionReviewPercentAllocation[];
+  isFallbackObjectiveRow?: boolean;
+  metricDetail?: string;
+  metricId: string;
+  metricTitle: string;
+  points?: number;
+}
+
+export interface ContributionReviewDraftPercentAllocation {
+  input: string;
+  member: string;
+  memberUserId?: string | null;
+}
+
+export interface ContributionReviewDraftMetricRow {
+  allocations: ContributionReviewDraftPercentAllocation[];
+  isFallbackObjectiveRow?: boolean;
+  metricDetail?: string;
+  metricId: string;
+  metricTitle: string;
+  points?: number;
 }
 
 export interface ContributionReviewMetricScore {
@@ -438,6 +469,7 @@ export interface ObjectiveContributionReview {
   allocations: ContributionAllocation[];
   abstentionReason?: string | null;
   kind?: "score" | "abstain";
+  metricRows?: ContributionReviewMetricRow[];
   metricScores?: ContributionReviewMetricScore[];
   submittedAt: string;
 }
