@@ -78,6 +78,7 @@ type RowHandlers = {
   editingTarget: ChallengeTarget | null;
   trialReviews: ObjectiveTrialReview[];
   canManageFlow: boolean;
+  peerReviewActionLabel: (objectiveId: string) => string | null;
   objectiveDeadlineEditState: (objective: ObjectiveNode["objective"]) => ObjectiveDeadlineEditState;
   canMutateMetrics: (objectiveId: string) => boolean;
   canMutateWorkItems: (objectiveId: string) => boolean;
@@ -329,6 +330,10 @@ function ObjectivePanel({
     currentUser: handlers.currentUser,
     trialReviews: handlers.trialReviews,
   });
+  const workbenchActionLabel =
+    workbenchAction?.kind === "submitPeerReview"
+      ? handlers.peerReviewActionLabel(group.objective.id) ?? workbenchAction.label
+      : workbenchAction?.label;
   const alignmentAction = isDraftObjective ? null : alignmentActionForObjective(group.objective, handlers.currentUser, objectiveAlignmentRequests);
   const showApplicationReview =
     handlers.canManageFlow &&
@@ -438,7 +443,7 @@ function ObjectivePanel({
         <ProgressValue value={group.objective.progress} />
         {workbenchAction ? (
           <Link className={actionButtonClassName({ className: "orf-row-loot-action", size: "sm", variant: "primary" })} to={workbenchAction.to}>
-            {workbenchAction.label}
+            {workbenchActionLabel}
           </Link>
         ) : null}
         {alignmentAction ? (
