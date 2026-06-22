@@ -71,28 +71,28 @@ export const feedbackImageUploadCase = {
     ],
   },
   S0: {
-    description: "新建反馈页面表单可见，反馈描述为空且添加附件操作可用",
+    description: "新建反馈页面表单可见，反馈描述为空且添加图片或附件操作可用",
     assertions: [
       step("S0-1", "api", "session.authenticated", "当前会话 应为 邮箱为 `orf-default-page-feedback-image-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话", "auth.session", "authenticated", { emailFrom: "data.email", roleFrom: "data.role", status: "active" }),
       step("S0-2", "playwright", "feedback_create.page.visible", "当前页面 应为 新建反馈页面", "feedback_create.page", "visible", { patternFrom: "data.createFeedbackPathPattern" }),
       step("S0-3", "playwright", "feedback_create.form.visible", "新建反馈表单 应可见", "feedback_create.form", "visible"),
       step("S0-4", "playwright", "feedback_create.description_input.empty", "新建反馈表单的反馈描述输入区域 应为空", "feedback_create.description_input", "empty"),
-      step("S0-5", "playwright", "feedback_create.add_image.enabled", "新建反馈表单的 \"添加附件\" 操作 应可点击", "feedback_create.add_image", "enabled"),
+      step("S0-5", "playwright", "feedback_create.add_image.enabled", "新建反馈表单的 \"添加图片或附件\" 操作 应可点击", "feedback_create.add_image", "enabled"),
     ],
   },
   Action: {
-    description: "通过添加附件入口依次选择有效图片和文本附件",
+    description: "通过添加图片或附件入口依次选择有效图片和文本附件",
     steps: [
-      step("Action-1", "playwright", "feedback_create.add_image.choose_valid", "通过新建反馈表单的 \"添加附件\" 操作选择本用例有效图片文件", "feedback_create.add_image", "choose", { filePathFrom: "runtime.validImage.path", fileNameFrom: "data.validImageFileName" }),
-      step("Action-2", "playwright", "feedback_create.add_image.choose_text", "通过新建反馈表单的 \"添加附件\" 操作选择本用例文本附件文件", "feedback_create.add_image", "choose", { filePathFrom: "runtime.textAttachment.path", fileNameFrom: "data.textAttachmentFileName" }),
+      step("Action-1", "playwright", "feedback_create.add_image.choose_valid", "通过新建反馈表单的 \"添加图片或附件\" 操作选择本用例有效图片文件", "feedback_create.add_image", "choose", { filePathFrom: "runtime.validImage.path", fileNameFrom: "data.validImageFileName" }),
+      step("Action-2", "playwright", "feedback_create.add_image.choose_text", "通过新建反馈表单的 \"添加图片或附件\" 操作选择本用例文本附件文件", "feedback_create.add_image", "choose", { filePathFrom: "runtime.textAttachment.path", fileNameFrom: "data.textAttachmentFileName" }),
     ],
   },
   S1: {
     description: "有效图片和文本文件均被添加为反馈附件",
     assertions: [
-      step("S1-1", "playwright", "feedback_create.description_input.contains_image", "新建反馈表单的反馈描述输入区域 应包含 本用例有效图片引用", "feedback_create.description_input", "contains_image_reference", { fileNameFrom: "data.validImageFileName" }),
+      step("S1-1", "playwright", "feedback_create.description_input.contains_image", "新建反馈表单的反馈描述输入区域 应包含 本用例有效图片附件展示文本", "feedback_create.description_input", "contains_image_reference", { fileNameFrom: "data.validImageFileName" }),
       step("S1-2", "playwright", "feedback_create.pending_attachments.contains_image", "新建反馈表单的待提交附件列表 应显示 本用例有效图片文件", "feedback_create.pending_attachments", "contains_file", { fileNameFrom: "data.validImageFileName" }),
-      step("S1-3", "playwright", "feedback_create.description_input.contains_text_attachment", "新建反馈表单的反馈描述输入区域 应包含 本用例文本附件引用", "feedback_create.description_input", "contains_attachment_reference", { fileNameFrom: "data.textAttachmentFileName" }),
+      step("S1-3", "playwright", "feedback_create.description_input.contains_text_attachment", "新建反馈表单的反馈描述输入区域 应包含 本用例文本附件展示文本", "feedback_create.description_input", "contains_attachment_reference", { fileNameFrom: "data.textAttachmentFileName" }),
       step("S1-4", "playwright", "feedback_create.pending_attachments.contains_text", "新建反馈表单的待提交附件列表 应显示 本用例文本附件文件", "feedback_create.pending_attachments", "contains_file", { fileNameFrom: "data.textAttachmentFileName" }),
       step("S1-5", "api", "session.authenticated.after_upload", "当前会话 应仍为 邮箱为 `orf-default-page-feedback-image-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话", "auth.session", "authenticated", { emailFrom: "data.email", roleFrom: "data.role", status: "active" }),
     ],

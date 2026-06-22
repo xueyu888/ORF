@@ -32,15 +32,15 @@ export const memberManagementForbiddenOperators = {
     },
 
     edit_action_absent: async ({ ctx }) => {
-      await expect(ctx.page.locator(".orf-user-table").getByRole("button", { name: "编辑" })).toHaveCount(0);
+      await expect(ctx.page.locator(".orf-user-table").getByRole("button", { name: "编辑用户", exact: true })).toHaveCount(0);
     },
 
     disable_action_absent: async ({ ctx }) => {
-      await expect(ctx.page.locator(".orf-user-table").getByRole("button", { name: "停用" })).toHaveCount(0);
+      await expect(ctx.page.locator(".orf-user-table").getByRole("button", { name: "停用用户", exact: true })).toHaveCount(0);
     },
 
     delete_action_absent: async ({ ctx }) => {
-      await expect(ctx.page.locator(".orf-user-table").getByRole("button", { name: "删除" })).toHaveCount(0);
+      await expect(ctx.page.locator(".orf-user-table").getByRole("button", { name: "删除用户", exact: true })).toHaveCount(0);
     },
   },
 } satisfies OperatorRegistry<MemberManagementForbiddenTestContext, MemberManagementForbiddenCaseData>;

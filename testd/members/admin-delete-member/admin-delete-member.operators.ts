@@ -60,7 +60,7 @@ export const adminDeleteMemberOperators = {
     },
 
     delete_visible: async ({ ctx, params }) => {
-      await expect(memberRow(ctx, requiredString(params, "text")).getByRole("button", { name: "删除" })).toBeVisible();
+      await expect(memberRow(ctx, requiredString(params, "text")).getByRole("button", { name: "删除用户", exact: true })).toBeVisible();
     },
 
     delete: async ({ ctx, runtime, params }) => {
@@ -70,7 +70,7 @@ export const adminDeleteMemberOperators = {
         runtime.values[saveAs] = captureUserDeleteResponse(ctx.page, userId);
       }
       ctx.page.once("dialog", (dialog) => void dialog.accept());
-      await memberRow(ctx, requiredString(params, "text")).getByRole("button", { name: "删除" }).click();
+      await memberRow(ctx, requiredString(params, "text")).getByRole("button", { name: "删除用户", exact: true }).click();
     },
   },
 

@@ -57,7 +57,7 @@ export const adminDeleteMemberCase = {
       { source: { caseStepId: "S0-1", method: "api" }, id: "session.admin.authenticated", title: "当前会话 应为 邮箱为 `orf-admin-delete-member-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话", object: "auth.session", operator: "authenticated", params: { emailFrom: "data.adminEmail", roleFrom: "data.adminRole", status: "active" } },
       { source: { caseStepId: "S0-2", method: "playwright" }, id: "url.members", title: "当前页面 应为 成员管理页面", object: "page.url", operator: "match", params: { pattern: "/system/members$" } },
       { source: { caseStepId: "S0-3", method: "playwright" }, id: "page.delete_member.visible", title: "成员管理列表 应显示 可删除成员", object: "page.member_row", operator: "visible", params: { textFrom: "data.memberEmail" } },
-      { source: { caseStepId: "S0-4", method: "playwright" }, id: "page.delete_member.action_visible", title: "可删除成员 的 \"删除\" 操作 应可见", object: "page.member_row", operator: "delete_visible", params: { textFrom: "data.memberEmail" } },
+      { source: { caseStepId: "S0-4", method: "playwright" }, id: "page.delete_member.action_visible", title: "可删除成员 的 \"删除用户\" 操作 应可见", object: "page.member_row", operator: "delete_visible", params: { textFrom: "data.memberEmail" } },
       { source: { caseStepId: "S0-5", method: "prisma" }, id: "db.delete_member.active", title: "可删除成员 的默认团队成员关系 应存在，角色为 `member`", object: "db.user", operator: "matches", params: { userIdFrom: "data.memberUserId", emailFrom: "data.memberEmail", roleFrom: "data.memberRole", status: "active" } },
       { source: { caseStepId: "S0-6", method: "prisma" }, id: "db.delete_member.references_absent", title: "可删除成员 应未被 ORF 业务记录引用", object: "db.delete_member_references", operator: "absent", params: { teamIdFrom: "runtime.adminUser.teamId", memberNameFrom: "data.memberName" } },
     ],
@@ -66,7 +66,7 @@ export const adminDeleteMemberCase = {
   Action: {
     description: "管理员删除可删除成员",
     steps: [
-      { source: { caseStepId: "Action-1", method: "playwright" }, id: "page.delete_member.delete", title: "点击 可删除成员 的 \"删除\" 操作并确认删除", object: "page.member_row", operator: "delete", params: { textFrom: "data.memberEmail", userIdFrom: "data.memberUserId", saveAs: "deleteUserResponse" } },
+      { source: { caseStepId: "Action-1", method: "playwright" }, id: "page.delete_member.delete", title: "点击 可删除成员 的 \"删除用户\" 操作并确认删除", object: "page.member_row", operator: "delete", params: { textFrom: "data.memberEmail", userIdFrom: "data.memberUserId", saveAs: "deleteUserResponse" } },
     ],
   },
 

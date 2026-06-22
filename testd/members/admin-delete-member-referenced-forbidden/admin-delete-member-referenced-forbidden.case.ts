@@ -62,7 +62,7 @@ export const adminDeleteMemberReferencedForbiddenCase = {
       { source: { caseStepId: "S0-1", method: "api" }, id: "session.admin.authenticated", title: "当前会话 应为 邮箱为 `orf-admin-delete-referenced-member-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话", object: "auth.session", operator: "authenticated", params: { emailFrom: "data.adminEmail", roleFrom: "data.adminRole", status: "active" } },
       { source: { caseStepId: "S0-2", method: "playwright" }, id: "url.members", title: "当前页面 应为 成员管理页面", object: "page.url", operator: "match", params: { pattern: "/system/members$" } },
       { source: { caseStepId: "S0-3", method: "playwright" }, id: "page.target.visible", title: "成员管理列表 应显示 被引用成员", object: "page.member_row", operator: "visible", params: { textFrom: "data.targetEmail" } },
-      { source: { caseStepId: "S0-4", method: "playwright" }, id: "page.target.delete_visible", title: "被引用成员 的 \"删除\" 操作 应可见", object: "page.member_row", operator: "delete_visible", params: { textFrom: "data.targetEmail" } },
+      { source: { caseStepId: "S0-4", method: "playwright" }, id: "page.target.delete_visible", title: "被引用成员 的 \"删除用户\" 操作 应可见", object: "page.member_row", operator: "delete_visible", params: { textFrom: "data.targetEmail" } },
       { source: { caseStepId: "S0-5", method: "prisma" }, id: "db.target.membership", title: "被引用成员 的默认团队成员关系 应存在，角色为 `member`", object: "db.default_team_membership", operator: "matches", params: { userIdFrom: "data.targetUserId", roleFrom: "data.targetRole" } },
       { source: { caseStepId: "S0-6", method: "prisma" }, id: "db.objective.references_member", title: "本用例引用目标 的挑战成员列表 应包含 被引用成员", object: "db.referenced_member_objective", operator: "references_member", params: { objectiveIdFrom: "data.objectiveId", memberNameFrom: "data.targetName" } },
     ],
@@ -71,7 +71,7 @@ export const adminDeleteMemberReferencedForbiddenCase = {
   Action: {
     description: "管理员删除被引用成员",
     steps: [
-      { source: { caseStepId: "Action-1", method: "playwright" }, id: "page.target.delete", title: "点击 被引用成员 的 \"删除\" 操作并确认删除", object: "page.member_row", operator: "delete", params: { textFrom: "data.targetEmail", userIdFrom: "data.targetUserId", saveAs: "deleteUserResponse" } },
+      { source: { caseStepId: "Action-1", method: "playwright" }, id: "page.target.delete", title: "点击 被引用成员 的 \"删除用户\" 操作并确认删除", object: "page.member_row", operator: "delete", params: { textFrom: "data.targetEmail", userIdFrom: "data.targetUserId", saveAs: "deleteUserResponse" } },
     ],
   },
 

@@ -242,7 +242,7 @@ export const adminEditMemberCase = {
       {
         source: { caseStepId: "S0-4", method: "playwright" },
         id: "page.member_row.original.edit_visible",
-        title: "原测试成员 的 \"编辑\" 操作 应可见",
+        title: "原测试成员 的 \"编辑用户\" 操作 应可见",
         object: "page.member_row",
         operator: "edit_visible",
         params: { textFrom: "data.originalEmail" },
@@ -280,7 +280,7 @@ export const adminEditMemberCase = {
       {
         source: { caseStepId: "Action-1", method: "playwright" },
         id: "page.member_row.original.edit",
-        title: "点击 原测试成员 的 \"编辑\" 操作",
+        title: "点击 原测试成员 的 \"编辑用户\" 操作",
         object: "page.member_row",
         operator: "edit",
         params: { textFrom: "data.originalEmail" },

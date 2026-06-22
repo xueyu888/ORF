@@ -59,7 +59,6 @@ export const topbarNavOperators = {
 
   "topbar.search": visibleEnabled(topbarButtonByLabel("搜索页面、目标、指标、任务、反馈")),
   "topbar.feedback": visibleEnabled(topbarButtonByRole("新建反馈")),
-  "topbar.notifications": visibleEnabled(topbarButtonByLabel(/消息/)),
   "topbar.window.minimize": visibleEnabled(topbarButtonByLabel("最小化")),
   "topbar.window.restore": visibleEnabled(topbarButtonByLabel("还原窗口")),
   "topbar.window.close_to_tray": visibleEnabled(topbarButtonByLabel("关闭到托盘")),

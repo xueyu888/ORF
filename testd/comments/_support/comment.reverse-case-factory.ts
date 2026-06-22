@@ -387,7 +387,7 @@ function s0Assertions(definition: ReverseCommentCaseDefinition): StepSpec[] {
     return [
       session,
       step("S0-2", "playwright", "comment_composer.ready", "评论输入框 应可用于输入评论", "page.comment_composer", "ready"),
-      step("S0-3", "playwright", "comment_composer.image_button.enabled", "\"添加附件\" 操作 应可点击", "page.comment_composer", "image_button_enabled"),
+      step("S0-3", "playwright", "comment_composer.image_button.enabled", "\"添加图片或附件\" 操作 应可点击", "page.comment_composer", "image_button_enabled"),
       step("S0-4", "prisma", "db.comment.image_absent", "数据库中 应不存在 本用例非图片附件", "db.comment", "image_absent", {
         fileNameFrom: "data.invalidFileName",
       }),
@@ -453,7 +453,7 @@ function actionSteps(definition: ReverseCommentCaseDefinition): StepSpec[] {
         targetFrom: "runtime.commentTarget",
         saveAs: "invalidUploadResponse",
       }),
-      step("Action-2", "playwright", "comment_composer.choose_file", "通过 \"添加附件\" 操作选择本用例非图片文件", "page.comment_composer", "choose_file", {
+      step("Action-2", "playwright", "comment_composer.choose_file", "通过 \"添加图片或附件\" 操作选择本用例非图片文件", "page.comment_composer", "choose_file", {
         fileFrom: "runtime.invalidFile",
       }),
     ];

@@ -47,12 +47,12 @@
   - [S0-1] [api] 当前会话 应为 邮箱为 `orf-admin-delete-referenced-member-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话。
   - [S0-2] [playwright] 当前页面 应为 成员管理页面。
   - [S0-3] [playwright] 成员管理列表 应显示 被引用成员。
-  - [S0-4] [playwright] 被引用成员 的 "删除" 操作 应可见。
+  - [S0-4] [playwright] 被引用成员 的 "删除用户" 操作 应可见。
   - [S0-5] [prisma] 被引用成员 的默认团队成员关系 应存在，角色为 `member`。
   - [S0-6] [prisma] 本用例引用目标 的挑战成员列表 应包含 被引用成员。
 
 - Action：被测业务动作。
-  - [Action-1] [playwright] 点击 被引用成员 的 "删除" 操作并确认删除。
+  - [Action-1] [playwright] 点击 被引用成员 的 "删除用户" 操作并确认删除。
 
 - S1：Action 后状态。
   - [S1-1] [api] 删除成员结果 应被拒绝，HTTP 状态码应为 409。

@@ -35,7 +35,7 @@ export const adminDisableMemberOperators = {
     },
 
     disable_visible: async ({ ctx, params }) => {
-      await expect(memberRow(ctx, requiredString(params, "text")).getByRole("button", { name: "停用" })).toBeVisible();
+      await expect(memberRow(ctx, requiredString(params, "text")).getByRole("button", { name: "停用用户", exact: true })).toBeVisible();
     },
 
     disable: async ({ ctx, runtime, params }) => {
@@ -45,7 +45,7 @@ export const adminDisableMemberOperators = {
         runtime.values[saveAs] = captureUserDisableResponse(ctx.page, userId);
       }
       ctx.page.once("dialog", (dialog) => void dialog.accept());
-      await memberRow(ctx, requiredString(params, "text")).getByRole("button", { name: "停用" }).click();
+      await memberRow(ctx, requiredString(params, "text")).getByRole("button", { name: "停用用户", exact: true }).click();
     },
   },
 } satisfies OperatorRegistry<TestContext, AdminDisableMemberCaseData>;
