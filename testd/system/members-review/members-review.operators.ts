@@ -1,0 +1,166 @@
+import { expect, type Page } from "@playwright/test";
+import type { OperatorRegistry } from "../../_framework/types";
+import { clearBrowserState } from "../../_operators/common.helpers";
+import { requiredString } from "../../_operators/params";
+import type { SystemMembersReviewCaseData, TestContext } from "./_support/members-review.context";
+import { setDefaultLandingPathByEmail } from "./_support/members-review.helpers";
+
+type ConfirmSnapshot = {
+  accepted: boolean;
+  action: string;
+  dismissed: boolean;
+  message: string;
+};
+
+export const systemMembersReviewOperators = {
+  browser: {
+    clear_state: async ({ ctx }) => {
+      await ctx.context.clearCookies();
+      await clearBrowserState(ctx.page);
+      await installDesktopShellMock(ctx.page);
+    },
+  },
+  "user.preferences": {
+    set_default_landing_path_by_email: async ({ params }) => {
+      await setDefaultLandingPathByEmail(requiredString(params, "email"), requiredString(params, "path"));
+    },
+    reset_default_landing_path_by_email: async ({ params }) => {
+      await setDefaultLandingPathByEmail(requiredString(params, "email"), null);
+    },
+  },
+  "page.members_list": {
+    contains_user: async ({ ctx, params }) => {
+      const row = memberRow(ctx.page, requiredString(params, "email"));
+      await expect(row).toBeVisible();
+      await expect(row).toContainText(requiredString(params, "name"));
+    },
+  },
+  "page.member_row_status": {
+    text: async ({ ctx, params }) => {
+      await expect(memberStatus(ctx.page, requiredString(params, "email"))).toHaveText(requiredString(params, "text"));
+    },
+  },
+  "page.member_row_action": {
+    visible: async ({ ctx, params }) => {
+      await expect(rowAction(ctx.page, params)).toBeVisible();
+    },
+    hidden: async ({ ctx, params }) => {
+      await expect(rowAction(ctx.page, params)).toBeHidden();
+    },
+    enabled: async ({ ctx, params }) => {
+      await expect(rowAction(ctx.page, params)).toBeEnabled();
+    },
+    click: async ({ ctx, params }) => {
+      await rowAction(ctx.page, params).click();
+      const waitEmail = requiredString(params, "waitEmail");
+      const waitStatus = requiredString(params, "waitStatus");
+      await expect(memberStatus(ctx.page, waitEmail)).toHaveText(waitStatus);
+    },
+    click_confirm: async ({ ctx, params }) => {
+      const action = requiredString(params, "action");
+      const decision = requiredString(params, "decision");
+      const dialogPromise = ctx.page.waitForEvent("dialog", { timeout: 5000 }).then(async (dialog) => {
+        const snapshot: ConfirmSnapshot = {
+          accepted: decision === "accept",
+          action,
+          dismissed: decision === "dismiss",
+          message: dialog.message(),
+        };
+
+        if (decision === "accept") {
+          await dialog.accept();
+        } else if (decision === "dismiss") {
+          await dialog.dismiss();
+        } else {
+          throw new Error(`不支持的确认框处理方式: ${decision}`);
+        }
+
+        return snapshot;
+      });
+
+      await rowAction(ctx.page, params).click();
+      const snapshot = await dialogPromise;
+      return snapshot;
+    },
+  },
+  "page.confirm_snapshot": {
+    observe: async ({ params }) => {
+      expect(confirmSnapshot(params).message.trim().length).toBeGreaterThan(0);
+    },
+    dismissed: async ({ params }) => {
+      const snapshot = confirmSnapshot(params);
+      expect(snapshot.dismissed).toBe(true);
+      expect(snapshot.accepted).toBe(false);
+    },
+    accepted: async ({ ctx, params }) => {
+      const snapshot = confirmSnapshot(params);
+      expect(snapshot.accepted).toBe(true);
+      expect(snapshot.dismissed).toBe(false);
+      const waitEmail = requiredString(params, "waitEmail");
+      const waitStatus = requiredString(params, "waitStatus");
+      await expect(memberStatus(ctx.page, waitEmail)).toHaveText(waitStatus);
+    },
+    message_matches: async ({ params }) => {
+      const pattern = new RegExp(requiredString(params, "pattern"));
+      expect(confirmSnapshot(params).message).toMatch(pattern);
+    },
+    contains: async ({ params }) => {
+      expect(confirmSnapshot(params).message).toContain(requiredString(params, "text"));
+    },
+  },
+} satisfies OperatorRegistry<TestContext, SystemMembersReviewCaseData>;
+
+function membersTable(page: Page) {
+  return page.locator("table.orf-user-table");
+}
+
+function memberRow(page: Page, email: string) {
+  return membersTable(page).locator("tbody tr", { hasText: email });
+}
+
+function memberStatus(page: Page, email: string) {
+  return memberRow(page, email).locator(".orf-user-status");
+}
+
+function rowAction(page: Page, params: Record<string, unknown>) {
+  const action = requiredString(params, "action");
+  return memberRow(page, requiredString(params, "email")).getByRole("button", {
+    name: actionButtonName(action),
+    exact: true,
+  });
+}
+
+function actionButtonName(action: string) {
+  if (action === "通过") return "通过用户";
+  if (action === "拒绝") return "拒绝用户";
+  return action;
+}
+
+function confirmSnapshot(params: Record<string, unknown>): ConfirmSnapshot {
+  const snapshot = params.snapshot;
+  if (!snapshot || typeof snapshot !== "object" || !("message" in snapshot)) {
+    throw new Error("参数 snapshot 必须包含确认弹窗快照");
+  }
+
+  return snapshot as ConfirmSnapshot;
+}
+
+async function installDesktopShellMock(page: Page) {
+  await page.addInitScript(() => {
+    const maximizedState = {
+      isFocused: true,
+      isFullScreen: false,
+      isMaximized: true,
+      isMinimized: false,
+      isVisible: true,
+    };
+    window.orfDesktopShell = {
+      closeWindow: async () => ({ data: maximizedState, status: "success" }),
+      getWindowState: async () => ({ data: maximizedState, status: "success" }),
+      minimizeWindow: async () => ({ data: { ...maximizedState, isMinimized: true }, status: "success" }),
+      onWindowStateChange: () => () => undefined,
+      setWorkbenchZoomLevel: async ({ level }) => ({ data: { level }, status: "success" }),
+      toggleMaximizeWindow: async () => ({ data: maximizedState, status: "success" }),
+    };
+  });
+}
