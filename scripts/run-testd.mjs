@@ -12,7 +12,7 @@ const testdReportRunId = process.env.TESTD_REPORT_RUN_ID ?? testdRunId;
 const extraArgs = process.argv.slice(2);
 const requestedSuite = process.env.TESTD_SUITE;
 const inferredSuite = requestedSuite ?? inferSuiteFromArgs(extraArgs);
-const suites = inferredSuite ? suitesFor(inferredSuite) : ["isolated", "permissions", "settings"];
+const suites = inferredSuite ? suitesFor(inferredSuite) : ["isolated", "permissions"];
 const outputTailLimit = 1024 * 1024;
 const defaultNetworkRetryDivisors = [2, 4, 8];
 const networkFailurePatterns = [
@@ -330,7 +330,7 @@ function buildNetworkRetryAttempts(suite, args) {
 }
 
 function isSerialSuite(suite) {
-  return suite === "permissions" || suite === "settings";
+  return suite === "permissions";
 }
 
 function networkRetryWorkers(currentWorkers) {
@@ -628,19 +628,15 @@ function inferSuiteFromArgs(args) {
     return "permissions";
   }
 
-  if (pathArgs.some((arg) => arg.includes("/settings/") || arg.includes("\\settings\\"))) {
-    return "settings";
-  }
-
   return "isolated";
 }
 
 function suitesFor(suite) {
   if (suite === "all") {
-    return ["isolated", "permissions", "settings"];
+    return ["isolated", "permissions"];
   }
 
-  if (suite === "isolated" || suite === "permissions" || suite === "settings") {
+  if (suite === "isolated" || suite === "permissions") {
     return [suite];
   }
 

@@ -102,10 +102,12 @@ export const personalSettingsPreferencesOperators = {
     },
   },
   preferences_login_form: {
-    submit_capture_sidebar: async ({ ctx }) => {
+    submit_capture_sidebar: async ({ ctx, data }) => {
       await ctx.page.getByRole("button", { name: "Sign In", exact: true }).click();
       await expect(ctx.page).toHaveURL(/\/tasks$/);
       await expect(sidebar(ctx.page)).toBeVisible();
+      await expect.poll(() => readSidebarStateByEmail(data.email)).toBe("collapsed");
+      await expect.poll(() => currentSidebarState(ctx.page)).toBe("collapsed");
       return {
         pageUrl: ctx.page.url(),
         sidebarState: await currentSidebarState(ctx.page),

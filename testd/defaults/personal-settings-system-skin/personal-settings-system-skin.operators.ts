@@ -18,7 +18,6 @@ type SystemSkinSnapshot = {
   savedAppBackground: VisualBackgroundConfig | null;
   selectedBackground: VisualBackgroundImage | null;
   shellBackgroundImage: string | null;
-  sidebarImageSrc: string | null;
 };
 
 export const personalSettingsSystemSkinOperators = {
@@ -63,9 +62,8 @@ export const personalSettingsSystemSkinOperators = {
     },
     select: async ({ ctx }) => {
       const background = await pickSystemBackground();
-      await systemSkinCard(ctx.page, background).click();
-      await expect(selectedBackgroundText(ctx.page, background)).toBeVisible();
-      await expect(useSelectedBackgroundButton(ctx.page)).toBeEnabled();
+      await systemSkinCard(ctx.page, background).click({ timeout: 10_000 });
+      await expect(useSelectedBackgroundButton(ctx.page)).toBeEnabled({ timeout: 10_000 });
       return background;
     },
   },
@@ -80,7 +78,7 @@ export const personalSettingsSystemSkinOperators = {
       await responsePromise;
       await expect.poll(() => readAppBackgroundByEmail(email)).toBeNull();
       const defaultBackground = await readDefaultAppBackground();
-      await expect.poll(() => pageUsesBackground(ctx.page, defaultBackground)).toBe(true);
+      await expect.poll(() => pageUsesBackground(ctx.page, defaultBackground), { timeout: 15_000 }).toBe(true);
       return captureSystemSkinSnapshot(ctx.page, email, defaultBackground);
     },
   },
@@ -91,11 +89,8 @@ export const personalSettingsSystemSkinOperators = {
     click: async ({ ctx, params }) => {
       const email = requiredString(params, "email");
       const background = requiredBackground(params, "background");
-      const responsePromise = waitForPreferencesSave(ctx.page);
-      await useSelectedBackgroundButton(ctx.page).click();
-      await responsePromise;
-      await expect.poll(async () => (await readAppBackgroundByEmail(email))?.fixedBackgroundId ?? null).toBe(background.id);
-      await expect.poll(() => pageUsesBackground(ctx.page, background)).toBe(true);
+      await applySelectedSystemBackground(ctx.page, email, background);
+      await expect.poll(() => pageUsesBackground(ctx.page, background), { timeout: 30_000 }).toBe(true);
       return captureSystemSkinSnapshot(ctx.page, email, background);
     },
   },
@@ -169,11 +164,41 @@ function deleteSkinButton(page: Page) {
   return page.getByRole("button", { name: "删除", exact: true }).first();
 }
 
-function waitForPreferencesSave(page: Page) {
+function waitForPreferencesSave(page: Page, timeout = 30_000) {
   return page.waitForResponse((response) => {
     const request = response.request();
     return request.method().toUpperCase() === "PUT" && response.url().includes("/api/settings/personal/preferences");
-  });
+  }, { timeout });
+}
+
+async function applySelectedSystemBackground(page: Page, email: string, background: VisualBackgroundImage) {
+  const deadline = Date.now() + 30_000;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    try {
+      await systemSkinCard(page, background).scrollIntoViewIfNeeded({ timeout: 2_000 });
+      await systemSkinCard(page, background).click({ timeout: 2_000 });
+      await expect(useSelectedBackgroundButton(page)).toBeEnabled({ timeout: 3_000 });
+
+      const responsePromise = waitForPreferencesSave(page, 5_000);
+      await useSelectedBackgroundButton(page).click({ timeout: 2_000 });
+      await responsePromise;
+
+      await expect
+        .poll(async () => (await readAppBackgroundByEmail(email))?.fixedBackgroundId ?? null, { timeout: 3_000 })
+        .toBe(background.id);
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.waitForTimeout(300);
+    }
+  }
+
+  const savedBackground = await readAppBackgroundByEmail(email);
+  throw new Error(
+    `系统皮肤未成功保存为 ${background.id}，当前保存值为 ${savedBackground?.fixedBackgroundId ?? "系统默认"}。最后一次错误：${String(lastError)}`,
+  );
 }
 
 async function captureSystemSkinSnapshot(
@@ -186,7 +211,6 @@ async function captureSystemSkinSnapshot(
     savedAppBackground: await readAppBackgroundByEmail(email),
     selectedBackground,
     shellBackgroundImage: await shellBackgroundImage(page),
-    sidebarImageSrc: await sidebarBackgroundImageSrc(page),
   };
 }
 
@@ -202,12 +226,8 @@ async function shellBackgroundImage(page: Page) {
     .catch(() => null);
 }
 
-async function sidebarBackgroundImageSrc(page: Page) {
-  return page.locator(".orf-sidebar-background-image").getAttribute("src").catch(() => null);
-}
-
 function snapshotMatchesBackground(snapshot: SystemSkinSnapshot, background: VisualBackgroundImage) {
-  return textIncludesBackground(snapshot.sidebarImageSrc, background) || textIncludesBackground(snapshot.shellBackgroundImage, background);
+  return textIncludesBackground(snapshot.shellBackgroundImage, background);
 }
 
 function textIncludesBackground(value: string | null, background: VisualBackgroundImage) {

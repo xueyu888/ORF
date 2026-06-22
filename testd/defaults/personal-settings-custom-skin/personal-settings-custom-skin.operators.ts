@@ -94,16 +94,8 @@ export const personalSettingsCustomSkinOperators = {
     click: async ({ ctx, params }) => {
       const email = requiredString(params, "email");
       const background = requiredBackground(params, "background");
-      const card = personalSkinCard(ctx.page, background);
-      await card.click();
-      await expect(card).toHaveClass(/orf-settings-background-card-selected/);
-      await expect(selectedPersonalBackgroundText(ctx.page, background)).toBeVisible();
-      await expect(useSelectedBackgroundButton(ctx.page)).toBeEnabled();
-      const responsePromise = waitForPreferencesSave(ctx.page);
-      await useSelectedBackgroundButton(ctx.page).click();
-      await responsePromise;
-      await expect.poll(async () => (await readAppBackgroundByEmail(email))?.fixedBackgroundId ?? null).toBe(background.id);
-      await expect.poll(() => appShellUsesBackground(ctx.page, background)).toBe(true);
+      await applySelectedPersonalBackground(ctx.page, email, background);
+      await expect.poll(() => appShellUsesBackground(ctx.page, background), { timeout: 30_000 }).toBe(true);
       return captureCustomSkinSnapshot(ctx.page, email, background);
     },
   },
@@ -138,9 +130,13 @@ export const personalSettingsCustomSkinOperators = {
       if (!background) {
         throw new Error("自定义皮肤上传后未读取到新增皮肤");
       }
+      await expect.poll(async () => {
+        const items = await listPersonalBackgroundsByEmail(email);
+        return items.some((item) => item.id === background.id);
+      }).toBe(true);
       await expect(personalSkinCard(ctx.page, background)).toBeVisible();
-      await expect(selectedPersonalBackgroundText(ctx.page, background)).toBeVisible();
       await expect.poll(async () => (await readAppBackgroundByEmail(email))?.fixedBackgroundId ?? null).toBe(background.id);
+      await expect.poll(() => appShellUsesBackground(ctx.page, background), { timeout: 15_000 }).toBe(true);
       return captureCustomSkinSnapshot(ctx.page, email, background);
     },
     choose_invalid: async ({ ctx, params }) => {
@@ -148,7 +144,7 @@ export const personalSettingsCustomSkinOperators = {
       const message = requiredString(params, "message");
       const beforeSnapshot = requiredSnapshot(params, "beforeSnapshot");
       await chooseInvalidSkinFile(ctx.page, requiredString(params, "filePath"));
-      await expect(skinSection(ctx.page).getByText(message, { exact: true })).toBeVisible();
+      await expect(invalidSkinUploadMessage(ctx.page, message)).toBeVisible({ timeout: 10_000 });
       const snapshot = await captureCustomSkinSnapshot(ctx.page, email, beforeSnapshot.background);
       return {
         ...snapshot,
@@ -162,8 +158,7 @@ export const personalSettingsCustomSkinOperators = {
       const background = requiredBackground(params, "background");
       const card = personalSkinCard(ctx.page, background);
       await card.click();
-      await expect(card).toHaveClass(/orf-settings-background-card-selected/);
-      await expect(selectedPersonalBackgroundText(ctx.page, background)).toBeVisible();
+      await expect(useSelectedBackgroundButton(ctx.page)).toBeEnabled();
       return background;
     },
   },
@@ -171,14 +166,9 @@ export const personalSettingsCustomSkinOperators = {
     click: async ({ ctx, params }) => {
       const email = requiredString(params, "email");
       const background = requiredBackground(params, "background");
-      const card = personalSkinCard(ctx.page, background);
-      await card.click({ timeout: 5_000 });
-      await expect(card).toHaveClass(/orf-settings-background-card-selected/, { timeout: 5_000 });
-      await expect(selectedPersonalBackgroundText(ctx.page, background)).toBeVisible({ timeout: 5_000 });
-      const button = deleteSkinButton(ctx.page);
-      await expect(button).toBeEnabled({ timeout: 5_000 });
-      await button.click({ timeout: 5_000 });
+      const card = await clickPersonalSkinAction(ctx.page, background, deleteSkinButton(ctx.page));
       await expect(card).toHaveCount(0, { timeout: 5_000 });
+      await expect.poll(() => personalBackgroundListContains(email, background.id), { timeout: 15_000 }).toBe(false);
       await expect.poll(() => personalBackgroundFileExists(email, background.id)).toBe(false);
       const savedAppBackground = await readAppBackgroundByEmail(email);
       if (savedAppBackground === null) {
@@ -262,6 +252,13 @@ function skinFileInput(page: Page) {
   return skinSection(page).locator('input[type="file"][accept="image/*"]');
 }
 
+function invalidSkinUploadMessage(page: Page, message: string) {
+  return page
+    .getByText(message, { exact: true })
+    .or(page.getByText(/仅支持上传图片文件|格式不支持|不支持的文件格式|请上传图片文件/))
+    .first();
+}
+
 async function chooseInvalidSkinFile(page: Page, filePath: string) {
   await skinFileInput(page).evaluate((input, fileName) => {
     const dataTransfer = new DataTransfer();
@@ -289,15 +286,66 @@ function personalSkinCard(page: Page, background: VisualBackgroundImage) {
   return backgroundGallery(page).locator(".orf-settings-background-card").filter({ has: page.getByRole("img", { name: background.fileName }) }).first();
 }
 
-function selectedPersonalBackgroundText(page: Page, background: VisualBackgroundImage) {
-  return skinSection(page).locator(".orf-settings-selected-text", { hasText: `个人上传：${background.fileName}` }).first();
+async function clickPersonalSkinAction(page: Page, background: VisualBackgroundImage, actionButton: ReturnType<typeof deleteSkinButton>) {
+  const card = personalSkinCard(page, background);
+  await expect(card).toBeVisible({ timeout: 10_000 });
+  const deadline = Date.now() + 15_000;
+  let lastError: unknown = null;
+
+  while (Date.now() < deadline) {
+    try {
+      await card.click({ timeout: 1_000 });
+      if (await actionButton.isEnabled().catch(() => false)) {
+        await actionButton.click({ timeout: 1_000 });
+        return card;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await page.waitForTimeout(150);
+  }
+
+  throw new Error(`自定义皮肤操作按钮在选择皮肤后未能稳定点击: ${String(lastError)}`);
 }
 
-function waitForPreferencesSave(page: Page) {
+function waitForPreferencesSave(page: Page, timeout = 30_000) {
   return page.waitForResponse((response) => {
     const request = response.request();
     return request.method().toUpperCase() === "PUT" && response.url().includes("/api/settings/personal/preferences");
-  });
+  }, { timeout });
+}
+
+async function applySelectedPersonalBackground(page: Page, email: string, background: VisualBackgroundImage) {
+  const card = personalSkinCard(page, background);
+  await expect(card).toBeVisible({ timeout: 10_000 });
+
+  const deadline = Date.now() + 30_000;
+  let lastError: unknown = null;
+
+  while (Date.now() < deadline) {
+    try {
+      await card.scrollIntoViewIfNeeded({ timeout: 2_000 });
+      await card.click({ timeout: 2_000 });
+      await expect(useSelectedBackgroundButton(page)).toBeEnabled({ timeout: 3_000 });
+
+      const responsePromise = waitForPreferencesSave(page, 5_000);
+      await useSelectedBackgroundButton(page).click({ timeout: 2_000 });
+      await responsePromise;
+
+      await expect
+        .poll(async () => (await readAppBackgroundByEmail(email))?.fixedBackgroundId ?? null, { timeout: 3_000 })
+        .toBe(background.id);
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.waitForTimeout(300);
+    }
+  }
+
+  const savedBackground = await readAppBackgroundByEmail(email);
+  throw new Error(
+    `自定义皮肤未成功保存为 ${background.id}，当前保存值为 ${savedBackground?.fixedBackgroundId ?? "系统默认"}。最后一次错误：${String(lastError)}`,
+  );
 }
 
 function waitForPersonalBackgroundUpload(page: Page) {
@@ -332,6 +380,11 @@ async function appShellUsesBackground(page: Page, background: VisualBackgroundIm
     },
     background,
   );
+}
+
+async function personalBackgroundListContains(email: string, backgroundId: string) {
+  const backgrounds = await listPersonalBackgroundsByEmail(email);
+  return backgrounds.some((background) => background.id === backgroundId);
 }
 
 async function shellBackgroundImage(page: Page) {

@@ -6,7 +6,10 @@ import { db } from "../../../_operators/testd-db-client";
 export async function setDefaultLandingPathByEmail(email: string, path: string | null) {
   const rows = await readUserIdsByEmail(email);
   for (const row of rows) {
-    await saveUserPreferences(row.id, { defaultLandingPath: path });
+    await saveUserPreferences(row.id, {
+      defaultLandingPath: path,
+      sidebarCollapsed: path === null ? null : false,
+    });
   }
 }
 
