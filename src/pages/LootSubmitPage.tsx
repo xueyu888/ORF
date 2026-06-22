@@ -4,6 +4,15 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { FantasySelectMenu, type FantasySelectOption } from "../components/FantasySelectMenu";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, Field, actionButtonClassName } from "../components/ui";
+import {
+  buildContributionReviewMatrix,
+  contributionReviewMatrixToAllocations,
+  contributionReviewTargetKey,
+  formatContributionReviewPercent,
+  normalizeContributionReviewMatrixInputs,
+  type ContributionReviewMatrixInputs,
+  type ContributionReviewMatrixSummary,
+} from "../features/challenge/model/contributionReviewMatrix";
 import { fetchLocalSettlementSummary, type LocalSettlementSummary } from "../services/localSettlementClient";
 import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { useOrf } from "../state/OrfProvider";
@@ -62,6 +71,19 @@ const trialDecisionOptions: Array<FantasySelectOption<Exclude<ObjectiveTrialRevi
 const CONTRIBUTION_PERCENT_TOTAL = 100;
 const CONTRIBUTION_PERCENT_TOLERANCE = 0.01;
 const CONTRIBUTION_RATIO_WARNING_THRESHOLD = 0.1;
+const CONTRIBUTION_REVIEW_DRAFT_STORAGE_PREFIX =
+  "orf:loot:contribution-review-draft:";
+const CONTRIBUTION_REVIEW_DRAFT_VERSION = 1;
+
+type ContributionReviewMode = "score" | "abstain";
+
+type StoredContributionReviewDraft = {
+  abstentionReason: string;
+  matrixInputs: ContributionReviewMatrixInputs;
+  peerReviewMode: ContributionReviewMode;
+  updatedAt: string;
+  version: typeof CONTRIBUTION_REVIEW_DRAFT_VERSION;
+};
 
 function ResultDetailsSummary({ result }: { result: Result }) {
   const detail = resultDetailText(result);
@@ -72,6 +94,91 @@ function ResultDetailsSummary({ result }: { result: Result }) {
       {detail}
     </div>
   );
+}
+
+function contributionReviewDraftStorageKey(userId: string, objectiveId: string) {
+  return `${CONTRIBUTION_REVIEW_DRAFT_STORAGE_PREFIX}${encodeURIComponent(
+    userId,
+  )}:${encodeURIComponent(objectiveId)}`;
+}
+
+function readContributionReviewDraft(
+  storageKey: string,
+): StoredContributionReviewDraft | null {
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return null;
+    return parseContributionReviewDraft(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function writeContributionReviewDraft(
+  storageKey: string,
+  draft: StoredContributionReviewDraft,
+) {
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(draft));
+  } catch {
+    // Draft persistence is best-effort; submission validation remains authoritative.
+  }
+}
+
+function clearContributionReviewDraft(storageKey: string) {
+  if (!storageKey) return;
+  try {
+    window.localStorage.removeItem(storageKey);
+  } catch {
+    // Ignore unavailable storage.
+  }
+}
+
+function parseContributionReviewDraft(
+  value: unknown,
+): StoredContributionReviewDraft | null {
+  if (!isRecord(value)) return null;
+  if (value.version !== CONTRIBUTION_REVIEW_DRAFT_VERSION) return null;
+  const peerReviewMode = parseContributionReviewMode(value.peerReviewMode);
+  if (!peerReviewMode) return null;
+
+  return {
+    abstentionReason:
+      typeof value.abstentionReason === "string" ? value.abstentionReason : "",
+    matrixInputs: parseContributionReviewDraftInputs(value.matrixInputs),
+    peerReviewMode,
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : "",
+    version: CONTRIBUTION_REVIEW_DRAFT_VERSION,
+  };
+}
+
+function parseContributionReviewMode(
+  value: unknown,
+): ContributionReviewMode | null {
+  return value === "score" || value === "abstain" ? value : null;
+}
+
+function parseContributionReviewDraftInputs(
+  value: unknown,
+): ContributionReviewMatrixInputs {
+  if (!isRecord(value)) return {};
+
+  const inputs: ContributionReviewMatrixInputs = {};
+  for (const [rowId, rowValue] of Object.entries(value)) {
+    if (!isRecord(rowValue)) continue;
+    const rowInputs: Record<string, string> = {};
+    for (const [targetKey, cellValue] of Object.entries(rowValue)) {
+      if (typeof cellValue === "string") {
+        rowInputs[targetKey] = cellValue;
+      }
+    }
+    inputs[rowId] = rowInputs;
+  }
+  return inputs;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function LootSubmitPage() {
@@ -125,11 +232,13 @@ export function LootSubmitPage() {
   const [resultReviews, setResultReviews] = useState<
     Record<string, ResultAcceptedResult>
   >({});
-  const [contributionInputs, setContributionInputs] = useState<
-    Record<string, string>
-  >({});
-  const [peerReviewMode, setPeerReviewMode] = useState<"score" | "abstain">("score");
+  const [contributionMatrixInputs, setContributionMatrixInputs] =
+    useState<ContributionReviewMatrixInputs>({});
+  const [peerReviewMode, setPeerReviewMode] =
+    useState<ContributionReviewMode>("score");
   const [abstentionReason, setAbstentionReason] = useState("");
+  const [activeContributionReviewDraftKey, setActiveContributionReviewDraftKey] =
+    useState("");
   const [resolutionInputs, setResolutionInputs] = useState<
     Record<string, string>
   >({});
@@ -174,13 +283,81 @@ export function LootSubmitPage() {
     });
   }, [results]);
 
+  const contributionReviewDraftKey = useMemo(
+    () =>
+      currentUser?.id && objective?.id
+        ? contributionReviewDraftStorageKey(currentUser.id, objective.id)
+        : "",
+    [currentUser?.id, objective?.id],
+  );
+
   useEffect(() => {
-    setContributionInputs((current) =>
-      percentInputDefaults(objective?.challengers ?? [], current),
+    if (!contributionReviewDraftKey) {
+      setActiveContributionReviewDraftKey("");
+      setContributionMatrixInputs({});
+      setPeerReviewMode("score");
+      setAbstentionReason("");
+      return;
+    }
+
+    const draft = readContributionReviewDraft(contributionReviewDraftKey);
+    setActiveContributionReviewDraftKey(contributionReviewDraftKey);
+    setContributionMatrixInputs(
+      normalizeContributionReviewMatrixInputs({
+        current: draft?.matrixInputs ?? {},
+        objectiveTitle: objective?.title ?? "目标整体",
+        results,
+        targets: challengerAllocationTargets,
+      }),
     );
-  }, [objective?.challengers]);
+    setPeerReviewMode(draft?.peerReviewMode ?? "score");
+    setAbstentionReason(draft?.abstentionReason ?? "");
+  }, [
+    challengerAllocationTargets,
+    contributionReviewDraftKey,
+    objective?.title,
+    results,
+  ]);
+
+  useEffect(() => {
+    if (
+      !contributionReviewDraftKey ||
+      activeContributionReviewDraftKey !== contributionReviewDraftKey
+    ) {
+      return;
+    }
+
+    writeContributionReviewDraft(contributionReviewDraftKey, {
+      abstentionReason,
+      matrixInputs: contributionMatrixInputs,
+      peerReviewMode,
+      updatedAt: new Date().toISOString(),
+      version: CONTRIBUTION_REVIEW_DRAFT_VERSION,
+    });
+  }, [
+    abstentionReason,
+    activeContributionReviewDraftKey,
+    contributionMatrixInputs,
+    contributionReviewDraftKey,
+    peerReviewMode,
+  ]);
 
   const settlementContributionTargets = challengerAllocationTargets;
+  const contributionReviewMatrix = useMemo(
+    () =>
+      buildContributionReviewMatrix({
+        inputs: contributionMatrixInputs,
+        objectiveTitle: objective?.title ?? "目标整体",
+        results,
+        targets: challengerAllocationTargets,
+      }),
+    [
+      challengerAllocationTargets,
+      contributionMatrixInputs,
+      objective?.title,
+      results,
+    ],
+  );
   const settlementParticipantUserIds = useMemo(
     () =>
       settlementContributionTargets
@@ -527,16 +704,18 @@ export function LootSubmitPage() {
           objective.id,
           { abstentionReason: note, kind: "abstain" },
         );
-        if (ok) navigate("/tasks");
+        if (ok) {
+          clearContributionReviewDraft(contributionReviewDraftKey);
+          navigate("/tasks");
+        }
       } finally {
         setSubmittingAction(null);
       }
       return;
     }
 
-    const result = percentInputsToAllocations(
-      contributionInputs,
-      challengerAllocationTargets,
+    const result = contributionReviewMatrixToAllocations(
+      contributionReviewMatrix,
     );
     if (result.status === "invalid") {
       setError(result.error);
@@ -549,10 +728,28 @@ export function LootSubmitPage() {
         objective.id,
         { allocations: result.allocations, kind: "score" },
       );
-      if (ok) navigate("/tasks");
+      if (ok) {
+        clearContributionReviewDraft(contributionReviewDraftKey);
+        navigate("/tasks");
+      }
     } finally {
       setSubmittingAction(null);
     }
+  };
+
+  const updateContributionReviewMatrixInput = (
+    rowId: string,
+    targetKey: string,
+    value: string,
+  ) => {
+    setContributionMatrixInputs((current) => ({
+      ...current,
+      [rowId]: {
+        ...(current[rowId] ?? {}),
+        [targetKey]: value,
+      },
+    }));
+    if (error) setError("");
   };
 
   return (
@@ -931,40 +1128,14 @@ export function LootSubmitPage() {
               {peerReviewMode === "score" ? (
                 <>
                   <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs orf-text-secondary">
-                    给每位目标挑战者填写 0-100 的贡献百分比，合计必须为
-                    100%。需要包含自己；自评只用于一致性核查，结算得分优先汇总其他挑战者对该成员的评价。
+                    按指标填写每位目标挑战者的贡献百分比；每一行合计必须为
+                    100%。页面按指标权重自动汇总为目标最终贡献比例，并只提交最终比例。
                   </div>
-                  <ContributionPercentTotal
-                    total={percentInputTotal(
-                      contributionInputs,
-                      objective.challengers,
-                    )}
+                  <ContributionReviewMatrixTable
+                    currentMemberName={currentMemberName}
+                    summary={contributionReviewMatrix}
+                    onChange={updateContributionReviewMatrixInput}
                   />
-                  <div className="grid gap-3">
-                    {objective.challengers.map((member) => (
-                      <Field
-                        key={member}
-                        label={`${member}${member === currentMemberName ? "（你）" : ""} 贡献百分比`}
-                      >
-                        <input
-                          className="orf-input px-3 py-2 text-sm"
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          inputMode="decimal"
-                          value={contributionInputs[member] ?? "0"}
-                          onChange={(event) => {
-                            setContributionInputs((items) => ({
-                              ...items,
-                              [member]: event.target.value,
-                            }));
-                            if (error) setError("");
-                          }}
-                        />
-                      </Field>
-                    ))}
-                  </div>
                 </>
               ) : (
                 <Field label="弃权说明">
@@ -1337,6 +1508,133 @@ function LocalSettlementSummaryView({
   );
 }
 
+function ContributionReviewMatrixTable({
+  currentMemberName,
+  onChange,
+  summary,
+}: {
+  currentMemberName: string;
+  onChange: (rowId: string, targetKey: string, value: string) => void;
+  summary: ContributionReviewMatrixSummary;
+}) {
+  return (
+    <div className="orf-loot-panel orf-loot-peer-review-matrix">
+      <div className="orf-loot-panel-heading">
+        <div>
+          <div className="text-sm font-semibold orf-text-primary">
+            指标贡献分配
+          </div>
+          <div className="text-xs orf-text-secondary">
+            {summary.hasMetricRows
+              ? "指标权重来自当前指标分值；底部目标最终比例会随每行输入自动更新。"
+              : "当前目标没有指标，页面按目标整体提交贡献比例。"}
+          </div>
+        </div>
+        <span
+          className={
+            summary.valid
+              ? "orf-loot-total-pill"
+              : "orf-loot-total-pill orf-loot-total-pill-warning"
+          }
+        >
+          {summary.valid ? "可提交" : "检查行合计"}
+        </span>
+      </div>
+      <div className="orf-loot-table-wrap">
+        <table className="orf-loot-table orf-loot-peer-review-table">
+          <thead className="orf-surface-muted orf-text-secondary">
+            <tr>
+              <th className="px-3 py-2 font-semibold">目标 / 指标</th>
+              {summary.targetCells.map((target) => (
+                <th
+                  key={target.targetKey}
+                  className="px-3 py-2 font-semibold"
+                >
+                  {target.member}
+                  {target.member === currentMemberName ? "（你）" : ""}
+                </th>
+              ))}
+              <th className="px-3 py-2 font-semibold">行合计</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summary.rows.map((row) => (
+              <tr key={row.id}>
+                <td className="px-3 py-2">
+                  <div className="orf-loot-result-title">{row.title}</div>
+                  <div className="orf-loot-result-meta">
+                    {!row.isFallbackObjectiveRow && row.uncertaintyLevel
+                      ? `${row.uncertaintyLevel} · `
+                      : ""}
+                    {!row.isFallbackObjectiveRow
+                      ? `指标分 ${row.points} · `
+                      : ""}
+                    权重 {formatContributionReviewPercent(row.weightRatio * 100)}%
+                  </div>
+                  {row.detail && (
+                    <div className="orf-loot-result-detail">{row.detail}</div>
+                  )}
+                </td>
+                {row.cells.map((cell) => (
+                  <td key={cell.targetKey} className="px-3 py-2">
+                    <input
+                      aria-label={`${row.title} ${cell.member} 贡献百分比`}
+                      className="orf-input orf-loot-percent-input"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={cell.input}
+                      onChange={(event) =>
+                        onChange(row.id, cell.targetKey, event.target.value)
+                      }
+                    />
+                  </td>
+                ))}
+                <td className="px-3 py-2">
+                  <span
+                    className={
+                      row.valid
+                        ? "orf-loot-total-pill"
+                        : "orf-loot-total-pill orf-loot-total-pill-warning"
+                    }
+                  >
+                    {formatContributionReviewPercent(row.totalPercent)}%
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th className="px-3 py-2 font-semibold">目标最终比例</th>
+              {summary.targetCells.map((cell) => (
+                <td key={cell.targetKey} className="px-3 py-2">
+                  <span className="orf-loot-target-percent">
+                    {formatContributionReviewPercent(cell.percent ?? 0)}%
+                  </span>
+                </td>
+              ))}
+              <td className="px-3 py-2">
+                <span
+                  className={
+                    summary.valid
+                      ? "orf-loot-total-pill"
+                      : "orf-loot-total-pill orf-loot-total-pill-warning"
+                  }
+                >
+                  {formatContributionReviewPercent(summary.targetTotalPercent)}%
+                </span>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function PeerReviewRawScoreTable({
   summary,
   targets,
@@ -1543,19 +1841,6 @@ function SingleContributionSummaryView({ member }: { member: string }) {
   );
 }
 
-function ContributionPercentTotal({ total }: { total: number }) {
-  const valid = isContributionPercentTotalValid(total);
-  return (
-    <div
-      className={
-        valid ? "text-xs orf-text-secondary" : "text-xs orf-warning-text"
-      }
-    >
-      当前合计：{formatInputPercent(total)}%
-    </div>
-  );
-}
-
 function isContributionPercentTotalValid(total: number) {
   return (
     Math.abs(total - CONTRIBUTION_PERCENT_TOTAL) <=
@@ -1612,7 +1897,7 @@ function balancedPercentDefaults(members: string[]) {
 type ContributionAllocationTarget = ContributionMemberTarget;
 
 function contributionTargetKey(target: ContributionAllocationTarget) {
-  return target.memberUserId ?? target.member;
+  return contributionReviewTargetKey(target);
 }
 
 function equalContributionAllocations(targets: ContributionAllocationTarget[]) {

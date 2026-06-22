@@ -8952,6 +8952,10 @@ button.work-logs-team-cell:focus-visible {
   background: rgba(255, 255, 255, 0.62);
 }
 
+.orf-loot-peer-review-matrix {
+  background: rgba(247, 251, 252, 0.68);
+}
+
 .orf-loot-submission-review {
   background: rgba(255, 255, 255, 0.62);
 }
@@ -9059,6 +9063,27 @@ button.work-logs-team-cell:focus-visible {
   width: 156px;
 }
 
+.orf-loot-peer-review-table {
+  min-width: max(100%, 760px);
+}
+
+.orf-loot-peer-review-table th:first-child,
+.orf-loot-peer-review-table td:first-child {
+  min-width: 260px;
+  width: 32%;
+}
+
+.orf-loot-peer-review-table th:not(:first-child),
+.orf-loot-peer-review-table td:not(:first-child) {
+  min-width: 116px;
+}
+
+.orf-loot-peer-review-table tfoot th,
+.orf-loot-peer-review-table tfoot td {
+  border-top: 1px solid rgba(45, 143, 179, 0.2);
+  background: rgba(226, 247, 252, 0.44);
+}
+
 .orf-loot-submission-block {
   display: grid;
   gap: 6px;
@@ -9104,6 +9129,14 @@ button.work-logs-team-cell:focus-visible {
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
+}
+
+.orf-loot-result-meta {
+  margin-top: 4px;
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.35;
 }
 
 .orf-loot-result-badge,
@@ -9156,6 +9189,13 @@ button.work-logs-team-cell:focus-visible {
   min-height: 32px;
   padding: 0 9px;
   font-size: 13px;
+}
+
+.orf-loot-target-percent {
+  color: var(--orf-text-primary);
+  font-size: 13px;
+  font-weight: 820;
+  white-space: nowrap;
 }
 
 @media (max-width: 900px) {
