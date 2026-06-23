@@ -1,0 +1,125 @@
+import { STATE_CASE_MODEL, type StateCaseSpec, type StepExecutionMethod, type StepSpec } from "../../_framework/types";
+import type { FeedbackEntryCaseData } from "./_support/feedback-entry.context";
+
+function step(
+  caseStepId: string,
+  method: StepExecutionMethod,
+  id: string,
+  title: string,
+  object: string,
+  operator: string,
+  params?: Record<string, unknown>,
+): StepSpec {
+  return {
+    source: { caseStepId, method },
+    id,
+    title,
+    object,
+    operator,
+    ...(params ? { params } : {}),
+  };
+}
+
+export const feedbackEntryCase = {
+  id: "feedback.create-and-detail.entry",
+  title: "02-反馈新建与详情进入",
+  model: STATE_CASE_MODEL,
+  tags: ["feedback", "entry", "detail", "create"],
+  data: {
+    email: "orf-feedback-entry-e2e@orf.local",
+    password: "OrfFeedbackEntryE2E!2026",
+    name: "ORF Feedback Entry E2E",
+    role: "admin",
+    feedbackPath: "/feedback",
+    feedbackCreatePathPattern: "/feedback/new$",
+    feedbackDetailPathPattern: "/feedback/testd-feedback-entry-issue$",
+    feedbackId: "testd-feedback-entry-issue",
+    phenomenon: "ORF反馈入口E2E-详情目标",
+    category: "技术问题",
+  },
+  B: {
+    description: "系统服务可用，浏览器处于未登录基准状态",
+    assertions: [
+      step("B-1", "api", "frontend.ready", "前端服务 应可用", "frontend.service", "available"),
+      step("B-2", "api", "backend.ready", "后端服务 应可用", "api.health", "ok"),
+      step("B-3", "api", "frontend.login_entry.accessible", "前端登录页入口 应可访问", "frontend.login_entry", "accessible"),
+      step("B-4", "api", "session.endpoint.accessible", "当前会话查询能力 应可用", "auth.session", "accessible"),
+      step("B-5", "prisma", "db.ready", "ORF 数据库 应可连接", "db", "ready"),
+      step("B-6", "prisma", "db.schema.current", "ORF 数据库 schema 应为 当前测试版本", "db.schema", "current"),
+      step("B-7", "api", "ory.admin_public.ready", "Ory/Kratos 认证服务的管理和公共访问能力 应可用", "ory.admin_public", "ready"),
+      step("B-8", "api", "session.unauthenticated", "当前会话 应为 未登录", "auth.session", "unauthenticated"),
+      step("B-9", "playwright", "cookie.absent", "当前浏览器 应不存在 Ory 登录会话 cookie", "browser.cookie", "absent"),
+      step("B-10", "playwright", "storage.empty", "当前浏览器 应不保留本地登录态", "browser.auth_storage", "empty"),
+    ],
+  },
+  Setup: {
+    description: "准备管理员测试用户、登录态和独占反馈 issue，并打开反馈页面",
+    steps: [
+      step("Setup-1", "api", "ory.identity.upsert", "准备邮箱为 `orf-feedback-entry-e2e@orf.local`、使用固定测试密码的反馈入口测试认证身份", "ory.identity", "upsert_password", { emailFrom: "data.email", passwordFrom: "data.password", nameFrom: "data.name", saveAs: "identity" }),
+      step("Setup-2", "prisma", "db.user.upsert", "准备邮箱为 `orf-feedback-entry-e2e@orf.local`、姓名为 `ORF Feedback Entry E2E`、角色为 `admin`、状态为 `active` 的反馈入口测试用户和默认团队成员关系", "db.user", "upsert", { emailFrom: "data.email", nameFrom: "data.name", roleFrom: "data.role", status: "active", identityIdFrom: "runtime.identity.id", saveAs: "user" }),
+      step("Setup-3", "prisma", "db.feedback_entry_issue.delete_residue", "删除现象为 `ORF反馈入口E2E-详情目标` 的残留反馈 issue 及其分类记录", "db.feedback_entry_issue", "delete", { feedbackIdFrom: "data.feedbackId", phenomenonFrom: "data.phenomenon" }),
+      step("Setup-4", "prisma", "db.feedback_entry_issue.prepare", "准备现象为 `ORF反馈入口E2E-详情目标`、状态为 `Open`、分类为 `技术问题` 且处理人为反馈入口测试用户的独占反馈 issue", "db.feedback_entry_issue", "prepare", { feedbackIdFrom: "data.feedbackId", phenomenonFrom: "data.phenomenon", categoryFrom: "data.category", emailFrom: "data.email" }),
+      step("Setup-5", "api", "ory.sessions.revoke", "撤销邮箱为 `orf-feedback-entry-e2e@orf.local` 的反馈入口测试认证身份的残留登录会话", "ory.sessions", "revoke_by_email", { emailFrom: "data.email" }),
+      step("Setup-6", "playwright", "browser.clear", "移除当前浏览器中的残留登录态", "browser", "clear_state"),
+      step("Setup-7", "playwright", "page.goto.auth", "打开 ORF 登录页", "page", "goto", { path: "/auth" }),
+      step("Setup-8", "playwright", "fill.email", "在邮箱输入框输入 `orf-feedback-entry-e2e@orf.local`", "page", "fill", { label: "Email", valueFrom: "data.email" }),
+      step("Setup-9", "playwright", "fill.password", "在密码输入框输入反馈入口测试固定密码", "page", "fill", { label: "Password", exact: true, valueFrom: "data.password" }),
+      step("Setup-10", "playwright", "click.sign_in", "点击 \"Sign In\" 登录操作", "page.login_form", "submit", { saveAs: "loginResponse" }),
+      step("Setup-11", "api", "session.authenticated", "当前会话 应为 邮箱为 `orf-feedback-entry-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话", "auth.session", "authenticated", { emailFrom: "data.email", roleFrom: "data.role", status: "active" }),
+      step("Setup-12", "playwright", "page.goto.feedback", "打开 反馈页面", "page", "goto", { pathFrom: "data.feedbackPath" }),
+    ],
+  },
+  S0: {
+    description: "管理员已登录并位于反馈页面，反馈新建入口和目标 issue 均可用",
+    assertions: [
+      step("S0-1", "api", "session.authenticated", "当前会话 应为 邮箱为 `orf-feedback-entry-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话", "auth.session", "authenticated", { emailFrom: "data.email", roleFrom: "data.role", status: "active" }),
+      step("S0-2", "playwright", "feedback.page.visible", "当前页面 应为 反馈页面", "feedback.page", "visible", { pathFrom: "data.feedbackPath" }),
+      step("S0-3", "playwright", "feedback.new_entry.visible", "反馈页面的新建反馈操作 应可见", "feedback.entry.new", "visible"),
+      step("S0-4", "playwright", "feedback.new_entry.enabled", "反馈页面的新建反馈操作 应可点击", "feedback.entry.new", "enabled"),
+      step("S0-5", "playwright", "feedback.issue.visible", "反馈页面的列表 应显示现象为 `ORF反馈入口E2E-详情目标` 的独占反馈 issue", "feedback.issue.row", "visible", { phenomenonFrom: "data.phenomenon" }),
+      step("S0-6", "playwright", "feedback.issue.enabled", "现象为 `ORF反馈入口E2E-详情目标` 的独占反馈 issue 在反馈页面的列表中 应可点击", "feedback.issue.row", "enabled", { phenomenonFrom: "data.phenomenon" }),
+      step("S0-7", "prisma", "db.feedback_entry_issue.exists", "现象为 `ORF反馈入口E2E-详情目标`、状态为 `Open`、分类为 `技术问题` 的独占反馈 issue 及其分类记录 应存在", "db.feedback_entry_issue", "exists", { feedbackIdFrom: "data.feedbackId", phenomenonFrom: "data.phenomenon" }),
+    ],
+  },
+  Action: {
+    description: "从反馈页面进入新建反馈页面，再返回反馈列表并打开目标反馈详情",
+    steps: [
+      step("Action-1", "playwright", "feedback.new_entry.click", "点击 反馈页面的新建反馈操作", "feedback.entry.new", "click"),
+      step("Action-2", "playwright", "feedback.create_snapshot.capture", "记录点击新建反馈操作后的页面状态", "feedback.create_snapshot", "capture", { saveAs: "createFeedbackPageSnapshot" }),
+      step("Action-3", "playwright", "page.goto.feedback", "打开 反馈页面", "page", "goto", { pathFrom: "data.feedbackPath" }),
+      step("Action-4", "playwright", "feedback.issue.click", "点击反馈页面列表中现象为 `ORF反馈入口E2E-详情目标` 的独占反馈 issue", "feedback.issue.row", "click", { phenomenonFrom: "data.phenomenon" }),
+      step("Action-5", "playwright", "feedback.issue_detail_snapshot.capture", "记录点击独占反馈 issue 后的页面状态", "feedback.issue_detail_snapshot", "capture", { saveAs: "feedbackDetailSnapshot" }),
+    ],
+  },
+  S1: {
+    description: "新建反馈页面和反馈详情页面的运行时快照符合预期",
+    assertions: [
+      step("S1-1", "playwright", "feedback.create_snapshot.page.visible", "点击新建反馈操作后，当前页面 应为 新建反馈页面", "feedback.create_snapshot", "page_visible", { snapshotFrom: "runtime.createFeedbackPageSnapshot", patternFrom: "data.feedbackCreatePathPattern" }),
+      step("S1-2", "playwright", "feedback.create_snapshot.form.visible", "点击新建反馈操作后，新建反馈表单 应可见", "feedback.create_snapshot", "form_visible", { snapshotFrom: "runtime.createFeedbackPageSnapshot" }),
+      step("S1-3", "playwright", "feedback.create_snapshot.title.visible", "点击新建反馈操作后，新建反馈表单的标题输入框 应可见", "feedback.create_snapshot", "title_input_visible", { snapshotFrom: "runtime.createFeedbackPageSnapshot" }),
+      step("S1-4", "playwright", "feedback.create_snapshot.body.visible", "点击新建反馈操作后，新建反馈表单的反馈正文输入区域 应可见", "feedback.create_snapshot", "body_input_visible", { snapshotFrom: "runtime.createFeedbackPageSnapshot" }),
+      step("S1-5", "playwright", "feedback.create_snapshot.submit.visible", "点击新建反馈操作后，新建反馈表单的提交操作 应可见", "feedback.create_snapshot", "submit_visible", { snapshotFrom: "runtime.createFeedbackPageSnapshot" }),
+      step("S1-6", "playwright", "feedback.issue_detail_snapshot.page.visible", "点击独占反馈 issue 后，当前页面 应为现象为 `ORF反馈入口E2E-详情目标` 的反馈详情页面", "feedback.issue_detail_snapshot", "page_visible", { snapshotFrom: "runtime.feedbackDetailSnapshot", patternFrom: "data.feedbackDetailPathPattern" }),
+      step("S1-7", "playwright", "feedback.issue_detail_snapshot.title.visible", "点击独占反馈 issue 后，反馈详情页面 应显示 `ORF反馈入口E2E-详情目标`", "feedback.issue_detail_snapshot", "title_visible", { snapshotFrom: "runtime.feedbackDetailSnapshot", valueFrom: "data.phenomenon" }),
+      step("S1-8", "playwright", "feedback.issue_detail_snapshot.state.visible", "点击独占反馈 issue 后，反馈详情页面 应显示状态为 `Open`", "feedback.issue_detail_snapshot", "state_visible", { snapshotFrom: "runtime.feedbackDetailSnapshot", value: "Open" }),
+      step("S1-9", "playwright", "feedback.issue_detail_snapshot.category.visible", "点击独占反馈 issue 后，反馈详情页面 应显示分类为 `技术问题`", "feedback.issue_detail_snapshot", "category_visible", { snapshotFrom: "runtime.feedbackDetailSnapshot", valueFrom: "data.category" }),
+      step("S1-10", "api", "session.authenticated.after_detail", "当前会话 应仍为 邮箱为 `orf-feedback-entry-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话", "auth.session", "authenticated", { emailFrom: "data.email", roleFrom: "data.role", status: "active" }),
+    ],
+  },
+  Clean: {
+    description: "删除本用例独占反馈 issue、认证身份和用户，恢复未登录基准状态",
+    steps: [
+      step("Clean-1", "api", "auth.logout", "注销当前登录会话", "auth", "logout"),
+      step("Clean-2", "playwright", "page.runtime.stop", "离开当前 ORF 前端页面", "page.runtime", "stop"),
+      step("Clean-3", "playwright", "browser.clear", "移除当前浏览器中的残留登录态", "browser", "clear_state"),
+      step("Clean-4", "prisma", "db.feedback_entry_issue.delete", "删除现象为 `ORF反馈入口E2E-详情目标` 的本用例反馈 issue 及其分类记录", "db.feedback_entry_issue", "delete", { feedbackIdFrom: "data.feedbackId", phenomenonFrom: "data.phenomenon" }),
+      step("Clean-5", "api", "ory.sessions.revoke", "撤销邮箱为 `orf-feedback-entry-e2e@orf.local` 的反馈入口测试认证身份的残留登录会话", "ory.sessions", "revoke_by_email", { emailFrom: "data.email" }),
+      step("Clean-6", "api", "ory.identity.delete", "删除邮箱为 `orf-feedback-entry-e2e@orf.local` 的反馈入口测试认证身份", "ory.identity", "delete_by_email", { emailFrom: "data.email" }),
+      step("Clean-7", "prisma", "db.user.memberships.delete", "删除邮箱为 `orf-feedback-entry-e2e@orf.local` 的反馈入口测试用户的默认团队成员关系", "db.user", "delete_memberships", { emailFrom: "data.email" }),
+      step("Clean-8", "prisma", "db.user.delete", "删除邮箱为 `orf-feedback-entry-e2e@orf.local` 的反馈入口测试用户", "db.user", "delete", { emailFrom: "data.email" }),
+      step("Clean-9", "prisma", "db.feedback_entry_issue.absent", "现象为 `ORF反馈入口E2E-详情目标` 的本用例反馈 issue 及其分类记录 应不存在", "db.feedback_entry_issue", "absent", { feedbackIdFrom: "data.feedbackId", phenomenonFrom: "data.phenomenon" }),
+      step("Clean-10", "api", "ory.identity.absent", "邮箱为 `orf-feedback-entry-e2e@orf.local` 的反馈入口测试认证身份 应不存在", "ory.identity", "absent", { emailFrom: "data.email" }),
+      step("Clean-11", "prisma", "db.user.absent", "邮箱为 `orf-feedback-entry-e2e@orf.local` 的反馈入口测试用户 应不存在", "db.user", "absent", { emailFrom: "data.email" }),
+    ],
+  },
+} satisfies StateCaseSpec<FeedbackEntryCaseData>;
