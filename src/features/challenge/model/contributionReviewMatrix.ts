@@ -1,9 +1,14 @@
 import { calibratedResultPoints } from "../../../domain/orfSettlement";
 import type { ContributionMemberTarget } from "../../../domain/orfObjectiveParticipants";
-import type { ContributionAllocation, ContributionReviewMetricScore, Result } from "../../../types/orf";
+import type {
+  ContributionAllocation,
+  ContributionReviewDraftMetricRow,
+  ContributionReviewMetricRow,
+  ContributionReviewMetricScore,
+  Result,
+} from "../../../types/orf";
 
 export const CONTRIBUTION_REVIEW_MATRIX_TOTAL_PERCENT = 100;
-export const CONTRIBUTION_REVIEW_MATRIX_PERCENT_TOLERANCE = 0.01;
 
 const objectiveFallbackRowId = "__objective__";
 
@@ -47,6 +52,12 @@ export type ContributionReviewMatrixSummary = {
 
 export type ContributionReviewMatrixAllocationResult =
   | { allocations: ContributionAllocation[]; metricScores: ContributionReviewMetricScore[]; status: "ok" }
+  | {
+      error: string;
+      status: "invalid";
+    };
+export type ContributionReviewMatrixMetricRowsResult =
+  | { metricRows: ContributionReviewMetricRow[]; status: "ok" }
   | {
       error: string;
       status: "invalid";
@@ -153,6 +164,53 @@ export function contributionReviewMatrixToAllocations(
   return { status: "ok", allocations: summary.allocations, metricScores: summary.metricScores };
 }
 
+export function contributionReviewMatrixToMetricRows(
+  summary: ContributionReviewMatrixSummary,
+): ContributionReviewMatrixMetricRowsResult {
+  if (summary.rows.length === 0) {
+    return { status: "invalid", error: "这个目标没有可评价的指标" };
+  }
+  if (!summary.valid) {
+    return {
+      status: "invalid",
+      error: "每个指标行都必须填写 0 到 100 的整数，且合计为 100%",
+    };
+  }
+
+  return {
+    status: "ok",
+    metricRows: summary.rows.map((row) => ({
+      allocations: row.cells.map((cell) => ({
+        member: cell.member,
+        memberUserId: cell.memberUserId,
+        percent: cell.percent ?? 0,
+      })),
+      isFallbackObjectiveRow: row.isFallbackObjectiveRow,
+      metricDetail: row.detail,
+      metricId: row.id,
+      metricTitle: row.title,
+      points: row.points,
+    })),
+  };
+}
+
+export function contributionReviewMatrixToDraftMetricRows(
+  summary: ContributionReviewMatrixSummary,
+): ContributionReviewDraftMetricRow[] {
+  return summary.rows.map((row) => ({
+    allocations: row.cells.map((cell) => ({
+      input: cell.input,
+      member: cell.member,
+      memberUserId: cell.memberUserId,
+    })),
+    isFallbackObjectiveRow: row.isFallbackObjectiveRow,
+    metricDetail: row.detail,
+    metricId: row.id,
+    metricTitle: row.title,
+    points: row.points,
+  }));
+}
+
 export function formatContributionReviewPercent(value: number) {
   if (!Number.isFinite(value)) return "0";
   const rounded = Number(value.toFixed(2));
@@ -219,7 +277,7 @@ function buildContributionReviewMatrixRow(
     valid:
       cells.length > 0 &&
       cells.every((cell) => cell.percent !== null) &&
-      Math.abs(totalPercent - CONTRIBUTION_REVIEW_MATRIX_TOTAL_PERCENT) <= CONTRIBUTION_REVIEW_MATRIX_PERCENT_TOLERANCE,
+      totalPercent === CONTRIBUTION_REVIEW_MATRIX_TOTAL_PERCENT,
   };
 }
 
@@ -244,10 +302,12 @@ function contributionReviewRowInputDefaults(
 function parseContributionReviewPercent(value: string) {
   const normalized = value.trim();
   if (!normalized) return null;
+  if (!/^(0|[1-9]\d*)$/.test(normalized)) return null;
 
   const percent = Number(normalized);
   if (
     !Number.isFinite(percent) ||
+    !Number.isInteger(percent) ||
     percent < 0 ||
     percent > CONTRIBUTION_REVIEW_MATRIX_TOTAL_PERCENT
   ) {

@@ -59,6 +59,10 @@ export type SettlementPlan = {
   contributionRatios: ContributionAllocation[];
 };
 export type ObjectiveAcceptancePlan = Omit<SettlementPlan, "contributionRatios">;
+export type SettlementPointAllocation<T extends ContributionAllocation = ContributionAllocation> = T & {
+  points: number;
+  pointUnits: number;
+};
 
 export function uncertaintyScoreFor(
   level: UncertaintyLevel | null | undefined,
@@ -226,4 +230,59 @@ export function planObjectiveSettlement(input: {
     ...acceptancePlan,
     contributionRatios,
   };
+}
+
+export function allocateSettlementPoints<T extends ContributionAllocation>(input: {
+  contributionRatios: T[];
+  settlementPoints: number;
+}): Array<SettlementPointAllocation<T>> {
+  const settlementUnits = Math.round(input.settlementPoints * 100);
+  if (input.contributionRatios.length === 0) return [];
+  if (settlementUnits <= 0) {
+    return input.contributionRatios.map((item) => ({
+      ...item,
+      points: 0,
+      pointUnits: 0,
+    }));
+  }
+
+  const totalRatio = input.contributionRatios.reduce((sum, item) => {
+    const ratio = Number(item.ratio);
+    return sum + (Number.isFinite(ratio) && ratio > 0 ? ratio : 0);
+  }, 0);
+  if (totalRatio <= 0) {
+    return input.contributionRatios.map((item) => ({
+      ...item,
+      points: 0,
+      pointUnits: 0,
+    }));
+  }
+
+  const raw = input.contributionRatios.map((item, index) => {
+    const ratio = Math.max(0, Number(item.ratio) || 0);
+    const exactUnits = (settlementUnits * ratio) / totalRatio;
+    const pointUnits = Math.floor(exactUnits);
+    return {
+      index,
+      item,
+      pointUnits,
+      remainder: exactUnits - pointUnits,
+    };
+  });
+  let remainingUnits = settlementUnits - raw.reduce((sum, item) => sum + item.pointUnits, 0);
+  const units = raw.map((item) => item.pointUnits);
+  for (const item of [...raw].sort((left, right) => right.remainder - left.remainder || left.index - right.index)) {
+    if (remainingUnits <= 0) break;
+    units[item.index] = (units[item.index] ?? 0) + 1;
+    remainingUnits -= 1;
+  }
+
+  return input.contributionRatios.map((item, index) => {
+    const pointUnits = units[index] ?? 0;
+    return {
+      ...item,
+      points: pointUnits / 100,
+      pointUnits,
+    };
+  });
 }

@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { hasPermission } from "../config/permissions";
 import { isObjectiveChallenger, objectiveChallengerCount, objectiveChallengerTargets } from "../domain/orfObjectiveParticipants";
 import { canAcceptObjectiveChallengeEntryForActor, canApplyToObjectiveChallengeEntry } from "../domain/orfChallengeEntry";
-import { fetchLocalSettlementSummary, submitLocalEncryptedContributionReview } from "../services/localSettlementClient";
+import { fetchLocalSettlementSummary, submitLocalContributionReview } from "../services/localSettlementClient";
 import { apiJson, apiRequest } from "./apiClient";
 import {
   bountyMutationFailureMessage,
@@ -12,7 +12,7 @@ import {
 } from "./orfProviderMutationMessages";
 import type {
   ContributionAllocation,
-  ContributionReviewMetricScore,
+  ContributionReviewMetricRow,
   LootResultClaim,
   ObjectiveAcceptedResult,
   Objective,
@@ -54,7 +54,7 @@ export type ReviewObjectiveTrialReviewInput = {
   commanderFeedback: string;
 };
 export type SubmitContributionReviewInput =
-  | { allocations: ContributionAllocation[]; kind: "score"; metricScores?: ContributionReviewMetricScore[] }
+  | { kind: "score"; metricRows: ContributionReviewMetricRow[] }
   | { abstentionReason: string; kind: "abstain" };
 export type RequestObjectiveAlignmentInput = {
   kind: ObjectiveAlignmentRequestKind;
@@ -343,30 +343,20 @@ export function useOrfProviderObjectiveActions({
       },
       submitContributionReview: async (objectiveId: string, input: SubmitContributionReviewInput) => {
         try {
-          const objective = state.objectives.find((item) => item.id === objectiveId);
-          if (!objective || !currentUser) {
+          if (!currentUser) {
             notify("匿名互评提交失败：目标或当前用户不可用");
             return false;
           }
-          await submitLocalEncryptedContributionReview(input.kind === "abstain"
+          await submitLocalContributionReview(input.kind === "abstain"
             ? {
                 abstentionReason: input.abstentionReason,
-                challengers: objective.challengers,
                 kind: "abstain",
                 objectiveId,
-                objectiveTitle: objective.title,
-                reviewer: currentUser.name,
-                reviewerUserId: currentUser.id,
               }
             : {
-                allocations: input.allocations,
-                challengers: objective.challengers,
                 kind: "score",
-                metricScores: input.metricScores,
+                metricRows: input.metricRows,
                 objectiveId,
-                objectiveTitle: objective.title,
-                reviewer: currentUser.name,
-                reviewerUserId: currentUser.id,
               });
           notify("匿名互评已通过 ORF 提交到共享结算服务");
           return true;
