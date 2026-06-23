@@ -19,6 +19,7 @@ import { ClientUpdateNotice } from "../features/client-updates/ClientUpdateNotic
 import { clientUpdateCenterOpenEvent, type ClientUpdateCenterOpenRequest } from "../features/client-updates/clientUpdateCenterEvents";
 import { ClientReleaseNotesDialog } from "../features/client-updates/ClientReleaseNotesDialog";
 import { DesktopWindowControls } from "../features/desktop/DesktopWindowControls";
+import { ChatFloatingImagePreviewProvider } from "../features/chat/ChatFloatingImagePreview";
 import { isDesktopShellAvailable, setDesktopWorkbenchZoomLevel } from "../features/desktop/desktopShellRuntime";
 import { applyDisplayPreferencesToDocument, nextWorkbenchZoomLevel } from "../features/display/displayPreferences";
 import { useVisualBackground } from "../hooks/useVisualBackground";
@@ -173,106 +174,108 @@ export function AppShell() {
   const isBountyHall = !isChatPage && shellDisplayPath.startsWith("/bounties");
 
   return (
-    <div
-      className="orf-app-shell flex min-h-screen"
-      data-bounty-hall={isBountyHall ? "true" : "false"}
-      data-chat-page={isChatPage ? "true" : "false"}
-      data-chat-theme={chatTheme}
-      data-desktop-chrome={desktopChromeEnabled ? "true" : "false"}
-      data-display-contrast={displayPreferences.contrast}
-      data-display-density={displayPreferences.density}
-      data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
-    >
-      <Sidebar
-        backgroundUrl={sidebarBackgroundUrl}
-        backgroundCrop={sidebarBackgroundCrop}
-        backgroundOverlayOpacity={sidebarBackgroundOverlayOpacity}
-        collapsed={sidebarCollapsed}
-        onCollapsedChange={handleSidebarCollapsedChange}
-        onNavigateIntent={handleShellNavigationIntent}
-        onOpenClientUpdateCenter={() => setClientUpdateCenter({ open: true })}
-      />
-      <div className="orf-shell-body min-w-0 flex-1">
-        <header
-          className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-2"
-          data-topbar-skin={topbarSelection ? "true" : "false"}
-          style={backgroundOverlayStyle(topbarSelection)}
-        >
-          <VisualBackgroundSlot
-            frameClassName="orf-topbar-skin-frame"
-            imageClassName="orf-topbar-skin-layer"
-            imageUrl={topbarSelection?.url ?? null}
-            crop={topbarSelection?.crop ?? defaultVisualBackgroundCrop}
-          />
-          <div className="orf-topbar-title orf-text-primary min-w-[160px] font-semibold tracking-tight" role="heading" aria-level={1}>
-            {isBountyHall && (
-              <span className="orf-topbar-title-icon" aria-hidden="true">
-                <Shield className="h-4 w-4" />
-              </span>
-            )}
-            <span>{breadcrumb(shellDisplayPath)}</span>
-          </div>
-          <div className="relative min-w-[180px] max-w-xl flex-1">
-            <Search className="orf-text-muted pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
-            <button
-              onClick={() => setCommandOpen(true)}
-              className="orf-search-trigger h-8 w-full pl-8 pr-3 text-left text-xs transition"
-              aria-label="搜索页面、目标、指标、任务、反馈"
-            >
-              <span className="orf-search-trigger-label">搜索页面、目标、指标、任务、反馈</span>
-            </button>
-          </div>
-          {!isBountyHall && canCreateFeedback && (
-            <Button className="orf-topbar-action-button" size="sm" variant="secondary" onClick={() => navigate("/feedback/new")}>
-              <MessageSquarePlus className="h-4 w-4" />
-              新建反馈
-            </Button>
-          )}
-          <div className="orf-topbar-actions ml-auto flex shrink-0 items-center gap-1.5">
-            {canCreateObjective && (
-              <Button className="orf-topbar-action-button" size="sm" onClick={() => navigate("/tasks?create=objective")}>
-                <Flag className="h-4 w-4" />
-                新建目标
+    <ChatFloatingImagePreviewProvider>
+      <div
+        className="orf-app-shell flex min-h-screen"
+        data-bounty-hall={isBountyHall ? "true" : "false"}
+        data-chat-page={isChatPage ? "true" : "false"}
+        data-chat-theme={chatTheme}
+        data-desktop-chrome={desktopChromeEnabled ? "true" : "false"}
+        data-display-contrast={displayPreferences.contrast}
+        data-display-density={displayPreferences.density}
+        data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
+      >
+        <Sidebar
+          backgroundUrl={sidebarBackgroundUrl}
+          backgroundCrop={sidebarBackgroundCrop}
+          backgroundOverlayOpacity={sidebarBackgroundOverlayOpacity}
+          collapsed={sidebarCollapsed}
+          onCollapsedChange={handleSidebarCollapsedChange}
+          onNavigateIntent={handleShellNavigationIntent}
+          onOpenClientUpdateCenter={() => setClientUpdateCenter({ open: true })}
+        />
+        <div className="orf-shell-body min-w-0 flex-1">
+          <header
+            className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-2"
+            data-topbar-skin={topbarSelection ? "true" : "false"}
+            style={backgroundOverlayStyle(topbarSelection)}
+          >
+            <VisualBackgroundSlot
+              frameClassName="orf-topbar-skin-frame"
+              imageClassName="orf-topbar-skin-layer"
+              imageUrl={topbarSelection?.url ?? null}
+              crop={topbarSelection?.crop ?? defaultVisualBackgroundCrop}
+            />
+            <div className="orf-topbar-title orf-text-primary min-w-[160px] font-semibold tracking-tight" role="heading" aria-level={1}>
+              {isBountyHall && (
+                <span className="orf-topbar-title-icon" aria-hidden="true">
+                  <Shield className="h-4 w-4" />
+                </span>
+              )}
+              <span>{breadcrumb(shellDisplayPath)}</span>
+            </div>
+            <div className="relative min-w-[180px] max-w-xl flex-1">
+              <Search className="orf-text-muted pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
+              <button
+                onClick={() => setCommandOpen(true)}
+                className="orf-search-trigger h-8 w-full pl-8 pr-3 text-left text-xs transition"
+                aria-label="搜索页面、目标、指标、任务、反馈"
+              >
+                <span className="orf-search-trigger-label">搜索页面、目标、指标、任务、反馈</span>
+              </button>
+            </div>
+            {!isBountyHall && canCreateFeedback && (
+              <Button className="orf-topbar-action-button" size="sm" variant="secondary" onClick={() => navigate("/feedback/new")}>
+                <MessageSquarePlus className="h-4 w-4" />
+                新建反馈
               </Button>
             )}
-            <DesktopWindowControls enabled={desktopChromeEnabled} />
-          </div>
-        </header>
-        <SystemBroadcastBanner broadcasts={systemBroadcasts} onDismiss={dismissSystemBroadcast} />
-        <ClientUpdateNotice />
-        <main
-          className="orf-main-content"
-          data-page-scene={pageBackgroundScene ?? "none"}
-          data-page-skin={pageSelection ? "true" : "false"}
-          style={backgroundOverlayStyle(pageSelection)}
-        >
-          <VisualBackgroundSlot
-            frameClassName="orf-main-content-skin-frame"
-            imageClassName="orf-main-content-skin-layer"
-            imageUrl={pageSelection?.url ?? null}
-            crop={pageSelection?.crop ?? defaultVisualBackgroundCrop}
-          />
-          {shellRoutePending && isChatPage ? (
-            <div className="orf-chat-loading" role="status">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <span>正在打开聊天中心</span>
+            <div className="orf-topbar-actions ml-auto flex shrink-0 items-center gap-1.5">
+              {canCreateObjective && (
+                <Button className="orf-topbar-action-button" size="sm" onClick={() => navigate("/tasks?create=objective")}>
+                  <Flag className="h-4 w-4" />
+                  新建目标
+                </Button>
+              )}
+              <DesktopWindowControls enabled={desktopChromeEnabled} />
             </div>
-          ) : (
-            <Outlet />
-          )}
-        </main>
+          </header>
+          <SystemBroadcastBanner broadcasts={systemBroadcasts} onDismiss={dismissSystemBroadcast} />
+          <ClientUpdateNotice />
+          <main
+            className="orf-main-content"
+            data-page-scene={pageBackgroundScene ?? "none"}
+            data-page-skin={pageSelection ? "true" : "false"}
+            style={backgroundOverlayStyle(pageSelection)}
+          >
+            <VisualBackgroundSlot
+              frameClassName="orf-main-content-skin-frame"
+              imageClassName="orf-main-content-skin-layer"
+              imageUrl={pageSelection?.url ?? null}
+              crop={pageSelection?.crop ?? defaultVisualBackgroundCrop}
+            />
+            {shellRoutePending && isChatPage ? (
+              <div className="orf-chat-loading" role="status">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <span>正在打开聊天中心</span>
+              </div>
+            ) : (
+              <Outlet />
+            )}
+          </main>
+        </div>
+        <CommandMenu open={commandOpen} onClose={() => setCommandOpen(false)} />
+        <MobileBottomNav onNavigateIntent={handleShellNavigationIntent} />
+        <ClientReleaseNotesDialog />
+        <ClientUpdateCenterDialog
+          notice={clientUpdateCenter.notice}
+          open={clientUpdateCenter.open}
+          onClose={() => setClientUpdateCenter({ open: false })}
+        />
+        <GlobalModals />
+        <Toasts />
       </div>
-      <CommandMenu open={commandOpen} onClose={() => setCommandOpen(false)} />
-      <MobileBottomNav onNavigateIntent={handleShellNavigationIntent} />
-      <ClientReleaseNotesDialog />
-      <ClientUpdateCenterDialog
-        notice={clientUpdateCenter.notice}
-        open={clientUpdateCenter.open}
-        onClose={() => setClientUpdateCenter({ open: false })}
-      />
-      <GlobalModals />
-      <Toasts />
-    </div>
+    </ChatFloatingImagePreviewProvider>
   );
 }
 

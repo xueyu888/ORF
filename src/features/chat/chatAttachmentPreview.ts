@@ -3,6 +3,8 @@ import type { ChatAttachment } from "../../types/orf";
 export type ChatAttachmentPreviewState =
   | { kind: "file"; attachment: ChatAttachment }
   | { kind: "image"; currentIndex: number; images: ChatAttachment[] };
+export type ChatAttachmentFilePreviewState = Extract<ChatAttachmentPreviewState, { kind: "file" }>;
+export type ChatAttachmentImagePreviewState = Extract<ChatAttachmentPreviewState, { kind: "image" }>;
 
 export type ChatAttachmentPreviewHandler = (
   attachment: ChatAttachment,
@@ -30,13 +32,29 @@ export function createChatAttachmentPreviewState(
 }
 
 export function moveChatAttachmentPreviewImage(
+  preview: ChatAttachmentImagePreviewState,
+  direction: -1 | 1,
+): ChatAttachmentImagePreviewState;
+export function moveChatAttachmentPreviewImage(
   preview: ChatAttachmentPreviewState,
   direction: -1 | 1,
-): ChatAttachmentPreviewState {
+): ChatAttachmentPreviewState;
+export function moveChatAttachmentPreviewImage(
+  preview: ChatAttachmentPreviewState,
+  direction: -1 | 1,
+) {
   if (preview.kind !== "image") return preview;
   const lastIndex = preview.images.length - 1;
   const currentIndex = clampPreviewIndex(preview.currentIndex, lastIndex);
   const nextIndex = clampPreviewIndex(currentIndex + direction, lastIndex);
+  return nextIndex === preview.currentIndex ? preview : { ...preview, currentIndex: nextIndex };
+}
+
+export function selectChatAttachmentPreviewImage(
+  preview: ChatAttachmentImagePreviewState,
+  index: number,
+): ChatAttachmentImagePreviewState {
+  const nextIndex = clampPreviewIndex(index, preview.images.length - 1);
   return nextIndex === preview.currentIndex ? preview : { ...preview, currentIndex: nextIndex };
 }
 

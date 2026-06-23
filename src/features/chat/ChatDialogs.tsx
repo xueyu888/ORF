@@ -1,9 +1,8 @@
 import { Download, FileText, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { ImagePreviewDialog, type ImagePreview } from "../../components/ImagePreviewDialog";
 import { Button, IconButton } from "../../components/ui";
-import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
-import { currentChatAttachmentPreviewImage, type ChatAttachmentPreviewState } from "./chatAttachmentPreview";
+import type { ChatMessage, ChatUser } from "../../types/orf";
+import type { ChatAttachmentFilePreviewState } from "./chatAttachmentPreview";
 import { formatFileSize } from "./chatFormat";
 import { ChatUserPicker } from "./ChatUserPicker";
 
@@ -170,33 +169,11 @@ export function DeleteMessageDialog({
 
 export function AttachmentPreview({
   onClose,
-  onNavigateImage,
   preview,
 }: {
   onClose: () => void;
-  onNavigateImage: (direction: -1 | 1) => void;
-  preview: ChatAttachmentPreviewState;
+  preview: ChatAttachmentFilePreviewState;
 }) {
-  if (preview.kind === "image") {
-    const attachment = currentChatAttachmentPreviewImage(preview);
-    if (!attachment) return null;
-    const hasNavigation = preview.images.length > 1;
-    const currentIndex = Math.min(Math.max(preview.currentIndex, 0), Math.max(preview.images.length - 1, 0));
-    return (
-      <ImagePreviewDialog
-        navigation={hasNavigation ? {
-          canGoNext: currentIndex < preview.images.length - 1,
-          canGoPrevious: currentIndex > 0,
-          counterLabel: `${currentIndex + 1} / ${preview.images.length}`,
-          onGoNext: () => onNavigateImage(1),
-          onGoPrevious: () => onNavigateImage(-1),
-        } : undefined}
-        preview={chatAttachmentImagePreview(attachment)}
-        onClose={onClose}
-      />
-    );
-  }
-
   const { attachment } = preview;
   const canEmbed = attachment.mimeType === "application/pdf" || attachment.mimeType.startsWith("text/");
 
@@ -223,18 +200,4 @@ export function AttachmentPreview({
       </div>
     </div>
   );
-}
-
-function chatAttachmentImagePreview(attachment: ChatAttachment): ImagePreview {
-  return {
-    alt: attachment.fileName,
-    copySourceUrl: attachment.contentUrl,
-    downloadFileName: attachment.fileName,
-    downloadUrl: attachment.contentUrl,
-    height: attachment.height,
-    label: attachment.fileName,
-    mimeType: attachment.mimeType,
-    src: attachment.contentUrl,
-    width: attachment.width,
-  };
 }
