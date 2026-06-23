@@ -139,7 +139,7 @@ export function ChallengeTree({
   const projectGroups = groupChallengeGroupsByProject(groups, visibleProjects);
 
   return (
-    <div className="grid gap-5">
+    <div className="orf-project-list grid gap-5">
       {projectGroups.map((project, index) => {
         const hasOpenRowMenu = project.objectives.some((group) => objectivePanelHasOpenRowMenu(group, handlers.openActionId));
 
