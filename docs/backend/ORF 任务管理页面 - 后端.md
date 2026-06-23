@@ -199,6 +199,8 @@ type ObjectiveFlowStatus =
 - `Objective.objectiveSettlementPoints`
 - `pointLedger`
 
+结算通知只发给目标 `Objective.challengerUserIds` 中仍为 active 的相关成员，通知正文只说明目标已结算并跳转到 `/reports` 查看最终结果；通知不携带匿名互评原始评分、比例矩阵或个人积分明细。
+
 `Result.uncertaintyScore` 是指标积分事实源，由 `Result.uncertaintyLevel` 映射写入。指标可以先创建为待校准，但 `reestimating -> frozen` 前，后端必须校验目标下每个指标都已设置积分等级；`Objective.objectiveBasePoints` 只从这些指标积分汇总得到，不作为目标创建或发布接口的输入字段。
 
 `Result.detail` 是指标详情唯一事实源。评论只保存讨论记录，不承载指标详情定义；战利品提交和验收读取同一个 `Result.detail` 字段作为只读上下文。

@@ -527,6 +527,39 @@ async function notifyAdminsOfObjectiveLoot(input: {
   });
 }
 
+async function notifyObjectiveChallengersOfSettlement(input: {
+  actorUserId: string;
+  objectiveId: string;
+  objectiveTitle: string;
+  recipientUserIds: string[];
+  settledAt: string;
+  teamId: string;
+}) {
+  const recipients = await getActiveMemberNotificationRecipientsByIds(input.teamId, input.recipientUserIds);
+  if (recipients.length === 0) {
+    return;
+  }
+
+  const actorName = await getUserNameById(input.actorUserId);
+  await publishNotificationEvent({
+    actorName: actorName || "指挥官",
+    actorUserId: input.actorUserId,
+    body: `「${input.objectiveTitle}」已完成结算，可以在统计页面查看最终结果。`,
+    kind: "objective.settled",
+    metadata: {
+      objectiveTitle: input.objectiveTitle,
+      settledAt: input.settledAt,
+      targetTitle: input.objectiveTitle,
+    },
+    recipientUserIds: recipients,
+    targetHref: "/reports",
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "目标已结算",
+  });
+}
+
 function objectiveAlignmentKindLabel(kind: ObjectiveAlignmentRequestKind) {
   return kind === "reestimateCompletion" ? "重估完成" : "验收";
 }
@@ -3325,6 +3358,15 @@ export async function settleObjectiveLoot(
     return true;
   });
   if (!settled) return { status: "invalid" };
+
+  await notifyObjectiveChallengersOfSettlement({
+    actorUserId: actorId,
+    objectiveId,
+    objectiveTitle: objective.title,
+    recipientUserIds: objectiveChallengerUserIds(objective),
+    settledAt: createdAt,
+    teamId: objective.teamId,
+  });
 
   publishObjectiveInvalidation({
     actorUserId: actorId,

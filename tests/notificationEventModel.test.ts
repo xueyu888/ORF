@@ -6,6 +6,7 @@ import {
   notificationChatDeliveryId,
   resolveNotificationRecipients,
 } from "../server/notifications/notificationEventModel";
+import { notificationPolicy } from "../server/notifications/policies/registry";
 
 test("personal notifications dedupe recipients and exclude the actor", () => {
   const recipients = resolveNotificationRecipients({
@@ -70,4 +71,12 @@ test("system chat projection metadata points back to the notification event", ()
   assert.equal(metadata.recipientUserId, "user-b");
   assert.equal(metadata.targetTitle, "聊天界面内存管理有问题");
   assert.equal(formatNotificationChatBody({ body: "请补充信息", targetHref: "/feedback/fb-1", title: "反馈有新评论" }), "**反馈有新评论**\n\n请补充信息\n\n[打开目标](/feedback/fb-1)");
+});
+
+test("settlement notifications are personal reminders without comment reply target", () => {
+  assert.deepEqual(notificationPolicy("objective.settled"), {
+    kind: "objective.settled",
+    replyTarget: "none",
+    stream: "personalNotification",
+  });
 });

@@ -19,6 +19,7 @@ export type NotificationKind =
   | "objective.alignment.requested"
   | "objective.alignment.reviewed"
   | "objective.loot.submitted"
+  | "objective.settled"
   | "feedback.created"
   | "feedback.commented"
   | "feedback.status.changed"
