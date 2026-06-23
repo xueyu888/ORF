@@ -86,6 +86,7 @@ export function handleRowDoubleClick(event: MouseEvent<HTMLElement>, target: Cha
   const element = event.target;
   if (!(element instanceof HTMLElement)) return;
   if (element.closest("button,a,input,textarea,select,[role='button'],[data-no-row-edit='true']")) return;
+  if (!element.closest("[data-title-edit-target='true']")) return;
   event.stopPropagation();
   onEdit(target);
 }

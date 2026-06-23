@@ -43,6 +43,7 @@ import {
 import {
   isObjectiveAssignedChallenger,
   isObjectiveChallenger,
+  objectiveChallengerTargets,
   objectiveChallengerUserIds,
   objectiveHasChallengers,
   participantDisplayNamesForUserIds,
@@ -3182,9 +3183,7 @@ export async function settleObjectiveLoot(
   const challengerNameById = new Map(challengerRows.map((member) => [member.id, member.name]));
   const challengerUserIds = objectiveChallengerUserIds(objective);
   const challengerUserIdSet = new Set(challengerUserIds);
-  const allChallengerTargets = challengerUserIds
-    .map((userId) => ({ member: challengerNameById.get(userId) ?? userId, memberUserId: userId }))
-    .filter((target) => Boolean(target.member));
+  const allChallengerTargets = objectiveChallengerTargets(objective, challengerNameById);
   const participantTargets = input.contributionResolution
     ? settlementParticipantTargetsForResolution(input.contributionResolution.ratios, allChallengerTargets)
     : allChallengerTargets;

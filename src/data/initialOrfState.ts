@@ -131,7 +131,9 @@ function normalizeInitialState(state: SeedInitialState): OrfState {
     const assignedChallengerUserIds = objective.assignedChallengerUserIds ?? [];
     const participants = objectiveParticipantSnapshot({
       challengerUserIds,
+      challengers: objective.challengers,
       assignedChallengerUserIds,
+      assignedChallengers: objective.assignedChallengers,
       userNameById,
     });
     const challengeApplications = (objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? [])).map((application) => {
