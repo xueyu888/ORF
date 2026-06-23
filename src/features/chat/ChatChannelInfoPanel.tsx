@@ -176,7 +176,7 @@ export function ChatChannelInfoPanel({
             return (
               <div key={member.userId}>
                 <ChatPresenceAvatar className="orf-chat-member-avatar" currentUserId={currentUserId} name={user?.name ?? "成员"} size="sm" user={user} />
-                <span>{user?.name ?? member.userId}</span>
+                <span>{user?.name ?? "未知成员"}</span>
                 <small>{member.role} · {formatPresence(user, currentUserId)}</small>
                 {canManageMembership && member.userId !== currentUserId && (
                   <button disabled={removingUserId === member.userId} type="button" onClick={() => void removeMember(member.userId)}>
