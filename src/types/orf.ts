@@ -19,6 +19,7 @@ export type NotificationKind =
   | "objective.alignment.requested"
   | "objective.alignment.reviewed"
   | "objective.loot.submitted"
+  | "objective.settled"
   | "feedback.created"
   | "feedback.commented"
   | "feedback.status.changed"
@@ -72,7 +73,7 @@ export interface TrendPoint {
 export interface ChallengeApplication {
   id: string;
   applicant: string;
-  applicantUserId?: string | null;
+  applicantUserId: string;
   reason?: string;
   status: ChallengeApplicationStatus;
   createdAt: string;
@@ -189,7 +190,7 @@ export interface OrfProject {
 }
 
 export interface ObjectiveParticipantProfile {
-  userId?: string | null;
+  userId: string;
   name: string;
   avatarUrl?: string | null;
 }
@@ -247,7 +248,7 @@ export interface ObjectiveLoot {
   id: string;
   objectiveId: string;
   submittedBy: string;
-  submittedByUserId?: string | null;
+  submittedByUserId: string;
   body: string;
   resultClaims: LootResultClaim[];
   selfTestReportUrl?: string | null;
@@ -259,7 +260,7 @@ export interface ObjectiveTrialReview {
   id: string;
   objectiveId: string;
   requestedBy: string;
-  requestedByUserId?: string | null;
+  requestedByUserId: string;
   body: string;
   resultClaims: LootResultClaim[];
   selfTestReportBody?: string | null;
@@ -276,7 +277,7 @@ export interface ObjectiveAlignmentRequest {
   objectiveId: string;
   kind: ObjectiveAlignmentRequestKind;
   requestedBy: string;
-  requestedByUserId?: string | null;
+  requestedByUserId: string;
   status: ObjectiveAlignmentRequestStatus;
   proposedAt: string;
   scheduledAt?: string | null;
@@ -291,7 +292,7 @@ export interface ObjectiveAlignmentRequest {
 export interface PointLedgerEntry {
   id: string;
   objectiveId: string;
-  userId?: string | null;
+  userId: string;
   memberName: string;
   points: number;
   reason: string;
@@ -417,13 +418,13 @@ export interface WorkLogReport {
 export interface ContributionAllocation {
   basisPoints?: number;
   member: string;
-  memberUserId?: string | null;
+  memberUserId: string;
   ratio: number;
 }
 
 export interface ContributionReviewPercentAllocation {
   member: string;
-  memberUserId?: string | null;
+  memberUserId: string;
   percent: number;
 }
 
@@ -439,7 +440,7 @@ export interface ContributionReviewMetricRow {
 export interface ContributionReviewDraftPercentAllocation {
   input: string;
   member: string;
-  memberUserId?: string | null;
+  memberUserId: string;
 }
 
 export interface ContributionReviewDraftMetricRow {
@@ -465,7 +466,7 @@ export interface ObjectiveContributionReview {
   id: string;
   objectiveId: string;
   reviewer: string;
-  reviewerUserId?: string | null;
+  reviewerUserId: string;
   allocations: ContributionAllocation[];
   abstentionReason?: string | null;
   kind?: "score" | "abstain";
@@ -489,7 +490,7 @@ export interface Result {
   confidence: number;
   source?: BountySource;
   definer?: string;
-  definerUserId?: string | null;
+  definerUserId: string;
   uncertaintyScore: number;
   acceptedResult: ResultAcceptedResult;
   evidenceIds: string[];
@@ -507,7 +508,7 @@ export interface Feedback {
   suggestedAdjustment: string;
   status: FeedbackStatus;
   owner: string;
-  ownerUserId?: string | null;
+  ownerUserId: string;
   createdBy?: string | null;
   updatedBy?: string | null;
   createdAt: string;
@@ -529,7 +530,7 @@ export interface Task {
   status: TaskStatus;
   priority: Priority;
   assignee: string;
-  assigneeUserId?: string | null;
+  assigneeUserId: string;
   linkedObjectiveId: string;
   dueDate: string;
   tags: string[];
@@ -552,7 +553,7 @@ export interface Evidence {
   source: string;
   date: string;
   owner: string;
-  ownerUserId?: string | null;
+  ownerUserId: string;
   linkedResultId: string;
 }
 

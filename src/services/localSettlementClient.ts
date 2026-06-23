@@ -13,6 +13,7 @@ export type LocalSettlementSummary = {
     basis: "peer" | "selfOnly" | "none";
     basisPoints?: number;
     member: string;
+    memberUserId: string;
     normalizedRatio: number;
     ratingCount: number;
     relativeDeviation: number;
@@ -35,7 +36,7 @@ export type LocalSettlementSummary = {
         metricScores?: ContributionReviewMetricScore[];
         receivedAt?: string;
         reviewer: string;
-        reviewerUserId?: string | null;
+        reviewerUserId: string;
         status: "scored";
         submittedAt: string;
       }
@@ -43,7 +44,7 @@ export type LocalSettlementSummary = {
         abstentionReason: string;
         receivedAt?: string;
         reviewer: string;
-        reviewerUserId?: string | null;
+        reviewerUserId: string;
         status: "abstained";
         submittedAt: string;
       }
@@ -57,7 +58,7 @@ export type LocalSettlementReview =
       metricScores?: ContributionReviewMetricScore[];
       receivedAt?: string;
       reviewer: string;
-      reviewerUserId?: string | null;
+      reviewerUserId: string;
       status: "scored";
       submittedAt: string;
     }
@@ -65,7 +66,7 @@ export type LocalSettlementReview =
       abstentionReason: string;
       receivedAt?: string;
       reviewer: string;
-      reviewerUserId?: string | null;
+      reviewerUserId: string;
       status: "abstained";
       submittedAt: string;
     };
@@ -74,14 +75,14 @@ export type LocalSettlementDraft =
   | {
       metricRows: ContributionReviewDraftMetricRow[];
       reviewer: string;
-      reviewerUserId?: string | null;
+      reviewerUserId: string;
       status: "scored";
       updatedAt: string;
     }
   | {
       abstentionReason: string;
       reviewer: string;
-      reviewerUserId?: string | null;
+      reviewerUserId: string;
       status: "abstained";
       updatedAt: string;
     };

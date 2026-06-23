@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { hasPermission } from "../config/permissions";
-import { isObjectiveChallenger, objectiveChallengerCount, objectiveChallengerTargets } from "../domain/orfObjectiveParticipants";
+import { isObjectiveChallenger, objectiveChallengerCount } from "../domain/orfObjectiveParticipants";
 import { canAcceptObjectiveChallengeEntryForActor, canApplyToObjectiveChallengeEntry } from "../domain/orfChallengeEntry";
 import { fetchLocalSettlementSummary, submitLocalContributionReview } from "../services/localSettlementClient";
 import { apiJson, apiRequest } from "./apiClient";
@@ -80,17 +80,8 @@ interface ObjectiveActionOptions {
   state: OrfState;
 }
 
-function withObjectiveChallengerUserIds(
-  ratios: ContributionAllocation[],
-  objective: Pick<OrfState["objectives"][number], "challengers" | "challengerUserIds">,
-) {
-  const userIdByMember = new Map(
-    objectiveChallengerTargets(objective).map((target) => [target.member, target.memberUserId ?? null]),
-  );
-  return ratios.map((ratio) => ({
-    ...ratio,
-    memberUserId: ratio.memberUserId ?? userIdByMember.get(ratio.member) ?? null,
-  }));
+function withObjectiveChallengerUserIds(ratios: ContributionAllocation[]) {
+  return ratios;
 }
 
 export function useOrfProviderObjectiveActions({
@@ -196,11 +187,11 @@ export function useOrfProviderObjectiveActions({
           return false;
         }
       },
-      recruitObjectiveChallengers: async (objectiveId: string, members: string[]) => {
+      recruitObjectiveChallengers: async (objectiveId: string, memberUserIds: string[]) => {
         try {
           await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/recruitments`, {
             method: "POST",
-            body: JSON.stringify({ members }),
+            body: JSON.stringify({ memberUserIds }),
           });
           await refreshTaskManagementData();
           notify("挑战者已征召");
@@ -324,7 +315,7 @@ export function useOrfProviderObjectiveActions({
                   ...settleInput,
                   contributionResolution: {
                     ...localSummary.contributionResolution,
-                    ratios: withObjectiveChallengerUserIds(localSummary.contributionResolution.ratios, objective),
+                    ratios: withObjectiveChallengerUserIds(localSummary.contributionResolution.ratios),
                   },
                 }
               : settleInput;

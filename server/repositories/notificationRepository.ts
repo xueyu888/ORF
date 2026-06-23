@@ -592,23 +592,6 @@ export async function getActiveTeamNotificationRecipients(teamId: string): Promi
   return rows.map((row) => row.id);
 }
 
-export async function getActiveMemberNotificationRecipientsByNames(teamId: string, memberNames: string[]): Promise<string[]> {
-  const names = Array.from(new Set(memberNames.map((name) => name.trim()).filter(Boolean)));
-  if (names.length === 0) return [];
-  const { rows } = await pool.query<{ id: string }>(
-    `
-      SELECT u.id
-      FROM team_members tm
-      INNER JOIN users u ON u.id = tm.user_id
-      WHERE tm.team_id = $1
-        AND COALESCE(u.status, 'active') = 'active'
-        AND u.name = ANY($2::text[])
-    `,
-    [teamId, names],
-  );
-  return rows.map((row) => row.id);
-}
-
 export async function getActiveMemberNotificationRecipientsByIds(teamId: string, userIds: string[]): Promise<string[]> {
   const ids = Array.from(new Set(userIds.map((id) => id.trim()).filter(Boolean)));
   if (ids.length === 0) return [];

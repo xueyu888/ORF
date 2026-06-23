@@ -128,6 +128,7 @@
 - 确认最终贡献比例。
 - 写入 `objectiveSettlementPoints`。
 - 生成 `pointLedger`，成员排行榜只读取后端结算后的积分流水。
+- 向目标 `Objective.challengerUserIds` 中的 active 成员发送 `objective.settled` 个人系统通知，提醒去统计页查看最终结果；通知不包含匿名互评明细。
 - `Objective.flowStatus` 从 `accepted` 进入 `settled`。
 
 Result 的不确定性分是冻结前必须明确的积分事实源。Objective 不初始化积分，目标总分由目标下指标的不确定性分相加得到；Result 不直接给个人分积分，个人积分按目标级最终贡献比例分配。单人目标也先进入 `accepted`，再由指挥官确认结算为 `100%`。

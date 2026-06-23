@@ -9,10 +9,8 @@ import { calculateObjectiveReestimateDueAt } from "../domain/orfReestimateWindow
 import {
   isObjectiveChallenger,
   objectiveParticipantSnapshot,
-  participantUserIdsForNames,
   uniqueParticipantNames,
   uniqueParticipantUserIds,
-  userIdByNameMap,
   userNameByIdMap,
 } from "../domain/orfObjectiveParticipants";
 import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
@@ -32,17 +30,6 @@ type SubmitLootInput = {
   resultClaims?: OrfState["objectiveLoot"][number]["resultClaims"];
   selfTestReportUrl?: string | null;
   selfTestReportBody?: string | null;
-};
-type LegacyResult = Omit<Result, "createdAt" | "updatedAt"> & Partial<Pick<Result, "createdAt" | "updatedAt">> & {
-  owner?: string;
-  finalDueAt?: string;
-  assignedChallenger?: string | null;
-  acceptedAt?: string | null;
-  confirmationDueAt?: string | null;
-  confirmedAt?: string | null;
-  priorityChallengeExpiresAt?: string | null;
-  priorityDeclinedBy?: string[];
-  challengeApplications?: ChallengeApplication[];
 };
 
 const cloneState = (state: OrfState): OrfState => JSON.parse(JSON.stringify(state)) as OrfState;
@@ -70,10 +57,8 @@ const currentTime = () => new Date().toISOString();
 const currentDate = () => localDateString(new Date());
 const currentUserId = (state: OrfState) => state.currentUserId || state.users[0]?.id || "";
 const currentUserName = (state: OrfState) => state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
-const userByName = (state: OrfState, name: string) => state.users.find((user) => user.name === name.trim());
+const userById = (state: OrfState, userId: string | null | undefined) => state.users.find((user) => user.id === userId?.trim());
 const userNameForId = (state: OrfState, userId: string | null | undefined, fallback = "") => state.users.find((user) => user.id === userId)?.name ?? fallback;
-const userIdForName = (state: OrfState, name: string | null | undefined) => state.users.find((user) => user.name === name?.trim())?.id ?? null;
-const userIdsForNames = (state: OrfState, names: Array<string | null | undefined>) => participantUserIdsForNames(userIdByNameMap(state.users), names);
 const latestDate = (values: Array<string | undefined | null>) => values.filter(Boolean).sort().at(-1) ?? "";
 
 const addDays = (value: string, days: number) => {
@@ -266,14 +251,13 @@ function inferFlowStatus(
 
 export const normalizeState = (state: OrfState): OrfState => {
   const normalizedUsers = (state.users ?? cloneValue(initialOrfState.users)).map((user) => ({ ...user, status: user.status ?? "active" }));
-  const userIdByName = userIdByNameMap(normalizedUsers);
   const userNameById = userNameByIdMap(normalizedUsers);
   const tasks = state.tasks.map((task) => ({
     ...task,
-    assigneeUserId: task.assigneeUserId ?? userIdByName.get(task.assignee) ?? null,
+    assigneeUserId: task.assigneeUserId ?? "",
     checklist: task.checklist.map((item) => ({ ...item, updatedAt: item.updatedAt ?? task.updatedAt })),
   }));
-  const legacyResults = state.results as LegacyResult[];
+  const results = state.results.map((result) => normalizeResult(result));
 
   return {
     ...state,
@@ -284,8 +268,8 @@ export const normalizeState = (state: OrfState): OrfState => {
       ...thread,
       messages: (thread.messages ?? []).map((message) => ({ ...message, attachments: message.attachments ?? [] })),
     })),
-    objectives: state.objectives.map((objective) => normalizeObjective(objective, legacyResults, tasks, userIdByName, userNameById)),
-    results: legacyResults.map((result) => normalizeResult(result, userIdByName)),
+    objectives: state.objectives.map((objective) => normalizeObjective(objective, results, tasks, userNameById)),
+    results,
     tasks,
     objectiveLoot: state.objectiveLoot ?? [],
     objectiveTrialReviews: state.objectiveTrialReviews ?? [],
@@ -307,25 +291,19 @@ function normalizeProject(project: OrfProject): OrfProject | null {
   };
 }
 
-function normalizeObjective(objective: Objective, results: LegacyResult[], tasks: Task[], userIdByName: Map<string, string>, userNameById: Map<string, string>): Objective {
+function normalizeObjective(objective: Objective, results: Result[], tasks: Task[], userNameById: Map<string, string>): Objective {
   const objectiveResults = results.filter((result) => result.objectiveId === objective.id);
-  const typedResults = objectiveResults.map((result) => normalizeResult(result, userIdByName));
+  const typedResults = objectiveResults.map((result) => normalizeResult(result));
   const acceptedResults = typedResults.filter((result) => result.acceptedResult === "completed" || result.acceptedResult === "falsified");
-  const rawAssignedChallengers = objective.assignedChallengers?.length
-    ? objective.assignedChallengers
-    : objectiveResults.map((result) => result.assignedChallenger);
   const participants = objectiveParticipantSnapshot({
     challengerUserIds: objective.challengerUserIds,
-    challengerNames: objective.challengers?.length ? objective.challengers : objectiveResults.map((result) => result.owner),
     assignedChallengerUserIds: objective.assignedChallengerUserIds,
-    assignedChallengerNames: rawAssignedChallengers,
-    userIdByName,
     userNameById,
   });
-  const challengeApplications = (objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? [])).map((application) => ({
+  const challengeApplications = (objective.challengeApplications ?? []).map((application) => ({
     ...application,
-    applicantUserId: application.applicantUserId ?? userIdByName.get(application.applicant) ?? null,
-  }));
+    applicantUserId: application.applicantUserId,
+  })).filter((application) => application.applicantUserId);
 
   return {
     ...objective,
@@ -341,9 +319,9 @@ function normalizeObjective(objective: Objective, results: LegacyResult[], tasks
     assignedChallengers: participants.assignedChallengers,
     assignedChallengerUserIds: participants.assignedChallengerUserIds,
     challengeApplications,
-    acceptedAt: objective.acceptedAt ?? objectiveResults.find((result) => result.acceptedAt)?.acceptedAt ?? null,
-    confirmationDueAt: objective.confirmationDueAt ?? (latestDate(objectiveResults.map((result) => result.confirmationDueAt)) || null),
-    confirmedAt: objective.confirmedAt ?? objectiveResults.find((result) => result.confirmedAt)?.confirmedAt ?? null,
+    acceptedAt: objective.acceptedAt ?? null,
+    confirmationDueAt: objective.confirmationDueAt ?? null,
+    confirmedAt: objective.confirmedAt ?? null,
     lootSubmittedAt: objective.lootSubmittedAt ?? null,
     acceptedResult: objective.acceptedResult ?? null,
     completionMultiplier: objective.completionMultiplier ?? null,
@@ -352,26 +330,14 @@ function normalizeObjective(objective: Objective, results: LegacyResult[], tasks
   };
 }
 
-function normalizeResult(result: LegacyResult, userIdByName = new Map<string, string>()): Result {
-  const {
-    owner: _owner,
-    finalDueAt: _finalDueAt,
-    assignedChallenger: _assignedChallenger,
-    acceptedAt: _acceptedAt,
-    confirmationDueAt: _confirmationDueAt,
-    confirmedAt: _confirmedAt,
-    priorityChallengeExpiresAt: _priorityChallengeExpiresAt,
-    priorityDeclinedBy: _priorityDeclinedBy,
-    challengeApplications: _challengeApplications,
-    ...rest
-  } = result;
+function normalizeResult(result: Result): Result {
   const updatedAt = result.updatedAt ?? result.createdAt ?? currentDate();
 
   return {
-    ...(rest as Result),
+    ...result,
     source: result.source ?? "managerDefined",
     definer: result.definer ?? "",
-    definerUserId: result.definerUserId ?? userIdByName.get(result.definer ?? "") ?? null,
+    definerUserId: result.definerUserId,
     uncertaintyScore: typeof result.uncertaintyScore === "number" ? result.uncertaintyScore : uncertaintyScore(result.uncertaintyLevel),
     acceptedResult: result.acceptedResult ?? "unreviewed",
     createdAt: result.createdAt ?? updatedAt,
@@ -458,8 +424,8 @@ export class OrfFlowStore {
       status: input.status ?? "Draft",
       confidence: input.confidence ?? 50,
       source: input.source ?? "managerDefined",
-      definer: input.definer ?? currentUserName(state),
-      definerUserId: input.definerUserId ?? userIdForName(state, input.definer ?? currentUserName(state)) ?? null,
+      definer: userNameForId(state, input.definerUserId ?? currentUserId(state), currentUserName(state)),
+      definerUserId: input.definerUserId ?? currentUserId(state),
       uncertaintyScore: input.uncertaintyScore ?? uncertaintyScore(input.uncertaintyLevel),
       acceptedResult: input.acceptedResult ?? "unreviewed",
       evidenceIds: [],
@@ -480,11 +446,11 @@ export class OrfFlowStore {
     };
   }
 
-  createFeedback(state: OrfState, input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "owner">): OrfState {
+  createFeedback(state: OrfState, input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "ownerUserId">): OrfState {
     const id = makeId("fb");
     const now = currentDate();
-    const owner = input.owner || currentUserName(state);
-    const ownerUserId = userIdForName(state, owner);
+    const ownerUserId = input.ownerUserId || currentUserId(state);
+    const owner = userNameForId(state, ownerUserId, currentUserName(state));
     const feedback: Feedback = {
       id,
       phenomenon: input.phenomenon,
@@ -505,7 +471,7 @@ export class OrfFlowStore {
     };
   }
 
-  createTask(state: OrfState, input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Task>): OrfState {
+  createTask(state: OrfState, input: Pick<Task, "title" | "description" | "assigneeUserId" | "priority" | "linkedObjectiveId"> & Partial<Task>): OrfState {
     const objective = state.objectives.find((item) => item.id === input.linkedObjectiveId);
     if (!objective) {
       return state;
@@ -518,8 +484,8 @@ export class OrfFlowStore {
       description: input.description,
       status: input.status ?? "Todo",
       priority: input.priority,
-      assignee: input.assignee || currentUserName(state),
-      assigneeUserId: input.assigneeUserId ?? userIdForName(state, input.assignee || currentUserName(state)),
+      assignee: userNameForId(state, input.assigneeUserId, currentUserName(state)),
+      assigneeUserId: input.assigneeUserId,
       linkedObjectiveId: objective.id,
       dueDate: input.dueDate ?? now,
       tags: input.tags ?? ["ORF"],
@@ -684,23 +650,22 @@ export class OrfFlowStore {
   }
 
   applyForBounty(state: OrfState, objectiveId: string, applicant: string, reason: string): OrfState {
-    const nextApplicant = applicant.trim();
     const applicationReason = reason.trim();
-    if (!nextApplicant || !applicationReason) {
+    if (!applicationReason) {
       return state;
     }
 
     const objective = state.objectives.find((item) => item.id === objectiveId);
-    const applicantUser = userByName(state, nextApplicant);
-    const challengerUserIds = objective ? uniqueParticipantUserIds([...(objective.challengerUserIds ?? []), ...userIdsForNames(state, objective.challengers ?? [])]) : [];
+    const applicantUser = userById(state, currentUserId(state));
+    const challengerUserIds = objective ? uniqueParticipantUserIds(objective.challengerUserIds ?? []) : [];
     if (!objective || !applicantUser || !canApplyForObjectiveChallenge(objective) || isObjectiveChallenger({ challengerUserIds }, applicantUser.id)) {
       return state;
     }
 
     const applications = (objective.challengeApplications ?? []).map((item) => ({
       ...item,
-      applicantUserId: item.applicantUserId ?? userIdForName(state, item.applicant),
-    }));
+      applicantUserId: item.applicantUserId ?? "",
+    })).filter((item) => item.applicantUserId);
     if (applications.some((item) => item.applicantUserId === applicantUser.id && item.status === "pending")) {
       return state;
     }
@@ -731,15 +696,10 @@ export class OrfFlowStore {
   }
 
   acceptBountyChallenge(state: OrfState, objectiveId: string, challenger: string): OrfState {
-    const nextChallenger = challenger.trim();
-    if (!nextChallenger) {
-      return state;
-    }
-
     const objective = state.objectives.find((item) => item.id === objectiveId);
-    const challengerUser = userByName(state, nextChallenger);
+    const challengerUser = userById(state, currentUserId(state));
     const currentChallengerNames = objective ? uniqueParticipantNames(objective.challengers ?? []) : [];
-    const currentChallengerUserIds = objective ? uniqueParticipantUserIds([...(objective.challengerUserIds ?? []), ...userIdsForNames(state, currentChallengerNames)]) : [];
+    const currentChallengerUserIds = objective ? uniqueParticipantUserIds(objective.challengerUserIds ?? []) : [];
     if (!objective || !challengerUser || currentChallengerUserIds.includes(challengerUser.id)) {
       return state;
     }
@@ -750,11 +710,11 @@ export class OrfFlowStore {
       return state;
     }
     const currentAssignedNames = uniqueParticipantNames(objective.assignedChallengers ?? []);
-    const currentAssignedUserIds = uniqueParticipantUserIds([...(objective.assignedChallengerUserIds ?? []), ...userIdsForNames(state, currentAssignedNames)]);
+    const currentAssignedUserIds = uniqueParticipantUserIds(objective.assignedChallengerUserIds ?? []);
     const applications = (objective.challengeApplications ?? []).map((application) => ({
       ...application,
-      applicantUserId: application.applicantUserId ?? userIdForName(state, application.applicant),
-    }));
+      applicantUserId: application.applicantUserId ?? "",
+    })).filter((application) => application.applicantUserId);
 
     return {
       ...state,

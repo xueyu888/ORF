@@ -2,10 +2,12 @@ import { UserAvatar } from "../../../components/UserAvatar";
 import type { ObjectiveParticipantProfile } from "../../../types/orf";
 import type { BountyItem } from "../model/bountyHallTypes";
 
-export function ParticipationPreview({ currentUserId, currentUserName, item }: { currentUserId: string; currentUserName: string; item: BountyItem }) {
+export function ParticipationPreview({ currentUserId, item }: { currentUserId: string; item: BountyItem }) {
   const applicationReasons = item.applications.filter((application) => application.status !== "declined" && application.reason?.trim());
   const challengerPeople = participantPeople(item.objective.challengerProfiles, item.challengers);
-  const assignedPeople = participantPeople(item.objective.assignedChallengerProfiles, item.assignedChallengers).filter((person) => !item.challengers.includes(person.name));
+  const challengerUserIds = new Set(item.objective.challengerUserIds);
+  const assignedPeople = participantPeople(item.objective.assignedChallengerProfiles, item.assignedChallengers)
+    .filter((person) => !person.userId || !challengerUserIds.has(person.userId));
   const hasParticipationState = challengerPeople.length > 0 || assignedPeople.length > 0 || item.pendingApplications.length > 0;
 
   return (
@@ -13,13 +15,13 @@ export function ParticipationPreview({ currentUserId, currentUserName, item }: {
       {challengerPeople.length > 0 ? (
         <div className="bounty-participant-line">
           <span>挑战者</span>
-          <BountyAvatarStack currentUserName={currentUserName} people={challengerPeople} />
+          <BountyAvatarStack currentUserId={currentUserId} people={challengerPeople} />
         </div>
       ) : null}
       {assignedPeople.length > 0 ? (
         <div className="bounty-participant-line">
           <span>待响应征召</span>
-          <BountyAvatarStack currentUserName={currentUserName} people={assignedPeople} variant="recruitment" />
+          <BountyAvatarStack currentUserId={currentUserId} people={assignedPeople} variant="recruitment" />
         </div>
       ) : null}
       {item.pendingApplications.length > 0 ? (
@@ -76,34 +78,37 @@ function participantPeople(profiles: ObjectiveParticipantProfile[] | undefined, 
   return names.map((name) => ({ name }));
 }
 
-function BountyAvatarStack({ currentUserName, people, variant }: { currentUserName: string; people: BountyAvatarPerson[]; variant?: "recruitment" }) {
+function BountyAvatarStack({ currentUserId, people, variant }: { currentUserId: string; people: BountyAvatarPerson[]; variant?: "recruitment" }) {
   if (people.length === 0) return null;
-  const orderedPeople = orderCurrentUserFirst(people, currentUserName);
+  const orderedPeople = orderCurrentUserFirst(people, currentUserId);
 
   return (
     <div className="bounty-avatar-stack" data-variant={variant}>
-      {orderedPeople.slice(0, 4).map((person, index) => (
-        <UserAvatar
-          key={person.userId ?? person.name}
-          aria-label={person.name === currentUserName ? `你，${person.name}` : person.name}
-          avatarUrl={person.avatarUrl ?? null}
-          className="bounty-avatar"
-          data-current-user={person.name === currentUserName ? "true" : undefined}
-          data-offset={index > 0 ? "true" : undefined}
-          frame={false}
-          name={person.name}
-          size="sm"
-          title={person.name === currentUserName ? `你 · ${person.name}` : person.name}
-        />
-      ))}
+      {orderedPeople.slice(0, 4).map((person, index) => {
+        const isCurrentUser = person.userId === currentUserId;
+        return (
+          <UserAvatar
+            key={person.userId ?? person.name}
+            aria-label={isCurrentUser ? `你，${person.name}` : person.name}
+            avatarUrl={person.avatarUrl ?? null}
+            className="bounty-avatar"
+            data-current-user={isCurrentUser ? "true" : undefined}
+            data-offset={index > 0 ? "true" : undefined}
+            frame={false}
+            name={person.name}
+            size="sm"
+            title={isCurrentUser ? `你 · ${person.name}` : person.name}
+          />
+        );
+      })}
       {orderedPeople.length > 4 && <span className="bounty-avatar-more">+{orderedPeople.length - 4}</span>}
     </div>
   );
 }
 
-function orderCurrentUserFirst(people: BountyAvatarPerson[], currentUserName: string) {
-  if (!currentUserName) return people;
-  const currentUserPeople = people.filter((person) => person.name === currentUserName);
+function orderCurrentUserFirst(people: BountyAvatarPerson[], currentUserId: string) {
+  if (!currentUserId) return people;
+  const currentUserPeople = people.filter((person) => person.userId === currentUserId);
   if (currentUserPeople.length === 0) return people;
-  return [...currentUserPeople, ...people.filter((person) => person.name !== currentUserName)];
+  return [...currentUserPeople, ...people.filter((person) => person.userId !== currentUserId)];
 }

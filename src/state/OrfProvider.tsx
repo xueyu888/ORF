@@ -136,7 +136,7 @@ interface OrfContextValue {
   setObjectiveProject: (objectiveId: string, projectId: string | null) => Promise<boolean>;
   createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title">) => Promise<Result | null>;
   publishObjective: (objectiveId: string) => Promise<boolean>;
-  recruitObjectiveChallengers: (objectiveId: string, members: string[]) => Promise<boolean>;
+  recruitObjectiveChallengers: (objectiveId: string, memberUserIds: string[]) => Promise<boolean>;
   approveChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   rejectChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   applyForBounty: (objectiveId: string, reason: string) => Promise<boolean>;
@@ -146,7 +146,7 @@ interface OrfContextValue {
   settleObjectiveLoot: (objectiveId: string, input: SettleObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, input: SubmitContributionReviewInput) => Promise<boolean>;
   createFeedback: (input: CreateFeedbackInput) => Promise<Feedback | null>;
-  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Pick<Task, "dueDate" | "tags" | "checklist">>) => Promise<Task | null>;
+  createTask: (input: Pick<Task, "title" | "description" | "assigneeUserId" | "priority" | "linkedObjectiveId"> & Partial<Pick<Task, "dueDate" | "tags" | "checklist">>) => Promise<Task | null>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   setTaskCompletion: (taskId: string, done: boolean) => Promise<boolean>;
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => Promise<boolean>;

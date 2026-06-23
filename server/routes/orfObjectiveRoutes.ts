@@ -65,7 +65,7 @@ const objectiveProjectBodySchema = z.object({
   projectId: optionalNullableTextSchema,
 });
 const recruitBodySchema = z.object({
-  members: z.array(z.string().trim().min(1)).min(1),
+  memberUserIds: z.array(z.string().trim().min(1)).min(1),
 });
 const challengeApplicationBodySchema = z.object({
   reason: requiredTextSchema,
@@ -98,7 +98,7 @@ const reviewAlignmentRequestBodySchema = z.object({
 });
 const contributionAllocationSchema = z.object({
   member: z.string().trim().min(1),
-  memberUserId: z.string().trim().min(1).nullable().optional(),
+  memberUserId: z.string().trim().min(1),
   ratio: z.number().min(0).max(1),
 });
 const reviewLootBodySchema = z.object({
@@ -342,7 +342,7 @@ export function registerOrfObjectiveRoutes(app: FastifyInstance) {
     if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
-    return sendObjectiveFlowOutcome(reply, await recruitObjectiveChallengers(params.objectiveId, body.members, context.user.id));
+    return sendObjectiveFlowOutcome(reply, await recruitObjectiveChallengers(params.objectiveId, body.memberUserIds, context.user.id));
   });
 
   app.patch("/api/objectives/:objectiveId/challenge-applications/:applicationId/approve", async (request, reply) => {
@@ -463,7 +463,7 @@ export function registerOrfObjectiveRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: "Only active members can accept objective challenges" });
     }
 
-    const outcome = await acceptObjectiveChallenge(params.objectiveId, user.name, user.id);
+    const outcome = await acceptObjectiveChallenge(params.objectiveId, user.id);
 
     if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Objective not found" });
@@ -503,7 +503,7 @@ export function registerOrfObjectiveRoutes(app: FastifyInstance) {
     }
 
     const body = challengeApplicationBodySchema.parse(request.body);
-    const outcome = await applyForObjectiveChallenge(params.objectiveId, user.name, user.id, body.reason);
+    const outcome = await applyForObjectiveChallenge(params.objectiveId, user.id, body.reason);
 
     if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Objective not found" });

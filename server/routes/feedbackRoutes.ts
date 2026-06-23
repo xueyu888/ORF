@@ -13,14 +13,14 @@ const createFeedbackBodySchema = z.object({
   impact: impactSchema,
   initialBody: z.string().trim().min(1).optional(),
   suggestedAdjustment: z.string().trim().min(1).optional(),
-  owner: z.string().trim().min(1),
+  ownerUserId: z.string().trim().min(1),
 }).refine((value) => value.initialBody || value.suggestedAdjustment, { message: "Feedback body is required" });
 const createFeedbackMultipartFieldsSchema = z.object({
   phenomenon: z.string().trim().min(1),
   causeCategories: z.string().trim().min(1),
   impact: impactSchema,
   initialBody: z.string().trim().min(1),
-  owner: z.string().trim().min(1),
+  ownerUserId: z.string().trim().min(1),
 });
 const updateFeedbackStatusBodySchema = z.object({ status: feedbackStatusSchema });
 const feedbackReferencesQuerySchema = z.object({
@@ -53,7 +53,7 @@ async function readCreateFeedbackBody(request: FastifyRequest) {
       causeCategories: body.causeCategories,
       impact: body.impact,
       initialBody: body.initialBody ?? body.suggestedAdjustment ?? "",
-      owner: body.owner,
+      ownerUserId: body.ownerUserId,
       attachments: [],
     };
   }
@@ -83,7 +83,7 @@ async function readCreateFeedbackBody(request: FastifyRequest) {
     causeCategories: parseCauseCategories(body.causeCategories),
     impact: body.impact,
     initialBody: body.initialBody,
-    owner: body.owner,
+    ownerUserId: body.ownerUserId,
     attachments,
   };
 }

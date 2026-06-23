@@ -46,7 +46,6 @@ import {
   objectiveChallengerUserIds,
   objectiveHasChallengers,
   participantDisplayNamesForUserIds,
-  participantUserIdsForNames,
   uniqueParticipantNames,
   uniqueParticipantUserIds,
 } from "../../src/domain/orfObjectiveParticipants";
@@ -94,7 +93,6 @@ import {
 import {
   getActiveAdminNotificationRecipients,
   getActiveMemberNotificationRecipientsByIds,
-  getActiveMemberNotificationRecipientsByNames,
   getActiveTeamNotificationRecipients,
   getUserNameById,
 } from "./notificationRepository";
@@ -211,34 +209,6 @@ function reorderIds(ids: string[], movingId: string, referenceId: string, placem
 
 type ScopedMemberIdentity = { id: string; name: string };
 
-async function getActiveMemberRowsByNamesInScope(storageScopeId: string, values: Array<string | undefined | null>) {
-  const memberNames = uniqueParticipantNames(values);
-  if (memberNames.length === 0) return [];
-
-  const rows = await db
-    .select({ id: users.id, name: users.name })
-    .from(teamMembers)
-    .innerJoin(users, eq(teamMembers.userId, users.id))
-    .where(and(eq(teamMembers.teamId, storageScopeId), eq(users.status, "active"), inArray(users.name, memberNames)));
-  return rows;
-}
-
-async function getActiveChallengerRowsByNamesInScope(
-  client: Pick<typeof db, "select">,
-  storageScopeId: string,
-  values: Array<string | undefined | null>,
-) {
-  const memberNames = uniqueParticipantNames(values);
-  if (memberNames.length === 0) return [];
-
-  const rows = await client
-    .select({ id: users.id, name: users.name })
-    .from(teamMembers)
-    .innerJoin(users, eq(teamMembers.userId, users.id))
-    .where(and(eq(teamMembers.teamId, storageScopeId), eq(teamMembers.role, "member"), eq(users.status, "active"), inArray(users.name, memberNames)));
-  return rows;
-}
-
 async function getActiveChallengerRowsByIdsInScope(
   client: Pick<typeof db, "select">,
   storageScopeId: string,
@@ -284,42 +254,12 @@ async function getMemberRowsByIdsInScope(
     .where(and(eq(teamMembers.teamId, storageScopeId), inArray(users.id, userIds)));
 }
 
-async function resolveActiveMemberByName(storageScopeId: string, memberName: string): Promise<ScopedMemberIdentity | null> {
-  const rows = await getActiveMemberRowsByNamesInScope(storageScopeId, [memberName]);
-  return rows.find((member) => member.name === memberName.trim()) ?? null;
+function challengerUserIdsForRow(userIds: Array<string | undefined | null>) {
+  return uniqueParticipantUserIds(userIds);
 }
 
-async function resolveActiveChallengerByName(
-  client: Pick<typeof db, "select">,
-  storageScopeId: string,
-  memberName: string,
-): Promise<ScopedMemberIdentity | null> {
-  const rows = await getActiveChallengerRowsByNamesInScope(client, storageScopeId, [memberName]);
-  return rows.find((member) => member.name === memberName.trim()) ?? null;
-}
-
-async function challengerUserIdsForRow(
-  client: Pick<typeof db, "select">,
-  storageScopeId: string,
-  userIds: Array<string | undefined | null>,
-  names: Array<string | undefined | null>,
-) {
-  const normalizedUserIds = uniqueParticipantUserIds(userIds);
-  if (normalizedUserIds.length > 0) return normalizedUserIds;
-  const rows = await getActiveChallengerRowsByNamesInScope(client, storageScopeId, names);
-  return participantUserIdsForNames(new Map(rows.map((member) => [member.name, member.id])), names);
-}
-
-async function assignedChallengerUserIdsForRow(
-  client: Pick<typeof db, "select">,
-  storageScopeId: string,
-  userIds: Array<string | undefined | null>,
-  names: Array<string | undefined | null>,
-) {
-  const normalizedUserIds = uniqueParticipantUserIds(userIds);
-  if (normalizedUserIds.length > 0) return normalizedUserIds;
-  const rows = await getActiveChallengerRowsByNamesInScope(client, storageScopeId, names);
-  return participantUserIdsForNames(new Map(rows.map((member) => [member.name, member.id])), names);
+function assignedChallengerUserIdsForRow(userIds: Array<string | undefined | null>, challengerUserIds: string[] = []) {
+  return uniqueParticipantUserIds(userIds).filter((userId) => !challengerUserIds.includes(userId));
 }
 
 function challengeObjectiveHref(path: "/bounties" | "/tasks", objectiveId: string) {
@@ -400,7 +340,7 @@ async function notifyTeamOfObjectivePublication(input: {
 async function notifyMemberOfChallengeApplicationApproval(input: {
   actorUserId: string;
   applicant: string;
-  applicantUserId?: string | null;
+  applicantUserId: string;
   objectiveId: string;
   objectiveTitle: string;
   teamId: string;
@@ -424,7 +364,7 @@ async function notifyMemberOfChallengeApplicationApproval(input: {
 async function notifyMemberOfChallengeApplicationRejection(input: {
   actorUserId: string;
   applicant: string;
-  applicantUserId?: string | null;
+  applicantUserId: string;
   objectiveId: string;
   objectiveTitle: string;
   teamId: string;
@@ -447,21 +387,15 @@ async function notifyMemberOfChallengeApplicationRejection(input: {
 
 async function challengeApplicationRecipientUserIds(input: {
   applicant: string;
-  applicantUserId?: string | null;
+  applicantUserId: string;
   teamId: string;
 }) {
-  const applicantUserId = input.applicantUserId?.trim();
-  if (applicantUserId) {
-    const recipients = await getActiveMemberNotificationRecipientsByIds(input.teamId, [applicantUserId]);
-    if (recipients.length > 0) return recipients;
-  }
-
-  return getActiveMemberNotificationRecipientsByNames(input.teamId, [input.applicant]);
+  return getActiveMemberNotificationRecipientsByIds(input.teamId, [input.applicantUserId]);
 }
 
 async function notifyMembersOfRecruitment(input: {
   actorUserId: string;
-  memberNames: string[];
+  memberUserIds: string[];
   objectiveId: string;
   objectiveTitle: string;
   teamId: string;
@@ -473,7 +407,7 @@ async function notifyMembersOfRecruitment(input: {
     body: `你被征召挑战「${input.objectiveTitle}」，请在悬赏大厅接受或拒绝。`,
     kind: "objective.recruitment.created",
     metadata: { objectiveTitle: input.objectiveTitle },
-    recipientUserIds: await getActiveMemberNotificationRecipientsByNames(input.teamId, input.memberNames),
+    recipientUserIds: await getActiveMemberNotificationRecipientsByIds(input.teamId, input.memberUserIds),
     targetHref: challengeObjectiveHref("/bounties", input.objectiveId),
     targetId: input.objectiveId,
     targetType: "objective",
@@ -527,6 +461,39 @@ async function notifyAdminsOfObjectiveLoot(input: {
   });
 }
 
+async function notifyObjectiveChallengersOfSettlement(input: {
+  actorUserId: string;
+  objectiveId: string;
+  objectiveTitle: string;
+  recipientUserIds: string[];
+  settledAt: string;
+  teamId: string;
+}) {
+  const recipients = await getActiveMemberNotificationRecipientsByIds(input.teamId, input.recipientUserIds);
+  if (recipients.length === 0) {
+    return;
+  }
+
+  const actorName = await getUserNameById(input.actorUserId);
+  await publishNotificationEvent({
+    actorName: actorName || "指挥官",
+    actorUserId: input.actorUserId,
+    body: `「${input.objectiveTitle}」已完成结算，可以在统计页面查看最终结果。`,
+    kind: "objective.settled",
+    metadata: {
+      objectiveTitle: input.objectiveTitle,
+      settledAt: input.settledAt,
+      targetTitle: input.objectiveTitle,
+    },
+    recipientUserIds: recipients,
+    targetHref: "/reports",
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "目标已结算",
+  });
+}
+
 function objectiveAlignmentKindLabel(kind: ObjectiveAlignmentRequestKind) {
   return kind === "reestimateCompletion" ? "重估完成" : "验收";
 }
@@ -571,6 +538,7 @@ async function notifyMemberOfObjectiveAlignmentReview(input: {
   objectiveId: string;
   objectiveTitle: string;
   requestedBy: string;
+  requestedByUserId: string;
   status: ObjectiveAlignmentRequestStatus;
   teamId: string;
 }) {
@@ -593,7 +561,7 @@ async function notifyMemberOfObjectiveAlignmentReview(input: {
       : `「${input.objectiveTitle}」${label}对齐${statusText}。`,
     kind: "objective.alignment.reviewed",
     metadata: { kind: input.kind, objectiveTitle: input.objectiveTitle, status: input.status },
-    recipientUserIds: await getActiveMemberNotificationRecipientsByNames(input.teamId, [input.requestedBy]),
+    recipientUserIds: await getActiveMemberNotificationRecipientsByIds(input.teamId, [input.requestedByUserId]),
     targetHref: objectiveAlignmentTargetHref(input.kind, input.objectiveId),
     targetId: input.objectiveId,
     targetType: "objective",
@@ -801,14 +769,13 @@ export interface CreateResultInput {
   direction?: MetricDirection;
   uncertaintyLevel?: UncertaintyLevel;
   source?: BountySource;
-  definer?: string;
-  definerUserId?: string | null;
+  definerUserId: string;
 }
 
 export interface CreateTaskInput {
   title: string;
   description?: string;
-  assignee: string;
+  assigneeUserId: string;
   actorId?: string | null;
   priority?: Priority;
   linkedObjectiveId: string;
@@ -984,13 +951,8 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
     const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
     const id = makeId("res");
     const now = today();
-    const requestedDefinerName = input.definer?.trim() || "";
-    const resolvedDefiner = input.definerUserId
-      ? (await getActiveMemberRowsByIdsInScope(tx, objective.teamId, [input.definerUserId]))[0] ?? null
-      : requestedDefinerName
-        ? await resolveActiveMemberByName(objective.teamId, requestedDefinerName)
-        : null;
-    if ((input.definerUserId || requestedDefinerName) && !resolvedDefiner) {
+    const resolvedDefiner = (await getActiveMemberRowsByIdsInScope(tx, objective.teamId, [input.definerUserId]))[0] ?? null;
+    if (!resolvedDefiner) {
       return null;
     }
 
@@ -1009,8 +971,8 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
       status: "Draft",
       confidence: 50,
       source: input.source ?? "managerDefined",
-      definer: resolvedDefiner?.name ?? "",
-      definerUserId: resolvedDefiner?.id ?? null,
+      definer: resolvedDefiner.name,
+      definerUserId: resolvedDefiner.id,
       uncertaintyScore: uncertaintyScoreFor(input.uncertaintyLevel ?? null),
       acceptedResult: "unreviewed",
       reviewCadence: "Weekly",
@@ -1047,9 +1009,8 @@ export type AcceptObjectiveChallengeOutcome =
   | { status: "closed" }
   | { status: "notFound" };
 
-export async function acceptObjectiveChallenge(objectiveId: string, challenger: string, actorId?: string): Promise<AcceptObjectiveChallengeOutcome> {
-  const nextChallenger = challenger.trim();
-  if (!nextChallenger && !actorId) {
+export async function acceptObjectiveChallenge(objectiveId: string, actorId: string): Promise<AcceptObjectiveChallengeOutcome> {
+  if (!actorId.trim()) {
     return { status: "notFound" };
   }
 
@@ -1059,14 +1020,12 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
       return { status: "notFound" as const };
     }
 
-    const actor = actorId
-      ? (await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, [actorId]))[0] ?? null
-      : await resolveActiveChallengerByName(tx, objective.teamId, nextChallenger);
+    const actor = (await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, [actorId]))[0] ?? null;
     if (!actor) {
       return { status: "forbidden" as const };
     }
 
-    const currentChallengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
+    const currentChallengerUserIds = challengerUserIdsForRow(objective.challengerUserIds ?? []);
     const currentChallengers = uniqueParticipantNames(objective.challengers ?? []);
     if (currentChallengerUserIds.includes(actor.id)) {
       return { status: "alreadyAccepted" as const, challengers: currentChallengers };
@@ -1075,8 +1034,7 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
       return { status: "closed" as const };
     }
 
-    const assignedChallengerUserIds = await assignedChallengerUserIdsForRow(tx, objective.teamId, objective.assignedChallengerUserIds ?? [], objective.assignedChallengers ?? []);
-    const assignedChallengers = uniqueParticipantNames(objective.assignedChallengers ?? []);
+    const assignedChallengerUserIds = assignedChallengerUserIdsForRow(objective.assignedChallengerUserIds ?? [], currentChallengerUserIds);
     const applications = objective.challengeApplications ?? [];
     const hasApprovedApplication = applications.some((application) => (application.applicantUserId ?? null) === actor.id && application.status === "approved");
     if (!isObjectiveAssignedChallenger({ assignedChallengerUserIds, challengerUserIds: currentChallengerUserIds }, actor.id) && !hasApprovedApplication) {
@@ -1089,13 +1047,17 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
       return { status: "invalidDueDate" as const };
     }
 
+    const nextAssignedChallengerUserIds = assignedChallengerUserIds.filter((userId) => userId !== actor.id);
+    const nextAssignedRows = await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, nextAssignedChallengerUserIds);
+    const assignedNameById = new Map(nextAssignedRows.map((member) => [member.id, member.name]));
+
     await tx
       .update(objectives)
       .set({
         challengers: [...currentChallengers, actor.name],
         challengerUserIds: [...currentChallengerUserIds, actor.id],
-        assignedChallengers: assignedChallengers.filter((member) => member !== actor.name),
-        assignedChallengerUserIds: assignedChallengerUserIds.filter((userId) => userId !== actor.id),
+        assignedChallengers: nextAssignedChallengerUserIds.map((userId) => assignedNameById.get(userId)).filter((name): name is string => Boolean(name)),
+        assignedChallengerUserIds: nextAssignedChallengerUserIds,
         flowStatus: objectiveLifecycleTransitions.acceptChallenge.to,
         stage: objectiveLifecycleTransitions.acceptChallenge.stage,
         acceptedAt: objective.acceptedAt ?? acceptedAt,
@@ -1105,7 +1067,7 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
         ),
         status: objective.status === "Draft" ? "On Track" : objective.status,
         updatedAt: today(),
-        updatedBy: actorId ?? objective.updatedBy,
+        updatedBy: actorId,
       })
       .where(eq(objectives.id, objectiveId));
 
@@ -1149,9 +1111,8 @@ export type ApplyObjectiveChallengeOutcome =
   | { status: "closed" }
   | { status: "notFound" };
 
-export async function applyForObjectiveChallenge(objectiveId: string, applicant: string, actorUserId: string | null | undefined, reason: string): Promise<ApplyObjectiveChallengeOutcome> {
-  const nextApplicant = applicant.trim();
-  if (!nextApplicant && !actorUserId) {
+export async function applyForObjectiveChallenge(objectiveId: string, actorUserId: string, reason: string): Promise<ApplyObjectiveChallengeOutcome> {
+  if (!actorUserId.trim()) {
     return { status: "notFound" };
   }
   const applicationReason = reason.trim();
@@ -1165,19 +1126,17 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
       return { status: "notFound" as const };
     }
 
-    const actor = actorUserId
-      ? (await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, [actorUserId]))[0] ?? null
-      : await resolveActiveChallengerByName(tx, objective.teamId, nextApplicant);
+    const actor = (await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, [actorUserId]))[0] ?? null;
     if (!actor) {
       return { status: "forbidden" as const };
     }
 
-    const challengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
+    const challengerUserIds = challengerUserIdsForRow(objective.challengerUserIds ?? []);
     const challengers = uniqueParticipantNames(objective.challengers ?? []);
     if (isObjectiveChallenger({ challengerUserIds }, actor.id)) {
       return { status: "alreadyAccepted" as const, challengers };
     }
-    const assignedChallengerUserIds = await assignedChallengerUserIdsForRow(tx, objective.teamId, objective.assignedChallengerUserIds ?? [], objective.assignedChallengers ?? []);
+    const assignedChallengerUserIds = assignedChallengerUserIdsForRow(objective.assignedChallengerUserIds ?? [], challengerUserIds);
     if (isObjectiveAssignedChallenger({ assignedChallengerUserIds, challengerUserIds }, actor.id)) {
       return { status: "alreadyRecruited" as const };
     }
@@ -1313,12 +1272,12 @@ export async function approveObjectiveChallengeApplication(
     const acceptedAt = nowIso();
     const nextConfirmationDueAt = calculateObjectiveReestimateDueAt(objective.finalDueAt, acceptedAt);
     if (!nextConfirmationDueAt) return { status: "invalid" as const };
-    const applicant = application.applicantUserId
-      ? (await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, [application.applicantUserId]))[0] ?? null
-      : await resolveActiveChallengerByName(tx, objective.teamId, application.applicant);
+    const applicantUserId = application.applicantUserId?.trim();
+    if (!applicantUserId) return { status: "invalid" as const };
+    const applicant = (await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, [applicantUserId]))[0] ?? null;
     if (!applicant) return { status: "invalid" as const };
 
-    const challengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
+    const challengerUserIds = challengerUserIdsForRow(objective.challengerUserIds ?? []);
     const challengers = uniqueParticipantNames([...(objective.challengers ?? []), applicant.name]);
     await tx
       .update(objectives)
@@ -1375,13 +1334,15 @@ export async function rejectObjectiveChallengeApplication(
     const applications = objective.challengeApplications ?? [];
     const application = applications.find((item) => item.id === applicationId && item.status === "pending");
     if (!application) return { status: "notFound" as const };
+    const applicantUserId = application.applicantUserId?.trim();
+    if (!applicantUserId) return { status: "invalid" as const };
     const decidedAt = nowIso();
     const nextApplications = applications.map((item) =>
       item.id === applicationId ? { ...item, status: "declined" as const, decidedAt, decidedBy: actorId } : item,
     );
     const hasPending = nextApplications.some((item) => item.status === "pending");
-    const assignedChallengerUserIds = await assignedChallengerUserIdsForRow(tx, objective.teamId, objective.assignedChallengerUserIds ?? [], objective.assignedChallengers ?? []);
-    const challengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
+    const challengerUserIds = challengerUserIdsForRow(objective.challengerUserIds ?? []);
+    const assignedChallengerUserIds = assignedChallengerUserIdsForRow(objective.assignedChallengerUserIds ?? [], challengerUserIds);
     await tx
       .update(objectives)
       .set({
@@ -1401,7 +1362,7 @@ export async function rejectObjectiveChallengeApplication(
       notification: {
         actorUserId: actorId,
         applicant: application.applicant,
-        applicantUserId: application.applicantUserId,
+        applicantUserId,
         objectiveId,
         objectiveTitle: objective.title,
         teamId: objective.teamId,
@@ -1425,24 +1386,24 @@ export async function rejectObjectiveChallengeApplication(
 
 export async function recruitObjectiveChallengers(
   objectiveId: string,
-  members: string[],
+  memberUserIds: string[],
   actorId: string,
 ): Promise<ObjectiveFlowMutationOutcome> {
   const recruitedResult = await db.transaction(async (tx) => {
     const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
     if (!objective) return { status: "notFound" as const };
     if (objectiveClosedForChallengeEntry(objective) || !canRecruitObjectiveChallengersByFlow(objective)) return { status: "invalid" as const };
-    const currentChallengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
-    const recruitMemberRows = await getActiveChallengerRowsByNamesInScope(tx, objective.teamId, members);
-    const recruitMembers = uniqueParticipantNames(members);
-    if (recruitMembers.some((member) => !recruitMemberRows.some((row) => row.name === member))) return { status: "invalid" as const };
-    const recruitCandidates = recruitMembers
-      .map((member) => recruitMemberRows.find((row) => row.name === member))
+    const currentChallengerUserIds = challengerUserIdsForRow(objective.challengerUserIds ?? []);
+    const recruitUserIds = uniqueParticipantUserIds(memberUserIds);
+    if (recruitUserIds.length === 0) return { status: "invalid" as const };
+    const recruitMemberRows = await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, recruitUserIds);
+    if (recruitUserIds.some((userId) => !recruitMemberRows.some((row) => row.id === userId))) return { status: "invalid" as const };
+    const recruitCandidates = recruitUserIds
+      .map((userId) => recruitMemberRows.find((row) => row.id === userId))
       .filter((member): member is ScopedMemberIdentity => Boolean(member))
       .filter((member) => !currentChallengerUserIds.includes(member.id));
-    if (recruitMembers.length === 0) return { status: "invalid" as const };
     if (recruitCandidates.length === 0) return { status: "invalid" as const };
-    const currentAssignedUserIds = await assignedChallengerUserIdsForRow(tx, objective.teamId, objective.assignedChallengerUserIds ?? [], objective.assignedChallengers ?? []);
+    const currentAssignedUserIds = assignedChallengerUserIdsForRow(objective.assignedChallengerUserIds ?? [], currentChallengerUserIds);
     const currentAssignedRows = await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, currentAssignedUserIds);
     const assignedChallengerUserIds = uniqueParticipantUserIds([...currentAssignedUserIds, ...recruitCandidates.map((member) => member.id)]).filter((userId) => !currentChallengerUserIds.includes(userId));
     if (assignedChallengerUserIds.length === 0) return { status: "invalid" as const };
@@ -1466,7 +1427,7 @@ export async function recruitObjectiveChallengers(
       scope: runtimeScope(objective.teamId),
       notification: {
         actorUserId: actorId,
-        memberNames: recruitCandidates.map((member) => member.name),
+        memberUserIds: recruitCandidates.map((member) => member.id),
         objectiveId,
         objectiveTitle: objective.title,
         teamId: objective.teamId,
@@ -1585,7 +1546,7 @@ export async function createObjectiveAlignmentRequest(
     const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
     if (!objective) return { status: "notFound" as const };
     if (!objectiveAcceptsAlignmentRequest(objective, input.kind)) return { status: "closed" as const };
-    const challengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
+    const challengerUserIds = challengerUserIdsForRow(objective.challengerUserIds ?? []);
     if (actor.role !== "member" || !isObjectiveChallenger({ challengerUserIds }, actor.id)) {
       return { status: "forbidden" as const };
     }
@@ -1697,6 +1658,7 @@ export async function reviewObjectiveAlignmentRequest(
         objectiveId,
         objectiveTitle: request.objectiveTitle,
         requestedBy: completed.request.requestedBy,
+        requestedByUserId: completed.request.requestedByUserId,
         status: completed.request.status,
         teamId: request.teamId,
       });
@@ -1748,6 +1710,7 @@ export async function reviewObjectiveAlignmentRequest(
       objectiveId,
       objectiveTitle: request.objectiveTitle,
       requestedBy: outcome.request.requestedBy,
+      requestedByUserId: outcome.request.requestedByUserId,
       status: outcome.request.status,
       teamId: request.teamId,
     });
@@ -3245,9 +3208,8 @@ export async function settleObjectiveLoot(
     contributionRatios: input.contributionRatios,
   });
   if (!settlementPlan) return { status: "invalid" };
-  const userIdByName = new Map(challengerRows.map((user) => [user.name, user.id]));
   const contributionRatios = settlementPlan.contributionRatios.map((item) => {
-    const userId = item.memberUserId?.trim() || userIdByName.get(item.member) || "";
+    const userId = item.memberUserId?.trim() || "";
     return {
       ...item,
       memberName: userId ? challengerNameById.get(userId) ?? item.member : item.member,
@@ -3326,6 +3288,15 @@ export async function settleObjectiveLoot(
   });
   if (!settled) return { status: "invalid" };
 
+  await notifyObjectiveChallengersOfSettlement({
+    actorUserId: actorId,
+    objectiveId,
+    objectiveTitle: objective.title,
+    recipientUserIds: objectiveChallengerUserIds(objective),
+    settledAt: createdAt,
+    teamId: objective.teamId,
+  });
+
   publishObjectiveInvalidation({
     actorUserId: actorId,
     reason: "objective.lifecycle.changed",
@@ -3341,11 +3312,10 @@ function settlementParticipantTargetsForResolution(
   targets: Array<{ member: string; memberUserId: string }>,
 ) {
   const targetByUserId = new Map(targets.map((target) => [target.memberUserId, target]));
-  const targetByName = new Map(targets.map((target) => [target.member, target]));
   const selected = new Map<string, { member: string; memberUserId: string }>();
 
   for (const ratio of ratios) {
-    const target = (ratio.memberUserId ? targetByUserId.get(ratio.memberUserId) : undefined) ?? targetByName.get(ratio.member);
+    const target = ratio.memberUserId ? targetByUserId.get(ratio.memberUserId) : undefined;
     if (!target || selected.has(target.memberUserId)) return null;
     selected.set(target.memberUserId, target);
   }
@@ -3374,9 +3344,8 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
     const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
     const id = makeId("ORF");
     const now = today();
-    const assigneeName = input.assignee.trim();
-    const assigneeUser = assigneeName ? await resolveActiveMemberByName(objective.teamId, assigneeName) : null;
-    if (assigneeName && !assigneeUser) {
+    const assigneeUser = (await getActiveMemberRowsByIdsInScope(tx, objective.teamId, [input.assigneeUserId]))[0] ?? null;
+    if (!assigneeUser) {
       return null;
     }
 
@@ -3387,8 +3356,8 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
       description: input.description?.trim() || "执行支撑目标的下一步技术任务。",
       status: "Todo",
       priority: input.priority ?? "Medium",
-      assignee: assigneeUser?.name ?? "",
-      assigneeUserId: assigneeUser?.id ?? null,
+      assignee: assigneeUser.name,
+      assigneeUserId: assigneeUser.id,
       linkedObjectiveId: objective.id,
       dueDate: dueDate ?? now,
       tags: ["ORF"],
