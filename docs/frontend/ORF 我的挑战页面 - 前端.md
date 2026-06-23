@@ -36,7 +36,7 @@ currentUser.id in Objective.challengerUserIds
 - 目标标题。
 - 目标状态。
 - 挑战者头像组，来源 `Objective.challengerProfiles`；缺失头像投影时回退 `Objective.challengers` 显示名。
-- 剩余时间：非重估目标显示最终剩余时间，来源 `Objective.finalDueAt`；重估中目标显示两行时间摘要，主信息为重估窗口剩余或已超时，来源 `Objective.confirmationDueAt`，次信息为最终剩余时间，来源 `Objective.finalDueAt`。
+- 剩余时间：非重估目标行内只显示最终剩余时间；重估中目标行内最多显示两行，主信息为重估窗口剩余或已超时，次信息为最终剩余时间。开始时间、冻结时间、重估截止和最终截止放入时间区域 hover/focus 提示，不在目标行常驻挤占扫描空间。开始时间来源 `Objective.acceptedAt`，没有挑战者正式接受或申请被批准前显示“未开始”；冻结时间来源 `Objective.confirmedAt`，未冻结时显示“未冻结”；重估窗口来源 `Objective.confirmationDueAt`，最终剩余来源 `Objective.finalDueAt`。
 - 截止时间；点击日期本身打开 ORF 自定义日期选择器，选定不同日期后立即提交，不进入可见输入框，也不需要二次确认。指挥官可编辑 `Objective.finalDueAt`；冻结前可正常调整，`frozen` 只允许延后；无权限或状态锁定时点击日期提示原因。
 - 目标进度，来源 `Objective.progress`。
 - `提交战利品` 入口；仅 `flowStatus=frozen` 且当前用户是挑战者时展示。
@@ -130,7 +130,7 @@ currentUser.id in Objective.challengerUserIds
 | 审核挑战申请 | 指挥官在目标行处理待审核申请；审批成功后立即刷新目标状态和申请记录，当前目标使用列表位置锚点保持原展示位置，直到用户离开当前目标上下文 |
 | 查看我的申请 | 普通成员在悬赏大厅 `我的申请` 分组追踪 pending、approved、declined 结果；未进入 `Objective.challengerUserIds` 的目标不能在本页编辑指标、行动项或提交战利品 |
 
-目标、指标和流程操作由 `permissionRules`、状态机和对应业务能力共同控制。目标内容只能由指挥官调整；截止日期以 `Objective.finalDueAt` 为唯一事实源，指标行不展示也不保存独立截止日期。重估窗口以 `Objective.confirmationDueAt` 为事实源，只用于重估中目标的窗口剩余展示和挑战者指标编辑窗口判断，不作为可编辑截止日期；目标仍处于 `reestimating` 且指挥官修改最终截止日期时，后端会重新返回同步后的 `confirmationDueAt`，前端只展示接口事实，不在页面内自行推导。指标可由指挥官编辑，挑战者只可在 `reestimating` 且未过 `confirmationDueAt` 时提出或编辑 `Objective.challengerUserIds` 包含自己的目标下的指标。行动项和子行动项不使用独立角色权限 key；候选目标允许指挥官先维护目标行动项，挑战者正式进入 `Objective.challengerUserIds` 后，任务和子任务的新增、编辑、勾选、移动、删除都按目标共同维护，不按 `assignee` 或创建人区分。冻结后指标口径锁定。
+目标、指标和流程操作由 `permissionRules`、状态机和对应业务能力共同控制。目标内容只能由指挥官调整；开始时间以 `Objective.acceptedAt` 为唯一事实源，只表示第一个挑战者正式接受或申请被批准的时间，前端只展示不编辑；冻结时间以 `Objective.confirmedAt` 为事实源，只表示重估完成并冻结的时间，前端只展示不编辑；截止日期以 `Objective.finalDueAt` 为唯一事实源，指标行不展示也不保存独立截止日期。重估窗口以 `Objective.confirmationDueAt` 为事实源，只用于重估中目标的窗口剩余展示和挑战者指标编辑窗口判断，不作为可编辑截止日期；目标仍处于 `reestimating` 且指挥官修改最终截止日期时，后端会重新返回同步后的 `confirmationDueAt`，前端只展示接口事实，不在页面内自行推导。指标可由指挥官编辑，挑战者只可在 `reestimating` 且未过 `confirmationDueAt` 时提出或编辑 `Objective.challengerUserIds` 包含自己的目标下的指标。行动项和子行动项不使用独立角色权限 key；候选目标允许指挥官先维护目标行动项，挑战者正式进入 `Objective.challengerUserIds` 后，任务和子任务的新增、编辑、勾选、移动、删除都按目标共同维护，不按 `assignee` 或创建人区分。冻结后指标口径锁定。
 
 反馈状态控件仅对管理员、反馈创建人或反馈 `owner` 指定处理人显示。普通成员可以看到自己可见范围内的反馈内容，但不能关闭或改写他人反馈状态。
 
