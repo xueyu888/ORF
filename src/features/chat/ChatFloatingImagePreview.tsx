@@ -178,7 +178,6 @@ function ChatFloatingImagePreviewWindow({
   const currentIndex = Math.min(Math.max(preview.currentIndex, 0), Math.max(preview.images.length - 1, 0));
   const canGoPrevious = currentIndex > 0;
   const canGoNext = currentIndex < preview.images.length - 1;
-  const zoomPercent = Math.round(viewerState.zoom * 100);
   const maximized = windowGeometry.mode === "maximized";
 
   const updateViewerState = (update: Partial<ChatImageViewerState> | ((current: ChatImageViewerState) => ChatImageViewerState)) => {
@@ -413,18 +412,18 @@ function ChatFloatingImagePreviewWindow({
   }, [attachment, preview.images.length]);
 
   useEffect(() => {
-    if (!naturalSize || chatAttachmentNaturalSize(attachment)) return;
+    if (!naturalSize) return;
     setWindowGeometry((current) => current.autoSized
       ? defaultChatImageWindowGeometry(naturalSize, preview.images.length > 1)
       : current);
-  }, [attachment, naturalSize, preview.images.length]);
+  }, [naturalSize, preview.images.length]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport || !naturalSize) return undefined;
 
     const updateFitSize = () => {
-      const bounds = viewport.getBoundingClientRect();
+      const bounds = chatImageViewportContentSize(viewport);
       if (bounds.width <= 0 || bounds.height <= 0) return;
       const nextViewportSize = {
         height: Math.max(1, Math.round(bounds.height)),
@@ -496,6 +495,9 @@ function ChatFloatingImagePreviewWindow({
         width: `${imageSize.width}px`,
       }
     : undefined;
+  const displayedZoomPercent = imageSize && naturalSize
+    ? Math.max(1, Math.round((imageSize.width / naturalSize.width) * 100))
+    : Math.round(viewerState.zoom * 100);
   const windowStyle = {
     "--orf-chat-image-window-height": `${Math.round(windowGeometry.rect.height)}px`,
     "--orf-chat-image-window-left": `${Math.round(windowGeometry.rect.x)}px`,
@@ -562,7 +564,7 @@ function ChatFloatingImagePreviewWindow({
               {viewerState.mode === "fit" ? "1:1" : "适应"}
             </button>
             <button type="button" onClick={resetImageTransform} disabled={viewerState.zoom === 1 && viewerState.rotation === 0 && viewerState.mode === "fit"} title="重置图片" aria-label="重置图片">
-              <span className="orf-chat-image-viewer-zoom">{zoomPercent}%</span>
+              <span className="orf-chat-image-viewer-zoom">{displayedZoomPercent}%</span>
             </button>
             <button type="button" onClick={rotateImage} title="顺时针旋转" aria-label="顺时针旋转">
               <RotateCw className="h-4 w-4" />
@@ -598,7 +600,7 @@ function ChatFloatingImagePreviewWindow({
         onPointerDown={startWindowMove}
       >
         <span>{attachment.fileName}</span>
-        <small>{currentIndex + 1} / {preview.images.length}</small>
+        <small>{displayedZoomPercent}% · {currentIndex + 1} / {preview.images.length}</small>
       </div>
       <div
         className={[
@@ -697,26 +699,28 @@ function defaultChatImageWindowRect(
 ): ChatImageWindowRect {
   const bounds = chatImageWindowNormalBounds();
   if (!naturalSize) {
-    const width = Math.min(bounds.width, Math.max(chatImageWindowMinWidth, chatImageWindowFallbackWidth));
-    const height = Math.min(bounds.height, Math.max(chatImageWindowMinHeight, chatImageWindowFallbackHeight));
-    return centeredChatImageWindowRect(bounds, { height, width });
+    return centeredChatImageWindowRect(bounds, {
+      height: Math.min(bounds.height, Math.max(chatImageWindowMinHeight, chatImageWindowFallbackHeight)),
+      width: Math.min(bounds.width, Math.max(chatImageWindowMinWidth, chatImageWindowFallbackWidth)),
+    });
   }
 
   const chromeHeight = chatImageWindowChromeHeight + chatImageWindowBodyPaddingY + (hasThumbnails ? chatImageWindowThumbnailHeight : 0);
-  const maxImageWidth = Math.max(1, bounds.width - chatImageWindowBodyPaddingX);
-  const maxImageHeight = Math.max(1, bounds.height - chromeHeight);
-  const imageScale = Math.min(maxImageWidth / naturalSize.width, maxImageHeight / naturalSize.height, 1);
-  const width = clamp(
-    Math.round(naturalSize.width * imageScale + chatImageWindowBodyPaddingX),
-    Math.min(chatImageWindowMinWidth, bounds.width),
-    bounds.width,
-  );
-  const height = clamp(
-    Math.round(naturalSize.height * imageScale + chromeHeight),
-    Math.min(chatImageWindowMinHeight, bounds.height),
-    bounds.height,
-  );
-  return centeredChatImageWindowRect(bounds, { height, width });
+  const originalSizeWindow = {
+    height: Math.round(naturalSize.height + chromeHeight),
+    width: Math.round(naturalSize.width + chatImageWindowBodyPaddingX),
+  };
+  const fitsOriginalSize = originalSizeWindow.width <= bounds.width && originalSizeWindow.height <= bounds.height;
+  const targetSize = fitsOriginalSize
+    ? {
+        height: clamp(originalSizeWindow.height, Math.min(chatImageWindowMinHeight, bounds.height), bounds.height),
+        width: clamp(originalSizeWindow.width, Math.min(chatImageWindowMinWidth, bounds.width), bounds.width),
+      }
+    : {
+        height: bounds.height,
+        width: bounds.width,
+      };
+  return centeredChatImageWindowRect(bounds, targetSize);
 }
 
 function centeredChatImageWindowRect(bounds: ChatImageWindowRect, size: { height: number; width: number }): ChatImageWindowRect {
@@ -814,6 +818,21 @@ function clampChatImageWindowRect(rect: ChatImageWindowRect): ChatImageWindowRec
 function readChatImageWindowCssPx(name: string) {
   if (typeof window === "undefined") return 0;
   const value = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function chatImageViewportContentSize(element: HTMLElement) {
+  const style = window.getComputedStyle(element);
+  const paddingX = cssPx(style.paddingLeft) + cssPx(style.paddingRight);
+  const paddingY = cssPx(style.paddingTop) + cssPx(style.paddingBottom);
+  return {
+    height: Math.max(1, element.clientHeight - paddingY),
+    width: Math.max(1, element.clientWidth - paddingX),
+  };
+}
+
+function cssPx(value: string) {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
