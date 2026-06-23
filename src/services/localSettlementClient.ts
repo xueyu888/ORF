@@ -1,24 +1,17 @@
-import type { ContributionAllocation, ContributionReviewMetricScore } from "../types/orf";
 import { localSettlementProxyBasePath } from "../domain/orfLocalSettlement";
-
-type LocalSettlementPublicKey = {
-  algorithm: "RSA-OAEP-256";
-  keyId: string;
-  publicKeyJwk: JsonWebKey;
-};
-
-type EncryptedReviewEnvelope = {
-  ciphertext: string;
-  encryptedKey: string;
-  iv: string;
-  keyId: string;
-};
+import type {
+  ContributionAllocation,
+  ContributionReviewDraftMetricRow,
+  ContributionReviewMetricRow,
+  ContributionReviewMetricScore,
+} from "../types/orf";
 
 export type LocalSettlementSummary = {
   abstainedReviewers: string[];
   averages: Array<{
     averageRatio: number | null;
     basis: "peer" | "selfOnly" | "none";
+    basisPoints?: number;
     member: string;
     normalizedRatio: number;
     ratingCount: number;
@@ -38,6 +31,7 @@ export type LocalSettlementSummary = {
           deviationFromAverage: number | null;
           deviationWarning: boolean;
         }>;
+        metricRows?: ContributionReviewMetricRow[];
         metricScores?: ContributionReviewMetricScore[];
         receivedAt?: string;
         reviewer: string;
@@ -59,6 +53,7 @@ export type LocalSettlementSummary = {
 export type LocalSettlementReview =
   | {
       allocations: ContributionAllocation[];
+      metricRows?: ContributionReviewMetricRow[];
       metricScores?: ContributionReviewMetricScore[];
       receivedAt?: string;
       reviewer: string;
@@ -73,6 +68,22 @@ export type LocalSettlementReview =
       reviewerUserId?: string | null;
       status: "abstained";
       submittedAt: string;
+    };
+
+export type LocalSettlementDraft =
+  | {
+      metricRows: ContributionReviewDraftMetricRow[];
+      reviewer: string;
+      reviewerUserId?: string | null;
+      status: "scored";
+      updatedAt: string;
+    }
+  | {
+      abstentionReason: string;
+      reviewer: string;
+      reviewerUserId?: string | null;
+      status: "abstained";
+      updatedAt: string;
     };
 
 const localSettlementRequestTimeoutMs = 3000;
@@ -107,53 +118,6 @@ export async function assertLocalSettlementAvailable() {
   await requestLocalSettlement("/health");
 }
 
-type LocalContributionReviewInputBase = {
-  challengers: string[];
-  objectiveId: string;
-  objectiveTitle?: string;
-  reviewer: string;
-  reviewerUserId?: string | null;
-};
-
-export async function submitLocalEncryptedContributionReview(input: LocalContributionReviewInputBase & (
-  | { allocations: ContributionAllocation[]; kind: "score"; metricScores?: ContributionReviewMetricScore[] }
-  | { abstentionReason: string; kind: "abstain" }
-)) {
-  await assertLocalSettlementAvailable();
-  const key = await fetchLocalSettlementPublicKey();
-  const payload = input.kind === "abstain"
-    ? {
-        abstentionReason: input.abstentionReason,
-        challengers: input.challengers,
-        kind: "abstain" as const,
-        objectiveId: input.objectiveId,
-        objectiveTitle: input.objectiveTitle,
-        reviewer: input.reviewer,
-        reviewerUserId: input.reviewerUserId ?? null,
-        submittedAt: new Date().toISOString(),
-        version: 1,
-      }
-    : {
-        allocations: input.allocations,
-        challengers: input.challengers,
-        kind: "score" as const,
-        metricScores: input.metricScores,
-        objectiveId: input.objectiveId,
-        objectiveTitle: input.objectiveTitle,
-        reviewer: input.reviewer,
-        reviewerUserId: input.reviewerUserId ?? null,
-        submittedAt: new Date().toISOString(),
-        version: 1,
-      };
-  const envelope = await encryptForLocalSettlement(key, payload);
-  const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/reviews`, {
-    body: JSON.stringify(envelope),
-    headers: { "content-type": "application/json" },
-    method: "POST",
-  });
-  return response.json() as Promise<{ ok: true; payloadHash: string; receivedAt: string }>;
-}
-
 export async function fetchLocalSettlementSummary(input: { objectiveId: string; participantUserIds?: string[] }) {
   const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/summary`, {
     body: JSON.stringify({ participantUserIds: input.participantUserIds }),
@@ -164,15 +128,47 @@ export async function fetchLocalSettlementSummary(input: { objectiveId: string; 
 }
 
 export async function fetchMyLocalSettlementReview(input: { objectiveId: string }) {
-  const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/reviews/current`, {
-    method: "POST",
-  });
-  return response.json() as Promise<{ objectiveId: string; review: LocalSettlementReview | null }>;
+  const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/reviews/me`);
+  return response.json() as Promise<{ draft: LocalSettlementDraft | null; objectiveId: string; review: LocalSettlementReview | null }>;
 }
 
-async function fetchLocalSettlementPublicKey() {
-  const response = await requestLocalSettlement("/public-key");
-  return response.json() as Promise<LocalSettlementPublicKey>;
+export async function saveLocalSettlementReviewDraft(input: {
+  abstentionReason?: string;
+  kind: "score" | "abstain";
+  metricRows?: ContributionReviewDraftMetricRow[];
+  objectiveId: string;
+}) {
+  const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/reviews/draft`, {
+    body: JSON.stringify(input.kind === "abstain"
+      ? { abstentionReason: input.abstentionReason ?? "", kind: "abstain" }
+      : { kind: "score", metricRows: input.metricRows ?? [] }),
+    headers: { "content-type": "application/json" },
+    method: "PUT",
+  });
+  return response.json() as Promise<{ draft: LocalSettlementDraft | null; objectiveId: string }>;
+}
+
+export async function clearLocalSettlementReviewDraft(input: { objectiveId: string }) {
+  const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/reviews/draft`, {
+    method: "DELETE",
+  });
+  return response.json() as Promise<{ objectiveId: string; ok: true }>;
+}
+
+export async function submitLocalContributionReview(input: {
+  abstentionReason?: string;
+  kind: "score" | "abstain";
+  metricRows?: ContributionReviewMetricRow[];
+  objectiveId: string;
+}) {
+  const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/reviews/submit`, {
+    body: JSON.stringify(input.kind === "abstain"
+      ? { abstentionReason: input.abstentionReason ?? "", kind: "abstain" }
+      : { kind: "score", metricRows: input.metricRows ?? [] }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  return response.json() as Promise<{ ok: true; payloadHash: string; receivedAt: string; review: LocalSettlementReview }>;
 }
 
 async function requestLocalSettlement(path: string, init?: RequestInit) {
@@ -203,36 +199,4 @@ async function readLocalSettlementErrorMessage(response: Response) {
   } catch {
     return text;
   }
-}
-
-async function encryptForLocalSettlement(key: LocalSettlementPublicKey, payload: Record<string, unknown>): Promise<EncryptedReviewEnvelope> {
-  const aesKey = await crypto.subtle.generateKey({ length: 256, name: "AES-GCM" }, true, ["encrypt"]);
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encodedPayload = new TextEncoder().encode(JSON.stringify(payload));
-  const ciphertext = await crypto.subtle.encrypt({ iv, name: "AES-GCM" }, aesKey, encodedPayload);
-  const rawAesKey = await crypto.subtle.exportKey("raw", aesKey);
-  const publicKey = await crypto.subtle.importKey(
-    "jwk",
-    key.publicKeyJwk,
-    { hash: "SHA-256", name: "RSA-OAEP" },
-    false,
-    ["encrypt"],
-  );
-  const encryptedKey = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, rawAesKey);
-
-  return {
-    ciphertext: arrayBufferToBase64(ciphertext),
-    encryptedKey: arrayBufferToBase64(encryptedKey),
-    iv: arrayBufferToBase64(iv),
-    keyId: key.keyId,
-  };
-}
-
-function arrayBufferToBase64(value: ArrayBuffer | Uint8Array) {
-  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return btoa(binary);
 }

@@ -40,7 +40,7 @@ currentUser.id in Objective.challengerUserIds
 - 截止时间；点击日期本身打开 ORF 自定义日期选择器，选定不同日期后立即提交，不进入可见输入框，也不需要二次确认。指挥官可编辑 `Objective.finalDueAt`；冻结前可正常调整，`frozen` 只允许延后；无权限或状态锁定时点击日期提示原因。
 - 目标进度，来源 `Objective.progress`。
 - `提交战利品` 入口；仅 `flowStatus=frozen` 且当前用户是挑战者时展示。
-- 匿名互评入口；仅 `flowStatus=accepted` 且当前用户是挑战者时展示。入口是否显示仍由目标生命周期和挑战者身份决定，按钮文案只读取 `/api/local-settlement/objectives/:objectiveId/reviews/current` 返回的当前用户服务器最新提交：最新记录为评分时显示 `更新匿名互评`，最新记录为弃权时显示 `更新弃权说明`；没有服务器记录、读取中或读取失败时保留默认 `提交匿名互评`，不使用提交页本机草稿反推列表文案。
+- 匿名互评入口；仅 `flowStatus=accepted` 且当前用户是挑战者时展示。入口是否显示仍由目标生命周期和挑战者身份决定，按钮文案只读取 `/api/local-settlement/objectives/:objectiveId/reviews/me` 返回的当前用户服务器最新提交：最新记录为评分时显示 `更新匿名互评`，最新记录为弃权时显示 `更新弃权说明`；没有服务器记录、读取中或读取失败时保留默认 `提交匿名互评`，不使用提交页服务器草稿反推列表文案。
 - `处理试验收` 入口；仅 `flowStatus=frozen`、当前用户为指挥官且存在待反馈试验收时展示。
 - hover 工具层包含一个主新增 `+`；点击后选择新增指标或新增行动项。
 

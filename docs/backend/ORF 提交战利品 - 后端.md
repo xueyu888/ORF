@@ -66,19 +66,24 @@
 
 ## 匿名互评请求体
 
-评分 payload 在浏览器内加密前的业务结构：
+前端提交评分时只传逐指标整数百分比矩阵；ORF 后端从当前目标的服务端指标和挑战者快照补齐 `metricTitle`、`metricDetail`、`points`、挑战者展示名和 `memberUserId`，再转发给匿名互评服务：
 
 ```json
 {
   "kind": "score",
-  "allocations": [
-    { "member": "Kai Wang", "memberUserId": "usr-kai", "ratio": 0.6 },
-    { "member": "Mia Zhang", "memberUserId": "usr-mia", "ratio": 0.4 }
+  "metricRows": [
+    {
+      "metricId": "result-1",
+      "allocations": [
+        { "member": "Kai Wang", "memberUserId": "usr-kai", "percent": 60 },
+        { "member": "Mia Zhang", "memberUserId": "usr-mia", "percent": 40 }
+      ]
+    }
   ]
 }
 ```
 
-弃权 payload 在浏览器内加密前的业务结构：
+弃权 payload：
 
 ```json
 {
@@ -87,9 +92,9 @@
 }
 ```
 
-`memberUserId` 对应 `users.id`，是贡献分配的身份事实源；`member` 是展示名兼容字段。`ratio` 是共享结算服务和 ORF 结算接口使用的目标级标准比例，范围为 `0..1`。一份评分必须覆盖当前目标的全部普通成员挑战者，不能重复成员，且 `ratio` 合计必须为 `1`。前端页面按指标行填写 `0..100` 的贡献百分比，按指标权重汇总为目标级 `allocations`；新提交会把逐指标明细作为 `metricScores` 一起加密提交到共享结算服务。`metricScores` 只用于本人重新评价回填和指挥官查看某个 reviewer 的逐指标评价，不进入 ORF 业务数据库，也不替代最终结算事实源。弃权必须带非空 `abstentionReason`，不带 `allocations` 参与均值计算。
+`memberUserId` 对应 `users.id`，是贡献分配的身份事实源；`member` 是展示名兼容字段。`percent` 必须是 `0..100` 的整数。每个指标行必须覆盖当前目标的全部普通成员挑战者，不能重复成员，且合计精确为 `100`。匿名互评服务从逐指标 `metricRows` 统一派生目标级 `allocations` 和 `metricScores`；前端和 ORF 主后端都不把目标级 `allocations` 当作原始提交事实。弃权必须带非空 `abstentionReason`，不带 `allocations` 参与均值计算。
 
-新匿名互评链路不把原始 `allocations` 或弃权说明写入 ORF 数据库：前端通过 ORF 同源代理读取共享结算服务公钥，在浏览器内加密后把 encrypted envelope 提交到 ORF 代理；ORF 后端只做认证、目标权限和状态校验，然后转发到共享结算服务，不解密、不保存原始互评。共享结算服务解密并追加保存历史提交，再从历史中按同一目标、同一 reviewer 派生最新评价；验收时通过 ORF 代理向指挥官返回最新提交状态、原始评分、弃权说明、均值和偏离提醒。ORF 结算接口只接收 `contributionResolution.ratios` 和公开积分结果。
+匿名互评链路不把原始 `metricRows`、草稿或弃权说明写入 ORF 数据库：前端通过 ORF 同源代理自动保存草稿到 `/api/local-settlement/objectives/:objectiveId/reviews/draft`，提交到 `/api/local-settlement/objectives/:objectiveId/reviews/submit`；ORF 后端只做认证、目标权限、状态校验和服务端事实补齐，然后转发到共享结算服务。共享结算服务维护一个覆盖式草稿、追加式提交历史，并从历史中按同一目标、同一 reviewer 派生最新评价；验收时通过 ORF 代理向指挥官返回最新提交状态、原始评分、弃权说明、均值和偏离提醒。ORF 结算接口只接收 `contributionResolution.ratios` 和公开积分结果。
 
 ## 保存字段
 
@@ -155,6 +160,7 @@
 
 - 按本地匿名互评结算结果或指挥官处理结果生成 `pointLedger`。
 - `pointLedger.userId` 来自目标挑战者的 `Objective.challengerUserIds`；`memberName` 只是结算时按 UUID 派生的展示名快照。
+- `pointLedger.points` 以 `0.01` 为最小单位分配，使用最大余数法保证个人积分合计等于目标结算积分。
 - 将 `Objective.flowStatus` 改为 `settled`。
 
 ## 约束
@@ -167,9 +173,9 @@
 - 只有指挥官可结算。
 - 只有 `accepted` 目标可结算。
 - 多个普通成员挑战者结算必须有 `contributionResolution.ratios`，来源可以是当前互评均值默认值，也可以是指挥官调整后的最终比例。
-- 同一 reviewer 可重复提交匿名互评，共享结算服务保留历史；结算只使用每个 reviewer 最新一条记录。
-- 当前目标挑战者可读取自己最新一版提交用于重新评价回填；同一目标再次提交后，挑战者视角只看到新的最新评价。历史旧提交没有 `metricScores` 时，只能展示最新目标级比例，不能还原指标行。
-- 匿名互评评分和最终结算比例都拒绝超出 `0..1`、成员缺失、成员重复或合计不为 `1` 的比例。
+- 同一 reviewer 可重复提交匿名互评，共享结算服务保留提交历史；结算只使用每个 reviewer 最新一条记录。
+- 当前目标挑战者可读取自己的服务器草稿和最新一版提交用于重新评价回填；同一目标再次提交后草稿清空，挑战者视角只看到新的最新评价。历史旧提交没有 `metricRows` 或 `metricScores` 时，只能展示最新目标级比例，不能还原指标行。
+- 匿名互评评分拒绝非整数百分比、成员缺失、成员重复或行合计不为 `100`；最终结算比例拒绝超出 `0..1`、成员缺失、成员重复或合计不为 `1`。
 - 缺评、弃权和超过 `10%` 的偏离只作为验收页提示，不阻止指挥官提交合法的最终结算比例。
 - 匿名互评不能只依赖前端隐藏；新提交的原始互评不得进入 ORF 后端数据库或读模型，旧后端提交接口必须返回 `410`。
 - 任务和子任务状态不自动决定目标完成。
