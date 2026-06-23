@@ -1132,7 +1132,7 @@ export function LootSubmitPage() {
             </form>
           </Card>
         ) : canSettle ? (
-          <Card className="orf-loot-review-card orf-card-padding">
+          <Card className="orf-loot-review-card orf-loot-settlement-card orf-card-padding">
             <form
               className="orf-loot-review-form"
               onSubmit={(event) => {
@@ -1140,8 +1140,8 @@ export function LootSubmitPage() {
                 void settle();
               }}
             >
-              <div className="grid gap-3">
-                <div className="text-sm font-semibold orf-text-primary">
+              <div className="orf-loot-settlement-stack">
+                <div className="orf-loot-settlement-title">
                   匿名互评贡献结果
                 </div>
                 {usesLocalContributionSettlement ? (
@@ -1706,37 +1706,37 @@ function LocalSettlementSummaryView({
 }) {
   return (
     <div className="orf-loot-panel orf-loot-peer-review">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="orf-loot-peer-review-heading">
         <div className="font-semibold orf-text-primary">匿名互评明细</div>
         {summary && (
-          <span className="orf-status-tag border orf-border px-2 py-0.5 text-xs font-semibold orf-text-secondary">
+          <span className="orf-loot-peer-review-summary-status orf-status-tag">
             {summaryStatusLabel(summary.status)}
           </span>
         )}
       </div>
-      <div className="text-xs orf-text-secondary">
+      <div className="orf-loot-peer-review-description">
         这里只在指挥官结算页展示共享结算服务里的最新提交状态、目标级评分和逐指标明细；挑战者页面不会读取其他人的评价。最终比例由指挥官在下方确认。
       </div>
       {loading && (
-        <div className="text-xs orf-text-secondary">正在读取匿名互评数据。</div>
+        <div className="orf-loot-peer-review-empty">正在读取匿名互评数据。</div>
       )}
       {error && (
-        <div className="text-xs orf-warning-text">
+        <div className="orf-loot-peer-review-empty orf-warning-text">
           匿名互评数据读取失败：{error}。仍可由指挥官填写最终结算比例后结算。
         </div>
       )}
       {summary ? (
         <>
           <div className="orf-loot-peer-review-stats">
-            <div>
+            <div data-state="scored">
               <span>已评分</span>
               <strong>{summary.reviewers.length}</strong>
             </div>
-            <div>
+            <div data-state="abstained">
               <span>已弃权</span>
               <strong>{summary.abstainedReviewers.length}</strong>
             </div>
-            <div>
+            <div data-state="missing">
               <span>未提交</span>
               <strong>{summary.missingReviewers.length}</strong>
             </div>
@@ -1745,7 +1745,7 @@ function LocalSettlementSummaryView({
         </>
       ) : (
         !loading && (
-          <div className="rounded-md border orf-border p-3 text-xs orf-text-secondary">
+          <div className="orf-loot-peer-review-empty-state">
             暂未读取到匿名互评汇总，最终比例会先按平均分配填入。
           </div>
         )
@@ -1945,7 +1945,7 @@ function PeerReviewRawScoreTable({
   targets: ContributionAllocationTarget[];
 }) {
   const submissionByReviewer = submissionMap(summary);
-  const rawAverageByMember = rawScoreAverageByMember(summary);
+  const rawAverageByMember = rawScoreAverageByTarget(summary);
   return (
     <div className="orf-loot-peer-review-submissions">
       {targets.map((target) => (
@@ -1953,7 +1953,7 @@ function PeerReviewRawScoreTable({
           key={contributionTargetKey(target)}
           rawAverageByMember={rawAverageByMember}
           reviewer={target}
-          submission={submissionByReviewer.get(target.member)}
+          submission={submissionByReviewer.get(contributionTargetKey(target))}
           targets={targets}
         />
       ))}
@@ -1972,18 +1972,26 @@ function PeerReviewSubmissionCard({
   submission: LocalSettlementSubmission | undefined;
   targets: ContributionAllocationTarget[];
 }) {
+  const hasWarning = submission?.status === "scored" ? submissionHasWarning(submission) : false;
+  const statusState = !submission
+    ? "missing"
+    : submission.status === "abstained"
+      ? "abstained"
+      : hasWarning
+        ? "warning"
+        : "scored";
   const statusLabel = !submission
     ? "未提交"
     : submission.status === "abstained"
       ? "已弃权"
-      : submissionHasWarning(submission)
+      : hasWarning
         ? "有偏差"
         : "已评分";
-  const statusClassName = submission?.status === "scored" && submissionHasWarning(submission)
+  const statusClassName = hasWarning
     ? "orf-loot-peer-review-status orf-loot-peer-review-status-warning"
     : "orf-loot-peer-review-status";
   return (
-    <section className="orf-loot-peer-review-card">
+    <section className="orf-loot-peer-review-card" data-status={statusState}>
       <div className="orf-loot-peer-review-card-header">
         <div>
           <div className="orf-loot-peer-review-card-title">{reviewer.member}</div>
@@ -2034,20 +2042,24 @@ function PeerReviewAllocationSummary({
   targets: ContributionAllocationTarget[];
 }) {
   const allocationByMember = new Map(
-    submission.allocations.map((allocation) => [allocation.member, allocation]),
+    submission.allocations.map((allocation) => [contributionAllocationKey(allocation), allocation]),
   );
   return (
     <div className="orf-loot-peer-review-allocation-row">
       {targets.map((target) => {
-        const allocation = allocationByMember.get(target.member);
-        const rawAverage = rawAverageByMember.get(target.member) ?? null;
+        const targetKey = contributionTargetKey(target);
+        const allocation = allocationByMember.get(targetKey);
+        const rawAverage = rawAverageByMember.get(targetKey) ?? null;
         const rawDeviation = allocation && rawAverage !== null
           ? allocation.ratio - rawAverage
           : null;
         const rawDeviationWarning = rawDeviation !== null &&
           Math.abs(rawDeviation) > CONTRIBUTION_RATIO_WARNING_THRESHOLD;
         return (
-          <div key={contributionTargetKey(target)}>
+          <div
+            key={targetKey}
+            data-warning={rawDeviationWarning ? "true" : undefined}
+          >
             <span>{target.member}</span>
             <strong>{allocation ? formatRatioPercent(allocation.ratio) : "-"}</strong>
             {rawDeviation !== null && (
@@ -2085,7 +2097,7 @@ function PeerReviewMetricScoreTable({
         <tbody>
           {metricScores.map((metric) => {
             const allocationByMember = new Map(
-              metric.allocations.map((allocation) => [allocation.member, allocation]),
+              metric.allocations.map((allocation) => [contributionAllocationKey(allocation), allocation]),
             );
             return (
               <tr key={metric.metricId}>
@@ -2096,9 +2108,10 @@ function PeerReviewMetricScoreTable({
                   </div>
                 </td>
                 {targets.map((target) => {
-                  const allocation = allocationByMember.get(target.member);
+                  const targetKey = contributionTargetKey(target);
+                  const allocation = allocationByMember.get(targetKey);
                   return (
-                    <td key={contributionTargetKey(target)} className="px-3 py-2">
+                    <td key={targetKey} className="px-3 py-2">
                       {allocation ? formatRatioPercent(allocation.ratio) : "-"}
                     </td>
                   );
@@ -2124,7 +2137,7 @@ function SettlementResolutionTable({
   onChange: (member: string, value: string) => void;
 }) {
   return (
-    <div className="orf-loot-table-wrap">
+    <div className="orf-loot-table-wrap orf-loot-settlement-table-wrap">
       <table className="orf-loot-table orf-loot-settlement-table">
         <thead className="orf-surface-muted orf-text-secondary">
           <tr>
@@ -2167,7 +2180,7 @@ function SettlementResolutionTable({
 
 function SingleContributionSummaryView({ member }: { member: string }) {
   return (
-    <div className="grid gap-2 rounded-md border orf-border orf-surface-muted p-3 text-sm">
+    <div className="orf-loot-single-summary">
       <div className="flex justify-between gap-3">
         <span className="orf-text-primary">{member}</span>
         <span className="orf-text-secondary">100%</span>
@@ -2202,10 +2215,11 @@ function percentInputDefaultsFromRatios(
 ) {
   const members = targets.map((target) => target.member);
   const defaults = balancedPercentDefaults(members);
-  const ratioByMember = new Map(ratios.map((ratio) => [ratio.member, ratio.ratio]));
+  const ratioByTarget = new Map(ratios.map((ratio) => [contributionAllocationKey(ratio), ratio.ratio]));
   const next: Record<string, string> = {};
-  for (const member of members) {
-    const ratio = ratioByMember.get(member);
+  for (const target of targets) {
+    const member = target.member;
+    const ratio = ratioByTarget.get(contributionTargetKey(target));
     next[member] = typeof ratio === "number"
       ? formatInputPercent(ratio * CONTRIBUTION_PERCENT_TOTAL)
       : current[member] ?? defaults[member] ?? "0";
@@ -2233,6 +2247,14 @@ type ContributionAllocationTarget = ContributionMemberTarget;
 
 function contributionTargetKey(target: ContributionAllocationTarget) {
   return contributionReviewTargetKey(target);
+}
+
+function contributionAllocationKey(allocation: { member: string; memberUserId?: string | null }) {
+  return allocation.memberUserId?.trim() || allocation.member.trim();
+}
+
+function contributionSubmissionKey(submission: { reviewer: string; reviewerUserId?: string | null }) {
+  return submission.reviewerUserId?.trim() || submission.reviewer.trim();
 }
 
 function contributionTargetForAllocation(
@@ -2286,7 +2308,7 @@ function defaultContributionResolutionReason(summary: LocalSettlementSummary | n
 type LocalSettlementSubmission = LocalSettlementSummary["submissions"][number];
 
 function submissionMap(summary: LocalSettlementSummary) {
-  return new Map(summary.submissions.map((submission) => [submission.reviewer, submission]));
+  return new Map(summary.submissions.map((submission) => [contributionSubmissionKey(submission), submission]));
 }
 
 function formatAllocationInline(allocations: ContributionAllocation[]) {
@@ -2299,14 +2321,15 @@ function submissionHasWarning(submission: Extract<LocalSettlementSubmission, { s
   return submission.allocations.some((allocation) => allocation.deviationWarning);
 }
 
-function rawScoreAverageByMember(summary: LocalSettlementSummary) {
+function rawScoreAverageByTarget(summary: LocalSettlementSummary) {
   const valuesByMember = new Map<string, number[]>();
   for (const submission of summary.submissions) {
     if (submission.status !== "scored") continue;
     for (const allocation of submission.allocations) {
-      const values = valuesByMember.get(allocation.member) ?? [];
+      const targetKey = contributionAllocationKey(allocation);
+      const values = valuesByMember.get(targetKey) ?? [];
       values.push(allocation.ratio);
-      valuesByMember.set(allocation.member, values);
+      valuesByMember.set(targetKey, values);
     }
   }
 

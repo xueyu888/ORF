@@ -13,6 +13,7 @@ export type LocalSettlementSummary = {
     basis: "peer" | "selfOnly" | "none";
     basisPoints?: number;
     member: string;
+    memberUserId?: string | null;
     normalizedRatio: number;
     ratingCount: number;
     relativeDeviation: number;

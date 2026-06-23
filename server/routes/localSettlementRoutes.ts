@@ -618,13 +618,14 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
     if (!objective) return reply.code(404).send({ error: "Objective not found" });
     if (!canSettleObjectiveLootByFlow(objective)) return reply.code(409).send({ error: "Objective is not ready for settlement summary" });
 
-    const challengers = await contributionChallengerNames(objective, body.participantUserIds);
-    if (!challengers) return reply.code(400).send({ error: "Invalid settlement participants" });
+    const targets = await contributionChallengerTargets(objective, body.participantUserIds);
+    if (!targets) return reply.code(400).send({ error: "Invalid settlement participants" });
+    const challengers = targets.map((target) => target.member);
     try {
       return sendLocalSettlementResponse(
         reply,
         await fetchLocalSettlementService({
-          body: { challengers },
+          body: { challengers, targets },
           method: "POST",
           path: `/objectives/${encodeURIComponent(params.objectiveId)}/summary`,
         }),
