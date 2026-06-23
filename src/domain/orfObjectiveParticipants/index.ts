@@ -13,7 +13,9 @@ export type ContributionMemberTarget = {
 };
 
 export type ObjectiveParticipantSnapshotInput = {
+  assignedChallengers?: Array<string | null | undefined>;
   assignedChallengerUserIds?: Array<string | null | undefined>;
+  challengers?: Array<string | null | undefined>;
   challengerUserIds?: Array<string | null | undefined>;
   userNameById?: Map<string, string>;
 };
@@ -45,12 +47,13 @@ export function userNameByIdMap(users: readonly ObjectiveParticipantUser[]) {
 export function participantDisplayNamesForUserIds(
   userNameById: Map<string, string>,
   userIds: Array<string | undefined | null>,
+  fallbackNames: Array<string | undefined | null> = [],
 ) {
   const names = uniqueParticipantUserIds(userIds)
-    .map((userId) => userNameById.get(userId) ?? userId)
+    .map((userId, index) => participantDisplayNameForUserId(userNameById, userId, fallbackNames[index]))
     .filter(isRealParticipantName)
     .map((name) => name!.trim());
-  return uniqueParticipantNames(names);
+  return names;
 }
 
 export function objectiveParticipantSnapshot(input: ObjectiveParticipantSnapshotInput): ObjectiveParticipantSnapshot {
@@ -63,9 +66,9 @@ export function objectiveParticipantSnapshot(input: ObjectiveParticipantSnapshot
 
   return {
     challengerUserIds: effectiveChallengerUserIds,
-    challengers: participantDisplayNamesForUserIds(userNameById, effectiveChallengerUserIds),
+    challengers: participantDisplayNamesForUserIds(userNameById, effectiveChallengerUserIds, input.challengers),
     assignedChallengerUserIds: effectiveAssignedChallengerUserIds,
-    assignedChallengers: participantDisplayNamesForUserIds(userNameById, effectiveAssignedChallengerUserIds),
+    assignedChallengers: participantDisplayNamesForUserIds(userNameById, effectiveAssignedChallengerUserIds, input.assignedChallengers),
   };
 }
 
@@ -100,13 +103,23 @@ export function objectiveChallengerCount(objective: Pick<Objective, "challengerU
 }
 
 export function objectiveChallengerTargets(
-  objective: Pick<Objective, "challengerUserIds">,
+  objective: Pick<Objective, "challengerUserIds"> & Partial<Pick<Objective, "challengers">>,
   userNameById: Map<string, string> = new Map(),
 ): ContributionMemberTarget[] {
   const challengerUserIds = objectiveChallengerUserIds(objective);
-  const names = participantDisplayNamesForUserIds(userNameById, challengerUserIds);
   return challengerUserIds.map((userId, index) => ({
-    member: names[index] ?? userId,
+    member: participantDisplayNameForUserId(userNameById, userId, objective.challengers?.[index]),
     memberUserId: userId,
   }));
+}
+
+function participantDisplayNameForUserId(
+  userNameById: Map<string, string>,
+  userId: string,
+  fallbackName: string | null | undefined,
+) {
+  const mappedName = userNameById.get(userId);
+  if (isRealParticipantName(mappedName)) return mappedName!.trim();
+  if (isRealParticipantName(fallbackName)) return fallbackName!.trim();
+  return "未知成员";
 }

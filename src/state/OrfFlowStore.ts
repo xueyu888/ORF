@@ -297,7 +297,9 @@ function normalizeObjective(objective: Objective, results: Result[], tasks: Task
   const acceptedResults = typedResults.filter((result) => result.acceptedResult === "completed" || result.acceptedResult === "falsified");
   const participants = objectiveParticipantSnapshot({
     challengerUserIds: objective.challengerUserIds,
+    challengers: objective.challengers,
     assignedChallengerUserIds: objective.assignedChallengerUserIds,
+    assignedChallengers: objective.assignedChallengers,
     userNameById,
   });
   const challengeApplications = (objective.challengeApplications ?? []).map((application) => ({

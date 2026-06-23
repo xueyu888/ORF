@@ -49,7 +49,7 @@ export function summarizeContributionReviews(
 
   const memberByUserId = new Map(members.map((member) => [member.memberUserId, member]));
   const latestReviews = latestReviewByReviewer(reviews, memberByUserId);
-  const reviewers = [...latestReviews.keys()].map((userId) => memberByUserId.get(userId)?.member ?? userId).sort();
+  const reviewers = [...latestReviews.keys()].map((userId) => memberByUserId.get(userId)?.member ?? "未知成员").sort();
   const missingReviewers = members.filter(
     (member) => !latestReviews.has(member.memberUserId),
   ).map(

@@ -114,7 +114,9 @@ export function mapObjectiveRows(input: {
     const objectiveResults = input.resultsByObjective.get(objective.id) ?? [];
     const participants = objectiveParticipantSnapshot({
       challengerUserIds: objective.challengerUserIds,
+      challengers: objective.challengers,
       assignedChallengerUserIds: objective.assignedChallengerUserIds,
+      assignedChallengers: objective.assignedChallengers,
       userNameById: input.userNameById,
     });
     const challengeApplications = (objective.challengeApplications ?? []).map((application) => ({
