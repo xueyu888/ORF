@@ -72,4 +72,8 @@ ORF 前端依赖以下 ORF 同源代理接口；ORF 后端再转发到共享私�
 - `ratios`：验收页默认填入的贡献比例。
 - `status`：`ready`、`missing`、`conflict` 只表示提示状态，不是验收阻塞条件。
 
+## 历史身份一致性
+
+匿名互评历史文件里的 `reviewerUserId` 和 `memberUserId` 必须和 ORF 数据库里的 `Objective.challengerUserIds` / `users.id` 对齐；`reviewer`、`member`、`challengers` 只是展示名兼容字段。成员改名后，正常数据不应只靠旧名字回退匹配；共享结算服务读取历史记录时优先使用稳定用户 ID，只在缺少旧数据身份字段时把名字匹配作为兼容防线。
+
 普通成员重新打开匿名互评页时，ORF 后端通过 `/reviews/me` 读取本人服务器草稿和本人最新一版提交；草稿优先回填，提交成功后私有服务立即清空草稿。如果最新提交包含 `metricRows` 或 `metricScores`，前端可回填每个指标行；如果是旧提交且只有目标级 `allocations`，前端只能展示最新比例提示，不能伪造指标行。ORF 后端代理读取 `/objectives/:objectiveId/summary` 产出的默认贡献比例和提示明细；目标进入已验收后，结算时只把指挥官确认后的公开比例写入 `pointLedger`，并按 `pointUnits=100` 表示 `1.00` 积分，用最大余数法保证个人积分合计等于目标结算积分。旧 `POST /api/objectives/:objectiveId/contribution-reviews` 后端接口返回 `410`，不能再写入原始匿名互评。
