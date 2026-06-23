@@ -294,6 +294,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "feedback.list.search-filter-reset",
+    title: "01-反馈列表搜索分类与重置",
+    doc: "testd-doc/cases/feedback/01-反馈列表搜索分类与重置.md",
+    changePolicy: "open",
+    spec: "testd/feedback/list-search-filter-reset/_entry/feedback-list-filter.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "system.access-control.role",
     title: "01-系统管理页面访问权限控制",
     doc: "testd-doc/cases/system/01-系统管理页面访问权限控制.md",
