@@ -1,13 +1,19 @@
 import type { Objective, OrfState, PointLedgerEntry, OrfUser } from "../../../types/orf";
 
-export type TimeRange = "quarter" | "year" | "all";
+export type TimeRange = "month" | "quarter" | "year" | "all";
+
+export type LeaderboardRankChange =
+  | { kind: "unavailable" }
+  | { kind: "new" }
+  | { kind: "flat"; previousRank: number }
+  | { kind: "moved"; delta: number; direction: "down" | "up"; previousRank: number };
 
 export type LeaderboardRow = {
   completionRate: number;
   memberName: string;
   points: number;
   rank: number;
-  rankChange: number;
+  rankChange: LeaderboardRankChange;
 };
 
 type LeaderboardState = Pick<OrfState, "objectives" | "pointLedger" | "users">;
@@ -15,6 +21,7 @@ type DateBounds = {
   end: string;
   start: string;
 };
+type PeriodLeaderboardRow = Omit<LeaderboardRow, "rankChange">;
 
 function dateOnly(value: string | null | undefined) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
@@ -40,6 +47,16 @@ function rangeBounds(range: TimeRange, anchorDate: string): DateBounds | null {
 
   const anchor = new Date(`${anchorDate}T00:00:00.000Z`);
   const year = anchor.getUTCFullYear();
+  if (range === "month") {
+    const month = anchor.getUTCMonth();
+    const start = new Date(Date.UTC(year, month, 1));
+    const end = new Date(Date.UTC(year, month + 1, 1));
+    return {
+      start: toDateKey(start),
+      end: toDateKey(end),
+    };
+  }
+
   if (range === "year") {
     return {
       start: `${year}-01-01`,
@@ -67,6 +84,9 @@ function previousRangeBounds(range: TimeRange, anchorDate: string): DateBounds |
   if (range === "year") {
     start.setUTCFullYear(start.getUTCFullYear() - 1);
     end.setUTCFullYear(end.getUTCFullYear() - 1);
+  } else if (range === "month") {
+    start.setUTCMonth(start.getUTCMonth() - 1);
+    end.setUTCMonth(end.getUTCMonth() - 1);
   } else {
     start.setUTCMonth(start.getUTCMonth() - 3);
     end.setUTCMonth(end.getUTCMonth() - 3);
@@ -97,7 +117,7 @@ function memberNames(users: OrfUser[], pointsByMember: Map<string, number>, obje
   return Array.from(new Set([...users.map((user) => user.name), ...pointsByMember.keys(), ...objectiveCounts.keys()])).filter(Boolean);
 }
 
-function buildPeriodRows(users: OrfUser[], ledger: PointLedgerEntry[], objectives: Objective[]) {
+function buildPeriodRows(users: OrfUser[], ledger: PointLedgerEntry[], objectives: Objective[], limit?: number): PeriodLeaderboardRow[] {
   const pointsByMember = new Map<string, number>();
   for (const entry of ledger) {
     pointsByMember.set(entry.memberName, (pointsByMember.get(entry.memberName) ?? 0) + entry.points);
@@ -121,7 +141,7 @@ function buildPeriodRows(users: OrfUser[], ledger: PointLedgerEntry[], objective
     objectiveCounts.set(entry.memberName, current);
   }
 
-  return memberNames(users, pointsByMember, objectiveCounts)
+  const rows = memberNames(users, pointsByMember, objectiveCounts)
     .map((memberName) => {
       const counts = objectiveCounts.get(memberName) ?? { completed: 0, total: 0 };
       const points = pointsByMember.get(memberName) ?? 0;
@@ -129,27 +149,49 @@ function buildPeriodRows(users: OrfUser[], ledger: PointLedgerEntry[], objective
         completionRate: counts.total > 0 ? Math.round((counts.completed / counts.total) * 100) : 0,
         memberName,
         points,
-        rankChange: 0,
       };
     })
     .filter((row) => row.points > 0 || row.completionRate > 0 || (objectiveCounts.get(row.memberName)?.total ?? 0) > 0)
     .sort((left, right) => right.points - left.points || right.completionRate - left.completionRate || left.memberName.localeCompare(right.memberName))
-    .slice(0, 10)
     .map((row, index) => ({
       ...row,
       rank: index + 1,
     }));
+
+  return typeof limit === "number" ? rows.slice(0, limit) : rows;
+}
+
+function rankChangeFor(row: PeriodLeaderboardRow, previousRanks: Map<string, number>): LeaderboardRankChange {
+  const previousRank = previousRanks.get(row.memberName);
+  if (!previousRank) {
+    return { kind: "new" };
+  }
+
+  const delta = previousRank - row.rank;
+  if (delta === 0) {
+    return { kind: "flat", previousRank };
+  }
+
+  return {
+    delta: Math.abs(delta),
+    direction: delta > 0 ? "up" : "down",
+    kind: "moved",
+    previousRank,
+  };
 }
 
 export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRange): LeaderboardRow[] {
   const anchorDate = latestDate(state.pointLedger, state.objectives);
   const ledger = state.pointLedger.filter((entry) => isInRange(entry.createdAt, timeRange, anchorDate));
   const objectives = state.objectives.filter((objective) => isInRange(objective.updatedAt ?? objective.createdAt, timeRange, anchorDate));
-  const currentRows = buildPeriodRows(state.users, ledger, objectives);
+  const currentRows = buildPeriodRows(state.users, ledger, objectives, 10);
   const previousBounds = previousRangeBounds(timeRange, anchorDate);
 
   if (!previousBounds) {
-    return currentRows;
+    return currentRows.map((row) => ({
+      ...row,
+      rankChange: { kind: "unavailable" },
+    }));
   }
 
   const previousRows = buildPeriodRows(
@@ -159,11 +201,8 @@ export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRan
   );
   const previousRanks = new Map(previousRows.map((row) => [row.memberName, row.rank]));
 
-  return currentRows.map((row) => {
-    const previousRank = previousRanks.get(row.memberName);
-    return {
-      ...row,
-      rankChange: previousRank ? previousRank - row.rank : 0,
-    };
-  });
+  return currentRows.map((row) => ({
+    ...row,
+    rankChange: rankChangeFor(row, previousRanks),
+  }));
 }
