@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, Download, ExternalLink, File as FileIcon, FileText, Pencil, Reply, Send, Trash2, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Download, ExternalLink, File as FileIcon, FileText, MoreHorizontal, Pencil, Reply, Send, Trash2, X } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
@@ -385,13 +385,38 @@ function CommentMessageRow({
   showReplyEntry?: boolean;
 }) {
   const { message, threadId } = entry;
+  const moreActionsRef = useRef<HTMLDivElement | null>(null);
+  const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const canManageMessage = canManageAllComments || (message.authorUserId ? message.authorUserId === currentUserId : message.author === currentMember);
   const createdTime = commentTimeDisplay(message.createdAt);
+  const moreMenuId = `orf-comment-message-more-${message.id}`;
   const deleteMessage = () => {
     if (window.confirm("删除这条评论？")) {
       onDelete(threadId, message.id);
     }
   };
+
+  useEffect(() => {
+    if (!moreActionsOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!moreActionsRef.current?.contains(event.target as Node)) {
+        setMoreActionsOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMoreActionsOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [moreActionsOpen]);
 
   return (
     <article className={clsx("orf-comment-message-row", selected && "orf-comment-message-row-selected")} onClick={() => onSelect(message.id)}>
@@ -399,15 +424,58 @@ function CommentMessageRow({
       <div className="orf-comment-message-main">
         <div className="orf-comment-message-header">
           <span className="orf-comment-author-name">{message.author}</span>
-          <div className="orf-comment-meta">
-            <time dateTime={createdTime.dateTime} title={createdTime.title}>{createdTime.label}</time>
-            <IconButton icon={Reply} label="回复评论" size="sm" type="button" onClick={(event) => { event.stopPropagation(); onReply(message); }} />
-            {canManageMessage && (
-              <>
-                <IconButton icon={Trash2} label="删除评论" size="sm" type="button" variant="danger" onClick={(event) => { event.stopPropagation(); deleteMessage(); }} />
-                <IconButton icon={Pencil} label="编辑评论" size="sm" type="button" onClick={(event) => { event.stopPropagation(); onEdit(threadId, message); }} />
-              </>
-            )}
+          <div className="orf-comment-message-trailing">
+            <time className="orf-comment-meta" dateTime={createdTime.dateTime} title={createdTime.title}>{createdTime.label}</time>
+            <div
+              className={clsx("orf-comment-message-actions", moreActionsOpen && "orf-comment-message-actions-open")}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <IconButton className="orf-comment-message-action" icon={Reply} label="回复评论" size="sm" type="button" onClick={() => onReply(message)} />
+              {canManageMessage && (
+                <IconButton
+                  className="orf-comment-message-action"
+                  icon={Pencil}
+                  label="编辑评论"
+                  size="sm"
+                  type="button"
+                  onClick={() => {
+                    setMoreActionsOpen(false);
+                    onEdit(threadId, message);
+                  }}
+                />
+              )}
+              {canManageMessage && (
+                <div className="orf-comment-message-more-anchor" ref={moreActionsRef}>
+                  <IconButton
+                    aria-controls={moreActionsOpen ? moreMenuId : undefined}
+                    aria-expanded={moreActionsOpen}
+                    aria-haspopup="menu"
+                    className={clsx("orf-comment-message-action", moreActionsOpen && "orf-comment-message-action-active")}
+                    icon={MoreHorizontal}
+                    label="更多评论操作"
+                    size="sm"
+                    type="button"
+                    onClick={() => setMoreActionsOpen((open) => !open)}
+                  />
+                  {moreActionsOpen && (
+                    <div className="orf-comment-message-more-menu" id={moreMenuId} role="menu">
+                      <button
+                        className="orf-comment-message-more-danger"
+                        role="menuitem"
+                        type="button"
+                        onClick={() => {
+                          setMoreActionsOpen(false);
+                          deleteMessage();
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        删除评论
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
         {editDraft ? (
