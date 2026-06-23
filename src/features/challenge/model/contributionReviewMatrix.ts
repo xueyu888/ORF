@@ -22,7 +22,7 @@ export type ContributionReviewMatrixInputs = Record<string, Record<string, strin
 export type ContributionReviewMatrixCell = {
   input: string;
   member: string;
-  memberUserId: string | null;
+  memberUserId: string;
   percent: number | null;
   targetKey: string;
 };
@@ -74,7 +74,7 @@ type ContributionReviewEditableRow = {
 };
 
 export function contributionReviewTargetKey(target: ContributionMemberTarget) {
-  return target.memberUserId?.trim() || target.member.trim();
+  return target.memberUserId.trim();
 }
 
 export function normalizeContributionReviewMatrixInputs(input: {
@@ -107,7 +107,7 @@ export function buildContributionReviewMatrix(input: {
     }, 0);
     return {
       member: target.member,
-      memberUserId: target.memberUserId ?? null,
+      memberUserId: target.memberUserId,
       ratio,
     };
   });
@@ -119,7 +119,7 @@ export function buildContributionReviewMatrix(input: {
         allocation.ratio * CONTRIBUTION_REVIEW_MATRIX_TOTAL_PERCENT,
       ),
       member: allocation.member,
-      memberUserId: allocation.memberUserId ?? null,
+      memberUserId: allocation.memberUserId,
       percent: allocation.ratio * CONTRIBUTION_REVIEW_MATRIX_TOTAL_PERCENT,
       targetKey: contributionReviewTargetKey(target),
     };
@@ -264,7 +264,7 @@ function buildContributionReviewMatrixRow(
     return {
       input,
       member: target.member,
-      memberUserId: target.memberUserId ?? null,
+      memberUserId: target.memberUserId,
       percent,
       targetKey,
     };

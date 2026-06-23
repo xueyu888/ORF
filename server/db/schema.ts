@@ -157,7 +157,7 @@ export const objectiveLoot = pgTable("objective_loot", {
     .notNull()
     .references(() => objectives.id, { onDelete: "cascade" }),
   submittedBy: text("submitted_by").notNull(),
-  submittedByUserId: uuid("submitted_by_user_id").references(() => users.id),
+  submittedByUserId: uuid("submitted_by_user_id").notNull().references(() => users.id),
   body: text("body").notNull(),
   resultClaims: jsonb("result_claims").$type<LootResultClaim[]>().notNull().default([]),
   selfTestReportUrl: text("self_test_report_url"),
@@ -176,7 +176,7 @@ export const objectiveTrialReviews = pgTable(
       .notNull()
       .references(() => objectives.id, { onDelete: "cascade" }),
     requestedBy: text("requested_by").notNull(),
-    requestedByUserId: uuid("requested_by_user_id").references(() => users.id),
+    requestedByUserId: uuid("requested_by_user_id").notNull().references(() => users.id),
     body: text("body").notNull(),
     resultClaims: jsonb("result_claims").$type<LootResultClaim[]>().notNull().default([]),
     selfTestReportBody: text("self_test_report_body"),
@@ -204,7 +204,7 @@ export const objectiveAlignmentRequests = pgTable(
       .references(() => objectives.id, { onDelete: "cascade" }),
     kind: text("kind").$type<ObjectiveAlignmentRequestKind>().notNull(),
     requestedBy: text("requested_by").notNull(),
-    requestedByUserId: uuid("requested_by_user_id").references(() => users.id),
+    requestedByUserId: uuid("requested_by_user_id").notNull().references(() => users.id),
     status: text("status").$type<ObjectiveAlignmentRequestStatus>().notNull().default("requested"),
     proposedAt: timestamp("proposed_at", { mode: "string", withTimezone: true }).notNull(),
     scheduledAt: timestamp("scheduled_at", { mode: "string", withTimezone: true }),
@@ -230,7 +230,7 @@ export const objectiveContributionReviews = pgTable("objective_contribution_revi
     .notNull()
     .references(() => objectives.id, { onDelete: "cascade" }),
   reviewer: text("reviewer").notNull(),
-  reviewerUserId: uuid("reviewer_user_id").references(() => users.id),
+  reviewerUserId: uuid("reviewer_user_id").notNull().references(() => users.id),
   allocations: jsonb("allocations").$type<ContributionAllocation[]>().notNull().default([]),
   submittedAt: timestamp("submitted_at", { mode: "string", withTimezone: true }).notNull(),
 });
@@ -243,7 +243,7 @@ export const pointLedger = pgTable("point_ledger", {
   objectiveId: text("objective_id")
     .notNull()
     .references(() => objectives.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").references(() => users.id),
+  userId: uuid("user_id").notNull().references(() => users.id),
   memberName: text("member_name").notNull(),
   points: real("points").notNull(),
   reason: text("reason").notNull(),
@@ -561,7 +561,7 @@ export const results = pgTable("results", {
   confidence: integer("confidence").notNull(),
   source: text("source").$type<BountySource>().notNull().default("managerDefined"),
   definer: text("definer").notNull().default(""),
-  definerUserId: uuid("definer_user_id").references(() => users.id),
+  definerUserId: uuid("definer_user_id").notNull().references(() => users.id),
   uncertaintyScore: integer("uncertainty_score").notNull().default(0),
   acceptedResult: text("accepted_result").$type<ResultAcceptedResult>().notNull().default("unreviewed"),
   reviewCadence: text("review_cadence").notNull(),
@@ -592,7 +592,7 @@ export const tasks = pgTable("tasks", {
   status: taskStatusEnum("status").notNull(),
   priority: priorityEnum("priority").notNull(),
   assignee: text("assignee").notNull(),
-  assigneeUserId: uuid("assignee_user_id").references(() => users.id),
+  assigneeUserId: uuid("assignee_user_id").notNull().references(() => users.id),
   linkedObjectiveId: text("linked_objective_id")
     .notNull()
     .references(() => objectives.id, { onDelete: "cascade" }),
@@ -627,7 +627,7 @@ export const feedback = pgTable("feedback", {
   suggestedAdjustment: text("suggested_adjustment").notNull(),
   status: feedbackStatusEnum("status").notNull(),
   owner: text("owner").notNull(),
-  ownerUserId: uuid("owner_user_id").references(() => users.id),
+  ownerUserId: uuid("owner_user_id").notNull().references(() => users.id),
   createdAt: date("created_at", { mode: "string" }).notNull(),
   updatedAt: date("updated_at", { mode: "string" }).notNull(),
   createdBy: uuid("created_by").references(() => users.id),
@@ -659,7 +659,7 @@ export const evidence = pgTable("evidence", {
   source: text("source").notNull(),
   date: date("date", { mode: "string" }).notNull(),
   owner: text("owner").notNull(),
-  ownerUserId: uuid("owner_user_id").references(() => users.id),
+  ownerUserId: uuid("owner_user_id").notNull().references(() => users.id),
   linkedResultId: text("linked_result_id")
     .notNull()
     .references(() => results.id, { onDelete: "cascade" }),

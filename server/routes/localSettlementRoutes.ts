@@ -24,7 +24,7 @@ const settlementSummaryBodySchema = z.object({
 const draftMetricAllocationSchema = z.object({
   input: z.string(),
   member: z.string().min(1),
-  memberUserId: z.string().nullable().optional(),
+  memberUserId: z.string().min(1),
 });
 const draftMetricRowSchema = z.object({
   allocations: z.array(draftMetricAllocationSchema),
@@ -32,7 +32,7 @@ const draftMetricRowSchema = z.object({
 });
 const submitMetricAllocationSchema = z.object({
   member: z.string().min(1),
-  memberUserId: z.string().nullable().optional(),
+  memberUserId: z.string().min(1),
   percent: z.number().int().min(0).max(100),
 });
 const submitMetricRowSchema = z.object({
@@ -59,20 +59,13 @@ const reviewSubmitBodySchema = z.discriminatedUnion("kind", [
     kind: z.literal("abstain"),
   }),
 ]);
-const encryptedReviewEnvelopeSchema = z.object({
-  ciphertext: z.string().min(1),
-  encryptedKey: z.string().min(1),
-  iv: z.string().min(1),
-  keyId: z.string().min(1),
-});
-
 type SettlementObjective = Pick<
   typeof objectives.$inferSelect,
-  "challengerUserIds" | "challengers" | "flowStatus" | "id" | "teamId" | "title"
+  "challengerUserIds" | "flowStatus" | "id" | "teamId" | "title"
 >;
 type ContributionTarget = {
   member: string;
-  memberUserId: string | null;
+  memberUserId: string;
 };
 type ReviewMetricSource = {
   detail: string;
@@ -93,7 +86,6 @@ async function settlementObjectiveInScope(objectiveId: string, scope: RuntimeSco
   const [objective] = await db
     .select({
       challengerUserIds: objectives.challengerUserIds,
-      challengers: objectives.challengers,
       flowStatus: objectives.flowStatus,
       id: objectives.id,
       teamId: objectives.teamId,
@@ -108,18 +100,16 @@ async function settlementObjectiveInScope(objectiveId: string, scope: RuntimeSco
 }
 
 async function contributionChallengerTargets(objective: SettlementObjective, participantUserIds?: string[]) {
-  const { userIdByName, userNameById } = await getUserMapsForStorageScope(objective.teamId);
+  const { userNameById } = await getUserMapsForStorageScope(objective.teamId);
   const snapshot = objectiveParticipantSnapshot({
-    challengerNames: objective.challengers,
     challengerUserIds: objective.challengerUserIds,
-    userIdByName,
     userNameById,
   });
 
   const targets = snapshot.challengers.map((member, index) => ({
     member,
-    memberUserId: snapshot.challengerUserIds[index] ?? null,
-  }));
+    memberUserId: snapshot.challengerUserIds[index]!,
+  })).filter((target) => target.memberUserId);
 
   if (!participantUserIds) return targets;
 
@@ -134,11 +124,6 @@ async function contributionChallengerTargets(objective: SettlementObjective, par
     memberUserId: userId,
   }));
   return requestedTargets.every((target) => target.member.trim()) ? requestedTargets : null;
-}
-
-async function contributionChallengerNames(objective: SettlementObjective, participantUserIds?: string[]) {
-  const targets = await contributionChallengerTargets(objective, participantUserIds);
-  return targets?.map((target) => target.member) ?? null;
 }
 
 async function reviewRouteContext(input: {
@@ -214,7 +199,7 @@ async function objectiveReviewMetricSources(objective: SettlementObjective): Pro
 }
 
 function contributionTargetKey(target: ContributionTarget) {
-  return target.memberUserId?.trim() || target.member.trim();
+  return target.memberUserId.trim();
 }
 
 function sourceRowByMetricId<T extends { metricId: string }>(inputRows: T[], sourceRows: ReviewMetricSource[]) {
@@ -230,13 +215,13 @@ function sourceRowByMetricId<T extends { metricId: string }>(inputRows: T[], sou
   return sourceById;
 }
 
-function inputAllocationByTarget<T extends { member: string; memberUserId?: string | null }>(
+function inputAllocationByTarget<T extends { member: string; memberUserId: string }>(
   allocations: T[],
   targets: ContributionTarget[],
 ) {
   const byKey = new Map<string, T>();
   for (const allocation of allocations) {
-    const key = allocation.memberUserId?.trim() || allocation.member.trim();
+    const key = allocation.memberUserId?.trim();
     if (!key || byKey.has(key)) return null;
     byKey.set(key, allocation);
   }
@@ -327,79 +312,6 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get(`${localSettlementProxyBasePath}/public-key`, async (_request, reply) => {
-    try {
-      return sendLocalSettlementResponse(reply, await fetchLocalSettlementService({ method: "GET", path: "/public-key" }));
-    } catch (error) {
-      if (error instanceof LocalSettlementServiceUnavailableError) return sendLocalSettlementUnavailable(reply);
-      throw error;
-    }
-  });
-
-  app.post(`${localSettlementProxyBasePath}/objectives/:objectiveId/reviews`, async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) return reply;
-
-    const params = objectiveParamsSchema.parse(request.params);
-    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
-      return reply;
-    }
-
-    const objective = await settlementObjectiveInScope(params.objectiveId, context.scope);
-    if (!objective) return reply.code(404).send({ error: "Objective not found" });
-    if (
-      context.user.role !== "member" ||
-      !canSubmitObjectiveContributionReviewByFlow(objective) ||
-      !isObjectiveChallenger(objective, context.user.id)
-    ) {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-
-    const body = encryptedReviewEnvelopeSchema.parse(request.body);
-    try {
-      return sendLocalSettlementResponse(reply, await fetchLocalSettlementService({ body, method: "POST", path: "/reviews" }));
-    } catch (error) {
-      if (error instanceof LocalSettlementServiceUnavailableError) return sendLocalSettlementUnavailable(reply);
-      throw error;
-    }
-  });
-
-  app.post(`${localSettlementProxyBasePath}/objectives/:objectiveId/reviews/current`, async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) return reply;
-
-    const params = objectiveParamsSchema.parse(request.params);
-    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
-      return reply;
-    }
-
-    const objective = await settlementObjectiveInScope(params.objectiveId, context.scope);
-    if (!objective) return reply.code(404).send({ error: "Objective not found" });
-    if (
-      context.user.role !== "member" ||
-      !canSubmitObjectiveContributionReviewByFlow(objective) ||
-      !isObjectiveChallenger(objective, context.user.id)
-    ) {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-
-    const challengers = await contributionChallengerNames(objective);
-    if (!challengers) return reply.code(400).send({ error: "Invalid settlement participants" });
-    try {
-      return sendLocalSettlementResponse(
-        reply,
-        await fetchLocalSettlementService({
-          body: { challengers, reviewer: context.user.name, reviewerUserId: context.user.id },
-          method: "POST",
-          path: `/objectives/${encodeURIComponent(params.objectiveId)}/reviews/latest`,
-        }),
-      );
-    } catch (error) {
-      if (error instanceof LocalSettlementServiceUnavailableError) return sendLocalSettlementUnavailable(reply);
-      throw error;
-    }
-  });
-
   app.get(`${localSettlementProxyBasePath}/objectives/:objectiveId/reviews/me`, async (request, reply) => {
     const context = await requireUserScopeContext(request, reply);
     if (!context) return reply;
@@ -421,6 +333,7 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
             challengers: routeContext.challengers,
             reviewer: context.user.name,
             reviewerUserId: context.user.id,
+            targets: routeContext.targets,
           },
           method: "POST",
           path: `/objectives/${encodeURIComponent(params.objectiveId)}/reviews/me`,
@@ -477,7 +390,7 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
       return sendLocalSettlementResponse(
         reply,
         await fetchLocalSettlementService({
-          body: { challengers: routeContext.challengers, payload },
+          body: { challengers: routeContext.challengers, payload, targets: routeContext.targets },
           method: "PUT",
           path: `/objectives/${encodeURIComponent(params.objectiveId)}/reviews/draft`,
         }),
@@ -561,7 +474,7 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
       return sendLocalSettlementResponse(
         reply,
         await fetchLocalSettlementService({
-          body: { challengers: routeContext.challengers, payload },
+          body: { challengers: routeContext.challengers, payload, targets: routeContext.targets },
           method: "POST",
           path: `/objectives/${encodeURIComponent(params.objectiveId)}/reviews/submit`,
         }),
@@ -593,6 +506,7 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
             challengers: routeContext.challengers,
             reviewer: context.user.name,
             reviewerUserId: context.user.id,
+            targets: routeContext.targets,
           },
           method: "POST",
           path: `/objectives/${encodeURIComponent(params.objectiveId)}/reviews/history`,
@@ -618,13 +532,14 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
     if (!objective) return reply.code(404).send({ error: "Objective not found" });
     if (!canSettleObjectiveLootByFlow(objective)) return reply.code(409).send({ error: "Objective is not ready for settlement summary" });
 
-    const challengers = await contributionChallengerNames(objective, body.participantUserIds);
-    if (!challengers) return reply.code(400).send({ error: "Invalid settlement participants" });
+    const targets = await contributionChallengerTargets(objective, body.participantUserIds);
+    if (!targets) return reply.code(400).send({ error: "Invalid settlement participants" });
+    const challengers = targets.map((target) => target.member);
     try {
       return sendLocalSettlementResponse(
         reply,
         await fetchLocalSettlementService({
-          body: { challengers },
+          body: { challengers, targets },
           method: "POST",
           path: `/objectives/${encodeURIComponent(params.objectiveId)}/summary`,
         }),

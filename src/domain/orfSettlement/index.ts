@@ -119,7 +119,7 @@ export function completionMultiplierFor(
 
 export function normalizeContributionRatios(
   input: ContributionAllocation[],
-  challengers: Array<string | ContributionMemberTarget>,
+  challengers: ContributionMemberTarget[],
 ) {
   const result = validateContributionAllocationInput(input, challengers);
   return result.status === "ok" ? result.allocations : null;

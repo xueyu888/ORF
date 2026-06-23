@@ -158,7 +158,7 @@ function bountyContributionSummary(input: {
 
 export async function getBountyHallData(viewer: { id: string; name: string; role: UserRole }, scope: TaskManagementDataScope = {}): Promise<BountyHallData> {
   const rows = await getBountyHallSourceRows(scope);
-  const { userIdByName, userNameById } = await getUserMapsForStorageScope(rows.storageScopeId);
+  const { userNameById } = await getUserMapsForStorageScope(rows.storageScopeId);
   const objectiveParticipantAvatarUrls = await getUserAvatarUrlMap(rows.objectiveRows.flatMap((objective) => [...objective.challengerUserIds, ...objective.assignedChallengerUserIds]));
   const resultItems = mapResultRows({
     evidenceIdsByResult: groupEvidenceIdsByResult(rows.evidenceRows),
@@ -173,7 +173,6 @@ export async function getBountyHallData(viewer: { id: string; name: string; role
     resultsByObjective,
     taskIdsByObjective,
     userAvatarUrlById: objectiveParticipantAvatarUrls,
-    userIdByName,
     userNameById,
   });
   const pointLedgerItems = mapPointLedgerRows({ pointLedgerRows: rows.pointLedgerRows, userNameById });

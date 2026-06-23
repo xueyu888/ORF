@@ -3,7 +3,7 @@ import { apiJson, apiRequest } from "./apiClient";
 import { businessMutationFailureMessage } from "./orfProviderMutationMessages";
 import type { Feedback, FeedbackStatus } from "../types/orf";
 
-export type CreateFeedbackInput = Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "owner"> & {
+export type CreateFeedbackInput = Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "ownerUserId"> & {
   attachments?: Array<{ file: File; id: string }>;
   initialBody: string;
 };
@@ -23,7 +23,7 @@ export function useOrfProviderFeedbackActions({ notify, refreshTaskManagementDat
           formData.set("causeCategories", JSON.stringify(input.causeCategories));
           formData.set("impact", input.impact);
           formData.set("initialBody", input.initialBody);
-          formData.set("owner", input.owner);
+          formData.set("ownerUserId", input.ownerUserId);
           for (const attachment of input.attachments ?? []) {
             formData.set(`attachment:${attachment.id}`, attachment.file);
           }

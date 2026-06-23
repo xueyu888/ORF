@@ -84,6 +84,7 @@ test("leaderboard counts only formal participants with point ledger rows", () =>
   assert.deepEqual(rows.map((row) => row.memberName), ["成员甲", "成员乙"]);
   assert.equal(rows.find((row) => row.memberName === "临时参与"), undefined);
   assert.equal(rows[0]?.completionRate, 100);
+  assert.equal(rows[0]?.rankChange.kind, "unavailable");
 });
 
 test("leaderboard keeps formal failed evaluations with zero points", () => {
@@ -104,4 +105,149 @@ test("leaderboard keeps formal failed evaluations with zero points", () => {
   assert.equal(rowsByMember.get("成员乙")?.points, 0);
   assert.equal(rowsByMember.get("成员甲")?.completionRate, 0);
   assert.equal(rowsByMember.get("成员乙")?.completionRate, 0);
+});
+
+test("quarterly leaderboard marks members without previous period ranks as new", () => {
+  const rows = buildLeaderboardRows(
+    state({
+      objectives: [objective({})],
+      pointLedger: [
+        ledger({ memberName: "成员甲", points: 60, userId: "user-a" }),
+        ledger({ memberName: "成员乙", points: 40, userId: "user-b" }),
+      ],
+    }),
+    "quarter",
+  );
+
+  assert.equal(rows[0]?.rankChange.kind, "new");
+  assert.equal(rows[1]?.rankChange.kind, "new");
+});
+
+test("monthly leaderboard compares against the previous month ranking only", () => {
+  const rows = buildLeaderboardRows(
+    state({
+      objectives: [
+        objective({ id: "objective-april", createdAt: "2026-04-15", updatedAt: "2026-04-15" }),
+        objective({ id: "objective-may", createdAt: "2026-05-15", updatedAt: "2026-05-15" }),
+        objective({ id: "objective-june", createdAt: "2026-06-13", updatedAt: "2026-06-13" }),
+      ],
+      pointLedger: [
+        ledger({
+          createdAt: "2026-04-15T10:00:00.000Z",
+          id: "ledger-april-a",
+          memberName: "成员甲",
+          objectiveId: "objective-april",
+          points: 500,
+          userId: "user-a",
+        }),
+        ledger({
+          createdAt: "2026-05-15T10:00:00.000Z",
+          id: "ledger-may-a",
+          memberName: "成员甲",
+          objectiveId: "objective-may",
+          points: 10,
+          userId: "user-a",
+        }),
+        ledger({
+          createdAt: "2026-05-15T10:00:00.000Z",
+          id: "ledger-may-b",
+          memberName: "成员乙",
+          objectiveId: "objective-may",
+          points: 20,
+          userId: "user-b",
+        }),
+        ledger({
+          createdAt: "2026-06-13T10:00:00.000Z",
+          id: "ledger-june-a",
+          memberName: "成员甲",
+          objectiveId: "objective-june",
+          points: 30,
+          userId: "user-a",
+        }),
+        ledger({
+          createdAt: "2026-06-13T10:00:00.000Z",
+          id: "ledger-june-b",
+          memberName: "成员乙",
+          objectiveId: "objective-june",
+          points: 20,
+          userId: "user-b",
+        }),
+      ],
+    }),
+    "month",
+  );
+
+  assert.equal(rows.find((row) => row.memberName === "成员甲")?.points, 30);
+  assert.deepEqual(rows.find((row) => row.memberName === "成员甲")?.rankChange, {
+    delta: 1,
+    direction: "up",
+    kind: "moved",
+    previousRank: 2,
+  });
+  assert.deepEqual(rows.find((row) => row.memberName === "成员乙")?.rankChange, {
+    delta: 1,
+    direction: "down",
+    kind: "moved",
+    previousRank: 1,
+  });
+});
+
+test("quarterly rank change compares against the full previous period ranking", () => {
+  const previousLeaders = Array.from({ length: 11 }, (_, index) =>
+    ledger({
+      createdAt: "2026-03-10T10:00:00.000Z",
+      id: `ledger-history-${index}`,
+      memberName: `历史成员${index + 1}`,
+      objectiveId: "objective-previous",
+      points: 100 - index,
+      userId: `history-${index}`,
+    }),
+  );
+
+  const rows = buildLeaderboardRows(
+    state({
+      objectives: [
+        objective({ id: "objective-previous", createdAt: "2026-03-10", updatedAt: "2026-03-10" }),
+        objective({ id: "objective-current", createdAt: "2026-06-13", updatedAt: "2026-06-13" }),
+      ],
+      pointLedger: [
+        ...previousLeaders,
+        ledger({
+          createdAt: "2026-03-10T10:00:00.000Z",
+          id: "ledger-previous-c",
+          memberName: "成员丙",
+          objectiveId: "objective-previous",
+          points: 1,
+          userId: "user-c",
+        }),
+        ledger({
+          createdAt: "2026-06-13T10:00:00.000Z",
+          id: "ledger-current-c",
+          memberName: "成员丙",
+          objectiveId: "objective-current",
+          points: 80,
+          userId: "user-c",
+        }),
+        ledger({
+          createdAt: "2026-06-13T10:00:00.000Z",
+          id: "ledger-current-a",
+          memberName: "成员甲",
+          objectiveId: "objective-current",
+          points: 40,
+          userId: "user-a",
+        }),
+      ],
+    }),
+    "quarter",
+  );
+
+  const renamedMember = rows.find((row) => row.userId === "user-c");
+  assert.equal(renamedMember?.memberName, "临时参与");
+  assert.deepEqual(renamedMember?.rankChange, {
+    delta: 11,
+    direction: "up",
+    kind: "moved",
+    previousRank: 12,
+  });
+  assert.equal(rows.find((row) => row.userId === "user-a")?.rankChange.kind, "new");
 });

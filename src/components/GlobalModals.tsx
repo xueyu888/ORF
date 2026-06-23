@@ -60,14 +60,14 @@ function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
           !isObjectiveAssignedChallenger(objective, user.id),
       )
     : [];
-  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [selectedMemberUserIds, setSelectedMemberUserIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   if (!objective) return null;
 
-  const toggleMember = (member: string) => {
-    setSelectedMembers((items) =>
-      items.includes(member) ? items.filter((item) => item !== member) : [...items, member],
+  const toggleMember = (memberUserId: string) => {
+    setSelectedMemberUserIds((items) =>
+      items.includes(memberUserId) ? items.filter((item) => item !== memberUserId) : [...items, memberUserId],
     );
   };
 
@@ -77,10 +77,10 @@ function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
         className="grid gap-4"
         onSubmit={async (event) => {
           event.preventDefault();
-          if (selectedMembers.length === 0 || submitting) return;
+          if (selectedMemberUserIds.length === 0 || submitting) return;
           setSubmitting(true);
           try {
-            const ok = await recruitObjectiveChallengers(objective.id, selectedMembers);
+            const ok = await recruitObjectiveChallengers(objective.id, selectedMemberUserIds);
             if (ok) closeModal();
           } finally {
             setSubmitting(false);
@@ -99,12 +99,12 @@ function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
                 <span className="font-medium orf-text-primary">{user.name}</span>
                 <span className="ml-2 orf-text-muted">{user.email}</span>
               </span>
-              <input aria-label={`征召 ${user.name}`} checked={selectedMembers.includes(user.name)} onChange={() => toggleMember(user.name)} type="checkbox" />
+              <input aria-label={`征召 ${user.name}`} checked={selectedMemberUserIds.includes(user.id)} onChange={() => toggleMember(user.id)} type="checkbox" />
             </label>
           ))}
           {candidates.length === 0 && <div className="rounded-lg border orf-border px-3 py-6 text-center text-sm orf-text-secondary">没有可征召的成员。</div>}
         </div>
-        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button disabled={selectedMembers.length === 0 || submitting} type="submit">发送征召</Button></div>
+        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button disabled={selectedMemberUserIds.length === 0 || submitting} type="submit">发送征召</Button></div>
       </form>
     </ModalFrame>
   );

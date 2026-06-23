@@ -12,7 +12,6 @@ import { ParticipationPreview } from "./ParticipationPreview";
 export function BountyObjectiveList({
   activeObjectiveId,
   currentUserId,
-  currentUserName,
   items,
   applicationView = false,
   now,
@@ -23,7 +22,6 @@ export function BountyObjectiveList({
 }: {
   activeObjectiveId: string | null;
   currentUserId: string;
-  currentUserName: string;
   items: BountyItem[];
   applicationView?: boolean;
   now: Date;
@@ -48,7 +46,6 @@ export function BountyObjectiveList({
           key={item.objective.id}
           active={item.objective.id === activeObjectiveId}
           currentUserId={currentUserId}
-          currentUserName={currentUserName}
           applicationView={applicationView}
           item={item}
           now={now}
@@ -65,7 +62,6 @@ export function BountyObjectiveList({
 function BountyListRow({
   item,
   currentUserId,
-  currentUserName,
   applicationView,
   now,
   onOpenChallengeWork,
@@ -76,7 +72,6 @@ function BountyListRow({
 }: {
   active: boolean;
   currentUserId: string;
-  currentUserName: string;
   applicationView: boolean;
   item: BountyItem;
   now: Date;
@@ -136,7 +131,7 @@ function BountyListRow({
         </div>
       </div>
       <div className="bounty-row-participants" data-label="参与状态">
-        <ParticipationPreview currentUserId={currentUserId} currentUserName={currentUserName} item={item} />
+        <ParticipationPreview currentUserId={currentUserId} item={item} />
       </div>
       <div className="bounty-row-results" data-label="指标">
         <ResultPreview item={item} />

@@ -72,6 +72,11 @@ export const notificationPolicyRegistry: Record<NotificationKind, NotificationPo
     replyTarget: "notification-target",
     stream: "teamAnnouncement",
   },
+  "objective.settled": {
+    kind: "objective.settled",
+    replyTarget: "none",
+    stream: "personalNotification",
+  },
   "objective.recruitment.created": {
     kind: "objective.recruitment.created",
     replyTarget: "notification-target",
