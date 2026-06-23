@@ -335,7 +335,7 @@ function buildNetworkRetryAttempts(suite, args) {
   const attempts = [
     {
       retryIndex: 0,
-      args,
+      args: withWorkerArg(args, currentWorkers),
       env: {},
       workers: currentWorkers,
       runId: testdRunId,
@@ -397,7 +397,8 @@ function workerFractions(currentWorkers) {
 }
 
 function defaultPlaywrightWorkerCount() {
-  return Math.max(1, Math.floor(logicalCpuCount() / 2));
+  // Keep full-suite database and global-setting operations stable by default.
+  return Math.max(1, Math.min(4, Math.floor(logicalCpuCount() / 2)));
 }
 
 function logicalCpuCount() {

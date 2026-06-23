@@ -4,10 +4,6 @@ import type { PermissionRule, UserRole } from "../../../src/types/orf";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
 import { clearBrowserState, readResponseBody } from "../../_operators/common.helpers";
 import { requiredNumber, requiredString } from "../../_operators/params";
-import {
-  acquireRolePermissionLock,
-  releaseRolePermissionLock,
-} from "../../_operators/role-permission-lock";
 import type {
   CurrentAccessResult,
   PermissionRulesResult,
@@ -25,8 +21,6 @@ import {
   updateMemberPermissionRulesByTeamId,
   updateMemberPermissionRules,
 } from "./_support/permissions-config.helpers";
-
-const rolePermissionLockOwnerKey = "__testdRolePermissionLockOwner";
 
 export const systemPermissionsConfigOperators = {
   browser: {
@@ -46,19 +40,13 @@ export const systemPermissionsConfigOperators = {
   },
   "api.permissions": {
     read_member_rules: async ({ ctx, params }) => {
-      const lockOwner = await acquireRolePermissionLock();
-      try {
-        if (typeof params.teamId === "string") {
-          return attachRolePermissionLockOwner(await readPermissionRulesByTeamId(params.teamId), lockOwner);
-        }
-
-        const result = await readPermissionRulesAsCurrentUser(ctx.page);
-        expect(result.status).toBe(200);
-        return attachRolePermissionLockOwner(requiredPermissionRules(result.body.permissionRules), lockOwner);
-      } catch (error) {
-        await releaseRolePermissionLock(lockOwner);
-        throw error;
+      if (typeof params.teamId === "string") {
+        return readPermissionRulesByTeamId(params.teamId);
       }
+
+      const result = await readPermissionRulesAsCurrentUser(ctx.page);
+      expect(result.status).toBe(200);
+      return requiredPermissionRules(result.body.permissionRules);
     },
     count_member_rules: async ({ params }) => {
       return rolePermissionKeys(requiredPermissionRules(params.rules), "member").length;
@@ -71,16 +59,11 @@ export const systemPermissionsConfigOperators = {
         return undefined;
       }
 
-      const lockOwner = rolePermissionLockOwner(params.rules);
-      try {
-        if (typeof params.teamId === "string") {
-          return await updateMemberPermissionRulesByTeamId(params.teamId, requiredPermissionRules(params.rules));
-        }
-
-        return await updateMemberPermissionRules(ctx.page, requiredPermissionRules(params.rules));
-      } finally {
-        await releaseRolePermissionLock(lockOwner);
+      if (typeof params.teamId === "string") {
+        return await updateMemberPermissionRulesByTeamId(params.teamId, requiredPermissionRules(params.rules));
       }
+
+      return await updateMemberPermissionRules(ctx.page, requiredPermissionRules(params.rules));
     },
     response_ok: async ({ params }) => {
       const result = requiredPermissionRulesResult(params.result);
@@ -256,26 +239,6 @@ function requiredRole(params: StepParams, key: string): UserRole {
 
 function requiredPermissionKey(params: StepParams, key: string): PermissionKey {
   return requiredString(params, key) as PermissionKey;
-}
-
-function attachRolePermissionLockOwner(rules: PermissionRule[], lockOwner?: string): PermissionRule[] {
-  if (!lockOwner) {
-    return rules;
-  }
-  Object.defineProperty(rules, rolePermissionLockOwnerKey, {
-    configurable: true,
-    enumerable: false,
-    value: lockOwner,
-  });
-  return rules;
-}
-
-function rolePermissionLockOwner(value: unknown): string | undefined {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-  const owner = (value as Record<string, unknown>)[rolePermissionLockOwnerKey];
-  return typeof owner === "string" ? owner : undefined;
 }
 
 function expectAccessPermissions(result: CurrentAccessResult) {

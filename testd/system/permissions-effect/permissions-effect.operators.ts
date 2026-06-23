@@ -5,10 +5,6 @@ import type { OperatorRegistry, StepParams } from "../../_framework/types";
 import { clearBrowserState, readResponseBody } from "../../_operators/common.helpers";
 import { requiredString } from "../../_operators/params";
 import {
-  acquireRolePermissionLock,
-  releaseRolePermissionLock,
-} from "../../_operators/role-permission-lock";
-import {
   commentMessageRow,
   commentPanel,
   createRootFixtureComment,
@@ -34,8 +30,6 @@ import {
   setRolePermission,
   updateMemberPermissionRulesByTeamId,
 } from "./_support/permissions-effect.helpers";
-
-const rolePermissionLockOwnerKey = "__testdRolePermissionLockOwner";
 
 export const systemPermissionsEffectOperators = {
   browser: {
@@ -102,18 +96,8 @@ export const systemPermissionsEffectOperators = {
     },
   },
   "api.permissions": {
-    read_member_rules: async ({ params }) => {
-      const lockOwner = await acquireRolePermissionLock();
-      try {
-        return attachRolePermissionLockOwner(
-          await readPermissionRulesByTeamId(requiredString(params, "teamId")),
-          lockOwner,
-        );
-      } catch (error) {
-        await releaseRolePermissionLock(lockOwner);
-        throw error;
-      }
-    },
+    read_member_rules: async ({ params }) =>
+      readPermissionRulesByTeamId(requiredString(params, "teamId")),
     recorded: async ({ params }) => {
       expect(requiredPermissionRules(params.rules).some((rule) => rule.role === "member")).toBe(true);
     },
@@ -121,15 +105,10 @@ export const systemPermissionsEffectOperators = {
       if (params.rules === undefined || params.rules === null) {
         return undefined;
       }
-      const lockOwner = rolePermissionLockOwner(params.rules);
-      try {
-        return await updateMemberPermissionRulesByTeamId(
-          requiredString(params, "teamId"),
-          requiredPermissionRules(params.rules),
-        );
-      } finally {
-        await releaseRolePermissionLock(lockOwner);
-      }
+      return updateMemberPermissionRulesByTeamId(
+        requiredString(params, "teamId"),
+        requiredPermissionRules(params.rules),
+      );
     },
     includes: async ({ params }) => {
       expect(rolePermissionKeys(requiredPermissionRules(params.rules), requiredRole(params, "role"))).toContain(
@@ -361,26 +340,6 @@ function expectAccessPermissions(result: CurrentAccessResult) {
     throw new Error("当前用户权限范围响应必须包含 permissions 数组");
   }
   return expect([...result.body.permissions].sort());
-}
-
-function attachRolePermissionLockOwner(rules: PermissionRule[], lockOwner?: string): PermissionRule[] {
-  if (!lockOwner) {
-    return rules;
-  }
-  Object.defineProperty(rules, rolePermissionLockOwnerKey, {
-    configurable: true,
-    enumerable: false,
-    value: lockOwner,
-  });
-  return rules;
-}
-
-function rolePermissionLockOwner(value: unknown): string | undefined {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-  const owner = (value as Record<string, unknown>)[rolePermissionLockOwnerKey];
-  return typeof owner === "string" ? owner : undefined;
 }
 
 async function installDesktopShellMock(page: Page) {
