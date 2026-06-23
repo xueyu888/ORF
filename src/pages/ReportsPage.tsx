@@ -18,7 +18,7 @@ export function ReportsPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>("quarter");
 
   const rows = useMemo<LeaderboardRow[]>(() => buildLeaderboardRows(state, timeRange), [state, timeRange]);
-  const usersByName = useMemo(() => new Map(state.users.map((user) => [user.name, user])), [state.users]);
+  const usersById = useMemo(() => new Map(state.users.map((user) => [user.id, user])), [state.users]);
   const summary = useMemo(() => buildReportSummary(rows), [rows]);
   const maxPoints = Math.max(1, ...rows.map((row) => row.points));
 
@@ -91,8 +91,8 @@ export function ReportsPage() {
               <tbody>
                 {rows.map((row) => (
                   <LeaderboardRowItem
-                    avatarUrl={usersByName.get(row.memberName)?.avatarUrl}
-                    key={row.memberName}
+                    avatarUrl={usersById.get(row.userId)?.avatarUrl}
+                    key={row.userId}
                     maxPoints={maxPoints}
                     row={row}
                   />

@@ -2249,23 +2249,19 @@ function contributionTargetKey(target: ContributionAllocationTarget) {
   return contributionReviewTargetKey(target);
 }
 
-function contributionAllocationKey(allocation: { member: string; memberUserId?: string | null }) {
-  return allocation.memberUserId?.trim() || allocation.member.trim();
+function contributionAllocationKey(allocation: { member: string; memberUserId: string }) {
+  return allocation.memberUserId.trim();
 }
 
-function contributionSubmissionKey(submission: { reviewer: string; reviewerUserId?: string | null }) {
-  return submission.reviewerUserId?.trim() || submission.reviewer.trim();
+function contributionSubmissionKey(submission: { reviewer: string; reviewerUserId: string }) {
+  return submission.reviewerUserId.trim();
 }
 
 function contributionTargetForAllocation(
-  allocation: { member: string; memberUserId?: string | null },
+  allocation: { member: string; memberUserId: string },
   targets: ContributionAllocationTarget[],
 ) {
-  return targets.find((target) =>
-    allocation.memberUserId
-      ? target.memberUserId === allocation.memberUserId
-      : target.member === allocation.member,
-  );
+  return targets.find((target) => target.memberUserId === allocation.memberUserId);
 }
 
 function equalContributionAllocations(targets: ContributionAllocationTarget[]) {
@@ -2273,7 +2269,7 @@ function equalContributionAllocations(targets: ContributionAllocationTarget[]) {
   const ratio = 1 / targets.length;
   return targets.map((target) => ({
     member: target.member,
-    memberUserId: target.memberUserId ?? null,
+    memberUserId: target.memberUserId,
     ratio,
   }));
 }
@@ -2385,7 +2381,7 @@ function percentInputsToAllocations(
     }
     allocations.push({
       member,
-      memberUserId: target.memberUserId ?? null,
+      memberUserId: target.memberUserId,
       ratio: percent / CONTRIBUTION_PERCENT_TOTAL,
     });
   }

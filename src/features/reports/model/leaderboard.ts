@@ -14,6 +14,7 @@ export type LeaderboardRow = {
   points: number;
   rank: number;
   rankChange: LeaderboardRankChange;
+  userId: string;
 };
 
 type LeaderboardState = Pick<OrfState, "objectives" | "pointLedger" | "users">;
@@ -113,45 +114,49 @@ function isInBounds(value: string | null | undefined, bounds: DateBounds) {
   return Boolean(key && key >= bounds.start && key < bounds.end);
 }
 
-function memberNames(users: OrfUser[], pointsByMember: Map<string, number>, objectiveCounts: Map<string, { completed: number; total: number }>) {
-  return Array.from(new Set([...users.map((user) => user.name), ...pointsByMember.keys(), ...objectiveCounts.keys()])).filter(Boolean);
+function userIds(users: OrfUser[], pointsByUserId: Map<string, number>, objectiveCounts: Map<string, { completed: number; total: number }>) {
+  return Array.from(new Set([...users.map((user) => user.id), ...pointsByUserId.keys(), ...objectiveCounts.keys()])).filter(Boolean);
 }
 
 function buildPeriodRows(users: OrfUser[], ledger: PointLedgerEntry[], objectives: Objective[], limit?: number): PeriodLeaderboardRow[] {
-  const pointsByMember = new Map<string, number>();
+  const userNameById = new Map(users.map((user) => [user.id, user.name]));
+  const pointsByUserId = new Map<string, number>();
   for (const entry of ledger) {
-    pointsByMember.set(entry.memberName, (pointsByMember.get(entry.memberName) ?? 0) + entry.points);
+    if (!entry.userId) continue;
+    pointsByUserId.set(entry.userId, (pointsByUserId.get(entry.userId) ?? 0) + entry.points);
   }
 
   const objectiveById = new Map(objectives.map((objective) => [objective.id, objective]));
   const objectiveCounts = new Map<string, { completed: number; total: number }>();
   const seenParticipation = new Set<string>();
   for (const entry of ledger) {
+    if (!entry.userId) continue;
     const objective = objectiveById.get(entry.objectiveId);
     if (!objective) continue;
-    const key = `${entry.memberName}\u0000${entry.objectiveId}`;
+    const key = `${entry.userId}\u0000${entry.objectiveId}`;
     if (seenParticipation.has(key)) continue;
     seenParticipation.add(key);
 
-    const current = objectiveCounts.get(entry.memberName) ?? { completed: 0, total: 0 };
+    const current = objectiveCounts.get(entry.userId) ?? { completed: 0, total: 0 };
     current.total += 1;
     if (objective.flowStatus === "settled" && objective.acceptedResult !== "abandoned") {
       current.completed += 1;
     }
-    objectiveCounts.set(entry.memberName, current);
+    objectiveCounts.set(entry.userId, current);
   }
 
-  const rows = memberNames(users, pointsByMember, objectiveCounts)
-    .map((memberName) => {
-      const counts = objectiveCounts.get(memberName) ?? { completed: 0, total: 0 };
-      const points = pointsByMember.get(memberName) ?? 0;
+  const rows = userIds(users, pointsByUserId, objectiveCounts)
+    .map((userId) => {
+      const counts = objectiveCounts.get(userId) ?? { completed: 0, total: 0 };
+      const points = pointsByUserId.get(userId) ?? 0;
       return {
         completionRate: counts.total > 0 ? Math.round((counts.completed / counts.total) * 100) : 0,
-        memberName,
+        memberName: userNameById.get(userId) ?? userId,
         points,
+        userId,
       };
     })
-    .filter((row) => row.points > 0 || row.completionRate > 0 || (objectiveCounts.get(row.memberName)?.total ?? 0) > 0)
+    .filter((row) => row.points > 0 || row.completionRate > 0 || (objectiveCounts.get(row.userId)?.total ?? 0) > 0)
     .sort((left, right) => right.points - left.points || right.completionRate - left.completionRate || left.memberName.localeCompare(right.memberName))
     .map((row, index) => ({
       ...row,
@@ -162,7 +167,7 @@ function buildPeriodRows(users: OrfUser[], ledger: PointLedgerEntry[], objective
 }
 
 function rankChangeFor(row: PeriodLeaderboardRow, previousRanks: Map<string, number>): LeaderboardRankChange {
-  const previousRank = previousRanks.get(row.memberName);
+  const previousRank = previousRanks.get(row.userId);
   if (!previousRank) {
     return { kind: "new" };
   }
@@ -199,7 +204,7 @@ export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRan
     state.pointLedger.filter((entry) => isInBounds(entry.createdAt, previousBounds)),
     state.objectives.filter((objective) => isInBounds(objective.updatedAt ?? objective.createdAt, previousBounds)),
   );
-  const previousRanks = new Map(previousRows.map((row) => [row.memberName, row.rank]));
+  const previousRanks = new Map(previousRows.map((row) => [row.userId, row.rank]));
 
   return currentRows.map((row) => ({
     ...row,

@@ -31,16 +31,16 @@ export function FeedbackCreatePage() {
   const navigate = useNavigate();
   const { createFeedback, currentUser, notify, state } = useOrf();
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
-  const defaultOwner = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
+  const defaultOwnerUserId = currentUser?.id ?? state.currentUserId ?? state.users[0]?.id ?? "";
   const causeOptions = teamFeedbackCauseOptions();
-  const activeOwnerOptions = state.users.filter((user) => user.status === "active").map((user) => user.name);
-  const ownerOptions = activeOwnerOptions.length > 0 ? activeOwnerOptions : [defaultOwner];
-  const initialOwner = ownerOptions.includes(defaultOwner) ? defaultOwner : ownerOptions[0] ?? defaultOwner;
+  const activeOwnerOptions = state.users.filter((user) => user.status === "active");
+  const ownerOptions = activeOwnerOptions.length > 0 ? activeOwnerOptions : state.users;
+  const initialOwnerUserId = ownerOptions.some((user) => user.id === defaultOwnerUserId) ? defaultOwnerUserId : ownerOptions[0]?.id ?? defaultOwnerUserId;
   const [title, setTitle] = useState("");
   const [draft, setDraft] = useState<CommentDraft>(() => emptyCommentDraft());
   const [cause, setCause] = useState<string>(causeOptions[0] ?? "技术问题");
   const [impact, setImpact] = useState<Impact>("Medium");
-  const [owner, setOwner] = useState(initialOwner);
+  const [ownerUserId, setOwnerUserId] = useState(initialOwnerUserId);
   const [pendingAttachments, setPendingAttachments] = useState<PendingFeedbackAttachment[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const attachmentCounterRef = useRef(0);
@@ -86,7 +86,7 @@ export function FeedbackCreatePage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (submitting) return;
-    if (!title.trim() || !body || !cause.trim() || !owner.trim()) {
+    if (!title.trim() || !body || !cause.trim() || !ownerUserId.trim()) {
       notify("请填写标题、正文、分类和处理人");
       return;
     }
@@ -98,7 +98,7 @@ export function FeedbackCreatePage() {
         causeCategories: [cause.trim()],
         impact,
         initialBody: body,
-        owner: owner.trim(),
+        ownerUserId: ownerUserId.trim(),
         attachments: referencedAttachments,
       });
       if (feedback) {
@@ -169,8 +169,8 @@ export function FeedbackCreatePage() {
         <aside className="feedback-create-sidebar" aria-label="反馈属性">
           <label className="feedback-create-sidebar-field">
             <span>处理人</span>
-            <select required value={owner} onChange={(event) => setOwner(event.target.value)}>
-              {ownerOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+            <select required value={ownerUserId} onChange={(event) => setOwnerUserId(event.target.value)}>
+              {ownerOptions.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
             </select>
           </label>
           <label className="feedback-create-sidebar-field">

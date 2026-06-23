@@ -38,7 +38,7 @@ const placementSchema = z.enum(["before", "after"]);
 const createTaskBodySchema = z.object({
   title: requiredTextSchema,
   description: optionalTextSchema,
-  assignee: optionalTextSchema,
+  assigneeUserId: z.string().trim().min(1).optional(),
   priority: prioritySchema.optional(),
   linkedObjectiveId: requiredTextSchema,
   dueDate: optionalDateOnlySchema,
@@ -71,13 +71,13 @@ export function registerOrfTaskRoutes(app: FastifyInstance) {
       return reply.code(404).send({ error: "Runtime scope not found" });
     }
 
-    const assignee = body.assignee?.trim() || user.name;
+    const assigneeUserId = body.assigneeUserId?.trim() || user.id;
     const activeUsers = await getScopedUsers(scope);
-    if (!activeUsers.some((item) => item.status === "active" && item.name === assignee)) {
+    if (!activeUsers.some((item) => item.status === "active" && item.id === assigneeUserId)) {
       return reply.code(400).send({ error: "Task assignee must be an active member" });
     }
 
-    const task = await createTask({ ...body, assignee, actorId: user.id });
+    const task = await createTask({ ...body, assigneeUserId, actorId: user.id });
 
     if (!task) {
       return reply.code(404).send({ error: "Objective not found" });

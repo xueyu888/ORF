@@ -153,7 +153,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const checklistRows = await getChecklistRows(taskIds);
   const causeRows = await getFeedbackCauseRows(feedbackIssueIds);
   const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
-  const { userIdByName, userNameById } = await getUserMapsForStorageScope(storageScopeId);
+  const { userNameById } = await getUserMapsForStorageScope(storageScopeId);
   const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
   const objectiveParticipantAvatarUrls = await getUserAvatarUrlMap(objectiveRows.flatMap((objective) => [...objective.challengerUserIds, ...objective.assignedChallengerUserIds]));
   const commentAuthorAvatarUrls = await getUserAvatarUrlMap(commentMessageRows.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
@@ -222,7 +222,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       status: task.status,
       priority: task.priority,
       assignee: nameForUserId(userNameById, task.assigneeUserId, task.assignee),
-      assigneeUserId: optional(task.assigneeUserId),
+      assigneeUserId: task.assigneeUserId,
       linkedObjectiveId: task.linkedObjectiveId,
       dueDate: task.dueDate,
       tags: task.tags,
@@ -250,7 +250,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     source: item.source,
     date: item.date,
     owner: nameForUserId(userNameById, item.ownerUserId, item.owner),
-    ownerUserId: optional(item.ownerUserId),
+    ownerUserId: item.ownerUserId,
     linkedResultId: item.linkedResultId,
   }));
 
@@ -262,7 +262,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     suggestedAdjustment: firstFeedbackMessageByTarget.get(item.id) ?? item.suggestedAdjustment ?? "",
     status: item.status,
     owner: nameForUserId(userNameById, item.ownerUserId, item.owner),
-    ownerUserId: optional(item.ownerUserId),
+    ownerUserId: item.ownerUserId,
     createdBy: item.createdBy,
     updatedBy: item.updatedBy,
     createdAt: item.createdAt,
@@ -282,7 +282,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     resultsByObjective: groupResultsByObjective(resultItems),
     taskIdsByObjective: groupTaskIdsByObjective(taskItems),
     userAvatarUrlById: objectiveParticipantAvatarUrls,
-    userIdByName,
     userNameById,
   });
   const objectiveLootItems: ObjectiveLoot[] = objectiveLootRows
@@ -291,7 +290,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       id: item.id,
       objectiveId: item.objectiveId,
       submittedBy: nameForUserId(userNameById, item.submittedByUserId, item.submittedBy),
-      submittedByUserId: optional(item.submittedByUserId),
+      submittedByUserId: item.submittedByUserId,
       body: item.body,
       resultClaims: item.resultClaims,
       selfTestReportUrl: item.selfTestReportUrl,
@@ -304,7 +303,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       id: item.id,
       objectiveId: item.objectiveId,
       requestedBy: nameForUserId(userNameById, item.requestedByUserId, item.requestedBy),
-      requestedByUserId: optional(item.requestedByUserId),
+      requestedByUserId: item.requestedByUserId,
       body: item.body,
       resultClaims: item.resultClaims,
       selfTestReportBody: item.selfTestReportBody,
@@ -322,7 +321,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       objectiveId: item.objectiveId,
       kind: item.kind,
       requestedBy: nameForUserId(userNameById, item.requestedByUserId, item.requestedBy),
-      requestedByUserId: optional(item.requestedByUserId),
+      requestedByUserId: item.requestedByUserId,
       status: item.status,
       proposedAt: item.proposedAt,
       scheduledAt: item.scheduledAt,

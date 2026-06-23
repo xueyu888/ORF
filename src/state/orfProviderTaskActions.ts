@@ -22,7 +22,7 @@ export function useOrfProviderTaskActions({
 }: TaskActionOptions) {
   return useMemo(
     () => ({
-      createTask: async (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Pick<Task, "dueDate" | "tags" | "checklist">>) => {
+      createTask: async (input: Pick<Task, "title" | "description" | "assigneeUserId" | "priority" | "linkedObjectiveId"> & Partial<Pick<Task, "dueDate" | "tags" | "checklist">>) => {
         try {
           const data = await apiJson<CreateTaskResponse>("/api/tasks", {
             method: "POST",

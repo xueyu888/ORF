@@ -241,11 +241,13 @@ test("quarterly rank change compares against the full previous period ranking", 
     "quarter",
   );
 
-  assert.deepEqual(rows.find((row) => row.memberName === "成员丙")?.rankChange, {
+  const renamedMember = rows.find((row) => row.userId === "user-c");
+  assert.equal(renamedMember?.memberName, "临时参与");
+  assert.deepEqual(renamedMember?.rankChange, {
     delta: 11,
     direction: "up",
     kind: "moved",
     previousRank: 12,
   });
-  assert.equal(rows.find((row) => row.memberName === "成员甲")?.rankChange.kind, "new");
+  assert.equal(rows.find((row) => row.userId === "user-a")?.rankChange.kind, "new");
 });

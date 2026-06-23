@@ -250,7 +250,6 @@ export function BountyHallPage() {
           <BountyObjectiveList
             activeObjectiveId={linkedBountyObjectiveId}
             currentUserId={currentUserId}
-            currentUserName={currentUser?.name ?? ""}
             applicationView={activeTab === "mine"}
             items={filteredHallItems}
             now={now}

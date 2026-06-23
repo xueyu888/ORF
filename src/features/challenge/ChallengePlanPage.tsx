@@ -985,7 +985,7 @@ export function ChallengePlanPage() {
         objectiveId: row.objectiveId,
         title: value,
         source: row.source ?? "managerDefined",
-        definer: currentUser?.name ?? currentMember,
+        definerUserId: currentUser?.id ?? "",
       }).then((result) => {
         if (result) {
           setChildCreationSession((current) => completeChildCreationDraft(current, submittingSession, { kind: "metric", result }));
@@ -1012,7 +1012,7 @@ export function ChallengePlanPage() {
     void createTask({
       title: value,
       description: "",
-      assignee: currentMember,
+      assigneeUserId: currentUser?.id ?? "",
       priority: "High",
       linkedObjectiveId: row.objectiveId,
     }).then((task) => {

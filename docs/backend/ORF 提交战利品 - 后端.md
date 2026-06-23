@@ -92,7 +92,7 @@
 }
 ```
 
-`memberUserId` 对应 `users.id`，是贡献分配的身份事实源；`member` 是展示名兼容字段。`percent` 必须是 `0..100` 的整数。每个指标行必须覆盖当前目标的全部普通成员挑战者，不能重复成员，且合计精确为 `100`。匿名互评服务从逐指标 `metricRows` 统一派生目标级 `allocations` 和 `metricScores`；前端和 ORF 主后端都不把目标级 `allocations` 当作原始提交事实。弃权必须带非空 `abstentionReason`，不带 `allocations` 参与均值计算。
+`memberUserId` 对应 `users.id`，是贡献分配的身份事实源；`member` 只是展示文本。`percent` 必须是 `0..100` 的整数。每个指标行必须覆盖当前目标的全部普通成员挑战者，不能重复成员，且合计精确为 `100`。匿名互评服务从逐指标 `metricRows` 统一派生目标级 `allocations` 和 `metricScores`；前端和 ORF 主后端都不把目标级 `allocations` 当作原始提交事实。弃权必须带非空 `abstentionReason`，不带 `allocations` 参与均值计算。
 
 匿名互评链路不把原始 `metricRows`、草稿或弃权说明写入 ORF 数据库：前端通过 ORF 同源代理自动保存草稿到 `/api/local-settlement/objectives/:objectiveId/reviews/draft`，提交到 `/api/local-settlement/objectives/:objectiveId/reviews/submit`；ORF 后端只做认证、目标权限、状态校验和服务端事实补齐，然后转发到共享结算服务。共享结算服务维护一个覆盖式草稿、追加式提交历史，并从历史中按同一目标、同一 reviewer 派生最新评价；验收时通过 ORF 代理向指挥官返回最新提交状态、原始评分、弃权说明、均值和偏离提醒。ORF 结算接口只接收 `contributionResolution.ratios` 和公开积分结果。
 
@@ -154,7 +154,7 @@
 }
 ```
 
-`contributionResolution.ratios` 使用同一标准比例契约：每个目标挑战者一项，范围 `0..1`，合计 `1`。后端写入积分时优先使用 `memberUserId`，只在旧请求没有该字段时按当前目标挑战者展示名兜底解析，且解析结果必须仍属于 `Objective.challengerUserIds`。
+`contributionResolution.ratios` 使用同一标准比例契约：每个目标挑战者一项，范围 `0..1`，合计 `1`。后端写入积分时只使用 `memberUserId` 归属积分，`member` 不参与匹配，且每个 `memberUserId` 必须属于 `Objective.challengerUserIds`。
 
 结算成功后：
 
