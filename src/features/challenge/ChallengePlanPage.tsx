@@ -11,6 +11,7 @@ import { resolveObjectiveDeadlineEditState, type ObjectiveDeadlineEditState } fr
 import { isObjectiveChallenger } from "../../domain/orfObjectiveParticipants";
 import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
 import type { ResultDetailsInput } from "../../domain/orfResultDetails";
+import { fetchMyLocalSettlementReview, type LocalSettlementReview } from "../../services/localSettlementClient";
 import type { Objective, OrfProject, OrfState, UncertaintyLevel } from "../../types/orf";
 import { localDateString } from "../../utils/date";
 import { applyListItemAnchor, createListItemAnchor, listContainsAnchoredItem, type ListItemAnchor } from "../interaction/listItemAnchor";
@@ -99,6 +100,7 @@ import {
   canEditObjectiveContent,
   canMutateObjectiveWorkItems,
   canRecruitObjectiveChallengers,
+  canSubmitObjectivePeerReview,
   metricCreationActionForObjective,
   metricEditAccessForObjective,
   metricEditUnavailableMessage,
@@ -178,6 +180,36 @@ function objectiveNode(objective: Objective): ObjectiveNode {
   };
 }
 
+type PeerReviewActionStatus = "loading" | "notSubmitted" | "scored" | "abstained" | "error";
+type PeerReviewActionStatusByObjectiveId = Record<string, PeerReviewActionStatus>;
+
+const peerReviewActionObjectiveIdSeparator = "\u001f";
+
+function peerReviewActionLabelForStatus(status: PeerReviewActionStatus | undefined) {
+  if (status === "scored") return "更新匿名互评";
+  if (status === "abstained") return "更新弃权说明";
+  return null;
+}
+
+function peerReviewActionStatusForReview(review: LocalSettlementReview | null): PeerReviewActionStatus {
+  return review?.status ?? "notSubmitted";
+}
+
+async function loadPeerReviewActionStatus(objectiveId: string): Promise<[string, PeerReviewActionStatus]> {
+  try {
+    const result = await fetchMyLocalSettlementReview({ objectiveId });
+    return [objectiveId, peerReviewActionStatusForReview(result.review)];
+  } catch {
+    return [objectiveId, "error"];
+  }
+}
+
+function peerReviewActionStatusesEqual(left: PeerReviewActionStatusByObjectiveId, right: PeerReviewActionStatusByObjectiveId) {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && leftKeys.every((key) => left[key] === right[key]);
+}
+
 export function ChallengePlanPage() {
   const {
     addComment,
@@ -246,6 +278,8 @@ export function ChallengePlanPage() {
   const [completionOverlays, setCompletionOverlays] = useState<TaskCompletionOverlay[]>([]);
   const [titleEditOverlays, setTitleEditOverlays] = useState<TitleEditOverlay[]>([]);
   const [objectiveInteractionAnchor, setObjectiveInteractionAnchor] = useState<ListItemAnchor | null>(null);
+  const [peerReviewActionStatuses, setPeerReviewActionStatuses] = useState<PeerReviewActionStatusByObjectiveId>({});
+  const peerReviewActionStatusUserIdRef = useRef<string | null>(null);
   const childCreationSubmissionSequenceRef = useRef(0);
   const completionOverlaySequenceRef = useRef(0);
   const titleEditOverlaySequenceRef = useRef(0);
@@ -360,6 +394,15 @@ export function ChallengePlanPage() {
     return objectiveNode(submittedObjective);
   }, [groups, submittedObjective]);
   const displaySourceGroups = useMemo(() => (optimisticGroup ? [optimisticGroup, ...groups] : groups), [groups, optimisticGroup]);
+  const peerReviewActionObjectiveIdsKey = useMemo(
+    () =>
+      displaySourceGroups
+        .filter((group) => canSubmitObjectivePeerReview(group.objective, currentUser))
+        .map((group) => group.objective.id)
+        .sort()
+        .join(peerReviewActionObjectiveIdSeparator),
+    [currentUser, displaySourceGroups],
+  );
   const cycleOptions = useMemo(() => challengeCycleOptions(displaySourceGroups), [displaySourceGroups]);
   const memberOptions = useMemo(() => challengeMemberOptions(displaySourceGroups, challengeState.users), [challengeState.users, displaySourceGroups]);
   const projectOptions = useMemo(
@@ -395,6 +438,36 @@ export function ChallengePlanPage() {
     : showAll
       ? "当前还没有挑战内容。"
       : "当前没有与你的挑战目标相关的内容。";
+
+  useEffect(() => {
+    const objectiveIds = peerReviewActionObjectiveIdsKey ? peerReviewActionObjectiveIdsKey.split(peerReviewActionObjectiveIdSeparator) : [];
+    if (objectiveIds.length === 0) {
+      peerReviewActionStatusUserIdRef.current = currentUser?.id ?? null;
+      setPeerReviewActionStatuses((current) => (Object.keys(current).length === 0 ? current : {}));
+      return undefined;
+    }
+
+    let cancelled = false;
+    const previousStatusUserId = peerReviewActionStatusUserIdRef.current;
+    const statusUserId = currentUser?.id ?? null;
+    peerReviewActionStatusUserIdRef.current = statusUserId;
+    setPeerReviewActionStatuses((current) => {
+      const next = Object.fromEntries(
+        objectiveIds.map((objectiveId) => [objectiveId, previousStatusUserId === statusUserId ? current[objectiveId] ?? "loading" : "loading"]),
+      ) as PeerReviewActionStatusByObjectiveId;
+      return peerReviewActionStatusesEqual(current, next) ? current : next;
+    });
+
+    void Promise.all(objectiveIds.map(loadPeerReviewActionStatus)).then((entries) => {
+      if (cancelled) return;
+      const next = Object.fromEntries(entries) as PeerReviewActionStatusByObjectiveId;
+      setPeerReviewActionStatuses((current) => (peerReviewActionStatusesEqual(current, next) ? current : next));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id, peerReviewActionObjectiveIdsKey]);
 
   useEffect(() => {
     if (cycleFilter !== "all" && !cycleOptions.includes(cycleFilter)) {
@@ -1248,6 +1321,7 @@ export function ChallengePlanPage() {
           draftObjectiveId,
           canCreateObjective,
           canManageProjects: currentUser?.role === "admin",
+          peerReviewActionLabel: (objectiveId) => peerReviewActionLabelForStatus(peerReviewActionStatuses[objectiveId]),
           metricActionLabel: (objective) =>
             metricCreationActionForObjective({
               objective,

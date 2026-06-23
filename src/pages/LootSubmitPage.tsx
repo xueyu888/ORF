@@ -499,6 +499,19 @@ export function LootSubmitPage() {
       objective &&
       usesLocalContributionSettlement,
   );
+  const hasSubmittedContributionReview = latestContributionReview !== null;
+  const contributionReviewLoadingLatest = canLoadMyContributionReview && latestContributionReviewLoading;
+  const contributionReviewLatestLoadBlocked = canLoadMyContributionReview && Boolean(latestContributionReviewError);
+  const canEditContributionReviewForm =
+    !contributionReviewLoadingLatest && !contributionReviewLatestLoadBlocked;
+  const contributionReviewSubmitLabel =
+    peerReviewMode === "abstain"
+      ? hasSubmittedContributionReview
+        ? "更新弃权说明"
+        : "提交弃权说明"
+      : hasSubmittedContributionReview
+        ? "更新匿名互评"
+        : "提交匿名互评";
   const reviewedResultValues = useMemo(
     () =>
       reviewDecision === "notPassed"
@@ -875,6 +888,10 @@ export function LootSubmitPage() {
     if (submittingAction) return;
     if (!canPeerReview) {
       setError("目标已验收后，挑战者才能提交匿名互评");
+      return;
+    }
+    if (!canEditContributionReviewForm) {
+      setError("正在确认服务器最新匿名互评，读取完成后才能继续提交");
       return;
     }
     if (peerReviewMode === "abstain") {
@@ -1292,6 +1309,7 @@ export function LootSubmitPage() {
                 <label className="flex items-start gap-2 orf-text-primary">
                   <input
                     type="radio"
+                    disabled={!canEditContributionReviewForm}
                     checked={peerReviewMode === "score"}
                     onChange={() => {
                       setContributionReviewFormSource("editing");
@@ -1306,6 +1324,7 @@ export function LootSubmitPage() {
                 <label className="flex items-start gap-2 orf-text-primary">
                   <input
                     type="radio"
+                    disabled={!canEditContributionReviewForm}
                     checked={peerReviewMode === "abstain"}
                     onChange={() => {
                       setContributionReviewFormSource("editing");
@@ -1324,7 +1343,7 @@ export function LootSubmitPage() {
                 source={contributionReviewFormSource}
                 error={latestContributionReviewError}
               />
-              {peerReviewMode === "score" ? (
+              {!canEditContributionReviewForm ? null : peerReviewMode === "score" ? (
                 <>
                   <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs orf-text-secondary">
                     按指标填写每位目标挑战者的贡献百分比；每一行合计必须为
@@ -1361,9 +1380,9 @@ export function LootSubmitPage() {
                 </Button>
                 <Button
                   type="submit"
-                  disabled={submittingAction === "peerReview"}
+                  disabled={submittingAction === "peerReview" || !canEditContributionReviewForm}
                 >
-                  {peerReviewMode === "abstain" ? "提交弃权说明" : "提交匿名互评"}
+                  {contributionReviewSubmitLabel}
                 </Button>
               </div>
             </form>
