@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { ORF_AUTH_SESSION_POLICY } from "../../src/domain/authSessionPolicy";
 import { databaseUnavailablePayload, isDatabaseUnavailableError } from "../db/errors";
 import { env } from "../env";
 import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "./errors";
@@ -27,7 +28,7 @@ const registrationBodySchema = loginBodySchema.extend({
 });
 
 function authCookie(sessionToken: string) {
-  return serializeSessionCookie(encodeURIComponent(sessionToken), 604800);
+  return serializeSessionCookie(encodeURIComponent(sessionToken), ORF_AUTH_SESSION_POLICY.maxAgeSeconds);
 }
 
 function clearAuthCookie() {
