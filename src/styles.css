@@ -118,7 +118,6 @@
   --orf-sidebar-width: 260px;
   --orf-sidebar-collapsed-width: 76px;
   --orf-sidebar-header-height: 100px;
-  --orf-metric-inspector-docked-width: clamp(320px, 24vw, 380px);
   --orf-border-width: 1px;
   --orf-shadow-card:
     0 14px 34px rgba(15, 23, 42, 0.08), 0 1px 1px rgba(15, 23, 42, 0.04);
@@ -11808,9 +11807,6 @@ body[data-dragging-floating="true"] {
   min-width: 0;
 }
 
-.orf-challenge-workspace-with-inspector {
-  align-items: start;
-}
 
 .orf-challenge-tree-pane {
   container: orf-challenge-tree-pane / inline-size;
@@ -11852,7 +11848,13 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-metric-inspector-panel {
+  position: fixed;
+  z-index: 85;
+  top: calc(var(--orf-topbar-height) + 16px);
+  right: max(16px, var(--orf-page-padding-x));
   display: grid;
+  width: min(386px, calc(100vw - 32px));
+  max-height: calc(100dvh - var(--orf-topbar-height) - 32px);
   gap: 14px;
   min-width: 0;
   overflow: auto;
@@ -12051,35 +12053,14 @@ body[data-dragging-floating="true"] {
   border-top: 1px solid rgba(255, 255, 255, 0.28);
 }
 
-@media (min-width: 1180px) and (any-hover: hover) {
-  .orf-challenge-workspace-with-inspector {
-    grid-template-columns: minmax(0, 1fr) var(--orf-metric-inspector-docked-width);
-  }
-
+@media (max-width: 720px) and (any-hover: none) {
   .orf-metric-inspector-panel {
-    position: sticky;
-    top: calc(var(--orf-topbar-height) + 16px);
-    max-height: calc(100vh - var(--orf-topbar-height) - 32px);
-  }
-
-  body:has(.orf-challenge-workspace-with-inspector) .orf-toast-stack {
-    right: calc(var(--orf-page-padding-x) + var(--orf-metric-inspector-docked-width) + 16px);
-  }
-}
-
-@media (max-width: 1179px), (any-hover: none) {
-  .orf-challenge-workspace-with-inspector .orf-challenge-tree-pane {
-    padding-bottom: 360px;
-  }
-
-  .orf-metric-inspector-panel {
-    position: fixed;
-    z-index: 70;
     right: 12px;
-    bottom: max(12px, env(safe-area-inset-bottom));
+    bottom: calc(var(--orf-mobile-bottom-nav-height, 0px) + max(12px, env(safe-area-inset-bottom)));
     left: 12px;
     top: auto;
-    max-height: min(78vh, 640px);
+    width: auto;
+    max-height: min(72dvh, 620px);
     border-radius: 8px;
   }
 }
