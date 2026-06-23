@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { objectives, results } from "../../../../server/db/schema";
+import { requiredTestUserIdForTeam } from "../../../_operators/common.helpers";
 import { resultDetailIncludesMetricName, testResultDetail } from "../../../_operators/result-detail.helpers";
 import type {
   AdminFreezeObjectiveCaseData,
@@ -53,6 +54,11 @@ export async function createFreezePrerequisiteResult(
   const id = freezePrerequisiteResultId(objective.id);
   const siblingRows = await db.select({ sortOrder: results.sortOrder }).from(results).where(eq(results.objectiveId, objective.id));
   const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
+  const definerUserId = await requiredTestUserIdForTeam({
+    teamId: objective.teamId,
+    preferredUserId: objective.createdBy ?? objective.updatedBy,
+    purpose: "管理员冻结目标前置指标",
+  });
 
   await db.insert(results).values({
     id,
@@ -70,11 +76,14 @@ export async function createFreezePrerequisiteResult(
     confidence: 50,
     source: "managerDefined",
     definer: "testd",
+    definerUserId,
     uncertaintyScore: 30,
     acceptedResult: "unreviewed",
     reviewCadence: "Weekly",
     createdAt: today(),
     updatedAt: today(),
+    createdBy: definerUserId,
+    updatedBy: definerUserId,
     sortOrder,
   });
 
@@ -191,6 +200,8 @@ async function readObjective(objectiveId: string) {
       stage: objectives.stage,
       flowStatus: objectives.flowStatus,
       confirmedAt: objectives.confirmedAt,
+      createdBy: objectives.createdBy,
+      updatedBy: objectives.updatedBy,
     })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))

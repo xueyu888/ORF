@@ -1,7 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { objectiveLoot, objectives, pointLedger, results } from "../../../../server/db/schema";
-import { readTestUserIdByNameInTeam, requiredTestUserIdByNameInTeam } from "../../../_operators/common.helpers";
+import {
+  readTestUserIdByNameInTeam,
+  requiredTestUserIdByNameInTeam,
+  requiredTestUserIdForTeam,
+} from "../../../_operators/common.helpers";
 import { testResultDetail } from "../../../_operators/result-detail.helpers";
 import type {
   AdminSettleLootCaseData,
@@ -68,6 +72,11 @@ export async function createSettleLootResult(
     title: input.resultTitle,
     points: input.points,
   };
+  const definerUserId = await requiredTestUserIdForTeam({
+    teamId: objective.teamId,
+    preferredUserId: objective.createdBy ?? objective.updatedBy,
+    purpose: "管理员结算战利品前置指标",
+  });
 
   await db.insert(results).values({
     id: result.id,
@@ -85,11 +94,14 @@ export async function createSettleLootResult(
     confidence: 50,
     source: "managerDefined",
     definer: "testd",
+    definerUserId,
     uncertaintyScore: input.points,
     acceptedResult: "completed",
     reviewCadence: "Weekly",
     createdAt: today(),
     updatedAt: today(),
+    createdBy: definerUserId,
+    updatedBy: definerUserId,
     sortOrder: 0,
   });
 
@@ -303,6 +315,8 @@ async function readObjective(objectiveId: string) {
       acceptedResult: objectives.acceptedResult,
       objectiveBasePoints: objectives.objectiveBasePoints,
       objectiveSettlementPoints: objectives.objectiveSettlementPoints,
+      createdBy: objectives.createdBy,
+      updatedBy: objectives.updatedBy,
     })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))

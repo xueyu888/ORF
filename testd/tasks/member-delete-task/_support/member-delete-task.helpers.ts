@@ -51,6 +51,11 @@ export async function createFixtureTask(input: {
   userId?: string;
 }): Promise<MemberDeleteTaskFixture> {
   const today = todayIsoDate();
+  const assigneeUserId = await requiredTestUserIdByNameInTeam({
+    teamId: input.teamId,
+    name: input.assignee,
+  });
+
   await db
     .insert(tasks)
     .values({
@@ -61,6 +66,7 @@ export async function createFixtureTask(input: {
       status: input.status,
       priority: input.priority,
       assignee: input.assignee,
+      assigneeUserId,
       linkedObjectiveId: input.linkedObjectiveId,
       feedbackOriginId: null,
       dueDate: addDaysIsoDate(14),
@@ -80,6 +86,7 @@ export async function createFixtureTask(input: {
         status: input.status,
         priority: input.priority,
         assignee: input.assignee,
+        assigneeUserId,
         linkedObjectiveId: input.linkedObjectiveId,
         feedbackOriginId: null,
         dueDate: addDaysIsoDate(14),
