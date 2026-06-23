@@ -1382,85 +1382,83 @@ export function ChallengePlanPage() {
             scope={scope}
             status={statusFilter}
           />
-          <div className="orf-challenge-tree-scroll">
-            <ChallengeTree
-              emptyText={emptyText}
-              groups={displayedGroups}
-              handlers={{
-                activeActionId,
-                collapsedActionIds,
-                collapsedBountyIds,
-                commentCounts,
-                temporaryChildRow,
-                dragDrop,
-                editingTarget: effectiveEditingTarget,
-                alignmentRequests: challengeState.objectiveAlignmentRequests,
-                trialReviews: challengeState.objectiveTrialReviews,
-                currentUser,
-                draftObjectiveId,
-                canCreateObjective,
-                canManageProjects: currentUser?.role === "admin",
-                canEditTargetTitle,
-                peerReviewActionLabel: (objectiveId) => peerReviewActionLabelForStatus(peerReviewActionStatuses[objectiveId]),
-                metricActionLabel: (objective) =>
-                  metricCreationActionForObjective({
-                    objective,
-                    currentUser,
-                    permissionRules: challengeState.permissionRules,
-                    now,
-                  })?.label ?? null,
-                metricEditAccess: metricEditAccessForObjectiveId,
-                canPublishObjective: () => canCreateObjective,
-                canRecruitObjective: (objective) =>
-                  canRecruitObjectiveChallengers({
-                    objective,
-                    currentUser,
-                    permissionRules: challengeState.permissionRules,
-                  }),
-                canMutateMetrics: canMutateMetricForObjective,
-                canMutateWorkItems: canMutateWorkItemsForObjective,
-                objectiveDeadlineEditState,
-                onActionDoneChange: setActionDone,
-                onActionRowAction: handleRowAction,
-                onActiveActionChange: activateRowAction,
-                onAddAction: addAction,
-                onAddBounty: addBounty,
-                onAddObjective: (projectId) => beginObjectiveCreation({ projectId }),
-                onAddSubAction: addSubAction,
-                onApproveApplication: approveAnchoredChallengeApplication,
-                onCancelEdit: cancelEdit,
-                onTemporaryChildTitleChange: (title) => setChildCreationSession((current) => updateChildCreationDraftTitle(current, title)),
-                onDraftTitleChange: (title) => setObjectiveCreationSession((current) => updateObjectiveCreationDraftTitle(current, title)),
-                onEditTarget: beginEdit,
-                onFreezeObjective: freezeObjective,
-                onRequestAlignment: requestObjectiveAlignment,
-                onReviewAlignment: reviewObjectiveAlignment,
-                onOpenActionChange: setOpenActionId,
-                onPublishObjective: publishObjective,
-                onRecruitObjective: (objectiveId) => openModal({ type: "recruitChallengers", objectiveId }),
-                onRejectApplication: rejectAnchoredChallengeApplication,
-                onCreateProject: (name) => createProject({ name }),
-                onDeleteProject: deleteProject,
-                onSaveObjectiveDeadline: saveObjectiveDeadline,
-                onSetObjectiveProject: setObjectiveProject,
-                onUnavailableObjectiveDeadline: notifyUnavailableObjectiveDeadline,
-                onUnavailableMetricEdit: notifyUnavailableMetricEdit,
-                onSaveMetricDifficulty: saveMetricDifficulty,
-                onSaveTitle: saveTitle,
-                onSelectMetric: selectMetric,
-                onSubActionDoneChange: setSubActionDone,
-                onToggleAction: (actionId) => setCollapsedActionIds((items) => toggleSetItem(items, actionId)),
-                onToggleBounty: (bountyId) => setCollapsedBountyIds((items) => toggleSetItem(items, bountyId)),
-                openActionId,
-                selectedMetricId,
-                canManageFlow: canShowFrontend(currentUser, "challenge.scope.all"),
-              }}
-              now={now}
-              projects={challengeState.projects}
-              scope={scope}
-              visibleProjects={visibleProjects}
-            />
-          </div>
+          <ChallengeTree
+            emptyText={emptyText}
+            groups={displayedGroups}
+            handlers={{
+              activeActionId,
+              collapsedActionIds,
+              collapsedBountyIds,
+              commentCounts,
+              temporaryChildRow,
+              dragDrop,
+              editingTarget: effectiveEditingTarget,
+              alignmentRequests: challengeState.objectiveAlignmentRequests,
+              trialReviews: challengeState.objectiveTrialReviews,
+              currentUser,
+              draftObjectiveId,
+              canCreateObjective,
+              canManageProjects: currentUser?.role === "admin",
+              canEditTargetTitle,
+              peerReviewActionLabel: (objectiveId) => peerReviewActionLabelForStatus(peerReviewActionStatuses[objectiveId]),
+              metricActionLabel: (objective) =>
+                metricCreationActionForObjective({
+                  objective,
+                  currentUser,
+                  permissionRules: challengeState.permissionRules,
+                  now,
+                })?.label ?? null,
+              metricEditAccess: metricEditAccessForObjectiveId,
+              canPublishObjective: () => canCreateObjective,
+              canRecruitObjective: (objective) =>
+                canRecruitObjectiveChallengers({
+                  objective,
+                  currentUser,
+                  permissionRules: challengeState.permissionRules,
+                }),
+              canMutateMetrics: canMutateMetricForObjective,
+              canMutateWorkItems: canMutateWorkItemsForObjective,
+              objectiveDeadlineEditState,
+              onActionDoneChange: setActionDone,
+              onActionRowAction: handleRowAction,
+              onActiveActionChange: activateRowAction,
+              onAddAction: addAction,
+              onAddBounty: addBounty,
+              onAddObjective: (projectId) => beginObjectiveCreation({ projectId }),
+              onAddSubAction: addSubAction,
+              onApproveApplication: approveAnchoredChallengeApplication,
+              onCancelEdit: cancelEdit,
+              onTemporaryChildTitleChange: (title) => setChildCreationSession((current) => updateChildCreationDraftTitle(current, title)),
+              onDraftTitleChange: (title) => setObjectiveCreationSession((current) => updateObjectiveCreationDraftTitle(current, title)),
+              onEditTarget: beginEdit,
+              onFreezeObjective: freezeObjective,
+              onRequestAlignment: requestObjectiveAlignment,
+              onReviewAlignment: reviewObjectiveAlignment,
+              onOpenActionChange: setOpenActionId,
+              onPublishObjective: publishObjective,
+              onRecruitObjective: (objectiveId) => openModal({ type: "recruitChallengers", objectiveId }),
+              onRejectApplication: rejectAnchoredChallengeApplication,
+              onCreateProject: (name) => createProject({ name }),
+              onDeleteProject: deleteProject,
+              onSaveObjectiveDeadline: saveObjectiveDeadline,
+              onSetObjectiveProject: setObjectiveProject,
+              onUnavailableObjectiveDeadline: notifyUnavailableObjectiveDeadline,
+              onUnavailableMetricEdit: notifyUnavailableMetricEdit,
+              onSaveMetricDifficulty: saveMetricDifficulty,
+              onSaveTitle: saveTitle,
+              onSelectMetric: selectMetric,
+              onSubActionDoneChange: setSubActionDone,
+              onToggleAction: (actionId) => setCollapsedActionIds((items) => toggleSetItem(items, actionId)),
+              onToggleBounty: (bountyId) => setCollapsedBountyIds((items) => toggleSetItem(items, bountyId)),
+              openActionId,
+              selectedMetricId,
+              canManageFlow: canShowFrontend(currentUser, "challenge.scope.all"),
+            }}
+            now={now}
+            projects={challengeState.projects}
+            scope={scope}
+            visibleProjects={visibleProjects}
+          />
         </div>
         {selectedMetric && !metricInspectorCollapsed ? (
           <MetricInspectorPanel
