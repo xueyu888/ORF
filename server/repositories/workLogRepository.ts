@@ -12,6 +12,7 @@ import type {
 import {
   canSaveUnscopedWorkLog,
   canUseWorkLogCategories,
+  requiresObjectiveProgressEstimate,
   unscopedWorkLogMemberNameList,
 } from "../../src/domain/orfWorkLogs";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
@@ -42,6 +43,7 @@ export type WorkLogDaySaveOutcome =
         | "categoryForbidden"
         | "classificationConflict"
         | "emptyBody"
+        | "estimateRequired"
         | "invalidCategory"
         | "invalidDuration"
         | "invalidEstimate"
@@ -131,6 +133,9 @@ function normalizeWorkLogEntryInput(user: AuthenticatedOrfUser, input: WorkLogDa
   ) {
     return { status: "invalid" as const, reason: "invalidEstimate" as const };
   }
+  if (objectiveId && requiresObjectiveProgressEstimate(user) && remainingEstimatePercent === null) {
+    return { status: "invalid" as const, reason: "estimateRequired" as const };
+  }
   if (
     durationMinutes !== null &&
     (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440)
@@ -173,13 +178,50 @@ async function listAuthorWorkLogObjectiveRows(input: { scope: RuntimeScope; user
     .orderBy(asc(objectives.finalDueAt), asc(objectives.title), asc(objectives.id));
 }
 
+async function listLatestWorkLogObjectiveEstimateByObjectiveId(input: {
+  objectiveIds: string[];
+  scope: RuntimeScope;
+  user: AuthenticatedOrfUser;
+}) {
+  const latestEstimateByObjectiveId = new Map<string, number>();
+  if (input.objectiveIds.length === 0) return latestEstimateByObjectiveId;
+
+  const rows = await db
+    .select({
+      objectiveId: workLogEntries.objectiveIdSnapshot,
+      remainingEstimatePercent: workLogEntries.remainingEstimatePercent,
+    })
+    .from(workLogEntries)
+    .where(and(
+      eq(workLogEntries.teamId, runtimeScopeStorageId(input.scope)),
+      eq(workLogEntries.authorUserId, input.user.id),
+      inArray(workLogEntries.objectiveIdSnapshot, input.objectiveIds),
+      sql`${workLogEntries.remainingEstimatePercent} IS NOT NULL`,
+    ))
+    .orderBy(desc(workLogEntries.updatedAt), desc(workLogEntries.createdAt), desc(workLogEntries.id));
+
+  for (const row of rows) {
+    if (!row.objectiveId || row.remainingEstimatePercent === null) continue;
+    if (!latestEstimateByObjectiveId.has(row.objectiveId)) {
+      latestEstimateByObjectiveId.set(row.objectiveId, row.remainingEstimatePercent);
+    }
+  }
+  return latestEstimateByObjectiveId;
+}
+
 export async function listWorkLogObjectiveOptions(user: AuthenticatedOrfUser, scope: RuntimeScope): Promise<WorkLogObjectiveOption[]> {
   const rows = await listAuthorWorkLogObjectiveRows({ scope, user });
+  const latestEstimateByObjectiveId = await listLatestWorkLogObjectiveEstimateByObjectiveId({
+    objectiveIds: rows.map((row) => row.id),
+    scope,
+    user,
+  });
   return rows.map((row) => ({
     id: row.id,
     title: row.title,
     flowStatus: row.flowStatus,
     finalDueAt: row.finalDueAt,
+    latestRemainingEstimatePercent: latestEstimateByObjectiveId.get(row.id) ?? null,
   }));
 }
 

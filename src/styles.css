@@ -8407,7 +8407,7 @@ button:disabled {
   gap: 7px;
 }
 
-.work-logs-remaining-pill {
+.work-logs-progress-pill {
   display: inline-flex;
   height: 30px;
   align-items: center;
