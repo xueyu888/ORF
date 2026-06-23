@@ -59,7 +59,7 @@ Chat：
 - 普通成员提及序列化为 `orf-user` token。
 - 广播提及插入普通 `@所有人` 文本。
 - 粘贴或拖放文件交给 Chat 附件上传，不插入评论附件 token。
-- Chat 图片查看器是 AppShell 下的跨路由临时 UI 状态，只由同一条消息的 `message.attachments` 中 `image/*` 附件派生；窗口缩放、旋转、适应/原图、缩略图、上一张/下一张和下载都不写入正文 token、附件存储字段或用户设置。
+- Chat 图片查看器是 AppShell 下的跨路由临时 UI 状态，只由同一条消息的 `message.attachments` 中 `image/*` 附件派生；窗口位置、窗口尺寸、最大化/还原、图片缩放、旋转、适应/原图、缩略图、上一张/下一张和下载都不写入正文 token、附件存储字段或用户设置。
 - Chat 消息展示通过共享 viewer 渲染；Chat 层只注入反馈链接、站内路由和系统广播提及样式。
 - Chat 通知、反馈列表和搜索预览只消费共享模型提供的 token 和纯文本投影，不再各自复制 Markdown stripping 或 `orf-user` 正则。
 

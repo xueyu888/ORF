@@ -13,6 +13,7 @@ import {
 import {
   createContext,
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type WheelEvent as ReactWheelEvent,
@@ -24,7 +25,6 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useDraggableFloating } from "../../hooks/useDraggableFloating";
 import type { ChatAttachment } from "../../types/orf";
 import {
   currentChatAttachmentPreviewImage,
@@ -48,8 +48,37 @@ type ChatImageViewerDrag = {
   x: number;
   y: number;
 };
+type ChatImageWindowMode = "normal" | "maximized";
+type ChatImageWindowRect = {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+};
+type ChatImageWindowGeometry = {
+  autoSized: boolean;
+  mode: ChatImageWindowMode;
+  rect: ChatImageWindowRect;
+  restoreRect: ChatImageWindowRect | null;
+};
+type ChatImageWindowResizeEdge = "n" | "e" | "s" | "w" | "ne" | "nw" | "se" | "sw";
+type ChatImageWindowInteraction =
+  | {
+      kind: "move";
+      pointerId: number;
+      startClientX: number;
+      startClientY: number;
+      startRect: ChatImageWindowRect;
+    }
+  | {
+      edge: ChatImageWindowResizeEdge;
+      kind: "resize";
+      pointerId: number;
+      startClientX: number;
+      startClientY: number;
+      startRect: ChatImageWindowRect;
+    };
 type ChatImageViewerState = {
-  expanded: boolean;
   mode: ChatImageViewerMode;
   rotation: number;
   thumbnailsOpen: boolean;
@@ -60,6 +89,17 @@ const ChatFloatingImagePreviewContext = createContext<ChatFloatingImagePreviewCo
 const chatImageZoomMin = 0.25;
 const chatImageZoomMax = 5;
 const chatImageZoomStep = 0.25;
+const chatImageWindowResizeEdges: ChatImageWindowResizeEdge[] = ["n", "e", "s", "w", "ne", "nw", "se", "sw"];
+const chatImageWindowMargin = 12;
+const chatImageWindowNormalTopOffset = 18;
+const chatImageWindowMinWidth = 520;
+const chatImageWindowMinHeight = 360;
+const chatImageWindowChromeHeight = 48 + 37;
+const chatImageWindowThumbnailHeight = 77;
+const chatImageWindowBodyPaddingX = 36;
+const chatImageWindowBodyPaddingY = 36;
+const chatImageWindowFallbackWidth = 900;
+const chatImageWindowFallbackHeight = 760;
 
 export function ChatFloatingImagePreviewProvider({ children }: { children: ReactNode }) {
   const sessionIdRef = useRef(0);
@@ -122,18 +162,24 @@ function ChatFloatingImagePreviewWindow({
   preview: ChatAttachmentImagePreviewState;
   sessionId: number;
 }) {
+  const attachment = currentChatAttachmentPreviewImage(preview);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const imageDragRef = useRef<ChatImageViewerDrag | null>(null);
+  const windowInteractionRef = useRef<ChatImageWindowInteraction | null>(null);
   const [draggingImage, setDraggingImage] = useState(false);
   const [naturalSize, setNaturalSize] = useState<{ height: number; width: number } | null>(null);
   const [fitSize, setFitSize] = useState<{ height: number; width: number } | null>(null);
+  const [viewportSize, setViewportSize] = useState<{ height: number; width: number } | null>(null);
   const [viewerState, setViewerState] = useState<ChatImageViewerState>(() => defaultChatImageViewerState(preview.images.length > 1));
-  const attachment = currentChatAttachmentPreviewImage(preview);
-  const drag = useDraggableFloating<HTMLDivElement>({ resetKey: sessionId });
+  const [windowGeometry, setWindowGeometry] = useState<ChatImageWindowGeometry>(() => (
+    defaultChatImageWindowGeometry(chatAttachmentNaturalSize(attachment), preview.images.length > 1)
+  ));
+  const [windowInteraction, setWindowInteraction] = useState<"move" | "resize" | null>(null);
   const currentIndex = Math.min(Math.max(preview.currentIndex, 0), Math.max(preview.images.length - 1, 0));
   const canGoPrevious = currentIndex > 0;
   const canGoNext = currentIndex < preview.images.length - 1;
   const zoomPercent = Math.round(viewerState.zoom * 100);
+  const maximized = windowGeometry.mode === "maximized";
 
   const updateViewerState = (update: Partial<ChatImageViewerState> | ((current: ChatImageViewerState) => ChatImageViewerState)) => {
     setViewerState((current) => typeof update === "function" ? update(current) : { ...current, ...update });
@@ -174,6 +220,57 @@ function ChatFloatingImagePreviewWindow({
       zoom: 1,
     }));
   };
+  const toggleWindowMaximized = () => {
+    setWindowGeometry((current) => {
+      if (current.mode === "maximized") {
+        return {
+          autoSized: false,
+          mode: "normal",
+          rect: clampChatImageWindowRect(current.restoreRect ?? current.rect),
+          restoreRect: null,
+        };
+      }
+
+      return {
+        autoSized: false,
+        mode: "maximized",
+        rect: chatImageWindowMaximizedRect(),
+        restoreRect: current.rect,
+      };
+    });
+  };
+  const startWindowMove = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0 || maximized || isChatImageWindowInteractiveTarget(event.target)) return;
+    windowInteractionRef.current = {
+      kind: "move",
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startRect: windowGeometry.rect,
+    };
+    document.body.dataset.draggingFloating = "true";
+    setWindowInteraction("move");
+    event.preventDefault();
+  };
+  const startWindowResize = (edge: ChatImageWindowResizeEdge, event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || maximized || isChatImageWindowMobileViewport()) return;
+    windowInteractionRef.current = {
+      edge,
+      kind: "resize",
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startRect: windowGeometry.rect,
+    };
+    document.body.dataset.draggingFloating = "true";
+    setWindowInteraction("resize");
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  const handleWindowHeaderDoubleClick = (event: ReactMouseEvent<HTMLElement>) => {
+    if (isChatImageWindowInteractiveTarget(event.target)) return;
+    toggleWindowMaximized();
+  };
   const handleImageWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
     event.preventDefault();
     setZoom((value) => value + (event.deltaY > 0 ? -0.15 : 0.15));
@@ -182,6 +279,7 @@ function ChatFloatingImagePreviewWindow({
     if (event.button !== 0) return;
     const viewport = viewportRef.current;
     if (!viewport) return;
+    if (viewport.scrollWidth <= viewport.clientWidth && viewport.scrollHeight <= viewport.clientHeight) return;
     imageDragRef.current = {
       pointerId: event.pointerId,
       scrollLeft: viewport.scrollLeft,
@@ -210,6 +308,43 @@ function ChatFloatingImagePreviewWindow({
     }
     setDraggingImage(false);
   };
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const interaction = windowInteractionRef.current;
+      if (!interaction || interaction.pointerId !== event.pointerId) return;
+      event.preventDefault();
+
+      const deltaX = event.clientX - interaction.startClientX;
+      const deltaY = event.clientY - interaction.startClientY;
+      setWindowGeometry((current) => ({
+        ...current,
+        autoSized: false,
+        mode: "normal",
+        rect: interaction.kind === "move"
+          ? moveChatImageWindowRect(interaction.startRect, deltaX, deltaY)
+          : resizeChatImageWindowRect(interaction.startRect, interaction.edge, deltaX, deltaY),
+        restoreRect: null,
+      }));
+    };
+
+    const stopInteraction = () => {
+      if (!windowInteractionRef.current) return;
+      windowInteractionRef.current = null;
+      delete document.body.dataset.draggingFloating;
+      setWindowInteraction(null);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopInteraction);
+    window.addEventListener("pointercancel", stopInteraction);
+    return () => {
+      stopInteraction();
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopInteraction);
+      window.removeEventListener("pointercancel", stopInteraction);
+    };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -249,6 +384,21 @@ function ChatFloatingImagePreviewWindow({
   }, [canGoNext, canGoPrevious, onClose, onNavigateImage, viewerState.zoom]);
 
   useEffect(() => {
+    setWindowGeometry(defaultChatImageWindowGeometry(chatAttachmentNaturalSize(attachment), preview.images.length > 1));
+  }, [attachment, preview.images.length, sessionId]);
+
+  useEffect(() => {
+    const handleViewportResize = () => {
+      setWindowGeometry((current) => current.mode === "maximized"
+        ? { ...current, rect: chatImageWindowMaximizedRect() }
+        : { ...current, rect: clampChatImageWindowRect(current.rect) });
+    };
+
+    window.addEventListener("resize", handleViewportResize);
+    return () => window.removeEventListener("resize", handleViewportResize);
+  }, []);
+
+  useEffect(() => {
     setViewerState((current) => ({
       ...current,
       mode: "fit",
@@ -263,15 +413,29 @@ function ChatFloatingImagePreviewWindow({
   }, [attachment, preview.images.length]);
 
   useEffect(() => {
+    if (!naturalSize || chatAttachmentNaturalSize(attachment)) return;
+    setWindowGeometry((current) => current.autoSized
+      ? defaultChatImageWindowGeometry(naturalSize, preview.images.length > 1)
+      : current);
+  }, [attachment, naturalSize, preview.images.length]);
+
+  useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport || !naturalSize) return undefined;
 
     const updateFitSize = () => {
       const bounds = viewport.getBoundingClientRect();
       if (bounds.width <= 0 || bounds.height <= 0) return;
+      const nextViewportSize = {
+        height: Math.max(1, Math.round(bounds.height)),
+        width: Math.max(1, Math.round(bounds.width)),
+      };
+      setViewportSize((current) => (
+        current?.height === nextViewportSize.height && current.width === nextViewportSize.width ? current : nextViewportSize
+      ));
       const effectiveNaturalSize = rotatedNaturalSize(naturalSize, viewerState.rotation);
       const scale = viewerState.mode === "fit"
-        ? Math.min(bounds.width / effectiveNaturalSize.width, bounds.height / effectiveNaturalSize.height, 1)
+        ? Math.min(bounds.width / effectiveNaturalSize.width, bounds.height / effectiveNaturalSize.height)
         : 1;
       const next = {
         height: Math.max(1, Math.round(naturalSize.height * scale)),
@@ -295,7 +459,7 @@ function ChatFloatingImagePreviewWindow({
       observer.disconnect();
       window.removeEventListener("resize", updateFitSize);
     };
-  }, [naturalSize, viewerState.expanded, viewerState.mode, viewerState.rotation, viewerState.thumbnailsOpen]);
+  }, [naturalSize, viewerState.mode, viewerState.rotation, viewerState.thumbnailsOpen, windowGeometry.rect.height, windowGeometry.rect.width]);
 
   if (!attachment) {
     return null;
@@ -314,6 +478,17 @@ function ChatFloatingImagePreviewWindow({
         width: `${rotated ? imageSize.height : imageSize.width}px`,
       }
     : undefined;
+  const stageDimensions = imageSize
+    ? {
+        height: rotated ? imageSize.width : imageSize.height,
+        width: rotated ? imageSize.height : imageSize.width,
+      }
+    : null;
+  const canPanImage = Boolean(
+    stageDimensions &&
+    viewportSize &&
+    (stageDimensions.width > viewportSize.width || stageDimensions.height > viewportSize.height),
+  );
   const imageStyle: CSSProperties | undefined = imageSize
     ? {
         height: `${imageSize.height}px`,
@@ -321,18 +496,28 @@ function ChatFloatingImagePreviewWindow({
         width: `${imageSize.width}px`,
       }
     : undefined;
+  const windowStyle = {
+    "--orf-chat-image-window-height": `${Math.round(windowGeometry.rect.height)}px`,
+    "--orf-chat-image-window-left": `${Math.round(windowGeometry.rect.x)}px`,
+    "--orf-chat-image-window-top": `${Math.round(windowGeometry.rect.y)}px`,
+    "--orf-chat-image-window-width": `${Math.round(windowGeometry.rect.width)}px`,
+  } as CSSProperties;
 
   const windowNode = (
     <div
       aria-label="聊天图片查看器"
-      className="orf-chat-floating-image-preview orf-draggable-floating"
-      data-expanded={viewerState.expanded ? "true" : "false"}
-      ref={drag.ref}
+      className="orf-chat-floating-image-preview"
+      data-window-interaction={windowInteraction ?? "idle"}
+      data-window-mode={windowGeometry.mode}
       role="dialog"
-      style={drag.style}
+      style={windowStyle}
     >
-      <header className="orf-chat-floating-image-preview-header orf-drag-handle" {...drag.handleProps}>
-        <div className="orf-chat-floating-image-preview-tools" data-drag-ignore="true">
+      <header
+        className="orf-chat-floating-image-preview-header"
+        onDoubleClick={handleWindowHeaderDoubleClick}
+        onPointerDown={startWindowMove}
+      >
+        <div className="orf-chat-floating-image-preview-tools">
           <div className="orf-chat-floating-image-preview-tool-group">
             {preview.images.length > 1 && (
               <>
@@ -393,12 +578,12 @@ function ChatFloatingImagePreviewWindow({
               <Download className="h-4 w-4" />
             </a>
             <button
-              aria-label={viewerState.expanded ? "还原图片窗口" : "放大图片窗口"}
-              title={viewerState.expanded ? "还原窗口" : "放大窗口"}
+              aria-label={maximized ? "还原图片窗口" : "放大图片窗口"}
+              title={maximized ? "还原窗口" : "放大窗口"}
               type="button"
-              onClick={() => updateViewerState((current) => ({ ...current, expanded: !current.expanded }))}
+              onClick={toggleWindowMaximized}
             >
-              {viewerState.expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              {maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
             <button aria-label="关闭图片窗口" title="关闭" type="button" onClick={onClose}>
               <X className="h-4 w-4" />
@@ -406,7 +591,12 @@ function ChatFloatingImagePreviewWindow({
           </div>
         </div>
       </header>
-      <div className="orf-chat-floating-image-preview-title" title={attachment.fileName}>
+      <div
+        className="orf-chat-floating-image-preview-title"
+        title={attachment.fileName}
+        onDoubleClick={handleWindowHeaderDoubleClick}
+        onPointerDown={startWindowMove}
+      >
         <span>{attachment.fileName}</span>
         <small>{currentIndex + 1} / {preview.images.length}</small>
       </div>
@@ -415,6 +605,7 @@ function ChatFloatingImagePreviewWindow({
           "orf-chat-floating-image-preview-body",
           draggingImage ? "orf-chat-floating-image-preview-body-dragging" : "",
         ].filter(Boolean).join(" ")}
+        data-can-pan={canPanImage ? "true" : "false"}
         ref={viewportRef}
         onDoubleClick={resetImageTransform}
         onPointerCancel={stopImageDrag}
@@ -454,6 +645,15 @@ function ChatFloatingImagePreviewWindow({
           ))}
         </div>
       )}
+      {chatImageWindowResizeEdges.map((edge) => (
+        <div
+          aria-hidden="true"
+          className={`orf-chat-floating-image-preview-resize-handle orf-chat-floating-image-preview-resize-${edge}`}
+          data-drag-ignore="true"
+          key={edge}
+          onPointerDown={(event) => startWindowResize(edge, event)}
+        />
+      ))}
     </div>
   );
 
@@ -462,7 +662,6 @@ function ChatFloatingImagePreviewWindow({
 
 function defaultChatImageViewerState(hasMultipleImages: boolean): ChatImageViewerState {
   return {
-    expanded: false,
     mode: "fit",
     rotation: 0,
     thumbnailsOpen: hasMultipleImages,
@@ -480,6 +679,153 @@ function rotatedNaturalSize(size: { height: number; width: number }, rotation: n
   return rotation % 180 === 0 ? size : { height: size.width, width: size.height };
 }
 
+function defaultChatImageWindowGeometry(
+  naturalSize: { height: number; width: number } | null,
+  hasThumbnails: boolean,
+): ChatImageWindowGeometry {
+  return {
+    autoSized: true,
+    mode: "normal",
+    rect: defaultChatImageWindowRect(naturalSize, hasThumbnails),
+    restoreRect: null,
+  };
+}
+
+function defaultChatImageWindowRect(
+  naturalSize: { height: number; width: number } | null,
+  hasThumbnails: boolean,
+): ChatImageWindowRect {
+  const bounds = chatImageWindowNormalBounds();
+  if (!naturalSize) {
+    const width = Math.min(bounds.width, Math.max(chatImageWindowMinWidth, chatImageWindowFallbackWidth));
+    const height = Math.min(bounds.height, Math.max(chatImageWindowMinHeight, chatImageWindowFallbackHeight));
+    return centeredChatImageWindowRect(bounds, { height, width });
+  }
+
+  const chromeHeight = chatImageWindowChromeHeight + chatImageWindowBodyPaddingY + (hasThumbnails ? chatImageWindowThumbnailHeight : 0);
+  const maxImageWidth = Math.max(1, bounds.width - chatImageWindowBodyPaddingX);
+  const maxImageHeight = Math.max(1, bounds.height - chromeHeight);
+  const imageScale = Math.min(maxImageWidth / naturalSize.width, maxImageHeight / naturalSize.height, 1);
+  const width = clamp(
+    Math.round(naturalSize.width * imageScale + chatImageWindowBodyPaddingX),
+    Math.min(chatImageWindowMinWidth, bounds.width),
+    bounds.width,
+  );
+  const height = clamp(
+    Math.round(naturalSize.height * imageScale + chromeHeight),
+    Math.min(chatImageWindowMinHeight, bounds.height),
+    bounds.height,
+  );
+  return centeredChatImageWindowRect(bounds, { height, width });
+}
+
+function centeredChatImageWindowRect(bounds: ChatImageWindowRect, size: { height: number; width: number }): ChatImageWindowRect {
+  return clampChatImageWindowRect({
+    height: size.height,
+    width: size.width,
+    x: bounds.x + Math.max(0, Math.round((bounds.width - size.width) / 2)),
+    y: bounds.y + Math.max(0, Math.round((bounds.height - size.height) / 2)),
+  });
+}
+
+function chatImageWindowNormalBounds(): ChatImageWindowRect {
+  if (typeof window === "undefined") {
+    return { height: chatImageWindowFallbackHeight, width: chatImageWindowFallbackWidth, x: chatImageWindowMargin, y: chatImageWindowMargin };
+  }
+  const topbarHeight = readChatImageWindowCssPx("--orf-topbar-height");
+  const y = Math.max(chatImageWindowMargin, topbarHeight + chatImageWindowNormalTopOffset);
+  return {
+    height: Math.max(chatImageWindowMinHeight, window.innerHeight - y - chatImageWindowMargin),
+    width: Math.max(chatImageWindowMinWidth, window.innerWidth - chatImageWindowMargin * 2),
+    x: chatImageWindowMargin,
+    y,
+  };
+}
+
+function chatImageWindowMaximizedRect(): ChatImageWindowRect {
+  if (typeof window === "undefined") {
+    return { height: chatImageWindowFallbackHeight, width: chatImageWindowFallbackWidth, x: chatImageWindowMargin, y: chatImageWindowMargin };
+  }
+  return {
+    height: Math.max(chatImageWindowMinHeight, window.innerHeight - chatImageWindowMargin * 2),
+    width: Math.max(chatImageWindowMinWidth, window.innerWidth - chatImageWindowMargin * 2),
+    x: chatImageWindowMargin,
+    y: chatImageWindowMargin,
+  };
+}
+
+function moveChatImageWindowRect(startRect: ChatImageWindowRect, deltaX: number, deltaY: number): ChatImageWindowRect {
+  return clampChatImageWindowRect({
+    ...startRect,
+    x: startRect.x + deltaX,
+    y: startRect.y + deltaY,
+  });
+}
+
+function resizeChatImageWindowRect(
+  startRect: ChatImageWindowRect,
+  edge: ChatImageWindowResizeEdge,
+  deltaX: number,
+  deltaY: number,
+): ChatImageWindowRect {
+  const bounds = chatImageWindowMaximizedRect();
+  const startRight = startRect.x + startRect.width;
+  const startBottom = startRect.y + startRect.height;
+  let nextX = startRect.x;
+  let nextY = startRect.y;
+  let nextWidth = startRect.width;
+  let nextHeight = startRect.height;
+
+  if (edge.includes("e")) {
+    nextWidth = clamp(startRect.width + deltaX, chatImageWindowMinWidth, bounds.x + bounds.width - startRect.x);
+  }
+  if (edge.includes("s")) {
+    nextHeight = clamp(startRect.height + deltaY, chatImageWindowMinHeight, bounds.y + bounds.height - startRect.y);
+  }
+  if (edge.includes("w")) {
+    nextX = clamp(startRect.x + deltaX, bounds.x, startRight - chatImageWindowMinWidth);
+    nextWidth = startRight - nextX;
+  }
+  if (edge.includes("n")) {
+    nextY = clamp(startRect.y + deltaY, bounds.y, startBottom - chatImageWindowMinHeight);
+    nextHeight = startBottom - nextY;
+  }
+
+  return clampChatImageWindowRect({
+    height: nextHeight,
+    width: nextWidth,
+    x: nextX,
+    y: nextY,
+  });
+}
+
+function clampChatImageWindowRect(rect: ChatImageWindowRect): ChatImageWindowRect {
+  const bounds = chatImageWindowMaximizedRect();
+  const width = clamp(rect.width, Math.min(chatImageWindowMinWidth, bounds.width), bounds.width);
+  const height = clamp(rect.height, Math.min(chatImageWindowMinHeight, bounds.height), bounds.height);
+  return {
+    height,
+    width,
+    x: clamp(rect.x, bounds.x, bounds.x + bounds.width - width),
+    y: clamp(rect.y, bounds.y, bounds.y + bounds.height - height),
+  };
+}
+
+function readChatImageWindowCssPx(name: string) {
+  if (typeof window === "undefined") return 0;
+  const value = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isChatImageWindowInteractiveTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement && Boolean(target.closest("button, input, textarea, select, a, [data-drag-ignore='true']"));
+}
+
+function isChatImageWindowMobileViewport() {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
+}
+
 function imageDimension(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
@@ -490,4 +836,8 @@ function clampChatImageZoom(value: number) {
 
 function isChatImageViewerShortcutEditableTarget(target: EventTarget | null) {
   return target instanceof HTMLElement && Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
 }
