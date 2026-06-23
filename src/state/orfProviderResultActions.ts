@@ -32,7 +32,7 @@ export function useOrfProviderResultActions({
         const payload = {
           ...input,
           source: input.source ?? "managerDefined",
-          definer: input.definer ?? currentUser?.name ?? "",
+          definerUserId: input.definerUserId ?? currentUser?.id ?? "",
         };
         const objective = state.objectives.find((item) => item.id === payload.objectiveId);
         const canAdjustDuringReestimate = Boolean(

@@ -36,6 +36,7 @@ const DESKTOP_RECOVERY_MAX_AUTOMATIC_RELOADS = 2;
 const DESKTOP_CREDENTIALS_MAX_ACCOUNTS = 10;
 const DESKTOP_CREDENTIALS_FILE_NAME = "saved-login-accounts.v1.json";
 const DESKTOP_SETTINGS_FILE_NAME = "desktop-settings.v1.json";
+const DESKTOP_STABLE_DATA_DIR_NAME = "ORF";
 const DESKTOP_WORKBENCH_ZOOM_MIN = -2;
 const DESKTOP_WORKBENCH_ZOOM_MAX = 4;
 const DESKTOP_SYSTEM_IDLE_THRESHOLD_SECONDS = 10 * 60;
@@ -57,9 +58,27 @@ const desktopShellState = {
   mainWindow: null,
   pendingChatNotificationTargetsByWebContents: new Map(),
   recoveryStateByWebContents: new Map(),
+  storagePaths: null,
   tray: null,
   unreadCount: 0,
 };
+
+function configureStableDesktopStoragePaths() {
+  const defaultUserDataPath = app.getPath("userData");
+  const defaultSessionDataPath = app.getPath("sessionData");
+  const stableDataPath = path.join(app.getPath("appData"), DESKTOP_STABLE_DATA_DIR_NAME);
+
+  app.setPath("userData", stableDataPath);
+  app.setPath("sessionData", stableDataPath);
+  desktopShellState.storagePaths = {
+    defaultSessionDataPath,
+    defaultUserDataPath,
+    sessionDataPath: stableDataPath,
+    userDataPath: stableDataPath,
+  };
+
+  console.info("[ORF desktop] stable storage paths configured", desktopShellState.storagePaths);
+}
 
 function resolveClientUrl() {
   const rawUrl = process.env.ORF_CLIENT_URL || process.env.ORF_APP_URL || DEFAULT_ORF_CLIENT_URL;
@@ -1308,6 +1327,7 @@ function removeClientUpdateInstallPath(targetPath) {
 
 app.setName("ORF");
 app.setAppUserModelId("org.duckdns.orfxueyu.orf");
+configureStableDesktopStoragePaths();
 Menu.setApplicationMenu(null);
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();

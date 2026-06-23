@@ -2,7 +2,11 @@ import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { notifications, objectiveLoot, objectives, results } from "../../../../server/db/schema";
-import { readTestUserIdByNameInTeam, requiredTestUserIdByNameInTeam } from "../../../_operators/common.helpers";
+import {
+  readTestUserIdByNameInTeam,
+  requiredTestUserIdByNameInTeam,
+  requiredTestUserIdForTeam,
+} from "../../../_operators/common.helpers";
 import { resultDetailIncludesMetricName, testResultDetail } from "../../../_operators/result-detail.helpers";
 import type {
   LootPrerequisiteResult,
@@ -76,6 +80,12 @@ export async function createLootPrerequisiteResult(
   }
 
   const id = `res-${objective.id}`;
+  const definerUserId = await requiredTestUserIdForTeam({
+    teamId: objective.teamId,
+    preferredUserId: objective.createdBy ?? objective.updatedBy,
+    purpose: "成员提交战利品前置指标",
+  });
+
   await db.insert(results).values({
     id,
     teamId: objective.teamId,
@@ -92,11 +102,14 @@ export async function createLootPrerequisiteResult(
     confidence: 50,
     source: "managerDefined",
     definer: "testd",
+    definerUserId,
     uncertaintyScore: 30,
     acceptedResult: "unreviewed",
     reviewCadence: "Weekly",
     createdAt: today(),
     updatedAt: today(),
+    createdBy: definerUserId,
+    updatedBy: definerUserId,
     sortOrder: 0,
   });
 
@@ -248,6 +261,8 @@ async function readObjective(objectiveId: string) {
       challengers: objectives.challengers,
       challengerUserIds: objectives.challengerUserIds,
       lootSubmittedAt: objectives.lootSubmittedAt,
+      createdBy: objectives.createdBy,
+      updatedBy: objectives.updatedBy,
     })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))

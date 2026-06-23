@@ -27,7 +27,6 @@ export async function getUserMapsForStorageScope(storageScopeId: string | null |
         .where(eq(teamMembers.teamId, storageScopeId))
     : await db.select({ id: users.id, name: users.name }).from(users);
   return {
-    userIdByName: new Map(rows.map((member) => [member.name, member.id])),
     userNameById: new Map(rows.map((member) => [member.id, member.name])),
   };
 }
@@ -73,7 +72,7 @@ export function mapResultRows(input: {
     confidence: result.confidence,
     source: result.source,
     definer: nameForUserId(input.userNameById, result.definerUserId, result.definer),
-    definerUserId: optional(result.definerUserId),
+    definerUserId: result.definerUserId,
     uncertaintyScore: result.uncertaintyScore ?? uncertaintyScoreFor(result.uncertaintyLevel),
     acceptedResult: result.acceptedResult ?? "unreviewed",
     evidenceIds: input.evidenceIdsByResult.get(result.id) ?? [],
@@ -109,33 +108,26 @@ export function mapObjectiveRows(input: {
   resultsByObjective: Map<string, Result[]>;
   taskIdsByObjective: Map<string, Task["id"][]>;
   userAvatarUrlById?: Map<string, string | null>;
-  userIdByName: Map<string, string>;
   userNameById: Map<string, string>;
 }) {
   return input.objectiveRows.map((objective): Objective => {
     const objectiveResults = input.resultsByObjective.get(objective.id) ?? [];
     const participants = objectiveParticipantSnapshot({
       challengerUserIds: objective.challengerUserIds,
-      challengerNames: objective.challengers ?? [],
       assignedChallengerUserIds: objective.assignedChallengerUserIds,
-      assignedChallengerNames: objective.assignedChallengers ?? [],
-      userIdByName: input.userIdByName,
       userNameById: input.userNameById,
     });
-    const challengeApplications = (objective.challengeApplications ?? []).map((application) => {
-      const applicantUserId = application.applicantUserId ?? input.userIdByName.get(application.applicant) ?? null;
-      return {
-        ...application,
-        applicant: nameForUserId(input.userNameById, applicantUserId, application.applicant),
-        applicantUserId,
-      };
-    });
+    const challengeApplications = (objective.challengeApplications ?? []).map((application) => ({
+      ...application,
+      applicant: nameForUserId(input.userNameById, application.applicantUserId, application.applicant),
+      applicantUserId: application.applicantUserId,
+    }));
     const profileFor = (name: string, userId?: string | null): ObjectiveParticipantProfile => {
-      const resolvedUserId = userId ?? input.userIdByName.get(name) ?? null;
+      const resolvedUserId = userId ?? "";
       return {
         name,
         userId: resolvedUserId,
-        avatarUrl: resolvedUserId ? input.userAvatarUrlById?.get(resolvedUserId) ?? null : null,
+        avatarUrl: input.userAvatarUrlById?.get(resolvedUserId) ?? null,
       };
     };
 

@@ -1,11 +1,17 @@
 import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
 import {
   objectiveParticipantSnapshot,
-  userIdByNameMap,
   userNameByIdMap,
 } from "../domain/orfObjectiveParticipants";
-import type { ChallengeApplication, Objective, OrfProject, OrfState, Result } from "../types/orf";
+import type { ChallengeApplication, Evidence, Feedback, Objective, ObjectiveLoot, OrfProject, OrfState, Result, Task } from "../types/orf";
 import { addCalendarDays } from "../utils/date";
+
+const USER_ALEX = "00000000-0000-4000-8000-000000000201";
+const USER_MIA = "00000000-0000-4000-8000-000000000202";
+const USER_ETHAN = "00000000-0000-4000-8000-000000000203";
+const USER_KAI = "00000000-0000-4000-8000-000000000204";
+const USER_NORA = "00000000-0000-4000-8000-000000000205";
+const USER_XUEYU = "00000000-0000-4000-8000-000000000206";
 
 type ObjectiveChallengeFields = Pick<
   Objective,
@@ -25,8 +31,11 @@ type ObjectiveChallengeFields = Pick<
   | "objectiveBasePoints"
   | "objectiveSettlementPoints"
 >;
-type LegacyObjective = Omit<Objective, keyof ObjectiveChallengeFields> & Partial<ObjectiveChallengeFields>;
-type LegacyResult = Omit<Result, "uncertaintyScore" | "acceptedResult" | "evidenceIds" | "createdAt" | "updatedAt"> &
+type SeedObjectiveChallengeFields = Omit<ObjectiveChallengeFields, "challengeApplications"> & {
+  challengeApplications: ChallengeApplication[];
+};
+type SeedObjective = Omit<Objective, keyof ObjectiveChallengeFields> & Partial<SeedObjectiveChallengeFields>;
+type SeedResult = Omit<Result, "uncertaintyScore" | "acceptedResult" | "evidenceIds" | "createdAt" | "updatedAt"> &
   Partial<Pick<Result, "uncertaintyScore" | "acceptedResult" | "evidenceIds" | "createdAt" | "updatedAt">> & {
     owner?: string;
     finalDueAt?: string;
@@ -38,9 +47,13 @@ type LegacyResult = Omit<Result, "uncertaintyScore" | "acceptedResult" | "eviden
     priorityDeclinedBy?: string[];
     challengeApplications?: ChallengeApplication[];
   };
-type LegacyInitialState = Omit<OrfState, "objectives" | "results"> & {
-  objectives: LegacyObjective[];
-  results: LegacyResult[];
+type SeedInitialState = Omit<OrfState, "evidence" | "feedback" | "objectiveLoot" | "objectives" | "results" | "tasks"> & {
+  evidence: Evidence[];
+  feedback: Feedback[];
+  objectiveLoot: ObjectiveLoot[];
+  objectives: SeedObjective[];
+  results: SeedResult[];
+  tasks: Task[];
 };
 
 function addDays(value: string, days: number) {
@@ -53,7 +66,15 @@ function latestDate(values: Array<string | undefined | null>) {
 
 const uncertaintyScore = uncertaintyScoreFor;
 
-function inferFlowStatus(objective: LegacyObjective, challengerUserIds: string[], assignedChallengerUserIds: string[], challengeApplications: ChallengeApplication[]): Objective["flowStatus"] {
+function requiredSeedUserId(userId: string | null | undefined, context: string) {
+  const normalizedUserId = userId?.trim();
+  if (!normalizedUserId) {
+    throw new Error(`Initial ORF seed data is missing ${context} userId`);
+  }
+  return normalizedUserId;
+}
+
+function inferFlowStatus(objective: SeedObjective, challengerUserIds: string[], assignedChallengerUserIds: string[], challengeApplications: ChallengeApplication[]): Objective["flowStatus"] {
   if (objective.flowStatus) return objective.flowStatus;
   if (objective.objectiveSettlementPoints != null) return "settled";
   if (objective.acceptedResult) return "accepted";
@@ -66,10 +87,9 @@ function inferFlowStatus(objective: LegacyObjective, challengerUserIds: string[]
   return "candidate";
 }
 
-function normalizeInitialState(state: LegacyInitialState): OrfState {
+function normalizeInitialState(state: SeedInitialState): OrfState {
   const projects: OrfProject[] = state.projects ?? [];
   const objectiveUpdatedAtById = new Map(state.objectives.map((objective) => [objective.id, objective.updatedAt]));
-  const userIdByName = userIdByNameMap(state.users);
   const userNameById = userNameByIdMap(state.users);
   const evidenceIdsByResult = new Map<string, string[]>();
   for (const evidence of state.evidence) {
@@ -92,9 +112,11 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
     } = item;
     const updatedAt = item.updatedAt ?? objectiveUpdatedAtById.get(item.objectiveId) ?? "2026-04-24";
 
+    const definerUserId = requiredSeedUserId(item.definerUserId, `result ${item.id} definer`);
     return {
       ...result,
-      definerUserId: item.definerUserId ?? (item.definer ? userIdByName.get(item.definer) ?? null : null),
+      definer: userNameById.get(definerUserId) ?? item.definer,
+      definerUserId,
       uncertaintyScore: item.uncertaintyScore ?? uncertaintyScore(item.uncertaintyLevel),
       acceptedResult: item.acceptedResult ?? "unreviewed",
       evidenceIds: item.evidenceIds ?? evidenceIdsByResult.get(item.id) ?? [],
@@ -105,18 +127,21 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
 
   const objectives: Objective[] = state.objectives.map((objective) => {
     const objectiveResults = state.results.filter((result) => result.objectiveId === objective.id);
+    const challengerUserIds = objective.challengerUserIds ?? [];
+    const assignedChallengerUserIds = objective.assignedChallengerUserIds ?? [];
     const participants = objectiveParticipantSnapshot({
-      challengerUserIds: objective.challengerUserIds,
-      challengerNames: objective.challengers ?? objectiveResults.map((result) => result.owner),
-      assignedChallengerUserIds: objective.assignedChallengerUserIds,
-      assignedChallengerNames: objective.assignedChallengers ?? objectiveResults.map((result) => result.assignedChallenger),
-      userIdByName,
+      challengerUserIds,
+      assignedChallengerUserIds,
       userNameById,
     });
-    const challengeApplications = (objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? [])).map((application) => ({
-      ...application,
-      applicantUserId: application.applicantUserId ?? userIdByName.get(application.applicant) ?? null,
-    }));
+    const challengeApplications = (objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? [])).map((application) => {
+      const applicantUserId = requiredSeedUserId(application.applicantUserId, `challenge application ${application.id} applicant`);
+      return {
+        ...application,
+        applicant: userNameById.get(applicantUserId) ?? application.applicant,
+        applicantUserId,
+      };
+    });
     const finalDueAt = objective.finalDueAt || addDays(objective.updatedAt, 14);
     const acceptedResults = results.filter(
       (result) => result.objectiveId === objective.id && (result.acceptedResult === "completed" || result.acceptedResult === "falsified"),
@@ -148,7 +173,22 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
     projects,
     objectives,
     results,
-    objectiveLoot: state.objectiveLoot ?? [],
+    evidence: state.evidence.map((item) => {
+      const ownerUserId = requiredSeedUserId(item.ownerUserId, `evidence ${item.id} owner`);
+      return { ...item, owner: userNameById.get(ownerUserId) ?? item.owner, ownerUserId };
+    }),
+    feedback: state.feedback.map((item) => {
+      const ownerUserId = requiredSeedUserId(item.ownerUserId, `feedback ${item.id} owner`);
+      return { ...item, owner: userNameById.get(ownerUserId) ?? item.owner, ownerUserId };
+    }),
+    tasks: state.tasks.map((item) => {
+      const assigneeUserId = requiredSeedUserId(item.assigneeUserId, `task ${item.id} assignee`);
+      return { ...item, assignee: userNameById.get(assigneeUserId) ?? item.assignee, assigneeUserId };
+    }),
+    objectiveLoot: (state.objectiveLoot ?? []).map((item) => {
+      const submittedByUserId = requiredSeedUserId(item.submittedByUserId, `objective loot ${item.id} submitter`);
+      return { ...item, submittedBy: userNameById.get(submittedByUserId) ?? item.submittedBy, submittedByUserId };
+    }),
     objectiveTrialReviews: state.objectiveTrialReviews ?? [],
     objectiveAlignmentRequests: state.objectiveAlignmentRequests ?? [],
     pointLedger: state.pointLedger ?? [],
@@ -166,13 +206,16 @@ const confidenceTrend = [
   { date: "Apr 22", value: 72 },
 ];
 
-const legacyInitialOrfState: LegacyInitialState = {
+const initialOrfStateSeed: SeedInitialState = {
   users: [
-    { id: "00000000-0000-4000-8000-000000000201", name: "Alex Chen", email: "alex@orf.local", role: "admin", status: "active", lastOnlineAt: "2026-05-05T09:42:00.000Z" },
-    { id: "00000000-0000-4000-8000-000000000202", name: "Mia Zhang", email: "mia@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-04T18:10:00.000Z" },
-    { id: "00000000-0000-4000-8000-000000000203", name: "Ethan Liu", email: "ethan@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-03T14:25:00.000Z" },
+    { id: USER_ALEX, name: "Alex Chen", email: "alex@orf.local", role: "admin", status: "active", lastOnlineAt: "2026-05-05T09:42:00.000Z" },
+    { id: USER_MIA, name: "Mia Zhang", email: "mia@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-04T18:10:00.000Z" },
+    { id: USER_ETHAN, name: "Ethan Liu", email: "ethan@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-03T14:25:00.000Z" },
+    { id: USER_KAI, name: "Kai Wang", email: "kai@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-02T10:00:00.000Z" },
+    { id: USER_NORA, name: "Nora Patel", email: "nora@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-01T10:00:00.000Z" },
+    { id: USER_XUEYU, name: "xueyu", email: "xueyu@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-01T09:00:00.000Z" },
   ],
-  currentUserId: "00000000-0000-4000-8000-000000000201",
+  currentUserId: USER_ALEX,
   permissionRules: defaultPermissionRules,
   projects: [
     { id: "project-ai-delivery", name: "AI 应用工程化", createdAt: "2026-04-24", updatedAt: "2026-04-24" },
@@ -284,7 +327,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       resultIds: ["res-bounty-agent-retry-idempotency", "res-bounty-agent-fallback"],
       taskIds: [],
       finalDueAt: "2026-06-18",
-      assignedChallengers: ["xueyu", "Mia Zhang"],
+      assignedChallengerUserIds: [USER_XUEYU, USER_MIA],
       createdAt: "2026-05-11",
       updatedAt: "2026-05-11",
     },
@@ -304,7 +347,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       resultIds: ["res-bounty-eval-automation", "res-bounty-dataset-growth"],
       taskIds: [],
       finalDueAt: "2026-07-02",
-      challengeApplications: [{ id: "challenge-application-seed-1", applicant: "Kai Wang", status: "pending", createdAt: "2026-05-12T09:20:00.000Z" }],
+      challengeApplications: [{ id: "challenge-application-seed-1", applicant: "Kai Wang", applicantUserId: USER_KAI, status: "pending", createdAt: "2026-05-12T09:20:00.000Z" }],
       createdAt: "2026-05-12",
       updatedAt: "2026-05-12",
     },
@@ -344,8 +387,8 @@ const legacyInitialOrfState: LegacyInitialState = {
       resultIds: ["res-demo-evidence-pack-integrity", "res-demo-replay-script"],
       taskIds: [],
       finalDueAt: "2026-06-20",
-      challengers: ["xueyu"],
-      assignedChallengers: [],
+      challengerUserIds: [USER_XUEYU],
+      assignedChallengerUserIds: [],
       challengeApplications: [],
       acceptedAt: "2026-05-14T09:00:00.000Z",
       confirmationDueAt: "2026-05-18T18:00:00.000Z",
@@ -371,8 +414,8 @@ const legacyInitialOrfState: LegacyInitialState = {
       resultIds: ["res-demo-review-citation-pass", "res-demo-review-regression-pass"],
       taskIds: [],
       finalDueAt: "2026-05-24",
-      challengers: ["Mia Zhang", "Ethan Liu"],
-      assignedChallengers: [],
+      challengerUserIds: [USER_MIA, USER_ETHAN],
+      assignedChallengerUserIds: [],
       challengeApplications: [],
       acceptedAt: "2026-05-10T09:00:00.000Z",
       confirmationDueAt: "2026-05-13T09:00:00.000Z",
@@ -399,8 +442,8 @@ const legacyInitialOrfState: LegacyInitialState = {
       resultIds: ["res-demo-routing-coverage", "res-demo-routing-quality"],
       taskIds: [],
       finalDueAt: "2026-05-16",
-      challengers: ["Kai Wang", "Nora Patel"],
-      assignedChallengers: [],
+      challengerUserIds: [USER_KAI, USER_NORA],
+      assignedChallengerUserIds: [],
       challengeApplications: [],
       acceptedAt: "2026-05-01T09:00:00.000Z",
       confirmationDueAt: "2026-05-04T09:00:00.000Z",
@@ -441,6 +484,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "Alex Chen",
+      definerUserId: USER_ALEX,
       assignedChallenger: "Alex Chen",
       trend: [
         { date: "Apr 01", value: 35 },
@@ -474,6 +518,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "On Track",
       confidence: 78,
       owner: "Kai Wang",
+      definerUserId: USER_KAI,
       trend: [
         { date: "Apr 01", value: 58 },
         { date: "Apr 08", value: 64 },
@@ -506,6 +551,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "At Risk",
       confidence: 58,
       owner: "Alex Chen",
+      definerUserId: USER_ALEX,
       trend: [
         { date: "Apr 01", value: 11 },
         { date: "Apr 08", value: 9.2 },
@@ -538,6 +584,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "On Track",
       confidence: 74,
       owner: "Ethan Liu",
+      definerUserId: USER_ETHAN,
       trend: [
         { date: "Apr 01", value: 81 },
         { date: "Apr 08", value: 85 },
@@ -570,6 +617,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "At Risk",
       confidence: 55,
       owner: "Nora Patel",
+      definerUserId: USER_NORA,
       trend: [
         { date: "Apr 01", value: 6.8 },
         { date: "Apr 08", value: 5.7 },
@@ -591,6 +639,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "On Track",
       confidence: 84,
       owner: "Ethan Liu",
+      definerUserId: USER_ETHAN,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -607,6 +656,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "On Track",
       confidence: 79,
       owner: "Alex Chen",
+      definerUserId: USER_ALEX,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -623,6 +673,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "At Risk",
       confidence: 66,
       owner: "Mia Zhang",
+      definerUserId: USER_MIA,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -639,6 +690,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "On Track",
       confidence: 76,
       owner: "Kai Wang",
+      definerUserId: USER_KAI,
       trend: confidenceTrend,
       reviewCadence: "Bi-weekly",
     },
@@ -655,6 +707,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "At Risk",
       confidence: 60,
       owner: "Nora Patel",
+      definerUserId: USER_NORA,
       trend: [
         { date: "Apr 01", value: 0.058 },
         { date: "Apr 08", value: 0.049 },
@@ -676,6 +729,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "On Track",
       confidence: 72,
       owner: "Nora Patel",
+      definerUserId: USER_NORA,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -694,6 +748,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "memberProposed",
       definer: "Alex Chen",
+      definerUserId: USER_ALEX,
       priorityChallengeExpiresAt: "2026-06-01T10:00:00.000Z",
       trend: confidenceTrend,
       reviewCadence: "Weekly",
@@ -713,6 +768,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "Alex Chen",
+      definerUserId: USER_ALEX,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -742,6 +798,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "Alex Chen",
+      definerUserId: USER_ALEX,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -771,6 +828,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "Alex Chen",
+      definerUserId: USER_ALEX,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -800,6 +858,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "Alex Chen",
+      definerUserId: USER_ALEX,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -829,6 +888,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "Alex Chen",
+      definerUserId: USER_ALEX,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -858,6 +918,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "memberProposed",
       definer: "Kai Wang",
+      definerUserId: USER_KAI,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -887,6 +948,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "memberProposed",
       definer: "Kai Wang",
+      definerUserId: USER_KAI,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -916,6 +978,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "Alex Chen",
+      definerUserId: USER_ALEX,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -945,6 +1008,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "Alex Chen",
+      definerUserId: USER_ALEX,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -974,6 +1038,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "xueyu",
+      definerUserId: USER_XUEYU,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -1003,6 +1068,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "xueyu",
+      definerUserId: USER_XUEYU,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -1032,6 +1098,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "memberProposed",
       definer: "Mia Zhang",
+      definerUserId: USER_MIA,
       trend: confidenceTrend,
       reviewCadence: "Weekly",
     },
@@ -1061,6 +1128,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "memberProposed",
       definer: "Ethan Liu",
+      definerUserId: USER_ETHAN,
       acceptedResult: "unreviewed",
       trend: confidenceTrend,
       reviewCadence: "Weekly",
@@ -1091,6 +1159,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "xueyu",
+      definerUserId: USER_XUEYU,
       acceptedResult: "completed",
       trend: confidenceTrend,
       reviewCadence: "Weekly",
@@ -1121,6 +1190,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "xueyu",
+      definerUserId: USER_XUEYU,
       acceptedResult: "completed",
       trend: confidenceTrend,
       reviewCadence: "Weekly",
@@ -1135,6 +1205,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       source: "评估流水线",
       date: "2026-04-22",
       owner: "Mia Zhang",
+      ownerUserId: USER_MIA,
       linkedResultId: "res-eval-coverage",
     },
     {
@@ -1145,6 +1216,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       source: "评估仪表盘",
       date: "2026-04-21",
       owner: "Kai Wang",
+      ownerUserId: USER_KAI,
       linkedResultId: "res-eval-coverage",
     },
     {
@@ -1155,6 +1227,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       source: "RAG 评估运行器",
       date: "2026-04-24",
       owner: "Kai Wang",
+      ownerUserId: USER_KAI,
       linkedResultId: "res-rag-recall",
     },
     {
@@ -1165,6 +1238,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       source: "生产日志",
       date: "2026-04-23",
       owner: "Alex Chen",
+      ownerUserId: USER_ALEX,
       linkedResultId: "res-rag-recall",
     },
     {
@@ -1175,6 +1249,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       source: "Judge v0.8",
       date: "2026-04-23",
       owner: "Alex Chen",
+      ownerUserId: USER_ALEX,
       linkedResultId: "res-hallucination",
     },
     {
@@ -1185,6 +1260,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       source: "事故 ORF-2026-17",
       date: "2026-04-22",
       owner: "Ethan Liu",
+      ownerUserId: USER_ETHAN,
       linkedResultId: "res-tool-success",
     },
     {
@@ -1195,6 +1271,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       source: "可观测性仪表盘",
       date: "2026-04-20",
       owner: "Nora Patel",
+      ownerUserId: USER_NORA,
       linkedResultId: "res-latency",
     },
   ],
@@ -1207,6 +1284,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       suggestedAdjustment: "更新知识库元数据，增加文档版本过滤，补充回归用例。",
       status: "Open",
       owner: "Alex Chen",
+      ownerUserId: USER_ALEX,
       createdAt: "2026-04-23",
       updatedAt: "2026-04-24",
       activity: [
@@ -1222,6 +1300,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       suggestedAdjustment: "增加幂等键，工具调用前增加状态确认步骤。",
       status: "Open",
       owner: "Ethan Liu",
+      ownerUserId: USER_ETHAN,
       createdAt: "2026-04-22",
       updatedAt: "2026-04-24",
       activity: [
@@ -1237,6 +1316,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       suggestedAdjustment: "引入缓存，拆分长上下文，增加成本感知路由。",
       status: "Open",
       owner: "Nora Patel",
+      ownerUserId: USER_NORA,
       createdAt: "2026-04-20",
       updatedAt: "2026-04-20",
       activity: [
@@ -1252,6 +1332,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "In Progress",
       priority: "High",
       assignee: "Kai Wang",
+      assigneeUserId: USER_KAI,
       linkedObjectiveId: "obj-engineering",
       dueDate: "2026-04-28",
       tags: ["RAG", "Evaluation"],
@@ -1270,6 +1351,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "Todo",
       priority: "High",
       assignee: "Mia Zhang",
+      assigneeUserId: USER_MIA,
       linkedObjectiveId: "obj-engineering",
       dueDate: "2026-04-29",
       tags: ["Knowledge", "Retrieval"],
@@ -1288,6 +1370,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "In Review",
       priority: "High",
       assignee: "Alex Chen",
+      assigneeUserId: USER_ALEX,
       linkedObjectiveId: "obj-engineering",
       dueDate: "2026-04-30",
       tags: ["Prompt", "Regression"],
@@ -1306,6 +1389,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "In Progress",
       priority: "Critical",
       assignee: "Ethan Liu",
+      assigneeUserId: USER_ETHAN,
       linkedObjectiveId: "obj-engineering",
       dueDate: "2026-04-27",
       tags: ["Agent", "Tooling"],
@@ -1324,6 +1408,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "Todo",
       priority: "Medium",
       assignee: "Nora Patel",
+      assigneeUserId: USER_NORA,
       linkedObjectiveId: "obj-cost-quality",
       dueDate: "2026-05-02",
       tags: ["Cost", "Observability"],
@@ -1338,6 +1423,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "Backlog",
       priority: "High",
       assignee: "Alex Chen",
+      assigneeUserId: USER_ALEX,
       linkedObjectiveId: "obj-engineering",
       dueDate: "2026-05-03",
       tags: ["Evaluation", "Judge"],
@@ -1352,6 +1438,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "Done",
       priority: "Medium",
       assignee: "Ethan Liu",
+      assigneeUserId: USER_ETHAN,
       linkedObjectiveId: "obj-feedback-loop",
       dueDate: "2026-04-24",
       tags: ["Feedback"],
@@ -1370,6 +1457,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "Todo",
       priority: "High",
       assignee: "Kai Wang",
+      assigneeUserId: USER_KAI,
       linkedObjectiveId: "obj-engineering",
       dueDate: "2026-05-01",
       tags: ["RAG", "Release"],
@@ -1384,6 +1472,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "In Progress",
       priority: "Medium",
       assignee: "Mia Zhang",
+      assigneeUserId: USER_MIA,
       linkedObjectiveId: "obj-feedback-loop",
       dueDate: "2026-05-02",
       tags: ["ORF", "Process"],
@@ -1402,6 +1491,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       status: "Backlog",
       priority: "High",
       assignee: "Nora Patel",
+      assigneeUserId: USER_NORA,
       linkedObjectiveId: "obj-cost-quality",
       dueDate: "2026-05-06",
       tags: ["Latency", "Cost"],
@@ -1561,6 +1651,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "loot-demo-peer-review-1",
       objectiveId: "obj-demo-submitted-peer-review",
       submittedBy: "Mia Zhang",
+      submittedByUserId: USER_MIA,
       body: "引用覆盖回归包已经完成，错误引用样本已全部修复，证据链接和自测报告见下方。",
       resultClaims: [
         {
@@ -1609,4 +1700,4 @@ const legacyInitialOrfState: LegacyInitialState = {
   },
 };
 
-export const initialOrfState: OrfState = normalizeInitialState(legacyInitialOrfState);
+export const initialOrfState: OrfState = normalizeInitialState(initialOrfStateSeed);

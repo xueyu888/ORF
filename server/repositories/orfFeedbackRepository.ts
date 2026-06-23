@@ -22,11 +22,12 @@ import { getScopedUsers } from "./userRepository";
 
 export type CreateFeedbackInput = Pick<
   Feedback,
-  "phenomenon" | "causeCategories" | "owner"
+  "phenomenon" | "causeCategories"
 > & {
   attachments?: CreateFeedbackAttachmentInput[];
   impact: Impact;
   initialBody: string;
+  ownerUserId: string;
 };
 export type CreateFeedbackAttachmentInput = {
   body: Buffer;
@@ -74,14 +75,14 @@ function makeCommentId(prefix: "cmsg" | "cthread") {
   return `${prefix}-${Date.now()}-${nextCommentIdCounter()}-${randomUUID()}`;
 }
 
-async function resolveActiveMemberByName(storageScopeId: string, memberName: string) {
-  const normalizedName = memberName.trim();
-  if (!normalizedName) {
+async function resolveActiveMemberById(storageScopeId: string, userId: string) {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
     return null;
   }
 
   const scopedUsers = await getScopedUsers(runtimeScope(storageScopeId));
-  const member = scopedUsers.find((user) => user.status === "active" && user.name === normalizedName);
+  const member = scopedUsers.find((user) => user.status === "active" && user.id === normalizedUserId);
   return member ? { id: member.id, name: member.name } : null;
 }
 
@@ -240,8 +241,7 @@ export async function createFeedback(input: CreateFeedbackInput, actor: CreateFe
     return { status: "invalid" };
   }
 
-  const owner = input.owner.trim();
-  const ownerUser = await resolveActiveMemberByName(teamId, owner);
+  const ownerUser = await resolveActiveMemberById(teamId, input.ownerUserId);
   if (!ownerUser) {
     return { status: "invalidOwner" };
   }

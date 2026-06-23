@@ -27,7 +27,7 @@ export function localSettlementTargetUrl(baseUrl: string, pathname: string) {
 
 export async function fetchLocalSettlementService(input: {
   body?: unknown;
-  method: "GET" | "POST";
+  method: "DELETE" | "GET" | "POST" | "PUT";
   path: string;
 }): Promise<LocalSettlementServiceResponse> {
   const controller = new AbortController();

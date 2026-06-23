@@ -2,6 +2,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
+import { ORF_AUTH_SESSION_POLICY, ORY_SESSION_LIFESPAN_ENV_NAME } from "../src/domain/authSessionPolicy";
 import { createPgPoolConfig } from "../server/db/connectionOptions";
 
 const runtimeDir = path.resolve("ory/.runtime");
@@ -101,6 +102,7 @@ function appendOryRuntimeEnv(lines: string[]) {
   lines.push(envLine("SELFSERVICE_FLOWS_LOGOUT_AFTER_DEFAULT_BROWSER_RETURN_URL", `${appUrl}/auth`));
   lines.push(envLine("SELFSERVICE_FLOWS_LOGIN_UI_URL", `${appUrl}/auth`));
   lines.push(envLine("SELFSERVICE_FLOWS_REGISTRATION_UI_URL", `${appUrl}/auth`));
+  lines.push(envLine(ORY_SESSION_LIFESPAN_ENV_NAME, ORF_AUTH_SESSION_POLICY.oryLifespan));
 
   corsOrigins.forEach((origin, index) => {
     lines.push(envLine(`SERVE_PUBLIC_CORS_ALLOWED_ORIGINS_${index}`, origin));

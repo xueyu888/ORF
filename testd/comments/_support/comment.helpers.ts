@@ -62,6 +62,11 @@ export async function createCommentTask(input: {
   userId?: string;
 }): Promise<CommentTask> {
   const today = todayIsoDate();
+  const assigneeUserId = await requiredTestUserIdByNameInTeam({
+    teamId: input.teamId,
+    name: input.assignee,
+  });
+
   await db
     .insert(tasks)
     .values({
@@ -72,6 +77,7 @@ export async function createCommentTask(input: {
       status: "Todo",
       priority: "Medium",
       assignee: input.assignee,
+      assigneeUserId,
       linkedObjectiveId: input.linkedObjectiveId,
       feedbackOriginId: null,
       dueDate: addDaysIsoDate(14),
@@ -91,6 +97,7 @@ export async function createCommentTask(input: {
         status: "Todo",
         priority: "Medium",
         assignee: input.assignee,
+        assigneeUserId,
         linkedObjectiveId: input.linkedObjectiveId,
         feedbackOriginId: null,
         dueDate: addDaysIsoDate(14),

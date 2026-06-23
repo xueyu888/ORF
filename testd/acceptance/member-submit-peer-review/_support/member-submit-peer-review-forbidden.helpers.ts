@@ -5,6 +5,7 @@ import { objectiveContributionReviews, objectiveLoot, objectives } from "../../.
 import type { ObjectiveFlowStatus, OrfStage } from "../../../../src/types/orf";
 import {
   deleteTestObjectives,
+  requiredTestUserIdForTeam,
   testObjectiveAbsent,
   upsertTestObjective,
 } from "../../../_operators/common.helpers";
@@ -67,11 +68,19 @@ export async function createPeerReviewForbiddenLoot(
   }
 
   const id = `loot-testd-peer-review-forbidden-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const submittedByUserId = await requiredTestUserIdForTeam({
+    teamId: objective.teamId,
+    preferredName: fixture.submittedBy,
+    preferredUserId: objective.createdBy ?? objective.updatedBy,
+    purpose: "成员提交匿名互评反向用例前置战利品",
+  });
+
   await db.insert(objectiveLoot).values({
     id,
     teamId: objective.teamId,
     objectiveId: objective.id,
     submittedBy: fixture.submittedBy,
+    submittedByUserId,
     body: fixture.body,
     resultClaims: [],
     selfTestReportUrl: null,
@@ -283,6 +292,8 @@ async function readObjective(objectiveId: string) {
       flowStatus: objectives.flowStatus,
       challengers: objectives.challengers,
       lootSubmittedAt: objectives.lootSubmittedAt,
+      createdBy: objectives.createdBy,
+      updatedBy: objectives.updatedBy,
     })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))

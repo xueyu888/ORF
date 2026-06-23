@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { objectiveContributionReviews, objectiveLoot, objectives } from "../../../../server/db/schema";
+import { requiredTestUserIdByNameInTeam } from "../../../_operators/common.helpers";
 import type {
   PeerReviewLoot,
   PeerReviewTarget,
@@ -68,11 +69,17 @@ export async function createPeerReviewLoot(target: PeerReviewTarget, body: strin
   }
 
   const id = `loot-${objective.id}`;
+  const submittedByUserId = await requiredTestUserIdByNameInTeam({
+    teamId: objective.teamId,
+    name: memberName,
+  });
+
   await db.insert(objectiveLoot).values({
     id,
     teamId: objective.teamId,
     objectiveId: objective.id,
     submittedBy: memberName,
+    submittedByUserId,
     body,
     resultClaims: [],
     selfTestReportUrl: null,

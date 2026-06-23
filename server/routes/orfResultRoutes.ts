@@ -44,7 +44,7 @@ const createResultBodySchema = z.object({
   direction: metricDirectionSchema.optional(),
   uncertaintyLevel: uncertaintyLevelSchema.optional(),
   source: bountySourceSchema.optional(),
-  definer: optionalTextSchema,
+  definerUserId: z.string().trim().min(1).optional(),
 });
 const updateResultConfidenceBodySchema = z.object({ confidence: z.number().int().min(0).max(100) });
 const updateResultUncertaintyBodySchema = z.object({ uncertaintyLevel: uncertaintyLevelSchema });
@@ -120,7 +120,7 @@ export function registerOrfResultRoutes(app: FastifyInstance) {
       ...body,
       actorId: user.id,
       source,
-      definer: source === "memberProposed" ? user.name : body.definer ?? user.name,
+      definerUserId: source === "memberProposed" ? user.id : body.definerUserId ?? user.id,
     });
 
     if (!result) {
