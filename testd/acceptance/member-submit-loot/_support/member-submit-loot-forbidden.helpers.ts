@@ -6,6 +6,7 @@ import type { ObjectiveFlowStatus, OrfStage } from "../../../../src/types/orf";
 import { resultDetailIncludesMetricName, testResultDetail } from "../../../_operators/result-detail.helpers";
 import {
   deleteTestObjectives,
+  requiredTestUserIdForTeam,
   testObjectiveAbsent,
   upsertTestObjective,
 } from "../../../_operators/common.helpers";
@@ -78,6 +79,11 @@ export async function createLootForbiddenResult(
   const id = `res-testd-loot-forbidden-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const siblingRows = await db.select({ sortOrder: results.sortOrder }).from(results).where(eq(results.objectiveId, objective.id));
   const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
+  const definerUserId = await requiredTestUserIdForTeam({
+    teamId: objective.teamId,
+    preferredUserId: objective.createdBy ?? objective.updatedBy,
+    purpose: "成员提交战利品反向用例前置指标",
+  });
 
   await db.insert(results).values({
     id,
@@ -95,11 +101,14 @@ export async function createLootForbiddenResult(
     confidence: 50,
     source: "managerDefined",
     definer: "testd",
+    definerUserId,
     uncertaintyScore: 30,
     acceptedResult: "unreviewed",
     reviewCadence: "Weekly",
     createdAt: today(),
     updatedAt: today(),
+    createdBy: definerUserId,
+    updatedBy: definerUserId,
     sortOrder,
   });
 
@@ -303,6 +312,8 @@ async function readObjective(objectiveId: string) {
       challengers: objectives.challengers,
       confirmedAt: objectives.confirmedAt,
       lootSubmittedAt: objectives.lootSubmittedAt,
+      createdBy: objectives.createdBy,
+      updatedBy: objectives.updatedBy,
     })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))

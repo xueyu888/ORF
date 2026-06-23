@@ -437,6 +437,45 @@ export async function requiredTestUserIdByNameInTeam(input: { teamId: string; na
   return userId;
 }
 
+export async function requiredTestUserIdForTeam(input: {
+  teamId: string;
+  preferredName?: string | null;
+  preferredUserId?: string | null;
+  purpose?: string;
+}) {
+  if (input.preferredUserId) {
+    const [row] = await db
+      .select({ userId: users.id })
+      .from(users)
+      .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
+      .where(and(eq(teamMembers.teamId, input.teamId), eq(users.id, input.preferredUserId)))
+      .limit(1);
+    if (row?.userId) {
+      return row.userId;
+    }
+  }
+
+  if (input.preferredName) {
+    const userId = await readTestUserIdByNameInTeam({ teamId: input.teamId, name: input.preferredName });
+    if (userId) {
+      return userId;
+    }
+  }
+
+  const [row] = await db
+    .select({ userId: users.id })
+    .from(users)
+    .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, input.teamId), eq(users.status, "active")))
+    .orderBy(asc(users.name), asc(users.id))
+    .limit(1);
+  if (row?.userId) {
+    return row.userId;
+  }
+
+  throw new Error(`${input.purpose ?? "测试业务记录"}需要默认团队内已存在的用户 ID`);
+}
+
 export async function readTestUserIdsByNamesInTeam(input: { teamId: string; names: readonly string[] }) {
   const names = uniqueStrings(input.names);
   if (names.length === 0) {
