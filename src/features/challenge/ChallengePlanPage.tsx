@@ -3,6 +3,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { CommentPanel, type CommentReplyInput } from "./comments/CommentPanel";
 import { ChallengeToolbar } from "./components/ChallengeToolbar";
 import { ChallengeTree } from "./components/ChallengeTree";
+import { MetricInspectorPanel } from "./components/MetricInspectorPanel";
 import { TeamDashboard } from "./components/TeamDashboard";
 import { canShowFrontend } from "../../config/frontendVisibility";
 import { hasPermission } from "../../config/permissions";
@@ -12,12 +13,13 @@ import { isObjectiveChallenger } from "../../domain/orfObjectiveParticipants";
 import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
 import type { ResultDetailsInput } from "../../domain/orfResultDetails";
 import { fetchMyLocalSettlementReview, type LocalSettlementReview } from "../../services/localSettlementClient";
-import type { Objective, OrfProject, OrfState, UncertaintyLevel } from "../../types/orf";
+import type { Objective, OrfProject, OrfState, Result, UncertaintyLevel } from "../../types/orf";
 import { localDateString } from "../../utils/date";
 import { applyListItemAnchor, createListItemAnchor, listContainsAnchoredItem, type ListItemAnchor } from "../interaction/listItemAnchor";
 import { useChallengeReadModelData, type ChallengeReadModelState } from "./hooks/useChallengeReadModelData";
 import { challengeLinkForTarget, parseChallengeTargetHash, type ChallengeUrlTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
+import { canDropItem } from "./model/challengeDragDrop";
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
 import {
   challengeCycleOptions,
@@ -268,6 +270,10 @@ export function ChallengePlanPage() {
   const [collapsedBountyIds, setCollapsedBountyIds] = useState<Set<string>>(() => new Set());
   const [collapsedActionIds, setCollapsedActionIds] = useState<Set<string>>(() => new Set());
   const [commentTarget, setCommentTarget] = useState<ChallengeCommentTarget | null>(null);
+  const [selectedMetricId, setSelectedMetricId] = useState<string | null>(null);
+  const [metricInspectorCollapsed, setMetricInspectorCollapsed] = useState(false);
+  const [metricInspectorDirty, setMetricInspectorDirty] = useState(false);
+  const [pendingSelectedMetricId, setPendingSelectedMetricId] = useState<string | null>(null);
   const [editingTarget, setEditingTarget] = useState<ChallengeTarget | null>(null);
   const [objectiveCreationSession, setObjectiveCreationSession] = useState<ObjectiveCreationSession>(idleObjectiveCreationSession);
   const [childCreationSession, setChildCreationSession] = useState<ChildCreationSession>(idleChildCreationSession);
@@ -433,6 +439,10 @@ export function ChallengePlanPage() {
     () => projectsForChallengeTree(challengeState.projects, displayedGroups, hasContentFilters, projectFilter),
     [challengeState.projects, displayedGroups, hasContentFilters, projectFilter],
   );
+  const displayedMetricIds = useMemo(
+    () => new Set(displayedGroups.flatMap((group) => group.bounties.map((bounty) => bounty.result.id))),
+    [displayedGroups],
+  );
   const emptyText = hasActiveFilters
     ? "没有符合筛选条件的挑战目标。"
     : showAll
@@ -489,6 +499,18 @@ export function ChallengePlanPage() {
       setObjectiveInteractionAnchor(null);
     }
   }, [creationAnchoredGroups, objectiveInteractionAnchor]);
+  useEffect(() => {
+    if (!selectedMetricId || displayedMetricIds.has(selectedMetricId)) return;
+    setSelectedMetricId(null);
+    setMetricInspectorCollapsed(false);
+    setMetricInspectorDirty(false);
+    setPendingSelectedMetricId(null);
+  }, [displayedMetricIds, selectedMetricId]);
+  useEffect(() => {
+    if (pendingSelectedMetricId && !displayedMetricIds.has(pendingSelectedMetricId)) {
+      setPendingSelectedMetricId(null);
+    }
+  }, [displayedMetricIds, pendingSelectedMetricId]);
   useEffect(() => {
     const objective = objectiveCreationSubmittedObjective(objectiveCreationSession);
     if (!objective) return;
@@ -550,6 +572,55 @@ export function ChallengePlanPage() {
     const editState = objectiveDeadlineEditState(objective);
     if (editState.status === "editable") return;
     notify(objectiveDeadlineUnavailableMessage(editState));
+  };
+  const metricTargetForResult = (result: Result): Extract<ChallengeTarget, { type: "bounty" }> => ({
+    type: "bounty",
+    id: result.id,
+    title: result.title,
+    objectiveId: result.objectiveId,
+  });
+  const selectedMetric = selectedMetricId ? challengeState.results.find((item) => item.id === selectedMetricId) ?? null : null;
+  const pendingSelectedMetric = pendingSelectedMetricId ? challengeState.results.find((item) => item.id === pendingSelectedMetricId) ?? null : null;
+  const selectedMetricObjective = selectedMetric ? objectiveById(selectedMetric.objectiveId) : undefined;
+  const canEditTargetTitle = (target: ChallengeTarget) => {
+    if (isChildCreationTarget(target)) return true;
+    if (target.type === "objective") {
+      if (target.id === draftObjectiveId) return true;
+      return canEditObjectiveContent(currentUser);
+    }
+    if (target.type === "bounty") {
+      return metricEditAccessForObjectiveId(target.objectiveId).status === "allowed";
+    }
+    if (target.type === "action" || target.type === "subAction") {
+      return workItemMutationAccessForObjectiveId(target.objectiveId).status === "allowed";
+    }
+    return canAccessTarget(challengeState, role, target, "edit");
+  };
+  const selectMetric = (target: Extract<ChallengeTarget, { type: "bounty" }>) => {
+    if (dragItem) return;
+    if (metricInspectorDirty && selectedMetricId && selectedMetricId !== target.id) {
+      setPendingSelectedMetricId(target.id);
+      setMetricInspectorCollapsed(false);
+      return;
+    }
+    setSelectedMetricId(target.id);
+    setPendingSelectedMetricId(null);
+    setMetricInspectorCollapsed(false);
+  };
+  const applyPendingMetricSelection = () => {
+    if (!pendingSelectedMetricId) return;
+    setSelectedMetricId(pendingSelectedMetricId);
+    setPendingSelectedMetricId(null);
+    setMetricInspectorDirty(false);
+    setMetricInspectorCollapsed(false);
+  };
+  const closeMetricInspector = () => {
+    if (metricInspectorDirty) {
+      notify("请先保存或取消指标详情修改");
+      return;
+    }
+    setMetricInspectorCollapsed(true);
+    setPendingSelectedMetricId(null);
   };
 
   const beginObjectiveCreation = useCallback(
@@ -1212,6 +1283,11 @@ export function ChallengePlanPage() {
     onDropTargetChange: setDropTarget,
     onDrop: (target: DropTarget) => {
       if (!dragItem) return;
+      if (!canDropItem(dragItem, target)) {
+        setDragItem(null);
+        setDropTarget(null);
+        return;
+      }
       if (dragItem.type === "objective") {
         if (currentUser?.role !== "admin") {
           notify("只有指挥官可以移动目标项目归属");
@@ -1304,81 +1380,103 @@ export function ChallengePlanPage() {
         scope={scope}
         status={statusFilter}
       />
-      <ChallengeTree
-        emptyText={emptyText}
-        groups={displayedGroups}
-        handlers={{
-          activeActionId,
-          collapsedActionIds,
-          collapsedBountyIds,
-          commentCounts,
-          temporaryChildRow,
-          dragDrop,
-          editingTarget: effectiveEditingTarget,
-          alignmentRequests: challengeState.objectiveAlignmentRequests,
-          trialReviews: challengeState.objectiveTrialReviews,
-          currentUser,
-          draftObjectiveId,
-          canCreateObjective,
-          canManageProjects: currentUser?.role === "admin",
-          peerReviewActionLabel: (objectiveId) => peerReviewActionLabelForStatus(peerReviewActionStatuses[objectiveId]),
-          metricActionLabel: (objective) =>
-            metricCreationActionForObjective({
-              objective,
+      <div className={selectedMetric && !metricInspectorCollapsed ? "orf-challenge-workspace orf-challenge-workspace-with-inspector" : "orf-challenge-workspace"}>
+        <div className="orf-challenge-tree-pane">
+          <ChallengeTree
+            emptyText={emptyText}
+            groups={displayedGroups}
+            handlers={{
+              activeActionId,
+              collapsedActionIds,
+              collapsedBountyIds,
+              commentCounts,
+              temporaryChildRow,
+              dragDrop,
+              editingTarget: effectiveEditingTarget,
+              alignmentRequests: challengeState.objectiveAlignmentRequests,
+              trialReviews: challengeState.objectiveTrialReviews,
               currentUser,
-              permissionRules: challengeState.permissionRules,
-              now,
-            })?.label ?? null,
-          metricEditAccess: metricEditAccessForObjectiveId,
-          canPublishObjective: () => canCreateObjective,
-          canRecruitObjective: (objective) =>
-            canRecruitObjectiveChallengers({
-              objective,
-              currentUser,
-              permissionRules: challengeState.permissionRules,
-            }),
-          canMutateMetrics: canMutateMetricForObjective,
-          canMutateWorkItems: canMutateWorkItemsForObjective,
-          objectiveDeadlineEditState,
-          onActionDoneChange: setActionDone,
-          onActionRowAction: handleRowAction,
-          onActiveActionChange: activateRowAction,
-          onAddAction: addAction,
-          onAddBounty: addBounty,
-          onAddObjective: (projectId) => beginObjectiveCreation({ projectId }),
-          onAddSubAction: addSubAction,
-          onApproveApplication: approveAnchoredChallengeApplication,
-          onCancelEdit: cancelEdit,
-          onTemporaryChildTitleChange: (title) => setChildCreationSession((current) => updateChildCreationDraftTitle(current, title)),
-          onDraftTitleChange: (title) => setObjectiveCreationSession((current) => updateObjectiveCreationDraftTitle(current, title)),
-          onEditTarget: beginEdit,
-          onFreezeObjective: freezeObjective,
-          onRequestAlignment: requestObjectiveAlignment,
-          onReviewAlignment: reviewObjectiveAlignment,
-          onOpenActionChange: setOpenActionId,
-          onPublishObjective: publishObjective,
-          onRecruitObjective: (objectiveId) => openModal({ type: "recruitChallengers", objectiveId }),
-          onRejectApplication: rejectAnchoredChallengeApplication,
-          onCreateProject: (name) => createProject({ name }),
-          onDeleteProject: deleteProject,
-          onSaveObjectiveDeadline: saveObjectiveDeadline,
-          onSetObjectiveProject: setObjectiveProject,
-          onUnavailableObjectiveDeadline: notifyUnavailableObjectiveDeadline,
-          onUnavailableMetricEdit: notifyUnavailableMetricEdit,
-          onSaveMetricDetails: saveMetricDetails,
-          onSaveMetricDifficulty: saveMetricDifficulty,
-          onSaveTitle: saveTitle,
-          onSubActionDoneChange: setSubActionDone,
-          onToggleAction: (actionId) => setCollapsedActionIds((items) => toggleSetItem(items, actionId)),
-          onToggleBounty: (bountyId) => setCollapsedBountyIds((items) => toggleSetItem(items, bountyId)),
-          openActionId,
-          canManageFlow: canShowFrontend(currentUser, "challenge.scope.all"),
-        }}
-        now={now}
-        projects={challengeState.projects}
-        scope={scope}
-        visibleProjects={visibleProjects}
-      />
+              draftObjectiveId,
+              canCreateObjective,
+              canManageProjects: currentUser?.role === "admin",
+              canEditTargetTitle,
+              peerReviewActionLabel: (objectiveId) => peerReviewActionLabelForStatus(peerReviewActionStatuses[objectiveId]),
+              metricActionLabel: (objective) =>
+                metricCreationActionForObjective({
+                  objective,
+                  currentUser,
+                  permissionRules: challengeState.permissionRules,
+                  now,
+                })?.label ?? null,
+              metricEditAccess: metricEditAccessForObjectiveId,
+              canPublishObjective: () => canCreateObjective,
+              canRecruitObjective: (objective) =>
+                canRecruitObjectiveChallengers({
+                  objective,
+                  currentUser,
+                  permissionRules: challengeState.permissionRules,
+                }),
+              canMutateMetrics: canMutateMetricForObjective,
+              canMutateWorkItems: canMutateWorkItemsForObjective,
+              objectiveDeadlineEditState,
+              onActionDoneChange: setActionDone,
+              onActionRowAction: handleRowAction,
+              onActiveActionChange: activateRowAction,
+              onAddAction: addAction,
+              onAddBounty: addBounty,
+              onAddObjective: (projectId) => beginObjectiveCreation({ projectId }),
+              onAddSubAction: addSubAction,
+              onApproveApplication: approveAnchoredChallengeApplication,
+              onCancelEdit: cancelEdit,
+              onTemporaryChildTitleChange: (title) => setChildCreationSession((current) => updateChildCreationDraftTitle(current, title)),
+              onDraftTitleChange: (title) => setObjectiveCreationSession((current) => updateObjectiveCreationDraftTitle(current, title)),
+              onEditTarget: beginEdit,
+              onFreezeObjective: freezeObjective,
+              onRequestAlignment: requestObjectiveAlignment,
+              onReviewAlignment: reviewObjectiveAlignment,
+              onOpenActionChange: setOpenActionId,
+              onPublishObjective: publishObjective,
+              onRecruitObjective: (objectiveId) => openModal({ type: "recruitChallengers", objectiveId }),
+              onRejectApplication: rejectAnchoredChallengeApplication,
+              onCreateProject: (name) => createProject({ name }),
+              onDeleteProject: deleteProject,
+              onSaveObjectiveDeadline: saveObjectiveDeadline,
+              onSetObjectiveProject: setObjectiveProject,
+              onUnavailableObjectiveDeadline: notifyUnavailableObjectiveDeadline,
+              onUnavailableMetricEdit: notifyUnavailableMetricEdit,
+              onSaveMetricDifficulty: saveMetricDifficulty,
+              onSaveTitle: saveTitle,
+              onSelectMetric: selectMetric,
+              onSubActionDoneChange: setSubActionDone,
+              onToggleAction: (actionId) => setCollapsedActionIds((items) => toggleSetItem(items, actionId)),
+              onToggleBounty: (bountyId) => setCollapsedBountyIds((items) => toggleSetItem(items, bountyId)),
+              openActionId,
+              selectedMetricId,
+              canManageFlow: canShowFrontend(currentUser, "challenge.scope.all"),
+            }}
+            now={now}
+            projects={challengeState.projects}
+            scope={scope}
+            visibleProjects={visibleProjects}
+          />
+        </div>
+        {selectedMetric && !metricInspectorCollapsed ? (
+          <MetricInspectorPanel
+            access={metricEditAccessForObjectiveId(selectedMetric.objectiveId)}
+            objectiveTitle={selectedMetricObjective?.title ?? "目标不可用"}
+            onCancelPendingSelection={() => setPendingSelectedMetricId(null)}
+            onClose={closeMetricInspector}
+            onComment={() => setCommentTarget(commentTargetForChallengeTarget(metricTargetForResult(selectedMetric)))}
+            onDirtyChange={setMetricInspectorDirty}
+            onDiscardPendingSelection={applyPendingMetricSelection}
+            onSaveDetails={(details) => saveMetricDetails(metricTargetForResult(selectedMetric), details)}
+            onSaveDifficulty={(uncertaintyLevel) => saveMetricDifficulty(metricTargetForResult(selectedMetric), uncertaintyLevel)}
+            onSavePendingSelection={applyPendingMetricSelection}
+            pendingSelectionTitle={pendingSelectedMetric?.title ?? null}
+            result={selectedMetric}
+          />
+        ) : null}
+      </div>
 
       {commentTarget && (
         <CommentPanel

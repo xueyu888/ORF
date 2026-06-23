@@ -1,7 +1,7 @@
 import { clsx } from "clsx";
 import { CalendarDays, CheckCircle2, Clock3, FolderKanban, MessageSquare, Plus, Send, Trash2, UserPlus, type LucideIcon } from "lucide-react";
 import { createPortal } from "react-dom";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { FantasyDatePicker } from "../../../components/FantasyDatePicker";
@@ -26,13 +26,6 @@ import {
   objectiveFreezeReadinessAfterReestimate,
   shouldRenderObjectiveAsFrozen,
 } from "../../../domain/orfLifecycle";
-import {
-  normalizeResultDetails,
-  normalizeResultDetailsInput,
-  resultDetailText,
-  resultDetailsEqual,
-  type ResultDetailsInput,
-} from "../../../domain/orfResultDetails";
 import { uncertaintyLevelOptions } from "../../../domain/orfSettlement";
 import type {
   ObjectiveAlignmentRequest,
@@ -78,6 +71,7 @@ type RowHandlers = {
   editingTarget: ChallengeTarget | null;
   trialReviews: ObjectiveTrialReview[];
   canManageFlow: boolean;
+  canEditTargetTitle: (target: ChallengeTarget) => boolean;
   peerReviewActionLabel: (objectiveId: string) => string | null;
   objectiveDeadlineEditState: (objective: ObjectiveNode["objective"]) => ObjectiveDeadlineEditState;
   canMutateMetrics: (objectiveId: string) => boolean;
@@ -112,16 +106,17 @@ type RowHandlers = {
   onCreateProject: (name: string) => Promise<OrfProject | null>;
   onDeleteProject: (projectId: string) => Promise<boolean>;
   onSaveObjectiveDeadline: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
-  onSaveMetricDetails: (target: ChallengeTarget, details: ResultDetailsInput) => Promise<boolean>;
   onSetObjectiveProject: (objectiveId: string, projectId: string | null) => Promise<boolean>;
   onUnavailableObjectiveDeadline: (objective: ObjectiveNode["objective"]) => void;
   onSaveMetricDifficulty: (target: ChallengeTarget, uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
+  onSelectMetric: (target: Extract<ChallengeTarget, { type: "bounty" }>) => void;
   onUnavailableMetricEdit: (objectiveId: string) => void;
   onSaveTitle: (target: ChallengeTarget, title: string, context: TitleSubmissionContext) => boolean | void;
   onSubActionDoneChange: (actionId: string, itemId: string, done: boolean) => void;
   onToggleAction: (actionId: string) => void;
   onToggleBounty: (bountyId: string) => void;
   openActionId: string | null;
+  selectedMetricId: string | null;
 };
 
 export function ChallengeTree({
@@ -416,7 +411,12 @@ function ObjectivePanel({
               value={group.objective.title}
             />
           ) : (
-            <div className={clsx("orf-objective-title min-w-0 truncate font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{group.objective.title}</div>
+            <EditableTitlePreview
+              className={clsx("orf-objective-title min-w-0 truncate font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}
+              editable={handlers.canEditTargetTitle(target)}
+              selected={isEditingTarget}
+              title={group.objective.title}
+            />
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "objective", group.objective.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
           <ObjectiveProjectMenu
@@ -825,6 +825,7 @@ function MetricRow({
   const actionId = anchorId;
   const rowActive = handlers.activeActionId === actionId || isRowActionOpen(handlers.openActionId, actionId);
   const isEditingTarget = isSameTarget(handlers.editingTarget, target);
+  const selected = bounty ? handlers.selectedMetricId === bounty.result.id : false;
   const dropClass = bounty
     ? dropTargetClass(handlers.dragDrop.dropTarget, [
         { type: "bounty", bountyId: bounty.result.id },
@@ -835,16 +836,22 @@ function MetricRow({
   const statusLabel = temporary ? (temporary.status === "submitting" ? "保存中" : "草稿") : bountyStatusLabel[bounty!.status];
 
   return (
-    <div className="orf-result-row-frame relative" data-details-open={rowActive ? "true" : undefined}>
+    <div className="orf-result-row-frame relative">
       <div
         className={clsx(
           "orf-result-row orf-challenge-row orf-challenge-row-bounty orf-row-depth-1 group relative grid items-center px-5",
           rowActive && "orf-row-active",
+          selected && "orf-row-selected",
           bounty && handlers.dragDrop.dragItem?.type === "bounty" && handlers.dragDrop.dragItem.id === bounty.result.id && "orf-row-dragging",
           dropClass,
         )}
         data-challenge-row-target={anchorId}
+        data-selected={selected ? "true" : undefined}
         data-scope={scope}
+        onClick={(event) => {
+          if (disabled || !bounty || shouldIgnoreMetricSelection(event)) return;
+          handlers.onSelectMetric(target as Extract<ChallengeTarget, { type: "bounty" }>);
+        }}
         onDoubleClick={(event) => {
           if (!disabled) handleRowDoubleClick(event, target, handlers.onEditTarget);
         }}
@@ -890,7 +897,12 @@ function MetricRow({
               value={temporary ? temporary.title : bounty!.result.title}
             />
           ) : (
-            <div className={clsx("orf-result-title truncate font-semibold", complete ? "text-[#98a2b3] line-through" : temporary ? "text-[#475467]" : "text-[#1d2939]")}>{title}</div>
+            <EditableTitlePreview
+              className={clsx("orf-result-title truncate font-semibold", complete ? "text-[#98a2b3] line-through" : temporary ? "text-[#475467]" : "text-[#1d2939]")}
+              editable={handlers.canEditTargetTitle(target)}
+              selected={selected || isEditingTarget}
+              title={title}
+            />
           )}
           {bounty && <CommentCountBadge count={commentCountFor(handlers.commentCounts, "result", bounty.result.id)} onClick={() => handlers.onActionRowAction("comment", target)} />}
         </HierarchyCell>
@@ -910,124 +922,6 @@ function MetricRow({
         <TimeValue icon={Clock3} value={bounty ? bounty.updatedAt || "未设置" : "未设置"} />
         <ProgressValue value={bounty ? bounty.progress : 0} />
         {scope === "mine" ? <EmptySlot /> : null}
-      </div>
-      {bounty && (
-        <MetricDetailsBlock
-          access={handlers.metricEditAccess(bounty.result.objectiveId)}
-          onSave={(details) => handlers.onSaveMetricDetails(target, details)}
-          onUnavailable={() => handlers.onUnavailableMetricEdit(bounty.result.objectiveId)}
-          result={bounty.result}
-        />
-      )}
-    </div>
-  );
-}
-
-function MetricDetailsBlock({
-  access,
-  onSave,
-  onUnavailable,
-  result,
-}: {
-  access: MetricEditAccess;
-  onSave: (details: ResultDetailsInput) => Promise<boolean>;
-  onUnavailable: () => void;
-  result: BountyNode["result"];
-}) {
-  const persistedDetails = useMemo(
-    () => normalizeResultDetails(result),
-    [result.detail],
-  );
-  const detail = resultDetailText(result);
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [draft, setDraft] = useState<ResultDetailsInput>(persistedDetails);
-
-  useEffect(() => {
-    setEditing(false);
-    setSaving(false);
-    setDraft(persistedDetails);
-  }, [result.id]);
-
-  useEffect(() => {
-    if (!editing) setDraft(persistedDetails);
-  }, [editing, persistedDetails]);
-
-  const beginEdit = () => {
-    if (saving) return;
-    if (access.status !== "allowed") {
-      onUnavailable();
-      return;
-    }
-    setDraft(persistedDetails);
-    setEditing(true);
-  };
-
-  const saveDetails = async () => {
-    if (saving) return;
-    const nextDetails = normalizeResultDetailsInput(draft);
-    if (resultDetailsEqual(nextDetails, persistedDetails)) {
-      setEditing(false);
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const saved = await onSave(nextDetails);
-      if (saved) setEditing(false);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className={clsx("orf-result-details-shell", editing && "orf-result-details-shell-editing")} data-no-row-edit="true">
-      <div className="orf-result-details-inner">
-        {editing ? (
-          <form
-            className="orf-result-details-editor"
-            onDoubleClick={(event) => event.stopPropagation()}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveDetails();
-            }}
-          >
-            <textarea
-              aria-label="编辑指标详情"
-              className="orf-result-details-textarea"
-              disabled={saving}
-              onBlur={() => {
-                if (!saving) void saveDetails();
-              }}
-              onChange={(event) => setDraft({ detail: event.target.value })}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                  void saveDetails();
-                }
-              }}
-              rows={4}
-              value={draft.detail}
-            />
-          </form>
-        ) : (
-          <div
-            className={clsx("orf-result-details-view", !detail && "orf-result-details-empty")}
-            onDoubleClick={(event) => {
-              event.stopPropagation();
-              beginEdit();
-            }}
-            tabIndex={0}
-          >
-            {detail ? (
-              <p className="orf-result-details-text">{detail}</p>
-            ) : (
-              <p className="orf-result-details-placeholder">
-                未填写指标详情，双击编辑。Enter 保存，Shift+Enter 换行，点击外部保存。
-              </p>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1160,7 +1054,12 @@ function ActionRow({
               value={temporary ? temporary.title : action!.title}
             />
           ) : (
-            <div className={clsx("orf-task-title min-w-0 truncate font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : temporary ? "text-[#475467]" : "text-[#1d2939]")}>{title}</div>
+            <EditableTitlePreview
+              className={clsx("orf-task-title min-w-0 truncate font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : temporary ? "text-[#475467]" : "text-[#1d2939]")}
+              editable={handlers.canEditTargetTitle(target)}
+              selected={isSameTarget(handlers.editingTarget, target)}
+              title={title}
+            />
           )}
           {action && <CommentCountBadge count={commentCountFor(handlers.commentCounts, "task", action.id)} onClick={() => handlers.onActionRowAction("comment", target)} />}
         </HierarchyCell>
@@ -1292,7 +1191,12 @@ function SubActionRow({
             value={temporary ? temporary.title : item!.label}
           />
         ) : (
-          <div className={clsx("orf-subtask-title truncate font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : temporary ? "text-[#475467]" : "text-[#344054]")}>{title}</div>
+          <EditableTitlePreview
+            className={clsx("orf-subtask-title truncate font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : temporary ? "text-[#475467]" : "text-[#344054]")}
+            editable={handlers.canEditTargetTitle(target)}
+            selected={isSameTarget(handlers.editingTarget, target)}
+            title={title}
+          />
         )}
         {item && <CommentCountBadge count={commentCountFor(handlers.commentCounts, "subtask", item.id)} onClick={() => handlers.onActionRowAction("comment", target)} />}
       </HierarchyCell>
@@ -1350,6 +1254,51 @@ function StatusChip({ tone, children }: { tone: "accepted" | "active" | "done" |
       <span className="orf-status-chip-dot" aria-hidden="true" />
       {children}
     </span>
+  );
+}
+
+function EditableTitlePreview({
+  className,
+  editable,
+  selected = false,
+  title,
+}: {
+  className: string;
+  editable: boolean;
+  selected?: boolean;
+  title: string;
+}) {
+  return (
+    <div
+      className={clsx("orf-editable-title-preview", className)}
+      data-editable={editable ? "true" : undefined}
+      data-selected={selected ? "true" : undefined}
+      data-title-edit-target="true"
+      title={editable ? `${title}\n双击编辑标题` : title}
+    >
+      {title}
+    </div>
+  );
+}
+
+function shouldIgnoreMetricSelection(event: MouseEvent<HTMLElement>) {
+  const target = event.target;
+  return target instanceof Element && Boolean(
+    target.closest(
+      [
+        "[data-challenge-row-actions]",
+        "[data-challenge-disclosure-action]",
+        "[data-no-row-edit]",
+        "[data-no-row-select]",
+        "button",
+        "a",
+        "input",
+        "textarea",
+        "select",
+        "[role='button']",
+        "[role='menuitem']",
+      ].join(","),
+    ),
   );
 }
 
