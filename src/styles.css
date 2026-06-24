@@ -9334,23 +9334,8 @@ button.work-logs-team-cell:focus-visible {
   gap: 12px;
 }
 
-.orf-loot-review-decision {
-  display: inline-flex;
-  min-width: 216px;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  color: var(--orf-text-secondary);
-  font-size: 12px;
-  font-weight: 780;
-}
-
 .orf-loot-select {
   width: 100%;
-}
-
-.orf-loot-compact-select {
-  width: 112px;
 }
 
 .orf-loot-table-select {
@@ -9414,13 +9399,18 @@ button.work-logs-team-cell:focus-visible {
   background: var(--orf-bg-row-hover);
 }
 
-.orf-loot-submission-table th:nth-child(2),
-.orf-loot-submission-table td:nth-child(2) {
-  width: 96px;
+.orf-loot-result-review-table {
+  min-width: max(100%, 760px);
 }
 
 .orf-loot-result-review-table th:nth-child(2),
 .orf-loot-result-review-table td:nth-child(2) {
+  min-width: 260px;
+  width: 36%;
+}
+
+.orf-loot-result-review-table th:nth-child(3),
+.orf-loot-result-review-table td:nth-child(3) {
   width: 172px;
 }
 
@@ -9538,6 +9528,20 @@ button.work-logs-team-cell:focus-visible {
   font-size: 12px;
   font-weight: 760;
   line-height: 1.35;
+}
+
+.orf-loot-claim-cell {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.orf-loot-claim-evidence {
+  color: var(--orf-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .orf-loot-result-badge,

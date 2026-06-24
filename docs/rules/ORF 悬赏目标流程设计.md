@@ -107,7 +107,7 @@
 战利品结构化保存到 `objectiveLoot`：
 
 - `body`：完成说明。
-- `resultClaims`：每个指标的完成、证伪或未主张状态。
+- `resultClaims`：每个指标的完成、证伪或未完成状态；接口内部兼容值 `notClaimed` 在界面展示为“未完成”。
 - `evidenceText`：每个指标对应的证据说明。
 - `selfTestReportBody` / `selfTestReportUrl`：自测报告占位。
 

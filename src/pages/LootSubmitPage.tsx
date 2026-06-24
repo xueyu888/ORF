@@ -42,7 +42,10 @@ import {
   type ContributionMemberTarget,
 } from "../domain/orfObjectiveParticipants";
 import { resultDetailText } from "../domain/orfResultDetails";
-import { objectiveAcceptedResultFromReviews } from "../domain/orfSettlement";
+import {
+  acceptedResultForClaim,
+  objectiveAcceptedResultFromReviews,
+} from "../domain/orfSettlement";
 import type {
   ContributionAllocation,
   ContributionReviewDraftMetricRow,
@@ -59,7 +62,7 @@ import type {
 const lootClaimOptions: Array<FantasySelectOption<LootResultClaimStatus>> = [
   { label: "完成", value: "completed" },
   { label: "证伪", value: "falsified" },
-  { label: "未主张", value: "notClaimed" },
+  { label: "未完成", value: "notClaimed" },
 ];
 
 const resultReviewOptions: Array<FantasySelectOption<ResultAcceptedResult>> = [
@@ -67,11 +70,6 @@ const resultReviewOptions: Array<FantasySelectOption<ResultAcceptedResult>> = [
   { label: "证伪", value: "falsified" },
   { label: "失败", value: "failed" },
   { label: "不验收", value: "unreviewed" },
-];
-
-const reviewDecisionOptions: Array<FantasySelectOption<"passed" | "notPassed">> = [
-  { label: "通过", value: "passed" },
-  { label: "不通过", value: "notPassed" },
 ];
 
 const trialDecisionOptions: Array<FantasySelectOption<Exclude<ObjectiveTrialReviewStatus, "requested">>> = [
@@ -362,7 +360,6 @@ export function LootSubmitPage() {
   const [settlementSummaryError, setSettlementSummaryError] = useState("");
   const [settlementSummaryLoading, setSettlementSummaryLoading] = useState(false);
   const [reason, setReason] = useState("");
-  const [reviewDecision, setReviewDecision] = useState<"passed" | "notPassed">("passed");
   const [trialDecision, setTrialDecision] =
     useState<Exclude<ObjectiveTrialReviewStatus, "requested">>("approved");
   const [trialFeedback, setTrialFeedback] = useState("");
@@ -388,14 +385,23 @@ export function LootSubmitPage() {
       }
       return next;
     });
+  }, [results]);
+
+  useEffect(() => {
     setResultReviews((current) => {
+      if (!latestLoot) return current;
+      const claimByResultId = new Map(
+        latestLoot.resultClaims.map((claim) => [claim.resultId, claim.claim]),
+      );
       const next: typeof current = {};
       for (const result of results) {
-        next[result.id] = current[result.id] ?? "completed";
+        next[result.id] =
+          current[result.id] ??
+          acceptedResultForClaim(claimByResultId.get(result.id));
       }
       return next;
     });
-  }, [results]);
+  }, [latestLoot, results]);
 
   const settlementContributionTargets = challengerAllocationTargets;
   const contributionReviewMatrix = useMemo(
@@ -452,15 +458,23 @@ export function LootSubmitPage() {
         ? "更新匿名互评"
         : "提交匿名互评";
   const reviewedResultValues = useMemo(
-    () =>
-      reviewDecision === "notPassed"
-        ? results.map(() => "failed" as ResultAcceptedResult)
-        : results.map((result) => resultReviews[result.id] ?? "completed"),
-    [reviewDecision, resultReviews, results],
+    () => {
+      const claimByResultId = new Map(
+        (latestLoot?.resultClaims ?? []).map((claim) => [
+          claim.resultId,
+          claim.claim,
+        ]),
+      );
+      return results.map(
+        (result) =>
+          resultReviews[result.id] ??
+          acceptedResultForClaim(claimByResultId.get(result.id)),
+      );
+    },
+    [latestLoot?.resultClaims, resultReviews, results],
   );
-  const objectiveReviewResult = reviewDecision === "notPassed"
-    ? "abandoned"
-    : objectiveAcceptedResultFromReviews(reviewedResultValues);
+  const objectiveReviewResult =
+    objectiveAcceptedResultFromReviews(reviewedResultValues);
 
   useEffect(() => {
     setResolutionEdited(false);
@@ -831,15 +845,9 @@ export function LootSubmitPage() {
       return;
     }
 
-    if (reviewDecision === "passed" && objectiveReviewResult === "abandoned") {
-      setError("通过验收时，指标验收结果不能包含失败或不验收");
-      return;
-    }
-
     setSubmittingAction("review");
     try {
       const ok = await reviewObjectiveLoot(objective.id, {
-        acceptedResult: objectiveReviewResult,
         lootId: latestLoot.id,
         reason: reason.trim() || undefined,
         resultReviews: results.map((result, index) => ({
@@ -1060,7 +1068,6 @@ export function LootSubmitPage() {
               {latestLoot && (
                 <LootSubmissionReviewPanel
                   loot={latestLoot}
-                  results={results}
                 />
               )}
               <div className="orf-loot-section">
@@ -1073,23 +1080,9 @@ export function LootSubmitPage() {
                       按挑战者提交的证据确认每个指标结论。
                     </div>
                   </div>
-                  <div className="orf-loot-review-decision">
-                    <span>验收结论</span>
-                    <FantasySelectMenu
-                      ariaLabel="验收结论"
-                      className="orf-loot-select orf-loot-compact-select"
-                      onChange={(value) => {
-                        setReviewDecision(value);
-                        if (error) setError("");
-                      }}
-                      options={reviewDecisionOptions}
-                      value={reviewDecision}
-                      variant="filter"
-                    />
-                  </div>
                 </div>
                 <ResultReviewTable
-                  readOnly={reviewDecision === "notPassed"}
+                  lootClaims={latestLoot?.resultClaims ?? []}
                   results={results}
                   values={resultReviews}
                   onChange={(resultId, value) => {
@@ -1518,13 +1511,9 @@ export function LootSubmitPage() {
 
 function LootSubmissionReviewPanel({
   loot,
-  results,
 }: {
   loot: ObjectiveLoot;
-  results: Result[];
 }) {
-  const resultById = new Map(results.map((result) => [result.id, result]));
-
   return (
     <div className="orf-loot-panel orf-loot-submission-review">
       <div className="orf-loot-panel-heading">
@@ -1563,36 +1552,6 @@ function LootSubmissionReviewPanel({
           )}
         </div>
       )}
-      <div className="orf-loot-table-wrap">
-        <table className="orf-loot-table orf-loot-submission-table">
-          <thead className="orf-surface-muted orf-text-secondary">
-            <tr>
-              <th className="px-3 py-2 font-semibold">指标</th>
-              <th className="px-3 py-2 font-semibold">主张</th>
-              <th className="px-3 py-2 font-semibold">证据</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loot.resultClaims.map((claim) => (
-              <tr key={claim.resultId}>
-                <td className="px-3 py-2 font-medium orf-text-primary">
-                  {resultById.get(claim.resultId)?.title ?? claim.resultId}
-                </td>
-                <td className="px-3 py-2 orf-text-secondary">
-                  {lootClaimLabel(claim.claim)}
-                </td>
-                <td className="px-3 py-2 orf-text-secondary">
-                  {claim.evidenceText ? (
-                    <LinkifiedText text={claim.evidenceText} />
-                  ) : (
-                    <span className="orf-text-muted">-</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
@@ -1627,12 +1586,12 @@ function linkifiedText(text: string): ReactNode[] {
 }
 
 function ResultReviewTable({
-  readOnly,
+  lootClaims,
   results,
   values,
   onChange,
 }: {
-  readOnly: boolean;
+  lootClaims: LootResultClaim[];
   results: Result[];
   values: Record<string, ResultAcceptedResult>;
   onChange: (resultId: string, value: ResultAcceptedResult) => void;
@@ -1645,20 +1604,25 @@ function ResultReviewTable({
     );
   }
 
+  const claimByResultId = new Map(
+    lootClaims.map((claim) => [claim.resultId, claim]),
+  );
+
   return (
     <div className="orf-loot-table-wrap">
       <table className="orf-loot-table orf-loot-result-review-table">
         <thead className="orf-surface-muted orf-text-secondary">
           <tr>
             <th className="px-3 py-2 font-semibold">指标</th>
+            <th className="px-3 py-2 font-semibold">完成声明与证据</th>
             <th className="px-3 py-2 font-semibold">结论</th>
           </tr>
         </thead>
         <tbody>
           {results.map((result) => {
-            const currentValue = readOnly
-              ? "failed"
-              : values[result.id] ?? "completed";
+            const claim = claimByResultId.get(result.id);
+            const currentValue =
+              values[result.id] ?? acceptedResultForClaim(claim?.claim);
             const detail = resultDetailText(result);
             return (
               <tr key={result.id}>
@@ -1669,20 +1633,30 @@ function ResultReviewTable({
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  {readOnly ? (
-                    <span className={resultReviewBadgeClass(currentValue)}>
-                      {resultReviewLabel(currentValue)}
+                  <div className="orf-loot-claim-cell">
+                    <span className={lootClaimBadgeClass(claim?.claim)}>
+                      {claim ? lootClaimLabel(claim.claim) : "未完成"}
                     </span>
-                  ) : (
-                    <FantasySelectMenu
-                      ariaLabel={`${result.title} 验收结论`}
-                      className="orf-loot-select orf-loot-table-select"
-                      onChange={(value) => onChange(result.id, value)}
-                      options={resultReviewOptions}
-                      value={currentValue}
-                      variant="filter"
-                    />
-                  )}
+                    {claim?.evidenceText ? (
+                      <div className="orf-loot-claim-evidence">
+                        <LinkifiedText text={claim.evidenceText} />
+                      </div>
+                    ) : (
+                      <div className="orf-loot-claim-evidence orf-text-muted">
+                        -
+                      </div>
+                    )}
+                  </div>
+                </td>
+                <td className="px-3 py-2">
+                  <FantasySelectMenu
+                    ariaLabel={`${result.title} 验收结论`}
+                    className="orf-loot-select orf-loot-table-select"
+                    onChange={(value) => onChange(result.id, value)}
+                    options={resultReviewOptions}
+                    value={currentValue}
+                    variant="filter"
+                  />
                 </td>
               </tr>
             );
@@ -2422,6 +2396,16 @@ function resultReviewLabel(value: ResultAcceptedResult) {
 }
 
 function resultReviewBadgeClass(value: ResultAcceptedResult) {
+  if (value === "completed") {
+    return "orf-loot-result-badge orf-loot-result-badge-success";
+  }
+  if (value === "falsified") {
+    return "orf-loot-result-badge orf-loot-result-badge-info";
+  }
+  return "orf-loot-result-badge orf-loot-result-badge-warning";
+}
+
+function lootClaimBadgeClass(value: LootResultClaimStatus | undefined) {
   if (value === "completed") {
     return "orf-loot-result-badge orf-loot-result-badge-success";
   }

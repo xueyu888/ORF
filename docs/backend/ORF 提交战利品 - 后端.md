@@ -31,7 +31,7 @@
 
 - `completed`：主张该指标完成。
 - `falsified`：主张该指标被有效证伪。
-- `notClaimed`：不主张该指标完成或证伪。
+- `notClaimed`：该指标未完成；接口字段保留 `notClaimed` 兼容值，前端展示为“未完成”。
 
 自测报告文件化能力依赖编辑器接入，当前先保存 `selfTestReportBody` 文本摘要。
 
