@@ -101,12 +101,7 @@ function createMainWindow(clientUrl, options = {}) {
     backgroundColor: "#f6f8fb",
     autoHideMenuBar: true,
     show: options.show !== false,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload: path.join(__dirname, "preload.cjs"),
-      sandbox: true,
-    },
+    webPreferences: desktopBrowserWindowWebPreferences(),
   });
   const webContentsId = mainWindow.webContents.id;
   desktopShellState.clientUrl = clientUrl;
@@ -116,6 +111,12 @@ function createMainWindow(clientUrl, options = {}) {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     const targetUrl = new URL(url);
     if (targetUrl.origin === clientUrl.origin) {
+      if (isChatImagePopoutUrl(targetUrl)) {
+        return {
+          action: "allow",
+          overrideBrowserWindowOptions: chatImagePopoutBrowserWindowOptions(),
+        };
+      }
       return { action: "allow" };
     }
     void shell.openExternal(url);
@@ -164,6 +165,33 @@ function createMainWindow(clientUrl, options = {}) {
   void mainWindow.loadURL(clientUrl.toString());
   updateDesktopUnreadState();
   return mainWindow;
+}
+
+function desktopBrowserWindowWebPreferences() {
+  return {
+    contextIsolation: true,
+    nodeIntegration: false,
+    preload: path.join(__dirname, "preload.cjs"),
+    sandbox: true,
+  };
+}
+
+function isChatImagePopoutUrl(url) {
+  return url.pathname.startsWith("/chat/image-popout/");
+}
+
+function chatImagePopoutBrowserWindowOptions() {
+  return {
+    autoHideMenuBar: true,
+    backgroundColor: "#f7f8fb",
+    frame: false,
+    minHeight: 360,
+    minWidth: 520,
+    resizable: true,
+    show: true,
+    title: "ORF 图片窗口",
+    webPreferences: desktopBrowserWindowWebPreferences(),
+  };
 }
 
 function resolveDesktopIconPath() {

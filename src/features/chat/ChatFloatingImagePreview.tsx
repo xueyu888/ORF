@@ -25,7 +25,9 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useParams } from "react-router-dom";
 import type { ChatAttachment } from "../../types/orf";
+import { toggleMaximizeDesktopWindow } from "../desktop/desktopShellRuntime";
 import {
   currentChatAttachmentPreviewImage,
   moveChatAttachmentPreviewImage,
@@ -84,6 +86,11 @@ type ChatImageViewerState = {
   thumbnailsOpen: boolean;
   zoom: number;
 };
+type ChatImagePopoutPayload = {
+  createdAt: number;
+  currentIndex: number;
+  images: ChatAttachment[];
+};
 
 const ChatFloatingImagePreviewContext = createContext<ChatFloatingImagePreviewContextValue | null>(null);
 const chatImageZoomMin = 0.25;
@@ -100,11 +107,19 @@ const chatImageWindowBodyPaddingX = 36;
 const chatImageWindowBodyPaddingY = 36;
 const chatImageWindowFallbackWidth = 900;
 const chatImageWindowFallbackHeight = 760;
+const chatImagePopoutPayloadPrefix = "orf:chat-image-popout:";
+const chatImagePopoutPayloadMaxAgeMs = 12 * 60 * 60 * 1000;
+const chatImagePopoutWindowName = "orf-chat-image-popout";
 
 export function ChatFloatingImagePreviewProvider({ children }: { children: ReactNode }) {
   const sessionIdRef = useRef(0);
   const [session, setSession] = useState<ChatFloatingImagePreviewSession | null>(null);
   const openImagePreview = useCallback((nextPreview: ChatAttachmentImagePreviewState) => {
+    if (openChatImagePopoutWindow(nextPreview)) {
+      setSession(null);
+      return;
+    }
+
     sessionIdRef.current += 1;
     setSession({ preview: nextPreview, sessionId: sessionIdRef.current });
   }, []);
@@ -153,14 +168,18 @@ function ChatFloatingImagePreviewWindow({
   onClose,
   onNavigateImage,
   onSelectImage,
+  onToggleHostMaximize,
   preview,
   sessionId,
+  standalone = false,
 }: {
   onClose: () => void;
   onNavigateImage: (direction: -1 | 1) => void;
   onSelectImage: (index: number) => void;
+  onToggleHostMaximize?: () => void;
   preview: ChatAttachmentImagePreviewState;
   sessionId: number;
+  standalone?: boolean;
 }) {
   const attachment = currentChatAttachmentPreviewImage(preview);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -239,6 +258,7 @@ function ChatFloatingImagePreviewWindow({
     });
   };
   const startWindowMove = (event: ReactPointerEvent<HTMLElement>) => {
+    if (standalone) return;
     if (event.button !== 0 || maximized || isChatImageWindowInteractiveTarget(event.target)) return;
     windowInteractionRef.current = {
       kind: "move",
@@ -268,6 +288,10 @@ function ChatFloatingImagePreviewWindow({
   };
   const handleWindowHeaderDoubleClick = (event: ReactMouseEvent<HTMLElement>) => {
     if (isChatImageWindowInteractiveTarget(event.target)) return;
+    if (standalone && onToggleHostMaximize) {
+      onToggleHostMaximize();
+      return;
+    }
     toggleWindowMaximized();
   };
   const handleImageWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
@@ -498,17 +522,20 @@ function ChatFloatingImagePreviewWindow({
   const displayedZoomPercent = imageSize && naturalSize
     ? Math.max(1, Math.round((imageSize.width / naturalSize.width) * 100))
     : Math.round(viewerState.zoom * 100);
-  const windowStyle = {
-    "--orf-chat-image-window-height": `${Math.round(windowGeometry.rect.height)}px`,
-    "--orf-chat-image-window-left": `${Math.round(windowGeometry.rect.x)}px`,
-    "--orf-chat-image-window-top": `${Math.round(windowGeometry.rect.y)}px`,
-    "--orf-chat-image-window-width": `${Math.round(windowGeometry.rect.width)}px`,
-  } as CSSProperties;
+  const windowStyle = standalone
+    ? undefined
+    : {
+        "--orf-chat-image-window-height": `${Math.round(windowGeometry.rect.height)}px`,
+        "--orf-chat-image-window-left": `${Math.round(windowGeometry.rect.x)}px`,
+        "--orf-chat-image-window-top": `${Math.round(windowGeometry.rect.y)}px`,
+        "--orf-chat-image-window-width": `${Math.round(windowGeometry.rect.width)}px`,
+      } as CSSProperties;
 
   const windowNode = (
     <div
       aria-label="聊天图片查看器"
       className="orf-chat-floating-image-preview"
+      data-window-layout={standalone ? "popout" : "floating"}
       data-window-interaction={windowInteraction ?? "idle"}
       data-window-mode={windowGeometry.mode}
       role="dialog"
@@ -583,7 +610,13 @@ function ChatFloatingImagePreviewWindow({
               aria-label={maximized ? "还原图片窗口" : "放大图片窗口"}
               title={maximized ? "还原窗口" : "放大窗口"}
               type="button"
-              onClick={toggleWindowMaximized}
+              onClick={() => {
+                if (standalone && onToggleHostMaximize) {
+                  onToggleHostMaximize();
+                  return;
+                }
+                toggleWindowMaximized();
+              }}
             >
               {maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
@@ -647,7 +680,7 @@ function ChatFloatingImagePreviewWindow({
           ))}
         </div>
       )}
-      {chatImageWindowResizeEdges.map((edge) => (
+      {!standalone && chatImageWindowResizeEdges.map((edge) => (
         <div
           aria-hidden="true"
           className={`orf-chat-floating-image-preview-resize-handle orf-chat-floating-image-preview-resize-${edge}`}
@@ -659,7 +692,61 @@ function ChatFloatingImagePreviewWindow({
     </div>
   );
 
-  return createPortal(windowNode, document.body);
+  return standalone ? windowNode : createPortal(windowNode, document.body);
+}
+
+export function ChatImagePopoutPage() {
+  const { popoutId } = useParams<{ popoutId: string }>();
+  const [preview, setPreview] = useState<ChatAttachmentImagePreviewState | null>(() => readChatImagePopoutPreview(popoutId));
+
+  useEffect(() => {
+    const attachment = preview ? currentChatAttachmentPreviewImage(preview) : null;
+    document.title = attachment?.fileName ? `${attachment.fileName} - ORF` : "ORF 图片窗口";
+  }, [preview]);
+
+  const closeWindow = () => {
+    if (popoutId) removeChatImagePopoutPayload(popoutId);
+    window.close();
+  };
+  const navigateImage = (direction: -1 | 1) => {
+    setPreview((current) => current ? moveChatAttachmentPreviewImage(current, direction) : current);
+  };
+  const selectImage = (index: number) => {
+    setPreview((current) => current ? selectChatAttachmentPreviewImage(current, index) : current);
+  };
+  const toggleHostMaximize = () => {
+    void toggleMaximizeDesktopWindow().then((result) => {
+      if (result.status !== "success") {
+        toggleBrowserPopoutMaximize();
+      }
+    });
+  };
+
+  if (!preview) {
+    return (
+      <main className="orf-chat-image-popout-page">
+        <section className="orf-chat-image-popout-empty" role="alert">
+          <h1>图片窗口已失效</h1>
+          <p>请回到聊天消息里重新打开图片。</p>
+          <button type="button" onClick={() => window.close()}>关闭窗口</button>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="orf-chat-image-popout-page">
+      <ChatFloatingImagePreviewWindow
+        preview={preview}
+        sessionId={0}
+        standalone
+        onClose={closeWindow}
+        onNavigateImage={navigateImage}
+        onSelectImage={selectImage}
+        onToggleHostMaximize={toggleHostMaximize}
+      />
+    </main>
+  );
 }
 
 function defaultChatImageViewerState(hasMultipleImages: boolean): ChatImageViewerState {
@@ -855,6 +942,181 @@ function clampChatImageZoom(value: number) {
 
 function isChatImageViewerShortcutEditableTarget(target: EventTarget | null) {
   return target instanceof HTMLElement && Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+}
+
+function openChatImagePopoutWindow(preview: ChatAttachmentImagePreviewState) {
+  if (typeof window === "undefined" || isChatImageWindowMobileViewport()) return false;
+  const payload = chatImagePopoutPayload(preview);
+  if (!payload) return false;
+  const popoutId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+  try {
+    cleanupStaleChatImagePopoutPayloads();
+    window.localStorage.setItem(chatImagePopoutPayloadKey(popoutId), JSON.stringify(payload));
+    const popout = window.open(
+      `/chat/image-popout/${encodeURIComponent(popoutId)}`,
+      chatImagePopoutWindowName,
+      chatImagePopoutWindowFeatures(payload),
+    );
+    if (!popout) {
+      removeChatImagePopoutPayload(popoutId);
+      return false;
+    }
+    popout.focus();
+    return true;
+  } catch {
+    removeChatImagePopoutPayload(popoutId);
+    return false;
+  }
+}
+
+function chatImagePopoutPayload(preview: ChatAttachmentImagePreviewState): ChatImagePopoutPayload | null {
+  const images = preview.images.map(normalizeChatImagePopoutAttachment).filter((image): image is ChatAttachment => Boolean(image));
+  if (images.length === 0) return null;
+  return {
+    createdAt: Date.now(),
+    currentIndex: clampPreviewIndex(preview.currentIndex, images.length - 1),
+    images,
+  };
+}
+
+function readChatImagePopoutPreview(popoutId?: string) {
+  if (!popoutId || typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(chatImagePopoutPayloadKey(popoutId));
+    if (!raw) return null;
+    const payload = normalizeChatImagePopoutPayload(JSON.parse(raw));
+    if (!payload || Date.now() - payload.createdAt > chatImagePopoutPayloadMaxAgeMs) {
+      removeChatImagePopoutPayload(popoutId);
+      return null;
+    }
+    return {
+      kind: "image" as const,
+      currentIndex: payload.currentIndex,
+      images: payload.images,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeChatImagePopoutPayload(value: unknown): ChatImagePopoutPayload | null {
+  if (!value || typeof value !== "object") return null;
+  const payload = value as Partial<ChatImagePopoutPayload>;
+  const images = Array.isArray(payload.images)
+    ? payload.images.map(normalizeChatImagePopoutAttachment).filter((image): image is ChatAttachment => Boolean(image))
+    : [];
+  if (images.length === 0) return null;
+  const createdAt = typeof payload.createdAt === "number" && Number.isFinite(payload.createdAt)
+    ? payload.createdAt
+    : 0;
+  return {
+    createdAt,
+    currentIndex: clampPreviewIndex(typeof payload.currentIndex === "number" ? payload.currentIndex : 0, images.length - 1),
+    images,
+  };
+}
+
+function normalizeChatImagePopoutAttachment(value: unknown): ChatAttachment | null {
+  if (!value || typeof value !== "object") return null;
+  const attachment = value as Partial<ChatAttachment>;
+  const id = safeChatImagePopoutText(attachment.id);
+  const fileName = safeChatImagePopoutText(attachment.fileName);
+  const mimeType = safeChatImagePopoutText(attachment.mimeType);
+  const contentUrl = safeChatImagePopoutText(attachment.contentUrl);
+  if (!id || !fileName || !mimeType.startsWith("image/") || !contentUrl) return null;
+  return {
+    id,
+    fileName,
+    mimeType,
+    contentUrl,
+    createdAt: safeChatImagePopoutText(attachment.createdAt),
+    fileSize: safeChatImagePopoutNumber(attachment.fileSize) ?? 0,
+    height: safeChatImagePopoutNumber(attachment.height),
+    width: safeChatImagePopoutNumber(attachment.width),
+  };
+}
+
+function safeChatImagePopoutText(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function safeChatImagePopoutNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function chatImagePopoutPayloadKey(popoutId: string) {
+  return `${chatImagePopoutPayloadPrefix}${popoutId}`;
+}
+
+function removeChatImagePopoutPayload(popoutId: string) {
+  try {
+    window.localStorage.removeItem(chatImagePopoutPayloadKey(popoutId));
+  } catch {
+    // Ignore best-effort cleanup failures.
+  }
+}
+
+function cleanupStaleChatImagePopoutPayloads() {
+  try {
+    const now = Date.now();
+    for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.localStorage.key(index);
+      if (!key?.startsWith(chatImagePopoutPayloadPrefix)) continue;
+      const raw = window.localStorage.getItem(key);
+      if (!raw) continue;
+      const payload = normalizeChatImagePopoutPayload(JSON.parse(raw));
+      if (!payload || now - payload.createdAt > chatImagePopoutPayloadMaxAgeMs) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Stale popout payloads are temporary display state; cleanup is best-effort.
+  }
+}
+
+function chatImagePopoutWindowFeatures(payload: ChatImagePopoutPayload) {
+  const image = payload.images[clampPreviewIndex(payload.currentIndex, payload.images.length - 1)];
+  const screenWidth = typeof window.screen?.availWidth === "number" ? window.screen.availWidth : window.innerWidth;
+  const screenHeight = typeof window.screen?.availHeight === "number" ? window.screen.availHeight : window.innerHeight;
+  const hasThumbnails = payload.images.length > 1;
+  const width = clamp(
+    Math.round((image?.width ?? chatImageWindowFallbackWidth) + chatImageWindowBodyPaddingX),
+    chatImageWindowMinWidth,
+    Math.max(chatImageWindowMinWidth, Math.round(screenWidth * 0.88)),
+  );
+  const height = clamp(
+    Math.round((image?.height ?? chatImageWindowFallbackHeight) + chatImageWindowChromeHeight + chatImageWindowBodyPaddingY + (hasThumbnails ? chatImageWindowThumbnailHeight : 0)),
+    chatImageWindowMinHeight,
+    Math.max(chatImageWindowMinHeight, Math.round(screenHeight * 0.88)),
+  );
+  const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - width) / 2));
+  const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - height) / 2));
+  return [
+    "popup=yes",
+    "resizable=yes",
+    "scrollbars=no",
+    `width=${width}`,
+    `height=${height}`,
+    `left=${left}`,
+    `top=${top}`,
+  ].join(",");
+}
+
+function toggleBrowserPopoutMaximize() {
+  try {
+    const width = window.screen.availWidth || window.outerWidth;
+    const height = window.screen.availHeight || window.outerHeight;
+    window.moveTo(0, 0);
+    window.resizeTo(width, height);
+  } catch {
+    // Browser popups may reject scripted maximize; native chrome remains available.
+  }
+}
+
+function clampPreviewIndex(index: number, lastIndex: number) {
+  if (lastIndex <= 0) return 0;
+  return Math.min(Math.max(Math.floor(index), 0), lastIndex);
 }
 
 function clamp(value: number, min: number, max: number) {
