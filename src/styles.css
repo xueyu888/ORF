@@ -14118,7 +14118,7 @@ body[data-dragging-floating="true"] {
   min-height: 0;
   align-items: center;
   justify-items: center;
-  overflow: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
   background: #ffffff;
   padding: 18px;
@@ -14128,6 +14128,7 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-chat-floating-image-preview-body[data-can-pan="true"] {
+  overflow: auto;
   cursor: grab;
 }
 
