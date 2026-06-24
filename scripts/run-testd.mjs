@@ -397,8 +397,7 @@ function workerFractions(currentWorkers) {
 }
 
 function defaultPlaywrightWorkerCount() {
-  // Keep full-suite database and global-setting operations stable by default.
-  return Math.max(1, Math.min(4, Math.floor(logicalCpuCount() / 2)));
+  return Math.max(1, Math.floor(logicalCpuCount() / 2));
 }
 
 function logicalCpuCount() {
