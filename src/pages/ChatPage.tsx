@@ -8,10 +8,10 @@ import { AttachmentPreview, ChannelModal, ConversationModal, DeleteMessageDialog
 import { ChatHeader } from "../features/chat/ChatHeader";
 import {
   createChatAttachmentPreviewState,
-  moveChatAttachmentPreviewImage,
+  type ChatAttachmentFilePreviewState,
   type ChatAttachmentPreviewHandler,
-  type ChatAttachmentPreviewState,
 } from "../features/chat/chatAttachmentPreview";
+import { useChatFloatingImagePreview } from "../features/chat/ChatFloatingImagePreview";
 import { matchesChatShortcutKey } from "../features/chat/chatKeyboardShortcuts";
 import { ChatMessageFeed } from "../features/chat/ChatMessageFeed";
 import { ChatRightPanel } from "../features/chat/ChatRightPanel";
@@ -157,16 +157,19 @@ export function ChatPage() {
   });
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [markingUnreadChannelsRead, setMarkingUnreadChannelsRead] = useState(false);
-  const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachmentPreviewState | null>(null);
+  const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachmentFilePreviewState | null>(null);
   const [memberSearchFocusSignal, setMemberSearchFocusSignal] = useState(0);
   const handledBootstrapInvalidationKeyRef = useRef("");
   const openChannelRequestIdRef = useRef(0);
+  const { openImagePreview } = useChatFloatingImagePreview();
   const openAttachmentPreview = useCallback<ChatAttachmentPreviewHandler>((attachment, messageAttachments) => {
-    setAttachmentPreview(createChatAttachmentPreviewState(messageAttachments, attachment));
-  }, []);
-  const navigateAttachmentPreview = useCallback((direction: -1 | 1) => {
-    setAttachmentPreview((current) => current ? moveChatAttachmentPreviewImage(current, direction) : current);
-  }, []);
+    const preview = createChatAttachmentPreviewState(messageAttachments, attachment);
+    if (preview.kind === "image") {
+      openImagePreview(preview);
+      return;
+    }
+    setAttachmentPreview(preview);
+  }, [openImagePreview]);
   const mobileViewport = useChatMobileViewport();
   const routeSystemChannel = routeSystemConversationId
     ? channels.find((channel) => channel.systemKind === SYSTEM_CONVERSATION_DEFINITIONS[routeSystemConversationId].stream) ?? null
@@ -1229,7 +1232,6 @@ export function ChatPage() {
       {attachmentPreview && (
         <AttachmentPreview
           onClose={() => setAttachmentPreview(null)}
-          onNavigateImage={navigateAttachmentPreview}
           preview={attachmentPreview}
         />
       )}

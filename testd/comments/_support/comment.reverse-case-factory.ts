@@ -323,10 +323,10 @@ function s0Assertions(definition: ReverseCommentCaseDefinition): StepSpec[] {
       step("S0-2", "playwright", "comment_panel.original_body.visible", "评论窗口 应显示 本用例原始评论正文", "page.comment_panel", "body_visible", {
         bodyFrom: "data.rootCommentBody",
       }),
-      step("S0-3", "playwright", "comment_message.edit.hidden", "本用例原始评论的 \"编辑评论\" 操作 应不可见", "page.comment_message", "edit_hidden", {
+      step("S0-3", "playwright", "comment_message.edit.hidden", "将鼠标悬停在本用例原始评论后，\"编辑评论\" 操作 应不可见", "page.comment_message", "edit_hidden", {
         bodyFrom: "data.rootCommentBody",
       }),
-      step("S0-4", "playwright", "comment_message.delete.hidden", "本用例原始评论的 \"删除评论\" 操作 应不可见", "page.comment_message", "delete_hidden", {
+      step("S0-4", "playwright", "comment_message.delete.hidden", "将鼠标悬停在本用例原始评论后，\"删除评论\" 操作 应不可见", "page.comment_message", "delete_hidden", {
         bodyFrom: "data.rootCommentBody",
       }),
       step("S0-5", "prisma", "db.comment.original.persisted", "数据库中 应存在 本用例原始评论正文", "db.comment", "root_persisted", {
@@ -346,10 +346,10 @@ function s0Assertions(definition: ReverseCommentCaseDefinition): StepSpec[] {
       step("S0-2", "playwright", "comment_panel.body.visible", "评论窗口 应显示 本用例测试评论正文", "page.comment_panel", "body_visible", {
         bodyFrom: "data.commentBody",
       }),
-      step("S0-3", "playwright", "comment_message.delete.hidden", "本用例测试评论的 \"删除评论\" 操作 应不可见", "page.comment_message", "delete_hidden", {
+      step("S0-3", "playwright", "comment_message.delete.hidden", "将鼠标悬停在本用例测试评论后，\"删除评论\" 操作 应不可见", "page.comment_message", "delete_hidden", {
         bodyFrom: "data.commentBody",
       }),
-      step("S0-4", "playwright", "comment_message.edit.hidden", "本用例测试评论的 \"编辑评论\" 操作 应不可见", "page.comment_message", "edit_hidden", {
+      step("S0-4", "playwright", "comment_message.edit.hidden", "将鼠标悬停在本用例测试评论后，\"编辑评论\" 操作 应不可见", "page.comment_message", "edit_hidden", {
         bodyFrom: "data.commentBody",
       }),
       step("S0-5", "prisma", "db.comment.body.persisted", "数据库中 应存在 本用例测试评论正文", "db.comment", "root_persisted", {
