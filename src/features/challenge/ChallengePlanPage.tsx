@@ -102,6 +102,7 @@ import {
   canEditObjectiveContent,
   canMutateObjectiveWorkItems,
   canRecruitObjectiveChallengers,
+  canReinforceObjectiveChallengers,
   canSubmitObjectivePeerReview,
   metricCreationActionForObjective,
   metricEditAccessForObjective,
@@ -1416,6 +1417,12 @@ export function ChallengePlanPage() {
                   currentUser,
                   permissionRules: challengeState.permissionRules,
                 }),
+              canReinforceObjective: (objective) =>
+                canReinforceObjectiveChallengers({
+                  objective,
+                  currentUser,
+                  permissionRules: challengeState.permissionRules,
+                }),
               canMutateMetrics: canMutateMetricForObjective,
               canMutateWorkItems: canMutateWorkItemsForObjective,
               objectiveDeadlineEditState,
@@ -1437,6 +1444,7 @@ export function ChallengePlanPage() {
               onOpenActionChange: setOpenActionId,
               onPublishObjective: publishObjective,
               onRecruitObjective: (objectiveId) => openModal({ type: "recruitChallengers", objectiveId }),
+              onReinforceObjective: (objectiveId) => openModal({ type: "reinforceChallengers", objectiveId }),
               onRejectApplication: rejectAnchoredChallengeApplication,
               onCreateProject: (name) => createProject({ name }),
               onDeleteProject: deleteProject,

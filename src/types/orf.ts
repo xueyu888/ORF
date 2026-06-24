@@ -15,6 +15,7 @@ export type NotificationKind =
   | "challenge.application.approved"
   | "challenge.application.rejected"
   | "objective.recruitment.created"
+  | "objective.reinforcement.added"
   | "objective.challenge.accepted"
   | "objective.alignment.requested"
   | "objective.alignment.reviewed"

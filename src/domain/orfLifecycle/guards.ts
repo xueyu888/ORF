@@ -27,6 +27,10 @@ export function canRecruitObjectiveChallengersByFlow(target: ObjectiveLifecycleT
   return policyFlag(target, "canRecruitChallengers");
 }
 
+export function canReinforceObjectiveChallengersByFlow(target: ObjectiveLifecycleTarget): boolean {
+  return policyFlag(target, "canReinforceChallengers");
+}
+
 export function canAcceptObjectiveChallengeByFlow(target: ObjectiveLifecycleTarget): boolean {
   return policyFlag(target, "canAcceptChallenge");
 }

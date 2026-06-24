@@ -84,6 +84,7 @@ type RowHandlers = {
   metricEditAccess: (objectiveId: string) => MetricEditAccess;
   canPublishObjective: (objective: ObjectiveNode["objective"]) => boolean;
   canRecruitObjective: (objective: ObjectiveNode["objective"]) => boolean;
+  canReinforceObjective: (objective: ObjectiveNode["objective"]) => boolean;
   onActionDoneChange: (actionId: string, done: boolean) => void;
   onActionRowAction: (action: ChallengeRowAction, target: ChallengeTarget) => void;
   onActiveActionChange: (id: string | null) => void;
@@ -102,6 +103,7 @@ type RowHandlers = {
   onOpenActionChange: (id: string | null) => void;
   onPublishObjective: (objectiveId: string) => Promise<boolean>;
   onRecruitObjective: (objectiveId: string) => void;
+  onReinforceObjective: (objectiveId: string) => void;
   onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onCreateProject: (name: string) => Promise<OrfProject | null>;
   onDeleteProject: (projectId: string) => Promise<boolean>;
@@ -773,6 +775,15 @@ function ObjectiveFlowAction({
       <Button size="sm" variant="secondary" disabled={disabled} type="button" title={disabled ? "完成目标标题后可征召" : "征召挑战者"} onClick={() => handlers.onRecruitObjective(objective.id)}>
         <UserPlus className="h-3.5 w-3.5" />
         征召
+      </Button>,
+    );
+  }
+
+  if (handlers.canReinforceObjective(objective)) {
+    actions.push(
+      <Button size="sm" variant="secondary" disabled={disabled} type="button" title={disabled ? "完成目标标题后可加派" : "加派挑战者"} onClick={() => handlers.onReinforceObjective(objective.id)}>
+        <UserPlus className="h-3.5 w-3.5" />
+        加派
       </Button>,
     );
   }

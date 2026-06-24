@@ -44,12 +44,13 @@ export function GlobalModals() {
   const { modal } = useOrf();
 
   if (modal.type === "newResult") return <NewResultModal objectiveId={modal.objectiveId} source={modal.source} />;
-  if (modal.type === "recruitChallengers") return <RecruitChallengersModal key={modal.objectiveId} objectiveId={modal.objectiveId} />;
+  if (modal.type === "recruitChallengers") return <AssignChallengersModal key={`${modal.objectiveId}:recruit`} mode="recruit" objectiveId={modal.objectiveId} />;
+  if (modal.type === "reinforceChallengers") return <AssignChallengersModal key={`${modal.objectiveId}:reinforce`} mode="reinforce" objectiveId={modal.objectiveId} />;
   return null;
 }
 
-function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
-  const { state, closeModal, recruitObjectiveChallengers } = useOrf();
+function AssignChallengersModal({ mode, objectiveId }: { mode: "recruit" | "reinforce"; objectiveId?: string }) {
+  const { state, closeModal, recruitObjectiveChallengers, reinforceObjectiveChallengers } = useOrf();
   const objective = state.objectives.find((item) => item.id === objectiveId);
   const candidates = objective
     ? state.users.filter(
@@ -64,6 +65,10 @@ function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
   const [submitting, setSubmitting] = useState(false);
 
   if (!objective) return null;
+  const modalTitle = mode === "reinforce" ? "加派挑战者" : "征召挑战者";
+  const submitLabel = mode === "reinforce" ? "确认加派" : "发送征召";
+  const emptyLabel = mode === "reinforce" ? "没有可加派的成员。" : "没有可征召的成员。";
+  const action = mode === "reinforce" ? reinforceObjectiveChallengers : recruitObjectiveChallengers;
 
   const toggleMember = (memberUserId: string) => {
     setSelectedMemberUserIds((items) =>
@@ -72,7 +77,7 @@ function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
   };
 
   return (
-    <ModalFrame title="征召挑战者">
+    <ModalFrame title={modalTitle}>
       <form
         className="grid gap-4"
         onSubmit={async (event) => {
@@ -80,7 +85,7 @@ function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
           if (selectedMemberUserIds.length === 0 || submitting) return;
           setSubmitting(true);
           try {
-            const ok = await recruitObjectiveChallengers(objective.id, selectedMemberUserIds);
+            const ok = await action(objective.id, selectedMemberUserIds);
             if (ok) closeModal();
           } finally {
             setSubmitting(false);
@@ -99,12 +104,12 @@ function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
                 <span className="font-medium orf-text-primary">{user.name}</span>
                 <span className="ml-2 orf-text-muted">{user.email}</span>
               </span>
-              <input aria-label={`征召 ${user.name}`} checked={selectedMemberUserIds.includes(user.id)} onChange={() => toggleMember(user.id)} type="checkbox" />
+              <input aria-label={`${modalTitle} ${user.name}`} checked={selectedMemberUserIds.includes(user.id)} onChange={() => toggleMember(user.id)} type="checkbox" />
             </label>
           ))}
-          {candidates.length === 0 && <div className="rounded-lg border orf-border px-3 py-6 text-center text-sm orf-text-secondary">没有可征召的成员。</div>}
+          {candidates.length === 0 && <div className="rounded-lg border orf-border px-3 py-6 text-center text-sm orf-text-secondary">{emptyLabel}</div>}
         </div>
-        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button disabled={selectedMemberUserIds.length === 0 || submitting} type="submit">发送征召</Button></div>
+        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button disabled={selectedMemberUserIds.length === 0 || submitting} type="submit">{submitLabel}</Button></div>
       </form>
     </ModalFrame>
   );

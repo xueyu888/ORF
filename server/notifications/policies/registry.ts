@@ -82,6 +82,11 @@ export const notificationPolicyRegistry: Record<NotificationKind, NotificationPo
     replyTarget: "notification-target",
     stream: "personalNotification",
   },
+  "objective.reinforcement.added": {
+    kind: "objective.reinforcement.added",
+    replyTarget: "notification-target",
+    stream: "personalNotification",
+  },
   "worklog.reminder": {
     kind: "worklog.reminder",
     replyTarget: "none",

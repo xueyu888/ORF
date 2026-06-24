@@ -187,6 +187,12 @@ export function businessMutationFailureMessage(error: unknown, fallback: string)
       if (error.message === "Objective result points must be calibrated before freezing") {
         return "请先校准目标下所有指标积分，再完成对齐冻结";
       }
+      if (error.message === "Objective is not open for reinforcement") {
+        return "目标当前阶段不能加派挑战者";
+      }
+      if (error.message === "Objective already includes all reinforcement candidates") {
+        return "选择的成员已经是目标挑战者";
+      }
       return error.message || "数据状态已变化，请刷新后再试";
     }
 
@@ -207,6 +213,9 @@ export function businessMutationFailureMessage(error: unknown, fallback: string)
       }
       if (error.message === "Objective alignment request is invalid") {
         return "对齐申请参数无效，请刷新后再试";
+      }
+      if (error.message === "Objective reinforcement candidates are invalid") {
+        return "加派成员必须是当前可用普通成员";
       }
     }
 

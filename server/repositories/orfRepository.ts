@@ -58,6 +58,7 @@ import {
   canMutateObjectiveCommentsByFlow,
   canMutateObjectiveResultsByFlow,
   canRecruitObjectiveChallengersByFlow,
+  canReinforceObjectiveChallengersByFlow,
   canReviewObjectiveChallengeApplications,
   canReviewObjectiveLootByFlow,
   canSettleObjectiveLootByFlow,
@@ -415,6 +416,29 @@ async function notifyMembersOfRecruitment(input: {
     targetType: "objective",
     teamId: input.teamId,
     title: "新的征召",
+  });
+}
+
+async function notifyMembersOfReinforcement(input: {
+  actorUserId: string;
+  memberUserIds: string[];
+  objectiveId: string;
+  objectiveTitle: string;
+  teamId: string;
+}) {
+  const actorName = await getUserNameById(input.actorUserId);
+  await publishNotificationEvent({
+    actorName: actorName || "指挥官",
+    actorUserId: input.actorUserId,
+    body: `你被加派到目标「${input.objectiveTitle}」，可以在我的挑战中处理执行事项。`,
+    kind: "objective.reinforcement.added",
+    metadata: { objectiveTitle: input.objectiveTitle },
+    recipientUserIds: await getActiveMemberNotificationRecipientsByIds(input.teamId, input.memberUserIds),
+    targetHref: challengeObjectiveHref("/tasks", input.objectiveId),
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "目标加派",
   });
 }
 
@@ -1448,6 +1472,95 @@ export async function recruitObjectiveChallengers(
   }
 
   return recruitedResult.status === "ok" ? objectiveOutcome(objectiveId, recruitedResult.scope) : recruitedResult;
+}
+
+export type ReinforceObjectiveChallengersOutcome =
+  | { status: "ok"; objective: Objective }
+  | { status: "notFound" }
+  | { status: "closed" }
+  | { status: "invalid" }
+  | { status: "duplicate" };
+
+export async function reinforceObjectiveChallengers(
+  objectiveId: string,
+  memberUserIds: string[],
+  actorId: string,
+): Promise<ReinforceObjectiveChallengersOutcome> {
+  const reinforcedResult = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective) return { status: "notFound" as const };
+    if (objectiveClosedForChallengeEntry(objective) || !canReinforceObjectiveChallengersByFlow(objective)) {
+      return { status: "closed" as const };
+    }
+
+    const currentChallengerUserIds = challengerUserIdsForRow(objective.challengerUserIds ?? []);
+    const reinforcementUserIds = uniqueParticipantUserIds(memberUserIds);
+    if (reinforcementUserIds.length === 0) return { status: "invalid" as const };
+
+    const reinforcementRows = await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, reinforcementUserIds);
+    if (reinforcementUserIds.some((userId) => !reinforcementRows.some((row) => row.id === userId))) {
+      return { status: "invalid" as const };
+    }
+
+    const reinforcementCandidates = reinforcementUserIds
+      .map((userId) => reinforcementRows.find((row) => row.id === userId))
+      .filter((member): member is ScopedMemberIdentity => Boolean(member))
+      .filter((member) => !currentChallengerUserIds.includes(member.id));
+    if (reinforcementCandidates.length === 0) return { status: "duplicate" as const };
+
+    const currentChallengers = uniqueParticipantNames(objective.challengers ?? []);
+    const nextChallengerUserIds = uniqueParticipantUserIds([
+      ...currentChallengerUserIds,
+      ...reinforcementCandidates.map((member) => member.id),
+    ]);
+    const nextChallengers = uniqueParticipantNames([
+      ...currentChallengers,
+      ...reinforcementCandidates.map((member) => member.name),
+    ]);
+    const nextAssignedChallengerUserIds = assignedChallengerUserIdsForRow(
+      objective.assignedChallengerUserIds ?? [],
+      nextChallengerUserIds,
+    );
+    const nextAssignedRows = await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, nextAssignedChallengerUserIds);
+    const assignedNameById = new Map(nextAssignedRows.map((member) => [member.id, member.name]));
+
+    await tx
+      .update(objectives)
+      .set({
+        challengers: nextChallengers,
+        challengerUserIds: nextChallengerUserIds,
+        assignedChallengers: nextAssignedChallengerUserIds.map((userId) => assignedNameById.get(userId)).filter((name): name is string => Boolean(name)),
+        assignedChallengerUserIds: nextAssignedChallengerUserIds,
+        updatedAt: today(),
+        updatedBy: actorId,
+      })
+      .where(eq(objectives.id, objectiveId));
+
+    return {
+      status: "ok" as const,
+      scope: runtimeScope(objective.teamId),
+      notification: {
+        actorUserId: actorId,
+        memberUserIds: reinforcementCandidates.map((member) => member.id),
+        objectiveId,
+        objectiveTitle: objective.title,
+        teamId: objective.teamId,
+      },
+    };
+  });
+
+  if (reinforcedResult.status !== "ok") return reinforcedResult;
+
+  await notifyMembersOfReinforcement(reinforcedResult.notification);
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.challenge.reinforcement.changed",
+    objectiveId,
+    teamId: runtimeScopeStorageId(reinforcedResult.scope),
+  });
+
+  const outcome = await objectiveOutcome(objectiveId, reinforcedResult.scope);
+  return outcome.status === "ok" ? { status: "ok", objective: outcome.objective } : { status: "notFound" };
 }
 
 export async function freezeObjectiveAfterReestimate(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {

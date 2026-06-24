@@ -25,6 +25,7 @@ export type ObjectiveFlowPolicy = {
   readonly canApplyForChallenge: boolean;
   readonly canReviewChallengeApplications: boolean;
   readonly canRecruitChallengers: boolean;
+  readonly canReinforceChallengers: boolean;
   readonly canAcceptChallenge: boolean;
   readonly canMutateResults: boolean;
   readonly canMutateWorkItems: boolean;

@@ -202,6 +202,21 @@ export function useOrfProviderObjectiveActions({
           return false;
         }
       },
+      reinforceObjectiveChallengers: async (objectiveId: string, memberUserIds: string[]) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/reinforcements`, {
+            method: "POST",
+            body: JSON.stringify({ memberUserIds }),
+          });
+          await refreshTaskManagementData();
+          notify("挑战者已加派");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "加派失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
       approveChallengeApplication: async (objectiveId: string, applicationId: string) => {
         try {
           await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge-applications/${encodeURIComponent(applicationId)}/approve`, { method: "PATCH" });

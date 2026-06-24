@@ -3,6 +3,7 @@ import { canReviewObjectiveTrialReview, latestObjectiveTrialReview } from "../..
 import {
   canFreezeObjectiveAfterReestimate,
   canRecruitObjectiveChallengersByFlow,
+  canReinforceObjectiveChallengersByFlow,
   canReviewObjectiveLootByFlow,
   canSettleObjectiveLootByFlow,
   canSubmitObjectiveContributionReviewByFlow,
@@ -12,6 +13,7 @@ import {
   isObjectiveSettledOrClosed,
   type ObjectiveFreezeReadiness,
 } from "../../../domain/orfLifecycle";
+import { objectiveChallengeEntryClosed } from "../../../domain/orfChallengeEntry";
 import {
   canMutateObjectiveWorkItemsForActor,
   objectiveWorkItemMutationAccess,
@@ -58,6 +60,13 @@ export function isObjectiveRecruitable(objective: Objective): boolean {
     canRecruitObjectiveChallengersByFlow(objective) &&
     !isObjectiveSettledOrClosed(objective) &&
     !objective.acceptedResult
+  );
+}
+
+export function isObjectiveReinforceable(objective: Objective): boolean {
+  return (
+    canReinforceObjectiveChallengersByFlow(objective) &&
+    !objectiveChallengeEntryClosed(objective)
   );
 }
 
@@ -187,6 +196,21 @@ export function canRecruitObjectiveChallengers({
   return (
     hasPermission(currentUser, permissionRules, "challenge.assign") &&
     isObjectiveRecruitable(objective)
+  );
+}
+
+export function canReinforceObjectiveChallengers({
+  objective,
+  currentUser,
+  permissionRules,
+}: {
+  objective: Objective;
+  currentUser: OrfUser | null;
+  permissionRules: PermissionRule[];
+}): boolean {
+  return (
+    hasPermission(currentUser, permissionRules, "challenge.assign") &&
+    isObjectiveReinforceable(objective)
   );
 }
 
