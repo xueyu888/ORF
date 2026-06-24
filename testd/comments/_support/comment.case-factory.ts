@@ -277,7 +277,7 @@ function createS0Assertions(definition: CommentCaseDefinition, actorLabel: strin
       step("S0-2", "playwright", "comment_panel.root_body.visible", "评论窗口 应显示 可回复外层评论正文", "page.comment_panel", "body_visible", {
         bodyFrom: "data.rootCommentBody",
       }),
-      step("S0-3", "playwright", "comment_message.reply.enabled", "可回复外层评论的 \"回复评论\" 操作 应可点击", "page.comment_message", "reply_enabled", {
+      step("S0-3", "playwright", "comment_message.reply.enabled", "将鼠标悬停在可回复外层评论后，\"回复评论\" 操作 应可点击", "page.comment_message", "reply_enabled", {
         bodyFrom: "data.rootCommentBody",
       }),
       step("S0-4", "prisma", "db.comment.root.persisted", "数据库中 应存在 可回复外层评论", "db.comment", "root_persisted", {
@@ -297,7 +297,7 @@ function createS0Assertions(definition: CommentCaseDefinition, actorLabel: strin
       step("S0-2", "playwright", "comment_panel.original_body.visible", "评论窗口 应显示 本用例原始评论正文", "page.comment_panel", "body_visible", {
         bodyFrom: "data.rootCommentBody",
       }),
-      step("S0-3", "playwright", "comment_message.edit.enabled", "本用例原始评论的 \"编辑评论\" 操作 应可点击", "page.comment_message", "edit_enabled", {
+      step("S0-3", "playwright", "comment_message.edit.enabled", "将鼠标悬停在本用例原始评论后，\"编辑评论\" 操作 应可点击", "page.comment_message", "edit_enabled", {
         bodyFrom: "data.rootCommentBody",
       }),
       step("S0-4", "prisma", "db.comment.original.persisted", "数据库中 应存在 本用例原始评论正文", "db.comment", "root_persisted", {
@@ -317,7 +317,7 @@ function createS0Assertions(definition: CommentCaseDefinition, actorLabel: strin
       step("S0-2", "playwright", "comment_panel.body.visible", "评论窗口 应显示 本用例测试评论正文", "page.comment_panel", "body_visible", {
         bodyFrom: "data.commentBody",
       }),
-      step("S0-3", "playwright", "comment_message.delete.enabled", "本用例测试评论的 \"删除评论\" 操作 应可点击", "page.comment_message", "delete_enabled", {
+      step("S0-3", "playwright", "comment_message.delete.enabled", "将鼠标悬停在本用例测试评论并打开 \"更多评论操作\" 后，\"删除评论\" 操作 应可点击", "page.comment_message", "delete_enabled", {
         bodyFrom: "data.commentBody",
       }),
       step("S0-4", "prisma", "db.comment.body.persisted", "数据库中 应存在 本用例测试评论正文", "db.comment", "root_persisted", {
@@ -367,7 +367,7 @@ function createActionSteps(definition: CommentCaseDefinition): StepSpec[] {
 
   if (definition.kind === "reply") {
     return [
-      step("Action-1", "playwright", "comment_message.click_reply", "点击 可回复外层评论的 \"回复评论\" 操作", "page.comment_message", "click_reply", {
+      step("Action-1", "playwright", "comment_message.click_reply", "将鼠标悬停在可回复外层评论并点击 \"回复评论\" 操作", "page.comment_message", "click_reply", {
         bodyFrom: "data.rootCommentBody",
       }),
       step("Action-2", "playwright", "comment_composer.fill_reply", "在回复评论输入框中输入本用例回复正文", "page.comment_composer", "fill_reply", {
@@ -381,7 +381,7 @@ function createActionSteps(definition: CommentCaseDefinition): StepSpec[] {
 
   if (definition.kind === "edit") {
     return [
-      step("Action-1", "playwright", "comment_message.click_edit", "点击 本用例原始评论的 \"编辑评论\" 操作", "page.comment_message", "click_edit", {
+      step("Action-1", "playwright", "comment_message.click_edit", "将鼠标悬停在本用例原始评论并点击 \"编辑评论\" 操作", "page.comment_message", "click_edit", {
         bodyFrom: "data.rootCommentBody",
       }),
       step("Action-2", "playwright", "comment_composer.fill_edit", "在编辑评论输入框中输入本用例编辑后评论正文", "page.comment_composer", "fill_edit", {
@@ -396,7 +396,7 @@ function createActionSteps(definition: CommentCaseDefinition): StepSpec[] {
 
   if (definition.kind === "delete") {
     return [
-      step("Action-1", "playwright", "comment_message.delete", "点击并确认 本用例测试评论的 \"删除评论\" 操作", "page.comment_message", "delete", {
+      step("Action-1", "playwright", "comment_message.delete", "将鼠标悬停在本用例测试评论，打开 \"更多评论操作\"，点击并确认 \"删除评论\" 操作", "page.comment_message", "delete", {
         bodyFrom: "data.commentBody",
         saveAs: "deleteResponse",
         urlEndsWithFrom: "runtime.rootComment.messageApiPath",
