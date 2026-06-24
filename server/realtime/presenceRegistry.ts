@@ -19,10 +19,8 @@ type PresenceClientSnapshot = {
   windowVisible?: boolean;
 };
 
-type PresenceSession = {
+type PresenceEvidence = {
   clientId: string;
-  connectedAt: string;
-  id: string;
   lastActiveAt: string;
   lastSeenAt: string;
   snapshot: PresenceClientSnapshot;
@@ -30,13 +28,25 @@ type PresenceSession = {
   userId: string;
 };
 
+type PresenceSession = PresenceEvidence & {
+  connectedAt: string;
+  id: string;
+};
+
+type PresenceActivityRecord = PresenceEvidence & {
+  id: string;
+};
+
 export const PRESENCE_ACTIVE_IDLE_THRESHOLD_SECONDS = 10 * 60;
 const PRESENCE_ACTIVE_IDLE_THRESHOLD_MS = PRESENCE_ACTIVE_IDLE_THRESHOLD_SECONDS * 1000;
+export const PRESENCE_ACTIVITY_HEARTBEAT_WINDOW_MS = 2 * 60 * 1000;
 const PRESENCE_RECENT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const defaultPresenceSource: ClientPresenceSource = "unknown";
 
 const sessionsById = new Map<string, PresenceSession>();
 const sessionIdsByUser = new Map<string, Set<string>>();
+const activityRecordsById = new Map<string, PresenceActivityRecord>();
+const activityRecordIdsByUser = new Map<string, Set<string>>();
 const publishedStateByUser = new Map<string, PresenceRuntimeState>();
 
 function userKey(teamId: string, userId: string) {
@@ -56,6 +66,10 @@ function parseIsoMs(value: string | null | undefined) {
 function sanitizeClientId(value: string | null | undefined, fallback: string) {
   const normalized = value?.trim();
   return normalized ? normalized.slice(0, 128) : fallback;
+}
+
+function activityRecordId(teamId: string, userId: string, clientId: string) {
+  return `${userKey(teamId, userId)}:${clientId}`;
 }
 
 function normalizeSource(value: unknown): ClientPresenceSource {
@@ -101,9 +115,64 @@ function sessionsForUser(teamId: string, userId: string) {
     .filter((session): session is PresenceSession => Boolean(session));
 }
 
-function isActiveSession(session: PresenceSession, nowMs: number) {
-  const idleSeconds = session.snapshot.systemIdleSeconds;
-  const idleState = session.snapshot.systemIdleState;
+function activityRecordIdsForUser(teamId: string, userId: string) {
+  return activityRecordIdsByUser.get(userKey(teamId, userId)) ?? new Set<string>();
+}
+
+function forgetActivityRecord(record: PresenceActivityRecord) {
+  activityRecordsById.delete(record.id);
+
+  const key = userKey(record.teamId, record.userId);
+  const activityRecordIds = activityRecordIdsByUser.get(key);
+  activityRecordIds?.delete(record.id);
+  if (activityRecordIds?.size === 0) {
+    activityRecordIdsByUser.delete(key);
+  }
+}
+
+function activityRecordsForUser(teamId: string, userId: string, nowMs: number) {
+  const records: PresenceActivityRecord[] = [];
+  for (const recordId of activityRecordIdsForUser(teamId, userId)) {
+    const record = activityRecordsById.get(recordId);
+    if (!record) continue;
+    if (nowMs - parseIsoMs(record.lastSeenAt) > PRESENCE_ACTIVITY_HEARTBEAT_WINDOW_MS) {
+      forgetActivityRecord(record);
+      continue;
+    }
+    records.push(record);
+  }
+  return records;
+}
+
+function rememberActivityRecord(input: {
+  clientId: string;
+  lastActiveAt: string;
+  lastSeenAt: string;
+  snapshot: PresenceClientSnapshot;
+  teamId: string;
+  userId: string;
+}) {
+  const id = activityRecordId(input.teamId, input.userId, input.clientId);
+  const record: PresenceActivityRecord = { ...input, id };
+  activityRecordsById.set(record.id, record);
+
+  const key = userKey(record.teamId, record.userId);
+  const activityRecordIds = activityRecordIdsByUser.get(key) ?? new Set<string>();
+  activityRecordIds.add(record.id);
+  activityRecordIdsByUser.set(key, activityRecordIds);
+  return record;
+}
+
+function presenceEvidenceForUser(teamId: string, userId: string, nowMs: number) {
+  return [
+    ...activityRecordsForUser(teamId, userId, nowMs),
+    ...sessionsForUser(teamId, userId),
+  ];
+}
+
+function isActivePresenceEvidence(evidence: PresenceEvidence, nowMs: number) {
+  const idleSeconds = evidence.snapshot.systemIdleSeconds;
+  const idleState = evidence.snapshot.systemIdleState;
   if (idleState === "locked") return false;
   if (typeof idleSeconds === "number" && Number.isFinite(idleSeconds)) {
     return idleSeconds < PRESENCE_ACTIVE_IDLE_THRESHOLD_SECONDS;
@@ -111,49 +180,34 @@ function isActiveSession(session: PresenceSession, nowMs: number) {
   if (idleState === "active") return true;
   if (idleState === "idle") return false;
 
-  if (session.snapshot.source === "desktop") {
-    if (session.snapshot.windowVisible === false || session.snapshot.windowMinimized === true) return false;
-    if (session.snapshot.windowFocused === false) return false;
+  if (evidence.snapshot.source === "desktop") {
+    if (evidence.snapshot.windowVisible === false || evidence.snapshot.windowMinimized === true) return false;
+    if (evidence.snapshot.windowFocused === false) return false;
   } else {
-    if (session.snapshot.documentVisible === false || session.snapshot.documentFocused === false) return false;
+    if (evidence.snapshot.documentVisible === false || evidence.snapshot.documentFocused === false) return false;
   }
 
-  return nowMs - parseIsoMs(session.lastActiveAt) < PRESENCE_ACTIVE_IDLE_THRESHOLD_MS;
+  return nowMs - parseIsoMs(evidence.lastActiveAt) < PRESENCE_ACTIVE_IDLE_THRESHOLD_MS;
 }
 
 function runtimeStateForUser(teamId: string, userId: string, nowMs = Date.now()): PresenceRuntimeState {
-  const sessions = sessionsForUser(teamId, userId);
-  if (sessions.length === 0) return "offline";
-  return sessions.some((session) => isActiveSession(session, nowMs)) ? "active" : "idle";
+  const evidence = presenceEvidenceForUser(teamId, userId, nowMs);
+  if (evidence.length === 0) return "offline";
+  return evidence.some((item) => isActivePresenceEvidence(item, nowMs)) ? "active" : "idle";
 }
 
-function activityIsActive(input: UserPresenceActivityInput | undefined, nowMs: number) {
-  if (!input) return true;
-  const lastActiveAt = nowIso(activeAtFromActivity(input, nowMs));
-  const snapshot = normalizeSnapshot(input);
-  return isActiveSession({
-    clientId: input.clientId ?? "activity",
-    connectedAt: nowIso(nowMs),
-    id: "activity",
-    lastActiveAt,
-    lastSeenAt: nowIso(nowMs),
-    snapshot,
-    teamId: "activity",
-    userId: "activity",
-  }, nowMs);
-}
-
-function rememberPublishedStateChange(teamId: string, userId: string, nowMs = Date.now()) {
+function storePublishedState(teamId: string, userId: string, state: PresenceRuntimeState) {
   const key = userKey(teamId, userId);
-  const nextState = runtimeStateForUser(teamId, userId, nowMs);
-  const previousState = publishedStateByUser.get(key) ?? "offline";
-  if (previousState === nextState) return false;
-  if (nextState === "offline") {
+  if (state === "offline") {
     publishedStateByUser.delete(key);
   } else {
-    publishedStateByUser.set(key, nextState);
+    publishedStateByUser.set(key, state);
   }
-  return true;
+}
+
+function rememberPublishedStateTransition(teamId: string, userId: string, previousState: PresenceRuntimeState, nextState: PresenceRuntimeState) {
+  storePublishedState(teamId, userId, nextState);
+  return previousState !== nextState;
 }
 
 export function connectRealtimePresence(input: {
@@ -163,6 +217,7 @@ export function connectRealtimePresence(input: {
   userId: string;
 }) {
   const nowMs = Date.now();
+  const previousState = runtimeStateForUser(input.teamId, input.userId, nowMs);
   const session: PresenceSession = {
     clientId: sanitizeClientId(input.clientId, input.sessionId),
     connectedAt: nowIso(nowMs),
@@ -183,12 +238,15 @@ export function connectRealtimePresence(input: {
   const sessionIds = sessionIdsByUser.get(key) ?? new Set<string>();
   sessionIds.add(session.id);
   sessionIdsByUser.set(key, sessionIds);
-  return rememberPublishedStateChange(session.teamId, session.userId, nowMs);
+  const nextState = runtimeStateForUser(session.teamId, session.userId, nowMs);
+  return rememberPublishedStateTransition(session.teamId, session.userId, previousState, nextState);
 }
 
 export function disconnectRealtimePresence(sessionId: string) {
   const session = sessionsById.get(sessionId);
   if (!session) return false;
+  const nowMs = Date.now();
+  const previousState = runtimeStateForUser(session.teamId, session.userId, nowMs);
   sessionsById.delete(sessionId);
 
   const key = userKey(session.teamId, session.userId);
@@ -198,7 +256,8 @@ export function disconnectRealtimePresence(sessionId: string) {
     sessionIdsByUser.delete(key);
   }
 
-  return rememberPublishedStateChange(session.teamId, session.userId);
+  const nextState = runtimeStateForUser(session.teamId, session.userId, nowMs);
+  return rememberPublishedStateTransition(session.teamId, session.userId, previousState, nextState);
 }
 
 export function recordRealtimePresenceActivity(input: {
@@ -208,9 +267,11 @@ export function recordRealtimePresenceActivity(input: {
   userId: string;
 }) {
   const nowMs = Date.now();
-  const clientId = sanitizeClientId(input.clientId ?? input.activity?.clientId, "");
+  const previousState = runtimeStateForUser(input.teamId, input.userId, nowMs);
+  const sessionClientId = sanitizeClientId(input.clientId ?? input.activity?.clientId, "");
+  const activityClientId = sanitizeClientId(input.clientId ?? input.activity?.clientId, "activity");
   const sessions = sessionsForUser(input.teamId, input.userId)
-    .filter((session) => !clientId || session.clientId === clientId);
+    .filter((session) => !sessionClientId || session.clientId === sessionClientId);
   const snapshot = normalizeSnapshot(input.activity);
   const lastActiveAt = nowIso(activeAtFromActivity(input.activity, nowMs));
   const lastSeenAt = nowIso(nowMs);
@@ -220,10 +281,19 @@ export function recordRealtimePresenceActivity(input: {
     session.lastActiveAt = lastActiveAt;
     session.lastSeenAt = lastSeenAt;
   }
+  rememberActivityRecord({
+    clientId: activityClientId,
+    lastActiveAt,
+    lastSeenAt,
+    snapshot,
+    teamId: input.teamId,
+    userId: input.userId,
+  });
+  const nextState = runtimeStateForUser(input.teamId, input.userId, nowMs);
 
   return {
-    active: sessions.some((session) => isActiveSession(session, nowMs)) || (sessions.length === 0 && activityIsActive(input.activity, nowMs)),
-    changed: sessions.length > 0 ? rememberPublishedStateChange(input.teamId, input.userId, nowMs) : false,
+    active: nextState === "active",
+    changed: rememberPublishedStateTransition(input.teamId, input.userId, previousState, nextState),
   };
 }
 
@@ -234,12 +304,14 @@ export function resolveRealtimeUserPresence(input: {
 }): ChatUser["presence"] {
   const nowMs = Date.now();
   const sessions = sessionsForUser(input.teamId, input.userId);
-  const connected = sessions.length > 0;
-  const activeSessions = sessions.filter((session) => isActiveSession(session, nowMs));
-  const runtimeState = activeSessions.length > 0 ? "active" : connected ? "idle" : "offline";
+  const activityRecords = activityRecordsForUser(input.teamId, input.userId, nowMs);
+  const evidence = [...activityRecords, ...sessions];
+  const connected = evidence.length > 0;
+  const activeEvidence = evidence.filter((item) => isActivePresenceEvidence(item, nowMs));
+  const runtimeState = activeEvidence.length > 0 ? "active" : connected ? "idle" : "offline";
   const lastActiveMs = Math.max(
     parseIsoMs(input.lastOnlineAt instanceof Date ? input.lastOnlineAt.toISOString() : input.lastOnlineAt),
-    ...sessions.map((session) => parseIsoMs(session.lastActiveAt)),
+    ...evidence.map((item) => parseIsoMs(item.lastActiveAt)),
   );
   const recent = !connected && lastActiveMs > 0 && nowMs - lastActiveMs < PRESENCE_RECENT_WINDOW_MS;
   const state: ChatPresenceState = runtimeState === "offline" && recent ? "recent" : runtimeState;
@@ -250,7 +322,7 @@ export function resolveRealtimeUserPresence(input: {
     connected,
     lastActiveAt: lastActiveMs ? nowIso(lastActiveMs) : null,
     online: active,
-    source: activeSessions[0]?.snapshot.source ?? sessions[0]?.snapshot.source ?? defaultPresenceSource,
+    source: activeEvidence[0]?.snapshot.source ?? evidence[0]?.snapshot.source ?? defaultPresenceSource,
     state,
   };
 }

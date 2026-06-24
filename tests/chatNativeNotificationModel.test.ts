@@ -272,7 +272,60 @@ test("realtime presence uses desktop system idle to separate active and idle con
   assert.equal(resolveRealtimeUserPresence({ teamId, userId }).state, "active");
 
   disconnectRealtimePresence(sessionId);
-  assert.equal(resolveRealtimeUserPresence({ lastOnlineAt: new Date().toISOString(), teamId, userId }).state, "recent");
+  const activityBackedPresence = resolveRealtimeUserPresence({ lastOnlineAt: new Date().toISOString(), teamId, userId });
+  assert.equal(activityBackedPresence.connected, true);
+  assert.equal(activityBackedPresence.state, "active");
+});
+
+test("realtime presence uses recent activity heartbeat when event stream session is missing", () => {
+  const teamId = `team-activity-presence-${Date.now()}`;
+  const userId = `user-activity-presence-${Date.now()}`;
+  const clientId = `client-activity-presence-${Date.now()}`;
+
+  const activeActivity = recordRealtimePresenceActivity({
+    activity: {
+      clientId,
+      source: "desktop",
+      systemIdleSeconds: 0,
+      systemIdleState: "active",
+      windowFocused: true,
+      windowMinimized: false,
+      windowVisible: true,
+    },
+    clientId,
+    teamId,
+    userId,
+  });
+  assert.equal(activeActivity.active, true);
+  assert.equal(activeActivity.changed, true);
+
+  const activePresence = resolveRealtimeUserPresence({ teamId, userId });
+  assert.equal(activePresence.connected, true);
+  assert.equal(activePresence.active, true);
+  assert.equal(activePresence.state, "active");
+  assert.equal(activePresence.source, "desktop");
+
+  const idleActivity = recordRealtimePresenceActivity({
+    activity: {
+      clientId,
+      source: "desktop",
+      systemIdleSeconds: PRESENCE_ACTIVE_IDLE_THRESHOLD_SECONDS + 1,
+      systemIdleState: "idle",
+      windowFocused: true,
+      windowMinimized: false,
+      windowVisible: true,
+    },
+    clientId,
+    teamId,
+    userId,
+  });
+  assert.equal(idleActivity.active, false);
+  assert.equal(idleActivity.changed, true);
+
+  const idlePresence = resolveRealtimeUserPresence({ teamId, userId });
+  assert.equal(idlePresence.connected, true);
+  assert.equal(idlePresence.active, false);
+  assert.equal(idlePresence.state, "idle");
 });
 
 test("chat native notification suppresses active thread replies only for the open thread", () => {
