@@ -13215,11 +13215,29 @@ body[data-dragging-floating="true"] {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.orf-comment-message-header {
+  min-width: 0;
+  min-height: 32px;
+}
+
+.orf-comment-composer-main {
   min-height: 28px;
+}
+
+.orf-comment-message-identity {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
 }
 
 .orf-comment-author-name {
   min-width: 0;
+  flex: 0 1 auto;
   overflow: hidden;
   color: #344054;
   font-size: 13px;
@@ -13228,16 +13246,9 @@ body[data-dragging-floating="true"] {
   white-space: nowrap;
 }
 
-.orf-comment-message-trailing {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
 .orf-comment-meta {
   display: inline-flex;
+  flex: 0 0 auto;
   min-width: max-content;
   align-items: center;
   color: #98a2b3;
@@ -13250,7 +13261,9 @@ body[data-dragging-floating="true"] {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
+  align-self: flex-start;
+  margin-left: auto;
   opacity: 0;
   pointer-events: none;
   transform: translateY(-1px);
@@ -13271,13 +13284,17 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-comment-message-actions .orf-control {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px !important;
+  flex: 0 0 32px;
+  aspect-ratio: 1 / 1;
   border-color: rgba(112, 137, 156, 0.16);
-  border-radius: 999px;
+  border-radius: 50%;
   background: rgba(255, 255, 255, 0.5);
   color: #667085;
+  padding: 0;
   box-shadow: none;
 }
 
