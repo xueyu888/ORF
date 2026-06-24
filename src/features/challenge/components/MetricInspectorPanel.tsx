@@ -3,6 +3,7 @@ import { MessageSquare, Pencil, Save, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { FantasySelectMenu, type FantasySelectOption } from "../../../components/FantasySelectMenu";
 import { Button, IconButton } from "../../../components/ui";
+import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
 import {
   normalizeResultDetails,
   normalizeResultDetailsInput,
@@ -43,6 +44,7 @@ export function MetricInspectorPanel({
   pendingSelectionTitle,
   result,
 }: MetricInspectorPanelProps) {
+  const panelDrag = useDraggableFloating<HTMLElement>({ resetKey: result.id });
   const persistedDetails = useMemo(
     () => normalizeResultDetails(result),
     [result.id, result.detail],
@@ -148,8 +150,13 @@ export function MetricInspectorPanel({
   };
 
   return (
-    <aside className="orf-metric-inspector-panel" data-no-row-edit="true">
-      <header className="orf-metric-inspector-header">
+    <aside
+      ref={panelDrag.ref}
+      className="orf-metric-inspector-panel orf-draggable-floating"
+      data-no-row-edit="true"
+      style={panelDrag.style}
+    >
+      <header className="orf-metric-inspector-header orf-drag-handle" {...panelDrag.handleProps}>
         <div className="min-w-0">
           <div className="orf-metric-inspector-kicker">指标详情</div>
           <h2 className="orf-metric-inspector-title" title={result.title}>{result.title}</h2>

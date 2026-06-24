@@ -84,9 +84,10 @@ function workLogSaveFailureMessage(reason: string) {
   if (reason === "categoryForbidden") return "只有管理员可以使用工作日志分类";
   if (reason === "classificationConflict") return "工作日志只能选择一个目标或一个分类";
   if (reason === "emptyBody") return "工作日志内容不能为空";
+  if (reason === "estimateRequired") return "请填写目标进度估计";
   if (reason === "invalidCategory") return "工作日志分类不存在或不能使用";
   if (reason === "invalidDuration") return "记录时间必须是 1-1440 分钟的整数";
-  if (reason === "invalidEstimate") return "目标剩余估计必须是 0-100 的整数";
+  if (reason === "invalidEstimate") return "目标进度估计必须是 0-100 的整数";
   if (reason === "objectiveRequired") return "当前账号填写工作日志时必须选择目标";
   return "目标不存在或当前用户不能给该目标填写工作日志";
 }

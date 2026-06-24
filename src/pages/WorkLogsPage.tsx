@@ -42,6 +42,7 @@ import { readModelInvalidationKey } from "../features/realtime/readModelInvalida
 import {
   canSaveUnscopedWorkLog,
   canUseWorkLogCategories,
+  requiresObjectiveProgressEstimate,
 } from "../domain/orfWorkLogs";
 import {
   applyWorkLogEditorDraftPatch,
@@ -52,13 +53,14 @@ import {
   classificationSelectValueFromDraft,
   formatWorkLogDurationMinutes,
   parseWorkLogDurationInput,
-  parseWorkLogEstimateInput,
+  parseWorkLogProgressEstimateInput,
   suggestionMatchesWorkLogDraft,
   validateWorkLogEditorDraft,
   workLogDraftPatchFromClassificationSelect,
   workLogDraftPatchFromSuggestion,
   workLogEditorDraftFromEntry,
   workLogEntryClassification,
+  workLogProgressEstimatePercentFromRemaining,
   workLogEntryTargetLabel,
   workLogSuggestionLabel,
   type WorkLogClassificationChoice,
@@ -176,6 +178,7 @@ export function WorkLogsPage() {
     currentUser?.role === "admin" || currentUser?.role === "member";
   const canUseWorkLogCategoryControls = canUseWorkLogCategories(currentUser);
   const canSaveWithoutObjective = canSaveUnscopedWorkLog(currentUser);
+  const objectiveProgressEstimateRequired = requiresObjectiveProgressEstimate(currentUser);
 
   useEffect(() => {
     const nextDate = dateFromSearch(location.search);
@@ -318,6 +321,7 @@ export function WorkLogsPage() {
     ? validateWorkLogEditorDraft(editorDraft, {
         allowCategories: canUseWorkLogCategoryControls,
         allowUncategorized: canSaveWithoutObjective,
+        requireObjectiveProgressEstimate: objectiveProgressEstimateRequired,
       })
     : "";
   const editorBaselineKey = JSON.stringify(
@@ -469,7 +473,7 @@ export function WorkLogsPage() {
   const applyClassificationSuggestion = (
     suggestion: WorkLogClassificationSuggestion,
   ) => {
-    updateEditorDraft(workLogDraftPatchFromSuggestion(suggestion));
+    updateEditorDraft(workLogDraftPatchFromSuggestion(suggestion, { objectives }));
   };
   const visibleActivityEntries = useMemo(
     () =>
@@ -608,35 +612,37 @@ export function WorkLogsPage() {
                   <span>当前账号没有可填写的个人目标日志</span>
                 </div>
               ) : (
-                <>
-                  <div className="work-logs-draft-list">
-                    <WorkLogEditorCard
-                      canUseCategories={canUseWorkLogCategoryControls}
-                      category={
-                        editorDraft.categoryId
-                          ? categoryOptionsById.get(editorDraft.categoryId)
-                          : undefined
-                      }
-                      currentUserId={currentUser?.id ?? ""}
-                      draft={editorDraft}
-                      editingEntry={editingEntry}
-                      objective={
-                        editorDraft.objectiveId
-                          ? objectiveOptionsById.get(editorDraft.objectiveId)
-                          : undefined
-                      }
-                      classificationOptions={buildWorkLogClassificationChoices(
-                        editorDraft,
-                        objectives,
-                        {
-                          allowCategories: canUseWorkLogCategoryControls,
-                          allowUncategorized: canSaveWithoutObjective,
-                        },
-                        categories,
-                      )}
-                      onChange={updateEditorDraft}
-                    />
-                  </div>
+                  <>
+                    <div className="work-logs-draft-list">
+                      <WorkLogEditorCard
+                        canUseCategories={canUseWorkLogCategoryControls}
+                        category={
+                          editorDraft.categoryId
+                            ? categoryOptionsById.get(editorDraft.categoryId)
+                            : undefined
+                        }
+                        currentUserId={currentUser?.id ?? ""}
+                        draft={editorDraft}
+                        editingEntry={editingEntry}
+                        objective={
+                          editorDraft.objectiveId
+                            ? objectiveOptionsById.get(editorDraft.objectiveId)
+                            : undefined
+                        }
+                        classificationOptions={buildWorkLogClassificationChoices(
+                          editorDraft,
+                          objectives,
+                          {
+                            allowCategories: canUseWorkLogCategoryControls,
+                            allowUncategorized: canSaveWithoutObjective,
+                          },
+                          categories,
+                        )}
+                        objectives={objectives}
+                        onChange={updateEditorDraft}
+                        requireProgressEstimate={objectiveProgressEstimateRequired}
+                      />
+                    </div>
 
                   <div className="work-logs-editor-actions">
                     <Button
@@ -789,7 +795,9 @@ function WorkLogEditorCard({
   draft,
   editingEntry,
   objective,
+  objectives,
   onChange,
+  requireProgressEstimate,
 }: {
   canUseCategories: boolean;
   category?: WorkLogCategoryOption;
@@ -798,13 +806,21 @@ function WorkLogEditorCard({
   draft: WorkLogEditorDraft;
   editingEntry: WorkLogEntry | null;
   objective?: WorkLogObjectiveOption;
+  objectives: WorkLogObjectiveOption[];
   onChange: (patch: WorkLogEditorDraftPatch) => void;
+  requireProgressEstimate: boolean;
 }) {
   const estimateEnabled = draft.classificationKind === "objective" && Boolean(draft.objectiveId);
   const estimateLabel =
-    draft.remainingEstimatePercent === null
+    draft.progressEstimatePercent === null
       ? "未填写"
-      : `${draft.remainingEstimatePercent}%`;
+      : `${draft.progressEstimatePercent}%`;
+  const inheritedProgressEstimate = workLogProgressEstimatePercentFromRemaining(objective?.latestRemainingEstimatePercent);
+  const estimateHint = !estimateEnabled
+    ? (requireProgressEstimate ? "选择目标后必须填写" : "选择目标后可填写")
+    : requireProgressEstimate
+      ? (inheritedProgressEstimate === null ? "本次日志必须填写" : "默认沿用上次估计，可调整")
+      : "只作为这条日志的主观快照";
   const classificationValue = classificationSelectValueFromDraft(draft);
   return (
     <section className="work-logs-draft-entry">
@@ -822,7 +838,7 @@ function WorkLogEditorCard({
               <NotebookPen className="h-4 w-4" />
             )
           }
-          onChange={(value) => onChange(workLogDraftPatchFromClassificationSelect(value))}
+          onChange={(value) => onChange(workLogDraftPatchFromClassificationSelect(value, { objectives }))}
           options={classificationOptions}
           placeholder="选择目标"
           searchable
@@ -862,50 +878,46 @@ function WorkLogEditorCard({
       >
         <div className="work-logs-estimate-heading">
           <div>
-            <span>目标剩余估计</span>
-            <small>
-              {estimateEnabled
-                ? "只作为这条日志的主观快照"
-                : "选择目标后可填写"}
-            </small>
+            <span>目标进度估计</span>
+            <small>{estimateHint}</small>
           </div>
           <strong>{estimateLabel}</strong>
         </div>
         <div className="work-logs-estimate-inputs">
           <input
-            aria-label="目标剩余估计滑块"
+            aria-label="目标进度估计滑块"
             disabled={!estimateEnabled}
             max={100}
             min={0}
             onChange={(event) =>
-              onChange({ remainingEstimatePercent: Number(event.target.value) })
+              onChange({ progressEstimatePercent: Number(event.target.value) })
             }
             type="range"
-            value={draft.remainingEstimatePercent ?? 0}
+            value={draft.progressEstimatePercent ?? 0}
           />
           <input
-            aria-label="目标剩余估计百分比"
+            aria-label="目标进度估计百分比"
             disabled={!estimateEnabled}
             inputMode="numeric"
             max={100}
             min={0}
             onChange={(event) =>
               onChange({
-                remainingEstimatePercent: parseWorkLogEstimateInput(
+                progressEstimatePercent: parseWorkLogProgressEstimateInput(
                   event.target.value,
                 ),
               })
             }
             placeholder="--"
             type="number"
-            value={draft.remainingEstimatePercent ?? ""}
+            value={draft.progressEstimatePercent ?? ""}
           />
           <button
             type="button"
             disabled={
-              !estimateEnabled || draft.remainingEstimatePercent === null
+              !estimateEnabled || draft.progressEstimatePercent === null
             }
-            onClick={() => onChange({ remainingEstimatePercent: null })}
+            onClick={() => onChange({ progressEstimatePercent: null })}
           >
             清除
           </button>
@@ -1070,12 +1082,11 @@ function WorkLogHistoryList({
                         {formatWorkLogDurationMinutes(entry.durationMinutes)}
                       </span>
                     )}
-                  {entry.remainingEstimatePercent !== null &&
-                    entry.remainingEstimatePercent !== undefined && (
-                      <span className="work-logs-remaining-pill">
-                        剩 {entry.remainingEstimatePercent}%
-                      </span>
-                    )}
+                  {formatWorkLogProgressEstimate(entry.remainingEstimatePercent) && (
+                    <span className="work-logs-progress-pill">
+                      {formatWorkLogProgressEstimate(entry.remainingEstimatePercent)}
+                    </span>
+                  )}
                   <Button
                     type="button"
                     size="sm"
@@ -1160,10 +1171,9 @@ function WorkLogActivityCard({
                 {formatWorkLogDurationMinutes(entry.durationMinutes)}
               </em>
             )}
-          {entry.remainingEstimatePercent !== null &&
-            entry.remainingEstimatePercent !== undefined && (
-              <em>剩 {entry.remainingEstimatePercent}%</em>
-            )}
+          {formatWorkLogProgressEstimate(entry.remainingEstimatePercent) && (
+            <em>{formatWorkLogProgressEstimate(entry.remainingEstimatePercent)}</em>
+          )}
         </div>
         <WorkLogMarkdown body={entry.bodyMarkdown} />
       </div>
@@ -1315,9 +1325,9 @@ function WorkLogReportSummary({ report }: { report: WorkLogReport }) {
       value: formatWorkLogDurationMinutes(report.totals.totalDurationMinutes) || "--",
     },
     {
-      label: "平均剩余估计",
+      label: "平均进度估计",
       value: formatOptionalPercent(
-        report.totals.averageRemainingEstimatePercent,
+        workLogProgressEstimatePercentFromRemaining(report.totals.averageRemainingEstimatePercent),
       ),
     },
   ];
@@ -1348,7 +1358,7 @@ function WorkLogPersonalCalendar({
       <div className="work-logs-personal-report-heading">
         <div>
           <h3>{user?.name ?? "个人"}的月度记录</h3>
-          <p>按日期查看记录、归类、可选时间和目标剩余估计</p>
+          <p>按日期查看记录、归类、可选时间和目标进度估计</p>
         </div>
         {user && (
           <div className="work-logs-personal-report-user">
@@ -1401,12 +1411,11 @@ function WorkLogPersonalCalendar({
                             {formatWorkLogDurationMinutes(cell.totalDurationMinutes)}
                           </span>
                         )}
-                        {cell.latestRemainingEstimatePercent !== null &&
-                          cell.latestRemainingEstimatePercent !== undefined && (
-                            <span>
-                              剩 {cell.latestRemainingEstimatePercent}%
-                            </span>
-                          )}
+                        {formatWorkLogProgressEstimate(cell.latestRemainingEstimatePercent) && (
+                          <span>
+                            {formatWorkLogProgressEstimate(cell.latestRemainingEstimatePercent)}
+                          </span>
+                        )}
                       </div>
                       <div className="work-logs-calendar-objectives">
                         {cell.classifications.slice(0, 3).map((classification) => (
@@ -1625,9 +1634,8 @@ function WorkLogTeamMatrixCell({
       {cell.totalDurationMinutes > 0 ? (
         <small>{formatWorkLogDurationMinutes(cell.totalDurationMinutes)}</small>
       ) : (
-        cell.latestRemainingEstimatePercent !== null &&
-        cell.latestRemainingEstimatePercent !== undefined && (
-          <small>剩{cell.latestRemainingEstimatePercent}%</small>
+        formatWorkLogProgressEstimate(cell.latestRemainingEstimatePercent) && (
+          <small>{formatWorkLogProgressEstimate(cell.latestRemainingEstimatePercent, { compact: true })}</small>
         )
       )}
     </button>
@@ -1674,10 +1682,9 @@ function WorkLogReportCellPopover({
                     {formatWorkLogDurationMinutes(entry.durationMinutes)}
                   </em>
                 )}
-              {entry.remainingEstimatePercent !== null &&
-                entry.remainingEstimatePercent !== undefined && (
-                  <em>剩 {entry.remainingEstimatePercent}%</em>
-                )}
+              {formatWorkLogProgressEstimate(entry.remainingEstimatePercent) && (
+                <em>{formatWorkLogProgressEstimate(entry.remainingEstimatePercent)}</em>
+              )}
             </div>
             <WorkLogMarkdown body={entry.bodyMarkdown} />
           </article>
@@ -1810,6 +1817,12 @@ function formatOptionalPercent(value: number | null | undefined) {
   return value === null || value === undefined ? "--" : `${value}%`;
 }
 
+function formatWorkLogProgressEstimate(value: number | null | undefined, options?: { compact?: boolean }) {
+  const progressEstimate = workLogProgressEstimatePercentFromRemaining(value);
+  if (progressEstimate === null) return "";
+  return `${options?.compact ? "进" : "进 "}${progressEstimate}%`;
+}
+
 function workLogReportDensity(count: number) {
   if (count <= 0) return "empty";
   if (count === 1) return "light";
@@ -1826,7 +1839,7 @@ function workLogReportCellTitle(cell?: WorkLogReportDayCell) {
     cell.latestRemainingEstimatePercent === null ||
     cell.latestRemainingEstimatePercent === undefined
       ? ""
-      : `，最新剩余估计 ${cell.latestRemainingEstimatePercent}%`;
+      : `，最新进度估计 ${workLogProgressEstimatePercentFromRemaining(cell.latestRemainingEstimatePercent)}%`;
   const duration = cell.totalDurationMinutes > 0
     ? `，记录时间 ${formatWorkLogDurationMinutes(cell.totalDurationMinutes)}`
     : "";
