@@ -24,7 +24,7 @@ export type FeedbackIssuePerson = {
 };
 
 export function feedbackIssueLabels(feedback: Pick<Feedback, "causeCategories" | "impact">): FeedbackIssueLabel[] {
-  const causes = feedback.causeCategories.map((cause) => cause.trim()).filter(Boolean);
+  const causes = Array.from(new Set(feedback.causeCategories.map((cause) => cause.trim()).filter(Boolean)));
   return [
     ...causes.map((cause) => ({
       key: `cause:${cause}`,
