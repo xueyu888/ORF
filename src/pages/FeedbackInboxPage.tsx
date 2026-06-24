@@ -7,6 +7,7 @@ import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/fe
 import { feedbackCauseGroupsForCategories, feedbackMatchesCauseGroup } from "../features/feedback/model/feedbackCategories";
 import { summarizeFeedbackInsights } from "../features/feedback/model/feedbackInsights";
 import { feedbackIssueBodyPreview, feedbackIssueCommentCount, feedbackIssueDisplayId, feedbackIssueHref, feedbackIssueStateLabel, isFeedbackIssueOpen } from "../features/feedback/model/feedbackIssue";
+import { sortFeedbackIssuesByUpdatedAtDescending } from "../features/feedback/model/feedbackIssueOrdering";
 import { useOrf } from "../state/OrfProvider";
 import type { Feedback, Impact } from "../types/orf";
 import { impactLabel } from "../utils/labels";
@@ -27,8 +28,8 @@ export function FeedbackInboxPage() {
   const normalizedQuery = query.trim().toLowerCase();
 
   const filteredFeedback = useMemo(
-    () =>
-      visibleFeedback.filter((item) => {
+    () => {
+      const matches = visibleFeedback.filter((item) => {
         const itemIsOpen = isFeedbackIssueOpen(item);
         const stateMatch = listState === "all" || (listState === "open" ? itemIsOpen : !itemIsOpen);
         const causeMatch = cause === "All" || feedbackMatchesCauseGroup(item.causeCategories, cause);
@@ -44,7 +45,10 @@ export function FeedbackInboxPage() {
         ].join(" ").toLowerCase();
         const queryMatch = normalizedQuery.length === 0 || searchableText.includes(normalizedQuery);
         return stateMatch && causeMatch && queryMatch;
-      }),
+      });
+
+      return sortFeedbackIssuesByUpdatedAtDescending(matches);
+    },
     [cause, listState, normalizedQuery, visibleFeedback],
   );
 

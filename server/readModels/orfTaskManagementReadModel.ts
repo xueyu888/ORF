@@ -217,7 +217,13 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const resultRows = storageScopeId ? await db.select().from(results).where(eq(results.teamId, storageScopeId)) : await db.select().from(results);
   const taskRows = storageScopeId ? await db.select().from(tasks).where(eq(tasks.teamId, storageScopeId)) : await db.select().from(tasks);
   const evidenceRows = storageScopeId ? await db.select().from(evidence).where(eq(evidence.teamId, storageScopeId)) : await db.select().from(evidence);
-  const feedbackRows = storageScopeId ? await db.select().from(feedback).where(eq(feedback.teamId, storageScopeId)) : await db.select().from(feedback);
+  const feedbackRows = storageScopeId
+    ? await db
+        .select()
+        .from(feedback)
+        .where(eq(feedback.teamId, storageScopeId))
+        .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id))
+    : await db.select().from(feedback).orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id));
   const objectiveLootRows = storageScopeId ? await db.select().from(objectiveLoot).where(eq(objectiveLoot.teamId, storageScopeId)) : await db.select().from(objectiveLoot);
   const objectiveTrialReviewRows = storageScopeId
     ? await db.select().from(objectiveTrialReviews).where(eq(objectiveTrialReviews.teamId, storageScopeId))

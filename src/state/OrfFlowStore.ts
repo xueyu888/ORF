@@ -16,6 +16,7 @@ import {
 import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
 import { taskIdsForObjective } from "../domain/orfWorkItems";
 import { userDisplayProfilesFromUsers } from "../domain/userDisplayProfile";
+import { sortFeedbackIssuesByUpdatedAtDescending } from "../features/feedback/model/feedbackIssueOrdering";
 import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfProject, OrfState, Result, Task, TaskStatus } from "../types/orf";
 import { addCalendarDays, localDateString } from "../utils/date";
@@ -283,6 +284,7 @@ export const normalizeState = (state: OrfState): OrfState => {
     objectiveAlignmentRequests: state.objectiveAlignmentRequests ?? [],
     objectiveSettlementEvents: state.objectiveSettlementEvents ?? [],
     pointLedger: state.pointLedger ?? [],
+    feedback: sortFeedbackIssuesByUpdatedAtDescending(state.feedback ?? []),
   };
 };
 
@@ -477,7 +479,7 @@ export class OrfFlowStore {
 
     return {
       ...state,
-      feedback: [feedback, ...state.feedback],
+      feedback: sortFeedbackIssuesByUpdatedAtDescending([feedback, ...state.feedback]),
     };
   }
 
@@ -963,7 +965,7 @@ export class OrfFlowStore {
     const now = currentDate();
     return {
       ...state,
-      feedback: state.feedback.map((item) =>
+      feedback: sortFeedbackIssuesByUpdatedAtDescending(state.feedback.map((item) =>
         item.id === feedbackId
           ? {
               ...item,
@@ -972,7 +974,7 @@ export class OrfFlowStore {
               activity: [...item.activity, { id: makeId("act"), actor: currentUserName(state), action: `更新反馈状态`, at: now }],
             }
           : item,
-      ),
+      )),
     };
   }
 
