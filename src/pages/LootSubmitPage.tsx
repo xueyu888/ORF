@@ -494,6 +494,8 @@ export function LootSubmitPage() {
   );
   const objectiveReviewResult =
     objectiveAcceptedResultFromReviews(reviewedResultValues);
+  const objectiveReviewPresentation =
+    objectiveReviewResultPresentation(objectiveReviewResult);
 
   useEffect(() => {
     setResolutionEdited(false);
@@ -1129,15 +1131,16 @@ export function LootSubmitPage() {
               </div>
               <div className="orf-loot-panel orf-loot-result-summary">
                 <div className="font-semibold orf-text-primary">
-                  目标验收结果
+                  {objectiveReviewPresentation.title}
                 </div>
                 <div className="orf-text-secondary">
-                  {objectiveReviewResultLabel(objectiveReviewResult)}
+                  {objectiveReviewPresentation.description}
                 </div>
               </div>
               <Field label="验收说明">
                 <textarea
                   className="orf-input min-h-24 px-3 py-2 text-sm"
+                  placeholder={objectiveReviewPresentation.reasonPlaceholder}
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
                 />
@@ -1152,7 +1155,7 @@ export function LootSubmitPage() {
                   取消
                 </Button>
                 <Button type="submit" disabled={submittingAction === "review"}>
-                  确认验收
+                  {objectiveReviewPresentation.submitLabel}
                 </Button>
               </div>
             </form>
@@ -2413,12 +2416,31 @@ function percentInputTotal(values: Record<string, string>, members: string[]) {
   }, 0);
 }
 
-function objectiveReviewResultLabel(
+function objectiveReviewResultPresentation(
   value: ReturnType<typeof objectiveAcceptedResultFromReviews>,
 ) {
-  if (value === "completed") return "全部指标完成，目标完成。";
-  if (value === "falsified") return "指标全部有效证伪，目标按有效证伪结算。";
-  return "存在未完成、失败或未验收指标，目标不按完成结算。";
+  if (value === "completed") {
+    return {
+      description: "全部指标完成；提交后目标进入已验收，挑战者可以继续匿名互评。",
+      reasonPlaceholder: "可填写验收说明，例如完成证据确认结果。",
+      submitLabel: "确认验收通过",
+      title: "目标将验收通过",
+    };
+  }
+  if (value === "falsified") {
+    return {
+      description: "指标全部有效证伪；提交后目标进入已验收，并按有效证伪口径结算。",
+      reasonPlaceholder: "可填写有效证伪的验收说明。",
+      submitLabel: "确认有效证伪",
+      title: "目标将按证伪通过",
+    };
+  }
+  return {
+    description: "存在未完成、失败或未验收指标；提交后目标进入待返工，挑战者需要继续完成并重新提交。",
+    reasonPlaceholder: "建议填写返工原因和需要补充的验收材料。",
+    submitLabel: "确认要求返工",
+    title: "目标将进入待返工",
+  };
 }
 
 function resultReviewLabel(value: ResultAcceptedResult) {
