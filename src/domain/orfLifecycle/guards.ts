@@ -79,6 +79,10 @@ export function isObjectiveChallengeDiscoverableByFlow(target: ObjectiveLifecycl
   return policyFlag(target, "challengeDiscoverable");
 }
 
+export function isObjectiveVisibleInBountyHallByFlow(target: ObjectiveLifecycleTarget): boolean {
+  return policyFlag(target, "bountyHallVisible");
+}
+
 export function isObjectiveChallengeAcceptedByFlow(target: ObjectiveLifecycleTarget): boolean {
   return policyFlag(target, "challengeAccepted");
 }

@@ -36,6 +36,7 @@ export type ObjectiveFlowPolicy = {
   readonly canSubmitContributionReview: boolean;
   readonly canReviewLoot: boolean;
   readonly challengeDiscoverable: boolean;
+  readonly bountyHallVisible: boolean;
   readonly challengeAccepted: boolean;
   readonly challengeEntryClosed: boolean;
   readonly resultLocked: boolean;

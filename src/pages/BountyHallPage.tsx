@@ -11,11 +11,13 @@ import { ChallengeConfirmModal } from "../features/bounty-hall/components/Challe
 import { useMinuteNow } from "../features/bounty-hall/hooks/useMinuteNow";
 import {
   bountyTargetElement,
+  buildHallItemBuckets,
   buildHallItems,
   compareByUrgency,
   compareHallItems,
-  isCurrentUserApplicationBounty,
-  isStartedBounty,
+  defaultHallTab,
+  hallTabs,
+  preferredHallTabForBountyItem,
   searchableBountyText,
 } from "../features/bounty-hall/model/bountyHallItems";
 import { bountyCycleLabel } from "../features/bounty-hall/model/bountyHallSummary";
@@ -40,7 +42,7 @@ export function BountyHallPage() {
   const [query, setQuery] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("deadline");
-  const [activeTab, setActiveTab] = useState<HallTab>("recruiting");
+  const [activeTab, setActiveTab] = useState<HallTab>(defaultHallTab);
   const [confirmTarget, setConfirmTarget] = useState<ChallengeConfirmTarget | null>(null);
   const [processingBountyId, setProcessingBountyId] = useState<string | null>(null);
   const now = useMinuteNow();
@@ -102,20 +104,9 @@ export function BountyHallPage() {
     const objectives = hallItems.map((item) => item.objective);
     return objectives.length > 0 ? objectives : objectiveOptions;
   }, [hallItems, objectiveOptions]);
-  const recruitingHallItems = useMemo(() => hallItems.filter((item) => !isStartedBounty(item)), [hallItems]);
-  const startedHallItems = useMemo(() => hallItems.filter(isStartedBounty), [hallItems]);
-  const myApplicationHallItems = useMemo(
-    () => hallItems.filter((item) => isCurrentUserApplicationBounty(item, currentUserId)),
-    [currentUserId, hallItems],
-  );
-  const tabbedHallItems =
-    activeTab === "all"
-      ? hallItems
-      : activeTab === "mine"
-        ? myApplicationHallItems
-        : activeTab === "started"
-          ? startedHallItems
-          : recruitingHallItems;
+  const hallItemBuckets = useMemo(() => buildHallItemBuckets(hallItems, currentUserId), [currentUserId, hallItems]);
+  const tabbedHallItems = hallItemBuckets[activeTab];
+  const activeTabLabel = hallTabs.find((tab) => tab.key === activeTab)?.label ?? "全部";
 
   const filteredHallItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -139,10 +130,8 @@ export function BountyHallPage() {
   useEffect(() => {
     if (!linkedBountyObjectiveId) return;
     const linkedItem = hallItems.find((item) => item.objective.id === linkedBountyObjectiveId);
-    if (linkedItem && isCurrentUserApplicationBounty(linkedItem, currentUserId)) {
-      setActiveTab("mine");
-    } else if (linkedItem && isStartedBounty(linkedItem)) {
-      setActiveTab("started");
+    if (linkedItem) {
+      setActiveTab(preferredHallTabForBountyItem(linkedItem, currentUserId));
     }
   }, [currentUserId, hallItems, linkedBountyObjectiveId]);
 
@@ -181,7 +170,7 @@ export function BountyHallPage() {
     const ok = await applyForBounty(item.objective.id, reason);
     setProcessingBountyId(null);
     if (ok) {
-      setActiveTab("mine");
+      setActiveTab("related");
       await loadBountyData();
       setConfirmTarget(null);
     }
@@ -205,10 +194,10 @@ export function BountyHallPage() {
   return (
     <div className="bounty-hall-page orf-workbench-surface grid gap-4">
       <BountyOverview
-        availableCount={availableBounties.length}
         publicCount={hallItems.length}
         cycle={bountyCycleLabel(pageObjectives)}
         challengerCount={hallItems.reduce((sum, item) => sum + item.challengers.length, 0)}
+        openCount={hallItemBuckets.open.length}
         recruitmentCount={recruitmentItems.length}
       />
 
@@ -227,10 +216,13 @@ export function BountyHallPage() {
         <BountyHallTabs
           activeTab={activeTab}
           counts={{
-            all: hallItems.length,
-            mine: myApplicationHallItems.length,
-            recruiting: recruitingHallItems.length,
-            started: startedHallItems.length,
+            all: hallItemBuckets.all.length,
+            open: hallItemBuckets.open.length,
+            frozen: hallItemBuckets.frozen.length,
+            submitted: hallItemBuckets.submitted.length,
+            accepted: hallItemBuckets.accepted.length,
+            settled: hallItemBuckets.settled.length,
+            related: hallItemBuckets.related.length,
           }}
           onChange={setActiveTab}
         />
@@ -250,7 +242,7 @@ export function BountyHallPage() {
           <BountyObjectiveList
             activeObjectiveId={linkedBountyObjectiveId}
             currentUserId={currentUserId}
-            applicationView={activeTab === "mine"}
+            showDeclinedApplicationState={activeTab === "related"}
             items={filteredHallItems}
             now={now}
             onOpenChallengeWork={openChallengeTarget}
@@ -260,8 +252,8 @@ export function BountyHallPage() {
           />
         ) : (
           <BountyEmptyState
-            title={loadingBounties ? "正在加载悬赏大厅" : hasFilters ? "没有符合条件的悬赏目标" : "当前没有公开悬赏目标"}
-            description={loadingBounties ? "正在读取悬赏大厅专用接口。" : hasFilters ? "调整搜索或筛选条件后再查看。" : "新的公开悬赏、申请进展和挑战者状态会出现在这里；你的征召目标会自动置顶。"}
+            title={loadingBounties ? "正在加载悬赏大厅" : hasFilters ? "没有符合条件的悬赏目标" : `${activeTabLabel}暂无悬赏目标`}
+            description={loadingBounties ? "正在读取悬赏大厅专用接口。" : hasFilters ? "调整搜索或筛选条件后再查看。" : "公开悬赏的开放、冻结、验收和结算状态会在这里延续展示；与你有关的目标会进入我的相关。"}
           />
         )}
       </section>

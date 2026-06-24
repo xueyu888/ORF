@@ -964,6 +964,7 @@
   display: inline-flex;
   width: fit-content;
   max-width: 100%;
+  flex-wrap: wrap;
   gap: 6px;
   border: 1px solid var(--bh-glass-line);
   border-radius: 13px;
@@ -2261,7 +2262,7 @@
   }
 
   .bounty-hall-tab {
-    flex: 1 1 0;
+    flex: 0 1 auto;
     justify-content: center;
   }
 
@@ -2926,6 +2927,7 @@
   }
 
   .bounty-hall-page .bounty-hall-tabs {
+    flex-wrap: nowrap;
     gap: 3px;
     overflow-x: auto;
     scrollbar-width: none;
@@ -2933,6 +2935,11 @@
 
   .bounty-hall-page .bounty-hall-tabs::-webkit-scrollbar {
     display: none;
+  }
+
+  .bounty-hall-page .bounty-hall-tab,
+  .orf-workbench-surface .bounty-hall-tab {
+    flex: 0 0 auto;
   }
 
   .bounty-hall-page .bounty-hall-tab,

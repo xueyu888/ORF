@@ -4,7 +4,7 @@ import { objectiveChallengeEntryClosed } from "../../src/domain/orfChallengeEntr
 import {
   canAcceptObjectiveChallengeByFlow,
   canApplyForObjectiveChallenge,
-  isObjectiveChallengeDiscoverableByFlow,
+  isObjectiveVisibleInBountyHallByFlow,
 } from "../../src/domain/orfLifecycle";
 import {
   isObjectiveAssignedChallenger,
@@ -61,7 +61,7 @@ function compareBountyItems(left: BountyHallItem, right: BountyHallItem) {
 }
 
 function objectiveVisibleInBountyHall(objective: Objective) {
-  return isObjectiveChallengeDiscoverableByFlow(objective) && !objectiveChallengeEntryClosed(objective);
+  return isObjectiveVisibleInBountyHallByFlow(objective);
 }
 
 function objectiveAvailableForBountyApplication(objective: Objective) {

@@ -4,7 +4,7 @@
 
 `/tasks` 是挑战工作台。普通成员看到自己已正式接受的目标，以及目标下并列的指标、任务和子任务；指挥官在所有挑战视图中创建、编辑和发布候选目标。
 
-普通成员主工作区只看自己参与的目标；管理员可切换所有挑战 / 我的挑战。普通成员自己发起但尚未通过的挑战申请仍不进入挑战树，统一回到悬赏大厅 `我的申请` 分组追踪。
+普通成员主工作区只看自己已经正式参与的目标；管理员可切换所有挑战 / 我的挑战。悬赏大厅是公开生命周期看板，普通成员自己发起但尚未通过的挑战申请、自己被征召的目标和已经参与的目标统一回到悬赏大厅 `我的相关` 分组追踪。申请被指挥官同意或征召被接受后，目标才进入本页作为执行详情视图。
 
 我的挑战过滤规则：
 
@@ -12,9 +12,9 @@
 currentUser.id in Objective.challengerUserIds
 ```
 
-悬赏大厅对所有已通过用户可见，但它只是发现页，不决定工作台归属。目标来自挑战页内候选目标创建、悬赏大厅申请、征召或接受挑战流程；普通成员只有在申请被通过或接受征召后，目标才进入本页。
+悬赏大厅对所有已通过用户可见，是发布后到结算的公开生命周期看板，不决定工作台归属。目标来自挑战页内候选目标创建、悬赏大厅申请、征召或接受挑战流程；普通成员只有在申请被通过或接受征召后，目标才进入本页。
 
-数据加载边界：Provider 通过 `/api/me/access` 读取当前用户权限；普通成员进入本页时再请求 `/api/my-challenges?scope=mine` 等成员可访问接口，不主动请求 `/api/permissions` 或 `/api/users` 等管理员集合。管理员进入业务页时才额外加载成员列表。后端兼容的 `/api/tasks-page` 对普通成员也只返回 scoped `my-challenges` 数据，不返回全量 state。`pendingChallengeApplications` 只是 `/api/my-challenges` 保留的兼容投影，不写回目标、指标、任务或权限状态；当前工作台 UI 不消费该字段，申请追踪由悬赏大厅 `GET /api/bounties` 的申请记录投影承担。
+数据加载边界：Provider 通过 `/api/me/access` 读取当前用户权限；普通成员进入本页时再请求 `/api/my-challenges?scope=mine` 等成员可访问接口，不主动请求 `/api/permissions` 或 `/api/users` 等管理员集合。管理员进入业务页时才额外加载成员列表。后端兼容的 `/api/tasks-page` 对普通成员也只返回 scoped `my-challenges` 数据，不返回全量 state。`pendingChallengeApplications` 只是 `/api/my-challenges` 保留的兼容投影，不写回目标、指标、任务或权限状态；当前工作台 UI 不消费该字段，申请、征召和正式参与追踪由悬赏大厅 `GET /api/bounties` 的 `我的相关` 投影承担。
 
 ## 页面内容
 
@@ -128,7 +128,7 @@ currentUser.id in Objective.challengerUserIds
 | 修改截止日期 | 点击日期本身打开 ORF 自定义日期选择器，选定不同日期后立即提交；只允许指挥官操作。冻结前可修改为合法日期，冻结后只能延后；无权限或待验收、已验收、已结算、已关闭时点击日期提示原因 |
 | 发布/冻结 | 指挥官在所有挑战视图中操作 |
 | 审核挑战申请 | 指挥官在目标行处理待审核申请；审批成功后立即刷新目标状态和申请记录，当前目标使用列表位置锚点保持原展示位置，直到用户离开当前目标上下文 |
-| 查看我的申请 | 普通成员在悬赏大厅 `我的申请` 分组追踪 pending、approved、declined 结果；未进入 `Objective.challengerUserIds` 的目标不能在本页编辑指标、行动项或提交战利品 |
+| 查看我的相关 | 普通成员在悬赏大厅 `我的相关` 分组追踪 pending、approved、declined 申请结果、待响应征召和已经参与的公开生命周期状态；未进入 `Objective.challengerUserIds` 的目标不能在本页编辑指标、行动项或提交战利品 |
 
 目标、指标和流程操作由 `permissionRules`、状态机和对应业务能力共同控制。目标内容只能由指挥官调整；开始时间以 `Objective.acceptedAt` 为唯一事实源，只表示第一个挑战者正式接受或申请被批准的时间，前端只展示不编辑；冻结时间以 `Objective.confirmedAt` 为事实源，只表示重估完成并冻结的时间，前端只展示不编辑；截止日期以 `Objective.finalDueAt` 为唯一事实源，指标行不展示也不保存独立截止日期。重估窗口以 `Objective.confirmationDueAt` 为事实源，只用于重估中目标的窗口剩余展示和挑战者指标编辑窗口判断，不作为可编辑截止日期；目标仍处于 `reestimating` 且指挥官修改最终截止日期时，后端会重新返回同步后的 `confirmationDueAt`，前端只展示接口事实，不在页面内自行推导。指标可由指挥官编辑，挑战者只可在 `reestimating` 且未过 `confirmationDueAt` 时提出或编辑 `Objective.challengerUserIds` 包含自己的目标下的指标。行动项和子行动项不使用独立角色权限 key；候选目标允许指挥官先维护目标行动项，挑战者正式进入 `Objective.challengerUserIds` 后，任务和子任务的新增、编辑、勾选、移动、删除都按目标共同维护，不按 `assignee` 或创建人区分。冻结后指标口径锁定。
 
