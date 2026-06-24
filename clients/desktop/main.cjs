@@ -37,6 +37,12 @@ const DESKTOP_CREDENTIALS_MAX_ACCOUNTS = 10;
 const DESKTOP_CREDENTIALS_FILE_NAME = "saved-login-accounts.v1.json";
 const DESKTOP_SETTINGS_FILE_NAME = "desktop-settings.v1.json";
 const DESKTOP_STABLE_DATA_DIR_NAME = "ORF";
+const DESKTOP_MAIN_WINDOW_SIZE = Object.freeze({
+  height: 900,
+  minHeight: 680,
+  minWidth: 820,
+  width: 1360,
+});
 const DESKTOP_WORKBENCH_ZOOM_MIN = -2;
 const DESKTOP_WORKBENCH_ZOOM_MAX = 4;
 const DESKTOP_SYSTEM_IDLE_THRESHOLD_SECONDS = 10 * 60;
@@ -91,10 +97,7 @@ function resolveClientUrl() {
 
 function createMainWindow(clientUrl, options = {}) {
   const mainWindow = new BrowserWindow({
-    width: 1360,
-    height: 900,
-    minWidth: 1024,
-    minHeight: 680,
+    ...DESKTOP_MAIN_WINDOW_SIZE,
     title: "ORF",
     icon: resolveDesktopIconPath(),
     frame: false,
