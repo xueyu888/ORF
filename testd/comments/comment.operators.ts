@@ -655,31 +655,42 @@ export const commentOperators = {
 
   "page.comment_message": {
     reply_enabled: async ({ ctx, params }) => {
-      await expect(commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "回复评论" })).toBeEnabled();
+      const row = await revealCommentMessageActions(ctx.page, requiredString(params, "body"));
+      await expect(row.getByRole("button", { name: "回复评论" })).toBeEnabled();
     },
 
     click_reply: async ({ ctx, params }) => {
-      await commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "回复评论" }).click();
+      const row = await revealCommentMessageActions(ctx.page, requiredString(params, "body"));
+      await row.getByRole("button", { name: "回复评论" }).click();
     },
 
     edit_enabled: async ({ ctx, params }) => {
-      await expect(commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "编辑评论" })).toBeEnabled();
+      const row = await revealCommentMessageActions(ctx.page, requiredString(params, "body"));
+      await expect(row.getByRole("button", { name: "编辑评论" })).toBeEnabled();
     },
 
     edit_hidden: async ({ ctx, params }) => {
-      await expect(commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "编辑评论" })).toHaveCount(0);
+      const row = await revealCommentMessageActions(ctx.page, requiredString(params, "body"));
+      await expect(row.getByRole("button", { name: "编辑评论" })).toHaveCount(0);
     },
 
     click_edit: async ({ ctx, params }) => {
-      await commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "编辑评论" }).click();
+      const row = await revealCommentMessageActions(ctx.page, requiredString(params, "body"));
+      await row.getByRole("button", { name: "编辑评论" }).click();
     },
 
     delete_enabled: async ({ ctx, params }) => {
-      await expect(commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "删除评论" })).toBeEnabled();
+      const deleteAction = await openCommentDeleteMenu(ctx.page, requiredString(params, "body"));
+      await expect(deleteAction).toBeEnabled();
     },
 
     delete_hidden: async ({ ctx, params }) => {
-      await expect(commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "删除评论" })).toHaveCount(0);
+      const row = await revealCommentMessageActions(ctx.page, requiredString(params, "body"));
+      const moreActions = row.getByRole("button", { name: "更多评论操作" });
+      if (await moreActions.count()) {
+        await moreActions.click();
+      }
+      await expect(row.getByRole("menuitem", { name: "删除评论" })).toHaveCount(0);
     },
 
     delete: async ({ ctx, params }) => {
@@ -687,7 +698,8 @@ export const commentOperators = {
         captureCommentResponse(ctx.page, "DELETE", requiredString(params, "urlEndsWith")),
         async () => {
           const dialogPromise = ctx.page.waitForEvent("dialog");
-          const clickPromise = commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "删除评论" }).click();
+          const deleteAction = await openCommentDeleteMenu(ctx.page, requiredString(params, "body"));
+          const clickPromise = deleteAction.click();
           const dialog = await dialogPromise;
           expect(dialog.type()).toBe("confirm");
           await dialog.accept();
@@ -705,6 +717,21 @@ export const commentOperators = {
     },
   },
 } satisfies OperatorRegistry<TestContext, CommentCaseData>;
+
+async function revealCommentMessageActions(page: Page, body: string) {
+  const row = commentMessageRow(page, body);
+  await row.hover();
+  return row;
+}
+
+async function openCommentDeleteMenu(page: Page, body: string) {
+  const row = await revealCommentMessageActions(page, body);
+  const deleteAction = row.getByRole("menuitem", { name: "删除评论" });
+  if (!(await deleteAction.isVisible())) {
+    await row.getByRole("button", { name: "更多评论操作" }).click();
+  }
+  return deleteAction;
+}
 
 function captureCommentResponse(page: Page, method: string, urlEndsWith: string): Promise<CapturedResponse> {
   return page
