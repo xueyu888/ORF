@@ -328,6 +328,7 @@ export interface WorkLogObjectiveOption {
   title: string;
   flowStatus: ObjectiveFlowStatus;
   finalDueAt: string;
+  latestRemainingEstimatePercent?: number | null;
 }
 
 export interface WorkLogCategoryOption {

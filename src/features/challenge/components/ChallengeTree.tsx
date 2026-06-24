@@ -1489,19 +1489,31 @@ function ObjectiveTimeSummary({ deadline, now, objective }: { deadline: string; 
   const finalRemaining = deadlineRemainingTime(deadline, now);
   const finalRemainingValue = finalRemaining?.value ?? (deadline || "未设置");
   const reestimateRemaining = isObjectiveReestimatingByFlow(objective) ? reestimateWindowRemainingTime(objective.confirmationDueAt, now) : null;
+  const startTitle = `开始时间：${objective.acceptedAt ? formatDateTimeMinute(objective.acceptedAt) : "未开始"}`;
+  const frozenTitle = `冻结时间：${objective.confirmedAt ? formatDateTimeMinute(objective.confirmedAt) : "未冻结"}`;
 
-  if (!reestimateRemaining) return <TimeValue icon={Clock3} value={finalRemainingValue} />;
+  if (!reestimateRemaining) {
+    const title = [startTitle, frozenTitle, `最终剩余：${finalRemainingValue}`, `最终截止：${deadline || "未设置"}`].join("\n");
+    return <TimeValue icon={Clock3} title={title} value={finalRemainingValue} />;
+  }
 
   const title = [
-    `重估窗口：${reestimateRemaining.value}`,
+    startTitle,
+    frozenTitle,
     `重估截止：${formatDateTimeMinute(objective.confirmationDueAt)}`,
+    `重估窗口：${reestimateRemaining.value}`,
     `最终剩余：${finalRemainingValue}`,
     `最终截止：${deadline || "未设置"}`,
   ].join("\n");
   const finalShortValue = finalRemaining ? compactTimeSummaryLabel("最终", finalRemaining) : "最终 未设置";
 
   return (
-    <span className={clsx("orf-objective-time-summary", reestimateRemaining.overdue && "orf-objective-time-summary-overdue")} title={title}>
+    <span
+      aria-label={title.replace(/\n/g, "；")}
+      className={clsx("orf-objective-time-summary", reestimateRemaining.overdue && "orf-objective-time-summary-overdue")}
+      tabIndex={0}
+      title={title}
+    >
       <span className="orf-objective-time-icon" aria-hidden="true">
         <Clock3 />
       </span>
@@ -1519,7 +1531,12 @@ function compactTimeSummaryLabel(label: string, time: RelativeTime) {
 
 function TimeValue({ className, icon: Icon, subtle, title, value }: { className?: string; icon: LucideIcon; subtle?: boolean; title?: string; value: string }) {
   return (
-    <span className={clsx("orf-time-value inline-flex h-7 min-w-0 items-center gap-2 whitespace-nowrap text-sm font-medium", subtle ? "text-[#667085]" : "text-[#344054]", className)} title={title ?? value}>
+    <span
+      aria-label={title ? title.replace(/\n/g, "；") : undefined}
+      className={clsx("orf-time-value inline-flex h-7 min-w-0 items-center gap-2 whitespace-nowrap text-sm font-medium", subtle ? "text-[#667085]" : "text-[#344054]", className)}
+      tabIndex={title ? 0 : undefined}
+      title={title ?? value}
+    >
       <Icon className={clsx("h-4 w-4", subtle ? "text-[#98a2b3]" : "text-[#667085]")} />
       <span className="orf-time-value-text">{value}</span>
     </span>

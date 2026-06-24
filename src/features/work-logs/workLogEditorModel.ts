@@ -18,7 +18,7 @@ export type WorkLogEditorDraft = {
   editingEntryId: string | null;
   objectiveId: string;
   objectiveTitleSnapshot?: string | null;
-  remainingEstimatePercent: number | null;
+  progressEstimatePercent: number | null;
 };
 
 export type WorkLogEditorDraftPatch = Partial<
@@ -30,7 +30,7 @@ export type WorkLogEditorDraftPatch = Partial<
     | "classificationKind"
     | "durationMinutes"
     | "objectiveId"
-    | "remainingEstimatePercent"
+    | "progressEstimatePercent"
   >
 >;
 
@@ -55,6 +55,24 @@ export type WorkLogEntryClassification = {
   title: string;
 };
 
+type WorkLogObjectiveOptionLookup = {
+  objectives?: WorkLogObjectiveOption[];
+};
+
+function normalizeWorkLogEstimatePercent(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+export function workLogProgressEstimatePercentFromRemaining(value: number | null | undefined) {
+  if (value === null || value === undefined) return null;
+  return 100 - normalizeWorkLogEstimatePercent(value);
+}
+
+export function workLogRemainingEstimatePercentFromProgress(value: number | null | undefined) {
+  if (value === null || value === undefined) return null;
+  return 100 - normalizeWorkLogEstimatePercent(value);
+}
+
 export const blankWorkLogEditorDraft = (): WorkLogEditorDraft => ({
   bodyMarkdown: "",
   categoryId: "",
@@ -63,7 +81,7 @@ export const blankWorkLogEditorDraft = (): WorkLogEditorDraft => ({
   durationMinutes: null,
   editingEntryId: null,
   objectiveId: "",
-  remainingEstimatePercent: null,
+  progressEstimatePercent: null,
 });
 
 export function applyWorkLogEditorDraftPatch(
@@ -88,7 +106,7 @@ export function applyWorkLogEditorDraftPatch(
       ...next,
       classificationKind: "category",
       objectiveId: "",
-      remainingEstimatePercent: null,
+      progressEstimatePercent: null,
     };
   }
   if (patch.classificationKind === "uncategorized") {
@@ -97,7 +115,7 @@ export function applyWorkLogEditorDraftPatch(
       categoryId: "",
       categoryName: "",
       objectiveId: "",
-      remainingEstimatePercent: null,
+      progressEstimatePercent: null,
     };
   }
   if (patch.objectiveId !== undefined) {
@@ -110,7 +128,7 @@ export function applyWorkLogEditorDraftPatch(
   }
   return next.classificationKind === "objective"
     ? next
-    : { ...next, remainingEstimatePercent: null };
+    : { ...next, progressEstimatePercent: null };
 }
 
 export function workLogEditorDraftFromEntry(entry: WorkLogEntry): WorkLogEditorDraft {
@@ -125,15 +143,15 @@ export function workLogEditorDraftFromEntry(entry: WorkLogEntry): WorkLogEditorD
     editingEntryId: entry.id,
     objectiveId: classification.kind === "objective" ? entry.objectiveIdSnapshot ?? "" : "",
     objectiveTitleSnapshot: entry.objectiveTitleSnapshot,
-    remainingEstimatePercent: entry.remainingEstimatePercent ?? null,
+    progressEstimatePercent: workLogProgressEstimatePercentFromRemaining(entry.remainingEstimatePercent),
   };
 }
 
-export function parseWorkLogEstimateInput(value: string) {
+export function parseWorkLogProgressEstimateInput(value: string) {
   if (!value.trim()) return null;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return null;
-  return Math.max(0, Math.min(100, Math.round(parsed)));
+  return normalizeWorkLogEstimatePercent(parsed);
 }
 
 export function parseWorkLogDurationInput(value: string) {
@@ -161,7 +179,7 @@ export function canonicalWorkLogEditorDraft(draft: WorkLogEditorDraft) {
         : null,
     remainingEstimatePercent:
       draft.classificationKind === "objective" && draft.objectiveId.trim()
-        ? draft.remainingEstimatePercent
+        ? workLogRemainingEstimatePercentFromProgress(draft.progressEstimatePercent)
         : null,
   };
 }
@@ -185,6 +203,7 @@ export function validateWorkLogEditorDraft(
   options: {
     allowCategories: boolean;
     allowUncategorized: boolean;
+    requireObjectiveProgressEstimate?: boolean;
   },
 ) {
   const entry = canonicalWorkLogEditorDraft(draft);
@@ -199,6 +218,13 @@ export function validateWorkLogEditorDraft(
   }
   if (draft.classificationKind === "category" && !entry.categoryId && !entry.categoryName) {
     return "请填写分类名称";
+  }
+  if (
+    draft.classificationKind === "objective" &&
+    options.requireObjectiveProgressEstimate &&
+    draft.progressEstimatePercent === null
+  ) {
+    return "请填写目标进度估计";
   }
   if (!orfRichTextHasMeaningfulContent(entry.bodyMarkdown)) {
     return "工作日志内容不能为空";
@@ -220,13 +246,17 @@ export function classificationSelectValueFromDraft(
 
 export function workLogDraftPatchFromClassificationSelect(
   value: WorkLogClassificationSelectValue,
+  options: WorkLogObjectiveOptionLookup = {},
 ): WorkLogEditorDraftPatch {
   if (value.startsWith("objective:")) {
+    const objectiveId = value.slice("objective:".length);
+    const objective = options.objectives?.find((item) => item.id === objectiveId);
     return {
       categoryId: "",
       categoryName: "",
       classificationKind: "objective",
-      objectiveId: value.slice("objective:".length),
+      objectiveId,
+      progressEstimatePercent: workLogProgressEstimatePercentFromRemaining(objective?.latestRemainingEstimatePercent),
     };
   }
   if (value.startsWith("category:") && value !== "category:new") {
@@ -235,7 +265,7 @@ export function workLogDraftPatchFromClassificationSelect(
       categoryName: "",
       classificationKind: "category",
       objectiveId: "",
-      remainingEstimatePercent: null,
+      progressEstimatePercent: null,
     };
   }
   if (value === "category:new") {
@@ -243,7 +273,7 @@ export function workLogDraftPatchFromClassificationSelect(
       categoryId: "",
       classificationKind: "category",
       objectiveId: "",
-      remainingEstimatePercent: null,
+      progressEstimatePercent: null,
     };
   }
   return {
@@ -251,15 +281,16 @@ export function workLogDraftPatchFromClassificationSelect(
     categoryName: "",
     classificationKind: "uncategorized",
     objectiveId: "",
-    remainingEstimatePercent: null,
+    progressEstimatePercent: null,
   };
 }
 
 export function workLogDraftPatchFromSuggestion(
   suggestion: WorkLogClassificationSuggestion,
+  options: WorkLogObjectiveOptionLookup = {},
 ): WorkLogEditorDraftPatch {
   if (suggestion.kind === "objective" && suggestion.objectiveId) {
-    return workLogDraftPatchFromClassificationSelect(`objective:${suggestion.objectiveId}`);
+    return workLogDraftPatchFromClassificationSelect(`objective:${suggestion.objectiveId}`, options);
   }
   if (suggestion.kind === "category" && suggestion.categoryId) {
     return workLogDraftPatchFromClassificationSelect(`category:${suggestion.categoryId}`);
@@ -270,7 +301,7 @@ export function workLogDraftPatchFromSuggestion(
       categoryName: suggestion.categoryName,
       classificationKind: "category",
       objectiveId: "",
-      remainingEstimatePercent: null,
+      progressEstimatePercent: null,
     };
   }
   return workLogDraftPatchFromClassificationSelect("uncategorized");

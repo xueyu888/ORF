@@ -19,3 +19,7 @@ export function canSaveUnscopedWorkLog(user: WorkLogPermissionUser | null | unde
   if (user?.role === "admin") return true;
   return user?.role === "member" && unscopedWorkLogMemberNames.has(normalizedUserName(user.name));
 }
+
+export function requiresObjectiveProgressEstimate(user: WorkLogPermissionUser | null | undefined) {
+  return user?.role === "member" && !canSaveUnscopedWorkLog(user);
+}

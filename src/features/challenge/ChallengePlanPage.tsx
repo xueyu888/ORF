@@ -1360,7 +1360,7 @@ export function ChallengePlanPage() {
         setOpenActionId(null);
       }}
     >
-      <div className={selectedMetric && !metricInspectorCollapsed ? "orf-challenge-workspace orf-challenge-workspace-with-inspector" : "orf-challenge-workspace"}>
+      <div className="orf-challenge-workspace">
         <div className="orf-challenge-tree-pane">
           {showAll && <TeamDashboard groups={filteredGroups} />}
           <ChallengeToolbar
