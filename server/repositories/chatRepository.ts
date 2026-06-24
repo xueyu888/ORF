@@ -21,6 +21,11 @@ import type { PermissionKey } from "../../src/config/permissions";
 import { addDaysToIsoDate, hasExecutableChatSearch, parseChatSearchQuery } from "../../src/features/chat/chatSearchSyntax";
 import { chatNotificationPreviewText } from "../../src/features/chat/chatNativeNotificationModel";
 import { pool } from "../db/client";
+import {
+  E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+  normalizedE2eNotificationViewerEmails,
+  visibleSystemNotificationMessageSql,
+} from "../notifications/notificationIsolationPolicy";
 import { chatPushChannelId, sendPushToUsers } from "../push/pushService";
 import { publishRealtimeChatEvent } from "../realtime/realtimeEventBus";
 import { resolveRealtimeUserPresence } from "../realtime/presenceRegistry";
@@ -65,6 +70,15 @@ import {
 } from "./chatRepositoryModel";
 
 export type { ChatActor } from "./chatRepositoryModel";
+
+function visibleChatMessageSql(messageSql: string, recipientUserIdParam: string, actorNamePatternParam: string, viewerEmailsParam: string) {
+  return visibleSystemNotificationMessageSql({
+    actorNamePatternParam,
+    messageSql,
+    recipientUserIdParam,
+    viewerEmailsParam,
+  });
+}
 
 async function ensureDefaultPublicChannel(teamId: string) {
   const now = nowIso();
@@ -159,8 +173,14 @@ async function findActiveDirectChannelIdByMemberIds(teamId: string, memberIds: s
 async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?: string } = {}) {
   const teamId = storageTeamId(actor);
   await preparePublicChannels(teamId);
-  const params = input.channelId ? [teamId, actor.id, input.channelId] : [teamId, actor.id];
-  const channelFilter = input.channelId ? "AND c.id = $3" : "";
+  const params: unknown[] = [
+    teamId,
+    actor.id,
+    E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+    normalizedE2eNotificationViewerEmails(),
+  ];
+  const channelFilter = input.channelId ? "AND c.id = $5" : "";
+  if (input.channelId) params.push(input.channelId);
   const { rows } = await pool.query<ChannelRow>(
     `
       WITH visible_channels AS (
@@ -189,6 +209,7 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
             SELECT count(*)::int
             FROM chat_messages msg
             WHERE msg.channel_id = c.id
+              AND ${visibleChatMessageSql("msg", "$2", "$3", "$4")}
           ) AS message_count,
           (
             SELECT string_agg(cm.user_id::text, ',' ORDER BY cm.user_id::text)
@@ -200,6 +221,7 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
             FROM chat_messages msg
             WHERE msg.channel_id = c.id
               AND msg.deleted_at IS NULL
+              AND ${visibleChatMessageSql("msg", "$2", "$3", "$4")}
           ) AS latest_message_at
         FROM chat_channels c
         INNER JOIN chat_channel_members m ON m.channel_id = c.id AND m.user_id = $2
@@ -297,12 +319,13 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
     pool.query<{ body: string; channel_id: string; created_at: Date | string }>(
       `
         SELECT DISTINCT ON (channel_id) channel_id, body, created_at
-        FROM chat_messages
-        WHERE channel_id = ANY($1::text[])
-          AND deleted_at IS NULL
+        FROM chat_messages m
+        WHERE m.channel_id = ANY($1::text[])
+          AND m.deleted_at IS NULL
+          AND ${visibleChatMessageSql("m", "$2", "$3", "$4")}
         ORDER BY channel_id, created_at DESC
       `,
-      [channelIds],
+      [channelIds, actor.id, E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN, normalizedE2eNotificationViewerEmails()],
     ),
     pool.query<{ channel_id: string; count: number }>(
       `
@@ -314,9 +337,10 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
           AND m.deleted_at IS NULL
           AND m.root_message_id IS NULL
           AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+          AND ${visibleChatMessageSql("m", "$2", "$3", "$4")}
         GROUP BY m.channel_id
       `,
-      [channelIds, actor.id],
+      [channelIds, actor.id, E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN, normalizedE2eNotificationViewerEmails()],
     ),
     pool.query<{ channel_id: string; count: number }>(
       `
@@ -329,9 +353,17 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
           AND m.root_message_id IS NULL
           AND (m.body LIKE $3 OR m.body ~* $4)
           AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+          AND ${visibleChatMessageSql("m", "$2", "$5", "$6")}
         GROUP BY m.channel_id
       `,
-      [channelIds, actor.id, `%orf-user:${actor.id}%`, CHAT_BROADCAST_MENTION_SQL_PATTERN],
+      [
+        channelIds,
+        actor.id,
+        `%orf-user:${actor.id}%`,
+        CHAT_BROADCAST_MENTION_SQL_PATTERN,
+        E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+        normalizedE2eNotificationViewerEmails(),
+      ],
     ),
     pool.query<{ channel_id: string; count: number }>(
       `
@@ -348,9 +380,10 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
           AND m.author_user_id <> $2
           AND m.deleted_at IS NULL
           AND (f.last_viewed_at IS NULL OR m.created_at > f.last_viewed_at)
+          AND ${visibleChatMessageSql("root", "$2", "$3", "$4")}
         GROUP BY m.channel_id
       `,
-      [channelIds, actor.id],
+      [channelIds, actor.id, E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN, normalizedE2eNotificationViewerEmails()],
     ),
   ]);
 
@@ -881,10 +914,12 @@ async function getMessageById(actor: ChatActor, messageId: string) {
              m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
       FROM chat_messages m
       INNER JOIN users u ON u.id = m.author_user_id
-      WHERE m.team_id = $1 AND m.id = $2
+      WHERE m.team_id = $1
+        AND m.id = $2
+        AND ${visibleChatMessageSql("m", "$3", "$4", "$5")}
       LIMIT 1
     `,
-    [teamId, messageId],
+    [teamId, messageId, actor.id, E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN, normalizedE2eNotificationViewerEmails()],
   );
   const [message] = await buildMessages(rows, actor);
   return message ?? null;
@@ -899,10 +934,12 @@ async function getRawMessage(actor: ChatActor, messageId: string) {
              m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
       FROM chat_messages m
       INNER JOIN users u ON u.id = m.author_user_id
-      WHERE m.team_id = $1 AND m.id = $2
+      WHERE m.team_id = $1
+        AND m.id = $2
+        AND ${visibleChatMessageSql("m", "$3", "$4", "$5")}
       LIMIT 1
     `,
-    [teamId, messageId],
+    [teamId, messageId, actor.id, E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN, normalizedE2eNotificationViewerEmails()],
   );
   return rows[0] ?? null;
 }
@@ -1028,6 +1065,7 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
           AND m.deleted_at IS NULL
           AND m.root_message_id IS NULL
           AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+          AND ${visibleChatMessageSql("m", "$2", "$5", "$6")}
         GROUP BY m.channel_id
       ),
       mention_unread AS (
@@ -1040,6 +1078,7 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
           AND m.root_message_id IS NULL
           AND (m.body LIKE $3 OR m.body ~* $4)
           AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+          AND ${visibleChatMessageSql("m", "$2", "$5", "$6")}
         GROUP BY m.channel_id
       ),
       thread_unread AS (
@@ -1056,6 +1095,7 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
           AND m.author_user_id <> $2
           AND m.deleted_at IS NULL
           AND (f.last_viewed_at IS NULL OR m.created_at > f.last_viewed_at)
+          AND ${visibleChatMessageSql("root", "$2", "$5", "$6")}
         GROUP BY m.channel_id
       ),
       channel_unread AS (
@@ -1079,7 +1119,14 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
         count(*) FILTER (WHERE message_count > 0 OR thread_count > 0)::int AS unread_channel_count
       FROM channel_unread
     `,
-    [teamId, actor.id, `%orf-user:${actor.id}%`, CHAT_BROADCAST_MENTION_SQL_PATTERN],
+    [
+      teamId,
+      actor.id,
+      `%orf-user:${actor.id}%`,
+      CHAT_BROADCAST_MENTION_SQL_PATTERN,
+      E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+      normalizedE2eNotificationViewerEmails(),
+    ],
   );
   const row = rows[0];
   const messageUnreadCount = Number(row?.message_unread_count ?? 0);
@@ -1098,8 +1145,15 @@ export async function listChatMessages(input: { before?: string; channelId: stri
   if (!(await hasReadableChannel(actor, input.channelId))) return { status: "notFound" };
 
   const limit = Math.max(1, Math.min(100, input.limit ?? 60));
-  const params: unknown[] = [storageTeamId(actor), input.channelId, limit];
-  const beforeClause = input.before ? "AND m.created_at < $4" : "";
+  const params: unknown[] = [
+    storageTeamId(actor),
+    input.channelId,
+    limit,
+    actor.id,
+    E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+    normalizedE2eNotificationViewerEmails(),
+  ];
+  const beforeClause = input.before ? "AND m.created_at < $7" : "";
   if (input.before) params.push(input.before);
   const { rows } = await pool.query<MessageRow>(
     `
@@ -1113,6 +1167,7 @@ export async function listChatMessages(input: { before?: string; channelId: stri
         WHERE m.team_id = $1
           AND m.channel_id = $2
           AND m.root_message_id IS NULL
+          AND ${visibleChatMessageSql("m", "$4", "$5", "$6")}
           ${beforeClause}
         ORDER BY m.created_at DESC
         LIMIT $3
@@ -1156,6 +1211,7 @@ export async function getChatMessageContext(
         WHERE m.team_id = $1
           AND m.channel_id = $2
           AND m.root_message_id IS NULL
+          AND ${visibleChatMessageSql("m", "$5", "$6", "$7")}
       ),
       target_root AS (
         SELECT rn, total_count
@@ -1168,7 +1224,15 @@ export async function getChatMessageContext(
       WHERE ordered_roots.rn BETWEEN target_root.rn - $4 AND target_root.rn + $4
       ORDER BY ordered_roots.rn ASC
     `,
-    [storageTeamId(actor), input.channelId, rootMessageId, radius],
+    [
+      storageTeamId(actor),
+      input.channelId,
+      rootMessageId,
+      radius,
+      actor.id,
+      E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+      normalizedE2eNotificationViewerEmails(),
+    ],
   );
   if (rows.length === 0) return { status: "notFound" };
 
@@ -1204,10 +1268,19 @@ export async function getChatUnreadContext(
         AND m.deleted_at IS NULL
         AND ($3::timestamptz IS NULL OR m.created_at > $3::timestamptz)
         AND ($4::boolean = true OR m.author_user_id <> $5::uuid)
+        AND ${visibleChatMessageSql("m", "$5", "$6", "$7")}
       ORDER BY m.created_at ASC, m.id ASC
       LIMIT 1
     `,
-    [storageTeamId(actor), input.channelId, lastReadAt, manuallyUnread, actor.id],
+    [
+      storageTeamId(actor),
+      input.channelId,
+      lastReadAt,
+      manuallyUnread,
+      actor.id,
+      E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+      normalizedE2eNotificationViewerEmails(),
+    ],
   );
   const targetMessageId = rows[0]?.id;
   if (!targetMessageId) return { status: "notFound" };
@@ -2007,10 +2080,17 @@ export async function listPinnedChatMessages(channelId: string, actor: ChatActor
       WHERE p.channel_id = $1
         AND m.team_id = $2
         AND m.deleted_at IS NULL
+        AND ${visibleChatMessageSql("m", "$3", "$4", "$5")}
       ORDER BY p.pinned_at DESC
       LIMIT 100
     `,
-    [channelId, storageTeamId(actor)],
+    [
+      channelId,
+      storageTeamId(actor),
+      actor.id,
+      E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+      normalizedE2eNotificationViewerEmails(),
+    ],
   );
   const messages = await buildMessages(rows, actor);
   return ok({ results: messages.map((message) => ({ channel, message })) });
@@ -2034,10 +2114,11 @@ export async function listSavedChatMessages(actor: ChatActor): Promise<Outcome<{
       WHERE m.team_id = $1
         AND m.deleted_at IS NULL
         AND c.archived_at IS NULL
+        AND ${visibleChatMessageSql("m", "$2", "$3", "$4")}
       ORDER BY s.saved_at DESC
       LIMIT 100
     `,
-    [teamId, actor.id],
+    [teamId, actor.id, E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN, normalizedE2eNotificationViewerEmails()],
   );
   const messages = await buildMessages(rows, actor);
   const uniqueChannelRows = await listVisibleChannelRows(actor);
@@ -2458,6 +2539,12 @@ export async function searchChatMessages(
     clauses.push(`c.type = ${pushParam(input.type)}`);
   }
   const searchClause = clauses.length > 0 ? `AND ${clauses.join("\n        AND ")}` : "";
+  const visibilityClause = visibleChatMessageSql(
+    "m",
+    "$2",
+    pushParam(E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN),
+    pushParam(normalizedE2eNotificationViewerEmails()),
+  );
   type SearchRow = MessageRow & {
     channel_archived_at: Date | string | null;
     channel_created_at: Date | string;
@@ -2487,6 +2574,7 @@ export async function searchChatMessages(
       WHERE m.team_id = $1
         AND m.deleted_at IS NULL
         AND c.archived_at IS NULL
+        AND ${visibilityClause}
         ${searchClause}
       ORDER BY m.created_at DESC
       LIMIT 50

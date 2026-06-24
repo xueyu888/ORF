@@ -107,7 +107,7 @@ import {
   matchOrfAttachmentMarkdownTokens,
   matchOrfMentionMarkdownTokens,
 } from "../../src/features/rich-text/orfRichTextTokens";
-import { publishRealtimeSystemBroadcast } from "../realtime/realtimeEventBus";
+import { publishRealtimeSystemBroadcastToUsers } from "../realtime/realtimeEventBus";
 import { publishObjectiveInvalidation, publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { objectStorage } from "../storage/objectStorage";
 import { getOrfStateSnapshot } from "../readModels/orfTaskManagementReadModel";
@@ -312,10 +312,11 @@ async function notifyTeamOfObjectivePublication(input: {
   teamId: string;
 }) {
   const actorName = await getUserNameById(input.actorUserId);
+  const actorDisplayName = actorName || "指挥官";
   const targetHref = challengeObjectiveHref("/bounties", input.objectiveId);
   const body = `新的悬赏目标「${input.objectiveTitle}」已发布到悬赏大厅。`;
-  await publishNotificationEvent({
-    actorName: actorName || "指挥官",
+  const notifications = await publishNotificationEvent({
+    actorName: actorDisplayName,
     actorUserId: input.actorUserId,
     body,
     kind: "objective.published",
@@ -327,7 +328,7 @@ async function notifyTeamOfObjectivePublication(input: {
     teamId: input.teamId,
     title: "新悬赏发布",
   });
-  publishRealtimeSystemBroadcast(input.teamId, {
+  publishRealtimeSystemBroadcastToUsers(input.teamId, notifications.map((notification) => notification.recipientUserId), {
     id: `objective-published:${input.objectiveId}`,
     body,
     createdAt: nowIso(),
