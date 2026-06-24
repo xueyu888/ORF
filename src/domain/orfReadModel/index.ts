@@ -22,6 +22,7 @@ export type TaskManagementData = Pick<
   | "objectiveAlignmentRequests"
   | "pointLedger"
   | "projects"
+  | "userProfiles"
 > & {
   pendingChallengeApplications: PendingChallengeApplication[];
 };

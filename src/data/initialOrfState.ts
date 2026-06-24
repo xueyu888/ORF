@@ -1,4 +1,5 @@
 import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
+import { userDisplayProfilesFromUsers } from "../domain/userDisplayProfile";
 import {
   objectiveParticipantSnapshot,
   userNameByIdMap,
@@ -47,7 +48,7 @@ type SeedResult = Omit<Result, "uncertaintyScore" | "acceptedResult" | "evidence
     priorityDeclinedBy?: string[];
     challengeApplications?: ChallengeApplication[];
   };
-type SeedInitialState = Omit<OrfState, "evidence" | "feedback" | "objectiveLoot" | "objectives" | "results" | "tasks"> & {
+type SeedInitialState = Omit<OrfState, "evidence" | "feedback" | "objectiveLoot" | "objectives" | "results" | "tasks" | "userProfiles"> & {
   evidence: Evidence[];
   feedback: Feedback[];
   objectiveLoot: ObjectiveLoot[];
@@ -172,6 +173,7 @@ function normalizeInitialState(state: SeedInitialState): OrfState {
   return {
     ...state,
     users: state.users.map((user) => ({ ...user, status: user.status ?? "active" })),
+    userProfiles: userDisplayProfilesFromUsers(state.users),
     projects,
     objectives,
     results,

@@ -24,7 +24,7 @@ import {
 } from "../db/schema";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
-import { getTaskManagementData, type TaskManagementDataScope } from "./orfTaskManagementReadModel";
+import { getTaskManagementData, userProfilesForTaskManagementData, type TaskManagementDataScope } from "./orfTaskManagementReadModel";
 import {
   getUserMapsForStorageScope,
   groupEvidenceIdsByResult,
@@ -252,8 +252,9 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
   const checklistItemIds = new Set(tasksForMember.flatMap((task) => task.checklist.map((item) => item.id)));
   const feedbackIssueIds = new Set(data.feedback.map((item) => item.id));
 
-  return {
+  const scopedData: TaskManagementData = {
     projects: data.projects.filter((project) => objectivesForMember.some((objective) => objective.projectId === project.id)),
+    userProfiles: [],
     objectives: objectivesForMember,
     results: resultsForMember,
     tasks: tasksForMember,
@@ -265,5 +266,9 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
     objectiveAlignmentRequests: data.objectiveAlignmentRequests.filter((item) => objectiveIds.has(item.objectiveId)),
     pointLedger: data.pointLedger,
     pendingChallengeApplications,
+  };
+  return {
+    ...scopedData,
+    userProfiles: userProfilesForTaskManagementData(scopedData, data.userProfiles),
   };
 }

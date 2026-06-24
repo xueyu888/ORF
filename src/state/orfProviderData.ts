@@ -2,6 +2,7 @@ import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, use
 import { apiJson, getCurrentUserAccess, type CurrentUserAccessData, type PermissionRulesResponse, type TaskManagementData, type UsersResponse } from "./apiClient";
 import { normalizeState } from "./orfStateSnapshot";
 import { shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
+import { mergeUserDisplayProfiles, userDisplayProfilesFromUsers } from "../domain/userDisplayProfile";
 import { getDesktopSystemIdleSnapshot, getDesktopWindowState, isDesktopShellAvailable } from "../features/desktop/desktopShellRuntime";
 import { readBrowserDocumentAttentionSnapshot } from "../features/interaction/appAttentionState";
 import { getRealtimeClientId } from "../features/realtime/realtimeClientId";
@@ -68,6 +69,7 @@ export function mergeTaskManagementData(state: OrfState, data: TaskManagementDat
     objectiveTrialReviews: data.objectiveTrialReviews ?? state.objectiveTrialReviews ?? [],
     objectiveAlignmentRequests: data.objectiveAlignmentRequests ?? state.objectiveAlignmentRequests ?? [],
     pointLedger: data.pointLedger ?? state.pointLedger ?? [],
+    userProfiles: data.userProfiles ?? state.userProfiles ?? userDisplayProfilesFromUsers(state.users),
   });
 }
 
@@ -79,6 +81,7 @@ export function mergeCurrentUserAccess(state: OrfState, data: CurrentUserAccessD
   return {
     ...state,
     users: mergeCurrentUser(state.users, data.user),
+    userProfiles: mergeUserDisplayProfiles(state.userProfiles, [data.user]),
     currentUserId: data.user.id,
     permissionRules: data.permissionRules,
   };
@@ -95,6 +98,7 @@ export function mergeUsers(state: OrfState, data: UsersResponse): OrfState {
   return {
     ...state,
     users: data.users,
+    userProfiles: userDisplayProfilesFromUsers(data.users),
     currentUserId: data.users.some((user) => user.id === state.currentUserId) ? state.currentUserId : data.users[0]?.id ?? state.currentUserId,
   };
 }

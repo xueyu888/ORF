@@ -15,6 +15,7 @@ import {
 } from "../domain/orfObjectiveParticipants";
 import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
 import { taskIdsForObjective } from "../domain/orfWorkItems";
+import { userDisplayProfilesFromUsers } from "../domain/userDisplayProfile";
 import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfProject, OrfState, Result, Task, TaskStatus } from "../types/orf";
 import { addCalendarDays, localDateString } from "../utils/date";
@@ -262,6 +263,7 @@ export const normalizeState = (state: OrfState): OrfState => {
   return {
     ...state,
     users: normalizedUsers,
+    userProfiles: state.userProfiles ?? userDisplayProfilesFromUsers(normalizedUsers),
     currentUserId: state.currentUserId ?? initialOrfState.currentUserId,
     projects: (state.projects ?? []).map((project) => normalizeProject(project)).filter((project): project is OrfProject => Boolean(project)),
     comments: (state.comments ?? []).map((thread) => ({

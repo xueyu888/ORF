@@ -61,6 +61,12 @@ export interface OrfUser {
   avatarUrl?: string | null;
 }
 
+export interface OrfUserDisplayProfile {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+}
+
 export interface PermissionRule {
   role: UserRole;
   permissions: PermissionKey[];
@@ -820,6 +826,7 @@ export interface ChatUnreadSummary {
 
 export interface OrfState {
   users: OrfUser[];
+  userProfiles: OrfUserDisplayProfile[];
   currentUserId: string;
   permissionRules: PermissionRule[];
   projects: OrfProject[];

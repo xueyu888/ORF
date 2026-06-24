@@ -11,6 +11,7 @@ import type {
   OrfProject,
   ObjectiveTrialReview,
   OrfState,
+  OrfUserDisplayProfile,
   Result,
   Task,
 } from "../../src/types/orf";
@@ -128,6 +129,81 @@ function taskDefinitionContributorUserIds(task: TaskRow) {
     : uniqueParticipantUserIds([task.createdBy, task.updatedBy]);
 }
 
+function addUserId(ids: Set<string>, value: string | null | undefined) {
+  const userId = value?.trim();
+  if (userId) ids.add(userId);
+}
+
+function addUserIds(ids: Set<string>, values: Array<string | null | undefined> | undefined) {
+  for (const value of values ?? []) {
+    addUserId(ids, value);
+  }
+}
+
+function addObjectiveUserIds(ids: Set<string>, objective: Objective) {
+  addUserIds(ids, objective.challengerUserIds);
+  addUserIds(ids, objective.assignedChallengerUserIds);
+  for (const application of objective.challengeApplications ?? []) {
+    addUserId(ids, application.applicantUserId);
+  }
+}
+
+export function userProfilesForTaskManagementData(
+  data: TaskManagementData,
+  profiles: readonly OrfUserDisplayProfile[] = data.userProfiles,
+) {
+  const ids = new Set<string>();
+  for (const objective of data.objectives) {
+    addObjectiveUserIds(ids, objective);
+  }
+  for (const result of data.results) {
+    addUserId(ids, result.definerUserId);
+  }
+  for (const task of data.tasks) {
+    addUserId(ids, task.assigneeUserId);
+    addUserId(ids, task.createdBy);
+    addUserId(ids, task.updatedBy);
+    addUserIds(ids, task.definitionContributorUserIds);
+  }
+  for (const item of data.evidence) {
+    addUserId(ids, item.ownerUserId);
+  }
+  for (const item of data.feedback) {
+    addUserId(ids, item.ownerUserId);
+    addUserId(ids, item.createdBy);
+    addUserId(ids, item.updatedBy);
+  }
+  for (const item of data.objectiveLoot) {
+    addUserId(ids, item.submittedByUserId);
+  }
+  for (const item of data.objectiveTrialReviews) {
+    addUserId(ids, item.requestedByUserId);
+    addUserId(ids, item.reviewedByUserId);
+  }
+  for (const item of data.objectiveAlignmentRequests) {
+    addUserId(ids, item.requestedByUserId);
+    addUserId(ids, item.reviewedByUserId);
+  }
+  for (const item of data.pointLedger) {
+    addUserId(ids, item.userId);
+  }
+  for (const thread of data.comments) {
+    addUserId(ids, thread.createdBy);
+    for (const message of thread.messages) {
+      addUserId(ids, message.authorUserId);
+    }
+  }
+  for (const pending of data.pendingChallengeApplications) {
+    addUserId(ids, pending.application.applicantUserId);
+    addObjectiveUserIds(ids, pending.objective);
+    for (const result of pending.results) {
+      addUserId(ids, result.definerUserId);
+    }
+  }
+
+  return profiles.filter((profile) => ids.has(profile.id));
+}
+
 export async function getTaskManagementData(scope: TaskManagementDataScope = {}): Promise<TaskManagementData> {
   const storageScopeId = scopedStorageId(scope);
   const objectiveRows = storageScopeId
@@ -153,7 +229,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const checklistRows = await getChecklistRows(taskIds);
   const causeRows = await getFeedbackCauseRows(feedbackIssueIds);
   const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
-  const { userNameById } = await getUserMapsForStorageScope(storageScopeId);
+  const { userNameById, userProfiles: scopeUserProfiles } = await getUserMapsForStorageScope(storageScopeId);
   const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
   const objectiveParticipantAvatarUrls = await getUserAvatarUrlMap(objectiveRows.flatMap((objective) => [...objective.challengerUserIds, ...objective.assignedChallengerUserIds]));
   const commentAuthorAvatarUrls = await getUserAvatarUrlMap(commentMessageRows.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
@@ -347,7 +423,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       messages: messagesByThread.get(thread.id) ?? [],
     }));
 
-  return {
+  const data: TaskManagementData = {
     projects: projectItems,
     objectives: objectiveItems,
     results: resultItems,
@@ -359,7 +435,12 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     objectiveTrialReviews: objectiveTrialReviewItems,
     objectiveAlignmentRequests: objectiveAlignmentRequestItems,
     pointLedger: pointLedgerItems,
+    userProfiles: [],
     pendingChallengeApplications: [],
+  };
+  return {
+    ...data,
+    userProfiles: userProfilesForTaskManagementData(data, scopeUserProfiles),
   };
 }
 
