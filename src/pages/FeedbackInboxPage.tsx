@@ -1,7 +1,7 @@
 import { CheckCircle2, CircleDot, Clock3, Flag, MessageSquare, Plus, RotateCcw, Tag } from "lucide-react";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { UserAvatar } from "../components/UserAvatar";
 import { BountyBadge, BountyButton, BountyEmptyState, BountySelect, BountyTextInput } from "../features/bounty-hall/BountyHallSkin";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
@@ -23,10 +23,12 @@ import { impactLabel } from "../utils/labels";
 
 export function FeedbackInboxPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const labelFilterParam = searchParams.get("label");
   const { currentUser, state } = useOrf();
   const [query, setQuery] = useState("");
   const [listState, setListState] = useState<FeedbackIssueListState>("open");
-  const [cause, setCause] = useState("All");
+  const [cause, setCause] = useState(labelFilterParam ?? "All");
   const [impact, setImpact] = useState<"All" | Impact>("All");
   const [assigneeUserId, setAssigneeUserId] = useState("All");
   const [authorUserId, setAuthorUserId] = useState("All");
@@ -41,6 +43,10 @@ export function FeedbackInboxPage() {
   const labelOptions = useMemo(() => feedbackIssueLabelOptions(issueItems), [issueItems]);
   const assigneeOptions = useMemo(() => feedbackIssueAssigneeOptions(issueItems), [issueItems]);
   const authorOptions = useMemo(() => feedbackIssueAuthorOptions(issueItems), [issueItems]);
+
+  useEffect(() => {
+    if (labelFilterParam) setCause(labelFilterParam);
+  }, [labelFilterParam]);
 
   const filteredFeedback = useMemo(
     () => filterFeedbackIssueListItems(issueItems, { assigneeUserId, authorUserId, cause, impact, listState, query, sort }),
@@ -78,8 +84,8 @@ export function FeedbackInboxPage() {
         </div>
         <div className="feedback-issue-header-actions">
           <div className="feedback-issue-index-links" aria-label="反馈索引">
-            <span><Tag aria-hidden="true" /> 标签 <strong>{labelOptions.length}</strong></span>
-            <span><Flag aria-hidden="true" /> 里程碑 <strong>0</strong></span>
+            <Link className="feedback-issue-index-link" to="/feedback/labels"><Tag aria-hidden="true" /> 标签 <strong>{labelOptions.length}</strong></Link>
+            <Link className="feedback-issue-index-link" to="/feedback/milestones"><Flag aria-hidden="true" /> 里程碑 <strong>0</strong></Link>
           </div>
           {canCreateFeedback && (
             <BountyButton onClick={() => navigate("/feedback/new")}>
