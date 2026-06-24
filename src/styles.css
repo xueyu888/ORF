@@ -15145,11 +15145,27 @@ a.orf-sidebar-link,
   text-transform: uppercase;
 }
 
-.orf-chat-channel-group-title > span {
+.orf-chat-channel-group-toggle {
   display: inline-flex;
   min-width: 0;
   align-items: center;
   gap: 4px;
+  border: 0;
+  border-radius: var(--orf-radius-control);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  padding: 2px 4px;
+  text-align: left;
+  text-transform: inherit;
+}
+
+.orf-chat-channel-group-toggle:hover,
+.orf-chat-channel-group-toggle:focus-visible {
+  background: var(--orf-bg-row-hover);
+  color: var(--orf-accent-text);
+  outline: 0;
 }
 
 .orf-chat-channel-group-action {
