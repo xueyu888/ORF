@@ -46,7 +46,7 @@ export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goa
 export type ObjectiveFlowStatus = "candidate" | "open" | "applying" | "recruiting" | "reestimating" | "frozen" | "submitted" | "revisionRequired" | "accepted" | "settled" | "closed";
 export type LootResultClaimStatus = "completed" | "falsified" | "notClaimed";
 export type ObjectiveTrialReviewStatus = "requested" | "approved" | "needsWork";
-export type ObjectiveAlignmentRequestKind = "reestimateCompletion" | "acceptance";
+export type ObjectiveAlignmentRequestKind = "reestimateCompletion" | "acceptance" | "frozenReestimate";
 export type ObjectiveAlignmentRequestStatus = "requested" | "scheduled" | "completed" | "needsWork" | "cancelled";
 export type ChatChannelType = "public" | "private" | "direct";
 export type ChatMemberRole = "owner" | "admin" | "member";
@@ -305,6 +305,7 @@ export interface ObjectiveAlignmentRequest {
   scheduledAt?: string | null;
   meetingRoom?: string | null;
   note?: string | null;
+  confirmationDueAt?: string | null;
   commanderFeedback?: string | null;
   reviewedBy?: string | null;
   reviewedByUserId?: string | null;

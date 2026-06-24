@@ -41,6 +41,8 @@ import {
 import {
   calculateObjectiveReestimateDueAt,
   resolveObjectiveReestimateWindowSync,
+  validateFrozenReestimateReopenDueAt,
+  type FrozenReestimateReopenBlockReason,
 } from "../../src/domain/orfReestimateWindow";
 import {
   isObjectiveAssignedChallenger,
@@ -598,7 +600,9 @@ async function notifyObjectiveChallengersOfSettlement(input: {
 }
 
 function objectiveAlignmentKindLabel(kind: ObjectiveAlignmentRequestKind) {
-  return kind === "reestimateCompletion" ? "重估完成" : "验收";
+  if (kind === "reestimateCompletion") return "重估完成";
+  if (kind === "frozenReestimate") return "冻结后重估";
+  return "验收";
 }
 
 function objectiveAlignmentTargetHref(kind: ObjectiveAlignmentRequestKind, objectiveId: string) {
@@ -1302,7 +1306,7 @@ export async function applyForObjectiveChallenge(objectiveId: string, actorUserI
   return applied ? { status: "applied", objective: applied } : { status: "notFound" };
 }
 
-export type ObjectiveMutationInvalidReason = ObjectiveFreezeBlockReason;
+export type ObjectiveMutationInvalidReason = ObjectiveFreezeBlockReason | FrozenReestimateReopenBlockReason;
 
 export type ObjectiveFlowMutationOutcome =
   | { status: "ok"; objective: Objective }
@@ -1719,11 +1723,13 @@ export interface ReviewObjectiveAlignmentRequestInput {
   status: Extract<ObjectiveAlignmentRequestStatus, "scheduled" | "completed" | "needsWork" | "cancelled">;
   scheduledAt?: string | null;
   meetingRoom?: string | null;
+  confirmationDueAt?: string | null;
   commanderFeedback?: string | null;
 }
 
 function objectiveAcceptsAlignmentRequest(objective: Pick<Objective, "flowStatus">, kind: ObjectiveAlignmentRequestKind) {
   if (kind === "reestimateCompletion") return objective.flowStatus === "reestimating";
+  if (kind === "frozenReestimate") return objective.flowStatus === "frozen";
   return objective.flowStatus === "submitted";
 }
 
@@ -1768,6 +1774,7 @@ export async function createObjectiveAlignmentRequest(
       scheduledAt: input.scheduledAt?.trim() || null,
       meetingRoom: input.meetingRoom?.trim() || null,
       note: input.note?.trim() || null,
+      confirmationDueAt: null,
       commanderFeedback: null,
       reviewedBy: null,
       reviewedByUserId: null,
@@ -1811,6 +1818,79 @@ export async function createObjectiveAlignmentRequest(
   return objectiveAlignmentOutcome(requestId, requested.scope);
 }
 
+type ReopenFrozenReestimateOutcome =
+  | { status: "ok"; scope: RuntimeScope }
+  | { status: "invalid"; reason?: ObjectiveMutationInvalidReason }
+  | { status: "notFound" }
+  | { status: "closed" };
+
+async function reopenFrozenObjectiveForReestimate(input: {
+  actorId: string;
+  commanderFeedback?: string | null;
+  confirmationDueAt?: string | null;
+  objectiveId: string;
+  requestId: string;
+}): Promise<ReopenFrozenReestimateOutcome> {
+  const reopened = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, input.objectiveId)).limit(1).for("update");
+    if (!objective) return { status: "notFound" as const };
+
+    const dueAtValidation = validateFrozenReestimateReopenDueAt(objective, input.confirmationDueAt);
+    if (dueAtValidation.status === "blocked") {
+      return { status: "invalid" as const, reason: dueAtValidation.reason };
+    }
+
+    const reviewedAt = nowIso();
+    const feedback = input.commanderFeedback?.trim() || "冻结后重估申请已通过，目标已重新进入重估。";
+    const reviewed = await tx
+      .update(objectiveAlignmentRequests)
+      .set({
+        status: "completed",
+        confirmationDueAt: dueAtValidation.confirmationDueAt,
+        commanderFeedback: feedback,
+        reviewedBy: input.actorId,
+        reviewedByUserId: input.actorId,
+        reviewedAt,
+      })
+      .where(
+        and(
+          eq(objectiveAlignmentRequests.id, input.requestId),
+          eq(objectiveAlignmentRequests.objectiveId, input.objectiveId),
+          eq(objectiveAlignmentRequests.kind, "frozenReestimate"),
+          inArray(objectiveAlignmentRequests.status, ["requested", "scheduled"]),
+        ),
+      )
+      .returning({ id: objectiveAlignmentRequests.id });
+    if (reviewed.length === 0) return { status: "closed" as const };
+
+    const transition = objectiveLifecycleTransitions.reopenFrozenReestimate;
+    await tx
+      .update(objectives)
+      .set({
+        flowStatus: transition.to,
+        stage: transition.stage,
+        confirmationDueAt: dueAtValidation.confirmationDueAt,
+        confirmedAt: null,
+        updatedAt: today(),
+        updatedBy: input.actorId,
+      })
+      .where(and(eq(objectives.id, input.objectiveId), eq(objectives.flowStatus, transition.from)));
+
+    return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
+  });
+
+  if (reopened.status === "ok") {
+    publishObjectiveInvalidation({
+      actorUserId: input.actorId,
+      reason: "objective.lifecycle.changed",
+      objectiveId: input.objectiveId,
+      teamId: runtimeScopeStorageId(reopened.scope),
+    });
+  }
+
+  return reopened;
+}
+
 export async function reviewObjectiveAlignmentRequest(
   objectiveId: string,
   requestId: string,
@@ -1837,9 +1917,21 @@ export async function reviewObjectiveAlignmentRequest(
   if (!["requested", "scheduled"].includes(request.status)) return { status: "closed" };
 
   if (input.status === "completed") {
-    if (request.kind !== "reestimateCompletion") return { status: "invalid" };
-    const frozen = await freezeObjectiveAfterReestimate(objectiveId, actorId);
-    if (frozen.status !== "ok") return frozen.status === "notFound" ? { status: "notFound" } : { status: "invalid", reason: frozen.reason };
+    if (request.kind === "reestimateCompletion") {
+      const frozen = await freezeObjectiveAfterReestimate(objectiveId, actorId);
+      if (frozen.status !== "ok") return frozen.status === "notFound" ? { status: "notFound" } : { status: "invalid", reason: frozen.reason };
+    } else if (request.kind === "frozenReestimate") {
+      const reopened = await reopenFrozenObjectiveForReestimate({
+        actorId,
+        commanderFeedback: input.commanderFeedback,
+        confirmationDueAt: input.confirmationDueAt,
+        objectiveId,
+        requestId,
+      });
+      if (reopened.status !== "ok") return reopened;
+    } else {
+      return { status: "invalid" };
+    }
 
     const completed = await objectiveAlignmentOutcome(requestId, runtimeScope(request.teamId));
     if (completed.status === "ok") {

@@ -83,7 +83,7 @@
 
 `Objective.finalDueAt` 是目标截止日期的唯一事实源。只有指挥官可以修改：`candidate/open/applying/recruiting/reestimating` 可正常调整；`frozen` 只允许因延期等异常原因把日期延后；`submitted/revisionRequired/accepted/settled/closed` 不允许修改。目标仍处于 `reestimating` 且最终截止日期实际变更时，`Objective.confirmationDueAt` 按挑战接受时间和新的最终截止日期重新计算；冻结后延后截止日期不重开指标重估，也不改变 `confirmationDueAt`。
 
-冻结后指标口径稳定，不再退回 `reestimating`。`confirmationDueAt` 到期后同样停止指标调整，不提供独立续期入口。
+冻结后指标口径默认稳定，不允许直接编辑。若挑战者发现冻结口径仍需修复，只能发起 `frozenReestimate` 对齐申请；指挥官审批通过时设置新的 `confirmationDueAt`，该时间必须晚于当前时间且不能超过 `Objective.finalDueAt` 当日 23:59。审批通过后目标退回现有 `reestimating/orfReestimate` 链路并清空当前 `confirmedAt`，改完后仍需重新申请完成重估并由指挥官再次冻结。`confirmationDueAt` 到期后停止指标调整，不提供不经审批的独立续期入口。
 
 ## 征召与申请
 

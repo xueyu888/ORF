@@ -99,7 +99,15 @@ type RowHandlers = {
   onEditTarget: (target: ChallengeTarget) => void;
   onFreezeObjective: (objectiveId: string) => Promise<boolean>;
   onRequestAlignment: (objectiveId: string, input: { kind: ObjectiveAlignmentRequestKind; note?: string | null }) => Promise<boolean>;
-  onReviewAlignment: (objectiveId: string, requestId: string, input: { status: Extract<ObjectiveAlignmentRequestStatus, "completed" | "needsWork">; commanderFeedback?: string | null }) => Promise<boolean>;
+  onReviewAlignment: (
+    objectiveId: string,
+    requestId: string,
+    input: {
+      status: Extract<ObjectiveAlignmentRequestStatus, "completed" | "needsWork">;
+      commanderFeedback?: string | null;
+      confirmationDueAt?: string | null;
+    },
+  ) => Promise<boolean>;
   onOpenActionChange: (id: string | null) => void;
   onPublishObjective: (objectiveId: string) => Promise<boolean>;
   onRecruitObjective: (objectiveId: string) => void;
@@ -518,6 +526,13 @@ function ObjectivePanel({
                   >
                     完成并冻结
                   </button>
+                ) : request.kind === "frozenReestimate" ? (
+                  <FrozenReestimateApprovalControl
+                    now={now}
+                    objective={group.objective}
+                    onReviewAlignment={handlers.onReviewAlignment}
+                    request={request}
+                  />
                 ) : (
                   <Link className={actionButtonClassName({ size: "sm", variant: "primary" })} to={`/tasks/objectives/${group.objective.id}/loot`}>
                     去验收
@@ -529,7 +544,12 @@ function ObjectivePanel({
                   onClick={() =>
                     void handlers.onReviewAlignment(group.objective.id, request.id, {
                       status: "needsWork",
-                      commanderFeedback: request.kind === "reestimateCompletion" ? "请继续重估指标口径后再申请对齐。" : "请补充验收材料后再申请对齐。",
+                      commanderFeedback:
+                        request.kind === "reestimateCompletion"
+                          ? "请继续重估指标口径后再申请对齐。"
+                          : request.kind === "frozenReestimate"
+                            ? "冻结后重估申请未通过，请补充需要修改的口径和原因。"
+                            : "请补充验收材料后再申请对齐。",
                     })
                   }
                 >
@@ -623,7 +643,9 @@ function alignmentActionForObjective(
       ? "reestimateCompletion"
       : objective.flowStatus === "submitted"
         ? "acceptance"
-        : null;
+        : objective.flowStatus === "frozen"
+          ? "frozenReestimate"
+          : null;
   if (!kind) return null;
 
   const existing = latestOpenObjectiveAlignmentRequest(objective.id, kind, requests);
@@ -649,13 +671,103 @@ function AlignmentActionButton({
       onClick={() =>
         void onRequestAlignment(objectiveId, {
           kind: action.kind,
-          note: "请和指挥官约时间，并定好会议室。",
+          note:
+            action.kind === "frozenReestimate"
+              ? "申请冻结后重新进入重估，需由指挥官设置新的重估截止时间。"
+              : "请和指挥官约时间，并定好会议室。",
         })
       }
     >
       {action.label}
     </button>
   );
+}
+
+function FrozenReestimateApprovalControl({
+  now,
+  objective,
+  onReviewAlignment,
+  request,
+}: {
+  now: Date;
+  objective: ObjectiveNode["objective"];
+  onReviewAlignment: RowHandlers["onReviewAlignment"];
+  request: ObjectiveAlignmentRequest;
+}) {
+  const [value, setValue] = useState(() => request.confirmationDueAt ? isoToDateTimeLocalInput(request.confirmationDueAt) : defaultFrozenReestimateDueAtInput(objective.finalDueAt, now));
+  const max = finalDueAtDateTimeLocalMax(objective.finalDueAt);
+  const disabled = !value;
+
+  return (
+    <span className="orf-objective-reestimate-approval">
+      <input
+        className="orf-objective-reestimate-due-input"
+        max={max}
+        min={dateToDateTimeLocalInput(now)}
+        onChange={(event) => setValue(event.target.value)}
+        type="datetime-local"
+        value={value}
+        aria-label="新的重估截止时间"
+        title="新的重估截止时间，不能超过目标验收截止时间"
+      />
+      <button
+        type="button"
+        className={actionButtonClassName({ size: "sm", variant: "primary" })}
+        disabled={disabled}
+        title={disabled ? "先设置新的重估截止时间" : "批准并重新进入重估"}
+        onClick={() => {
+          const confirmationDueAt = dateTimeLocalInputToIso(value);
+          void onReviewAlignment(objective.id, request.id, {
+            status: "completed",
+            confirmationDueAt,
+          });
+        }}
+      >
+        批准重开
+      </button>
+    </span>
+  );
+}
+
+function padDateTimePart(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function dateToDateTimeLocalInput(value: Date) {
+  return [
+    value.getFullYear(),
+    "-",
+    padDateTimePart(value.getMonth() + 1),
+    "-",
+    padDateTimePart(value.getDate()),
+    "T",
+    padDateTimePart(value.getHours()),
+    ":",
+    padDateTimePart(value.getMinutes()),
+  ].join("");
+}
+
+function isoToDateTimeLocalInput(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : dateToDateTimeLocalInput(date);
+}
+
+function finalDueAtDateTimeLocalMax(finalDueAt: string | null | undefined) {
+  return finalDueAt ? `${finalDueAt}T23:59` : undefined;
+}
+
+function defaultFrozenReestimateDueAtInput(finalDueAt: string | null | undefined, now: Date) {
+  const maxDate = finalDueAt ? new Date(`${finalDueAt}T23:59:00`) : null;
+  if (!maxDate || Number.isNaN(maxDate.getTime()) || maxDate.getTime() <= now.getTime()) return "";
+
+  const proposed = new Date(now.getTime() + 60 * 60 * 1000);
+  return dateToDateTimeLocalInput(proposed.getTime() <= maxDate.getTime() ? proposed : maxDate);
+}
+
+function dateTimeLocalInputToIso(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function ObjectiveProjectMenu({

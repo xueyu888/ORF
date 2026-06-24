@@ -130,7 +130,7 @@ currentUser.id in Objective.challengerUserIds
 | 审核挑战申请 | 指挥官在目标行处理待审核申请；审批成功后立即刷新目标状态和申请记录，当前目标使用列表位置锚点保持原展示位置，直到用户离开当前目标上下文 |
 | 查看我的相关 | 普通成员在悬赏大厅 `我的相关` 分组追踪 pending、approved、declined 申请结果、待响应征召和已经参与的公开生命周期状态；未进入 `Objective.challengerUserIds` 的目标不能在本页编辑指标、行动项或提交战利品 |
 
-目标、指标和流程操作由 `permissionRules`、状态机和对应业务能力共同控制。目标内容只能由指挥官调整；开始时间以 `Objective.acceptedAt` 为唯一事实源，只表示第一个挑战者正式接受或申请被批准的时间，前端只展示不编辑；冻结时间以 `Objective.confirmedAt` 为事实源，只表示重估完成并冻结的时间，前端只展示不编辑；截止日期以 `Objective.finalDueAt` 为唯一事实源，指标行不展示也不保存独立截止日期。重估窗口以 `Objective.confirmationDueAt` 为事实源，只用于重估中目标的窗口剩余展示和挑战者指标编辑窗口判断，不作为可编辑截止日期；目标仍处于 `reestimating` 且指挥官修改最终截止日期时，后端会重新返回同步后的 `confirmationDueAt`，前端只展示接口事实，不在页面内自行推导。指标可由指挥官编辑，挑战者只可在 `reestimating` 且未过 `confirmationDueAt` 时提出或编辑 `Objective.challengerUserIds` 包含自己的目标下的指标。行动项和子行动项不使用独立角色权限 key；候选目标允许指挥官先维护目标行动项，挑战者正式进入 `Objective.challengerUserIds` 后，任务和子任务的新增、编辑、勾选、移动、删除都按目标共同维护，不按 `assignee` 或创建人区分。冻结后指标口径锁定。
+目标、指标和流程操作由 `permissionRules`、状态机和对应业务能力共同控制。目标内容只能由指挥官调整；开始时间以 `Objective.acceptedAt` 为唯一事实源，只表示第一个挑战者正式接受或申请被批准的时间，前端只展示不编辑；冻结时间以 `Objective.confirmedAt` 为事实源，只表示当前冻结时间，冻结后重开重估时后端会清空，重新冻结后再写入；截止日期以 `Objective.finalDueAt` 为唯一事实源，指标行不展示也不保存独立截止日期。重估窗口以 `Objective.confirmationDueAt` 为事实源，只用于重估中目标的窗口剩余展示和挑战者指标编辑窗口判断，不作为普通可编辑截止日期；目标仍处于 `reestimating` 且指挥官修改最终截止日期时，后端会重新返回同步后的 `confirmationDueAt`，前端只展示接口事实，不在页面内自行推导。冻结后指标口径默认锁定；挑战者只能发起 `frozenReestimate` 对齐申请，指挥官审批时输入新的 `confirmationDueAt`，通过后目标回到现有 `reestimating` 权限链路。指标可由指挥官编辑，挑战者只可在 `reestimating` 且未过 `confirmationDueAt` 时提出或编辑 `Objective.challengerUserIds` 包含自己的目标下的指标。行动项和子行动项不使用独立角色权限 key；候选目标允许指挥官先维护目标行动项，挑战者正式进入 `Objective.challengerUserIds` 后，任务和子任务的新增、编辑、勾选、移动、删除都按目标共同维护，不按 `assignee` 或创建人区分。
 
 反馈状态控件仅对管理员、反馈创建人或反馈 `owner` 指定处理人显示。普通成员可以看到自己可见范围内的反馈内容，但不能关闭或改写他人反馈状态。
 

@@ -211,6 +211,7 @@ export const objectiveAlignmentRequests = pgTable(
     scheduledAt: timestamp("scheduled_at", { mode: "string", withTimezone: true }),
     meetingRoom: text("meeting_room"),
     note: text("note"),
+    confirmationDueAt: timestamp("confirmation_due_at", { mode: "string", withTimezone: true }),
     commanderFeedback: text("commander_feedback"),
     reviewedBy: text("reviewed_by"),
     reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id),

@@ -11589,6 +11589,28 @@ body[data-dragging-floating="true"] {
   font-size: 11px;
 }
 
+.orf-objective-reestimate-approval {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.orf-objective-reestimate-due-input {
+  width: 176px;
+  max-width: min(176px, 42vw);
+  height: 28px;
+  min-width: 0;
+  border: 1px solid rgba(111, 126, 146, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #344054;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0 7px;
+}
+
 .orf-date-stack {
   display: grid;
   gap: 2px;

@@ -15,6 +15,23 @@ export type ObjectiveReestimateWindowSync =
   | { status: "updated"; confirmationDueAt: string }
   | { status: "invalid" };
 
+export type FrozenReestimateReopenBlockReason =
+  | "lifecycleLocked"
+  | "missingReestimateDueAt"
+  | "invalidReestimateDueAt"
+  | "reestimateDueAtNotFuture"
+  | "finalDueAtElapsed"
+  | "reestimateDueAtAfterFinalDueAt";
+
+export type FrozenReestimateReopenTarget = {
+  finalDueAt?: string | null;
+  flowStatus: ObjectiveFlowStatus;
+};
+
+export type FrozenReestimateReopenValidation =
+  | { status: "allowed"; confirmationDueAt: string }
+  | { status: "blocked"; reason: FrozenReestimateReopenBlockReason };
+
 export function calculateObjectiveReestimateDueAt(
   finalDueAt: string | null | undefined,
   acceptedAt: string | null | undefined,
@@ -43,4 +60,48 @@ export function resolveObjectiveReestimateWindowSync(
 
   const confirmationDueAt = calculateObjectiveReestimateDueAt(nextFinalDueAt, target.acceptedAt);
   return confirmationDueAt ? { status: "updated", confirmationDueAt } : { status: "invalid" };
+}
+
+export function objectiveFinalDueAtCutoff(finalDueAt: string | null | undefined): Date | null {
+  if (!finalDueAt) return null;
+  const finalDueDate = new Date(`${finalDueAt}T23:59:00`);
+  return Number.isNaN(finalDueDate.getTime()) ? null : finalDueDate;
+}
+
+export function validateFrozenReestimateReopenDueAt(
+  target: FrozenReestimateReopenTarget | null | undefined,
+  confirmationDueAt: string | null | undefined,
+  now = new Date(),
+): FrozenReestimateReopenValidation {
+  if (!target || target.flowStatus !== "frozen") {
+    return { status: "blocked", reason: "lifecycleLocked" };
+  }
+
+  const finalDueAtCutoff = objectiveFinalDueAtCutoff(target.finalDueAt);
+  if (!finalDueAtCutoff) {
+    return { status: "blocked", reason: "invalidReestimateDueAt" };
+  }
+
+  if (finalDueAtCutoff.getTime() <= now.getTime()) {
+    return { status: "blocked", reason: "finalDueAtElapsed" };
+  }
+
+  if (!confirmationDueAt) {
+    return { status: "blocked", reason: "missingReestimateDueAt" };
+  }
+
+  const dueAt = new Date(confirmationDueAt);
+  if (Number.isNaN(dueAt.getTime())) {
+    return { status: "blocked", reason: "invalidReestimateDueAt" };
+  }
+
+  if (dueAt.getTime() <= now.getTime()) {
+    return { status: "blocked", reason: "reestimateDueAtNotFuture" };
+  }
+
+  if (dueAt.getTime() > finalDueAtCutoff.getTime()) {
+    return { status: "blocked", reason: "reestimateDueAtAfterFinalDueAt" };
+  }
+
+  return { status: "allowed", confirmationDueAt: dueAt.toISOString() };
 }

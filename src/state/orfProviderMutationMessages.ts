@@ -214,6 +214,18 @@ export function businessMutationFailureMessage(error: unknown, fallback: string)
       if (error.message === "Objective alignment request is invalid") {
         return "对齐申请参数无效，请刷新后再试";
       }
+      if (error.message === "Reestimate due time is required") {
+        return "请先设置新的重估截止时间";
+      }
+      if (error.message === "Reestimate due time is invalid") {
+        return "新的重估截止时间无效";
+      }
+      if (error.message === "Reestimate due time must be in the future") {
+        return "新的重估截止时间必须晚于当前时间";
+      }
+      if (error.message === "Reestimate due time must not exceed objective final deadline") {
+        return "新的重估截止时间不能超过目标验收截止时间";
+      }
       if (error.message === "Objective reinforcement candidates are invalid") {
         return "加派成员必须是当前可用普通成员";
       }

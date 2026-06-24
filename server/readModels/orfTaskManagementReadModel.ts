@@ -420,6 +420,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       scheduledAt: item.scheduledAt,
       meetingRoom: item.meetingRoom,
       note: item.note,
+      confirmationDueAt: item.confirmationDueAt,
       commanderFeedback: item.commanderFeedback,
       reviewedBy: item.reviewedByUserId || item.reviewedBy ? nameForUserId(userNameById, item.reviewedByUserId, item.reviewedBy ?? "") : null,
       reviewedByUserId: optional(item.reviewedByUserId),

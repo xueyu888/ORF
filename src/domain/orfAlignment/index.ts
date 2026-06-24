@@ -1,15 +1,19 @@
 import type { Objective, ObjectiveAlignmentRequest, ObjectiveAlignmentRequestKind, OrfUser } from "../../types/orf";
 import { isObjectiveChallenger } from "../orfObjectiveParticipants";
 
-export const objectiveAlignmentRequestKinds = ["reestimateCompletion", "acceptance"] as const satisfies readonly ObjectiveAlignmentRequestKind[];
+export const objectiveAlignmentRequestKinds = ["reestimateCompletion", "acceptance", "frozenReestimate"] as const satisfies readonly ObjectiveAlignmentRequestKind[];
 export const openObjectiveAlignmentRequestStatuses = ["requested", "scheduled"] as const;
 
 export function objectiveAlignmentRequestKindLabel(kind: ObjectiveAlignmentRequestKind) {
-  return kind === "reestimateCompletion" ? "重估对齐" : "验收对齐";
+  if (kind === "reestimateCompletion") return "重估对齐";
+  if (kind === "frozenReestimate") return "冻结后重估";
+  return "验收对齐";
 }
 
 export function objectiveAlignmentRequestActionLabel(kind: ObjectiveAlignmentRequestKind) {
-  return kind === "reestimateCompletion" ? "申请完成重估" : "申请验收对齐";
+  if (kind === "reestimateCompletion") return "申请完成重估";
+  if (kind === "frozenReestimate") return "申请重开重估";
+  return "申请验收对齐";
 }
 
 export function objectiveAlignmentRequestStatusLabel(status: ObjectiveAlignmentRequest["status"]) {
@@ -54,6 +58,7 @@ export function canRequestObjectiveAlignment(
       isObjectiveChallenger(objective, currentUser.id) &&
       !existingRequest &&
       ((kind === "reestimateCompletion" && objective.flowStatus === "reestimating") ||
+        (kind === "frozenReestimate" && objective.flowStatus === "frozen") ||
         (kind === "acceptance" && objective.flowStatus === "submitted")),
   );
 }

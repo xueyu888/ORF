@@ -87,7 +87,7 @@ const reviewTrialBodySchema = z.object({
   commanderFeedback: requiredTextSchema,
 });
 const createAlignmentRequestBodySchema = z.object({
-  kind: z.enum(["reestimateCompletion", "acceptance"]),
+  kind: z.enum(["reestimateCompletion", "acceptance", "frozenReestimate"]),
   scheduledAt: optionalDateTimeSchema,
   meetingRoom: optionalTextSchema,
   note: optionalTextSchema,
@@ -96,6 +96,7 @@ const reviewAlignmentRequestBodySchema = z.object({
   status: z.enum(["scheduled", "completed", "needsWork", "cancelled"]),
   scheduledAt: optionalDateTimeSchema,
   meetingRoom: optionalTextSchema,
+  confirmationDueAt: optionalDateTimeSchema,
   commanderFeedback: optionalTextSchema,
 });
 const contributionAllocationSchema = z.object({
@@ -266,6 +267,10 @@ function objectiveInvalidErrorMessage(reason: ObjectiveMutationInvalidReason | u
   if (reason === "missingResults") return "Objective must have at least one calibrated result before freezing";
   if (reason === "uncalibratedResults") return "Objective result points must be calibrated before freezing";
   if (reason === "lifecycleLocked") return "Objective status does not allow this operation";
+  if (reason === "missingReestimateDueAt") return "Reestimate due time is required";
+  if (reason === "invalidReestimateDueAt") return "Reestimate due time is invalid";
+  if (reason === "reestimateDueAtNotFuture") return "Reestimate due time must be in the future";
+  if (reason === "finalDueAtElapsed" || reason === "reestimateDueAtAfterFinalDueAt") return "Reestimate due time must not exceed objective final deadline";
   return fallback;
 }
 
