@@ -58,6 +58,7 @@ import type {
   Result,
   ResultAcceptedResult,
 } from "../types/orf";
+import { localDateString } from "../utils/date";
 
 const lootClaimOptions: Array<FantasySelectOption<LootResultClaimStatus>> = [
   { label: "完成", value: "completed" },
@@ -316,6 +317,21 @@ export function LootSubmitPage() {
   );
   const currentMemberId = currentUser?.id ?? "";
   const currentMemberName = currentUser?.name ?? "";
+  const todayDate = localDateString(new Date());
+  const settlementEventKind = objective?.flowStatus === "revisionRequired"
+    ? "deadlinePenalty"
+    : objective?.flowStatus === "accepted"
+      ? "finalCompletion"
+      : null;
+  const hasCurrentSettlementEvent = Boolean(
+    objective &&
+      settlementEventKind &&
+      state.objectiveSettlementEvents.some(
+        (event) => event.objectiveId === objective.id && event.kind === settlementEventKind,
+      ),
+  );
+  const settlementDeadlineReady = settlementEventKind !== "deadlinePenalty" ||
+    Boolean(objective && todayDate >= objective.finalDueAt);
   const isChallenger = Boolean(
     objective &&
       currentUser?.role === "member" &&
@@ -324,6 +340,7 @@ export function LootSubmitPage() {
   const canPeerReview = Boolean(
     objective &&
       canSubmitObjectiveContributionReviewByFlow(objective) &&
+      settlementDeadlineReady &&
       isChallenger,
   );
   const [body, setBody] = useState("");
@@ -436,6 +453,8 @@ export function LootSubmitPage() {
     currentUser?.role === "admin" &&
     objective &&
     canSettleObjectiveLootByFlow(objective) &&
+    !hasCurrentSettlementEvent &&
+    settlementDeadlineReady &&
     latestLoot &&
     usesLocalContributionSettlement,
   );
@@ -715,8 +734,22 @@ export function LootSubmitPage() {
   const canSettle = Boolean(
     currentUser?.role === "admin" &&
     canSettleObjectiveLootByFlow(objective) &&
+    !hasCurrentSettlementEvent &&
+    settlementDeadlineReady &&
     latestLoot,
   );
+  const settlementTitle = settlementEventKind === "deadlinePenalty"
+    ? "逾期惩罚互评结果"
+    : "匿名互评贡献结果";
+  const settlementRatioTitle = settlementEventKind === "deadlinePenalty"
+    ? "惩罚结算比例"
+    : "最终结算比例";
+  const settlementRatioDescription = settlementEventKind === "deadlinePenalty"
+    ? "默认来自当前互评平均值。确认后只写入逾期未通过验收的惩罚积分，目标仍需继续返工。"
+    : "默认来自当前互评平均值。缺评、弃权和偏离只作为提示，指挥官确认合计为 100% 后即可结算。";
+  const settlementSubmitLabel = settlementEventKind === "deadlinePenalty"
+    ? "确认惩罚结算"
+    : "确认结算";
   const canRequestTrial = canRequestObjectiveTrialReview(
     objective,
     currentUser,
@@ -1135,7 +1168,7 @@ export function LootSubmitPage() {
             >
               <div className="orf-loot-settlement-stack">
                 <div className="orf-loot-settlement-title">
-                  匿名互评贡献结果
+                  {settlementTitle}
                 </div>
                 {usesLocalContributionSettlement ? (
                   <LocalSettlementSummaryView
@@ -1154,10 +1187,10 @@ export function LootSubmitPage() {
                     <div className="orf-loot-panel-heading">
                       <div>
                         <div className="text-sm font-semibold orf-text-primary">
-                          最终结算比例
+                          {settlementRatioTitle}
                         </div>
                         <div className="text-xs orf-text-secondary">
-                          默认来自当前互评平均值。缺评、弃权和偏离只作为提示，指挥官确认合计为 100% 后即可结算。
+                          {settlementRatioDescription}
                         </div>
                       </div>
                       <div className="orf-loot-panel-heading-actions">
@@ -1223,7 +1256,7 @@ export function LootSubmitPage() {
                   取消
                 </Button>
                 <Button type="submit" disabled={submittingAction === "settle"}>
-                  确认结算
+                  {settlementSubmitLabel}
                 </Button>
               </div>
             </form>

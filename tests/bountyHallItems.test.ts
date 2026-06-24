@@ -15,12 +15,12 @@ test("bounty hall tabs follow the public lifecycle and related-view contract", (
   assert.equal(defaultHallTab, "all");
   assert.deepEqual(
     hallTabs.map((tab) => tab.key),
-    ["all", "open", "frozen", "submitted", "accepted", "settled", "related"],
+    ["all", "open", "frozen", "submitted", "revisionRequired", "accepted", "settled", "related"],
   );
 });
 
 test("bounty hall lifecycle visibility includes settled objectives but excludes drafts and closed records", () => {
-  const visibleStatuses: ObjectiveFlowStatus[] = ["open", "applying", "recruiting", "reestimating", "frozen", "submitted", "accepted", "settled"];
+  const visibleStatuses: ObjectiveFlowStatus[] = ["open", "applying", "recruiting", "reestimating", "frozen", "submitted", "revisionRequired", "accepted", "settled"];
   for (const status of visibleStatuses) {
     assert.equal(isObjectiveVisibleInBountyHallByFlow(status), true, status);
   }
@@ -35,6 +35,7 @@ test("bounty hall buckets are built in a single lifecycle pass", () => {
     bountyItem({ id: "objective-reestimating", flowStatus: "reestimating", challengerUserIds: ["user-1"] }),
     bountyItem({ id: "objective-frozen", flowStatus: "frozen" }),
     bountyItem({ id: "objective-submitted", flowStatus: "submitted" }),
+    bountyItem({ id: "objective-revision-required", flowStatus: "revisionRequired", challengerUserIds: ["user-1"] }),
     bountyItem({ id: "objective-accepted", flowStatus: "accepted", assignedChallengerUserIds: ["user-1"] }),
     bountyItem({ id: "objective-settled", flowStatus: "settled" }),
   ];
@@ -46,15 +47,17 @@ test("bounty hall buckets are built in a single lifecycle pass", () => {
     "objective-reestimating",
     "objective-frozen",
     "objective-submitted",
+    "objective-revision-required",
     "objective-accepted",
     "objective-settled",
   ]);
   assert.deepEqual(buckets.open.map((item) => item.objective.id), ["objective-open", "objective-reestimating"]);
   assert.deepEqual(buckets.frozen.map((item) => item.objective.id), ["objective-frozen"]);
   assert.deepEqual(buckets.submitted.map((item) => item.objective.id), ["objective-submitted"]);
+  assert.deepEqual(buckets.revisionRequired.map((item) => item.objective.id), ["objective-revision-required"]);
   assert.deepEqual(buckets.accepted.map((item) => item.objective.id), ["objective-accepted"]);
   assert.deepEqual(buckets.settled.map((item) => item.objective.id), ["objective-settled"]);
-  assert.deepEqual(buckets.related.map((item) => item.objective.id), ["objective-reestimating", "objective-accepted"]);
+  assert.deepEqual(buckets.related.map((item) => item.objective.id), ["objective-reestimating", "objective-revision-required", "objective-accepted"]);
 });
 
 test("current user application ignores declined records outside the related view", () => {

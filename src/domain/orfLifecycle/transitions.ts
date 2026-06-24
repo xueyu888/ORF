@@ -28,6 +28,15 @@ export const objectiveLifecycleTransitions = {
     from: "frozen",
     to: "submitted",
   },
+  resubmitLoot: {
+    from: "revisionRequired",
+    to: "submitted",
+  },
+  requireRevision: {
+    from: "submitted",
+    to: "revisionRequired",
+    stage: "goalFrozen",
+  },
   acceptLoot: {
     from: "submitted",
     to: "accepted",

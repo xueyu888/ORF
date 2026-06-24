@@ -10,6 +10,7 @@ export const hallTabs: Array<{ key: HallTab; label: string }> = [
   { key: "open", label: "开放中" },
   { key: "frozen", label: "已冻结" },
   { key: "submitted", label: "待验收" },
+  { key: "revisionRequired", label: "待返工" },
   { key: "accepted", label: "待结算" },
   { key: "settled", label: "已结算" },
   { key: "related", label: "我的相关" },
@@ -23,6 +24,7 @@ const lifecycleTabByFlowStatus: Partial<Record<ObjectiveFlowStatus, HallTab>> = 
   reestimating: "open",
   frozen: "frozen",
   submitted: "submitted",
+  revisionRequired: "revisionRequired",
   accepted: "accepted",
   settled: "settled",
 };
@@ -68,6 +70,7 @@ export function buildHallItemBuckets(items: BountyItem[], currentUserId: string)
     open: [],
     frozen: [],
     submitted: [],
+    revisionRequired: [],
     accepted: [],
     settled: [],
     related: [],

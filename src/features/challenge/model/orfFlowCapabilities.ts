@@ -52,14 +52,13 @@ type WorkbenchAction = {
 };
 
 export function isObjectiveResultLocked(objective: Objective | undefined): boolean {
-  return isObjectiveResultLockedByFlow(objective) || Boolean(objective?.acceptedResult);
+  return isObjectiveResultLockedByFlow(objective);
 }
 
 export function isObjectiveRecruitable(objective: Objective): boolean {
   return (
     canRecruitObjectiveChallengersByFlow(objective) &&
-    !isObjectiveSettledOrClosed(objective) &&
-    !objective.acceptedResult
+    !isObjectiveSettledOrClosed(objective)
   );
 }
 

@@ -111,7 +111,7 @@
 | `selfTestReportUrl`  | 自测报告文件 URL，占位          |
 | `submittedAt`        | 提交时间                        |
 
-提交成功后同步更新 `Objective.lootSubmittedAt`，并将 `Objective.flowStatus` 从 `frozen` 改为 `submitted`。
+提交成功后同步更新 `Objective.lootSubmittedAt`。首次提交将 `Objective.flowStatus` 从 `frozen` 改为 `submitted`；待返工目标重新提交时，将 `Objective.flowStatus` 从 `revisionRequired` 改回 `submitted`，并清空上一轮目标验收结论，上一轮明细保留在验收记录中。
 
 ## 验收请求体
 
@@ -125,12 +125,14 @@
 
 验收成功后：
 
+- 写入一条 `objectiveAcceptanceReviews`，记录本次 `lootId`、目标结论、逐指标结论、验收说明和验收人。
 - 写入 `Result.acceptedResult`。
-- 按指标验收结论汇总并写入 `Objective.acceptedResult`。
+- 按指标验收结论汇总并写入 `Objective.acceptedResult`；该字段记录最近一次验收结论，不反向定义生命周期状态。
 - 写入 `Objective.completionMultiplier` 和 `Objective.objectiveBasePoints`。
-- 将 `Objective.flowStatus` 改为 `accepted`。
+- 验收通过时将 `Objective.flowStatus` 改为 `accepted`，并提醒挑战者可以重新检查匿名互评。
+- 验收不通过时将 `Objective.flowStatus` 改为 `revisionRequired`，目标仍需继续完成后重新提交。
 
-验收不通过时，目标保持 `submitted`，不写入积分流水。
+验收不通过本身不直接写入积分流水；如果已经到达目标截止日，指挥官仍应组织匿名互评并执行逾期惩罚结算。
 
 ## 结算请求体
 
@@ -145,7 +147,7 @@
 }
 ```
 
-`contributionResolution` 填写指挥官确认的最终贡献比例；页面默认使用共享匿名互评结算服务返回的当前均值，指挥官可调整。单人目标也先进入 `accepted`，再由指挥官确认 `100%` 结算比例：
+`contributionResolution` 填写指挥官确认的贡献比例；页面默认使用共享匿名互评结算服务返回的当前均值，指挥官可调整。单人目标也走同一结算事件，只是默认比例为 `100%`：
 
 ```json
 {
@@ -158,20 +160,27 @@
 
 结算成功后：
 
-- 按本地匿名互评结算结果或指挥官处理结果生成 `pointLedger`。
+- 写入一条 `objectiveSettlementEvents`，记录结算事件类型、关联战利品、基础分、事件倍率和事件分值。
+- 按本地匿名互评结算结果或指挥官处理结果追加生成 `pointLedger`，不得删除同一目标历史账本。
 - `pointLedger.userId` 来自目标挑战者的 `Objective.challengerUserIds`；`memberName` 只是结算时按 UUID 派生的展示名快照。
 - `pointLedger.points` 以 `0.01` 为最小单位分配，使用最大余数法保证个人积分合计等于目标结算积分。
-- 将 `Objective.flowStatus` 改为 `settled`。
+- `Objective.objectiveSettlementPoints` 只是该目标已写入账本积分的展示汇总，生命周期仍以 `Objective.flowStatus` 为准。
+
+结算事件分为两类：
+
+- `deadlinePenalty`：目标已到截止日且验收不通过时，在 `revisionRequired` 状态执行；事件倍率为 `50%`，写入惩罚积分后目标仍保持 `revisionRequired`，挑战者必须继续完成并重新提交。
+- `finalCompletion`：最终验收通过后在 `accepted` 状态执行；如果此前已有 `deadlinePenalty`，该事件写入剩余 `50%`；否则沿用原按时/延期完成倍率。该事件完成后将 `Objective.flowStatus` 改为 `settled`。
 
 ## 约束
 
 - 只有 `Objective.challengerUserIds` 中的 active 普通成员可提交；`Objective.challengers` 只作为展示投影。
-- 只有 `frozen` 目标可提交战利品。
+- 只有 `frozen` 或 `revisionRequired` 目标可提交战利品。
 - 试验收仅允许 `frozen` 目标的挑战者发起一次；指挥官反馈试验收不推进状态。
 - 只有指挥官可验收。
 - 只有 `submitted` 目标可验收。
 - 只有指挥官可结算。
-- 只有 `accepted` 目标可结算。
+- `revisionRequired` 目标只有在截止日已到且同类惩罚事件尚未结算时可执行逾期惩罚结算。
+- `accepted` 目标只有在最终结算事件尚未结算时可执行最终结算。
 - 多个普通成员挑战者结算必须有 `contributionResolution.ratios`，来源可以是当前互评均值默认值，也可以是指挥官调整后的最终比例。
 - 同一 reviewer 可重复提交匿名互评，共享结算服务保留提交历史；结算只使用每个 reviewer 最新一条记录。
 - 当前目标挑战者可读取自己的服务器草稿和最新一版提交用于重新评价回填；同一目标再次提交后草稿清空，挑战者视角只看到新的最新评价。历史旧提交没有 `metricRows` 或 `metricScores` 时，只能展示最新目标级比例，不能还原指标行。

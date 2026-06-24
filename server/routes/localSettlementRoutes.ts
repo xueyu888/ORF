@@ -15,6 +15,7 @@ import { canSettleObjectiveLootByFlow, canSubmitObjectiveContributionReviewByFlo
 import { calibratedResultPoints } from "../../src/domain/orfSettlement";
 import { isObjectiveChallenger, objectiveParticipantSnapshot } from "../../src/domain/orfObjectiveParticipants";
 import type { ContributionReviewDraftMetricRow, ContributionReviewMetricRow } from "../../src/types/orf";
+import { localDateString } from "../../src/utils/date";
 import { getUserMapsForStorageScope } from "../readModels/orfReadModelMappers";
 
 const objectiveParamsSchema = z.object({ objectiveId: z.string().min(1) });
@@ -61,7 +62,7 @@ const reviewSubmitBodySchema = z.discriminatedUnion("kind", [
 ]);
 type SettlementObjective = Pick<
   typeof objectives.$inferSelect,
-  "challengerUserIds" | "flowStatus" | "id" | "teamId" | "title"
+  "challengerUserIds" | "finalDueAt" | "flowStatus" | "id" | "teamId" | "title"
 >;
 type ContributionTarget = {
   member: string;
@@ -86,6 +87,7 @@ async function settlementObjectiveInScope(objectiveId: string, scope: RuntimeSco
   const [objective] = await db
     .select({
       challengerUserIds: objectives.challengerUserIds,
+      finalDueAt: objectives.finalDueAt,
       flowStatus: objectives.flowStatus,
       id: objectives.id,
       teamId: objectives.teamId,
@@ -144,6 +146,7 @@ async function reviewRouteContext(input: {
   if (
     input.user.role !== "member" ||
     !canSubmitObjectiveContributionReviewByFlow(objective) ||
+    !objectiveSettlementReviewWindowOpen(objective) ||
     !isObjectiveChallenger(objective, input.user.id)
   ) {
     input.reply.code(403).send({ error: "Forbidden" });
@@ -161,6 +164,11 @@ async function reviewRouteContext(input: {
     objective,
     targets,
   };
+}
+
+function objectiveSettlementReviewWindowOpen(objective: SettlementObjective) {
+  return objective.flowStatus !== "revisionRequired" ||
+    localDateString(new Date()) >= objective.finalDueAt;
 }
 
 async function objectiveReviewMetricSources(objective: SettlementObjective): Promise<ReviewMetricSource[]> {
@@ -531,6 +539,7 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
     const objective = await settlementObjectiveInScope(params.objectiveId, context.scope);
     if (!objective) return reply.code(404).send({ error: "Objective not found" });
     if (!canSettleObjectiveLootByFlow(objective)) return reply.code(409).send({ error: "Objective is not ready for settlement summary" });
+    if (!objectiveSettlementReviewWindowOpen(objective)) return reply.code(409).send({ error: "Objective deadline has not reached" });
 
     const targets = await contributionChallengerTargets(objective, body.participantUserIds);
     if (!targets) return reply.code(400).send({ error: "Invalid settlement participants" });

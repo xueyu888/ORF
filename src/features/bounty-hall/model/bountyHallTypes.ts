@@ -3,7 +3,7 @@ import type { UncertaintyLevel } from "../../../types/orf";
 
 export type DifficultyFilter = "all" | UncertaintyLevel;
 export type SortKey = "deadline" | "points" | "difficulty" | "published";
-export type HallTab = "all" | "open" | "frozen" | "submitted" | "accepted" | "settled" | "related";
+export type HallTab = "all" | "open" | "frozen" | "submitted" | "revisionRequired" | "accepted" | "settled" | "related";
 
 export type BountyItem = BountyHallItem;
 

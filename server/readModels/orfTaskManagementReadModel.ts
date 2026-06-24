@@ -23,8 +23,10 @@ import {
   evidence,
   feedback,
   feedbackCauseCategories,
+  objectiveAcceptanceReviews,
   objectiveAlignmentRequests,
   objectiveLoot,
+  objectiveSettlementEvents,
   objectives,
   objectiveTrialReviews,
   projects,
@@ -47,7 +49,9 @@ import {
   groupResultTrends,
   groupResultsByObjective,
   groupTaskIdsByObjective,
+  mapObjectiveAcceptanceReviewRows,
   mapObjectiveRows,
+  mapObjectiveSettlementEventRows,
   mapPointLedgerRows,
   mapResultRows,
   nameForUserId,
@@ -218,9 +222,15 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const objectiveTrialReviewRows = storageScopeId
     ? await db.select().from(objectiveTrialReviews).where(eq(objectiveTrialReviews.teamId, storageScopeId))
     : await db.select().from(objectiveTrialReviews);
+  const objectiveAcceptanceReviewRows = storageScopeId
+    ? await db.select().from(objectiveAcceptanceReviews).where(eq(objectiveAcceptanceReviews.teamId, storageScopeId))
+    : await db.select().from(objectiveAcceptanceReviews);
   const objectiveAlignmentRequestRows = storageScopeId
     ? await db.select().from(objectiveAlignmentRequests).where(eq(objectiveAlignmentRequests.teamId, storageScopeId))
     : await db.select().from(objectiveAlignmentRequests);
+  const objectiveSettlementEventRows = storageScopeId
+    ? await db.select().from(objectiveSettlementEvents).where(eq(objectiveSettlementEvents.teamId, storageScopeId))
+    : await db.select().from(objectiveSettlementEvents);
   const pointLedgerRows = storageScopeId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId)) : await db.select().from(pointLedger);
   const resultIds = resultRows.map((result) => result.id);
   const taskIds = taskRows.map((task) => task.id);
@@ -390,6 +400,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       reviewedAt: item.reviewedAt,
       requestedAt: item.requestedAt,
     }));
+  const objectiveAcceptanceReviewItems = mapObjectiveAcceptanceReviewRows(objectiveAcceptanceReviewRows);
   const objectiveAlignmentRequestItems: ObjectiveAlignmentRequest[] = objectiveAlignmentRequestRows
     .sort((left, right) => right.proposedAt.localeCompare(left.proposedAt))
     .map((item) => ({
@@ -408,6 +419,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       reviewedByUserId: optional(item.reviewedByUserId),
       reviewedAt: item.reviewedAt,
     }));
+  const objectiveSettlementEventItems = mapObjectiveSettlementEventRows(objectiveSettlementEventRows);
   const pointLedgerItems = mapPointLedgerRows({ pointLedgerRows, userNameById });
   const commentItems: CommentThread[] = [...commentThreadRows]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
@@ -433,7 +445,9 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     comments: commentItems,
     objectiveLoot: objectiveLootItems,
     objectiveTrialReviews: objectiveTrialReviewItems,
+    objectiveAcceptanceReviews: objectiveAcceptanceReviewItems,
     objectiveAlignmentRequests: objectiveAlignmentRequestItems,
+    objectiveSettlementEvents: objectiveSettlementEventItems,
     pointLedger: pointLedgerItems,
     userProfiles: [],
     pendingChallengeApplications: [],

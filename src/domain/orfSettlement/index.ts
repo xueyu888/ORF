@@ -3,6 +3,7 @@ import type {
   LootResultClaimStatus,
   Objective,
   ObjectiveAcceptedResult,
+  ObjectiveSettlementEventKind,
   ObjectiveLoot,
   Result,
   ResultAcceptedResult,
@@ -59,6 +60,12 @@ export type SettlementPlan = {
   contributionRatios: ContributionAllocation[];
 };
 export type ObjectiveAcceptancePlan = Omit<SettlementPlan, "contributionRatios">;
+export type ObjectiveSettlementEventPlan = {
+  kind: ObjectiveSettlementEventKind;
+  basePoints: number;
+  multiplier: number;
+  settlementPoints: number;
+};
 export type SettlementPointAllocation<T extends ContributionAllocation = ContributionAllocation> = T & {
   points: number;
   pointUnits: number;
@@ -115,6 +122,39 @@ export function completionMultiplierFor(
   if (result !== "completed" && result !== "falsified") return 0;
   if (!lootSubmittedAt || !finalDueAt) return 0;
   return lootSubmittedAt.slice(0, 10) <= finalDueAt ? 1 : 0.5;
+}
+
+export function settlementEventMultiplierFor(input: {
+  acceptedResult: ObjectiveAcceptedResult;
+  finalDueAt: string;
+  hasDeadlinePenaltyEvent: boolean;
+  kind: ObjectiveSettlementEventKind;
+  lootSubmittedAt: string | null;
+}) {
+  if (input.kind === "deadlinePenalty") return 0.5;
+  if (input.hasDeadlinePenaltyEvent) return 0.5;
+  return completionMultiplierFor(
+    input.acceptedResult,
+    input.lootSubmittedAt,
+    input.finalDueAt,
+  );
+}
+
+export function planObjectiveSettlementEvent(input: {
+  acceptedResult: ObjectiveAcceptedResult;
+  basePoints: number;
+  finalDueAt: string;
+  hasDeadlinePenaltyEvent: boolean;
+  kind: ObjectiveSettlementEventKind;
+  lootSubmittedAt: string | null;
+}): ObjectiveSettlementEventPlan {
+  const multiplier = settlementEventMultiplierFor(input);
+  return {
+    kind: input.kind,
+    basePoints: input.basePoints,
+    multiplier,
+    settlementPoints: Number((input.basePoints * multiplier).toFixed(2)),
+  };
 }
 
 export function normalizeContributionRatios(

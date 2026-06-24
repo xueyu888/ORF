@@ -78,13 +78,13 @@
 | `Objective.challengeApplications[].applicant` | 申请人显示名快照和申请理由展示；指挥官/管理员触发挑战动作时不能新增申请 |
 | `Objective.assignedChallengerUserIds` | 被征召普通成员的身份事实源；当前用户是否被征召和接受征召判断以该字段为准 |
 | `Objective.assignedChallengers` | 按 `assignedChallengerUserIds` 派生的被征召成员显示名投影 |
-| `Objective.flowStatus` | 候选、申请、征召、重估、冻结、验收和结算状态 |
+| `Objective.flowStatus` | 候选、申请、征召、重估、冻结、验收、待返工和结算状态 |
 | `Objective.publishedAt` | 指挥官发布到悬赏大厅的日期；大厅显示和发布时间排序使用该字段 |
 | `Objective.finalDueAt` | 剩余时间、排序和按时结算判断 |
 | `Result[]` | 目标下的指标清单、指标详情、最高难度和目标总分来源；`detail` 是指标详情事实源；`uncertaintyLevel` 未设置时该指标积分仍为待校准；指标不拥有独立截止日期 |
 | `ObjectiveLoot[]` | 战利品提交和验收展示 |
 | `PointLedgerEntry[]` | 统计页积分来源 |
-| `BountyHallData.publicItems` | 大厅公开生命周期列表，包含 `open/applying/recruiting/reestimating/frozen/submitted/accepted/settled` 目标，不包含 `candidate/closed` |
+| `BountyHallData.publicItems` | 大厅公开生命周期列表，包含 `open/applying/recruiting/reestimating/frozen/submitted/revisionRequired/accepted/settled` 目标，不包含 `candidate/closed` |
 | `BountyHallItem.isRecruitment` | 是否展示 `征召令` 并置顶 |
 | `BountyHallItem.hasCurrentApplication` | 当前普通成员是否已申请，用于禁用重复申请；指挥官/管理员不能用该字段伪造可写申请状态 |
 | `BountyHallItem.applications` | 申请记录投影来源；`我的相关` 分组按当前用户申请、征召和正式挑战者身份过滤，并展示最新申请的 `pending/approved/declined` 结果 |
@@ -115,7 +115,7 @@
 | `POST /api/objectives/:objectiveId/review` | 指挥官验收指标 |
 | `POST /api/objectives/:objectiveId/settle` | 指挥官确认结算 |
 
-`GET /api/bounties` 的列表项以 `Objective` 为挑战对象，包含该目标下的 `Result[]` 作为指标清单，并用同一条 `challengeApplications` 数据展示申请理由和申请状态。该接口服务大厅公开生命周期数据，不能因为当前用户是指挥官/管理员而清空列表，也不能在目标进入 `reestimating/frozen/submitted/accepted/settled` 后把目标从大厅移除。前端不从任务管理页大快照自行拼装悬赏大厅列表；操作区展示由 `BountyHallItem.isRecruitment`、当前用户最新申请、`BountyHallItem.isCurrentChallenger` 和 `Objective.flowStatus` 决定，动作生效再由当前用户角色和后端 mutation 校验。指挥官/管理员触发申请 / 接受时，前端必须先弹窗提示并保持原状态，不能本地伪造已申请或已接受。冻结后加派只会让大厅读模型展示新的挑战者头像和相关状态，不在大厅生成 `isRecruitment`、申请状态或接受动作。
+`GET /api/bounties` 的列表项以 `Objective` 为挑战对象，包含该目标下的 `Result[]` 作为指标清单，并用同一条 `challengeApplications` 数据展示申请理由和申请状态。该接口服务大厅公开生命周期数据，不能因为当前用户是指挥官/管理员而清空列表，也不能在目标进入 `reestimating/frozen/submitted/revisionRequired/accepted/settled` 后把目标从大厅移除。前端不从任务管理页大快照自行拼装悬赏大厅列表；操作区展示由 `BountyHallItem.isRecruitment`、当前用户最新申请、`BountyHallItem.isCurrentChallenger` 和 `Objective.flowStatus` 决定，动作生效再由当前用户角色和后端 mutation 校验。指挥官/管理员触发申请 / 接受时，前端必须先弹窗提示并保持原状态，不能本地伪造已申请或已接受。冻结后加派只会让大厅读模型展示新的挑战者头像和相关状态，不在大厅生成 `isRecruitment`、申请状态或接受动作。
 
 指挥官/管理员在悬赏大厅单击目标行时，只让当前行获得焦点并展开详情；双击目标行才做查看定位：跳转到 `/tasks#objective:{objectiveId}`，由挑战工作台已有的目标锚点负责切到全局范围、清空工作台筛选并滚动到对应目标。这个跳转不修改申请、征召、挑战者或目标状态；普通未挑战成员仍通过申请 / 接受动作进入后续流程，不能把大厅双击当成“加入我的挑战”。
 

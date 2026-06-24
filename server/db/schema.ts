@@ -16,6 +16,7 @@ import type {
   ObjectiveAlignmentRequestStatus,
   ObjectiveAcceptedResult,
   ObjectiveFlowStatus,
+  ObjectiveSettlementEventKind,
   ObjectiveTrialReviewStatus,
   OrfStage,
   ResultAcceptedResult,
@@ -221,6 +222,56 @@ export const objectiveAlignmentRequests = pgTable(
   }),
 );
 
+export const objectiveAcceptanceReviews = pgTable(
+  "objective_acceptance_reviews",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    objectiveId: text("objective_id")
+      .notNull()
+      .references(() => objectives.id, { onDelete: "cascade" }),
+    lootId: text("loot_id")
+      .notNull()
+      .references(() => objectiveLoot.id, { onDelete: "cascade" }),
+    reviewerUserId: uuid("reviewer_user_id").notNull().references(() => users.id),
+    acceptedResult: text("accepted_result").$type<ObjectiveAcceptedResult>().notNull(),
+    resultReviews: jsonb("result_reviews").$type<Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>>().notNull().default([]),
+    reason: text("reason"),
+    reviewedAt: timestamp("reviewed_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    objectiveReviewedAt: index("objective_acceptance_reviews_objective_reviewed_at_idx").on(table.objectiveId, table.reviewedAt),
+    teamReviewedAt: index("objective_acceptance_reviews_team_reviewed_at_idx").on(table.teamId, table.reviewedAt),
+  }),
+);
+
+export const objectiveSettlementEvents = pgTable(
+  "objective_settlement_events",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    objectiveId: text("objective_id")
+      .notNull()
+      .references(() => objectives.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<ObjectiveSettlementEventKind>().notNull(),
+    lootId: text("loot_id").references(() => objectiveLoot.id, { onDelete: "set null" }),
+    basePoints: real("base_points").notNull(),
+    multiplier: real("multiplier").notNull(),
+    settlementPoints: real("settlement_points").notNull(),
+    reason: text("reason").notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    objectiveKind: uniqueIndex("objective_settlement_events_objective_kind_idx").on(table.objectiveId, table.kind),
+    teamCreatedAt: index("objective_settlement_events_team_created_at_idx").on(table.teamId, table.createdAt),
+  }),
+);
+
 export const objectiveContributionReviews = pgTable("objective_contribution_reviews", {
   id: text("id").primaryKey(),
   teamId: text("team_id")
@@ -243,6 +294,7 @@ export const pointLedger = pgTable("point_ledger", {
   objectiveId: text("objective_id")
     .notNull()
     .references(() => objectives.id, { onDelete: "cascade" }),
+  settlementEventId: text("settlement_event_id").references(() => objectiveSettlementEvents.id, { onDelete: "set null" }),
   userId: uuid("user_id").notNull().references(() => users.id),
   memberName: text("member_name").notNull(),
   points: real("points").notNull(),

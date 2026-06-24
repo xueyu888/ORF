@@ -81,9 +81,27 @@ test("system chat projection metadata points back to the notification event", ()
 });
 
 test("settlement notifications are personal reminders without comment reply target", () => {
+  assert.deepEqual(notificationPolicy("objective.settlement.updated"), {
+    kind: "objective.settlement.updated",
+    replyTarget: "none",
+    stream: "personalNotification",
+  });
   assert.deepEqual(notificationPolicy("objective.settled"), {
     kind: "objective.settled",
     replyTarget: "none",
+    stream: "personalNotification",
+  });
+});
+
+test("revision and peer review notifications point back to the objective", () => {
+  assert.deepEqual(notificationPolicy("objective.revision.required"), {
+    kind: "objective.revision.required",
+    replyTarget: "notification-target",
+    stream: "personalNotification",
+  });
+  assert.deepEqual(notificationPolicy("objective.peerReview.requested"), {
+    kind: "objective.peerReview.requested",
+    replyTarget: "notification-target",
     stream: "personalNotification",
   });
 });

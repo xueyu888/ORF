@@ -16,6 +16,7 @@ import type {
   ObjectiveAlignmentRequestStatus,
   Objective,
   ObjectiveAcceptedResult,
+  ObjectiveSettlementEventKind,
   ObjectiveLoot,
   ObjectiveTrialReview,
   ObjectiveTrialReviewStatus,
@@ -34,6 +35,7 @@ import {
   objectiveBasePointsForResults,
   planObjectiveAcceptance,
   planObjectiveSettlement,
+  planObjectiveSettlementEvent,
   uncertaintyScoreFor,
 } from "../../src/domain/orfSettlement";
 import {
@@ -81,8 +83,10 @@ import {
   commentThreads,
   feedback,
   objectiveAlignmentRequests,
+  objectiveAcceptanceReviews,
   objectives,
   objectiveLoot,
+  objectiveSettlementEvents,
   objectiveTrialReviews,
   pointLedger,
   projects,
@@ -487,12 +491,12 @@ async function notifyAdminsOfObjectiveLoot(input: {
   });
 }
 
-async function notifyObjectiveChallengersOfSettlement(input: {
+async function notifyObjectiveChallengersOfRevisionRequired(input: {
   actorUserId: string;
   objectiveId: string;
   objectiveTitle: string;
   recipientUserIds: string[];
-  settledAt: string;
+  reviewedAt: string;
   teamId: string;
 }) {
   const recipients = await getActiveMemberNotificationRecipientsByIds(input.teamId, input.recipientUserIds);
@@ -504,10 +508,83 @@ async function notifyObjectiveChallengersOfSettlement(input: {
   await publishNotificationEvent({
     actorName: actorName || "指挥官",
     actorUserId: input.actorUserId,
-    body: `「${input.objectiveTitle}」已完成结算，可以在统计页面查看最终结果。`,
-    kind: "objective.settled",
+    body: `「${input.objectiveTitle}」验收未通过，目标已进入待返工，需要继续完成后重新提交。`,
+    kind: "objective.revision.required",
     metadata: {
       objectiveTitle: input.objectiveTitle,
+      reviewedAt: input.reviewedAt,
+      targetTitle: input.objectiveTitle,
+    },
+    recipientUserIds: recipients,
+    targetHref: `/tasks/objectives/${encodeURIComponent(input.objectiveId)}/loot`,
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "目标待返工",
+  });
+}
+
+async function notifyObjectiveChallengersOfPeerReviewRequested(input: {
+  actorUserId: string;
+  objectiveId: string;
+  objectiveTitle: string;
+  recipientUserIds: string[];
+  reviewedAt: string;
+  teamId: string;
+}) {
+  const recipients = await getActiveMemberNotificationRecipientsByIds(input.teamId, input.recipientUserIds);
+  if (recipients.length === 0) {
+    return;
+  }
+
+  const actorName = await getUserNameById(input.actorUserId);
+  await publishNotificationEvent({
+    actorName: actorName || "指挥官",
+    actorUserId: input.actorUserId,
+    body: `「${input.objectiveTitle}」已最终验收通过。目标返工后可能有新的贡献变化，可以重新检查匿名互评是否需要调整。`,
+    kind: "objective.peerReview.requested",
+    metadata: {
+      objectiveTitle: input.objectiveTitle,
+      reviewedAt: input.reviewedAt,
+      targetTitle: input.objectiveTitle,
+    },
+    recipientUserIds: recipients,
+    targetHref: `/tasks/objectives/${encodeURIComponent(input.objectiveId)}/loot`,
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "请检查匿名互评",
+  });
+}
+
+async function notifyObjectiveChallengersOfSettlement(input: {
+  actorUserId: string;
+  kind: ObjectiveSettlementEventKind;
+  objectiveId: string;
+  objectiveTitle: string;
+  recipientUserIds: string[];
+  settlementPoints: number;
+  settledAt: string;
+  teamId: string;
+}) {
+  const recipients = await getActiveMemberNotificationRecipientsByIds(input.teamId, input.recipientUserIds);
+  if (recipients.length === 0) {
+    return;
+  }
+
+  const actorName = await getUserNameById(input.actorUserId);
+  const isFinalCompletion = input.kind === "finalCompletion";
+  await publishNotificationEvent({
+    actorName: actorName || "指挥官",
+    actorUserId: input.actorUserId,
+    body: isFinalCompletion
+      ? `「${input.objectiveTitle}」已完成最终结算，可以在统计页面查看最终结果。`
+      : `「${input.objectiveTitle}」已完成逾期惩罚结算，本次按 ${input.settlementPoints} 分写入统计；目标仍需继续返工直到验收通过。`,
+    kind: isFinalCompletion ? "objective.settled" : "objective.settlement.updated",
+    metadata: {
+      objectiveTitle: input.objectiveTitle,
+      settlementKind: input.kind,
+      settlementPoints: String(input.settlementPoints),
       settledAt: input.settledAt,
       targetTitle: input.objectiveTitle,
     },
@@ -516,7 +593,7 @@ async function notifyObjectiveChallengersOfSettlement(input: {
     targetId: input.objectiveId,
     targetType: "objective",
     teamId: input.teamId,
-    title: "目标已结算",
+    title: isFinalCompletion ? "目标已结算" : "目标惩罚结算",
   });
 }
 
@@ -2980,11 +3057,21 @@ export async function submitObjectiveLoot(
 
   const submittedAt = nowIso();
   const lootId = makeId("loot");
+  const submitTransition = objective.flowStatus === objectiveLifecycleTransitions.resubmitLoot.from
+    ? objectiveLifecycleTransitions.resubmitLoot
+    : objectiveLifecycleTransitions.submitLoot;
   const submitted = await db.transaction(async (tx) => {
     const updated = await tx
       .update(objectives)
-      .set({ lootSubmittedAt: submittedAt, flowStatus: objectiveLifecycleTransitions.submitLoot.to, updatedAt: today(), updatedBy: actor.id })
-      .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, objectiveLifecycleTransitions.submitLoot.from)))
+      .set({
+        lootSubmittedAt: submittedAt,
+        flowStatus: submitTransition.to,
+        acceptedResult: null,
+        completionMultiplier: null,
+        updatedAt: today(),
+        updatedBy: actor.id,
+      })
+      .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, submitTransition.from)))
       .returning({ id: objectives.id });
     if (updated.length === 0) {
       return false;
@@ -3002,6 +3089,13 @@ export async function submitObjectiveLoot(
       selfTestReportBody: input.selfTestReportBody?.trim() || null,
       submittedAt,
     });
+
+    if (submitTransition.from === objectiveLifecycleTransitions.resubmitLoot.from) {
+      await tx
+        .update(results)
+        .set({ acceptedResult: "unreviewed", updatedBy: actor.id })
+        .where(eq(results.objectiveId, objectiveId));
+    }
     return true;
   });
   if (!submitted) {
@@ -3214,29 +3308,55 @@ export async function reviewObjectiveLoot(
     resultReviews: input.resultReviews,
     acceptedResult: input.acceptedResult,
   });
-  if (acceptancePlan.objectiveAcceptedResult === "abandoned") {
-    return objectiveOutcome(objectiveId, runtimeScope(objective.teamId));
-  }
 
   const acceptedAt = nowIso();
-  const accepted = await db.transaction(async (tx) => {
+  const normalizedResultReviews = resultRows.map((result) => ({
+    resultId: result.id,
+    acceptedResult: acceptancePlan.acceptedResultByResultId.get(result.id) ?? "failed",
+  }));
+  const requiresRevision = acceptancePlan.objectiveAcceptedResult === "abandoned";
+  const reviewed = await db.transaction(async (tx) => {
     const updated = await tx
       .update(objectives)
-      .set({
-        flowStatus: objectiveLifecycleTransitions.acceptLoot.to,
-        stage: objectiveLifecycleTransitions.acceptLoot.stage,
-        acceptedResult: acceptancePlan.objectiveAcceptedResult,
-        completionMultiplier: acceptancePlan.completionMultiplier,
-        objectiveBasePoints: acceptancePlan.basePoints,
-        objectiveSettlementPoints: null,
-        updatedAt: today(),
-        updatedBy: actorId,
-      })
+      .set(
+        requiresRevision
+          ? {
+              flowStatus: objectiveLifecycleTransitions.requireRevision.to,
+              stage: objectiveLifecycleTransitions.requireRevision.stage,
+              acceptedResult: acceptancePlan.objectiveAcceptedResult,
+              completionMultiplier: acceptancePlan.completionMultiplier,
+              objectiveBasePoints: acceptancePlan.basePoints,
+              updatedAt: today(),
+              updatedBy: actorId,
+            }
+          : {
+              flowStatus: objectiveLifecycleTransitions.acceptLoot.to,
+              stage: objectiveLifecycleTransitions.acceptLoot.stage,
+              acceptedAt,
+              acceptedResult: acceptancePlan.objectiveAcceptedResult,
+              completionMultiplier: acceptancePlan.completionMultiplier,
+              objectiveBasePoints: acceptancePlan.basePoints,
+              updatedAt: today(),
+              updatedBy: actorId,
+            },
+      )
       .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, objectiveLifecycleTransitions.acceptLoot.from)))
       .returning({ id: objectives.id });
     if (updated.length === 0) {
       return false;
     }
+
+    await tx.insert(objectiveAcceptanceReviews).values({
+      id: makeId("acceptance-review"),
+      teamId: objective.teamId,
+      objectiveId: objective.id,
+      lootId: loot.id,
+      reviewerUserId: actorId,
+      acceptedResult: acceptancePlan.objectiveAcceptedResult,
+      resultReviews: normalizedResultReviews,
+      reason: input.reason?.trim() || null,
+      reviewedAt: acceptedAt,
+    });
 
     for (const result of resultRows) {
       await tx
@@ -3245,25 +3365,64 @@ export async function reviewObjectiveLoot(
         .where(eq(results.id, result.id));
     }
 
-    await tx
-      .update(objectiveAlignmentRequests)
-      .set({
-        status: "completed",
-        commanderFeedback: "验收对齐完成，目标已验收。",
-        reviewedBy: actorId,
-        reviewedByUserId: actorId,
-        reviewedAt: acceptedAt,
-      })
-      .where(
-        and(
-          eq(objectiveAlignmentRequests.objectiveId, objectiveId),
-          eq(objectiveAlignmentRequests.kind, "acceptance"),
-          inArray(objectiveAlignmentRequests.status, ["requested", "scheduled"]),
-        ),
-      );
+    if (requiresRevision) {
+      await tx
+        .update(objectiveAlignmentRequests)
+        .set({
+          status: "needsWork",
+          commanderFeedback: "验收未通过，目标进入待返工。",
+          reviewedBy: actorId,
+          reviewedByUserId: actorId,
+          reviewedAt: acceptedAt,
+        })
+        .where(
+          and(
+            eq(objectiveAlignmentRequests.objectiveId, objectiveId),
+            eq(objectiveAlignmentRequests.kind, "acceptance"),
+            inArray(objectiveAlignmentRequests.status, ["requested", "scheduled"]),
+          ),
+        );
+    } else {
+      await tx
+        .update(objectiveAlignmentRequests)
+        .set({
+          status: "completed",
+          commanderFeedback: "验收对齐完成，目标已验收。",
+          reviewedBy: actorId,
+          reviewedByUserId: actorId,
+          reviewedAt: acceptedAt,
+        })
+        .where(
+          and(
+            eq(objectiveAlignmentRequests.objectiveId, objectiveId),
+            eq(objectiveAlignmentRequests.kind, "acceptance"),
+            inArray(objectiveAlignmentRequests.status, ["requested", "scheduled"]),
+          ),
+        );
+    }
     return true;
   });
-  if (!accepted) return { status: "invalid" };
+  if (!reviewed) return { status: "invalid" };
+
+  if (requiresRevision) {
+    await notifyObjectiveChallengersOfRevisionRequired({
+      actorUserId: actorId,
+      objectiveId,
+      objectiveTitle: objective.title,
+      recipientUserIds: objectiveChallengerUserIds(objective),
+      reviewedAt: acceptedAt,
+      teamId: objective.teamId,
+    });
+  } else {
+    await notifyObjectiveChallengersOfPeerReviewRequested({
+      actorUserId: actorId,
+      objectiveId,
+      objectiveTitle: objective.title,
+      recipientUserIds: objectiveChallengerUserIds(objective),
+      reviewedAt: acceptedAt,
+      teamId: objective.teamId,
+    });
+  }
 
   publishObjectiveInvalidation({
     actorUserId: actorId,
@@ -3282,7 +3441,10 @@ export async function settleObjectiveLoot(
 ): Promise<ObjectiveFlowMutationOutcome> {
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
   if (!objective) return { status: "notFound" };
-  if (!canSettleObjectiveLootByFlow(objective) || !objective.lootSubmittedAt || !objective.acceptedResult) return { status: "invalid" };
+  const settlementEventKind = objectiveSettlementEventKindFor(objective);
+  if (!canSettleObjectiveLootByFlow(objective) || !settlementEventKind || !objective.lootSubmittedAt) return { status: "invalid" };
+  if (settlementEventKind === "deadlinePenalty" && !isObjectiveDeadlineReached(objective)) return { status: "invalid" };
+  if (settlementEventKind === "finalCompletion" && !objective.acceptedResult) return { status: "invalid" };
 
   const lootRows = await db
     .select()
@@ -3291,6 +3453,12 @@ export async function settleObjectiveLoot(
   const sortedLootRows = [...lootRows].sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
   const loot = input.lootId ? sortedLootRows.find((item) => item.id === input.lootId) : sortedLootRows[0];
   if (!loot) return { status: "notFound" };
+
+  const existingSettlementEvents = await db
+    .select()
+    .from(objectiveSettlementEvents)
+    .where(eq(objectiveSettlementEvents.objectiveId, objectiveId));
+  if (existingSettlementEvents.some((event) => event.kind === settlementEventKind)) return { status: "invalid" };
 
   const resultRows = await db.select().from(results).where(eq(results.objectiveId, objectiveId));
   const challengerRows = await getMemberRowsByIdsInScope(db, objective.teamId, objective.challengerUserIds ?? []);
@@ -3316,11 +3484,20 @@ export async function settleObjectiveLoot(
       resultId: result.id,
       acceptedResult: result.acceptedResult,
     })),
-    acceptedResult: objective.acceptedResult,
+    acceptedResult: objective.acceptedResult ?? undefined,
     contributionResolution: input.contributionResolution,
     contributionRatios: input.contributionRatios,
   });
   if (!settlementPlan) return { status: "invalid" };
+  const hasDeadlinePenaltyEvent = existingSettlementEvents.some((event) => event.kind === "deadlinePenalty");
+  const eventPlan = planObjectiveSettlementEvent({
+    acceptedResult: settlementPlan.objectiveAcceptedResult,
+    basePoints: settlementPlan.basePoints,
+    finalDueAt: objective.finalDueAt,
+    hasDeadlinePenaltyEvent,
+    kind: settlementEventKind,
+    lootSubmittedAt: loot.submittedAt,
+  });
   const contributionRatios = settlementPlan.contributionRatios.map((item) => {
     const userId = item.memberUserId?.trim() || "";
     return {
@@ -3334,45 +3511,85 @@ export async function settleObjectiveLoot(
   }
   const pointAllocations = allocateSettlementPoints({
     contributionRatios,
-    settlementPoints: settlementPlan.settlementPoints,
+    settlementPoints: eventPlan.settlementPoints,
   });
   const createdAt = nowIso();
-  const reason = input.reason?.trim() || input.contributionResolution?.reason.trim() || `目标结算：${objective.title}`;
+  const reason = input.reason?.trim() || input.contributionResolution?.reason.trim() || objectiveSettlementEventDefaultReason(settlementEventKind, objective.title);
+  const settlementEventId = makeId("settlement-event");
+  const existingPointRows = await db
+    .select({ points: pointLedger.points })
+    .from(pointLedger)
+    .where(eq(pointLedger.objectiveId, objectiveId));
+  const objectiveSettlementPoints = Number(
+    (
+      existingPointRows.reduce((sum, row) => sum + row.points, 0) +
+      pointAllocations.reduce((sum, row) => sum + row.points, 0)
+    ).toFixed(2),
+  );
 
   const settled = await db.transaction(async (tx) => {
     const updated = await tx
       .update(objectives)
-      .set({
-        flowStatus: objectiveLifecycleTransitions.settleLoot.to,
-        stage: objectiveLifecycleTransitions.settleLoot.stage,
-        acceptedResult: settlementPlan.objectiveAcceptedResult,
-        completionMultiplier: settlementPlan.completionMultiplier,
-        objectiveBasePoints: settlementPlan.basePoints,
-        objectiveSettlementPoints: settlementPlan.settlementPoints,
-        assignedChallengers: [],
-        assignedChallengerUserIds: [],
-        updatedAt: today(),
-        updatedBy: actorId,
-      })
-      .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, objectiveLifecycleTransitions.settleLoot.from)))
+      .set(
+        settlementEventKind === "finalCompletion"
+          ? {
+              flowStatus: objectiveLifecycleTransitions.settleLoot.to,
+              stage: objectiveLifecycleTransitions.settleLoot.stage,
+              acceptedResult: settlementPlan.objectiveAcceptedResult,
+              completionMultiplier: eventPlan.basePoints > 0 ? Number((objectiveSettlementPoints / eventPlan.basePoints).toFixed(4)) : eventPlan.multiplier,
+              objectiveBasePoints: settlementPlan.basePoints,
+              objectiveSettlementPoints,
+              assignedChallengers: [],
+              assignedChallengerUserIds: [],
+              updatedAt: today(),
+              updatedBy: actorId,
+            }
+          : {
+              flowStatus: "revisionRequired",
+              stage: objectiveLifecycleTransitions.requireRevision.stage,
+              acceptedResult: settlementPlan.objectiveAcceptedResult,
+              objectiveBasePoints: settlementPlan.basePoints,
+              objectiveSettlementPoints,
+              updatedAt: today(),
+              updatedBy: actorId,
+            },
+      )
+      .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, objective.flowStatus)))
       .returning({ id: objectives.id });
     if (updated.length === 0) {
       return false;
     }
 
-    for (const result of resultRows) {
-      await tx
-        .update(results)
-        .set({ acceptedResult: settlementPlan.acceptedResultByResultId.get(result.id) ?? "failed", updatedBy: actorId })
-        .where(eq(results.id, result.id));
+    await tx.insert(objectiveSettlementEvents).values({
+      id: settlementEventId,
+      teamId: objective.teamId,
+      objectiveId: objective.id,
+      kind: settlementEventKind,
+      lootId: loot.id,
+      basePoints: eventPlan.basePoints,
+      multiplier: eventPlan.multiplier,
+      settlementPoints: eventPlan.settlementPoints,
+      reason,
+      createdByUserId: actorId,
+      createdAt,
+    });
+
+    if (settlementEventKind === "finalCompletion") {
+      for (const result of resultRows) {
+        await tx
+          .update(results)
+          .set({ acceptedResult: settlementPlan.acceptedResultByResultId.get(result.id) ?? "failed", updatedBy: actorId })
+          .where(eq(results.id, result.id));
+      }
     }
-    await tx.delete(pointLedger).where(eq(pointLedger.objectiveId, objectiveId));
+
     if (contributionRatios.length > 0) {
       await tx.insert(pointLedger).values(
         pointAllocations.map((item) => ({
           id: makeId("points"),
           teamId: objective.teamId,
           objectiveId: objective.id,
+          settlementEventId,
           userId: item.userId,
           memberName: item.memberName,
           points: item.points,
@@ -3384,8 +3601,10 @@ export async function settleObjectiveLoot(
     await tx
       .update(objectiveAlignmentRequests)
       .set({
-        status: "completed",
-        commanderFeedback: "验收对齐完成，目标已结算。",
+        status: settlementEventKind === "finalCompletion" ? "completed" : "needsWork",
+        commanderFeedback: settlementEventKind === "finalCompletion"
+          ? "验收对齐完成，目标已结算。"
+          : "验收未通过，已完成逾期惩罚结算，目标仍需返工。",
         reviewedBy: actorId,
         reviewedByUserId: actorId,
         reviewedAt: createdAt,
@@ -3403,9 +3622,11 @@ export async function settleObjectiveLoot(
 
   await notifyObjectiveChallengersOfSettlement({
     actorUserId: actorId,
+    kind: settlementEventKind,
     objectiveId,
     objectiveTitle: objective.title,
     recipientUserIds: objectiveChallengerUserIds(objective),
+    settlementPoints: eventPlan.settlementPoints,
     settledAt: createdAt,
     teamId: objective.teamId,
   });
@@ -3418,6 +3639,30 @@ export async function settleObjectiveLoot(
   });
 
   return objectiveOutcome(objectiveId, runtimeScope(objective.teamId));
+}
+
+function objectiveSettlementEventKindFor(
+  objective: Pick<Objective, "flowStatus">,
+): ObjectiveSettlementEventKind | null {
+  if (objective.flowStatus === "revisionRequired") return "deadlinePenalty";
+  if (objective.flowStatus === "accepted") return "finalCompletion";
+  return null;
+}
+
+function isObjectiveDeadlineReached(
+  objective: Pick<Objective, "finalDueAt">,
+  currentDate = today(),
+) {
+  return currentDate >= objective.finalDueAt;
+}
+
+function objectiveSettlementEventDefaultReason(
+  kind: ObjectiveSettlementEventKind,
+  objectiveTitle: string,
+) {
+  return kind === "deadlinePenalty"
+    ? `目标逾期未通过验收惩罚结算：${objectiveTitle}`
+    : `目标最终结算：${objectiveTitle}`;
 }
 
 function settlementParticipantTargetsForResolution(

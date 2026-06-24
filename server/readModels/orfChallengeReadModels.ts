@@ -141,10 +141,9 @@ function bountyContributionSummary(input: {
   objectives: Objective[];
   pointLedger: PointLedgerEntry[];
 }) {
-  const ledgerPoints = input.pointLedger
-    .filter((entry) => entry.userId === input.memberUserId)
-    .reduce((sum, entry) => sum + entry.points, 0);
-  if (ledgerPoints > 0) {
+  const ledgerEntries = input.pointLedger.filter((entry) => entry.userId === input.memberUserId);
+  if (ledgerEntries.length > 0) {
+    const ledgerPoints = ledgerEntries.reduce((sum, entry) => sum + entry.points, 0);
     return { points: ledgerPoints };
   }
 
@@ -263,7 +262,9 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
     comments: filterComments(data, { feedbackIssueIds, objectiveIds, resultIds, taskIds, checklistItemIds }),
     objectiveLoot: data.objectiveLoot.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveTrialReviews: data.objectiveTrialReviews.filter((item) => objectiveIds.has(item.objectiveId)),
+    objectiveAcceptanceReviews: data.objectiveAcceptanceReviews.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveAlignmentRequests: data.objectiveAlignmentRequests.filter((item) => objectiveIds.has(item.objectiveId)),
+    objectiveSettlementEvents: data.objectiveSettlementEvents.filter((item) => objectiveIds.has(item.objectiveId)),
     pointLedger: data.pointLedger,
     pendingChallengeApplications,
   };

@@ -67,7 +67,9 @@ export function mergeTaskManagementData(state: OrfState, data: TaskManagementDat
     comments: data.comments ?? state.comments ?? [],
     objectiveLoot: data.objectiveLoot ?? state.objectiveLoot ?? [],
     objectiveTrialReviews: data.objectiveTrialReviews ?? state.objectiveTrialReviews ?? [],
+    objectiveAcceptanceReviews: data.objectiveAcceptanceReviews ?? state.objectiveAcceptanceReviews ?? [],
     objectiveAlignmentRequests: data.objectiveAlignmentRequests ?? state.objectiveAlignmentRequests ?? [],
+    objectiveSettlementEvents: data.objectiveSettlementEvents ?? state.objectiveSettlementEvents ?? [],
     pointLedger: data.pointLedger ?? state.pointLedger ?? [],
     userProfiles: data.userProfiles ?? state.userProfiles ?? userDisplayProfilesFromUsers(state.users),
   });

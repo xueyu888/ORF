@@ -20,6 +20,9 @@ export type NotificationKind =
   | "objective.alignment.requested"
   | "objective.alignment.reviewed"
   | "objective.loot.submitted"
+  | "objective.revision.required"
+  | "objective.peerReview.requested"
+  | "objective.settlement.updated"
   | "objective.settled"
   | "feedback.created"
   | "feedback.commented"
@@ -35,11 +38,12 @@ export type ChatMessageSource = "user" | "system";
 export type WorkLogReminderStatus = "active" | "resolved";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
+export type ObjectiveSettlementEventKind = "deadlinePenalty" | "finalCompletion";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
 export type UserRole = "admin" | "member";
 export type UserStatus = "pending" | "active" | "rejected" | "disabled";
 export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
-export type ObjectiveFlowStatus = "candidate" | "open" | "applying" | "recruiting" | "reestimating" | "frozen" | "submitted" | "accepted" | "settled" | "closed";
+export type ObjectiveFlowStatus = "candidate" | "open" | "applying" | "recruiting" | "reestimating" | "frozen" | "submitted" | "revisionRequired" | "accepted" | "settled" | "closed";
 export type LootResultClaimStatus = "completed" | "falsified" | "notClaimed";
 export type ObjectiveTrialReviewStatus = "requested" | "approved" | "needsWork";
 export type ObjectiveAlignmentRequestKind = "reestimateCompletion" | "acceptance";
@@ -279,6 +283,17 @@ export interface ObjectiveTrialReview {
   requestedAt: string;
 }
 
+export interface ObjectiveAcceptanceReview {
+  id: string;
+  objectiveId: string;
+  lootId: string;
+  reviewerUserId: string;
+  acceptedResult: ObjectiveAcceptedResult;
+  resultReviews: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
+  reason?: string | null;
+  reviewedAt: string;
+}
+
 export interface ObjectiveAlignmentRequest {
   id: string;
   objectiveId: string;
@@ -299,10 +314,24 @@ export interface ObjectiveAlignmentRequest {
 export interface PointLedgerEntry {
   id: string;
   objectiveId: string;
+  settlementEventId?: string | null;
   userId: string;
   memberName: string;
   points: number;
   reason: string;
+  createdAt: string;
+}
+
+export interface ObjectiveSettlementEvent {
+  id: string;
+  objectiveId: string;
+  kind: ObjectiveSettlementEventKind;
+  lootId?: string | null;
+  basePoints: number;
+  multiplier: number;
+  settlementPoints: number;
+  reason: string;
+  createdByUserId: string;
   createdAt: string;
 }
 
@@ -842,7 +871,9 @@ export interface OrfState {
   comments: CommentThread[];
   objectiveLoot: ObjectiveLoot[];
   objectiveTrialReviews: ObjectiveTrialReview[];
+  objectiveAcceptanceReviews: ObjectiveAcceptanceReview[];
   objectiveAlignmentRequests: ObjectiveAlignmentRequest[];
+  objectiveSettlementEvents: ObjectiveSettlementEvent[];
   pointLedger: PointLedgerEntry[];
   causeCategories: string[];
   rules: OrfRules;

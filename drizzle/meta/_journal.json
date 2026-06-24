@@ -435,6 +435,13 @@
       "when": 1782188655123,
       "tag": "0061_enforce_user_id_identity_source",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1782290000000,
+      "tag": "0062_objective_acceptance_and_settlement_events",
+      "breakpoints": true
     }
   ]
 }

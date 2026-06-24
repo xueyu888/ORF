@@ -220,6 +220,7 @@ export function BountyHallPage() {
             open: hallItemBuckets.open.length,
             frozen: hallItemBuckets.frozen.length,
             submitted: hallItemBuckets.submitted.length,
+            revisionRequired: hallItemBuckets.revisionRequired.length,
             accepted: hallItemBuckets.accepted.length,
             settled: hallItemBuckets.settled.length,
             related: hallItemBuckets.related.length,

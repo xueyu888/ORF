@@ -48,10 +48,12 @@ type SeedResult = Omit<Result, "uncertaintyScore" | "acceptedResult" | "evidence
     priorityDeclinedBy?: string[];
     challengeApplications?: ChallengeApplication[];
   };
-type SeedInitialState = Omit<OrfState, "evidence" | "feedback" | "objectiveLoot" | "objectives" | "results" | "tasks" | "userProfiles"> & {
+type SeedInitialState = Omit<OrfState, "evidence" | "feedback" | "objectiveAcceptanceReviews" | "objectiveLoot" | "objectiveSettlementEvents" | "objectives" | "results" | "tasks" | "userProfiles"> & {
   evidence: Evidence[];
   feedback: Feedback[];
+  objectiveAcceptanceReviews?: OrfState["objectiveAcceptanceReviews"];
   objectiveLoot: ObjectiveLoot[];
+  objectiveSettlementEvents?: OrfState["objectiveSettlementEvents"];
   objectives: SeedObjective[];
   results: SeedResult[];
   tasks: Task[];
@@ -194,7 +196,9 @@ function normalizeInitialState(state: SeedInitialState): OrfState {
       return { ...item, submittedBy: userNameById.get(submittedByUserId) ?? item.submittedBy, submittedByUserId };
     }),
     objectiveTrialReviews: state.objectiveTrialReviews ?? [],
+    objectiveAcceptanceReviews: state.objectiveAcceptanceReviews ?? [],
     objectiveAlignmentRequests: state.objectiveAlignmentRequests ?? [],
+    objectiveSettlementEvents: state.objectiveSettlementEvents ?? [],
     pointLedger: state.pointLedger ?? [],
   };
 }
@@ -1675,7 +1679,9 @@ const initialOrfStateSeed: SeedInitialState = {
     },
   ],
   objectiveTrialReviews: [],
+  objectiveAcceptanceReviews: [],
   objectiveAlignmentRequests: [],
+  objectiveSettlementEvents: [],
   pointLedger: [
     {
       id: "ledger-demo-routing-kai",
