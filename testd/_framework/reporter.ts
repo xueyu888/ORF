@@ -24,7 +24,7 @@ const TESTD_RECOVERY_ONLY_ENV = "TESTD_RECOVERY_ONLY";
 const REPORT_RETENTION_DAYS_ENV = "TESTD_REPORT_RETENTION_DAYS";
 const DEFAULT_REPORT_RETENTION_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const SUITE_ORDER = ["isolated", "permissions"];
+const SUITE_ORDER = ["并行", "串行"];
 
 type StageStatus = "passed" | "failed";
 type CaseStatus = TestResult["status"];
@@ -56,6 +56,7 @@ type CaseReport = {
   id: string;
   title: string;
   suite?: string;
+  module?: string;
   status: CaseStatus;
   durationMs: number;
   failedStage?: string;
@@ -133,10 +134,12 @@ export default class StateCaseReporter implements Reporter {
     const failedStage = stages.find((stage) => stage.status === "failed")?.name;
     const caseId = annotation(result, STATE_CASE_ID_ANNOTATION) ?? test.id;
     const caseTitle = annotation(result, STATE_CASE_TITLE_ANNOTATION) ?? test.title;
+    const module = testdModuleName(test);
 
     this.cases.push({
       id: caseId,
       title: caseTitle,
+      ...(module ? { module } : {}),
       status: result.status,
       durationMs: result.duration,
       ...(failedStage ? { failedStage } : {}),
@@ -293,7 +296,21 @@ function aggregateReportRunId() {
 }
 
 function currentSuiteName() {
-  return process.env[TESTD_SUITE_ENV] ?? "default";
+  const suite = process.env[TESTD_SUITE_ENV];
+  if (suite === "parallel") {
+    return "并行";
+  }
+  if (suite === "serial") {
+    return "串行";
+  }
+  return suite ?? "默认";
+}
+
+function testdModuleName(test: Pick<TestCase, "location">) {
+  const testdRoot = path.join(process.cwd(), "testd");
+  const relativePath = toPosixPath(path.relative(testdRoot, test.location.file));
+  const [executionMode, module] = relativePath.split("/");
+  return executionMode === "并行" || executionMode === "串行" ? module : undefined;
 }
 
 async function loadAggregateState(runId: string, startedAt: Date): Promise<AggregateState> {
@@ -634,10 +651,10 @@ function renderPassedCases(cases: CaseReport[]) {
   const includeSuite = cases.some((testCase) => testCase.suite);
   if (includeSuite) {
     return [
-      "| 批次 | 用例 ID | 用例名称 | 耗时 |",
-      "|---|---|---|---:|",
+      "| 批次 | 模块 | 用例 ID | 用例名称 | 耗时 |",
+      "|---|---|---|---|---:|",
       ...cases.map((testCase) =>
-        `| ${escapeTableCell(testCase.suite ?? "")} | ${escapeTableCell(testCase.id)} | ${escapeTableCell(testCase.title)} | ${formatDuration(testCase.durationMs)} |`,
+        `| ${escapeTableCell(testCase.suite ?? "")} | ${escapeTableCell(testCase.module ?? "")} | ${escapeTableCell(testCase.id)} | ${escapeTableCell(testCase.title)} | ${formatDuration(testCase.durationMs)} |`,
       ),
     ].join("\n");
   }
@@ -667,6 +684,8 @@ function renderFailedCase(testCase: CaseReport) {
     "",
     testCase.suite ? `**批次：** ${testCase.suite}` : undefined,
     testCase.suite ? "" : undefined,
+    testCase.module ? `**模块：** ${testCase.module}` : undefined,
+    testCase.module ? "" : undefined,
     `**失败阶段：** ${testCase.failedStage ?? "未记录"}`,
     "",
     `**耗时：** ${formatDuration(testCase.durationMs)}`,

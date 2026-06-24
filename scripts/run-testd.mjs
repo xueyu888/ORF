@@ -12,7 +12,7 @@ const testdReportRunId = process.env.TESTD_REPORT_RUN_ID ?? testdRunId;
 const extraArgs = process.argv.slice(2);
 const requestedSuite = process.env.TESTD_SUITE;
 const inferredSuite = requestedSuite ?? inferSuiteFromArgs(extraArgs);
-const suites = inferredSuite ? suitesFor(inferredSuite) : ["isolated", "permissions"];
+const suites = inferredSuite ? suitesFor(inferredSuite) : ["parallel", "serial"];
 const runnableSuites = suites.filter((suite) => hasRunnableSpecsForSuite(suite, extraArgs));
 const outputTailLimit = 1024 * 1024;
 const defaultNetworkRetryDivisors = [2, 4, 8];
@@ -92,12 +92,13 @@ if (shouldPrintAggregateTestdSummary(extraArgs)) {
 }
 
 async function runSuiteWithNetworkRetry(suite, args) {
+  console.error(`TestD 启动${suiteLabel(suite)}组：模块 ${suiteModuleNames(suite).join("、") || "无"}`);
   const attempts = buildNetworkRetryAttempts(suite, args);
 
   for (const [attemptIndex, attempt] of attempts.entries()) {
     if (attempt.retryIndex > 0) {
       console.error(
-        `TestD 网络降级重试 ${attempt.retryIndex}/${attempts.length - 1}: suite=${suite} ${describeAttempt(attempt)}`,
+        `TestD ${suiteLabel(suite)}组网络降级重试 ${attempt.retryIndex}/${attempts.length - 1}: ${describeAttempt(attempt)}`,
       );
     }
 
@@ -112,7 +113,7 @@ async function runSuiteWithNetworkRetry(suite, args) {
     const networkFailure = detectNetworkEntryFailure(result.outputTail);
     const nextAttempt = attempts[attemptIndex + 1];
     if (networkFailure && nextAttempt && isRecoveryPassAllowed(attempt.args)) {
-      console.error(`TestD 检测到 ${suite} suite 可能遇到数据库公网入口建连抖动: ${networkFailure.reason}`);
+      console.error(`TestD ${suiteLabel(suite)}组可能遇到数据库公网入口建连抖动: ${networkFailure.reason}`);
       const recoveryResult = await runPostFailureRecoveryPass(suite, attempt.args, result.exitCode, {
         preserveOriginalExitCode: false,
       });
@@ -125,7 +126,7 @@ async function runSuiteWithNetworkRetry(suite, args) {
 
       const delayMs = networkRetryDelayMs();
       console.error(
-        `TestD 已完成本轮清理，将在 ${delayMs}ms 后用更低并发重跑整个 ${suite} suite: ${describeAttempt(nextAttempt)}`,
+        `TestD 已完成本轮清理，将在 ${delayMs}ms 后用更低并发重跑整个${suiteLabel(suite)}组: ${describeAttempt(nextAttempt)}`,
       );
       await sleep(delayMs);
       continue;
@@ -184,7 +185,7 @@ function runPlaywrightAttempt(suite, args, extraEnv = {}) {
       currentChildExited = true;
       currentChild = undefined;
       if (signal) {
-        console.error(`testd ${suite} suite exited by signal ${signal}`);
+        console.error(`TestD ${suiteLabel(suite)}组被信号 ${signal} 终止`);
         resolve({ exitCode: signalExitCode(signal), outputTail });
         return;
       }
@@ -224,7 +225,7 @@ function hasRunnableSpecsForSuite(suite, args) {
   const specPaths = listSpecPaths(path.join(process.cwd(), "testd"));
   const hasSpecs = specPaths.some((specPath) => specBelongsToSuite(suite, specPath));
   if (!hasSpecs) {
-    console.error(`TestD 跳过 ${suite} suite：当前没有匹配的测试文件。`);
+    console.error(`TestD 跳过${suiteLabel(suite)}组：当前没有匹配的测试文件。`);
   }
   return hasSpecs;
 }
@@ -255,18 +256,28 @@ function listSpecPaths(rootDir) {
 
 function specBelongsToSuite(suite, specPath) {
   const normalized = specPath.split(path.sep).join("/");
-  const inPermissions = normalized.includes("/permissions/");
-  if (suite === "permissions") {
-    return inPermissions;
+  const inSerialDirectory = normalized.includes("/串行/");
+  if (suite === "serial") {
+    return inSerialDirectory;
   }
-  return !inPermissions;
+  return !inSerialDirectory;
+}
+
+function suiteModuleNames(suite) {
+  const testdRoot = path.join(process.cwd(), "testd");
+  return [...new Set(
+    listSpecPaths(testdRoot)
+      .filter((specPath) => specBelongsToSuite(suite, specPath))
+      .map((specPath) => path.relative(testdRoot, specPath).split(path.sep)[1])
+      .filter(Boolean),
+  )].sort();
 }
 
 function runRecoveryPass(suite, args, reason) {
   const recoveryRunId = createTestdRunId();
   const recoveryWorkers = positiveIntegerEnv("TESTD_RECOVERY_WORKERS", 1);
   console.error(
-    `TestD recovery ${reason} pass 启动: suite=${suite} TESTD_RUN_ID=${recoveryRunId} workers=${recoveryWorkers}`,
+    `TestD ${suiteLabel(suite)}组 recovery ${reason} pass 启动: TESTD_RUN_ID=${recoveryRunId} workers=${recoveryWorkers}`,
   );
   return runPlaywright(suite, recoveryArgs(args), {
     TESTD_RECOVERY_ONLY: "1",
@@ -280,7 +291,7 @@ async function runPostFailureRecoveryPass(suite, args, originalExitCode, options
     return { completed: false, skipped: true, exitCode: originalExitCode };
   }
 
-  console.error(`TestD 检测到 ${suite} suite 失败，开始补清理本轮异常退出留下的 recovery case...`);
+  console.error(`TestD ${suiteLabel(suite)}组失败，开始补清理本轮异常退出留下的 recovery case...`);
   const recoveryExitCode = await runRecoveryPass(suite, args, "post-failure");
   if (terminating) {
     process.exitCode = signalExitCode(terminationSignal ?? "SIGINT");
@@ -335,7 +346,7 @@ function buildNetworkRetryAttempts(suite, args) {
   const attempts = [
     {
       retryIndex: 0,
-      args,
+      args: withWorkerArg(args, currentWorkers),
       env: {},
       workers: currentWorkers,
       runId: testdRunId,
@@ -377,7 +388,7 @@ function buildNetworkRetryAttempts(suite, args) {
 }
 
 function isSerialSuite(suite) {
-  return suite === "permissions";
+  return suite === "serial";
 }
 
 function networkRetryWorkers(currentWorkers) {
@@ -671,22 +682,32 @@ function inferSuiteFromArgs(args) {
     return undefined;
   }
 
-  if (pathArgs.some((arg) => arg.includes("/permissions/") || arg.includes("\\permissions\\"))) {
-    return "permissions";
+  if (pathArgs.some((arg) => arg.includes("/串行/") || arg.includes("\\串行\\"))) {
+    return "serial";
   }
 
-  return "isolated";
+  return "parallel";
 }
 
 function suitesFor(suite) {
   if (suite === "all") {
-    return ["isolated", "permissions"];
+    return ["parallel", "serial"];
   }
 
-  if (suite === "isolated" || suite === "permissions") {
+  if (suite === "parallel" || suite === "serial") {
     return [suite];
   }
 
   console.error(`Unsupported TESTD_SUITE: ${suite}`);
   process.exit(1);
+}
+
+function suiteLabel(suite) {
+  if (suite === "parallel") {
+    return "并行";
+  }
+  if (suite === "serial") {
+    return "串行";
+  }
+  return suite;
 }
