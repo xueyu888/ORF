@@ -53,7 +53,9 @@ import type {
   ContributionReviewMetricScore,
   LootResultClaim,
   LootResultClaimStatus,
+  ObjectiveAcceptanceReview,
   ObjectiveLoot,
+  ObjectiveSettlementEvent,
   ObjectiveTrialReviewStatus,
   Result,
   ResultAcceptedResult,
@@ -100,6 +102,81 @@ function ResultDetailsSummary({ result }: { result: Result }) {
     <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs whitespace-pre-wrap leading-5 orf-text-secondary">
       {detail}
     </div>
+  );
+}
+
+function InactiveLootActionPanel({
+  currentSettlementEvent,
+  latestAcceptanceReview,
+  latestLoot,
+  message,
+  results,
+}: {
+  currentSettlementEvent: ObjectiveSettlementEvent | null;
+  latestAcceptanceReview: ObjectiveAcceptanceReview | null;
+  latestLoot: ObjectiveLoot | undefined;
+  message: string;
+  results: Result[];
+}) {
+  const failedReviews = latestAcceptanceReview?.resultReviews.filter(
+    (review) => review.acceptedResult !== "completed" && review.acceptedResult !== "falsified",
+  ) ?? [];
+
+  return (
+    <Card className="orf-card-padding">
+      <div className="grid gap-4 text-sm">
+        <div className="grid gap-1">
+          <div className="font-semibold orf-text-primary">当前处理状态</div>
+          <div className="orf-text-secondary">{message}</div>
+        </div>
+
+        {latestLoot && (
+          <div className="rounded-md border orf-border p-3">
+            <div className="text-xs font-semibold orf-text-muted">最近正式提交</div>
+            <div className="mt-1 orf-text-primary">{latestLoot.submittedBy} · {formatSummaryTime(latestLoot.submittedAt)}</div>
+            <div className="mt-2 whitespace-pre-wrap orf-text-secondary">{latestLoot.body}</div>
+          </div>
+        )}
+
+        {latestAcceptanceReview && (
+          <div className="rounded-md border orf-border p-3">
+            <div className="text-xs font-semibold orf-text-muted">最近验收结果</div>
+            <div className="mt-1 orf-text-primary">
+              {objectiveAcceptanceReviewLabel(latestAcceptanceReview.acceptedResult)} · {formatSummaryTime(latestAcceptanceReview.reviewedAt)}
+            </div>
+            {latestAcceptanceReview.reason && (
+              <div className="mt-2 whitespace-pre-wrap orf-text-secondary">{latestAcceptanceReview.reason}</div>
+            )}
+            {failedReviews.length > 0 && (
+              <div className="mt-3 grid gap-2">
+                {failedReviews.map((review) => (
+                  <div key={review.resultId} className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className={resultReviewBadgeClass(review.acceptedResult)}>
+                      {resultReviewLabel(review.acceptedResult)}
+                    </span>
+                    <span className="orf-text-secondary">
+                      {results.find((result) => result.id === review.resultId)?.title ?? review.resultId}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {currentSettlementEvent && (
+          <div className="rounded-md border orf-border p-3">
+            <div className="text-xs font-semibold orf-text-muted">已完成结算事件</div>
+            <div className="mt-1 orf-text-primary">
+              {settlementEventLabel(currentSettlementEvent.kind)} · {formatSummaryTime(currentSettlementEvent.createdAt)}
+            </div>
+            <div className="mt-2 orf-text-secondary">
+              本次写入 {currentSettlementEvent.settlementPoints} 分；目标累计已结算分会进入统计页。
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -311,6 +388,13 @@ export function LootSubmitPage() {
       ),
     [objectiveId, state.objectiveTrialReviews],
   );
+  const latestAcceptanceReview = useMemo(
+    () =>
+      state.objectiveAcceptanceReviews
+        .filter((item) => item.objectiveId === objectiveId)
+        .sort((left, right) => right.reviewedAt.localeCompare(left.reviewedAt))[0] ?? null,
+    [objectiveId, state.objectiveAcceptanceReviews],
+  );
   const challengerAllocationTargets = useMemo(
     () => (objective ? objectiveChallengerTargets(objective) : []),
     [objective],
@@ -339,6 +423,13 @@ export function LootSubmitPage() {
   const settlementEventKind = settlementReviewWindow.kind;
   const settlementWindowOpen = settlementReviewWindow.open;
   const hasCurrentSettlementEvent = settlementReviewWindow.reason === "alreadySettled";
+  const currentSettlementEvent = useMemo(
+    () =>
+      settlementEventKind
+        ? objectiveSettlementEvents.find((event) => event.kind === settlementEventKind) ?? null
+        : null,
+    [objectiveSettlementEvents, settlementEventKind],
+  );
   const isChallenger = Boolean(
     objective &&
       currentUser?.role === "member" &&
@@ -1544,9 +1635,13 @@ export function LootSubmitPage() {
             </form>
           </Card>
         ) : (
-          <Card className="orf-card-padding text-sm orf-text-secondary">
-            {inactiveActionMessage}
-          </Card>
+          <InactiveLootActionPanel
+            currentSettlementEvent={currentSettlementEvent}
+            latestAcceptanceReview={latestAcceptanceReview}
+            latestLoot={latestLoot}
+            message={inactiveActionMessage}
+            results={results}
+          />
         )}
       </div>
     </PageScaffold>
@@ -2449,6 +2544,18 @@ function objectiveReviewResultPresentation(
     submitLabel: "确认要求返工",
     title: "目标将进入待返工",
   };
+}
+
+function objectiveAcceptanceReviewLabel(value: ObjectiveAcceptanceReview["acceptedResult"]) {
+  if (value === "completed") return "验收通过";
+  if (value === "falsified") return "有效证伪";
+  if (value === "overdelivered") return "超额完成";
+  if (value === "overturned") return "结论改判";
+  return "验收不通过";
+}
+
+function settlementEventLabel(value: ObjectiveSettlementEvent["kind"]) {
+  return value === "deadlinePenalty" ? "逾期惩罚结算" : "最终结算";
 }
 
 function resultReviewLabel(value: ResultAcceptedResult) {
