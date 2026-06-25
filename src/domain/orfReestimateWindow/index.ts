@@ -1,7 +1,6 @@
 import type { ObjectiveFlowStatus } from "../../types/orf";
 
 export const REESTIMATE_WINDOW_HALF_DAY_MS = 12 * 60 * 60 * 1000;
-export const REESTIMATE_WINDOW_MAX_HALF_DAYS = 18;
 export const REESTIMATE_WINDOW_RATIO = 0.3;
 
 export type ObjectiveReestimateWindowTarget = {
@@ -46,7 +45,7 @@ export function calculateObjectiveReestimateDueAt(
   if (remainingMs < REESTIMATE_WINDOW_HALF_DAY_MS) return null;
 
   const roundedHalfDays = Math.round((remainingMs * REESTIMATE_WINDOW_RATIO) / REESTIMATE_WINDOW_HALF_DAY_MS);
-  const confirmationHalves = Math.min(REESTIMATE_WINDOW_MAX_HALF_DAYS, Math.max(1, roundedHalfDays));
+  const confirmationHalves = Math.max(1, roundedHalfDays);
   return new Date(acceptedDate.getTime() + confirmationHalves * REESTIMATE_WINDOW_HALF_DAY_MS).toISOString();
 }
 

@@ -3,7 +3,6 @@ import test from "node:test";
 import {
   calculateObjectiveReestimateDueAt,
   REESTIMATE_WINDOW_HALF_DAY_MS,
-  REESTIMATE_WINDOW_MAX_HALF_DAYS,
   resolveObjectiveReestimateWindowSync,
   validateFrozenReestimateReopenDueAt,
 } from "../src/domain/orfReestimateWindow";
@@ -18,15 +17,21 @@ test("objective reestimate due date moves with the final deadline", () => {
   assert.ok(new Date(laterDueAt).getTime() > new Date(earlyDueAt).getTime());
 });
 
-test("objective reestimate due date is capped at nine days after acceptance", () => {
+test("objective reestimate due date keeps using the 30 percent window without a fixed maximum", () => {
   const acceptedAt = "2026-06-01T00:00:00.000Z";
   const dueAt = calculateObjectiveReestimateDueAt("2026-12-31", acceptedAt);
 
   assert.ok(dueAt);
+  const finalDueAt = new Date("2026-12-31T23:59:00").getTime();
+  const acceptedAtTime = new Date(acceptedAt).getTime();
+  const roundedHalfDays = Math.round(((finalDueAt - acceptedAtTime) * 0.3) / REESTIMATE_WINDOW_HALF_DAY_MS);
+  const expectedWindowMs = Math.max(1, roundedHalfDays) * REESTIMATE_WINDOW_HALF_DAY_MS;
+
   assert.equal(
-    new Date(dueAt).getTime() - new Date(acceptedAt).getTime(),
-    REESTIMATE_WINDOW_MAX_HALF_DAYS * REESTIMATE_WINDOW_HALF_DAY_MS,
+    new Date(dueAt).getTime() - acceptedAtTime,
+    expectedWindowMs,
   );
+  assert.ok(expectedWindowMs > 9 * 24 * 60 * 60 * 1000);
 });
 
 test("objective reestimate due date rejects an invalid or too-short window", () => {

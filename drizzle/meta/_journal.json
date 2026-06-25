@@ -449,6 +449,13 @@
       "when": 1782291000000,
       "tag": "0063_frozen_reestimate_alignment_due_at",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1782382779216,
+      "tag": "0064_reestimate_window_remove_max_cap",
+      "breakpoints": true
     }
   ]
 }
