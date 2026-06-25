@@ -48,6 +48,8 @@ curl "$ORF_LOCAL_SETTLEMENT_SERVICE_URL/health"
 
 如果前端提示“匿名互评结算服务不可用”，说明 ORF 后端代理访问不到 `ORF_LOCAL_SETTLEMENT_SERVICE_URL` 指向的服务；先检查 `orf-local-private-service` 的 systemd 用户服务是否启动、监听地址是否正确，以及 ORF 后端所在机器是否能访问该地址。
 
+本机 `ORF_LOCAL_SETTLEMENT_SERVICE_URL` 指向 `127.0.0.1`、`localhost` 或 `::1` 时，`orf up` 会把该服务纳入启动前健康检查；不健康时会执行 `systemctl --user start orf-local-private-service.service`。如果服务部署在局域网共享主机，`orf up` 只检查健康状态，不在本机启动替代服务。
+
 ## 接口契约
 
 ORF 前端依赖以下 ORF 同源代理接口；ORF 后端再转发到共享私有服务：

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { planObjectiveSettlementEvent } from "../src/domain/orfSettlement";
+import {
+  objectiveSettlementReviewWindow,
+  planObjectiveSettlementEvent,
+} from "../src/domain/orfSettlement";
 
 test("deadline penalty settlement awards half points even when acceptance failed", () => {
   const event = planObjectiveSettlementEvent({
@@ -61,5 +64,45 @@ test("final completion without prior penalty follows the original deadline multi
       lootSubmittedAt: "2026-06-30T09:00:00.000Z",
     }).settlementPoints,
     50,
+  );
+});
+
+test("settlement review window closes after the current event is settled", () => {
+  assert.deepEqual(
+    objectiveSettlementReviewWindow({
+      objective: { finalDueAt: "2026-06-24", flowStatus: "revisionRequired" },
+      settlementEvents: [],
+      today: "2026-06-25",
+    }),
+    { kind: "deadlinePenalty", open: true, reason: "open" },
+  );
+
+  assert.deepEqual(
+    objectiveSettlementReviewWindow({
+      objective: { finalDueAt: "2026-06-24", flowStatus: "revisionRequired" },
+      settlementEvents: [{ kind: "deadlinePenalty" }],
+      today: "2026-06-25",
+    }),
+    { kind: "deadlinePenalty", open: false, reason: "alreadySettled" },
+  );
+
+  assert.deepEqual(
+    objectiveSettlementReviewWindow({
+      objective: { finalDueAt: "2026-06-24", flowStatus: "accepted" },
+      settlementEvents: [{ kind: "deadlinePenalty" }],
+      today: "2026-06-30",
+    }),
+    { kind: "finalCompletion", open: true, reason: "open" },
+  );
+});
+
+test("deadline penalty review window stays closed before the due date", () => {
+  assert.deepEqual(
+    objectiveSettlementReviewWindow({
+      objective: { finalDueAt: "2026-06-30", flowStatus: "revisionRequired" },
+      settlementEvents: [],
+      today: "2026-06-25",
+    }),
+    { kind: "deadlinePenalty", open: false, reason: "deadlinePending" },
   );
 });

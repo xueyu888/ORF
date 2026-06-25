@@ -26,7 +26,6 @@ import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVis
 import { useOrf } from "../state/OrfProvider";
 import {
   canReviewObjectiveLootByFlow,
-  canSettleObjectiveLootByFlow,
   canSubmitObjectiveContributionReviewByFlow,
   canSubmitObjectiveLootByFlow,
 } from "../domain/orfLifecycle";
@@ -45,6 +44,7 @@ import { resultDetailText } from "../domain/orfResultDetails";
 import {
   acceptedResultForClaim,
   objectiveAcceptedResultFromReviews,
+  objectiveSettlementReviewWindow,
 } from "../domain/orfSettlement";
 import type {
   ContributionAllocation,
@@ -318,20 +318,27 @@ export function LootSubmitPage() {
   const currentMemberId = currentUser?.id ?? "";
   const currentMemberName = currentUser?.name ?? "";
   const todayDate = localDateString(new Date());
-  const settlementEventKind = objective?.flowStatus === "revisionRequired"
-    ? "deadlinePenalty"
-    : objective?.flowStatus === "accepted"
-      ? "finalCompletion"
-      : null;
-  const hasCurrentSettlementEvent = Boolean(
-    objective &&
-      settlementEventKind &&
-      state.objectiveSettlementEvents.some(
-        (event) => event.objectiveId === objective.id && event.kind === settlementEventKind,
-      ),
+  const objectiveSettlementEvents = useMemo(
+    () =>
+      objective
+        ? state.objectiveSettlementEvents.filter(
+            (event) => event.objectiveId === objective.id,
+          )
+        : [],
+    [objective, state.objectiveSettlementEvents],
   );
-  const settlementDeadlineReady = settlementEventKind !== "deadlinePenalty" ||
-    Boolean(objective && todayDate >= objective.finalDueAt);
+  const settlementReviewWindow = useMemo(
+    () =>
+      objectiveSettlementReviewWindow({
+        objective,
+        settlementEvents: objectiveSettlementEvents,
+        today: todayDate,
+      }),
+    [objective, objectiveSettlementEvents, todayDate],
+  );
+  const settlementEventKind = settlementReviewWindow.kind;
+  const settlementWindowOpen = settlementReviewWindow.open;
+  const hasCurrentSettlementEvent = settlementReviewWindow.reason === "alreadySettled";
   const isChallenger = Boolean(
     objective &&
       currentUser?.role === "member" &&
@@ -340,7 +347,7 @@ export function LootSubmitPage() {
   const canPeerReview = Boolean(
     objective &&
       canSubmitObjectiveContributionReviewByFlow(objective) &&
-      settlementDeadlineReady &&
+      settlementWindowOpen &&
       isChallenger,
   );
   const [body, setBody] = useState("");
@@ -452,9 +459,7 @@ export function LootSubmitPage() {
   const canLoadSettlementSummary = Boolean(
     currentUser?.role === "admin" &&
     objective &&
-    canSettleObjectiveLootByFlow(objective) &&
-    !hasCurrentSettlementEvent &&
-    settlementDeadlineReady &&
+    settlementWindowOpen &&
     latestLoot &&
     usesLocalContributionSettlement,
   );
@@ -735,9 +740,7 @@ export function LootSubmitPage() {
   );
   const canSettle = Boolean(
     currentUser?.role === "admin" &&
-    canSettleObjectiveLootByFlow(objective) &&
-    !hasCurrentSettlementEvent &&
-    settlementDeadlineReady &&
+    settlementWindowOpen &&
     latestLoot,
   );
   const settlementTitle = settlementEventKind === "deadlinePenalty"
@@ -1012,6 +1015,11 @@ export function LootSubmitPage() {
     }));
     if (error) setError("");
   };
+  const inactiveActionMessage = hasCurrentSettlementEvent && objective.flowStatus === "revisionRequired"
+    ? "逾期惩罚结算已完成，目标仍需返工。挑战者重新正式提交后，指挥官再次验收；验收通过后才会开放最终匿名互评和最终结算。"
+    : settlementReviewWindow.reason === "deadlinePending"
+      ? "目标仍在返工期内；到达截止日后才会开放逾期惩罚互评和结算。"
+      : "当前状态没有可提交的验收动作。";
 
   return (
     <PageScaffold
@@ -1537,7 +1545,7 @@ export function LootSubmitPage() {
           </Card>
         ) : (
           <Card className="orf-card-padding text-sm orf-text-secondary">
-            当前状态没有可提交的验收动作。
+            {inactiveActionMessage}
           </Card>
         )}
       </div>

@@ -100,10 +100,11 @@ orf status
 | PostgreSQL | 使用 `DATABASE_URL` 或 `REMOTE_DATABASE_URL` 执行 `select 1`。 |
 | Ory | 请求 `ORY_PUBLIC_URL` 的 `/health/ready`。 |
 | MinIO | 请求 `OBJECT_STORAGE_ENDPOINT` 的 `/minio/health/live`。 |
+| 匿名互评服务 | 请求 `ORF_LOCAL_SETTLEMENT_SERVICE_URL` 的 `/health`。 |
 | Backend | 请求 `http://127.0.0.1:8787/health`。 |
 | Frontend | 通过 Vite 代理请求 `http://127.0.0.1:5173/health`。 |
 
-`orf up` 会在启动应用前先执行 `npm install` 同步 Node 依赖，再执行同一组依赖检查。PostgreSQL 缺配置或不可连接时直接失败；当 `ORY_PUBLIC_URL` / `OBJECT_STORAGE_ENDPOINT` 指向本地地址时，Ory 和 MinIO 不健康会先运行对应的本地启动脚本；指向共享公共地址时，`orf up` 只会检查，不会尝试拉起这两个服务。
+`orf up` 会在启动应用前先执行 `npm install` 同步 Node 依赖，再执行同一组依赖检查。PostgreSQL 缺配置或不可连接时直接失败；当 `ORY_PUBLIC_URL` / `OBJECT_STORAGE_ENDPOINT` 指向本地地址时，Ory 和 MinIO 不健康会先运行对应的本地启动脚本；当 `ORF_LOCAL_SETTLEMENT_SERVICE_URL` 指向本地地址时，匿名互评服务不健康会先运行 `systemctl --user start orf-local-private-service.service`；指向共享公共地址时，`orf up` 只会检查，不会尝试拉起这些服务。
 
 以后需要打开本地前端页面时，先识别当前是否在 WSL：
 

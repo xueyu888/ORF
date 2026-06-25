@@ -3,6 +3,8 @@ import type {
   LootResultClaimStatus,
   Objective,
   ObjectiveAcceptedResult,
+  ObjectiveFlowStatus,
+  ObjectiveSettlementEvent,
   ObjectiveSettlementEventKind,
   ObjectiveLoot,
   Result,
@@ -66,10 +68,21 @@ export type ObjectiveSettlementEventPlan = {
   multiplier: number;
   settlementPoints: number;
 };
+export type ObjectiveSettlementReviewWindow = {
+  kind: ObjectiveSettlementEventKind | null;
+  open: boolean;
+  reason:
+    | "alreadySettled"
+    | "deadlinePending"
+    | "notSettlementState"
+    | "open";
+};
 export type SettlementPointAllocation<T extends ContributionAllocation = ContributionAllocation> = T & {
   points: number;
   pointUnits: number;
 };
+type SettlementReviewObjective = Pick<Objective, "finalDueAt" | "flowStatus">;
+type SettlementReviewEvent = Pick<ObjectiveSettlementEvent, "kind">;
 
 export function uncertaintyScoreFor(
   level: UncertaintyLevel | null | undefined,
@@ -155,6 +168,37 @@ export function planObjectiveSettlementEvent(input: {
     multiplier,
     settlementPoints: Number((input.basePoints * multiplier).toFixed(2)),
   };
+}
+
+export function objectiveSettlementEventKindForFlowStatus(
+  flowStatus: ObjectiveFlowStatus | null | undefined,
+): ObjectiveSettlementEventKind | null {
+  if (flowStatus === "revisionRequired") return "deadlinePenalty";
+  if (flowStatus === "accepted") return "finalCompletion";
+  return null;
+}
+
+export function objectiveSettlementReviewWindow(input: {
+  objective: SettlementReviewObjective | null | undefined;
+  settlementEvents: readonly SettlementReviewEvent[];
+  today: string;
+}): ObjectiveSettlementReviewWindow {
+  const kind = objectiveSettlementEventKindForFlowStatus(
+    input.objective?.flowStatus,
+  );
+  if (!input.objective || !kind) {
+    return { kind, open: false, reason: "notSettlementState" };
+  }
+
+  if (input.settlementEvents.some((event) => event.kind === kind)) {
+    return { kind, open: false, reason: "alreadySettled" };
+  }
+
+  if (kind === "deadlinePenalty" && input.today < input.objective.finalDueAt) {
+    return { kind, open: false, reason: "deadlinePending" };
+  }
+
+  return { kind, open: true, reason: "open" };
 }
 
 export function normalizeContributionRatios(

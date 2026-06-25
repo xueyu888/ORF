@@ -242,6 +242,7 @@ type ObjectiveFlowStatus =
 - `提交试验收` 仅允许目标挑战者在 `frozen` 状态执行一次；`试验收反馈` 仅允许指挥官在 `frozen` 状态处理，且不推进状态。
 - `验收` 仅允许指挥官在 `submitted` 状态执行；验收通过后进入 `accepted`，验收不通过进入 `revisionRequired`。
 - `结算` 允许指挥官在 `revisionRequired` 执行逾期惩罚结算，或在 `accepted` 执行最终结算；单人目标也必须走对应结算事件。
+- `匿名互评` 只在当前结算事件窗口开放时允许提交：`revisionRequired` 必须已到截止日且尚未写入 `deadlinePenalty`，`accepted` 必须尚未写入 `finalCompletion`。
 - 多挑战者目标结算优先使用匿名互评当前均值作为默认比例；缺评、弃权、分歧或申诉只提示指挥官，不阻塞结算。
 - 匿名互评评分和指挥官最终确认的贡献比例必须是每个挑战者一项、范围 `0..1`、合计 `1` 的标准比例；后端不接受任意权重再静默归一化。
 - 注册用户默认为 `pending`，只有 `active` 用户可访问业务 API。

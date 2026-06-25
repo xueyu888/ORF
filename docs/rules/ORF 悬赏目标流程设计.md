@@ -52,7 +52,7 @@
 | `reestimating` | 重估中 | 申请被通过或征召被接受 | 其他 active 普通成员继续申请；指挥官改目标和指标；挑战者提出指标、编辑指标、维护任务、评论 |
 | `frozen` | 已冻结 | 指挥官确认重估完成 | 挑战者提交战利品 |
 | `submitted` | 待验收 | 挑战者提交战利品 | 指挥官验收指标 |
-| `revisionRequired` | 待返工 | 指挥官验收不通过 | 截止日已到时进行匿名互评和逾期惩罚结算；挑战者继续完成并重新提交 |
+| `revisionRequired` | 待返工 | 指挥官验收不通过 | 截止日已到且 `deadlinePenalty` 尚未结算时进行匿名互评和逾期惩罚结算；挑战者继续完成并重新提交 |
 | `accepted` | 已验收 | 指挥官确认验收通过 | 挑战者匿名互评；指挥官确认结算 |
 | `settled` | 已结算 | 指挥官确认最终比例并写入积分 | 查看结果和排行榜 |
 | `closed` | 已关闭 | 目标关闭或放弃 | 无 |
@@ -123,7 +123,7 @@
 - 按每个指标验收结论汇总 `Objective.acceptedResult`；该字段记录最近一次验收结论，不反向定义生命周期状态。
 - 写入 `completionMultiplier`、`objectiveBasePoints`；`objectiveBasePoints` 从已冻结指标的积分汇总得到，不作为目标初始化字段手填。
 - 验收通过时 `Objective.flowStatus` 从 `submitted` 进入 `accepted`，并提醒挑战者可以重新检查匿名互评。
-- 验收不通过时 `Objective.flowStatus` 从 `submitted` 进入 `revisionRequired`；如果已到截止日，仍要进行匿名互评和逾期惩罚结算。
+- 验收不通过时 `Objective.flowStatus` 从 `submitted` 进入 `revisionRequired`；如果已到截止日且 `deadlinePenalty` 尚未结算，仍要进行匿名互评和逾期惩罚结算。
 
 指挥官结算 `revisionRequired` 或 `accepted` 目标后：
 
@@ -132,6 +132,7 @@
 - 写入 `objectiveSettlementEvents`，并追加生成 `pointLedger`；历史账本不得删除。
 - `Objective.objectiveSettlementPoints` 只是该目标已写入账本积分的展示汇总，成员排行榜只读取后端结算后的积分流水。
 - `revisionRequired` 的 `deadlinePenalty` 事件按目标基础分 `50%` 写入惩罚积分，目标仍保持 `revisionRequired`。
+- `deadlinePenalty` 已写入后，同一待返工阶段不再继续开放惩罚互评或惩罚结算；挑战者必须重新提交，指挥官重新验收通过进入 `accepted` 后，再开放最终互评和 `finalCompletion` 结算。
 - `accepted` 的 `finalCompletion` 事件在已有惩罚事件时写入剩余 `50%`，否则沿用按时/延期完成倍率；最终结算后 `Objective.flowStatus` 从 `accepted` 进入 `settled`。
 - 向目标 `Objective.challengerUserIds` 中的 active 成员发送个人系统通知；通知不包含匿名互评明细。
 

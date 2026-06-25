@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { requireAdminContext, requireTargetInScope, requireUserScopeContext } from "../auth/accessPolicy";
 import { db } from "../db/client";
-import { objectives, results } from "../db/schema";
+import { objectiveSettlementEvents, objectives, results } from "../db/schema";
 import {
   fetchLocalSettlementService,
   LocalSettlementServiceUnavailableError,
@@ -11,8 +11,8 @@ import {
   type LocalSettlementServiceResponse,
 } from "../localSettlement/localSettlementProxy";
 import { runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
-import { canSettleObjectiveLootByFlow, canSubmitObjectiveContributionReviewByFlow } from "../../src/domain/orfLifecycle";
-import { calibratedResultPoints } from "../../src/domain/orfSettlement";
+import { canSubmitObjectiveContributionReviewByFlow } from "../../src/domain/orfLifecycle";
+import { calibratedResultPoints, objectiveSettlementReviewWindow } from "../../src/domain/orfSettlement";
 import { isObjectiveChallenger, objectiveParticipantSnapshot } from "../../src/domain/orfObjectiveParticipants";
 import type { ContributionReviewDraftMetricRow, ContributionReviewMetricRow } from "../../src/types/orf";
 import { localDateString } from "../../src/utils/date";
@@ -128,6 +128,13 @@ async function contributionChallengerTargets(objective: SettlementObjective, par
   return requestedTargets.every((target) => target.member.trim()) ? requestedTargets : null;
 }
 
+async function objectiveSettlementEventsForObjective(objectiveId: string) {
+  return await db
+    .select({ kind: objectiveSettlementEvents.kind })
+    .from(objectiveSettlementEvents)
+    .where(eq(objectiveSettlementEvents.objectiveId, objectiveId));
+}
+
 async function reviewRouteContext(input: {
   objectiveId: string;
   reply: FastifyReply;
@@ -146,7 +153,11 @@ async function reviewRouteContext(input: {
   if (
     input.user.role !== "member" ||
     !canSubmitObjectiveContributionReviewByFlow(objective) ||
-    !objectiveSettlementReviewWindowOpen(objective) ||
+    !objectiveSettlementReviewWindow({
+      objective,
+      settlementEvents: await objectiveSettlementEventsForObjective(objective.id),
+      today: localDateString(new Date()),
+    }).open ||
     !isObjectiveChallenger(objective, input.user.id)
   ) {
     input.reply.code(403).send({ error: "Forbidden" });
@@ -164,11 +175,6 @@ async function reviewRouteContext(input: {
     objective,
     targets,
   };
-}
-
-function objectiveSettlementReviewWindowOpen(objective: SettlementObjective) {
-  return objective.flowStatus !== "revisionRequired" ||
-    localDateString(new Date()) >= objective.finalDueAt;
 }
 
 async function objectiveReviewMetricSources(objective: SettlementObjective): Promise<ReviewMetricSource[]> {
@@ -538,8 +544,15 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
     const body = settlementSummaryBodySchema.parse(request.body ?? {});
     const objective = await settlementObjectiveInScope(params.objectiveId, context.scope);
     if (!objective) return reply.code(404).send({ error: "Objective not found" });
-    if (!canSettleObjectiveLootByFlow(objective)) return reply.code(409).send({ error: "Objective is not ready for settlement summary" });
-    if (!objectiveSettlementReviewWindowOpen(objective)) return reply.code(409).send({ error: "Objective deadline has not reached" });
+    if (
+      !objectiveSettlementReviewWindow({
+        objective,
+        settlementEvents: await objectiveSettlementEventsForObjective(objective.id),
+        today: localDateString(new Date()),
+      }).open
+    ) {
+      return reply.code(409).send({ error: "Objective is not ready for settlement summary" });
+    }
 
     const targets = await contributionChallengerTargets(objective, body.participantUserIds);
     if (!targets) return reply.code(400).send({ error: "Invalid settlement participants" });
