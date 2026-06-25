@@ -2482,6 +2482,33 @@ button:disabled {
   align-items: center;
 }
 
+.orf-settings-gitlab-create {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(130px, 0.6fr) minmax(180px, 1fr) minmax(220px, 1.2fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.orf-settings-gitlab-events {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.orf-settings-gitlab-events label {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(47, 67, 92, 0.14);
+  background: rgba(255, 255, 255, 0.62);
+  color: #2f435c;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .orf-settings-gitlab-badge,
 .orf-settings-gitlab-group {
   display: inline-flex;
@@ -2510,7 +2537,7 @@ button:disabled {
 
 .orf-settings-gitlab-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1.25fr) minmax(280px, 1fr) minmax(160px, 0.6fr);
+  grid-template-columns: minmax(220px, 1.15fr) minmax(180px, 0.8fr) minmax(240px, 1fr);
   gap: 12px;
   align-items: center;
   border-bottom: 1px solid rgba(47, 67, 92, 0.1);
@@ -2566,6 +2593,7 @@ button:disabled {
   display: flex;
   min-width: 0;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -2583,11 +2611,19 @@ button:disabled {
 }
 
 .orf-settings-gitlab-binding-state {
+  display: grid;
   min-width: 0;
+  gap: 3px;
   overflow-wrap: anywhere;
   color: #60758d;
   font-size: 12px;
   font-weight: 900;
+}
+
+.orf-settings-gitlab-binding-state small {
+  color: #7f91a4;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .orf-settings-background-label {
@@ -3954,6 +3990,7 @@ button:disabled {
 
   .orf-settings-background-controls,
   .orf-settings-background-body,
+  .orf-settings-gitlab-create,
   .orf-settings-gitlab-row {
     grid-template-columns: 1fr;
   }
@@ -17575,6 +17612,91 @@ button.orf-chat-image-attachment {
 .orf-chat-info-fields textarea {
   min-height: 72px;
   resize: vertical;
+}
+
+.orf-chat-gitlab-section select {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--orf-border);
+  border-radius: var(--orf-radius-control);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--orf-text-primary);
+  padding: 0 9px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.orf-chat-gitlab-summary,
+.orf-chat-gitlab-events {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.orf-chat-gitlab-summary span,
+.orf-chat-gitlab-events label {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--orf-border);
+  border-radius: var(--orf-radius-control);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--orf-text-muted);
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.orf-chat-gitlab-summary span[data-active="true"] {
+  border-color: rgba(25, 143, 182, 0.34);
+  background: rgba(69, 214, 244, 0.14);
+  color: #116a8a;
+}
+
+.orf-chat-gitlab-create,
+.orf-chat-gitlab-list {
+  display: grid;
+  gap: 8px;
+}
+
+.orf-chat-gitlab-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--orf-border);
+  border-radius: var(--orf-radius-control);
+  background: rgba(255, 255, 255, 0.78);
+  padding: 8px;
+}
+
+.orf-chat-gitlab-item > svg {
+  color: #198fb6;
+}
+
+.orf-chat-gitlab-item div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.orf-chat-gitlab-item strong,
+.orf-chat-gitlab-item small {
+  overflow-wrap: anywhere;
+}
+
+.orf-chat-gitlab-item strong {
+  color: var(--orf-text-primary);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.orf-chat-gitlab-item small,
+.orf-chat-gitlab-state {
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .orf-chat-member-list,
