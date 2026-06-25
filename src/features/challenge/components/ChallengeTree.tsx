@@ -31,6 +31,7 @@ import type {
   ObjectiveAlignmentRequest,
   ObjectiveAlignmentRequestKind,
   ObjectiveAlignmentRequestStatus,
+  ObjectiveSettlementEvent,
   ObjectiveTrialReview,
   OrfProject,
   OrfUser,
@@ -73,6 +74,8 @@ type RowHandlers = {
   canManageFlow: boolean;
   canEditTargetTitle: (target: ChallengeTarget) => boolean;
   peerReviewActionLabel: (objectiveId: string) => string | null;
+  settlementEventsForObjective: (objectiveId: string) => readonly ObjectiveSettlementEvent[];
+  today: string;
   objectiveDeadlineEditState: (objective: ObjectiveNode["objective"]) => ObjectiveDeadlineEditState;
   canMutateMetrics: (objectiveId: string) => boolean;
   canMutateWorkItems: (objectiveId: string) => boolean;
@@ -335,6 +338,8 @@ function ObjectivePanel({
   const workbenchAction = workbenchActionForObjective({
     objective: group.objective,
     currentUser: handlers.currentUser,
+    settlementEvents: handlers.settlementEventsForObjective(group.objective.id),
+    today: handlers.today,
     trialReviews: handlers.trialReviews,
   });
   const workbenchActionLabel =

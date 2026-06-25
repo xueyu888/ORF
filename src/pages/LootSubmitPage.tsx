@@ -26,7 +26,6 @@ import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVis
 import { useOrf } from "../state/OrfProvider";
 import {
   canReviewObjectiveLootByFlow,
-  canSubmitObjectiveContributionReviewByFlow,
   canSubmitObjectiveLootByFlow,
 } from "../domain/orfLifecycle";
 import {
@@ -61,6 +60,7 @@ import type {
   ResultAcceptedResult,
 } from "../types/orf";
 import { localDateString } from "../utils/date";
+import { canSubmitObjectivePeerReview } from "../features/challenge/model/orfFlowCapabilities";
 
 const lootClaimOptions: Array<FantasySelectOption<LootResultClaimStatus>> = [
   { label: "完成", value: "completed" },
@@ -436,10 +436,12 @@ export function LootSubmitPage() {
       isObjectiveChallenger(objective, currentMemberId),
   );
   const canPeerReview = Boolean(
-    objective &&
-      canSubmitObjectiveContributionReviewByFlow(objective) &&
-      settlementWindowOpen &&
-      isChallenger,
+    canSubmitObjectivePeerReview({
+      objective,
+      currentUser,
+      settlementEvents: objectiveSettlementEvents,
+      today: todayDate,
+    }),
   );
   const [body, setBody] = useState("");
   const [selfTestReportBody, setSelfTestReportBody] = useState("");

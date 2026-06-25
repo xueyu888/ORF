@@ -4,6 +4,8 @@ import {
   objectiveSettlementReviewWindow,
   planObjectiveSettlementEvent,
 } from "../src/domain/orfSettlement";
+import { canSubmitObjectivePeerReview } from "../src/features/challenge/model/orfFlowCapabilities";
+import type { Objective, OrfUser } from "../src/types/orf";
 
 test("deadline penalty settlement awards half points even when acceptance failed", () => {
   const event = planObjectiveSettlementEvent({
@@ -104,5 +106,37 @@ test("deadline penalty review window stays closed before the due date", () => {
       today: "2026-06-25",
     }),
     { kind: "deadlinePenalty", open: false, reason: "deadlinePending" },
+  );
+});
+
+test("member peer review action follows the settlement review window", () => {
+  const member = {
+    id: "member-1",
+    role: "member",
+  } as OrfUser;
+  const objective = {
+    challengerUserIds: ["member-1"],
+    finalDueAt: "2026-06-24",
+    flowStatus: "revisionRequired",
+  } as Objective;
+
+  assert.equal(
+    canSubmitObjectivePeerReview({
+      objective,
+      currentUser: member,
+      settlementEvents: [],
+      today: "2026-06-25",
+    }),
+    true,
+  );
+
+  assert.equal(
+    canSubmitObjectivePeerReview({
+      objective,
+      currentUser: member,
+      settlementEvents: [{ kind: "deadlinePenalty" }],
+      today: "2026-06-25",
+    }),
+    false,
   );
 });
