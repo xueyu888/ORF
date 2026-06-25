@@ -15842,6 +15842,12 @@ a.orf-sidebar-link,
   background: rgba(22, 133, 169, 0.08);
 }
 
+.orf-chat-message-focused {
+  box-shadow:
+    inset 0 0 0 1px var(--orf-accent-border),
+    0 0 0 2px rgba(22, 133, 169, 0.12);
+}
+
 .orf-chat-message-threadable {
   cursor: pointer;
 }
@@ -18673,6 +18679,13 @@ button.orf-chat-image-attachment {
 .orf-app-shell[data-chat-page="true"][data-chat-theme="dark"]
   .orf-chat-message-focused {
   background: rgba(211, 221, 235, 0.06);
+}
+
+.orf-app-shell[data-chat-page="true"][data-chat-theme="dark"]
+  .orf-chat-message-focused {
+  box-shadow:
+    inset 0 0 0 1px rgba(176, 220, 255, 0.48),
+    0 0 0 2px rgba(82, 170, 206, 0.18);
 }
 
 .orf-app-shell[data-chat-page="true"][data-chat-theme="dark"]
