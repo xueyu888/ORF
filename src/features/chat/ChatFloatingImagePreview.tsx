@@ -107,7 +107,9 @@ const chatImageWindowBodyPaddingX = 36;
 const chatImageWindowBodyPaddingY = 36;
 const chatImageWindowFallbackWidth = 900;
 const chatImageWindowFallbackHeight = 760;
+const chatImageFitOverflowGuardPx = 2;
 const chatImagePanOverflowTolerance = 1;
+const chatImageZoomNeutralTolerance = 0.001;
 const chatImagePopoutPayloadPrefix = "orf:chat-image-popout:";
 const chatImagePopoutPayloadMaxAgeMs = 12 * 60 * 60 * 1000;
 const chatImagePopoutWindowName = "orf-chat-image-popout";
@@ -501,7 +503,7 @@ function ChatFloatingImagePreviewWindow({
         width: rotated ? imageSize.height : imageSize.width,
       }
     : null;
-  const canPanImage = canPanChatImageStage(stageDimensions, viewportSize);
+  const canPanImage = canPanChatImageStage(stageDimensions, viewportSize, viewerState);
   const imageStyle: CSSProperties | undefined = imageSize
     ? {
         height: `${imageSize.height}px`,
@@ -649,7 +651,8 @@ function ChatFloatingImagePreviewWindow({
             onLoad={(event) => {
               const image = event.currentTarget;
               if (image.naturalWidth > 0 && image.naturalHeight > 0) {
-                setNaturalSize({ height: image.naturalHeight, width: image.naturalWidth });
+                const nextNaturalSize = { height: image.naturalHeight, width: image.naturalWidth };
+                setNaturalSize((current) => sameChatImageSize(current, nextNaturalSize) ? current : nextNaturalSize);
               }
             }}
           />
@@ -765,8 +768,9 @@ function renderedChatImageSize(
   bounds: { height: number; width: number },
 ) {
   const effectiveNaturalSize = rotatedNaturalSize(naturalSize, rotation);
+  const fitBounds = mode === "fit" ? guardedChatImageFitBounds(bounds) : bounds;
   const scale = mode === "fit"
-    ? Math.min(bounds.width / effectiveNaturalSize.width, bounds.height / effectiveNaturalSize.height)
+    ? Math.min(fitBounds.width / effectiveNaturalSize.width, fitBounds.height / effectiveNaturalSize.height)
     : 1;
   const roundDimension = mode === "fit" ? Math.floor : Math.round;
 
@@ -776,15 +780,31 @@ function renderedChatImageSize(
   };
 }
 
+function guardedChatImageFitBounds(bounds: { height: number; width: number }) {
+  return {
+    height: Math.max(1, bounds.height - chatImageFitOverflowGuardPx),
+    width: Math.max(1, bounds.width - chatImageFitOverflowGuardPx),
+  };
+}
+
 function canPanChatImageStage(
   stageDimensions: { height: number; width: number } | null,
   viewportSize: { height: number; width: number } | null,
+  viewerState: Pick<ChatImageViewerState, "mode" | "zoom">,
 ) {
   if (!stageDimensions || !viewportSize) return false;
+  if (viewerState.mode === "fit" && viewerState.zoom <= 1 + chatImageZoomNeutralTolerance) return false;
   return (
     stageDimensions.width - viewportSize.width > chatImagePanOverflowTolerance ||
     stageDimensions.height - viewportSize.height > chatImagePanOverflowTolerance
   );
+}
+
+function sameChatImageSize(
+  current: { height: number; width: number } | null,
+  next: { height: number; width: number },
+) {
+  return Boolean(current && current.height === next.height && current.width === next.width);
 }
 
 function defaultChatImageWindowGeometry(
