@@ -15,6 +15,7 @@ import { registerSystemConversationRoutes } from "./routes/systemConversationRou
 import { registerOrfReadRoutes } from "./routes/orfReadRoutes";
 import { registerCommentRoutes } from "./routes/commentRoutes";
 import { registerChatRoutes } from "./routes/chatRoutes";
+import { registerGitLabOrfChatRoutes } from "./routes/gitLabOrfChatRoutes";
 import { registerUserRoutes } from "./routes/userRoutes";
 import { registerUserAvatarRoutes } from "./users/avatar/avatarRoutes";
 import { registerPermissionRoutes } from "./routes/permissionRoutes";
@@ -106,6 +107,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   registerSettingsRoutes(app);
   registerCommentRoutes(app);
   registerChatRoutes(app);
+  registerGitLabOrfChatRoutes(app);
   registerFeedbackRoutes(app);
   registerLocalSettlementRoutes(app);
   registerOrfObjectiveRoutes(app);

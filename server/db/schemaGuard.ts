@@ -244,19 +244,23 @@ export function validateGitLabOrfChatIntegrationSchema(snapshot: { columns: Runt
     return map;
   }, new Map<string, Map<string, RuntimeTableColumn>>());
 
-  const projectColumns = columnsByTable.get("gitlab_orf_project_channels") ?? new Map();
+  const subscriptionColumns = columnsByTable.get("gitlab_orf_channel_subscriptions") ?? new Map();
   for (const columnName of [
+    "id",
     "team_id",
+    "chat_channel_id",
+    "gitlab_group_path",
     "gitlab_project_id",
     "gitlab_project_path",
     "gitlab_project_url",
-    "chat_channel_id",
+    "event_types",
+    "enabled",
+    "created_by_user_id",
     "created_at",
     "updated_at",
-    "last_seen_at",
   ]) {
-    if (!projectColumns.has(columnName)) {
-      errors.push(`gitlab_orf_project_channels.${columnName} is missing.`);
+    if (!subscriptionColumns.has(columnName)) {
+      errors.push(`gitlab_orf_channel_subscriptions.${columnName} is missing.`);
     }
   }
 
@@ -264,7 +268,10 @@ export function validateGitLabOrfChatIntegrationSchema(snapshot: { columns: Runt
   for (const columnName of [
     "team_id",
     "external_event_key",
+    "subscription_id",
     "gitlab_project_id",
+    "gitlab_project_path",
+    "gitlab_project_url",
     "event_type",
     "chat_channel_id",
     "chat_message_id",
@@ -484,7 +491,7 @@ export async function assertRuntimeDatabaseSchema() {
           is_nullable as "isNullable"
         from information_schema.columns
         where table_schema = current_schema()
-          and table_name in ('gitlab_orf_project_channels', 'gitlab_orf_event_deliveries')
+          and table_name in ('gitlab_orf_channel_subscriptions', 'gitlab_orf_event_deliveries')
       `,
     ),
     pool.query<RuntimeTableColumn>(

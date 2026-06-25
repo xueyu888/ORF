@@ -33,10 +33,18 @@ export type GitLabApiProject = {
 type GitLabProject = z.infer<typeof gitLabProjectSchema>;
 type GitLabHook = z.infer<typeof gitLabHookSchema>;
 
+export type GitLabOrfChatHookReconcileAction = "created" | "updated" | "unchanged";
+
 export type GitLabOrfChatHookReconcileResult = {
   created: string[];
   duplicates: string[];
   failed: string[];
+  group: null | {
+    action: GitLabOrfChatHookReconcileAction;
+    duplicateCount: number;
+    target: string;
+  };
+  mode: GitLabOrfChatConfig["GITLAB_ORF_CHAT_HOOK_MODE"];
   projects: number;
   unchanged: string[];
   updated: string[];
@@ -77,6 +85,30 @@ export async function listGitLabGroupProjects(config: GitLabOrfChatConfig, optio
   }
 }
 
+export async function reconcileGitLabOrfGroupHook(input: {
+  config: GitLabOrfChatConfig;
+  fetchImpl?: Fetch;
+}) {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const groupPath = encodeURIComponent(input.config.GITLAB_ORF_CHAT_GROUP);
+  const hooks = await gitLabRequest(input.config, fetchImpl, `/groups/${groupPath}/hooks`, {}, gitLabHooksSchema);
+  const matchingHooks = hooks.filter((hook) => hook.url === input.config.GITLAB_ORF_CHAT_WEBHOOK_URL);
+  const duplicateCount = Math.max(0, matchingHooks.length - 1);
+
+  if (matchingHooks.length === 0) {
+    await gitLabRequest(input.config, fetchImpl, `/groups/${groupPath}/hooks`, hookRequest(input.config, "POST"), z.unknown());
+    return { action: "created" as const, duplicateCount };
+  }
+
+  const hook = matchingHooks[0]!;
+  if (hookMatchesTarget(hook)) {
+    return { action: "unchanged" as const, duplicateCount };
+  }
+
+  await gitLabRequest(input.config, fetchImpl, `/groups/${groupPath}/hooks/${hook.id}`, hookRequest(input.config, "PUT"), z.unknown());
+  return { action: "updated" as const, duplicateCount };
+}
+
 export async function reconcileGitLabOrfProjectHook(input: {
   config: GitLabOrfChatConfig;
   fetchImpl?: Fetch;
@@ -89,20 +121,20 @@ export async function reconcileGitLabOrfProjectHook(input: {
   const duplicateCount = Math.max(0, matchingHooks.length - 1);
 
   if (matchingHooks.length === 0) {
-    await gitLabRequest(input.config, fetchImpl, `/projects/${projectId}/hooks`, projectHookRequest(input.config, "POST"), z.unknown());
+    await gitLabRequest(input.config, fetchImpl, `/projects/${projectId}/hooks`, hookRequest(input.config, "POST"), z.unknown());
     return { action: "created" as const, duplicateCount };
   }
 
   const hook = matchingHooks[0]!;
-  if (projectHookMatchesTarget(hook)) {
+  if (hookMatchesTarget(hook)) {
     return { action: "unchanged" as const, duplicateCount };
   }
 
-  await gitLabRequest(input.config, fetchImpl, `/projects/${projectId}/hooks/${hook.id}`, projectHookRequest(input.config, "PUT"), z.unknown());
+  await gitLabRequest(input.config, fetchImpl, `/projects/${projectId}/hooks/${hook.id}`, hookRequest(input.config, "PUT"), z.unknown());
   return { action: "updated" as const, duplicateCount };
 }
 
-export function projectHookMatchesTarget(hook: GitLabHook) {
+export function hookMatchesTarget(hook: GitLabHook) {
   return (
     hook.push_events === true &&
     hook.tag_push_events === true &&
@@ -111,26 +143,34 @@ export function projectHookMatchesTarget(hook: GitLabHook) {
     hook.pipeline_events === true &&
     hook.enable_ssl_verification === true &&
     hook.branch_filter_strategy === "all_branches" &&
-    hook.push_events_branch_filter === null
+    (hook.push_events_branch_filter === null || hook.push_events_branch_filter === "")
   );
 }
 
-function projectHookRequest(config: GitLabOrfChatConfig, method: "POST" | "PUT"): RequestInit {
+function hookRequest(config: GitLabOrfChatConfig, method: "POST" | "PUT"): RequestInit {
+  const body = new URLSearchParams({
+    url: config.GITLAB_ORF_CHAT_WEBHOOK_URL ?? "",
+    push_events: "true",
+    tag_push_events: "true",
+    merge_requests_events: "true",
+    issues_events: "true",
+    pipeline_events: "true",
+    enable_ssl_verification: "true",
+    branch_filter_strategy: "all_branches",
+    push_events_branch_filter: "",
+  });
+
+  if (config.GITLAB_ORF_CHAT_WEBHOOK_SECRET) {
+    body.set("token", config.GITLAB_ORF_CHAT_WEBHOOK_SECRET);
+  }
+  if (config.GITLAB_ORF_CHAT_SIGNING_TOKEN) {
+    body.set("signing_token", config.GITLAB_ORF_CHAT_SIGNING_TOKEN);
+  }
+
   return {
     method,
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      url: config.GITLAB_ORF_CHAT_WEBHOOK_URL ?? "",
-      token: config.GITLAB_ORF_CHAT_WEBHOOK_SECRET ?? "",
-      push_events: "true",
-      tag_push_events: "true",
-      merge_requests_events: "true",
-      issues_events: "true",
-      pipeline_events: "true",
-      enable_ssl_verification: "true",
-      branch_filter_strategy: "all_branches",
-      push_events_branch_filter: "",
-    }),
+    body,
   };
 }
 
@@ -146,7 +186,7 @@ async function gitLabRequest<T>(
   }
 
   const headers = new Headers(init.headers);
-  headers.set("authorization", `Bearer ${config.GITLAB_ORF_CHAT_ACCESS_TOKEN}`);
+  headers.set("PRIVATE-TOKEN", config.GITLAB_ORF_CHAT_ACCESS_TOKEN);
   const response = await fetchImpl(`${baseUrl(config.GITLAB_URL)}/api/v4${path}`, {
     ...init,
     headers,

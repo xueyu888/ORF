@@ -1,11 +1,15 @@
 import type { GitLabApiProject } from "./api";
+import type { GitLabOrfChatConfig } from "./config";
+import type { GitLabOrfChatEventType } from "./model";
 
 export type GitLabOrfChatConfigStatus = {
   accessTokenConfigured: boolean;
-  channelType: "public" | "private";
   enabled: boolean;
   gitlabUrlConfigured: boolean;
   groupPath: string;
+  hookMode: "group" | "project" | "both";
+  signingTokenConfigured: boolean;
+  webhookConfigured: boolean;
   webhookSecretConfigured: boolean;
   webhookUrlConfigured: boolean;
 };
@@ -18,71 +22,43 @@ export type GitLabOrfChatChannelOption = {
   type: "public" | "private";
 };
 
-export type GitLabOrfChatProjectMapping = {
-  channelDisplayName: string | null;
-  channelId: string;
-  channelType: "public" | "private" | null;
-  createdAt: string;
-  lastSeenAt: string;
-  projectId: string;
-  projectPath: string;
-  projectUrl: string;
-  updatedAt: string;
-};
+export type GitLabOrfChatSubscriptionScope = "group" | "project";
 
-export type GitLabOrfChatProjectBinding = {
-  channelDisplayName: string | null;
-  channelId: string | null;
-  channelType: "public" | "private" | null;
-  lastSeenAt: string | null;
-  projectId: string;
-  projectPath: string;
-  projectUrl: string;
-  source: "gitlab" | "mapping";
+export type GitLabOrfChatSubscription = {
+  channelDisplayName: string;
+  channelId: string;
+  channelType: "public" | "private";
+  createdAt: string;
+  enabled: boolean;
+  eventTypes: GitLabOrfChatEventType[];
+  gitlabGroupPath: string;
+  gitlabProjectId: string | null;
+  gitlabProjectPath: string | null;
+  gitlabProjectUrl: string;
+  id: string;
+  scope: GitLabOrfChatSubscriptionScope;
+  updatedAt: string;
 };
 
 export type GitLabOrfChatSettingsData = {
   channels: GitLabOrfChatChannelOption[];
   config: GitLabOrfChatConfigStatus;
+  eventTypes: GitLabOrfChatEventType[];
   gitlabProjectListError: string | null;
-  projects: GitLabOrfChatProjectBinding[];
+  projects: GitLabApiProject[];
+  subscriptions: GitLabOrfChatSubscription[];
 };
 
-export function mergeGitLabOrfChatProjectBindings(input: {
-  gitlabProjects: GitLabApiProject[];
-  mappings: GitLabOrfChatProjectMapping[];
-}) {
-  const byProjectId = new Map<string, GitLabOrfChatProjectBinding>();
-
-  for (const mapping of input.mappings) {
-    byProjectId.set(mapping.projectId, {
-      channelDisplayName: mapping.channelDisplayName,
-      channelId: mapping.channelId,
-      channelType: mapping.channelType,
-      lastSeenAt: mapping.lastSeenAt,
-      projectId: mapping.projectId,
-      projectPath: mapping.projectPath,
-      projectUrl: mapping.projectUrl,
-      source: "mapping",
-    });
-  }
-
-  for (const project of input.gitlabProjects) {
-    const existing = byProjectId.get(project.id);
-    byProjectId.set(project.id, {
-      channelDisplayName: existing?.channelDisplayName ?? null,
-      channelId: existing?.channelId ?? null,
-      channelType: existing?.channelType ?? null,
-      lastSeenAt: existing?.lastSeenAt ?? null,
-      projectId: project.id,
-      projectPath: project.path,
-      projectUrl: project.url,
-      source: "gitlab",
-    });
-  }
-
-  return Array.from(byProjectId.values()).sort((left, right) =>
-    left.projectPath.localeCompare(right.projectPath, "zh-Hans-CN", { sensitivity: "base" }) ||
-    left.projectId.localeCompare(right.projectId),
-  );
+export function gitLabOrfChatConfigStatus(config: GitLabOrfChatConfig): GitLabOrfChatConfigStatus {
+  return {
+    accessTokenConfigured: Boolean(config.GITLAB_ORF_CHAT_ACCESS_TOKEN),
+    enabled: config.GITLAB_ORF_CHAT_ENABLED,
+    gitlabUrlConfigured: Boolean(config.GITLAB_URL),
+    groupPath: config.GITLAB_ORF_CHAT_GROUP,
+    hookMode: config.GITLAB_ORF_CHAT_HOOK_MODE,
+    signingTokenConfigured: Boolean(config.GITLAB_ORF_CHAT_SIGNING_TOKEN),
+    webhookConfigured: Boolean(config.GITLAB_ORF_CHAT_WEBHOOK_SECRET || config.GITLAB_ORF_CHAT_SIGNING_TOKEN),
+    webhookSecretConfigured: Boolean(config.GITLAB_ORF_CHAT_WEBHOOK_SECRET),
+    webhookUrlConfigured: Boolean(config.GITLAB_ORF_CHAT_WEBHOOK_URL),
+  };
 }

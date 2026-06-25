@@ -1030,27 +1030,36 @@ export const chatImportMappings = pgTable(
   }),
 );
 
-export const gitLabOrfProjectChannels = pgTable(
-  "gitlab_orf_project_channels",
+export const gitLabOrfChannelSubscriptions = pgTable(
+  "gitlab_orf_channel_subscriptions",
   {
+    id: text("id").primaryKey(),
     teamId: text("team_id")
       .notNull()
       .references(() => teams.id, { onDelete: "cascade" }),
-    gitlabProjectId: text("gitlab_project_id").notNull(),
-    gitlabProjectPath: text("gitlab_project_path").notNull(),
-    gitlabProjectUrl: text("gitlab_project_url").notNull().default(""),
     chatChannelId: text("chat_channel_id")
       .notNull()
       .references(() => chatChannels.id, { onDelete: "cascade" }),
+    gitlabGroupPath: text("gitlab_group_path").notNull(),
+    gitlabProjectId: text("gitlab_project_id"),
+    gitlabProjectPath: text("gitlab_project_path"),
+    gitlabProjectUrl: text("gitlab_project_url").notNull().default(""),
+    eventTypes: jsonb("event_types").$type<string[]>().notNull().default(sql`'["push","tag_push","merge_request","issue","pipeline"]'::jsonb`),
+    enabled: boolean("enabled").notNull().default(true),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
-    lastSeenAt: timestamp("last_seen_at", { mode: "string", withTimezone: true }).notNull(),
   },
   (table) => ({
-    pk: primaryKey({ columns: [table.teamId, table.gitlabProjectId] }),
-    teamPathUnique: uniqueIndex("gitlab_orf_project_channels_team_path_unique").on(table.teamId, table.gitlabProjectPath),
-    teamChannelUnique: uniqueIndex("gitlab_orf_project_channels_team_channel_unique").on(table.teamId, table.chatChannelId),
-    channel: index("gitlab_orf_project_channels_channel_idx").on(table.chatChannelId),
+    channel: index("gitlab_orf_channel_subscriptions_channel_idx").on(table.teamId, table.chatChannelId),
+    project: index("gitlab_orf_channel_subscriptions_project_idx").on(table.teamId, table.gitlabProjectId),
+    enabled: index("gitlab_orf_channel_subscriptions_enabled_idx").on(table.teamId, table.enabled),
+    groupUnique: uniqueIndex("gitlab_orf_channel_subscriptions_group_unique")
+      .on(table.teamId, table.chatChannelId, table.gitlabGroupPath)
+      .where(sql`gitlab_project_id IS NULL`),
+    projectUnique: uniqueIndex("gitlab_orf_channel_subscriptions_project_unique")
+      .on(table.teamId, table.chatChannelId, table.gitlabProjectId)
+      .where(sql`gitlab_project_id IS NOT NULL`),
   }),
 );
 
@@ -1061,7 +1070,10 @@ export const gitLabOrfEventDeliveries = pgTable(
       .notNull()
       .references(() => teams.id, { onDelete: "cascade" }),
     externalEventKey: text("external_event_key").notNull(),
+    subscriptionId: text("subscription_id").references(() => gitLabOrfChannelSubscriptions.id, { onDelete: "set null" }),
     gitlabProjectId: text("gitlab_project_id").notNull(),
+    gitlabProjectPath: text("gitlab_project_path").notNull().default(""),
+    gitlabProjectUrl: text("gitlab_project_url").notNull().default(""),
     eventType: text("event_type").notNull(),
     chatChannelId: text("chat_channel_id").references(() => chatChannels.id, { onDelete: "set null" }),
     chatMessageId: text("chat_message_id").references(() => chatMessages.id, { onDelete: "set null" }),
@@ -1072,7 +1084,8 @@ export const gitLabOrfEventDeliveries = pgTable(
     updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
   },
   (table) => ({
-    pk: primaryKey({ columns: [table.teamId, table.externalEventKey] }),
+    channelEventUnique: uniqueIndex("gitlab_orf_event_deliveries_channel_event_unique").on(table.teamId, table.chatChannelId, table.externalEventKey),
+    subscription: index("gitlab_orf_event_deliveries_subscription_idx").on(table.subscriptionId, table.receivedAt),
     project: index("gitlab_orf_event_deliveries_project_idx").on(table.teamId, table.gitlabProjectId, table.receivedAt),
     status: index("gitlab_orf_event_deliveries_status_idx").on(table.teamId, table.status, table.updatedAt),
   }),
