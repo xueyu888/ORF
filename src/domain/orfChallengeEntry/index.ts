@@ -11,14 +11,11 @@ import {
 
 export type ObjectiveChallengeEntryTarget = Pick<
   Objective,
-  "acceptedResult" | "flowStatus" | "lootSubmittedAt" | "objectiveSettlementPoints"
+  "flowStatus"
 >;
 
 export function objectiveChallengeEntryClosed(objective: ObjectiveChallengeEntryTarget) {
-  return (
-    isObjectiveChallengeEntryClosedByFlow(objective) ||
-    Boolean(objective.lootSubmittedAt || objective.acceptedResult || objective.objectiveSettlementPoints != null)
-  );
+  return isObjectiveChallengeEntryClosedByFlow(objective);
 }
 
 export type ObjectiveChallengeApplicationTarget = ObjectiveChallengeEntryTarget & Pick<

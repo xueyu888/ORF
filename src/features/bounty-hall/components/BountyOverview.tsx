@@ -1,15 +1,15 @@
 import { CalendarCheck, ClipboardList, ShieldAlert, UserCheck, UsersRound, type LucideIcon } from "lucide-react";
 
 export function BountyOverview({
-  availableCount,
   challengerCount,
   cycle,
+  openCount,
   publicCount,
   recruitmentCount,
 }: {
-  availableCount: number;
   challengerCount: number;
   cycle: string;
+  openCount: number;
   publicCount: number;
   recruitmentCount: number;
 }) {
@@ -21,7 +21,7 @@ export function BountyOverview({
       </div>
       <div className="bounty-stat-grid">
         <BountyStatCard icon={UsersRound} label="公开悬赏" tone="cyan" value={publicCount} />
-        <BountyStatCard icon={ClipboardList} label="可申请" tone="blue" value={availableCount} />
+        <BountyStatCard icon={ClipboardList} label="开放中" tone="blue" value={openCount} />
         <BountyStatCard icon={UserCheck} label="挑战者" tone="orange" value={challengerCount} />
         <BountyStatCard icon={ShieldAlert} label="征召" tone="gold" value={recruitmentCount} />
       </div>

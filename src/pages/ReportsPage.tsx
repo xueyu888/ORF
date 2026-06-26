@@ -18,7 +18,6 @@ export function ReportsPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>("quarter");
 
   const rows = useMemo<LeaderboardRow[]>(() => buildLeaderboardRows(state, timeRange), [state, timeRange]);
-  const usersById = useMemo(() => new Map(state.users.map((user) => [user.id, user])), [state.users]);
   const summary = useMemo(() => buildReportSummary(rows), [rows]);
   const maxPoints = Math.max(1, ...rows.map((row) => row.points));
 
@@ -91,7 +90,6 @@ export function ReportsPage() {
               <tbody>
                 {rows.map((row) => (
                   <LeaderboardRowItem
-                    avatarUrl={usersById.get(row.userId)?.avatarUrl}
                     key={row.userId}
                     maxPoints={maxPoints}
                     row={row}
@@ -127,7 +125,7 @@ function TimeRangeControl({ onChange, timeRange }: { onChange: (value: TimeRange
   );
 }
 
-function LeaderboardRowItem({ avatarUrl, maxPoints, row }: { avatarUrl?: string | null; maxPoints: number; row: LeaderboardRow }) {
+function LeaderboardRowItem({ maxPoints, row }: { maxPoints: number; row: LeaderboardRow }) {
   const percentage = Math.max(0, Math.min(100, (row.points / maxPoints) * 100));
 
   return (
@@ -137,7 +135,7 @@ function LeaderboardRowItem({ avatarUrl, maxPoints, row }: { avatarUrl?: string 
       </td>
       <td data-label="成员">
         <div className="reports-member">
-          <UserAvatar avatarUrl={avatarUrl} className="reports-member-avatar" frame={false} name={row.memberName} />
+          <UserAvatar avatarUrl={row.avatarUrl} className="reports-member-avatar" frame={false} name={row.memberName} />
           <span className="reports-member-name">{row.memberName}</span>
         </div>
       </td>

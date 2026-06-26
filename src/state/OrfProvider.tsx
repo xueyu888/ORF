@@ -72,7 +72,7 @@ import type {
   WorkLogReminderState,
 } from "../types/orf";
 
-type ModalType = "newResult" | "recruitChallengers" | null;
+type ModalType = "newResult" | "recruitChallengers" | "reinforceChallengers" | null;
 
 interface ModalState {
   type: ModalType;
@@ -137,6 +137,7 @@ interface OrfContextValue {
   createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title">) => Promise<Result | null>;
   publishObjective: (objectiveId: string) => Promise<boolean>;
   recruitObjectiveChallengers: (objectiveId: string, memberUserIds: string[]) => Promise<boolean>;
+  reinforceObjectiveChallengers: (objectiveId: string, memberUserIds: string[]) => Promise<boolean>;
   approveChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   rejectChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   applyForBounty: (objectiveId: string, reason: string) => Promise<boolean>;

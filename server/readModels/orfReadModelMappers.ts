@@ -1,10 +1,12 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { objectiveParticipantSnapshot } from "../../src/domain/orfObjectiveParticipants";
 import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../../src/domain/orfSettlement";
-import type { Objective, ObjectiveParticipantProfile, PointLedgerEntry, Result, Task } from "../../src/types/orf";
+import { userDisplayProfileFromUser } from "../../src/domain/userDisplayProfile";
+import type { Objective, ObjectiveAcceptanceReview, ObjectiveParticipantProfile, ObjectiveSettlementEvent, OrfUserDisplayProfile, PointLedgerEntry, Result, Task } from "../../src/types/orf";
 import { addCalendarDays } from "../../src/utils/date";
 import { db } from "../db/client";
-import { objectives, pointLedger, results, resultTrendPoints, teamMembers, users } from "../db/schema";
+import { objectiveAcceptanceReviews, objectiveSettlementEvents, objectives, pointLedger, results, resultTrendPoints, teamMembers, users } from "../db/schema";
+import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 
 export function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
@@ -21,13 +23,34 @@ export function nameForUserId(userNameById: Map<string, string>, userId: string 
 export async function getUserMapsForStorageScope(storageScopeId: string | null | undefined) {
   const rows = storageScopeId
     ? await db
-        .select({ id: users.id, name: users.name })
+        .select({
+          avatarObjectKey: users.avatarObjectKey,
+          avatarUpdatedAt: users.avatarUpdatedAt,
+          id: users.id,
+          name: users.name,
+        })
         .from(teamMembers)
         .innerJoin(users, eq(teamMembers.userId, users.id))
         .where(eq(teamMembers.teamId, storageScopeId))
-    : await db.select({ id: users.id, name: users.name }).from(users);
+        .orderBy(asc(users.name))
+    : await db
+        .select({
+          avatarObjectKey: users.avatarObjectKey,
+          avatarUpdatedAt: users.avatarUpdatedAt,
+          id: users.id,
+          name: users.name,
+        })
+        .from(users)
+        .orderBy(asc(users.name));
   return {
     userNameById: new Map(rows.map((member) => [member.id, member.name])),
+    userProfiles: rows
+      .map((member) => userDisplayProfileFromUser({
+        avatarUrl: avatarUrlForUser(member),
+        id: member.id,
+        name: member.name,
+      }))
+      .filter((profile): profile is OrfUserDisplayProfile => Boolean(profile)),
   };
 }
 
@@ -181,10 +204,47 @@ export function mapPointLedgerRows(input: {
     .map((item): PointLedgerEntry => ({
       id: item.id,
       objectiveId: item.objectiveId,
+      settlementEventId: item.settlementEventId,
       userId: item.userId,
       memberName: nameForUserId(input.userNameById, item.userId, item.memberName),
       points: item.points,
       reason: item.reason,
+      createdAt: item.createdAt,
+    }));
+}
+
+export function mapObjectiveAcceptanceReviewRows(
+  reviewRows: Array<typeof objectiveAcceptanceReviews.$inferSelect>,
+): ObjectiveAcceptanceReview[] {
+  return [...reviewRows]
+    .sort((left, right) => right.reviewedAt.localeCompare(left.reviewedAt))
+    .map((item) => ({
+      id: item.id,
+      objectiveId: item.objectiveId,
+      lootId: item.lootId,
+      reviewerUserId: item.reviewerUserId,
+      acceptedResult: item.acceptedResult,
+      resultReviews: item.resultReviews,
+      reason: item.reason,
+      reviewedAt: item.reviewedAt,
+    }));
+}
+
+export function mapObjectiveSettlementEventRows(
+  eventRows: Array<typeof objectiveSettlementEvents.$inferSelect>,
+): ObjectiveSettlementEvent[] {
+  return [...eventRows]
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .map((item) => ({
+      id: item.id,
+      objectiveId: item.objectiveId,
+      kind: item.kind,
+      lootId: item.lootId,
+      basePoints: item.basePoints,
+      multiplier: item.multiplier,
+      settlementPoints: item.settlementPoints,
+      reason: item.reason,
+      createdByUserId: item.createdByUserId,
       createdAt: item.createdAt,
     }));
 }

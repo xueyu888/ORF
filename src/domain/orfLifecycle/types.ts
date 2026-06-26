@@ -25,6 +25,7 @@ export type ObjectiveFlowPolicy = {
   readonly canApplyForChallenge: boolean;
   readonly canReviewChallengeApplications: boolean;
   readonly canRecruitChallengers: boolean;
+  readonly canReinforceChallengers: boolean;
   readonly canAcceptChallenge: boolean;
   readonly canMutateResults: boolean;
   readonly canMutateWorkItems: boolean;
@@ -36,6 +37,7 @@ export type ObjectiveFlowPolicy = {
   readonly canSubmitContributionReview: boolean;
   readonly canReviewLoot: boolean;
   readonly challengeDiscoverable: boolean;
+  readonly bountyHallVisible: boolean;
   readonly challengeAccepted: boolean;
   readonly challengeEntryClosed: boolean;
   readonly resultLocked: boolean;

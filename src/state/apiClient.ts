@@ -140,13 +140,16 @@ export type ApiUploadProgress = {
 };
 export type GitLabOrfChatConfigStatus = {
   accessTokenConfigured: boolean;
-  channelType: "public" | "private";
   enabled: boolean;
   gitlabUrlConfigured: boolean;
   groupPath: string;
+  hookMode: "group" | "project" | "both";
+  signingTokenConfigured: boolean;
+  webhookConfigured: boolean;
   webhookSecretConfigured: boolean;
   webhookUrlConfigured: boolean;
 };
+export type GitLabOrfChatEventType = "push" | "tag_push" | "merge_request" | "issue" | "pipeline";
 export type GitLabOrfChatChannelOption = {
   displayName: string;
   id: string;
@@ -154,21 +157,33 @@ export type GitLabOrfChatChannelOption = {
   name: string | null;
   type: "public" | "private";
 };
-export type GitLabOrfChatProjectBinding = {
-  channelDisplayName: string | null;
-  channelId: string | null;
-  channelType: "public" | "private" | null;
-  lastSeenAt: string | null;
-  projectId: string;
-  projectPath: string;
-  projectUrl: string;
-  source: "gitlab" | "mapping";
+export type GitLabOrfChatProjectOption = {
+  id: string;
+  path: string;
+  url: string;
+};
+export type GitLabOrfChatSubscription = {
+  channelDisplayName: string;
+  channelId: string;
+  channelType: "public" | "private";
+  createdAt: string;
+  enabled: boolean;
+  eventTypes: GitLabOrfChatEventType[];
+  gitlabGroupPath: string;
+  gitlabProjectId: string | null;
+  gitlabProjectPath: string | null;
+  gitlabProjectUrl: string;
+  id: string;
+  scope: "group" | "project";
+  updatedAt: string;
 };
 export type GitLabOrfChatSettingsData = {
   channels: GitLabOrfChatChannelOption[];
   config: GitLabOrfChatConfigStatus;
+  eventTypes: GitLabOrfChatEventType[];
   gitlabProjectListError: string | null;
-  projects: GitLabOrfChatProjectBinding[];
+  projects: GitLabOrfChatProjectOption[];
+  subscriptions: GitLabOrfChatSubscription[];
 };
 export type WorkLogObjectivesResponse = {
   categories: WorkLogCategoryOption[];
@@ -820,22 +835,65 @@ export async function getGitLabOrfChatSettings() {
   return response.data;
 }
 
-export async function saveGitLabOrfProjectChannel(input: {
+export async function getGitLabOrfChatChannelSubscriptions(channelId: string) {
+  const response = await apiJson<ApiEnvelope<GitLabOrfChatSettingsData>>(
+    `/api/chat/channels/${encodeURIComponent(channelId)}/gitlab-subscriptions`,
+  );
+  return response.data;
+}
+
+export async function createGitLabOrfChatChannelSubscription(input: {
   channelId: string;
-  projectId: string;
-  projectPath: string;
-  projectUrl: string;
+  enabled?: boolean;
+  eventTypes?: GitLabOrfChatEventType[];
+  projectId?: string;
+  projectPath?: string;
+  projectUrl?: string;
+  scope: "group" | "project";
 }) {
   const response = await apiJson<ApiEnvelope<GitLabOrfChatSettingsData>>(
-    `/api/settings/gitlab-orf-chat/projects/${encodeURIComponent(input.projectId)}/channel`,
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/gitlab-subscriptions`,
     {
-      method: "PUT",
+      method: "POST",
       body: JSON.stringify({
-        channelId: input.channelId,
+        enabled: input.enabled,
+        eventTypes: input.eventTypes,
+        projectId: input.projectId,
         projectPath: input.projectPath,
-        projectUrl: input.projectUrl,
+        projectUrl: input.projectUrl ?? "",
+        scope: input.scope,
       }),
     },
+  );
+  return response.data;
+}
+
+export async function updateGitLabOrfChatChannelSubscription(input: {
+  channelId: string;
+  enabled?: boolean;
+  eventTypes?: GitLabOrfChatEventType[];
+  subscriptionId: string;
+}) {
+  const response = await apiJson<ApiEnvelope<GitLabOrfChatSettingsData>>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/gitlab-subscriptions/${encodeURIComponent(input.subscriptionId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        enabled: input.enabled,
+        eventTypes: input.eventTypes,
+      }),
+    },
+  );
+  return response.data;
+}
+
+export async function deleteGitLabOrfChatChannelSubscription(input: {
+  channelId: string;
+  subscriptionId: string;
+}) {
+  const response = await apiJson<ApiEnvelope<GitLabOrfChatSettingsData>>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/gitlab-subscriptions/${encodeURIComponent(input.subscriptionId)}`,
+    { method: "DELETE" },
   );
   return response.data;
 }

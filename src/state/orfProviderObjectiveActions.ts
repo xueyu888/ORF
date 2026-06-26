@@ -66,6 +66,7 @@ export type ReviewObjectiveAlignmentInput = {
   status: Extract<ObjectiveAlignmentRequestStatus, "scheduled" | "completed" | "needsWork" | "cancelled">;
   scheduledAt?: string | null;
   meetingRoom?: string | null;
+  confirmationDueAt?: string | null;
   commanderFeedback?: string | null;
 };
 
@@ -198,6 +199,21 @@ export function useOrfProviderObjectiveActions({
           return true;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "征召失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      reinforceObjectiveChallengers: async (objectiveId: string, memberUserIds: string[]) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/reinforcements`, {
+            method: "POST",
+            body: JSON.stringify({ memberUserIds }),
+          });
+          await refreshTaskManagementData();
+          notify("挑战者已加派");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "加派失败"));
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }
@@ -457,7 +473,13 @@ export function useOrfProviderObjectiveActions({
             body: JSON.stringify(input),
           });
           await refreshTaskManagementData();
-          notify(input.kind === "reestimateCompletion" ? "已申请重估对齐，请约时间并定好会议室" : "已申请验收对齐，请约时间并定好会议室");
+          notify(
+            input.kind === "reestimateCompletion"
+              ? "已申请重估对齐，请约时间并定好会议室"
+              : input.kind === "frozenReestimate"
+                ? "已申请重开重估，请等待指挥官审批"
+                : "已申请验收对齐，请约时间并定好会议室",
+          );
           return true;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "对齐申请失败"));

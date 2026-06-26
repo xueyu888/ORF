@@ -19,6 +19,7 @@ import {
   deleteObjective,
   freezeObjectiveAfterReestimate,
   publishObjective,
+  reinforceObjectiveChallengers,
   recruitObjectiveChallengers,
   rejectObjectiveChallengeApplication,
   reviewObjectiveAlignmentRequest,
@@ -67,6 +68,7 @@ const objectiveProjectBodySchema = z.object({
 const recruitBodySchema = z.object({
   memberUserIds: z.array(z.string().trim().min(1)).min(1),
 });
+const reinforceBodySchema = recruitBodySchema;
 const challengeApplicationBodySchema = z.object({
   reason: requiredTextSchema,
 });
@@ -85,7 +87,7 @@ const reviewTrialBodySchema = z.object({
   commanderFeedback: requiredTextSchema,
 });
 const createAlignmentRequestBodySchema = z.object({
-  kind: z.enum(["reestimateCompletion", "acceptance"]),
+  kind: z.enum(["reestimateCompletion", "acceptance", "frozenReestimate"]),
   scheduledAt: optionalDateTimeSchema,
   meetingRoom: optionalTextSchema,
   note: optionalTextSchema,
@@ -94,6 +96,7 @@ const reviewAlignmentRequestBodySchema = z.object({
   status: z.enum(["scheduled", "completed", "needsWork", "cancelled"]),
   scheduledAt: optionalDateTimeSchema,
   meetingRoom: optionalTextSchema,
+  confirmationDueAt: optionalDateTimeSchema,
   commanderFeedback: optionalTextSchema,
 });
 const contributionAllocationSchema = z.object({
@@ -142,6 +145,29 @@ function sendObjectiveFlowOutcome(reply: FastifyReply, outcome: Awaited<ReturnTy
 
   if (outcome.status === "invalid") {
     return reply.code(409).send({ error: objectiveInvalidErrorMessage(outcome.reason, "Objective status does not allow this operation") });
+  }
+
+  return { objective: outcome.objective };
+}
+
+function sendObjectiveReinforcementOutcome(
+  reply: FastifyReply,
+  outcome: Awaited<ReturnType<typeof reinforceObjectiveChallengers>>,
+) {
+  if (outcome.status === "notFound") {
+    return reply.code(404).send({ error: "Objective not found" });
+  }
+
+  if (outcome.status === "closed") {
+    return reply.code(409).send({ error: "Objective is not open for reinforcement" });
+  }
+
+  if (outcome.status === "duplicate") {
+    return reply.code(409).send({ error: "Objective already includes all reinforcement candidates" });
+  }
+
+  if (outcome.status === "invalid") {
+    return reply.code(400).send({ error: "Objective reinforcement candidates are invalid" });
   }
 
   return { objective: outcome.objective };
@@ -241,6 +267,10 @@ function objectiveInvalidErrorMessage(reason: ObjectiveMutationInvalidReason | u
   if (reason === "missingResults") return "Objective must have at least one calibrated result before freezing";
   if (reason === "uncalibratedResults") return "Objective result points must be calibrated before freezing";
   if (reason === "lifecycleLocked") return "Objective status does not allow this operation";
+  if (reason === "missingReestimateDueAt") return "Reestimate due time is required";
+  if (reason === "invalidReestimateDueAt") return "Reestimate due time is invalid";
+  if (reason === "reestimateDueAtNotFuture") return "Reestimate due time must be in the future";
+  if (reason === "finalDueAtElapsed" || reason === "reestimateDueAtAfterFinalDueAt") return "Reestimate due time must not exceed objective final deadline";
   return fallback;
 }
 
@@ -343,6 +373,20 @@ export function registerOrfObjectiveRoutes(app: FastifyInstance) {
       return reply;
     }
     return sendObjectiveFlowOutcome(reply, await recruitObjectiveChallengers(params.objectiveId, body.memberUserIds, context.user.id));
+  });
+
+  app.post("/api/objectives/:objectiveId/reinforcements", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = objectiveParamsSchema.parse(request.params);
+    const body = reinforceBodySchema.parse(request.body);
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
+      return reply;
+    }
+    return sendObjectiveReinforcementOutcome(reply, await reinforceObjectiveChallengers(params.objectiveId, body.memberUserIds, context.user.id));
   });
 
   app.patch("/api/objectives/:objectiveId/challenge-applications/:applicationId/approve", async (request, reply) => {

@@ -10,6 +10,8 @@ export type GitLabOrfChatProject = {
   url: string;
 };
 
+export const gitLabOrfChatEventTypes = ["push", "tag_push", "merge_request", "issue", "pipeline"] as const;
+export type GitLabOrfChatEventType = typeof gitLabOrfChatEventTypes[number];
 export type GitLabWebhookEventType = "push" | "tag_push" | "merge_request" | "issue" | "pipeline" | "generic";
 
 export type GitLabWebhookEvent = {
@@ -22,7 +24,7 @@ export type GitLabWebhookEvent = {
 };
 
 const zeroShaPattern = /^0+$/;
-const maxChannelNameLength = 48;
+const gitLabOrfChatEventTypeSet = new Set<string>(gitLabOrfChatEventTypes);
 
 export function parseGitLabWebhookEvent(input: { headers?: HeaderMap; payload: unknown }): GitLabWebhookEvent | null {
   const payload = record(input.payload);
@@ -51,25 +53,28 @@ export function parseGitLabWebhookEvent(input: { headers?: HeaderMap; payload: u
   };
 }
 
-export function buildGitLabProjectChannelName(project: GitLabOrfChatProject) {
-  const projectId = channelSlug(project.id).slice(-12) || digest(project.id).slice(0, 8);
-  const prefix = "gitlab";
-  const separatorLength = 2;
-  const pathBudget = Math.max(1, maxChannelNameLength - prefix.length - projectId.length - separatorLength);
-  const pathSlug = channelSlug(project.path).slice(0, pathBudget) || "project";
-  return `${prefix}-${pathSlug}-${projectId}`.slice(0, maxChannelNameLength);
+export function normalizeGitLabOrfChatEventTypes(values: readonly string[] | null | undefined): GitLabOrfChatEventType[] {
+  const normalized: GitLabOrfChatEventType[] = [];
+  for (const value of values ?? gitLabOrfChatEventTypes) {
+    if (gitLabOrfChatEventTypeSet.has(value) && !normalized.includes(value as GitLabOrfChatEventType)) {
+      normalized.push(value as GitLabOrfChatEventType);
+    }
+  }
+  return normalized.length > 0 ? normalized : [...gitLabOrfChatEventTypes];
 }
 
-export function buildGitLabProjectChannelDisplayName(project: GitLabOrfChatProject) {
-  return `GitLab - ${project.path}`;
+export function gitLabProjectPathMatchesGroup(projectPath: string, groupPath: string) {
+  const project = normalizeGitLabPath(projectPath);
+  const group = normalizeGitLabPath(groupPath);
+  return Boolean(group && (project === group || project.startsWith(`${group}/`)));
 }
 
-export function buildGitLabProjectChannelPurpose(project: GitLabOrfChatProject) {
-  return project.url ? `GitLab project activity for ${project.path}: ${project.url}` : `GitLab project activity for ${project.path}`;
-}
-
-export function buildGitLabProjectChannelHeader(project: GitLabOrfChatProject) {
-  return project.url ? `GitLab project: ${project.url}` : `GitLab project: ${project.path}`;
+export function normalizeGitLabPath(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/\/+/g, "/");
 }
 
 export function formatGitLabWebhookChatMessage(event: GitLabWebhookEvent) {
@@ -276,15 +281,6 @@ function numberValue(value: unknown) {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
-}
-
-function channelSlug(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/['"`]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 }
 
 function digest(value: string) {

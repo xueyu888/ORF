@@ -20,6 +20,8 @@ ORF 客户端只提供安装入口，不复制业务逻辑。Win11 PC 端和 And
 ORF_CLIENT_URL=https://example.com/ npm run client:desktop:dist:win
 ```
 
+Win11 主窗口默认以 `1360x900` 打开，最小窗口尺寸由 `clients/desktop/main.cjs` 的 `DESKTOP_MAIN_WINDOW_SIZE` 统一维护。主窗口最小宽度保持在 `820` Electron DIP，低于 Web 端 `900px` 窄屏断点，使高 DPI 竖屏设备可以缩到同一套移动/窄屏布局；这只是客户端壳层展示约束，不定义 ORF 业务数据或页面事实源。
+
 Win11 客户端可以保存登录账号。保存职责属于客户端壳层：Electron 主进程通过系统 `safeStorage` 加密密码并写入本机 `userData/credentials`，渲染进程只能通过受限 IPC 读取账号列表、保存、删除或在用户选择/提交登录时临时读取密码。浏览器和 Android 不共享这份本机 vault；浏览器入口只依赖浏览器自己的密码管理能力。
 
 Win11 客户端必须在 Electron `ready` 前把 `userData` 和 `sessionData` 固定到同一个稳定的 `ORF` 数据目录。登录态事实仍由 Ory session 和 ORF Cookie 决定，桌面端只负责让 Chromium Cookie、缓存、已保存账号和本机设置在安装包升级后继续落在同一个 profile，不能因为包名、构建目录或 Electron 默认路径变化读到旧 profile 的会话。

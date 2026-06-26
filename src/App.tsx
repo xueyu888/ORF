@@ -6,6 +6,7 @@ import { AppFallbackPage } from "./components/AppFallback";
 import { Button } from "./components/ui";
 import { canShowFrontend, canShowFrontendPath, type FrontendVisibilityKey } from "./config/frontendVisibility";
 import { systemManagementPages } from "./config/navigation";
+import { ChatImagePopoutPage } from "./features/chat/ChatFloatingImagePreview";
 import { useOrf } from "./state/OrfProvider";
 
 const AIEvaluationPage = lazyNamed(() => import("./pages/AIEvaluationPage"), "AIEvaluationPage");
@@ -18,6 +19,8 @@ const FantasyUiPreviewPage = lazyNamed(() => import("./features/fantasy-ui"), "F
 const FeedbackInboxPage = lazyNamed(() => import("./pages/FeedbackInboxPage"), "FeedbackInboxPage");
 const FeedbackCreatePage = lazyNamed(() => import("./pages/FeedbackCreatePage"), "FeedbackCreatePage");
 const FeedbackIssuePage = lazyNamed(() => import("./pages/FeedbackIssuePage"), "FeedbackIssuePage");
+const FeedbackLabelsPage = lazyNamed(() => import("./pages/FeedbackLabelsPage"), "FeedbackLabelsPage");
+const FeedbackMilestonesPage = lazyNamed(() => import("./pages/FeedbackMilestonesPage"), "FeedbackMilestonesPage");
 const GenshinUIKitPreviewPage = lazyNamed(() => import("./features/genshin-ui-kit"), "GenshinUIKitPreviewPage");
 const LootSubmitPage = lazyNamed(() => import("./pages/LootSubmitPage"), "LootSubmitPage");
 const MembersPage = lazyNamed(() => import("./pages/MembersPage"), "MembersPage");
@@ -33,6 +36,7 @@ export function App() {
   return (
     <Routes>
       <Route path="auth" element={<AuthRoute />} />
+      <Route path="chat/image-popout/:popoutId" element={<ChatImagePopoutPage />} />
       <Route path="preview/genshin-ui-kit" element={<LazyRoute><GenshinUIKitPreviewPage /></LazyRoute>} />
       <Route element={<RequireAuth />}>
         <Route path="dashboard" element={<LazyRoute><DashboardPage /></LazyRoute>} />
@@ -47,6 +51,8 @@ export function App() {
         <Route path="genshin-ui-kit" element={<LazyRoute><GenshinUIKitPreviewPage /></LazyRoute>} />
         <Route path="feedback" element={<LazyRoute><FeedbackInboxPage /></LazyRoute>} />
         <Route path="feedback/new" element={<LazyRoute><FeedbackCreatePage /></LazyRoute>} />
+        <Route path="feedback/labels" element={<LazyRoute><FeedbackLabelsPage /></LazyRoute>} />
+        <Route path="feedback/milestones" element={<LazyRoute><FeedbackMilestonesPage /></LazyRoute>} />
         <Route path="feedback/:feedbackId" element={<LazyRoute><FeedbackIssuePage /></LazyRoute>} />
         <Route path="notifications" element={<Navigate to="/chat/system/personalNotifications" replace />} />
         <Route path="strategy-map" element={<LazyRoute><StrategyMapPage /></LazyRoute>} />

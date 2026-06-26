@@ -1,5 +1,6 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
 import { ApiError, apiJson, type AuthSession } from "./apiClient";
+import { mergeUserDisplayProfiles } from "../domain/userDisplayProfile";
 import type { OrfState, OrfUser } from "../types/orf";
 
 const AUTH_SESSION_TIMEOUT_MS = 8000;
@@ -12,6 +13,7 @@ function mergeAuthenticatedUser(state: OrfState, user: OrfUser): OrfState {
   return {
     ...state,
     users: [...users, user],
+    userProfiles: mergeUserDisplayProfiles(state.userProfiles, [user]),
     currentUserId: user.id,
   };
 }

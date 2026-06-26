@@ -1,16 +1,33 @@
 import { canApplyForObjectiveChallenge } from "../../../domain/orfLifecycle";
 import { resultDetailText } from "../../../domain/orfResultDetails";
 import { hasUncalibratedResultPoints } from "../../../domain/orfSettlement";
-import type { ChallengeApplication, UncertaintyLevel } from "../../../types/orf";
+import type { ChallengeApplication, ObjectiveFlowStatus, UncertaintyLevel } from "../../../types/orf";
 import type { BountyItem, DifficultyFilter, HallTab, SortKey } from "./bountyHallTypes";
 
 export const difficultyOptions: DifficultyFilter[] = ["all", "简易", "入门", "进阶", "破局", "渡劫", "飞升"];
 export const hallTabs: Array<{ key: HallTab; label: string }> = [
-  { key: "recruiting", label: "招募中" },
-  { key: "started", label: "已开始" },
-  { key: "mine", label: "我的申请" },
   { key: "all", label: "全部" },
+  { key: "open", label: "开放中" },
+  { key: "frozen", label: "已冻结" },
+  { key: "submitted", label: "待验收" },
+  { key: "revisionRequired", label: "待返工" },
+  { key: "accepted", label: "待结算" },
+  { key: "settled", label: "已结算" },
+  { key: "related", label: "我的相关" },
 ];
+export const defaultHallTab = "all" satisfies HallTab;
+
+const lifecycleTabByFlowStatus: Partial<Record<ObjectiveFlowStatus, HallTab>> = {
+  open: "open",
+  applying: "open",
+  recruiting: "open",
+  reestimating: "open",
+  frozen: "frozen",
+  submitted: "submitted",
+  revisionRequired: "revisionRequired",
+  accepted: "accepted",
+  settled: "settled",
+};
 
 const difficultyLabelsByRank: Record<number, UncertaintyLevel> = {
   1: "简易",
@@ -47,8 +64,44 @@ export function compareByUrgency(left: BountyItem, right: BountyItem) {
   return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || bountySortTitle(left).localeCompare(bountySortTitle(right));
 }
 
-export function isStartedBounty(item: BountyItem) {
-  return item.objective.flowStatus === "reestimating" || item.challengers.length > 0;
+export function buildHallItemBuckets(items: BountyItem[], currentUserId: string): Record<HallTab, BountyItem[]> {
+  const buckets: Record<HallTab, BountyItem[]> = {
+    all: [],
+    open: [],
+    frozen: [],
+    submitted: [],
+    revisionRequired: [],
+    accepted: [],
+    settled: [],
+    related: [],
+  };
+
+  for (const item of items) {
+    buckets.all.push(item);
+    const lifecycleTab = bountyHallLifecycleTab(item);
+    if (lifecycleTab) buckets[lifecycleTab].push(item);
+    if (isCurrentUserRelatedBounty(item, currentUserId)) buckets.related.push(item);
+  }
+
+  return buckets;
+}
+
+export function bountyHallLifecycleTab(item: BountyItem): HallTab | null {
+  return lifecycleTabByFlowStatus[item.objective.flowStatus] ?? null;
+}
+
+export function preferredHallTabForBountyItem(item: BountyItem, currentUserId: string): HallTab {
+  if (isCurrentUserRelatedBounty(item, currentUserId)) return "related";
+  return bountyHallLifecycleTab(item) ?? defaultHallTab;
+}
+
+export function isCurrentUserRelatedBounty(item: BountyItem, currentUserId: string) {
+  if (!currentUserId) return false;
+  return (
+    currentUserApplication(item, currentUserId, { includeDeclined: true }) !== null ||
+    (item.objective.assignedChallengerUserIds ?? []).includes(currentUserId) ||
+    (item.objective.challengerUserIds ?? []).includes(currentUserId)
+  );
 }
 
 export function currentUserApplication(
@@ -64,10 +117,6 @@ export function currentUserApplication(
   });
 
   return [...applications].sort(compareChallengeApplicationsByRecency)[0] ?? null;
-}
-
-export function isCurrentUserApplicationBounty(item: BountyItem, currentUserId: string) {
-  return Boolean(currentUserApplication(item, currentUserId, { includeDeclined: true }));
 }
 
 export function publishedDateLabel(item: BountyItem) {

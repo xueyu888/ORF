@@ -3,7 +3,7 @@ import {
   gitLabOrfChatReconcilerConfigured,
   readGitLabOrfChatConfig,
 } from "../server/integrations/gitlab-orf-chat/config";
-import { reconcileGitLabOrfChatProjects } from "../server/integrations/gitlab-orf-chat";
+import { reconcileGitLabOrfChatHooks } from "../server/integrations/gitlab-orf-chat";
 
 const config = readGitLabOrfChatConfig();
 
@@ -12,7 +12,7 @@ try {
     throw new Error("GitLab ORF chat reconciler is not fully configured");
   }
 
-  const result = await reconcileGitLabOrfChatProjects(config);
+  const result = await reconcileGitLabOrfChatHooks(config);
   console.log(JSON.stringify(result, null, 2));
   if (result.failed.length > 0) {
     process.exitCode = 1;

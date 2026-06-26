@@ -67,10 +67,25 @@ export const notificationPolicyRegistry: Record<NotificationKind, NotificationPo
     replyTarget: "metadata-comment-target",
     stream: "personalNotification",
   },
+  "objective.peerReview.requested": {
+    kind: "objective.peerReview.requested",
+    replyTarget: "notification-target",
+    stream: "personalNotification",
+  },
   "objective.published": {
     kind: "objective.published",
     replyTarget: "notification-target",
     stream: "teamAnnouncement",
+  },
+  "objective.revision.required": {
+    kind: "objective.revision.required",
+    replyTarget: "notification-target",
+    stream: "personalNotification",
+  },
+  "objective.settlement.updated": {
+    kind: "objective.settlement.updated",
+    replyTarget: "none",
+    stream: "personalNotification",
   },
   "objective.settled": {
     kind: "objective.settled",
@@ -79,6 +94,11 @@ export const notificationPolicyRegistry: Record<NotificationKind, NotificationPo
   },
   "objective.recruitment.created": {
     kind: "objective.recruitment.created",
+    replyTarget: "notification-target",
+    stream: "personalNotification",
+  },
+  "objective.reinforcement.added": {
+    kind: "objective.reinforcement.added",
     replyTarget: "notification-target",
     stream: "personalNotification",
   },

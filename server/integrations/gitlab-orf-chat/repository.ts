@@ -1,30 +1,45 @@
+import { randomUUID } from "node:crypto";
 import { pool } from "../../db/client";
 import type { ChatActor } from "../../repositories/chatRepository";
 import { nowIso } from "../../repositories/chatRepositoryModel";
+import { runtimeScopeStorageId } from "../../repositories/runtimeScope";
 import {
   ensureOrfChatBotActor,
   ensureOrfChatChannelMembership,
-  ensureOrfChatNamedChannel,
   sendOrfChatMessage,
 } from "../orf-chat-delivery";
 import type { GitLabOrfChatConfig } from "./config";
 import {
-  buildGitLabProjectChannelDisplayName,
-  buildGitLabProjectChannelHeader,
-  buildGitLabProjectChannelName,
-  buildGitLabProjectChannelPurpose,
+  gitLabOrfChatEventTypes,
+  normalizeGitLabOrfChatEventTypes,
+  normalizeGitLabPath,
+  type GitLabOrfChatEventType,
   type GitLabOrfChatProject,
+  type GitLabWebhookEvent,
 } from "./model";
 import type {
   GitLabOrfChatChannelOption,
-  GitLabOrfChatProjectMapping,
+  GitLabOrfChatSubscription,
+  GitLabOrfChatSubscriptionScope,
 } from "./settingsModel";
 
-type GitLabProjectChannelRow = {
-  archived_at: Date | string | null;
-  chat_channel_id: string;
-  channel_id: string | null;
-  type: string | null;
+type SubscriptionRow = {
+  channel_display_name: string;
+  channel_id: string;
+  channel_type: "public" | "private";
+  created_at: Date | string;
+  enabled: boolean;
+  event_types: unknown;
+  gitlab_group_path: string;
+  gitlab_project_id: string | null;
+  gitlab_project_path: string | null;
+  gitlab_project_url: string;
+  id: string;
+  updated_at: Date | string;
+};
+
+export type GitLabOrfChatMatchingSubscription = GitLabOrfChatSubscription & {
+  project: GitLabOrfChatProject;
 };
 
 export async function ensureGitLabOrfChatBotActor(input: {
@@ -33,129 +48,6 @@ export async function ensureGitLabOrfChatBotActor(input: {
   teamId: string;
 }): Promise<ChatActor> {
   return ensureOrfChatBotActor(input);
-}
-
-export async function ensureGitLabOrfProjectChannel(input: {
-  actor: ChatActor;
-  channelType: GitLabOrfChatConfig["GITLAB_ORF_CHAT_CHANNEL_TYPE"];
-  project: GitLabOrfChatProject;
-  teamId: string;
-}) {
-  const existing = await findMappedProjectChannel(input.teamId, input.project.id);
-  if (existing?.channel_id && existing.archived_at === null && existing.type !== "direct") {
-    await updateGitLabProjectChannelMapping({
-      chatChannelId: existing.channel_id,
-      project: input.project,
-      teamId: input.teamId,
-    });
-    await ensureOrfChatChannelMembership({ channelId: existing.channel_id, teamId: input.teamId, userId: input.actor.id });
-    return { channelId: existing.channel_id, created: false };
-  }
-
-  const channelId = await createGitLabProjectChannel({
-    actor: input.actor,
-    channelType: input.channelType,
-    project: input.project,
-    teamId: input.teamId,
-  });
-  await upsertGitLabProjectChannelMapping({
-    chatChannelId: channelId,
-    project: input.project,
-    teamId: input.teamId,
-  });
-  return { channelId, created: true };
-}
-
-export async function reserveGitLabOrfEventDelivery(input: {
-  channelId: string;
-  eventKey: string;
-  eventType: string;
-  projectId: string;
-  teamId: string;
-}) {
-  const now = nowIso();
-  const result = await pool.query<{ external_event_key: string }>(
-    `
-      INSERT INTO gitlab_orf_event_deliveries (
-        team_id,
-        external_event_key,
-        gitlab_project_id,
-        event_type,
-        chat_channel_id,
-        status,
-        received_at,
-        updated_at
-      )
-      VALUES ($1, $2, $3, $4, $5, 'reserved', $6, $6)
-      ON CONFLICT (team_id, external_event_key)
-      DO UPDATE SET
-        gitlab_project_id = EXCLUDED.gitlab_project_id,
-        event_type = EXCLUDED.event_type,
-        chat_channel_id = EXCLUDED.chat_channel_id,
-        chat_message_id = null,
-        status = 'reserved',
-        error = null,
-        received_at = EXCLUDED.received_at,
-        delivered_at = null,
-        updated_at = EXCLUDED.updated_at
-      WHERE gitlab_orf_event_deliveries.status = 'failed'
-         OR (
-           gitlab_orf_event_deliveries.status = 'reserved'
-           AND gitlab_orf_event_deliveries.updated_at < now() - interval '10 minutes'
-         )
-      RETURNING external_event_key
-    `,
-    [input.teamId, input.eventKey, input.projectId, input.eventType, input.channelId, now],
-  );
-  return result.rows.length > 0;
-}
-
-export async function markGitLabOrfEventDelivered(input: {
-  chatMessageId: string;
-  eventKey: string;
-  teamId: string;
-}) {
-  const now = nowIso();
-  await pool.query(
-    `
-      UPDATE gitlab_orf_event_deliveries
-      SET status = 'delivered',
-          chat_message_id = $3,
-          delivered_at = $4,
-          updated_at = $4,
-          error = null
-      WHERE team_id = $1
-        AND external_event_key = $2
-    `,
-    [input.teamId, input.eventKey, input.chatMessageId, now],
-  );
-}
-
-export async function markGitLabOrfEventFailed(input: {
-  error: string;
-  eventKey: string;
-  teamId: string;
-}) {
-  const now = nowIso();
-  await pool.query(
-    `
-      UPDATE gitlab_orf_event_deliveries
-      SET status = 'failed',
-          error = $3,
-          updated_at = $4
-      WHERE team_id = $1
-        AND external_event_key = $2
-    `,
-    [input.teamId, input.eventKey, input.error.slice(0, 1000), now],
-  );
-}
-
-export async function sendGitLabOrfChatMessage(input: {
-  actor: ChatActor;
-  body: string;
-  channelId: string;
-}) {
-  return sendOrfChatMessage(input);
 }
 
 export async function listGitLabOrfChatChannelOptions(teamId: string): Promise<GitLabOrfChatChannelOption[]> {
@@ -177,6 +69,7 @@ export async function listGitLabOrfChatChannelOptions(teamId: string): Promise<G
       LEFT JOIN chat_channel_members cm ON cm.channel_id = c.id
       WHERE c.team_id = $1
         AND c.type IN ('public', 'private')
+        AND c.system_kind IS NULL
         AND c.archived_at IS NULL
       GROUP BY c.id
       ORDER BY c.type, lower(c.display_name), c.id
@@ -192,180 +85,405 @@ export async function listGitLabOrfChatChannelOptions(teamId: string): Promise<G
   }));
 }
 
-export async function listGitLabOrfProjectChannelMappings(teamId: string): Promise<GitLabOrfChatProjectMapping[]> {
-  const { rows } = await pool.query<{
-    channel_display_name: string | null;
-    channel_id: string;
-    channel_type: "public" | "private" | null;
-    created_at: Date | string;
-    gitlab_project_id: string;
-    gitlab_project_path: string;
-    gitlab_project_url: string;
-    last_seen_at: Date | string;
-    updated_at: Date | string;
-  }>(
+export async function listGitLabOrfChatSubscriptions(input: {
+  channelId?: string;
+  teamId: string;
+}): Promise<GitLabOrfChatSubscription[]> {
+  const values: string[] = [input.teamId];
+  let channelFilter = "";
+  if (input.channelId) {
+    values.push(input.channelId);
+    channelFilter = `AND subscription.chat_channel_id = $${values.length}`;
+  }
+
+  const { rows } = await pool.query<SubscriptionRow>(
     `
       SELECT
-        mapping.gitlab_project_id,
-        mapping.gitlab_project_path,
-        mapping.gitlab_project_url,
-        mapping.chat_channel_id AS channel_id,
-        mapping.created_at,
-        mapping.updated_at,
-        mapping.last_seen_at,
+        subscription.id,
+        subscription.chat_channel_id AS channel_id,
         channel.display_name AS channel_display_name,
-        CASE
-          WHEN channel.type IN ('public', 'private') THEN channel.type::text
-          ELSE NULL
-        END AS channel_type
-      FROM gitlab_orf_project_channels mapping
-      LEFT JOIN chat_channels channel
-        ON channel.id = mapping.chat_channel_id
-       AND channel.team_id = mapping.team_id
+        channel.type::text AS channel_type,
+        subscription.gitlab_group_path,
+        subscription.gitlab_project_id,
+        subscription.gitlab_project_path,
+        subscription.gitlab_project_url,
+        subscription.event_types,
+        subscription.enabled,
+        subscription.created_at,
+        subscription.updated_at
+      FROM gitlab_orf_channel_subscriptions subscription
+      INNER JOIN chat_channels channel
+        ON channel.id = subscription.chat_channel_id
+       AND channel.team_id = subscription.team_id
+       AND channel.type IN ('public', 'private')
+       AND channel.system_kind IS NULL
        AND channel.archived_at IS NULL
-      WHERE mapping.team_id = $1
-      ORDER BY lower(mapping.gitlab_project_path), mapping.gitlab_project_id
+      WHERE subscription.team_id = $1
+        ${channelFilter}
+      ORDER BY lower(channel.display_name), subscription.gitlab_project_path NULLS FIRST, subscription.gitlab_group_path, subscription.created_at
     `,
-    [teamId],
+    values,
   );
+  return rows.map(subscriptionFromRow);
+}
+
+export async function listVisibleGitLabOrfChatSubscriptions(input: {
+  actor: ChatActor;
+  channelId: string;
+}): Promise<GitLabOrfChatSubscription[]> {
+  if (!input.actor.canRead) {
+    throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
+  }
+  await requireVisibleSubscribableChannel(input.actor, input.channelId);
+  return listGitLabOrfChatSubscriptions({
+    channelId: input.channelId,
+    teamId: runtimeScopeStorageId(input.actor.scope),
+  });
+}
+
+export async function createGitLabOrfChatSubscription(input: {
+  actor: ChatActor;
+  channelId: string;
+  config: GitLabOrfChatConfig;
+  enabled?: boolean;
+  eventTypes?: readonly string[];
+  project?: GitLabOrfChatProject | null;
+  scope: GitLabOrfChatSubscriptionScope;
+}) {
+  if (!input.actor.canRead) {
+    throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
+  }
+  const channel = await requireVisibleSubscribableChannel(input.actor, input.channelId);
+  const now = nowIso();
+  const project = input.scope === "project" ? requiredProject(input.project) : null;
+  const eventTypes = normalizeGitLabOrfChatEventTypes(input.eventTypes);
+  await pool.query(
+    `
+      INSERT INTO gitlab_orf_channel_subscriptions (
+        id,
+        team_id,
+        chat_channel_id,
+        gitlab_group_path,
+        gitlab_project_id,
+        gitlab_project_path,
+        gitlab_project_url,
+        event_types,
+        enabled,
+        created_by_user_id,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $11)
+    `,
+    [
+      `gitlab-subscription-${randomUUID()}`,
+      runtimeScopeStorageId(input.actor.scope),
+      channel.id,
+      normalizeGitLabPath(input.config.GITLAB_ORF_CHAT_GROUP),
+      project?.id ?? null,
+      project ? normalizeGitLabPath(project.path) : null,
+      project?.url ?? "",
+      JSON.stringify(eventTypes),
+      input.enabled ?? true,
+      input.actor.id,
+      now,
+    ],
+  );
+}
+
+export async function updateGitLabOrfChatSubscription(input: {
+  actor: ChatActor;
+  channelId: string;
+  enabled?: boolean;
+  eventTypes?: readonly string[];
+  subscriptionId: string;
+}) {
+  if (!input.actor.canRead) {
+    throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
+  }
+  await requireVisibleSubscribableChannel(input.actor, input.channelId);
+  const assignments: string[] = [];
+  const values: unknown[] = [
+    runtimeScopeStorageId(input.actor.scope),
+    input.channelId,
+    input.subscriptionId,
+  ];
+
+  if (input.eventTypes) {
+    values.push(JSON.stringify(normalizeGitLabOrfChatEventTypes(input.eventTypes)));
+    assignments.push(`event_types = $${values.length}::jsonb`);
+  }
+  if (typeof input.enabled === "boolean") {
+    values.push(input.enabled);
+    assignments.push(`enabled = $${values.length}`);
+  }
+
+  if (assignments.length === 0) return;
+
+  values.push(nowIso());
+  const result = await pool.query(
+    `
+      UPDATE gitlab_orf_channel_subscriptions
+      SET ${assignments.join(", ")},
+          updated_at = $${values.length}
+      WHERE team_id = $1
+        AND chat_channel_id = $2
+        AND id = $3
+    `,
+    values,
+  );
+  if (result.rowCount === 0) {
+    throw Object.assign(new Error("GitLab ORF chat subscription not found"), { statusCode: 404 });
+  }
+}
+
+export async function deleteGitLabOrfChatSubscription(input: {
+  actor: ChatActor;
+  channelId: string;
+  subscriptionId: string;
+}) {
+  if (!input.actor.canRead) {
+    throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
+  }
+  await requireVisibleSubscribableChannel(input.actor, input.channelId);
+  const result = await pool.query(
+    `
+      DELETE FROM gitlab_orf_channel_subscriptions
+      WHERE team_id = $1
+        AND chat_channel_id = $2
+        AND id = $3
+    `,
+    [runtimeScopeStorageId(input.actor.scope), input.channelId, input.subscriptionId],
+  );
+  if (result.rowCount === 0) {
+    throw Object.assign(new Error("GitLab ORF chat subscription not found"), { statusCode: 404 });
+  }
+}
+
+export async function listMatchingGitLabOrfChatSubscriptions(input: {
+  event: GitLabWebhookEvent;
+  teamId: string;
+}): Promise<GitLabOrfChatMatchingSubscription[]> {
+  if (!gitLabOrfChatEventTypes.includes(input.event.eventType as GitLabOrfChatEventType)) {
+    return [];
+  }
+
+  const normalizedProjectPath = normalizeGitLabPath(input.event.project.path);
+  const { rows } = await pool.query<SubscriptionRow>(
+    `
+      SELECT
+        subscription.id,
+        subscription.chat_channel_id AS channel_id,
+        channel.display_name AS channel_display_name,
+        channel.type::text AS channel_type,
+        subscription.gitlab_group_path,
+        subscription.gitlab_project_id,
+        subscription.gitlab_project_path,
+        subscription.gitlab_project_url,
+        subscription.event_types,
+        subscription.enabled,
+        subscription.created_at,
+        subscription.updated_at
+      FROM gitlab_orf_channel_subscriptions subscription
+      INNER JOIN chat_channels channel
+        ON channel.id = subscription.chat_channel_id
+       AND channel.team_id = subscription.team_id
+       AND channel.type IN ('public', 'private')
+       AND channel.system_kind IS NULL
+       AND channel.archived_at IS NULL
+      WHERE subscription.team_id = $1
+        AND subscription.enabled = true
+        AND subscription.event_types @> jsonb_build_array($2::text)
+        AND (
+          (
+            subscription.gitlab_project_id IS NOT NULL
+            AND subscription.gitlab_project_id = $3
+          )
+          OR (
+            subscription.gitlab_project_id IS NULL
+            AND (
+              $4 = subscription.gitlab_group_path
+              OR $4 LIKE subscription.gitlab_group_path || '/%'
+            )
+          )
+        )
+      ORDER BY (subscription.gitlab_project_id IS NOT NULL) DESC, subscription.created_at
+    `,
+    [input.teamId, input.event.eventType, input.event.project.id, normalizedProjectPath],
+  );
+
   return rows.map((row) => ({
+    ...subscriptionFromRow(row),
+    project: input.event.project,
+  }));
+}
+
+export async function reserveGitLabOrfEventDelivery(input: {
+  channelId: string;
+  eventKey: string;
+  eventType: string;
+  project: GitLabOrfChatProject;
+  subscriptionId: string;
+  teamId: string;
+}) {
+  const now = nowIso();
+  const result = await pool.query<{ external_event_key: string }>(
+    `
+      INSERT INTO gitlab_orf_event_deliveries (
+        team_id,
+        external_event_key,
+        subscription_id,
+        gitlab_project_id,
+        gitlab_project_path,
+        gitlab_project_url,
+        event_type,
+        chat_channel_id,
+        status,
+        received_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'reserved', $9, $9)
+      ON CONFLICT (team_id, chat_channel_id, external_event_key)
+      DO UPDATE SET
+        subscription_id = EXCLUDED.subscription_id,
+        gitlab_project_id = EXCLUDED.gitlab_project_id,
+        gitlab_project_path = EXCLUDED.gitlab_project_path,
+        gitlab_project_url = EXCLUDED.gitlab_project_url,
+        event_type = EXCLUDED.event_type,
+        chat_message_id = null,
+        status = 'reserved',
+        error = null,
+        received_at = EXCLUDED.received_at,
+        delivered_at = null,
+        updated_at = EXCLUDED.updated_at
+      WHERE gitlab_orf_event_deliveries.status = 'failed'
+         OR (
+           gitlab_orf_event_deliveries.status = 'reserved'
+           AND gitlab_orf_event_deliveries.updated_at < now() - interval '10 minutes'
+         )
+      RETURNING external_event_key
+    `,
+    [
+      input.teamId,
+      input.eventKey,
+      input.subscriptionId,
+      input.project.id,
+      normalizeGitLabPath(input.project.path),
+      input.project.url,
+      input.eventType,
+      input.channelId,
+      now,
+    ],
+  );
+  return result.rows.length > 0;
+}
+
+export async function markGitLabOrfEventDelivered(input: {
+  channelId: string;
+  chatMessageId: string;
+  eventKey: string;
+  teamId: string;
+}) {
+  const now = nowIso();
+  await pool.query(
+    `
+      UPDATE gitlab_orf_event_deliveries
+      SET status = 'delivered',
+          chat_message_id = $4,
+          delivered_at = $5,
+          updated_at = $5,
+          error = null
+      WHERE team_id = $1
+        AND chat_channel_id = $2
+        AND external_event_key = $3
+    `,
+    [input.teamId, input.channelId, input.eventKey, input.chatMessageId, now],
+  );
+}
+
+export async function markGitLabOrfEventFailed(input: {
+  channelId: string;
+  error: string;
+  eventKey: string;
+  teamId: string;
+}) {
+  const now = nowIso();
+  await pool.query(
+    `
+      UPDATE gitlab_orf_event_deliveries
+      SET status = 'failed',
+          error = $4,
+          updated_at = $5
+      WHERE team_id = $1
+        AND chat_channel_id = $2
+        AND external_event_key = $3
+    `,
+    [input.teamId, input.channelId, input.eventKey, input.error.slice(0, 1000), now],
+  );
+}
+
+export async function sendGitLabOrfChatMessage(input: {
+  actor: ChatActor;
+  body: string;
+  channelId: string;
+}) {
+  await ensureOrfChatChannelMembership({ channelId: input.channelId, teamId: runtimeScopeStorageId(input.actor.scope), userId: input.actor.id });
+  return sendOrfChatMessage(input);
+}
+
+function subscriptionFromRow(row: SubscriptionRow): GitLabOrfChatSubscription {
+  const scope: GitLabOrfChatSubscriptionScope = row.gitlab_project_id ? "project" : "group";
+  return {
     channelDisplayName: row.channel_display_name,
     channelId: row.channel_id,
     channelType: row.channel_type,
     createdAt: iso(row.created_at),
-    lastSeenAt: iso(row.last_seen_at),
-    projectId: row.gitlab_project_id,
-    projectPath: row.gitlab_project_path,
-    projectUrl: row.gitlab_project_url,
+    enabled: row.enabled,
+    eventTypes: normalizeGitLabOrfChatEventTypes(Array.isArray(row.event_types) ? row.event_types.map(String) : null),
+    gitlabGroupPath: row.gitlab_group_path,
+    gitlabProjectId: row.gitlab_project_id,
+    gitlabProjectPath: row.gitlab_project_path,
+    gitlabProjectUrl: row.gitlab_project_url,
+    id: row.id,
+    scope,
     updatedAt: iso(row.updated_at),
-  }));
+  };
 }
 
-export async function bindGitLabOrfProjectChannel(input: {
-  actor: ChatActor;
-  channelId: string;
-  project: GitLabOrfChatProject;
-  teamId: string;
-}) {
-  const channel = await getBindableChatChannel(input.teamId, input.channelId);
-  if (!channel) {
-    throw Object.assign(new Error("GitLab ORF chat channel is not bindable"), { statusCode: 404 });
+async function requireVisibleSubscribableChannel(actor: ChatActor, channelId: string) {
+  const { rows } = await pool.query<{
+    id: string;
+    type: "public" | "private";
+  }>(
+    `
+      SELECT c.id, c.type
+      FROM chat_channels c
+      INNER JOIN chat_channel_members cm
+        ON cm.channel_id = c.id
+       AND cm.user_id = $2
+      WHERE c.team_id = $1
+        AND c.id = $3
+        AND c.type IN ('public', 'private')
+        AND c.system_kind IS NULL
+        AND c.archived_at IS NULL
+      LIMIT 1
+    `,
+    [runtimeScopeStorageId(actor.scope), actor.id, channelId],
+  );
+  const row = rows[0];
+  if (!row) {
+    throw Object.assign(new Error("GitLab ORF chat channel is not subscribable"), { statusCode: 404 });
   }
-  await ensureOrfChatChannelMembership({ channelId: channel.id, teamId: input.teamId, userId: input.actor.id });
-  await upsertGitLabProjectChannelMapping({
-    chatChannelId: channel.id,
-    project: input.project,
-    teamId: input.teamId,
-  });
+  return row;
+}
+
+function requiredProject(project: GitLabOrfChatProject | null | undefined): GitLabOrfChatProject {
+  if (!project?.id || !project.path) {
+    throw Object.assign(new Error("GitLab project subscription requires project id and path"), { statusCode: 400 });
+  }
+  return project;
 }
 
 function iso(value: Date | string) {
   return value instanceof Date ? value.toISOString() : value;
-}
-
-async function getBindableChatChannel(teamId: string, channelId: string) {
-  const { rows } = await pool.query<{ id: string }>(
-    `
-      SELECT id
-      FROM chat_channels
-      WHERE team_id = $1
-        AND id = $2
-        AND type IN ('public', 'private')
-        AND archived_at IS NULL
-      LIMIT 1
-    `,
-    [teamId, channelId],
-  );
-  return rows[0] ?? null;
-}
-
-async function findMappedProjectChannel(teamId: string, projectId: string) {
-  const { rows } = await pool.query<GitLabProjectChannelRow>(
-    `
-      SELECT
-        mapping.chat_channel_id,
-        channel.id AS channel_id,
-        channel.type,
-        channel.archived_at
-      FROM gitlab_orf_project_channels mapping
-      LEFT JOIN chat_channels channel
-        ON channel.id = mapping.chat_channel_id
-       AND channel.team_id = mapping.team_id
-      WHERE mapping.team_id = $1
-        AND mapping.gitlab_project_id = $2
-      LIMIT 1
-    `,
-    [teamId, projectId],
-  );
-  return rows[0] ?? null;
-}
-
-async function createGitLabProjectChannel(input: {
-  actor: ChatActor;
-  channelType: GitLabOrfChatConfig["GITLAB_ORF_CHAT_CHANNEL_TYPE"];
-  project: GitLabOrfChatProject;
-  teamId: string;
-}) {
-  const channel = await ensureOrfChatNamedChannel({
-    actor: input.actor,
-    displayName: buildGitLabProjectChannelDisplayName(input.project),
-    header: buildGitLabProjectChannelHeader(input.project),
-    name: buildGitLabProjectChannelName(input.project),
-    purpose: buildGitLabProjectChannelPurpose(input.project),
-    teamId: input.teamId,
-    type: input.channelType,
-  });
-  return channel.channelId;
-}
-
-async function upsertGitLabProjectChannelMapping(input: {
-  chatChannelId: string;
-  project: GitLabOrfChatProject;
-  teamId: string;
-}) {
-  const now = nowIso();
-  await pool.query(
-    `
-      INSERT INTO gitlab_orf_project_channels (
-        team_id,
-        gitlab_project_id,
-        gitlab_project_path,
-        gitlab_project_url,
-        chat_channel_id,
-        created_at,
-        updated_at,
-        last_seen_at
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $6, $6)
-      ON CONFLICT (team_id, gitlab_project_id)
-      DO UPDATE SET
-        gitlab_project_path = EXCLUDED.gitlab_project_path,
-        gitlab_project_url = EXCLUDED.gitlab_project_url,
-        chat_channel_id = EXCLUDED.chat_channel_id,
-        updated_at = EXCLUDED.updated_at,
-        last_seen_at = EXCLUDED.last_seen_at
-    `,
-    [input.teamId, input.project.id, input.project.path, input.project.url, input.chatChannelId, now],
-  );
-}
-
-async function updateGitLabProjectChannelMapping(input: {
-  chatChannelId: string;
-  project: GitLabOrfChatProject;
-  teamId: string;
-}) {
-  const now = nowIso();
-  await pool.query(
-    `
-      UPDATE gitlab_orf_project_channels
-      SET gitlab_project_path = $3,
-          gitlab_project_url = $4,
-          chat_channel_id = $5,
-          updated_at = $6,
-          last_seen_at = $6
-      WHERE team_id = $1
-        AND gitlab_project_id = $2
-    `,
-    [input.teamId, input.project.id, input.project.path, input.project.url, input.chatChannelId, now],
-  );
 }

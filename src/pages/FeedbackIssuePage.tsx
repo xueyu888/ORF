@@ -23,6 +23,7 @@ import type { OrfRichTextAttachmentUploadResult } from "../features/rich-text/Or
 import { canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
 import {
   feedbackIssueDisplayId,
+  feedbackIssueHref,
   feedbackIssueMarkdownLink,
   feedbackIssueState,
   feedbackIssueStateLabel,
@@ -30,9 +31,14 @@ import {
   isFeedbackIssueOpen,
   nextFeedbackIssueStatus,
 } from "../features/feedback/model/feedbackIssue";
+import {
+  feedbackIssueAssignee,
+  feedbackIssueLabels,
+  feedbackIssueLinkedFeedback,
+  feedbackIssueParticipants,
+} from "../features/feedback/model/feedbackIssueMetadata";
 import { useOrf } from "../state/OrfProvider";
-import type { CommentMessage, CommentThread, Feedback, Impact, OrfUser } from "../types/orf";
-import { impactLabel } from "../utils/labels";
+import type { ActivityItem, CommentMessage, CommentThread, Feedback, OrfUser } from "../types/orf";
 
 type FeedbackCommentEntry = {
   message: CommentMessage;
@@ -61,6 +67,7 @@ export function FeedbackIssuePage() {
   const entries = useMemo(() => feedbackCommentEntries(threads), [threads]);
   const originalEntry = entries[0] ?? null;
   const timelineEntries = originalEntry ? entries.slice(1) : entries;
+  const activityEntries = useMemo(() => feedback ? feedbackIssueActivityEntries(feedback.activity) : [], [feedback]);
   const mentionUsersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
   const canChangeState = feedback ? canManageFeedbackStatus(feedback, currentUser) : false;
   const canManageAllComments = hasPermission(currentUser, state.permissionRules, "comment.manage");
@@ -236,6 +243,8 @@ export function FeedbackIssuePage() {
             onUploadAttachment={uploadFeedbackCommentAttachment}
           />
 
+          <FeedbackActivityTimeline entries={activityEntries} />
+
           <div className="feedback-issue-timeline">
             {timelineEntries.map(({ message, thread }) => (
               <article key={`${thread.id}:${message.id}`} className="feedback-issue-comment-card">
@@ -303,7 +312,7 @@ export function FeedbackIssuePage() {
         </section>
 
         <aside className="feedback-issue-sidebar" aria-label="反馈属性">
-          <IssueSidebar feedback={feedback} />
+          <IssueSidebar comments={threads} feedback={feedback} feedbackItems={state.feedback} users={state.users} />
         </aside>
       </main>
 
@@ -392,33 +401,101 @@ function OriginalFeedbackCard({
   );
 }
 
-function IssueSidebar({ feedback }: { feedback: Feedback }) {
+function IssueSidebar({
+  comments,
+  feedback,
+  feedbackItems,
+  users,
+}: {
+  comments: readonly CommentThread[];
+  feedback: Feedback;
+  feedbackItems: readonly Feedback[];
+  users: readonly OrfUser[];
+}) {
+  const assignee = feedbackIssueAssignee(feedback, users);
+  const labels = feedbackIssueLabels(feedback);
+  const participants = feedbackIssueParticipants({ feedback, threads: comments, users });
+  const linkedFeedback = feedbackIssueLinkedFeedback({ feedback, feedbackItems, threads: comments });
+
   return (
     <>
       <div className="feedback-issue-sidebar-block">
-        <span>状态</span>
+        <span>State</span>
         <IssueStateBadge feedback={feedback} />
       </div>
       <div className="feedback-issue-sidebar-block">
-        <span>处理人</span>
-        <strong>{feedback.owner}</strong>
-      </div>
-      <div className="feedback-issue-sidebar-block">
-        <span>分类</span>
-        <div className="feedback-issue-sidebar-labels">
-          {feedback.causeCategories.map((item) => <BountyBadge key={item} tone={causeTone(item)}>{item}</BountyBadge>)}
+        <span>Assignees</span>
+        <div className="feedback-issue-sidebar-person">
+          <UserAvatar avatarUrl={assignee.avatarUrl} className="h-7 w-7 text-[10px]" frame={false} name={assignee.name} />
+          <strong>{assignee.name}</strong>
         </div>
       </div>
       <div className="feedback-issue-sidebar-block">
-        <span>影响</span>
-        <BountyBadge tone={impactTone(feedback.impact)}>{impactLabel[feedback.impact]}</BountyBadge>
+        <span>Labels</span>
+        <div className="feedback-issue-sidebar-labels">
+          {labels.map((item) => <BountyBadge key={item.key} tone={item.tone}>{item.name}</BountyBadge>)}
+        </div>
       </div>
       <div className="feedback-issue-sidebar-block">
-        <span>时间</span>
+        <span>Projects</span>
+        <p className="feedback-issue-sidebar-empty">未加入项目</p>
+      </div>
+      <div className="feedback-issue-sidebar-block">
+        <span>Milestone</span>
+        <p className="feedback-issue-sidebar-empty">无里程碑</p>
+      </div>
+      <div className="feedback-issue-sidebar-block">
+        <span>Relationships</span>
+        {linkedFeedback.length > 0 ? (
+          <div className="feedback-issue-sidebar-links">
+            {linkedFeedback.map((item) => (
+              <Link key={item.id} to={feedbackIssueHref(item.id)}>
+                #{feedbackIssueDisplayId(item.id)} {item.phenomenon}
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="feedback-issue-sidebar-empty">无关联反馈</p>
+        )}
+      </div>
+      <div className="feedback-issue-sidebar-block">
+        <span>Participants</span>
+        <div className="feedback-issue-sidebar-participants">
+          {participants.map((participant) => (
+            <UserAvatar
+              key={participant.id ?? participant.name}
+              avatarUrl={participant.avatarUrl}
+              className="h-7 w-7 text-[10px]"
+              frame={false}
+              name={participant.name}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="feedback-issue-sidebar-block">
+        <span>Timeline</span>
         <strong>{formatIssueDate(feedback.createdAt)} 创建</strong>
         <strong>{formatIssueDate(feedback.updatedAt)} 更新</strong>
       </div>
     </>
+  );
+}
+
+function FeedbackActivityTimeline({ entries }: { entries: readonly ActivityItem[] }) {
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="feedback-issue-event-list" aria-label="反馈活动">
+      {entries.map((entry) => (
+        <div key={entry.id} className="feedback-issue-event-row">
+          <span aria-hidden="true" className="feedback-issue-event-dot" />
+          <p>
+            <strong>{entry.actor}</strong> {entry.action}
+            <time dateTime={entry.at}>{formatIssueDate(entry.at)}</time>
+          </p>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -438,24 +515,14 @@ function feedbackCommentEntries(threads: readonly CommentThread[]): FeedbackComm
     .sort((left, right) => left.message.createdAt.localeCompare(right.message.createdAt));
 }
 
+function feedbackIssueActivityEntries(entries: readonly ActivityItem[]) {
+  return [...entries].sort((left, right) => left.at.localeCompare(right.at));
+}
+
 function canManageFeedbackComment(message: CommentMessage, currentUser: OrfUser | null, canManageAllComments: boolean) {
   if (canManageAllComments) return true;
   if (!currentUser) return false;
   return message.authorUserId ? message.authorUserId === currentUser.id : message.author === currentUser.name;
-}
-
-function causeTone(value: string) {
-  if (/管理|流程|协作/.test(value)) return "gold" as const;
-  if (/技术|系统|质量|缺陷|bug/i.test(value)) return "accent" as const;
-  if (/风险|事故|阻塞/.test(value)) return "warning" as const;
-  return "neutral" as const;
-}
-
-function impactTone(value: Impact) {
-  if (value === "Critical") return "danger" as const;
-  if (value === "High") return "warning" as const;
-  if (value === "Medium") return "accent" as const;
-  return "neutral" as const;
 }
 
 function formatIssueDate(value: string) {

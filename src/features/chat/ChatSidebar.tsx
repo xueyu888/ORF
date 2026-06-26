@@ -1,7 +1,7 @@
 import { clsx } from "clsx";
 import type { LucideIcon } from "lucide-react";
-import { Bell, CheckCheck, ChevronDown, Hash, Megaphone, MessageSquare, Plus, Reply, Search } from "lucide-react";
-import type { KeyboardEvent } from "react";
+import { Bell, CheckCheck, ChevronDown, ChevronRight, Hash, Megaphone, MessageSquare, Plus, Reply, Search } from "lucide-react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { isChatConversation } from "../../domain/chatConversation";
 import type { ChatChannel, ChatUser } from "../../types/orf";
@@ -33,6 +33,8 @@ type ChatSidebarProps = {
   users: ChatUser[];
 };
 
+type ChatSidebarGroupId = "system" | "members" | "unread" | "favorites" | "public" | "private" | "direct";
+
 export function ChatSidebar({
   activeChannelId,
   channels,
@@ -48,6 +50,7 @@ export function ChatSidebar({
   markingUnreadChannelsRead,
   users,
 }: ChatSidebarProps) {
+  const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<ChatSidebarGroupId>>(() => new Set());
   const normalizedQuery = query.trim().toLowerCase();
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
   const visibleChannels = channels.filter((channel) => chatChannelSearchText(channel, currentUserId, usersById).toLowerCase().includes(normalizedQuery));
@@ -65,13 +68,24 @@ export function ChatSidebar({
   const publicChannels = uncategorizedChannels.filter((channel) => channel.type === "public");
   const privateChannels = uncategorizedChannels.filter((channel) => channel.type === "private");
   const conversations = uncategorizedChannels.filter((channel) => channel.type === "direct");
-  const channelGroups: Array<{ channels: ChatChannel[]; title: string }> = [
-    { title: "未读", channels: unreadChannels },
-    { title: "收藏", channels: favorites },
-    { title: "公开频道", channels: publicChannels },
-    { title: "私有频道", channels: privateChannels },
-    { title: "私信", channels: conversations },
+  const channelGroups: Array<{ channels: ChatChannel[]; id: ChatSidebarGroupId; title: string }> = [
+    { id: "unread", title: "未读", channels: unreadChannels },
+    { id: "favorites", title: "收藏", channels: favorites },
+    { id: "public", title: "公开频道", channels: publicChannels },
+    { id: "private", title: "私有频道", channels: privateChannels },
+    { id: "direct", title: "私信", channels: conversations },
   ];
+  const toggleGroupCollapsed = (groupId: ChatSidebarGroupId) => {
+    setCollapsedGroupIds((items) => {
+      const next = new Set(items);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  };
 
   return (
     <aside className="orf-chat-sidebar" aria-label="聊天列表">
@@ -89,15 +103,19 @@ export function ChatSidebar({
         <SystemChannelGroup
           activeChannelId={activeChannelId}
           channels={filteredSystemChannels}
+          collapsed={collapsedGroupIds.has("system")}
           currentUserId={currentUserId}
           onOpenChannel={onOpenChannel}
           onPreviewChannel={onPreviewChannel}
+          onToggleCollapsed={toggleGroupCollapsed}
           usersById={usersById}
         />
         {matchedUsers.length > 0 && (
           <UserResultGroup
+            collapsed={collapsedGroupIds.has("members")}
             currentUserId={currentUserId}
             onOpenConversationWithUser={onOpenConversationWithUser}
+            onToggleCollapsed={toggleGroupCollapsed}
             title="成员"
             users={matchedUsers}
           />
@@ -106,13 +124,16 @@ export function ChatSidebar({
           <ChannelGroup
             activeChannelId={activeChannelId}
             channels={group.channels}
+            collapsed={collapsedGroupIds.has(group.id)}
             currentUserId={currentUserId}
             draftChannelIds={draftChannelIds}
+            groupId={group.id}
             key={group.title}
             markingAllRead={group.title === "未读" && markingUnreadChannelsRead}
             onMarkAllRead={group.title === "未读" ? () => onMarkUnreadChannelsRead(unreadChannels.map((channel) => channel.id)) : undefined}
             onOpenChannel={onOpenChannel}
             onPreviewChannel={onPreviewChannel}
+            onToggleCollapsed={toggleGroupCollapsed}
             title={group.title}
             usersById={usersById}
           />
@@ -270,27 +291,25 @@ function ChatSidebarCreateMenu({ commands }: { commands: ChatSidebarCreateComman
 function SystemChannelGroup({
   activeChannelId,
   channels,
+  collapsed,
   currentUserId,
   onOpenChannel,
   onPreviewChannel,
+  onToggleCollapsed,
   usersById,
 }: {
   activeChannelId: string | null;
   channels: ChatChannel[];
+  collapsed: boolean;
   currentUserId?: string;
   onOpenChannel: (channelId: string) => void;
   onPreviewChannel: (channelId: string) => void;
+  onToggleCollapsed: (groupId: ChatSidebarGroupId) => void;
   usersById: Map<string, ChatUser>;
 }) {
   if (channels.length === 0) return null;
   return (
-    <section className="orf-chat-channel-group">
-      <div className="orf-chat-channel-group-title">
-        <span>
-          <ChevronDown className="h-3.5 w-3.5" />
-          系统
-        </span>
-      </div>
+    <ChatSidebarGroupSection collapsed={collapsed} groupId="system" title="系统" onToggleCollapsed={onToggleCollapsed}>
       {channels.map((channel) => {
         const Icon = channel.systemKind === "teamAnnouncement" ? Megaphone : Bell;
         const label = chatChannelDisplayLabel(channel, currentUserId, usersById);
@@ -319,54 +338,59 @@ function SystemChannelGroup({
           </button>
         );
       })}
-    </section>
+    </ChatSidebarGroupSection>
   );
 }
 
 function ChannelGroup({
   activeChannelId,
   channels,
+  collapsed,
   currentUserId,
   draftChannelIds,
+  groupId,
   markingAllRead,
   onMarkAllRead,
   onOpenChannel,
   onPreviewChannel,
+  onToggleCollapsed,
   title,
   usersById,
 }: {
   activeChannelId: string | null;
   channels: ChatChannel[];
+  collapsed: boolean;
   currentUserId?: string;
   draftChannelIds: Set<string>;
+  groupId: ChatSidebarGroupId;
   markingAllRead?: boolean;
   onMarkAllRead?: () => void;
   onOpenChannel: (channelId: string) => void;
   onPreviewChannel: (channelId: string) => void;
+  onToggleCollapsed: (groupId: ChatSidebarGroupId) => void;
   title: string;
   usersById: Map<string, ChatUser>;
 }) {
   if (channels.length === 0) return null;
   return (
-    <section className="orf-chat-channel-group">
-      <div className="orf-chat-channel-group-title">
-        <span>
-          <ChevronDown className="h-3.5 w-3.5" />
-          {title}
-        </span>
-        {onMarkAllRead && (
-          <button
-            type="button"
-            className="orf-chat-channel-group-action"
-            disabled={markingAllRead}
-            title="全部标记已读"
-            aria-label="全部标记已读"
-            onClick={onMarkAllRead}
-          >
-            <CheckCheck className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
+    <ChatSidebarGroupSection
+      action={onMarkAllRead ? (
+        <button
+          type="button"
+          className="orf-chat-channel-group-action"
+          disabled={markingAllRead}
+          title="全部标记已读"
+          aria-label="全部标记已读"
+          onClick={onMarkAllRead}
+        >
+          <CheckCheck className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
+      collapsed={collapsed}
+      groupId={groupId}
+      title={title}
+      onToggleCollapsed={onToggleCollapsed}
+    >
       {channels.map((channel) => {
         const membership = currentMembership(channel, currentUserId);
         const directPeer = chatDirectPeer(channel, currentUserId, usersById);
@@ -409,29 +433,27 @@ function ChannelGroup({
           </button>
         );
       })}
-    </section>
+    </ChatSidebarGroupSection>
   );
 }
 
 function UserResultGroup({
+  collapsed,
   currentUserId,
   onOpenConversationWithUser,
+  onToggleCollapsed,
   title,
   users,
 }: {
+  collapsed: boolean;
   currentUserId?: string;
   onOpenConversationWithUser: (userId: string) => void;
+  onToggleCollapsed: (groupId: ChatSidebarGroupId) => void;
   title: string;
   users: ChatUser[];
 }) {
   return (
-    <section className="orf-chat-channel-group">
-      <div className="orf-chat-channel-group-title">
-        <span>
-          <ChevronDown className="h-3.5 w-3.5" />
-          {title}
-        </span>
-      </div>
+    <ChatSidebarGroupSection collapsed={collapsed} groupId="members" title={title} onToggleCollapsed={onToggleCollapsed}>
       <div className="orf-chat-user-results">
         {users.map((user) => (
           <button
@@ -447,6 +469,47 @@ function UserResultGroup({
             <MessageSquare className="h-4 w-4" />
           </button>
         ))}
+      </div>
+    </ChatSidebarGroupSection>
+  );
+}
+
+function ChatSidebarGroupSection({
+  action,
+  children,
+  collapsed,
+  groupId,
+  onToggleCollapsed,
+  title,
+}: {
+  action?: ReactNode;
+  children: ReactNode;
+  collapsed: boolean;
+  groupId: ChatSidebarGroupId;
+  onToggleCollapsed: (groupId: ChatSidebarGroupId) => void;
+  title: string;
+}) {
+  const contentId = useId();
+  const expanded = !collapsed;
+  const Icon = expanded ? ChevronDown : ChevronRight;
+  return (
+    <section className="orf-chat-channel-group" data-collapsed={collapsed ? "true" : "false"}>
+      <div className="orf-chat-channel-group-title">
+        <button
+          type="button"
+          className="orf-chat-channel-group-toggle"
+          aria-controls={contentId}
+          aria-expanded={expanded}
+          title={expanded ? `收起${title}` : `展开${title}`}
+          onClick={() => onToggleCollapsed(groupId)}
+        >
+          <Icon className="h-3.5 w-3.5" />
+          <span className="truncate">{title}</span>
+        </button>
+        {action}
+      </div>
+      <div className="orf-chat-channel-group-items" id={contentId} hidden={collapsed}>
+        {children}
       </div>
     </section>
   );

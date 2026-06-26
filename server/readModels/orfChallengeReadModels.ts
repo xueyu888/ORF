@@ -4,7 +4,7 @@ import { objectiveChallengeEntryClosed } from "../../src/domain/orfChallengeEntr
 import {
   canAcceptObjectiveChallengeByFlow,
   canApplyForObjectiveChallenge,
-  isObjectiveChallengeDiscoverableByFlow,
+  isObjectiveVisibleInBountyHallByFlow,
 } from "../../src/domain/orfLifecycle";
 import {
   isObjectiveAssignedChallenger,
@@ -24,7 +24,7 @@ import {
 } from "../db/schema";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
-import { getTaskManagementData, type TaskManagementDataScope } from "./orfTaskManagementReadModel";
+import { getTaskManagementData, userProfilesForTaskManagementData, type TaskManagementDataScope } from "./orfTaskManagementReadModel";
 import {
   getUserMapsForStorageScope,
   groupEvidenceIdsByResult,
@@ -61,7 +61,7 @@ function compareBountyItems(left: BountyHallItem, right: BountyHallItem) {
 }
 
 function objectiveVisibleInBountyHall(objective: Objective) {
-  return isObjectiveChallengeDiscoverableByFlow(objective) && !objectiveChallengeEntryClosed(objective);
+  return isObjectiveVisibleInBountyHallByFlow(objective);
 }
 
 function objectiveAvailableForBountyApplication(objective: Objective) {
@@ -141,10 +141,9 @@ function bountyContributionSummary(input: {
   objectives: Objective[];
   pointLedger: PointLedgerEntry[];
 }) {
-  const ledgerPoints = input.pointLedger
-    .filter((entry) => entry.userId === input.memberUserId)
-    .reduce((sum, entry) => sum + entry.points, 0);
-  if (ledgerPoints > 0) {
+  const ledgerEntries = input.pointLedger.filter((entry) => entry.userId === input.memberUserId);
+  if (ledgerEntries.length > 0) {
+    const ledgerPoints = ledgerEntries.reduce((sum, entry) => sum + entry.points, 0);
     return { points: ledgerPoints };
   }
 
@@ -252,8 +251,9 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
   const checklistItemIds = new Set(tasksForMember.flatMap((task) => task.checklist.map((item) => item.id)));
   const feedbackIssueIds = new Set(data.feedback.map((item) => item.id));
 
-  return {
+  const scopedData: TaskManagementData = {
     projects: data.projects.filter((project) => objectivesForMember.some((objective) => objective.projectId === project.id)),
+    userProfiles: [],
     objectives: objectivesForMember,
     results: resultsForMember,
     tasks: tasksForMember,
@@ -262,8 +262,14 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
     comments: filterComments(data, { feedbackIssueIds, objectiveIds, resultIds, taskIds, checklistItemIds }),
     objectiveLoot: data.objectiveLoot.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveTrialReviews: data.objectiveTrialReviews.filter((item) => objectiveIds.has(item.objectiveId)),
+    objectiveAcceptanceReviews: data.objectiveAcceptanceReviews.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveAlignmentRequests: data.objectiveAlignmentRequests.filter((item) => objectiveIds.has(item.objectiveId)),
+    objectiveSettlementEvents: data.objectiveSettlementEvents.filter((item) => objectiveIds.has(item.objectiveId)),
     pointLedger: data.pointLedger,
     pendingChallengeApplications,
+  };
+  return {
+    ...scopedData,
+    userProfiles: userProfilesForTaskManagementData(scopedData, data.userProfiles),
   };
 }

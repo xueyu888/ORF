@@ -3,6 +3,7 @@ import { canReviewObjectiveTrialReview, latestObjectiveTrialReview } from "../..
 import {
   canFreezeObjectiveAfterReestimate,
   canRecruitObjectiveChallengersByFlow,
+  canReinforceObjectiveChallengersByFlow,
   canReviewObjectiveLootByFlow,
   canSettleObjectiveLootByFlow,
   canSubmitObjectiveContributionReviewByFlow,
@@ -12,6 +13,8 @@ import {
   isObjectiveSettledOrClosed,
   type ObjectiveFreezeReadiness,
 } from "../../../domain/orfLifecycle";
+import { objectiveChallengeEntryClosed } from "../../../domain/orfChallengeEntry";
+import { objectiveSettlementReviewWindow } from "../../../domain/orfSettlement";
 import {
   canMutateObjectiveWorkItemsForActor,
   objectiveWorkItemMutationAccess,
@@ -21,6 +24,7 @@ import { canEditObjectiveContentForUser } from "../../../domain/orfObjectiveCont
 import { isObjectiveChallenger } from "../../../domain/orfObjectiveParticipants";
 import type {
   Objective,
+  ObjectiveSettlementEvent,
   ObjectiveTrialReview,
   OrfUser,
   PermissionRule,
@@ -48,16 +52,23 @@ type WorkbenchAction = {
   label: string;
   to: string;
 };
+type PeerReviewSettlementEvent = Pick<ObjectiveSettlementEvent, "kind">;
 
 export function isObjectiveResultLocked(objective: Objective | undefined): boolean {
-  return isObjectiveResultLockedByFlow(objective) || Boolean(objective?.acceptedResult);
+  return isObjectiveResultLockedByFlow(objective);
 }
 
 export function isObjectiveRecruitable(objective: Objective): boolean {
   return (
     canRecruitObjectiveChallengersByFlow(objective) &&
-    !isObjectiveSettledOrClosed(objective) &&
-    !objective.acceptedResult
+    !isObjectiveSettledOrClosed(objective)
+  );
+}
+
+export function isObjectiveReinforceable(objective: Objective): boolean {
+  return (
+    canReinforceObjectiveChallengersByFlow(objective) &&
+    !objectiveChallengeEntryClosed(objective)
   );
 }
 
@@ -190,6 +201,21 @@ export function canRecruitObjectiveChallengers({
   );
 }
 
+export function canReinforceObjectiveChallengers({
+  objective,
+  currentUser,
+  permissionRules,
+}: {
+  objective: Objective;
+  currentUser: OrfUser | null;
+  permissionRules: PermissionRule[];
+}): boolean {
+  return (
+    hasPermission(currentUser, permissionRules, "challenge.assign") &&
+    isObjectiveReinforceable(objective)
+  );
+}
+
 export function canSubmitObjectiveLoot(
   objective: Objective | undefined,
   currentUser: OrfUser | null,
@@ -204,14 +230,28 @@ export function canSubmitObjectiveLoot(
 }
 
 export function canSubmitObjectivePeerReview(
-  objective: Objective | undefined,
-  currentUser: OrfUser | null,
+  {
+    objective,
+    currentUser,
+    settlementEvents,
+    today,
+  }: {
+    objective: Objective | undefined;
+    currentUser: OrfUser | null;
+    settlementEvents: readonly PeerReviewSettlementEvent[];
+    today: string;
+  },
 ): boolean {
   return Boolean(
     objective &&
       currentUser &&
       currentUser.role === "member" &&
       canSubmitObjectiveContributionReviewByFlow(objective) &&
+      objectiveSettlementReviewWindow({
+        objective,
+        settlementEvents,
+        today,
+      }).open &&
       (objective.challengerUserIds ?? []).includes(currentUser.id),
   );
 }
@@ -237,10 +277,14 @@ export function canSettleObjectiveLoot(
 export function workbenchActionForObjective({
   objective,
   currentUser,
+  settlementEvents,
+  today,
   trialReviews = [],
 }: {
   objective: Objective;
   currentUser: OrfUser | null;
+  settlementEvents: readonly PeerReviewSettlementEvent[];
+  today: string;
   trialReviews?: ObjectiveTrialReview[];
 }): WorkbenchAction | null {
   const trialReview = latestObjectiveTrialReview(objective.id, trialReviews);
@@ -276,7 +320,12 @@ export function workbenchActionForObjective({
     };
   }
 
-  if (canSubmitObjectivePeerReview(objective, currentUser)) {
+  if (canSubmitObjectivePeerReview({
+    objective,
+    currentUser,
+    settlementEvents,
+    today,
+  })) {
     return {
       kind: "submitPeerReview",
       label: "提交匿名互评",

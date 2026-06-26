@@ -478,6 +478,7 @@ function flowStatusLabel(status: ObjectiveFlowStatus) {
     open: "开放",
     recruiting: "征召",
     reestimating: "重估",
+    revisionRequired: "待返工",
     settled: "已结算",
     submitted: "待验收",
   };

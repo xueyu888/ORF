@@ -523,7 +523,7 @@ async function reserveGitHubDelivery(context: GitHubDeliveryContext, channelId: 
         status,
         updated_at
       )
-      values ($1, $2, $3, $4, $5, $6, 'reserved', now())
+      values ($1, $2, $3, $4, $5, $6, $7, 'reserved', now())
       on conflict (delivery_key) do update
       set channel_id = excluded.channel_id,
           source = excluded.source,

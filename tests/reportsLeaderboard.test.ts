@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildLeaderboardRows } from "../src/features/reports/model/leaderboard";
-import type { Objective, PointLedgerEntry, OrfUser } from "../src/types/orf";
+import type { Objective, PointLedgerEntry, OrfUser, OrfUserDisplayProfile } from "../src/types/orf";
 
 const users: OrfUser[] = [
   { id: "user-a", name: "成员甲", email: "a@example.com", role: "member", status: "active" },
@@ -59,11 +59,13 @@ function ledger(input: Partial<PointLedgerEntry>): PointLedgerEntry {
 function state(input: {
   objectives?: Objective[];
   pointLedger?: PointLedgerEntry[];
+  userProfiles?: OrfUserDisplayProfile[];
   users?: OrfUser[];
 }) {
   return {
     objectives: [],
     pointLedger: [],
+    userProfiles: [],
     users,
     ...input,
   };
@@ -85,6 +87,28 @@ test("leaderboard counts only formal participants with point ledger rows", () =>
   assert.equal(rows.find((row) => row.memberName === "临时参与"), undefined);
   assert.equal(rows[0]?.completionRate, 100);
   assert.equal(rows[0]?.rankChange.kind, "unavailable");
+});
+
+test("leaderboard uses public user display profiles when full users are not loaded", () => {
+  const rows = buildLeaderboardRows(
+    state({
+      objectives: [objective({})],
+      pointLedger: [
+        ledger({ memberName: "c8ddd02a-c56d-42ee-874d-ada6d36f44ab", points: 40, userId: "user-b" }),
+        ledger({ memberName: "5038c983-8509-4f91-a935-d92fa6bdde65", points: 30, userId: "user-c" }),
+      ],
+      userProfiles: [
+        { avatarUrl: "/api/users/user-b/avatar?v=avatar-b", id: "user-b", name: "汪万庆" },
+        { avatarUrl: "/api/users/user-c/avatar?v=avatar-c", id: "user-c", name: "夏伟" },
+      ],
+      users: [{ id: "user-a", name: "当前用户", email: "current@example.com", role: "admin", status: "active" }],
+    }),
+    "all",
+  );
+
+  assert.deepEqual(rows.map((row) => row.memberName), ["汪万庆", "夏伟"]);
+  assert.equal(rows[0]?.avatarUrl, "/api/users/user-b/avatar?v=avatar-b");
+  assert.equal(rows[1]?.avatarUrl, "/api/users/user-c/avatar?v=avatar-c");
 });
 
 test("leaderboard keeps formal failed evaluations with zero points", () => {

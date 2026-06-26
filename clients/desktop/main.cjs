@@ -37,6 +37,12 @@ const DESKTOP_CREDENTIALS_MAX_ACCOUNTS = 10;
 const DESKTOP_CREDENTIALS_FILE_NAME = "saved-login-accounts.v1.json";
 const DESKTOP_SETTINGS_FILE_NAME = "desktop-settings.v1.json";
 const DESKTOP_STABLE_DATA_DIR_NAME = "ORF";
+const DESKTOP_MAIN_WINDOW_SIZE = Object.freeze({
+  height: 900,
+  minHeight: 680,
+  minWidth: 820,
+  width: 1360,
+});
 const DESKTOP_WORKBENCH_ZOOM_MIN = -2;
 const DESKTOP_WORKBENCH_ZOOM_MAX = 4;
 const DESKTOP_SYSTEM_IDLE_THRESHOLD_SECONDS = 10 * 60;
@@ -91,22 +97,14 @@ function resolveClientUrl() {
 
 function createMainWindow(clientUrl, options = {}) {
   const mainWindow = new BrowserWindow({
-    width: 1360,
-    height: 900,
-    minWidth: 1024,
-    minHeight: 680,
+    ...DESKTOP_MAIN_WINDOW_SIZE,
     title: "ORF",
     icon: resolveDesktopIconPath(),
     frame: false,
     backgroundColor: "#f6f8fb",
     autoHideMenuBar: true,
     show: options.show !== false,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload: path.join(__dirname, "preload.cjs"),
-      sandbox: true,
-    },
+    webPreferences: desktopBrowserWindowWebPreferences(),
   });
   const webContentsId = mainWindow.webContents.id;
   desktopShellState.clientUrl = clientUrl;
@@ -116,6 +114,12 @@ function createMainWindow(clientUrl, options = {}) {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     const targetUrl = new URL(url);
     if (targetUrl.origin === clientUrl.origin) {
+      if (isChatImagePopoutUrl(targetUrl)) {
+        return {
+          action: "allow",
+          overrideBrowserWindowOptions: chatImagePopoutBrowserWindowOptions(),
+        };
+      }
       return { action: "allow" };
     }
     void shell.openExternal(url);
@@ -164,6 +168,33 @@ function createMainWindow(clientUrl, options = {}) {
   void mainWindow.loadURL(clientUrl.toString());
   updateDesktopUnreadState();
   return mainWindow;
+}
+
+function desktopBrowserWindowWebPreferences() {
+  return {
+    contextIsolation: true,
+    nodeIntegration: false,
+    preload: path.join(__dirname, "preload.cjs"),
+    sandbox: true,
+  };
+}
+
+function isChatImagePopoutUrl(url) {
+  return url.pathname.startsWith("/chat/image-popout/");
+}
+
+function chatImagePopoutBrowserWindowOptions() {
+  return {
+    autoHideMenuBar: true,
+    backgroundColor: "#f7f8fb",
+    frame: false,
+    minHeight: 360,
+    minWidth: 520,
+    resizable: true,
+    show: true,
+    title: "ORF 图片窗口",
+    webPreferences: desktopBrowserWindowWebPreferences(),
+  };
 }
 
 function resolveDesktopIconPath() {

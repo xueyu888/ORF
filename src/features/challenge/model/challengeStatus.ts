@@ -19,10 +19,10 @@ export const bountyStatusLabel: Record<BountyStatus, string> = {
 
 export function bountyStatus(result: Result, objective?: Objective): BountyStatus {
   if (objective) {
-    if (isObjectiveSettledOrClosed(objective) || objective.objectiveSettlementPoints != null) return "settled";
-    if (isObjectiveAcceptedByFlow(objective) || objective.acceptedResult) return "accepted";
-    if (isObjectiveSubmittedByFlow(objective) || objective.lootSubmittedAt) return "review";
-    if (isObjectiveChallengeAcceptedByFlow(objective) || objective.challengers.length > 0) return "active";
+    if (isObjectiveSettledOrClosed(objective)) return "settled";
+    if (isObjectiveAcceptedByFlow(objective)) return "accepted";
+    if (isObjectiveSubmittedByFlow(objective)) return "review";
+    if (isObjectiveChallengeAcceptedByFlow(objective)) return "active";
     return "open";
   }
   if (result.acceptedResult === "completed" || result.acceptedResult === "falsified") return "settled";
@@ -50,7 +50,6 @@ export function objectiveStatusLabel(objective: Objective) {
 
 export function objectiveStatusTone(objective: Objective) {
   if (objectiveComplete(objective)) return "done";
-  if (objective.lootSubmittedAt) return "review";
   const flowTone = objectiveFlowTone(objective);
   if (flowTone) return flowTone;
   if (objective.status === "At Risk" || objective.status === "Blocked") return "warning";
