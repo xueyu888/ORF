@@ -15,6 +15,8 @@ import {
 } from "../domain/orfObjectiveParticipants";
 import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
 import { taskIdsForObjective } from "../domain/orfWorkItems";
+import { userDisplayProfilesFromUsers } from "../domain/userDisplayProfile";
+import { sortFeedbackIssuesByUpdatedAtDescending } from "../features/feedback/model/feedbackIssueOrdering";
 import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfProject, OrfState, Result, Task, TaskStatus } from "../types/orf";
 import { addCalendarDays, localDateString } from "../utils/date";
@@ -202,6 +204,8 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
   failureSamples: state.failureSamples.filter((item) => !targets.resultIds.has(item.linkedResultId)),
   objectiveLoot: state.objectiveLoot.filter((item) => !targets.objectiveIds.has(item.objectiveId)),
   objectiveTrialReviews: (state.objectiveTrialReviews ?? []).filter((item) => !targets.objectiveIds.has(item.objectiveId)),
+  objectiveAcceptanceReviews: (state.objectiveAcceptanceReviews ?? []).filter((item) => !targets.objectiveIds.has(item.objectiveId)),
+  objectiveSettlementEvents: (state.objectiveSettlementEvents ?? []).filter((item) => !targets.objectiveIds.has(item.objectiveId)),
   pointLedger: state.pointLedger.filter((item) => !targets.objectiveIds.has(item.objectiveId)),
   comments: removeCommentsForTargets(state.comments, {
     objectiveIds: targets.objectiveIds,
@@ -227,7 +231,9 @@ export const emptyBusinessState = (): OrfState => ({
   comments: [],
   objectiveLoot: [],
   objectiveTrialReviews: [],
+  objectiveAcceptanceReviews: [],
   objectiveAlignmentRequests: [],
+  objectiveSettlementEvents: [],
   pointLedger: [],
 });
 
@@ -262,6 +268,7 @@ export const normalizeState = (state: OrfState): OrfState => {
   return {
     ...state,
     users: normalizedUsers,
+    userProfiles: state.userProfiles ?? userDisplayProfilesFromUsers(normalizedUsers),
     currentUserId: state.currentUserId ?? initialOrfState.currentUserId,
     projects: (state.projects ?? []).map((project) => normalizeProject(project)).filter((project): project is OrfProject => Boolean(project)),
     comments: (state.comments ?? []).map((thread) => ({
@@ -273,8 +280,11 @@ export const normalizeState = (state: OrfState): OrfState => {
     tasks,
     objectiveLoot: state.objectiveLoot ?? [],
     objectiveTrialReviews: state.objectiveTrialReviews ?? [],
+    objectiveAcceptanceReviews: state.objectiveAcceptanceReviews ?? [],
     objectiveAlignmentRequests: state.objectiveAlignmentRequests ?? [],
+    objectiveSettlementEvents: state.objectiveSettlementEvents ?? [],
     pointLedger: state.pointLedger ?? [],
+    feedback: sortFeedbackIssuesByUpdatedAtDescending(state.feedback ?? []),
   };
 };
 
@@ -469,7 +479,7 @@ export class OrfFlowStore {
 
     return {
       ...state,
-      feedback: [feedback, ...state.feedback],
+      feedback: sortFeedbackIssuesByUpdatedAtDescending([feedback, ...state.feedback]),
     };
   }
 
@@ -955,7 +965,7 @@ export class OrfFlowStore {
     const now = currentDate();
     return {
       ...state,
-      feedback: state.feedback.map((item) =>
+      feedback: sortFeedbackIssuesByUpdatedAtDescending(state.feedback.map((item) =>
         item.id === feedbackId
           ? {
               ...item,
@@ -964,7 +974,7 @@ export class OrfFlowStore {
               activity: [...item.activity, { id: makeId("act"), actor: currentUserName(state), action: `更新反馈状态`, at: now }],
             }
           : item,
-      ),
+      )),
     };
   }
 

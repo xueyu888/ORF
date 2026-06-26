@@ -11,6 +11,7 @@ import type {
   OrfProject,
   ObjectiveTrialReview,
   OrfState,
+  OrfUserDisplayProfile,
   Result,
   Task,
 } from "../../src/types/orf";
@@ -22,8 +23,10 @@ import {
   evidence,
   feedback,
   feedbackCauseCategories,
+  objectiveAcceptanceReviews,
   objectiveAlignmentRequests,
   objectiveLoot,
+  objectiveSettlementEvents,
   objectives,
   objectiveTrialReviews,
   projects,
@@ -46,7 +49,9 @@ import {
   groupResultTrends,
   groupResultsByObjective,
   groupTaskIdsByObjective,
+  mapObjectiveAcceptanceReviewRows,
   mapObjectiveRows,
+  mapObjectiveSettlementEventRows,
   mapPointLedgerRows,
   mapResultRows,
   nameForUserId,
@@ -128,6 +133,81 @@ function taskDefinitionContributorUserIds(task: TaskRow) {
     : uniqueParticipantUserIds([task.createdBy, task.updatedBy]);
 }
 
+function addUserId(ids: Set<string>, value: string | null | undefined) {
+  const userId = value?.trim();
+  if (userId) ids.add(userId);
+}
+
+function addUserIds(ids: Set<string>, values: Array<string | null | undefined> | undefined) {
+  for (const value of values ?? []) {
+    addUserId(ids, value);
+  }
+}
+
+function addObjectiveUserIds(ids: Set<string>, objective: Objective) {
+  addUserIds(ids, objective.challengerUserIds);
+  addUserIds(ids, objective.assignedChallengerUserIds);
+  for (const application of objective.challengeApplications ?? []) {
+    addUserId(ids, application.applicantUserId);
+  }
+}
+
+export function userProfilesForTaskManagementData(
+  data: TaskManagementData,
+  profiles: readonly OrfUserDisplayProfile[] = data.userProfiles,
+) {
+  const ids = new Set<string>();
+  for (const objective of data.objectives) {
+    addObjectiveUserIds(ids, objective);
+  }
+  for (const result of data.results) {
+    addUserId(ids, result.definerUserId);
+  }
+  for (const task of data.tasks) {
+    addUserId(ids, task.assigneeUserId);
+    addUserId(ids, task.createdBy);
+    addUserId(ids, task.updatedBy);
+    addUserIds(ids, task.definitionContributorUserIds);
+  }
+  for (const item of data.evidence) {
+    addUserId(ids, item.ownerUserId);
+  }
+  for (const item of data.feedback) {
+    addUserId(ids, item.ownerUserId);
+    addUserId(ids, item.createdBy);
+    addUserId(ids, item.updatedBy);
+  }
+  for (const item of data.objectiveLoot) {
+    addUserId(ids, item.submittedByUserId);
+  }
+  for (const item of data.objectiveTrialReviews) {
+    addUserId(ids, item.requestedByUserId);
+    addUserId(ids, item.reviewedByUserId);
+  }
+  for (const item of data.objectiveAlignmentRequests) {
+    addUserId(ids, item.requestedByUserId);
+    addUserId(ids, item.reviewedByUserId);
+  }
+  for (const item of data.pointLedger) {
+    addUserId(ids, item.userId);
+  }
+  for (const thread of data.comments) {
+    addUserId(ids, thread.createdBy);
+    for (const message of thread.messages) {
+      addUserId(ids, message.authorUserId);
+    }
+  }
+  for (const pending of data.pendingChallengeApplications) {
+    addUserId(ids, pending.application.applicantUserId);
+    addObjectiveUserIds(ids, pending.objective);
+    for (const result of pending.results) {
+      addUserId(ids, result.definerUserId);
+    }
+  }
+
+  return profiles.filter((profile) => ids.has(profile.id));
+}
+
 export async function getTaskManagementData(scope: TaskManagementDataScope = {}): Promise<TaskManagementData> {
   const storageScopeId = scopedStorageId(scope);
   const objectiveRows = storageScopeId
@@ -137,14 +217,26 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const resultRows = storageScopeId ? await db.select().from(results).where(eq(results.teamId, storageScopeId)) : await db.select().from(results);
   const taskRows = storageScopeId ? await db.select().from(tasks).where(eq(tasks.teamId, storageScopeId)) : await db.select().from(tasks);
   const evidenceRows = storageScopeId ? await db.select().from(evidence).where(eq(evidence.teamId, storageScopeId)) : await db.select().from(evidence);
-  const feedbackRows = storageScopeId ? await db.select().from(feedback).where(eq(feedback.teamId, storageScopeId)) : await db.select().from(feedback);
+  const feedbackRows = storageScopeId
+    ? await db
+        .select()
+        .from(feedback)
+        .where(eq(feedback.teamId, storageScopeId))
+        .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id))
+    : await db.select().from(feedback).orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id));
   const objectiveLootRows = storageScopeId ? await db.select().from(objectiveLoot).where(eq(objectiveLoot.teamId, storageScopeId)) : await db.select().from(objectiveLoot);
   const objectiveTrialReviewRows = storageScopeId
     ? await db.select().from(objectiveTrialReviews).where(eq(objectiveTrialReviews.teamId, storageScopeId))
     : await db.select().from(objectiveTrialReviews);
+  const objectiveAcceptanceReviewRows = storageScopeId
+    ? await db.select().from(objectiveAcceptanceReviews).where(eq(objectiveAcceptanceReviews.teamId, storageScopeId))
+    : await db.select().from(objectiveAcceptanceReviews);
   const objectiveAlignmentRequestRows = storageScopeId
     ? await db.select().from(objectiveAlignmentRequests).where(eq(objectiveAlignmentRequests.teamId, storageScopeId))
     : await db.select().from(objectiveAlignmentRequests);
+  const objectiveSettlementEventRows = storageScopeId
+    ? await db.select().from(objectiveSettlementEvents).where(eq(objectiveSettlementEvents.teamId, storageScopeId))
+    : await db.select().from(objectiveSettlementEvents);
   const pointLedgerRows = storageScopeId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId)) : await db.select().from(pointLedger);
   const resultIds = resultRows.map((result) => result.id);
   const taskIds = taskRows.map((task) => task.id);
@@ -153,7 +245,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const checklistRows = await getChecklistRows(taskIds);
   const causeRows = await getFeedbackCauseRows(feedbackIssueIds);
   const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
-  const { userNameById } = await getUserMapsForStorageScope(storageScopeId);
+  const { userNameById, userProfiles: scopeUserProfiles } = await getUserMapsForStorageScope(storageScopeId);
   const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
   const objectiveParticipantAvatarUrls = await getUserAvatarUrlMap(objectiveRows.flatMap((objective) => [...objective.challengerUserIds, ...objective.assignedChallengerUserIds]));
   const commentAuthorAvatarUrls = await getUserAvatarUrlMap(commentMessageRows.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
@@ -314,6 +406,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       reviewedAt: item.reviewedAt,
       requestedAt: item.requestedAt,
     }));
+  const objectiveAcceptanceReviewItems = mapObjectiveAcceptanceReviewRows(objectiveAcceptanceReviewRows);
   const objectiveAlignmentRequestItems: ObjectiveAlignmentRequest[] = objectiveAlignmentRequestRows
     .sort((left, right) => right.proposedAt.localeCompare(left.proposedAt))
     .map((item) => ({
@@ -327,11 +420,13 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       scheduledAt: item.scheduledAt,
       meetingRoom: item.meetingRoom,
       note: item.note,
+      confirmationDueAt: item.confirmationDueAt,
       commanderFeedback: item.commanderFeedback,
       reviewedBy: item.reviewedByUserId || item.reviewedBy ? nameForUserId(userNameById, item.reviewedByUserId, item.reviewedBy ?? "") : null,
       reviewedByUserId: optional(item.reviewedByUserId),
       reviewedAt: item.reviewedAt,
     }));
+  const objectiveSettlementEventItems = mapObjectiveSettlementEventRows(objectiveSettlementEventRows);
   const pointLedgerItems = mapPointLedgerRows({ pointLedgerRows, userNameById });
   const commentItems: CommentThread[] = [...commentThreadRows]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
@@ -347,7 +442,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       messages: messagesByThread.get(thread.id) ?? [],
     }));
 
-  return {
+  const data: TaskManagementData = {
     projects: projectItems,
     objectives: objectiveItems,
     results: resultItems,
@@ -357,9 +452,16 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     comments: commentItems,
     objectiveLoot: objectiveLootItems,
     objectiveTrialReviews: objectiveTrialReviewItems,
+    objectiveAcceptanceReviews: objectiveAcceptanceReviewItems,
     objectiveAlignmentRequests: objectiveAlignmentRequestItems,
+    objectiveSettlementEvents: objectiveSettlementEventItems,
     pointLedger: pointLedgerItems,
+    userProfiles: [],
     pendingChallengeApplications: [],
+  };
+  return {
+    ...data,
+    userProfiles: userProfilesForTaskManagementData(data, scopeUserProfiles),
   };
 }
 

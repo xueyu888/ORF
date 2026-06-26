@@ -15,7 +15,7 @@ import type { ObjectiveNode } from "./types";
 export type ChallengeCycleFilter = "all" | string;
 export type ChallengeMemberFilter = "all" | string;
 export type ChallengeProjectFilter = "all" | "unassigned" | string;
-export type ChallengeStatusFilter = "all" | "unassigned" | "pendingReestimate" | "active" | "review" | "accepted" | "settled";
+export type ChallengeStatusFilter = "all" | "unassigned" | "pendingReestimate" | "active" | "review" | "revisionRequired" | "accepted" | "settled";
 
 export interface ChallengeFilters {
   cycle: ChallengeCycleFilter;
@@ -35,6 +35,7 @@ export const challengeStatusFilterOptions: Array<{ label: string; value: Challen
   { label: "待重估", value: "pendingReestimate" },
   { label: "执行中", value: "active" },
   { label: "待验收", value: "review" },
+  { label: "待返工", value: "revisionRequired" },
   { label: "已验收", value: "accepted" },
   { label: "已结算", value: "settled" },
 ];
@@ -79,6 +80,7 @@ function challengeGroupMatchesStatus(group: ObjectiveNode, status: ChallengeStat
   if (status === "pendingReestimate") return isObjectiveReestimatingByFlow(group.objective);
   if (status === "active") return group.objective.flowStatus === "frozen";
   if (status === "review") return isObjectiveSubmittedByFlow(group.objective);
+  if (status === "revisionRequired") return group.objective.flowStatus === "revisionRequired";
   if (status === "accepted") return isObjectiveAcceptedByFlow(group.objective);
   return isObjectiveSettledOrClosed(group.objective);
 }

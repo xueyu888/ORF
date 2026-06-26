@@ -19,9 +19,12 @@ export type TaskManagementData = Pick<
   | "comments"
   | "objectiveLoot"
   | "objectiveTrialReviews"
+  | "objectiveAcceptanceReviews"
   | "objectiveAlignmentRequests"
+  | "objectiveSettlementEvents"
   | "pointLedger"
   | "projects"
+  | "userProfiles"
 > & {
   pendingChallengeApplications: PendingChallengeApplication[];
 };

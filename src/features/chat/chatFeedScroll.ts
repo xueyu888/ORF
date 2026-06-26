@@ -35,9 +35,17 @@ export function scrollChatFeedToMessage(
   options: ChatFeedScrollOptions = {},
 ) {
   if (!element) return false;
-  const target = Array.from(element.querySelectorAll<HTMLElement>("[data-chat-message-id]"))
-    .find((item) => item.dataset.chatMessageId === messageId) ?? null;
+  const target = findChatFeedMessageElement(element, messageId);
   return scrollChatFeedToElement(element, target, options);
+}
+
+export function isChatFeedMessageVisible(element: HTMLElement | null, messageId: string, margin = 24) {
+  if (!element) return false;
+  const target = findChatFeedMessageElement(element, messageId);
+  if (!target) return false;
+  const elementRect = element.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  return targetRect.bottom > elementRect.top + margin && targetRect.top < elementRect.bottom - margin;
 }
 
 export function scrollChatFeedToUnread(element: HTMLElement | null, options: ChatFeedScrollOptions = {}) {
@@ -91,6 +99,11 @@ function scrollChatFeedToElement(
     : targetTop - offset;
   setChatFeedScrollTop(element, Math.max(0, nextTop), behavior);
   return true;
+}
+
+function findChatFeedMessageElement(element: HTMLElement, messageId: string) {
+  return Array.from(element.querySelectorAll<HTMLElement>("[data-chat-message-id]"))
+    .find((item) => item.dataset.chatMessageId === messageId) ?? null;
 }
 
 function setChatFeedScrollTop(element: HTMLElement, top: number, behavior: ScrollBehavior) {

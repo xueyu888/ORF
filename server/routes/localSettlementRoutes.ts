@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { requireAdminContext, requireTargetInScope, requireUserScopeContext } from "../auth/accessPolicy";
 import { db } from "../db/client";
-import { objectives, results } from "../db/schema";
+import { objectiveSettlementEvents, objectives, results } from "../db/schema";
 import {
   fetchLocalSettlementService,
   LocalSettlementServiceUnavailableError,
@@ -11,10 +11,11 @@ import {
   type LocalSettlementServiceResponse,
 } from "../localSettlement/localSettlementProxy";
 import { runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
-import { canSettleObjectiveLootByFlow, canSubmitObjectiveContributionReviewByFlow } from "../../src/domain/orfLifecycle";
-import { calibratedResultPoints } from "../../src/domain/orfSettlement";
+import { canSubmitObjectiveContributionReviewByFlow } from "../../src/domain/orfLifecycle";
+import { calibratedResultPoints, objectiveSettlementReviewWindow } from "../../src/domain/orfSettlement";
 import { isObjectiveChallenger, objectiveParticipantSnapshot } from "../../src/domain/orfObjectiveParticipants";
 import type { ContributionReviewDraftMetricRow, ContributionReviewMetricRow } from "../../src/types/orf";
+import { localDateString } from "../../src/utils/date";
 import { getUserMapsForStorageScope } from "../readModels/orfReadModelMappers";
 
 const objectiveParamsSchema = z.object({ objectiveId: z.string().min(1) });
@@ -61,7 +62,7 @@ const reviewSubmitBodySchema = z.discriminatedUnion("kind", [
 ]);
 type SettlementObjective = Pick<
   typeof objectives.$inferSelect,
-  "challengerUserIds" | "flowStatus" | "id" | "teamId" | "title"
+  "challengerUserIds" | "finalDueAt" | "flowStatus" | "id" | "teamId" | "title"
 >;
 type ContributionTarget = {
   member: string;
@@ -86,6 +87,7 @@ async function settlementObjectiveInScope(objectiveId: string, scope: RuntimeSco
   const [objective] = await db
     .select({
       challengerUserIds: objectives.challengerUserIds,
+      finalDueAt: objectives.finalDueAt,
       flowStatus: objectives.flowStatus,
       id: objectives.id,
       teamId: objectives.teamId,
@@ -126,6 +128,13 @@ async function contributionChallengerTargets(objective: SettlementObjective, par
   return requestedTargets.every((target) => target.member.trim()) ? requestedTargets : null;
 }
 
+async function objectiveSettlementEventsForObjective(objectiveId: string) {
+  return await db
+    .select({ kind: objectiveSettlementEvents.kind })
+    .from(objectiveSettlementEvents)
+    .where(eq(objectiveSettlementEvents.objectiveId, objectiveId));
+}
+
 async function reviewRouteContext(input: {
   objectiveId: string;
   reply: FastifyReply;
@@ -144,6 +153,11 @@ async function reviewRouteContext(input: {
   if (
     input.user.role !== "member" ||
     !canSubmitObjectiveContributionReviewByFlow(objective) ||
+    !objectiveSettlementReviewWindow({
+      objective,
+      settlementEvents: await objectiveSettlementEventsForObjective(objective.id),
+      today: localDateString(new Date()),
+    }).open ||
     !isObjectiveChallenger(objective, input.user.id)
   ) {
     input.reply.code(403).send({ error: "Forbidden" });
@@ -530,7 +544,15 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
     const body = settlementSummaryBodySchema.parse(request.body ?? {});
     const objective = await settlementObjectiveInScope(params.objectiveId, context.scope);
     if (!objective) return reply.code(404).send({ error: "Objective not found" });
-    if (!canSettleObjectiveLootByFlow(objective)) return reply.code(409).send({ error: "Objective is not ready for settlement summary" });
+    if (
+      !objectiveSettlementReviewWindow({
+        objective,
+        settlementEvents: await objectiveSettlementEventsForObjective(objective.id),
+        today: localDateString(new Date()),
+      }).open
+    ) {
+      return reply.code(409).send({ error: "Objective is not ready for settlement summary" });
+    }
 
     const targets = await contributionChallengerTargets(objective, body.participantUserIds);
     if (!targets) return reply.code(400).send({ error: "Invalid settlement participants" });

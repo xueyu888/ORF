@@ -79,6 +79,7 @@ import {
 } from "../types/orf";
 
 const chatFeedPrefetchDelayMs = 250;
+const chatLocatedMessageHighlightMs = 3_200;
 
 function isChatGlobalShortcutEditableTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable]"));
@@ -158,8 +159,10 @@ export function ChatPage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [markingUnreadChannelsRead, setMarkingUnreadChannelsRead] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachmentFilePreviewState | null>(null);
+  const [locatedMessageId, setLocatedMessageId] = useState<string | null>(null);
   const [memberSearchFocusSignal, setMemberSearchFocusSignal] = useState(0);
   const handledBootstrapInvalidationKeyRef = useRef("");
+  const locatedMessageTimerRef = useRef<number | null>(null);
   const openChannelRequestIdRef = useRef(0);
   const { openImagePreview } = useChatFloatingImagePreview();
   const openAttachmentPreview = useCallback<ChatAttachmentPreviewHandler>((attachment, messageAttachments) => {
@@ -310,6 +313,24 @@ export function ChatPage() {
       return params;
     }, { replace: true });
   }, [setSearchParams]);
+  const holdLocatedMessageHighlight = useCallback((messageId: string) => {
+    if (locatedMessageTimerRef.current !== null) {
+      window.clearTimeout(locatedMessageTimerRef.current);
+    }
+    setLocatedMessageId(messageId);
+    locatedMessageTimerRef.current = window.setTimeout(() => {
+      setLocatedMessageId((current) => (current === messageId ? null : current));
+      locatedMessageTimerRef.current = null;
+    }, chatLocatedMessageHighlightMs);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (locatedMessageTimerRef.current !== null) {
+        window.clearTimeout(locatedMessageTimerRef.current);
+      }
+    };
+  }, []);
 
   const {
     applyMessageToFeed,
@@ -345,6 +366,7 @@ export function ChatPage() {
     notify,
     onChannelUpdate: applyChannel,
     onRequestedMessageConsumed: consumeRequestedMessage,
+    onRequestedMessageLocated: holdLocatedMessageHighlight,
     onRequestedMessageRedirect: redirectRequestedMessage,
     onThreadTarget: requestThreadTarget,
     onUnreadSummaryRefresh: refreshChatUnreadSummary,
@@ -483,6 +505,7 @@ export function ChatPage() {
   }, [openInfoPanel]);
 
   const handleOpenChannel = useCallback((channelId: string) => {
+    setLocatedMessageId(null);
     if (channelId === activeChannel?.id) {
       openChannelRequestIdRef.current += 1;
       return;
@@ -494,6 +517,13 @@ export function ChatPage() {
       navigate(`/chat/${encodeURIComponent(channelId)}`);
     });
   }, [activeChannel?.id, navigate, prefetchChannelMessages]);
+
+  const handleOpenChatResult = useCallback((result: ChatSearchResult) => {
+    applyChannel(result.channel);
+    setLocatedMessageId(null);
+    navigate(`/chat/${encodeURIComponent(result.channel.id)}?message=${encodeURIComponent(result.message.id)}`);
+    if (mobileViewport) closePanel();
+  }, [applyChannel, closePanel, mobileViewport, navigate]);
 
   const handleBackToChatList = useCallback(() => {
     openChannelRequestIdRef.current += 1;
@@ -1054,7 +1084,7 @@ export function ChatPage() {
               currentUserId={currentUser?.id}
               editingMessageId={editingMessage?.id ?? null}
               feedbackItems={feedbackLinkItems}
-              focusMessageId={focusMessageId}
+              focusMessageId={focusMessageId ?? locatedMessageId}
               hasNewerMessages={hasNewerMessages}
               hasOlderMessages={hasOlderMessages}
               loadingMessages={messagesLoading}
@@ -1135,10 +1165,7 @@ export function ChatPage() {
           collectionResults={collectionResults}
           threadSummaries={threadSummaries}
           threadSummariesLoading={threadSummariesLoading}
-          onOpenResult={(result) => {
-            navigate(`/chat/${encodeURIComponent(result.channel.id)}?message=${encodeURIComponent(result.message.id)}`);
-            if (mobileViewport) closePanel();
-          }}
+          onOpenResult={handleOpenChatResult}
           onOpenThreadSummary={(summary) => {
             navigate(`/chat/${encodeURIComponent(summary.channel.id)}?message=${encodeURIComponent(summary.rootMessage.id)}`);
             markThreadSummaryViewed(summary.rootMessage.id);

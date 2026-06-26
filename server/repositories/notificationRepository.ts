@@ -5,6 +5,7 @@ import type {
   NotificationStream,
   NotificationTargetType,
 } from "../../src/types/orf";
+import type { PoolClient } from "pg";
 import { pool } from "../db/client";
 import { ensureOrfChatBotActor } from "../integrations/orf-chat-delivery";
 import {
@@ -16,6 +17,12 @@ import {
   type NotificationMetadataInput,
   type NotificationRecipientFact,
 } from "../notifications/notificationEventModel";
+import {
+  E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+  e2eNotificationRecipientVisibilitySql,
+  isE2eNotificationActorName,
+  normalizedE2eNotificationViewerEmails,
+} from "../notifications/notificationIsolationPolicy";
 import { publishRealtimeNotification } from "../realtime/realtimeEventBus";
 import { sendChatMessage, type ChatActor } from "./chatRepository";
 import { makeId, nowIso, stableConversationName } from "./chatRepositoryModel";
@@ -410,10 +417,26 @@ async function markActorRead(input: { actorUserId?: string | null; channelId: st
   );
 }
 
+async function loadNotificationActorIsolationName(
+  client: PoolClient,
+  input: { actorName: string; actorUserId?: string | null },
+) {
+  const actorUserId = input.actorUserId?.trim();
+  if (!actorUserId) return input.actorName;
+  const { rows } = await client.query<{ name: string }>("SELECT name FROM users WHERE id = $1 LIMIT 1", [actorUserId]);
+  return rows[0]?.name?.trim() || input.actorName;
+}
+
 async function insertNotificationEvent(input: NotificationEventInput, eventId: string, createdAt: string, recipients: NotificationRecipientFact[]) {
   const client = await pool.connect();
+  const actorName = input.actorName.trim();
   try {
     await client.query("BEGIN");
+    const actorIsolationName = await loadNotificationActorIsolationName(client, {
+      actorName,
+      actorUserId: input.actorUserId,
+    });
+    const isolatedE2eActor = isE2eNotificationActorName(actorIsolationName);
     await client.query(
       `
         INSERT INTO notification_events (
@@ -428,7 +451,7 @@ async function insertNotificationEvent(input: NotificationEventInput, eventId: s
         input.teamId,
         input.stream,
         input.actorUserId?.trim() || null,
-        input.actorName.trim(),
+        actorName,
         input.kind,
         input.title.trim(),
         input.body.trim(),
@@ -455,13 +478,29 @@ async function insertNotificationEvent(input: NotificationEventInput, eventId: s
           INNER JOIN users u ON u.id = input_recipients.user_id
           INNER JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = $2
           WHERE COALESCE(u.status, 'active') = 'active'
+            AND ${e2eNotificationRecipientVisibilitySql({
+              actorNamePatternParam: "$7",
+              actorNameSql: "$6::text",
+              recipientEmailSql: "u.email",
+              recipientNameSql: "u.name",
+              viewerEmailsParam: "$8",
+            })}
           ON CONFLICT (event_id, recipient_user_id) DO NOTHING
           RETURNING recipient_user_id::text, read_at, delivered_at
         `,
-        [eventId, input.teamId, recipients.map((recipient) => recipient.userId), recipients.map((recipient) => recipient.readAt), createdAt],
+        [
+          eventId,
+          input.teamId,
+          recipients.map((recipient) => recipient.userId),
+          recipients.map((recipient) => recipient.readAt),
+          createdAt,
+          actorIsolationName,
+          E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+          normalizedE2eNotificationViewerEmails(),
+        ],
       );
 
-      if (input.stream === "personalNotification" && receiptRows.rows.length > 0) {
+      if ((input.stream === "personalNotification" || isolatedE2eActor) && receiptRows.rows.length > 0) {
         await client.query(
           `
             WITH input_deliveries AS (
@@ -486,7 +525,7 @@ async function insertNotificationEvent(input: NotificationEventInput, eventId: s
       }
     }
 
-    if (input.stream === "teamAnnouncement") {
+    if (input.stream === "teamAnnouncement" && !isolatedE2eActor) {
       await client.query(
         `
           INSERT INTO notification_deliveries (
@@ -641,7 +680,16 @@ async function notificationReceiptProjection(input: { notificationId: string; us
         r.delivered_at
       FROM notification_events e
       INNER JOIN notification_receipts r ON r.event_id = e.id AND r.recipient_user_id = $2
+      LEFT JOIN users actor ON actor.id = e.actor_user_id
+      INNER JOIN users recipient ON recipient.id = r.recipient_user_id
       WHERE e.team_id = $1
+        AND ${e2eNotificationRecipientVisibilitySql({
+          actorNamePatternParam: "$4",
+          actorNameSql: "coalesce(actor.name, e.actor_name)",
+          recipientEmailSql: "recipient.email",
+          recipientNameSql: "recipient.name",
+          viewerEmailsParam: "$5",
+        })}
         AND (
           e.id = $3
           OR EXISTS (
@@ -655,7 +703,13 @@ async function notificationReceiptProjection(input: { notificationId: string; us
         )
       LIMIT 1
     `,
-    [teamId, input.userId, input.notificationId],
+    [
+      teamId,
+      input.userId,
+      input.notificationId,
+      E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+      normalizedE2eNotificationViewerEmails(),
+    ],
   );
   return rows[0] ?? null;
 }
@@ -685,11 +739,26 @@ export async function listNotificationsForUser(userId: string, scope: RuntimeSco
         r.delivered_at
       FROM notification_events e
       INNER JOIN notification_receipts r ON r.event_id = e.id AND r.recipient_user_id = $2
+      LEFT JOIN users actor ON actor.id = e.actor_user_id
+      INNER JOIN users recipient ON recipient.id = r.recipient_user_id
       WHERE e.team_id = $1
+        AND ${e2eNotificationRecipientVisibilitySql({
+          actorNamePatternParam: "$4",
+          actorNameSql: "coalesce(actor.name, e.actor_name)",
+          recipientEmailSql: "recipient.email",
+          recipientNameSql: "recipient.name",
+          viewerEmailsParam: "$5",
+        })}
       ORDER BY r.delivered_at DESC, e.created_at DESC, e.id DESC
       LIMIT $3
     `,
-    [teamId, userId, Math.max(1, Math.min(100, limit))],
+    [
+      teamId,
+      userId,
+      Math.max(1, Math.min(100, limit)),
+      E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+      normalizedE2eNotificationViewerEmails(),
+    ],
   );
   return rows.map(toNotification);
 }
@@ -706,11 +775,20 @@ export async function getUnreadNotificationCount(userId: string, scope: RuntimeS
       SELECT count(*)::int AS count
       FROM notification_receipts r
       INNER JOIN notification_events e ON e.id = r.event_id
+      LEFT JOIN users actor ON actor.id = e.actor_user_id
+      INNER JOIN users recipient ON recipient.id = r.recipient_user_id
       WHERE e.team_id = $1
         AND r.recipient_user_id = $2
         AND r.read_at IS NULL
+        AND ${e2eNotificationRecipientVisibilitySql({
+          actorNamePatternParam: "$3",
+          actorNameSql: "coalesce(actor.name, e.actor_name)",
+          recipientEmailSql: "recipient.email",
+          recipientNameSql: "recipient.name",
+          viewerEmailsParam: "$4",
+        })}
     `,
-    [teamId, userId],
+    [teamId, userId, E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN, normalizedE2eNotificationViewerEmails()],
   );
   return Number(rows[0]?.count ?? 0);
 }
@@ -755,27 +833,45 @@ export async function markAllNotificationsRead(userId: string, scope: RuntimeSco
         UPDATE notification_receipts r
         SET read_at = $3
         FROM notification_events e
+        LEFT JOIN users actor ON actor.id = e.actor_user_id,
+             users recipient
         WHERE e.id = r.event_id
+          AND recipient.id = r.recipient_user_id
           AND e.team_id = $1
           AND r.recipient_user_id = $2
           AND r.read_at IS NULL
           AND ($4::text IS NULL OR e.stream::text = $4)
+          AND ${e2eNotificationRecipientVisibilitySql({
+            actorNamePatternParam: "$5",
+            actorNameSql: "coalesce(actor.name, e.actor_name)",
+            recipientEmailSql: "recipient.email",
+            recipientNameSql: "recipient.name",
+            viewerEmailsParam: "$6",
+          })}
         RETURNING r.event_id
       )
       SELECT count(*)::int AS count
       FROM updated
     `,
-    [teamId, userId, readAt, stream ?? null],
+    [
+      teamId,
+      userId,
+      readAt,
+      stream ?? null,
+      E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+      normalizedE2eNotificationViewerEmails(),
+    ],
   );
   return Number(rows[0]?.count ?? 0);
 }
 
 async function findExistingSystemChatMessageForDelivery(row: NotificationDeliveryEventRow): Promise<ExistingSystemChatMessageRow | null> {
-  const recipientFilter = row.stream === "personalNotification"
+  const recipientUserId = row.delivery_recipient_user_id?.trim();
+  const recipientFilter = recipientUserId
     ? "AND c.system_kind = 'personalNotification' AND c.system_recipient_user_id = $3"
     : "AND c.system_kind = 'teamAnnouncement'";
-  const params = row.stream === "personalNotification"
-    ? [row.team_id, row.event_id, row.delivery_recipient_user_id]
+  const params = recipientUserId
+    ? [row.team_id, row.event_id, recipientUserId]
     : [row.team_id, row.event_id];
   const { rows } = await pool.query<ExistingSystemChatMessageRow>(
     `
@@ -888,11 +984,13 @@ async function deliverNotificationChatDelivery(deliveryId: string): Promise<"del
     const metadataInput = metadataInputFromDelivery(row);
     const body = formatNotificationChatBody(metadataInput);
     let channelId: string | null;
-    if (row.stream === "teamAnnouncement") {
+    const recipientUserId = row.delivery_recipient_user_id?.trim();
+    if (recipientUserId) {
+      channelId = recipientUserId ? await ensurePersonalNotificationChannel({ actor, recipientUserId, teamId: row.team_id }) : null;
+    } else if (row.stream === "teamAnnouncement") {
       channelId = await ensureTeamAnnouncementChannel({ actor, teamId: row.team_id });
     } else {
-      const recipientUserId = row.delivery_recipient_user_id?.trim();
-      channelId = recipientUserId ? await ensurePersonalNotificationChannel({ actor, recipientUserId, teamId: row.team_id }) : null;
+      channelId = null;
     }
     if (!channelId) {
       throw new Error("Notification chat delivery has no active destination channel");

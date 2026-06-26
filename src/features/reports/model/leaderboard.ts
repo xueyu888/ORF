@@ -1,4 +1,5 @@
-import type { Objective, OrfState, PointLedgerEntry, OrfUser } from "../../../types/orf";
+import { userDisplayProfileMap } from "../../../domain/userDisplayProfile";
+import type { Objective, OrfState, OrfUser, OrfUserDisplayProfile, PointLedgerEntry } from "../../../types/orf";
 
 export type TimeRange = "month" | "quarter" | "year" | "all";
 
@@ -9,6 +10,7 @@ export type LeaderboardRankChange =
   | { kind: "moved"; delta: number; direction: "down" | "up"; previousRank: number };
 
 export type LeaderboardRow = {
+  avatarUrl?: string | null;
   completionRate: number;
   memberName: string;
   points: number;
@@ -17,7 +19,9 @@ export type LeaderboardRow = {
   userId: string;
 };
 
-type LeaderboardState = Pick<OrfState, "objectives" | "pointLedger" | "users">;
+type LeaderboardState = Pick<OrfState, "objectives" | "pointLedger" | "users"> & {
+  userProfiles?: OrfUserDisplayProfile[];
+};
 type DateBounds = {
   end: string;
   start: string;
@@ -114,15 +118,30 @@ function isInBounds(value: string | null | undefined, bounds: DateBounds) {
   return Boolean(key && key >= bounds.start && key < bounds.end);
 }
 
-function userIds(users: OrfUser[], pointsByUserId: Map<string, number>, objectiveCounts: Map<string, { completed: number; total: number }>) {
-  return Array.from(new Set([...users.map((user) => user.id), ...pointsByUserId.keys(), ...objectiveCounts.keys()])).filter(Boolean);
+function userIds(
+  users: OrfUser[],
+  profiles: Map<string, OrfUserDisplayProfile>,
+  pointsByUserId: Map<string, number>,
+  objectiveCounts: Map<string, { completed: number; total: number }>,
+) {
+  return Array.from(new Set([...profiles.keys(), ...users.map((user) => user.id), ...pointsByUserId.keys(), ...objectiveCounts.keys()])).filter(Boolean);
 }
 
-function buildPeriodRows(users: OrfUser[], ledger: PointLedgerEntry[], objectives: Objective[], limit?: number): PeriodLeaderboardRow[] {
-  const userNameById = new Map(users.map((user) => [user.id, user.name]));
+function buildPeriodRows(
+  users: OrfUser[],
+  userProfiles: OrfUserDisplayProfile[] | undefined,
+  ledger: PointLedgerEntry[],
+  objectives: Objective[],
+  limit?: number,
+): PeriodLeaderboardRow[] {
+  const displayProfiles = userDisplayProfileMap({ userProfiles, users });
+  const ledgerNameByUserId = new Map<string, string>();
   const pointsByUserId = new Map<string, number>();
   for (const entry of ledger) {
     if (!entry.userId) continue;
+    if (entry.memberName.trim() && !ledgerNameByUserId.has(entry.userId)) {
+      ledgerNameByUserId.set(entry.userId, entry.memberName.trim());
+    }
     pointsByUserId.set(entry.userId, (pointsByUserId.get(entry.userId) ?? 0) + entry.points);
   }
 
@@ -145,13 +164,15 @@ function buildPeriodRows(users: OrfUser[], ledger: PointLedgerEntry[], objective
     objectiveCounts.set(entry.userId, current);
   }
 
-  const rows = userIds(users, pointsByUserId, objectiveCounts)
+  const rows = userIds(users, displayProfiles, pointsByUserId, objectiveCounts)
     .map((userId) => {
       const counts = objectiveCounts.get(userId) ?? { completed: 0, total: 0 };
       const points = pointsByUserId.get(userId) ?? 0;
+      const displayProfile = displayProfiles.get(userId);
       return {
+        avatarUrl: displayProfile?.avatarUrl ?? null,
         completionRate: counts.total > 0 ? Math.round((counts.completed / counts.total) * 100) : 0,
-        memberName: userNameById.get(userId) ?? userId,
+        memberName: displayProfile?.name ?? ledgerNameByUserId.get(userId) ?? userId,
         points,
         userId,
       };
@@ -189,7 +210,7 @@ export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRan
   const anchorDate = latestDate(state.pointLedger, state.objectives);
   const ledger = state.pointLedger.filter((entry) => isInRange(entry.createdAt, timeRange, anchorDate));
   const objectives = state.objectives.filter((objective) => isInRange(objective.updatedAt ?? objective.createdAt, timeRange, anchorDate));
-  const currentRows = buildPeriodRows(state.users, ledger, objectives, 10);
+  const currentRows = buildPeriodRows(state.users, state.userProfiles, ledger, objectives, 10);
   const previousBounds = previousRangeBounds(timeRange, anchorDate);
 
   if (!previousBounds) {
@@ -201,6 +222,7 @@ export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRan
 
   const previousRows = buildPeriodRows(
     state.users,
+    state.userProfiles,
     state.pointLedger.filter((entry) => isInBounds(entry.createdAt, previousBounds)),
     state.objectives.filter((objective) => isInBounds(objective.updatedAt ?? objective.createdAt, previousBounds)),
   );

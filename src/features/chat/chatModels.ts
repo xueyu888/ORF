@@ -57,6 +57,8 @@ export type ChatUnreadJumpTarget = {
   messageId?: string | null;
 };
 
+export type ChatFeedWindowKind = "context" | "latest" | "unread";
+
 export type ChatFeedSnapshot = {
   hasNewerMessages: boolean;
   hasOlderMessages: boolean;
@@ -64,6 +66,7 @@ export type ChatFeedSnapshot = {
   messages: ChatMessage[];
   scrollTop: number;
   syncedAt?: string;
+  windowKind: ChatFeedWindowKind;
 };
 
 export const chatMessagePageSize = 80;
@@ -342,6 +345,7 @@ export function createFeedSnapshot(input?: Partial<ChatFeedSnapshot>): ChatFeedS
     messages: input?.messages ?? [],
     scrollTop: input?.scrollTop ?? 0,
     syncedAt: input?.syncedAt,
+    windowKind: input?.windowKind ?? "latest",
   };
 }
 
@@ -349,7 +353,7 @@ export function replaceFeedMessages(
   snapshot: ChatFeedSnapshot | undefined,
   messages: ChatMessage[],
   pageSize = chatMessagePageSize,
-  flags?: Partial<Pick<ChatFeedSnapshot, "hasNewerMessages" | "hasOlderMessages">>,
+  flags?: Partial<Pick<ChatFeedSnapshot, "hasNewerMessages" | "hasOlderMessages" | "windowKind">>,
 ) {
   return createFeedSnapshot({
     hasNewerMessages: flags?.hasNewerMessages ?? false,
@@ -358,6 +362,7 @@ export function replaceFeedMessages(
     messages,
     scrollTop: snapshot?.scrollTop ?? 0,
     syncedAt: new Date().toISOString(),
+    windowKind: flags?.windowKind ?? "latest",
   });
 }
 
@@ -365,6 +370,10 @@ export function isFreshFeedSnapshot(snapshot: ChatFeedSnapshot | undefined, now 
   if (!snapshot?.syncedAt) return false;
   const syncedAt = Date.parse(snapshot.syncedAt);
   return Number.isFinite(syncedAt) && now - syncedAt <= chatFeedFreshSnapshotMs;
+}
+
+export function shouldPreserveFeedWindow(snapshot: ChatFeedSnapshot | undefined) {
+  return Boolean(snapshot && snapshot.windowKind !== "latest");
 }
 
 export function applyFeedMessage(snapshot: ChatFeedSnapshot | undefined, message: ChatMessage) {

@@ -10,6 +10,7 @@ import type { ChatChannel, ChatMessage } from "../../types/orf";
 import {
   isChatFeedNearLatest,
   isChatFeedNearOldest,
+  isChatFeedMessageVisible,
   readChatFeedScrollAnchor,
   restoreChatFeedScrollAnchor,
   scrollChatFeedToMessage,
@@ -33,6 +34,7 @@ import {
   replaceFeedMessages,
   replacePendingMessage,
   shouldFollowIncomingMessage,
+  shouldPreserveFeedWindow,
   updatePendingMessageDelivery,
   upsertChannelMessage,
 } from "./chatModels";
@@ -52,13 +54,19 @@ type UseChatFeedStateInput = {
   notify: (message: string) => void;
   onChannelUpdate: (channel: ChatChannel) => void;
   onRequestedMessageConsumed: () => void;
+  onRequestedMessageLocated: (messageId: string) => void;
   onRequestedMessageRedirect: (messageId: string) => void;
   onThreadTarget: (target: ChatFeedThreadTarget) => void;
   onUnreadSummaryRefresh: () => Promise<void>;
   requestedMessageId: string | null;
 };
 
-function runChatFeedScrollIntent(tryScroll: () => boolean, onDone: () => void, attempts = 4) {
+function runChatFeedScrollIntent(
+  tryScroll: () => boolean,
+  onDone: () => void,
+  attempts = 4,
+  isSettled?: () => boolean,
+) {
   let cancelled = false;
   let frame: number | null = null;
   let remainingAttempts = Math.max(1, attempts);
@@ -67,7 +75,7 @@ function runChatFeedScrollIntent(tryScroll: () => boolean, onDone: () => void, a
     if (cancelled) return;
     const scrolled = tryScroll();
     remainingAttempts -= 1;
-    if (scrolled || remainingAttempts <= 0) {
+    if ((scrolled && (!isSettled || isSettled())) || remainingAttempts <= 0) {
       onDone();
       return;
     }
@@ -89,6 +97,7 @@ export function useChatFeedState({
   notify,
   onChannelUpdate,
   onRequestedMessageConsumed,
+  onRequestedMessageLocated,
   onRequestedMessageRedirect,
   onThreadTarget,
   onUnreadSummaryRefresh,
@@ -455,9 +464,10 @@ export function useChatFeedState({
       requestedMessageId &&
       cachedFeed?.messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId),
     );
+    const shouldPreserveCachedWindow = !requestedMessageId && shouldPreserveFeedWindow(cachedFeed);
     manualUnreadAutoReadSuppressedRef.current = false;
     cancelPendingReadReceipt();
-    setFollowingLatest(!shouldOpenMainUnread && !requestedMessageId);
+    setFollowingLatest(!shouldOpenMainUnread && !requestedMessageId && !shouldPreserveCachedWindow);
     setUnreadAnchor(anchor);
     setPendingNewMessageCount(0);
     olderLoadInFlightRef.current = false;
@@ -483,6 +493,7 @@ export function useChatFeedState({
             {
               hasNewerMessages: response.hasNewerMessages,
               hasOlderMessages: response.hasOlderMessages,
+              windowKind: "unread",
             },
           );
           feedCacheRef.current.set(channelId, snapshot);
@@ -515,7 +526,9 @@ export function useChatFeedState({
         });
     } else if (!requestedMessageId && isFreshFeedSnapshot(cachedFeed)) {
       setMessagesLoading(false);
-      if (cachedFeed?.hasNewerMessages) {
+      if (shouldPreserveCachedWindow) {
+        setFollowingLatest(false);
+      } else if (cachedFeed?.hasNewerMessages) {
         void loadLatestMessages("auto");
       } else {
         requestScrollToLatest("auto");
@@ -606,6 +619,7 @@ export function useChatFeedState({
           {
             hasNewerMessages: response.hasNewerMessages,
             hasOlderMessages: response.hasOlderMessages,
+            windowKind: "context",
           },
         );
         feedCacheRef.current.set(activeChannelId, snapshot);
@@ -648,10 +662,15 @@ export function useChatFeedState({
     if (!requestedMessageId || !messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId)) return undefined;
     setFollowingLatest(false);
     return runChatFeedScrollIntent(
-      () => scrollChatFeedToMessage(messageScrollRef.current, requestedMessageId, { behavior: "smooth", block: "center" }),
-      onRequestedMessageConsumed,
+      () => scrollChatFeedToMessage(messageScrollRef.current, requestedMessageId, { behavior: "auto", block: "center" }),
+      () => {
+        onRequestedMessageLocated(requestedMessageId);
+        onRequestedMessageConsumed();
+      },
+      8,
+      () => isChatFeedMessageVisible(messageScrollRef.current, requestedMessageId),
     );
-  }, [messages, onRequestedMessageConsumed, requestedMessageId, setFollowingLatest]);
+  }, [messages, onRequestedMessageConsumed, onRequestedMessageLocated, requestedMessageId, setFollowingLatest]);
 
   useLayoutEffect(() => {
     if (!pendingUnreadScrollRef.current || messagesLoading) return undefined;
@@ -799,6 +818,7 @@ export function useChatFeedState({
         {
           hasNewerMessages: response.hasNewerMessages,
           hasOlderMessages: response.hasOlderMessages,
+          windowKind: "unread",
         },
       );
       feedCacheRef.current.set(channelId, snapshot);

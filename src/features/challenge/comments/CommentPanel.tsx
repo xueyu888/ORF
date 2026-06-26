@@ -423,59 +423,59 @@ function CommentMessageRow({
       <PersonAvatar avatarUrl={message.authorAvatarUrl} name={message.author} />
       <div className="orf-comment-message-main">
         <div className="orf-comment-message-header">
-          <span className="orf-comment-author-name">{message.author}</span>
-          <div className="orf-comment-message-trailing">
+          <div className="orf-comment-message-identity">
+            <span className="orf-comment-author-name">{message.author}</span>
             <time className="orf-comment-meta" dateTime={createdTime.dateTime} title={createdTime.title}>{createdTime.label}</time>
-            <div
-              className={clsx("orf-comment-message-actions", moreActionsOpen && "orf-comment-message-actions-open")}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <IconButton className="orf-comment-message-action" icon={Reply} label="回复评论" size="sm" type="button" onClick={() => onReply(message)} />
-              {canManageMessage && (
+          </div>
+          <div
+            className={clsx("orf-comment-message-actions", moreActionsOpen && "orf-comment-message-actions-open")}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <IconButton className="orf-comment-message-action" icon={Reply} label="回复评论" size="sm" type="button" onClick={() => onReply(message)} />
+            {canManageMessage && (
+              <IconButton
+                className="orf-comment-message-action"
+                icon={Pencil}
+                label="编辑评论"
+                size="sm"
+                type="button"
+                onClick={() => {
+                  setMoreActionsOpen(false);
+                  onEdit(threadId, message);
+                }}
+              />
+            )}
+            {canManageMessage && (
+              <div className="orf-comment-message-more-anchor" ref={moreActionsRef}>
                 <IconButton
-                  className="orf-comment-message-action"
-                  icon={Pencil}
-                  label="编辑评论"
+                  aria-controls={moreActionsOpen ? moreMenuId : undefined}
+                  aria-expanded={moreActionsOpen}
+                  aria-haspopup="menu"
+                  className={clsx("orf-comment-message-action", moreActionsOpen && "orf-comment-message-action-active")}
+                  icon={MoreHorizontal}
+                  label="更多评论操作"
                   size="sm"
                   type="button"
-                  onClick={() => {
-                    setMoreActionsOpen(false);
-                    onEdit(threadId, message);
-                  }}
+                  onClick={() => setMoreActionsOpen((open) => !open)}
                 />
-              )}
-              {canManageMessage && (
-                <div className="orf-comment-message-more-anchor" ref={moreActionsRef}>
-                  <IconButton
-                    aria-controls={moreActionsOpen ? moreMenuId : undefined}
-                    aria-expanded={moreActionsOpen}
-                    aria-haspopup="menu"
-                    className={clsx("orf-comment-message-action", moreActionsOpen && "orf-comment-message-action-active")}
-                    icon={MoreHorizontal}
-                    label="更多评论操作"
-                    size="sm"
-                    type="button"
-                    onClick={() => setMoreActionsOpen((open) => !open)}
-                  />
-                  {moreActionsOpen && (
-                    <div className="orf-comment-message-more-menu" id={moreMenuId} role="menu">
-                      <button
-                        className="orf-comment-message-more-danger"
-                        role="menuitem"
-                        type="button"
-                        onClick={() => {
-                          setMoreActionsOpen(false);
-                          deleteMessage();
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        删除评论
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                {moreActionsOpen && (
+                  <div className="orf-comment-message-more-menu" id={moreMenuId} role="menu">
+                    <button
+                      className="orf-comment-message-more-danger"
+                      role="menuitem"
+                      type="button"
+                      onClick={() => {
+                        setMoreActionsOpen(false);
+                        deleteMessage();
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      删除评论
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
         {editDraft ? (

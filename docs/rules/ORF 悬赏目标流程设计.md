@@ -8,7 +8,7 @@
 - 挑战者身份绑定到 `Objective.challengerUserIds`，不绑定到 `Result`；`Objective.challengers` 只是按 UUID 派生的显示名投影。
 - 挑战者只能是当前作用域内的 active 普通成员；指挥官/管理员不进入 `Objective.challengerUserIds`、`Objective.assignedChallengerUserIds` 或挑战申请。
 - 同一目标下的任务和子任务由 `Objective.challengerUserIds` 共同维护；`assignee` 只是执行提示，`Task.createdBy` / `updatedBy` 只是审计字段，不能作为同目标成员之间的私有维护边界。
-- 悬赏大厅是所有已通过用户都可见的公开交互页，不只是未领取目标列表。`open`、`applying`、`recruiting`、`reestimating` 目标都在大厅展示当前申请人、申请理由、已通过挑战者头像和征召状态；角色只决定挑战动作能否生效，不决定界面是否隐藏。active 普通成员可以申请公开目标或接受自己的征召；指挥官/管理员需要看到完整大厅界面和操作区，但点击申请或接受时必须被提示不能挑战，不能写入申请、接受或挑战者关系。
+- 悬赏大厅是所有已通过用户都可见的公开生命周期看板，不只是未领取目标列表。`open`、`applying`、`recruiting`、`reestimating`、`frozen`、`submitted`、`revisionRequired`、`accepted`、`settled` 目标都在大厅展示当前申请人、申请理由、已通过挑战者头像、征召状态和后续冻结、验收、返工、结算状态；`candidate` 只在挑战页编辑，`closed` 不进入大厅主列表。角色只决定动作能否生效，不决定界面是否隐藏。active 普通成员可以在开放期申请公开目标或接受自己的征召；指挥官/管理员需要看到完整大厅界面和操作区，但点击申请或接受时必须被提示不能挑战，不能写入申请、接受或挑战者关系。
 - 一个目标可以有多个挑战者；一个目标可以包含多个指标。
 - 新建目标属于挑战页内的候选目标编辑流程；全局入口只负责把用户带到挑战页。页面先插入完整 temporary 目标面板，标题输入按 Enter 或输入框失焦快速创建 `candidate`；创建 UI 必须用单一 `objectiveCreationSession` 表达 `editingDraft → submittingDraft → submittedOverlay → anchoredCreated / failedEditingDraft`。请求发起后 temporary 目标立即退出标题编辑态、留在原位并在状态列显示“保存中”，此时重复点击全局 `新建目标` 只能提示“目标正在创建，请稍后”，不能发起第二次创建。`POST /api/objectives` 返回真实目标后立即连续替换为 persisted 目标并沿用原位置，任务管理数据刷新只负责撤掉覆盖层，一次性排序锚点保留到用户切换筛选或业务排序键变化，刷新前后都不能出现目标消失或跳位。没有真实指标或行动项时，不渲染“待定义指标 / 待创建行动项”伪子行；新增必须从父级 `+` 发起。真实目标行 hover 只保留一个主新增 `+`，点击后打开子级类型选择，只能在当前权限和状态允许的 `新增/提出指标`、`新增行动项` 中选择一项。任务行 `+` 直接新增该任务的 temporary 子任务。指标行没有 `+`，因为指标当前没有子级对象。点击 `+` 后才插入对应 temporary 行并进入标题编辑；提交成功后由后端返回的真实 `Result` / `Task` / `TaskChecklistItem` 进入一次性创建覆盖层并替换 temporary 行，直到挑战页刷新数据包含同一真实 id 后撤掉覆盖层。保存成功后不自动追加下一条 temporary 行，不在目标头堆叠多个相同 `+`。
 - 指标、行动项和子行动项创建必须由单一 `childCreationSession` 表达 `editingDraft → submittingDraft → submittedOverlay / failedEditingDraft → idle`。temporary 行只是该会话的展示派生数据，POST 返回的真实实体只是待快照覆盖层，后端快照才是最终业务事实源。`submittingDraft` 必须携带唯一提交 token，旧请求返回不能接管已清理或新建的草稿；`submittedOverlay` 阶段不能再启动另一条子级创建，直到后端快照包含同一真实 id 或用户显式切换上下文清理会话。页面和组件不得分别维护 temporary 行、覆盖层和快照接管条件，避免形成多个事实源。
@@ -52,6 +52,7 @@
 | `reestimating` | 重估中 | 申请被通过或征召被接受 | 其他 active 普通成员继续申请；指挥官改目标和指标；挑战者提出指标、编辑指标、维护任务、评论 |
 | `frozen` | 已冻结 | 指挥官确认重估完成 | 挑战者提交战利品 |
 | `submitted` | 待验收 | 挑战者提交战利品 | 指挥官验收指标 |
+| `revisionRequired` | 待返工 | 指挥官验收不通过 | 截止日已到且 `deadlinePenalty` 尚未结算时进行匿名互评和逾期惩罚结算；挑战者继续完成并重新提交 |
 | `accepted` | 已验收 | 指挥官确认验收通过 | 挑战者匿名互评；指挥官确认结算 |
 | `settled` | 已结算 | 指挥官确认最终比例并写入积分 | 查看结果和排行榜 |
 | `closed` | 已关闭 | 目标关闭或放弃 | 无 |
@@ -64,8 +65,8 @@
 
 | 页面 | 状态 |
 | --- | --- |
-| 悬赏大厅 | 所有已通过用户可见 `open`、`applying`、`recruiting`、`reestimating` 的公开招募和参与状态；默认显示招募中目标，`reestimating` 或已有挑战者的目标自动进入已开始分组；奖励列只展示难度、分数和征召标记，不承载生命周期状态；参与列展示申请者、挑战者并高亮当前用户身份；操作列只表达当前用户可执行动作或暂无操作；active 普通成员可在冻结前申请公开目标或接受自己的征召；申请必须填写理由；通过后挑战者头像继续挂在大厅目标上；新悬赏发布写入聊天里的系统公告并通过实时横幅广播提醒在线用户；指挥官/管理员完整显示大厅界面，但挑战动作被提示并阻断 |
-| 我的挑战 / 挑战工作台 | 指挥官可见 `candidate` 和全量挑战，并可按正式挑战者筛选目标；成员只见 `Objective.challengerUserIds` 包含自己的 `reestimating`、`frozen`、`submitted`、`accepted`、`settled` |
+| 悬赏大厅 | 所有已通过用户可见 `open`、`applying`、`recruiting`、`reestimating`、`frozen`、`submitted`、`revisionRequired`、`accepted`、`settled` 的公开生命周期状态；默认显示全部公开悬赏，并按 `开放中 / 已冻结 / 待验收 / 待返工 / 待结算 / 已结算 / 我的相关` 过滤；奖励列只展示难度、分数和征召标记，不承载生命周期状态；参与列展示申请者、挑战者并高亮当前用户身份；操作列只表达当前用户可执行动作或暂无操作；active 普通成员可在冻结前申请公开目标或接受自己的征召；申请必须填写理由；通过后挑战者头像继续挂在大厅目标上，冻结、验收、返工和结算后仍保留公开展示；新悬赏发布写入聊天里的系统公告并通过实时横幅广播提醒在线用户；指挥官/管理员完整显示大厅界面，但挑战动作被提示并阻断 |
+| 我的挑战 / 挑战工作台 | 指挥官可见 `candidate` 和全量挑战，并可按正式挑战者筛选目标；成员只见 `Objective.challengerUserIds` 包含自己的 `reestimating`、`frozen`、`submitted`、`revisionRequired`、`accepted`、`settled` |
 | 成员管理 | 注册待审核、启用、拒绝、停用 |
 | 统计 | `pointLedger` 结算后的成员积分 |
 
@@ -80,9 +81,9 @@
 - 同一目标的正式挑战者可以共同新增、编辑、勾选、移动和删除目标下的任务与子任务，并维护评论，用来拆解执行动作和协作记录；任务不挂到指标下，执行人和创建人不形成私有所有权。
 - 目标至少已有一个指标，且每个指标都已校准积分等级后，指挥官才能冻结目标。
 
-`Objective.finalDueAt` 是目标截止日期的唯一事实源。只有指挥官可以修改：`candidate/open/applying/recruiting/reestimating` 可正常调整；`frozen` 只允许因延期等异常原因把日期延后；`submitted/accepted/settled/closed` 不允许修改。目标仍处于 `reestimating` 且最终截止日期实际变更时，`Objective.confirmationDueAt` 按挑战接受时间和新的最终截止日期重新计算；冻结后延后截止日期不重开指标重估，也不改变 `confirmationDueAt`。
+`Objective.finalDueAt` 是目标截止日期的唯一事实源。只有指挥官可以修改：`candidate/open/applying/recruiting/reestimating` 可正常调整；`frozen` 只允许因延期等异常原因把日期延后；`submitted/revisionRequired/accepted/settled/closed` 不允许修改。目标仍处于 `reestimating` 且最终截止日期实际变更时，`Objective.confirmationDueAt` 按挑战接受时间和新的最终截止日期重新计算：重估窗口取剩余验收周期的 30%，按半天取整，保留至少半天的最小窗口，不再设置固定最长天数。冻结后延后截止日期不重开指标重估，也不改变 `confirmationDueAt`。
 
-冻结后指标口径稳定，不再退回 `reestimating`。`confirmationDueAt` 到期后同样停止指标调整，不提供独立续期入口。
+冻结后指标口径默认稳定，不允许直接编辑。若挑战者发现冻结口径仍需修复，只能发起 `frozenReestimate` 对齐申请；指挥官审批通过时设置新的 `confirmationDueAt`，该时间必须晚于当前时间且不能超过 `Objective.finalDueAt` 当日 23:59。审批通过后目标退回现有 `reestimating/orfReestimate` 链路并清空当前 `confirmedAt`，改完后仍需重新申请完成重估并由指挥官再次冻结。`confirmationDueAt` 到期后停止指标调整，不提供不经审批的独立续期入口。
 
 ## 征召与申请
 
@@ -96,7 +97,7 @@
 - 征召对象只能是 active 普通成员。
 - 被征召成员只能接受征召；有异议时线下找指挥官处理。
 - 被征召成员接受后成为挑战者，目标进入重估。
-- `frozen`、`submitted`、`accepted`、`settled`、`closed` 不再接受或审核挑战申请；历史残留的 pending 申请只读，不应展示通过或拒绝操作。
+- `frozen`、`submitted`、`revisionRequired`、`accepted`、`settled`、`closed` 不再接受或审核挑战申请；历史残留的 pending 申请只读，不应展示通过或拒绝操作。
 
 ## 战利品
 
@@ -107,7 +108,7 @@
 战利品结构化保存到 `objectiveLoot`：
 
 - `body`：完成说明。
-- `resultClaims`：每个指标的完成、证伪或未主张状态。
+- `resultClaims`：每个指标的完成、证伪或未完成状态；接口内部兼容值 `notClaimed` 在界面展示为“未完成”。
 - `evidenceText`：每个指标对应的证据说明。
 - `selfTestReportBody` / `selfTestReportUrl`：自测报告占位。
 
@@ -117,21 +118,25 @@
 
 指挥官验收 `submitted` 目标后：
 
+- 写入 `objectiveAcceptanceReviews`，保留每次验收的战利品、指标结论、目标结论、说明和验收人。
 - 写入每个 `Result.acceptedResult`。
-- 按每个指标验收结论汇总 `Objective.acceptedResult`；全部指标完成则目标完成。
+- 按每个指标验收结论汇总 `Objective.acceptedResult`；该字段记录最近一次验收结论，不反向定义生命周期状态。
 - 写入 `completionMultiplier`、`objectiveBasePoints`；`objectiveBasePoints` 从已冻结指标的积分汇总得到，不作为目标初始化字段手填。
-- 验收通过时 `Objective.flowStatus` 从 `submitted` 进入 `accepted`；验收不通过时保持 `submitted`，不写入积分流水。
+- 验收通过时 `Objective.flowStatus` 从 `submitted` 进入 `accepted`，并提醒挑战者可以重新检查匿名互评。
+- 验收不通过时 `Objective.flowStatus` 从 `submitted` 进入 `revisionRequired`；如果已到截止日且 `deadlinePenalty` 尚未结算，仍要进行匿名互评和逾期惩罚结算。
 
-指挥官结算 `accepted` 目标后：
+指挥官结算 `revisionRequired` 或 `accepted` 目标后：
 
 - 读取匿名互评提交状态、原始评分、弃权说明、均值和偏离提醒。
-- 确认最终贡献比例。
-- 写入 `objectiveSettlementPoints`。
-- 生成 `pointLedger`，成员排行榜只读取后端结算后的积分流水。
-- 向目标 `Objective.challengerUserIds` 中的 active 成员发送 `objective.settled` 个人系统通知，提醒去统计页查看最终结果；通知不包含匿名互评明细。
-- `Objective.flowStatus` 从 `accepted` 进入 `settled`。
+- 确认本次结算事件的贡献比例。
+- 写入 `objectiveSettlementEvents`，并追加生成 `pointLedger`；历史账本不得删除。
+- `Objective.objectiveSettlementPoints` 只是该目标已写入账本积分的展示汇总，成员排行榜只读取后端结算后的积分流水。
+- `revisionRequired` 的 `deadlinePenalty` 事件按目标基础分 `50%` 写入惩罚积分，目标仍保持 `revisionRequired`。
+- `deadlinePenalty` 已写入后，同一待返工阶段不再继续开放惩罚互评或惩罚结算；挑战者必须重新提交，指挥官重新验收通过进入 `accepted` 后，再开放最终互评和 `finalCompletion` 结算。
+- `accepted` 的 `finalCompletion` 事件在已有惩罚事件时写入剩余 `50%`，否则沿用按时/延期完成倍率；最终结算后 `Objective.flowStatus` 从 `accepted` 进入 `settled`。
+- 向目标 `Objective.challengerUserIds` 中的 active 成员发送个人系统通知；通知不包含匿名互评明细。
 
-Result 的不确定性分是冻结前必须明确的积分事实源。Objective 不初始化积分，目标总分由目标下指标的不确定性分相加得到；Result 不直接给个人分积分，个人积分按目标级最终贡献比例分配。单人目标也先进入 `accepted`，再由指挥官确认结算为 `100%`。
+Result 的不确定性分是冻结前必须明确的积分事实源。Objective 不初始化积分，目标总分由目标下指标的不确定性分相加得到；Result 不直接给个人分积分，个人积分按目标级结算事件的贡献比例分配。单人目标也走相同结算事件，默认比例为 `100%`。
 
 ## TODO
 

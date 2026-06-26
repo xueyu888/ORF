@@ -24,9 +24,23 @@ export const objectiveLifecycleTransitions = {
     to: "frozen",
     stage: "goalFrozen",
   },
+  reopenFrozenReestimate: {
+    from: "frozen",
+    to: "reestimating",
+    stage: "orfReestimate",
+  },
   submitLoot: {
     from: "frozen",
     to: "submitted",
+  },
+  resubmitLoot: {
+    from: "revisionRequired",
+    to: "submitted",
+  },
+  requireRevision: {
+    from: "submitted",
+    to: "revisionRequired",
+    stage: "goalFrozen",
   },
   acceptLoot: {
     from: "submitted",

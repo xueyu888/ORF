@@ -3,6 +3,9 @@ import type {
   LootResultClaimStatus,
   Objective,
   ObjectiveAcceptedResult,
+  ObjectiveFlowStatus,
+  ObjectiveSettlementEvent,
+  ObjectiveSettlementEventKind,
   ObjectiveLoot,
   Result,
   ResultAcceptedResult,
@@ -59,10 +62,27 @@ export type SettlementPlan = {
   contributionRatios: ContributionAllocation[];
 };
 export type ObjectiveAcceptancePlan = Omit<SettlementPlan, "contributionRatios">;
+export type ObjectiveSettlementEventPlan = {
+  kind: ObjectiveSettlementEventKind;
+  basePoints: number;
+  multiplier: number;
+  settlementPoints: number;
+};
+export type ObjectiveSettlementReviewWindow = {
+  kind: ObjectiveSettlementEventKind | null;
+  open: boolean;
+  reason:
+    | "alreadySettled"
+    | "deadlinePending"
+    | "notSettlementState"
+    | "open";
+};
 export type SettlementPointAllocation<T extends ContributionAllocation = ContributionAllocation> = T & {
   points: number;
   pointUnits: number;
 };
+type SettlementReviewObjective = Pick<Objective, "finalDueAt" | "flowStatus">;
+type SettlementReviewEvent = Pick<ObjectiveSettlementEvent, "kind">;
 
 export function uncertaintyScoreFor(
   level: UncertaintyLevel | null | undefined,
@@ -115,6 +135,70 @@ export function completionMultiplierFor(
   if (result !== "completed" && result !== "falsified") return 0;
   if (!lootSubmittedAt || !finalDueAt) return 0;
   return lootSubmittedAt.slice(0, 10) <= finalDueAt ? 1 : 0.5;
+}
+
+export function settlementEventMultiplierFor(input: {
+  acceptedResult: ObjectiveAcceptedResult;
+  finalDueAt: string;
+  hasDeadlinePenaltyEvent: boolean;
+  kind: ObjectiveSettlementEventKind;
+  lootSubmittedAt: string | null;
+}) {
+  if (input.kind === "deadlinePenalty") return 0.5;
+  if (input.hasDeadlinePenaltyEvent) return 0.5;
+  return completionMultiplierFor(
+    input.acceptedResult,
+    input.lootSubmittedAt,
+    input.finalDueAt,
+  );
+}
+
+export function planObjectiveSettlementEvent(input: {
+  acceptedResult: ObjectiveAcceptedResult;
+  basePoints: number;
+  finalDueAt: string;
+  hasDeadlinePenaltyEvent: boolean;
+  kind: ObjectiveSettlementEventKind;
+  lootSubmittedAt: string | null;
+}): ObjectiveSettlementEventPlan {
+  const multiplier = settlementEventMultiplierFor(input);
+  return {
+    kind: input.kind,
+    basePoints: input.basePoints,
+    multiplier,
+    settlementPoints: Number((input.basePoints * multiplier).toFixed(2)),
+  };
+}
+
+export function objectiveSettlementEventKindForFlowStatus(
+  flowStatus: ObjectiveFlowStatus | null | undefined,
+): ObjectiveSettlementEventKind | null {
+  if (flowStatus === "revisionRequired") return "deadlinePenalty";
+  if (flowStatus === "accepted") return "finalCompletion";
+  return null;
+}
+
+export function objectiveSettlementReviewWindow(input: {
+  objective: SettlementReviewObjective | null | undefined;
+  settlementEvents: readonly SettlementReviewEvent[];
+  today: string;
+}): ObjectiveSettlementReviewWindow {
+  const kind = objectiveSettlementEventKindForFlowStatus(
+    input.objective?.flowStatus,
+  );
+  if (!input.objective || !kind) {
+    return { kind, open: false, reason: "notSettlementState" };
+  }
+
+  if (input.settlementEvents.some((event) => event.kind === kind)) {
+    return { kind, open: false, reason: "alreadySettled" };
+  }
+
+  if (kind === "deadlinePenalty" && input.today < input.objective.finalDueAt) {
+    return { kind, open: false, reason: "deadlinePending" };
+  }
+
+  return { kind, open: true, reason: "open" };
 }
 
 export function normalizeContributionRatios(

@@ -6,6 +6,13 @@ import {
   notificationChatDeliveryId,
   resolveNotificationRecipients,
 } from "../server/notifications/notificationEventModel";
+import {
+  canReceiveE2eActorNotification,
+  isE2eNotificationActor,
+  isE2eNotificationActorName,
+  notificationActorIsolationName,
+  shouldSuppressE2eActorNotificationForRecipient,
+} from "../server/notifications/notificationIsolationPolicy";
 import { notificationPolicy } from "../server/notifications/policies/registry";
 
 test("personal notifications dedupe recipients and exclude the actor", () => {
@@ -74,9 +81,54 @@ test("system chat projection metadata points back to the notification event", ()
 });
 
 test("settlement notifications are personal reminders without comment reply target", () => {
+  assert.deepEqual(notificationPolicy("objective.settlement.updated"), {
+    kind: "objective.settlement.updated",
+    replyTarget: "none",
+    stream: "personalNotification",
+  });
   assert.deepEqual(notificationPolicy("objective.settled"), {
     kind: "objective.settled",
     replyTarget: "none",
     stream: "personalNotification",
   });
+});
+
+test("revision and peer review notifications point back to the objective", () => {
+  assert.deepEqual(notificationPolicy("objective.revision.required"), {
+    kind: "objective.revision.required",
+    replyTarget: "notification-target",
+    stream: "personalNotification",
+  });
+  assert.deepEqual(notificationPolicy("objective.peerReview.requested"), {
+    kind: "objective.peerReview.requested",
+    replyTarget: "notification-target",
+    stream: "personalNotification",
+  });
+});
+
+test("E2E actor notification isolation is based on actor name and recipient identity", () => {
+  assert.equal(isE2eNotificationActorName("ORF Member Review E2E"), true);
+  assert.equal(isE2eNotificationActorName("tangyl"), false);
+  assert.equal(notificationActorIsolationName({ fallbackActorName: "Displayed E2E", userName: "普通用户" }), "普通用户");
+  assert.equal(notificationActorIsolationName({ fallbackActorName: "System E2E", userName: "" }), "System E2E");
+  assert.equal(isE2eNotificationActor({ fallbackActorName: "Displayed E2E", userName: "普通用户" }), false);
+  assert.equal(isE2eNotificationActor({ fallbackActorName: "System E2E", userName: "" }), true);
+
+  assert.equal(canReceiveE2eActorNotification({ email: "tangyl@sdrising.com", name: "唐" }), true);
+  assert.equal(canReceiveE2eActorNotification({ email: "zrx831@gmail.com", name: "张" }), true);
+  assert.equal(canReceiveE2eActorNotification({ email: "member@example.com", name: "ORF E2E Member" }), true);
+  assert.equal(canReceiveE2eActorNotification({ email: "member@example.com", name: "普通成员" }), false);
+
+  assert.equal(shouldSuppressE2eActorNotificationForRecipient({
+    actorName: "ORF E2E Bot",
+    recipient: { email: "member@example.com", name: "普通成员" },
+  }), true);
+  assert.equal(shouldSuppressE2eActorNotificationForRecipient({
+    actorName: "tangyl",
+    recipient: { email: "member@example.com", name: "普通成员" },
+  }), false);
+  assert.equal(shouldSuppressE2eActorNotificationForRecipient({
+    actorName: "ORF E2E Bot",
+    recipient: { email: "tangyl@sdrising.com", name: "唐" },
+  }), false);
 });

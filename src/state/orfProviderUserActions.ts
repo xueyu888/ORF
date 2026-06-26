@@ -9,6 +9,7 @@ import {
 } from "./apiClient";
 import { mergePermissionRules, mergeUsers } from "./orfProviderData";
 import { avatarMutationFailureMessage, userMutationFailureMessage } from "./orfProviderMutationMessages";
+import { mergeUserDisplayProfiles } from "../domain/userDisplayProfile";
 import type { AuthResult } from "./orfProviderAuth";
 import type { OrfState, OrfUser, UserRole } from "../types/orf";
 
@@ -30,6 +31,7 @@ function mergeUser(state: OrfState, user: OrfUser): OrfState {
   return {
     ...state,
     users: exists ? state.users.map((item) => (item.id === user.id ? user : item)) : [...state.users, user],
+    userProfiles: mergeUserDisplayProfiles(state.userProfiles, [user]),
     currentUserId: state.currentUserId || user.id,
   };
 }

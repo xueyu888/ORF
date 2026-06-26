@@ -13,21 +13,21 @@ export function BountyObjectiveList({
   activeObjectiveId,
   currentUserId,
   items,
-  applicationView = false,
   now,
   onOpenChallengeWork,
   onOpenObjective,
   processingBountyId,
+  showDeclinedApplicationState = false,
   onAction,
 }: {
   activeObjectiveId: string | null;
   currentUserId: string;
   items: BountyItem[];
-  applicationView?: boolean;
   now: Date;
   onOpenChallengeWork: (objectiveId: string) => void;
   onOpenObjective?: (objectiveId: string) => void;
   processingBountyId: string | null;
+  showDeclinedApplicationState?: boolean;
   onAction: (item: BountyItem, action: ChallengeAction) => void;
 }) {
   return (
@@ -46,12 +46,12 @@ export function BountyObjectiveList({
           key={item.objective.id}
           active={item.objective.id === activeObjectiveId}
           currentUserId={currentUserId}
-          applicationView={applicationView}
           item={item}
           now={now}
           onOpenChallengeWork={onOpenChallengeWork}
           onOpenObjective={onOpenObjective}
           processing={processingBountyId === item.objective.id}
+          showDeclinedApplicationState={showDeclinedApplicationState}
           onAction={(action) => onAction(item, action)}
         />
       ))}
@@ -62,25 +62,25 @@ export function BountyObjectiveList({
 function BountyListRow({
   item,
   currentUserId,
-  applicationView,
   now,
   onOpenChallengeWork,
   onOpenObjective,
   processing,
+  showDeclinedApplicationState,
   onAction,
   active,
 }: {
   active: boolean;
   currentUserId: string;
-  applicationView: boolean;
   item: BountyItem;
   now: Date;
   onOpenChallengeWork: (objectiveId: string) => void;
   onOpenObjective?: (objectiveId: string) => void;
   processing: boolean;
+  showDeclinedApplicationState: boolean;
   onAction: (action: ChallengeAction) => void;
 }) {
-  const currentApplication = currentUserApplication(item, currentUserId, { includeDeclined: applicationView });
+  const currentApplication = currentUserApplication(item, currentUserId, { includeDeclined: showDeclinedApplicationState });
   const canApply = item.isRecruitment || canApplyForObjectiveChallenge(item.objective);
   const openable = Boolean(onOpenObjective);
   const openObjective = () => onOpenObjective?.(item.objective.id);

@@ -13,7 +13,7 @@ import { isObjectiveChallenger } from "../../domain/orfObjectiveParticipants";
 import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
 import type { ResultDetailsInput } from "../../domain/orfResultDetails";
 import { fetchMyLocalSettlementReview, type LocalSettlementReview } from "../../services/localSettlementClient";
-import type { Objective, OrfProject, OrfState, Result, UncertaintyLevel } from "../../types/orf";
+import type { Objective, ObjectiveSettlementEvent, OrfProject, OrfState, Result, UncertaintyLevel } from "../../types/orf";
 import { localDateString } from "../../utils/date";
 import { applyListItemAnchor, createListItemAnchor, listContainsAnchoredItem, type ListItemAnchor } from "../interaction/listItemAnchor";
 import { useChallengeReadModelData, type ChallengeReadModelState } from "./hooks/useChallengeReadModelData";
@@ -102,6 +102,7 @@ import {
   canEditObjectiveContent,
   canMutateObjectiveWorkItems,
   canRecruitObjectiveChallengers,
+  canReinforceObjectiveChallengers,
   canSubmitObjectivePeerReview,
   metricCreationActionForObjective,
   metricEditAccessForObjective,
@@ -186,6 +187,7 @@ type PeerReviewActionStatus = "loading" | "notSubmitted" | "scored" | "abstained
 type PeerReviewActionStatusByObjectiveId = Record<string, PeerReviewActionStatus>;
 
 const peerReviewActionObjectiveIdSeparator = "\u001f";
+const emptyObjectiveSettlementEvents: readonly ObjectiveSettlementEvent[] = [];
 
 function peerReviewActionLabelForStatus(status: PeerReviewActionStatus | undefined) {
   if (status === "scored") return "更新匿名互评";
@@ -293,6 +295,7 @@ export function ChallengePlanPage() {
   const appliedLinkedTargetRef = useRef<string | null>(null);
   const scopeDefaultedForAllAccessRef = useRef(false);
   const now = useMinuteNow();
+  const today = localDateString(now);
 
   useEffect(() => {
     if (!canShowAllChallenges) {
@@ -400,14 +403,37 @@ export function ChallengePlanPage() {
     return objectiveNode(submittedObjective);
   }, [groups, submittedObjective]);
   const displaySourceGroups = useMemo(() => (optimisticGroup ? [optimisticGroup, ...groups] : groups), [groups, optimisticGroup]);
+  const objectiveSettlementEventsByObjectiveId = useMemo(() => {
+    const map = new Map<string, ObjectiveSettlementEvent[]>();
+    for (const event of challengeState.objectiveSettlementEvents) {
+      const events = map.get(event.objectiveId);
+      if (events) {
+        events.push(event);
+      } else {
+        map.set(event.objectiveId, [event]);
+      }
+    }
+    return map;
+  }, [challengeState.objectiveSettlementEvents]);
+  const settlementEventsForObjective = useCallback(
+    (objectiveId: string) => objectiveSettlementEventsByObjectiveId.get(objectiveId) ?? emptyObjectiveSettlementEvents,
+    [objectiveSettlementEventsByObjectiveId],
+  );
   const peerReviewActionObjectiveIdsKey = useMemo(
     () =>
       displaySourceGroups
-        .filter((group) => canSubmitObjectivePeerReview(group.objective, currentUser))
+        .filter((group) =>
+          canSubmitObjectivePeerReview({
+            objective: group.objective,
+            currentUser,
+            settlementEvents: settlementEventsForObjective(group.objective.id),
+            today,
+          }),
+        )
         .map((group) => group.objective.id)
         .sort()
         .join(peerReviewActionObjectiveIdSeparator),
-    [currentUser, displaySourceGroups],
+    [currentUser, displaySourceGroups, settlementEventsForObjective, today],
   );
   const cycleOptions = useMemo(() => challengeCycleOptions(displaySourceGroups), [displaySourceGroups]);
   const memberOptions = useMemo(() => challengeMemberOptions(displaySourceGroups, challengeState.users), [challengeState.users, displaySourceGroups]);
@@ -1401,6 +1427,8 @@ export function ChallengePlanPage() {
               canManageProjects: currentUser?.role === "admin",
               canEditTargetTitle,
               peerReviewActionLabel: (objectiveId) => peerReviewActionLabelForStatus(peerReviewActionStatuses[objectiveId]),
+              settlementEventsForObjective,
+              today,
               metricActionLabel: (objective) =>
                 metricCreationActionForObjective({
                   objective,
@@ -1412,6 +1440,12 @@ export function ChallengePlanPage() {
               canPublishObjective: () => canCreateObjective,
               canRecruitObjective: (objective) =>
                 canRecruitObjectiveChallengers({
+                  objective,
+                  currentUser,
+                  permissionRules: challengeState.permissionRules,
+                }),
+              canReinforceObjective: (objective) =>
+                canReinforceObjectiveChallengers({
                   objective,
                   currentUser,
                   permissionRules: challengeState.permissionRules,
@@ -1437,6 +1471,7 @@ export function ChallengePlanPage() {
               onOpenActionChange: setOpenActionId,
               onPublishObjective: publishObjective,
               onRecruitObjective: (objectiveId) => openModal({ type: "recruitChallengers", objectiveId }),
+              onReinforceObjective: (objectiveId) => openModal({ type: "reinforceChallengers", objectiveId }),
               onRejectApplication: rejectAnchoredChallengeApplication,
               onCreateProject: (name) => createProject({ name }),
               onDeleteProject: deleteProject,

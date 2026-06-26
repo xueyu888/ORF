@@ -27,6 +27,10 @@ export function canRecruitObjectiveChallengersByFlow(target: ObjectiveLifecycleT
   return policyFlag(target, "canRecruitChallengers");
 }
 
+export function canReinforceObjectiveChallengersByFlow(target: ObjectiveLifecycleTarget): boolean {
+  return policyFlag(target, "canReinforceChallengers");
+}
+
 export function canAcceptObjectiveChallengeByFlow(target: ObjectiveLifecycleTarget): boolean {
   return policyFlag(target, "canAcceptChallenge");
 }
@@ -77,6 +81,10 @@ export function canSettleObjectiveLootByFlow(target: ObjectiveLifecycleTarget): 
 
 export function isObjectiveChallengeDiscoverableByFlow(target: ObjectiveLifecycleTarget): boolean {
   return policyFlag(target, "challengeDiscoverable");
+}
+
+export function isObjectiveVisibleInBountyHallByFlow(target: ObjectiveLifecycleTarget): boolean {
+  return policyFlag(target, "bountyHallVisible");
 }
 
 export function isObjectiveChallengeAcceptedByFlow(target: ObjectiveLifecycleTarget): boolean {

@@ -25,6 +25,8 @@ loadEnvFile(envFile);
 
 const authBaseUrl = process.env.ORY_PUBLIC_URL ?? 'http://127.0.0.1:4433';
 const storageBaseUrl = process.env.OBJECT_STORAGE_ENDPOINT ?? 'http://127.0.0.1:9000';
+const localSettlementBaseUrl = process.env.ORF_LOCAL_SETTLEMENT_SERVICE_URL ?? 'http://127.0.0.1:8799';
+const localSettlementSystemdUnit = process.env.ORF_LOCAL_SETTLEMENT_SYSTEMD_UNIT ?? 'orf-local-private-service.service';
 let databaseToolsPromise;
 let nodeDependenciesInstalled = false;
 
@@ -56,6 +58,12 @@ const dependencyServices = {
     script: isLocalServiceUrl(storageBaseUrl) ? 'storage:dev' : undefined,
     url: `${trimSlash(storageBaseUrl)}/minio/health/live`,
     displayUrl: storageBaseUrl,
+  },
+  settlement: {
+    start: isLocalServiceUrl(localSettlementBaseUrl) ? startLocalSettlementService : undefined,
+    startLabel: `systemctl --user start ${localSettlementSystemdUnit}`,
+    url: `${trimSlash(localSettlementBaseUrl)}/health`,
+    displayUrl: localSettlementBaseUrl,
   },
 };
 
@@ -139,10 +147,10 @@ function printHelp() {
   console.log(`ORF command line
 
 Usage:
-  orf up              Run npm install, check PostgreSQL, start Ory, MinIO, backend, and frontend
+  orf up              Run npm install, check PostgreSQL, start Ory, MinIO, settlement service, backend, and frontend
   orf down            Stop background backend and frontend
   orf restart         Restart background backend and frontend
-  orf status          Check PostgreSQL, Ory, MinIO, backend, and frontend health
+  orf status          Check PostgreSQL, Ory, MinIO, settlement service, backend, and frontend health
   orf dev             Run backend and frontend in the foreground
   orf backend         Run only the Fastify backend in the foreground
   orf frontend        Run only the Vite frontend in the foreground
@@ -339,7 +347,7 @@ async function prepareRuntimeDependencies() {
       continue;
     }
 
-    if (!service.script) {
+    if (!service.script && !service.start) {
       console.error(`${name} is not healthy: ${health.message}`);
       if (name === 'database') {
         console.error('Set DATABASE_URL or REMOTE_DATABASE_URL in .env, then run node scripts/verify-db.mjs.');
@@ -350,15 +358,16 @@ async function prepareRuntimeDependencies() {
       return false;
     }
 
-    console.log(`${name} is not healthy (${health.message}); running npm run ${service.script}`);
-    const code = await runNpmScriptCommand(service.script, []);
+    const startLabel = service.script ? `npm run ${service.script}` : service.startLabel ?? `start ${name}`;
+    console.log(`${name} is not healthy (${health.message}); running ${startLabel}`);
+    const code = service.start ? await service.start() : await runNpmScriptCommand(service.script, []);
     if (code !== 0) {
-      console.error(`${name} failed to start via npm run ${service.script}`);
+      console.error(`${name} failed to start via ${startLabel}`);
       process.exitCode = code;
       return false;
     }
 
-    const ready = await waitForHealth(service.url, 30000);
+    const ready = await waitForServiceHealth(service, 30000);
     if (!ready.ok) {
       console.error(`${name} did not become healthy: ${ready.message}`);
       console.error(`Check npm run ${service.script} and ${service.displayUrl}`);
@@ -747,16 +756,32 @@ async function checkBackendHealth() {
   };
 }
 
+async function startLocalSettlementService() {
+  return await runCommand('systemctl', ['--user', 'start', localSettlementSystemdUnit], {
+    cwd: rootDir,
+    env: process.env,
+    stdio: 'inherit',
+  });
+}
+
 async function runNpmScriptCommand(script, scriptArgs) {
   return await runNpmCommand(['run', script, '--', ...scriptArgs]);
 }
 
 async function runNpmCommand(npmArgs) {
+  return await runCommand(npmCmd, npmArgs, {
+    cwd: rootDir,
+    stdio: 'inherit',
+    env: process.env,
+  });
+}
+
+async function runCommand(commandName, commandArgs, options) {
   return await new Promise((resolvePromise) => {
-    const child = spawn(npmCmd, npmArgs, {
-      cwd: rootDir,
-      stdio: 'inherit',
-      env: process.env,
+    const child = spawn(commandName, commandArgs, options);
+    child.on('error', (error) => {
+      console.error(`${commandName} failed to start: ${error?.message ?? String(error)}`);
+      resolvePromise(1);
     });
     child.on('exit', (code, signal) => {
       if (signal) {

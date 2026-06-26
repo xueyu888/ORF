@@ -26,8 +26,6 @@ import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVis
 import { useOrf } from "../state/OrfProvider";
 import {
   canReviewObjectiveLootByFlow,
-  canSettleObjectiveLootByFlow,
-  canSubmitObjectiveContributionReviewByFlow,
   canSubmitObjectiveLootByFlow,
 } from "../domain/orfLifecycle";
 import {
@@ -42,7 +40,11 @@ import {
   type ContributionMemberTarget,
 } from "../domain/orfObjectiveParticipants";
 import { resultDetailText } from "../domain/orfResultDetails";
-import { objectiveAcceptedResultFromReviews } from "../domain/orfSettlement";
+import {
+  acceptedResultForClaim,
+  objectiveAcceptedResultFromReviews,
+  objectiveSettlementReviewWindow,
+} from "../domain/orfSettlement";
 import type {
   ContributionAllocation,
   ContributionReviewDraftMetricRow,
@@ -50,16 +52,20 @@ import type {
   ContributionReviewMetricScore,
   LootResultClaim,
   LootResultClaimStatus,
+  ObjectiveAcceptanceReview,
   ObjectiveLoot,
+  ObjectiveSettlementEvent,
   ObjectiveTrialReviewStatus,
   Result,
   ResultAcceptedResult,
 } from "../types/orf";
+import { localDateString } from "../utils/date";
+import { canSubmitObjectivePeerReview } from "../features/challenge/model/orfFlowCapabilities";
 
 const lootClaimOptions: Array<FantasySelectOption<LootResultClaimStatus>> = [
   { label: "完成", value: "completed" },
   { label: "证伪", value: "falsified" },
-  { label: "未主张", value: "notClaimed" },
+  { label: "未完成", value: "notClaimed" },
 ];
 
 const resultReviewOptions: Array<FantasySelectOption<ResultAcceptedResult>> = [
@@ -67,11 +73,6 @@ const resultReviewOptions: Array<FantasySelectOption<ResultAcceptedResult>> = [
   { label: "证伪", value: "falsified" },
   { label: "失败", value: "failed" },
   { label: "不验收", value: "unreviewed" },
-];
-
-const reviewDecisionOptions: Array<FantasySelectOption<"passed" | "notPassed">> = [
-  { label: "通过", value: "passed" },
-  { label: "不通过", value: "notPassed" },
 ];
 
 const trialDecisionOptions: Array<FantasySelectOption<Exclude<ObjectiveTrialReviewStatus, "requested">>> = [
@@ -101,6 +102,81 @@ function ResultDetailsSummary({ result }: { result: Result }) {
     <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs whitespace-pre-wrap leading-5 orf-text-secondary">
       {detail}
     </div>
+  );
+}
+
+function InactiveLootActionPanel({
+  currentSettlementEvent,
+  latestAcceptanceReview,
+  latestLoot,
+  message,
+  results,
+}: {
+  currentSettlementEvent: ObjectiveSettlementEvent | null;
+  latestAcceptanceReview: ObjectiveAcceptanceReview | null;
+  latestLoot: ObjectiveLoot | undefined;
+  message: string;
+  results: Result[];
+}) {
+  const failedReviews = latestAcceptanceReview?.resultReviews.filter(
+    (review) => review.acceptedResult !== "completed" && review.acceptedResult !== "falsified",
+  ) ?? [];
+
+  return (
+    <Card className="orf-card-padding">
+      <div className="grid gap-4 text-sm">
+        <div className="grid gap-1">
+          <div className="font-semibold orf-text-primary">当前处理状态</div>
+          <div className="orf-text-secondary">{message}</div>
+        </div>
+
+        {latestLoot && (
+          <div className="rounded-md border orf-border p-3">
+            <div className="text-xs font-semibold orf-text-muted">最近正式提交</div>
+            <div className="mt-1 orf-text-primary">{latestLoot.submittedBy} · {formatSummaryTime(latestLoot.submittedAt)}</div>
+            <div className="mt-2 whitespace-pre-wrap orf-text-secondary">{latestLoot.body}</div>
+          </div>
+        )}
+
+        {latestAcceptanceReview && (
+          <div className="rounded-md border orf-border p-3">
+            <div className="text-xs font-semibold orf-text-muted">最近验收结果</div>
+            <div className="mt-1 orf-text-primary">
+              {objectiveAcceptanceReviewLabel(latestAcceptanceReview.acceptedResult)} · {formatSummaryTime(latestAcceptanceReview.reviewedAt)}
+            </div>
+            {latestAcceptanceReview.reason && (
+              <div className="mt-2 whitespace-pre-wrap orf-text-secondary">{latestAcceptanceReview.reason}</div>
+            )}
+            {failedReviews.length > 0 && (
+              <div className="mt-3 grid gap-2">
+                {failedReviews.map((review) => (
+                  <div key={review.resultId} className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className={resultReviewBadgeClass(review.acceptedResult)}>
+                      {resultReviewLabel(review.acceptedResult)}
+                    </span>
+                    <span className="orf-text-secondary">
+                      {results.find((result) => result.id === review.resultId)?.title ?? review.resultId}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {currentSettlementEvent && (
+          <div className="rounded-md border orf-border p-3">
+            <div className="text-xs font-semibold orf-text-muted">已完成结算事件</div>
+            <div className="mt-1 orf-text-primary">
+              {settlementEventLabel(currentSettlementEvent.kind)} · {formatSummaryTime(currentSettlementEvent.createdAt)}
+            </div>
+            <div className="mt-2 orf-text-secondary">
+              本次写入 {currentSettlementEvent.settlementPoints} 分；目标累计已结算分会进入统计页。
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -312,21 +388,60 @@ export function LootSubmitPage() {
       ),
     [objectiveId, state.objectiveTrialReviews],
   );
+  const latestAcceptanceReview = useMemo(
+    () =>
+      state.objectiveAcceptanceReviews
+        .filter((item) => item.objectiveId === objectiveId)
+        .sort((left, right) => right.reviewedAt.localeCompare(left.reviewedAt))[0] ?? null,
+    [objectiveId, state.objectiveAcceptanceReviews],
+  );
   const challengerAllocationTargets = useMemo(
     () => (objective ? objectiveChallengerTargets(objective) : []),
     [objective],
   );
   const currentMemberId = currentUser?.id ?? "";
   const currentMemberName = currentUser?.name ?? "";
+  const todayDate = localDateString(new Date());
+  const objectiveSettlementEvents = useMemo(
+    () =>
+      objective
+        ? state.objectiveSettlementEvents.filter(
+            (event) => event.objectiveId === objective.id,
+          )
+        : [],
+    [objective, state.objectiveSettlementEvents],
+  );
+  const settlementReviewWindow = useMemo(
+    () =>
+      objectiveSettlementReviewWindow({
+        objective,
+        settlementEvents: objectiveSettlementEvents,
+        today: todayDate,
+      }),
+    [objective, objectiveSettlementEvents, todayDate],
+  );
+  const settlementEventKind = settlementReviewWindow.kind;
+  const settlementWindowOpen = settlementReviewWindow.open;
+  const hasCurrentSettlementEvent = settlementReviewWindow.reason === "alreadySettled";
+  const currentSettlementEvent = useMemo(
+    () =>
+      settlementEventKind
+        ? objectiveSettlementEvents.find((event) => event.kind === settlementEventKind) ?? null
+        : null,
+    [objectiveSettlementEvents, settlementEventKind],
+  );
   const isChallenger = Boolean(
     objective &&
       currentUser?.role === "member" &&
       isObjectiveChallenger(objective, currentMemberId),
   );
   const canPeerReview = Boolean(
-    objective &&
-      canSubmitObjectiveContributionReviewByFlow(objective) &&
-      isChallenger,
+    canSubmitObjectivePeerReview({
+      objective,
+      currentUser,
+      settlementEvents: objectiveSettlementEvents,
+      today: todayDate,
+    }),
   );
   const [body, setBody] = useState("");
   const [selfTestReportBody, setSelfTestReportBody] = useState("");
@@ -362,7 +477,6 @@ export function LootSubmitPage() {
   const [settlementSummaryError, setSettlementSummaryError] = useState("");
   const [settlementSummaryLoading, setSettlementSummaryLoading] = useState(false);
   const [reason, setReason] = useState("");
-  const [reviewDecision, setReviewDecision] = useState<"passed" | "notPassed">("passed");
   const [trialDecision, setTrialDecision] =
     useState<Exclude<ObjectiveTrialReviewStatus, "requested">>("approved");
   const [trialFeedback, setTrialFeedback] = useState("");
@@ -388,14 +502,23 @@ export function LootSubmitPage() {
       }
       return next;
     });
+  }, [results]);
+
+  useEffect(() => {
     setResultReviews((current) => {
+      if (!latestLoot) return current;
+      const claimByResultId = new Map(
+        latestLoot.resultClaims.map((claim) => [claim.resultId, claim.claim]),
+      );
       const next: typeof current = {};
       for (const result of results) {
-        next[result.id] = current[result.id] ?? "completed";
+        next[result.id] =
+          current[result.id] ??
+          acceptedResultForClaim(claimByResultId.get(result.id));
       }
       return next;
     });
-  }, [results]);
+  }, [latestLoot, results]);
 
   const settlementContributionTargets = challengerAllocationTargets;
   const contributionReviewMatrix = useMemo(
@@ -429,7 +552,7 @@ export function LootSubmitPage() {
   const canLoadSettlementSummary = Boolean(
     currentUser?.role === "admin" &&
     objective &&
-    canSettleObjectiveLootByFlow(objective) &&
+    settlementWindowOpen &&
     latestLoot &&
     usesLocalContributionSettlement,
   );
@@ -452,15 +575,25 @@ export function LootSubmitPage() {
         ? "更新匿名互评"
         : "提交匿名互评";
   const reviewedResultValues = useMemo(
-    () =>
-      reviewDecision === "notPassed"
-        ? results.map(() => "failed" as ResultAcceptedResult)
-        : results.map((result) => resultReviews[result.id] ?? "completed"),
-    [reviewDecision, resultReviews, results],
+    () => {
+      const claimByResultId = new Map(
+        (latestLoot?.resultClaims ?? []).map((claim) => [
+          claim.resultId,
+          claim.claim,
+        ]),
+      );
+      return results.map(
+        (result) =>
+          resultReviews[result.id] ??
+          acceptedResultForClaim(claimByResultId.get(result.id)),
+      );
+    },
+    [latestLoot?.resultClaims, resultReviews, results],
   );
-  const objectiveReviewResult = reviewDecision === "notPassed"
-    ? "abandoned"
-    : objectiveAcceptedResultFromReviews(reviewedResultValues);
+  const objectiveReviewResult =
+    objectiveAcceptedResultFromReviews(reviewedResultValues);
+  const objectiveReviewPresentation =
+    objectiveReviewResultPresentation(objectiveReviewResult);
 
   useEffect(() => {
     setResolutionEdited(false);
@@ -700,9 +833,21 @@ export function LootSubmitPage() {
   );
   const canSettle = Boolean(
     currentUser?.role === "admin" &&
-    canSettleObjectiveLootByFlow(objective) &&
+    settlementWindowOpen &&
     latestLoot,
   );
+  const settlementTitle = settlementEventKind === "deadlinePenalty"
+    ? "逾期惩罚互评结果"
+    : "匿名互评贡献结果";
+  const settlementRatioTitle = settlementEventKind === "deadlinePenalty"
+    ? "惩罚结算比例"
+    : "最终结算比例";
+  const settlementRatioDescription = settlementEventKind === "deadlinePenalty"
+    ? "默认来自当前互评平均值。确认后只写入逾期未通过验收的惩罚积分，目标仍需继续返工。"
+    : "默认来自当前互评平均值。缺评、弃权和偏离只作为提示，指挥官确认合计为 100% 后即可结算。";
+  const settlementSubmitLabel = settlementEventKind === "deadlinePenalty"
+    ? "确认惩罚结算"
+    : "确认结算";
   const canRequestTrial = canRequestObjectiveTrialReview(
     objective,
     currentUser,
@@ -831,15 +976,9 @@ export function LootSubmitPage() {
       return;
     }
 
-    if (reviewDecision === "passed" && objectiveReviewResult === "abandoned") {
-      setError("通过验收时，指标验收结果不能包含失败或不验收");
-      return;
-    }
-
     setSubmittingAction("review");
     try {
       const ok = await reviewObjectiveLoot(objective.id, {
-        acceptedResult: objectiveReviewResult,
         lootId: latestLoot.id,
         reason: reason.trim() || undefined,
         resultReviews: results.map((result, index) => ({
@@ -969,6 +1108,11 @@ export function LootSubmitPage() {
     }));
     if (error) setError("");
   };
+  const inactiveActionMessage = hasCurrentSettlementEvent && objective.flowStatus === "revisionRequired"
+    ? "逾期惩罚结算已完成，目标仍需返工。挑战者重新正式提交后，指挥官再次验收；验收通过后才会开放最终匿名互评和最终结算。"
+    : settlementReviewWindow.reason === "deadlinePending"
+      ? "目标仍在返工期内；到达截止日后才会开放逾期惩罚互评和结算。"
+      : "当前状态没有可提交的验收动作。";
 
   return (
     <PageScaffold
@@ -1060,7 +1204,6 @@ export function LootSubmitPage() {
               {latestLoot && (
                 <LootSubmissionReviewPanel
                   loot={latestLoot}
-                  results={results}
                 />
               )}
               <div className="orf-loot-section">
@@ -1073,23 +1216,9 @@ export function LootSubmitPage() {
                       按挑战者提交的证据确认每个指标结论。
                     </div>
                   </div>
-                  <div className="orf-loot-review-decision">
-                    <span>验收结论</span>
-                    <FantasySelectMenu
-                      ariaLabel="验收结论"
-                      className="orf-loot-select orf-loot-compact-select"
-                      onChange={(value) => {
-                        setReviewDecision(value);
-                        if (error) setError("");
-                      }}
-                      options={reviewDecisionOptions}
-                      value={reviewDecision}
-                      variant="filter"
-                    />
-                  </div>
                 </div>
                 <ResultReviewTable
-                  readOnly={reviewDecision === "notPassed"}
+                  lootClaims={latestLoot?.resultClaims ?? []}
                   results={results}
                   values={resultReviews}
                   onChange={(resultId, value) => {
@@ -1103,15 +1232,16 @@ export function LootSubmitPage() {
               </div>
               <div className="orf-loot-panel orf-loot-result-summary">
                 <div className="font-semibold orf-text-primary">
-                  目标验收结果
+                  {objectiveReviewPresentation.title}
                 </div>
                 <div className="orf-text-secondary">
-                  {objectiveReviewResultLabel(objectiveReviewResult)}
+                  {objectiveReviewPresentation.description}
                 </div>
               </div>
               <Field label="验收说明">
                 <textarea
                   className="orf-input min-h-24 px-3 py-2 text-sm"
+                  placeholder={objectiveReviewPresentation.reasonPlaceholder}
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
                 />
@@ -1126,7 +1256,7 @@ export function LootSubmitPage() {
                   取消
                 </Button>
                 <Button type="submit" disabled={submittingAction === "review"}>
-                  确认验收
+                  {objectiveReviewPresentation.submitLabel}
                 </Button>
               </div>
             </form>
@@ -1142,7 +1272,7 @@ export function LootSubmitPage() {
             >
               <div className="orf-loot-settlement-stack">
                 <div className="orf-loot-settlement-title">
-                  匿名互评贡献结果
+                  {settlementTitle}
                 </div>
                 {usesLocalContributionSettlement ? (
                   <LocalSettlementSummaryView
@@ -1161,10 +1291,10 @@ export function LootSubmitPage() {
                     <div className="orf-loot-panel-heading">
                       <div>
                         <div className="text-sm font-semibold orf-text-primary">
-                          最终结算比例
+                          {settlementRatioTitle}
                         </div>
                         <div className="text-xs orf-text-secondary">
-                          默认来自当前互评平均值。缺评、弃权和偏离只作为提示，指挥官确认合计为 100% 后即可结算。
+                          {settlementRatioDescription}
                         </div>
                       </div>
                       <div className="orf-loot-panel-heading-actions">
@@ -1230,7 +1360,7 @@ export function LootSubmitPage() {
                   取消
                 </Button>
                 <Button type="submit" disabled={submittingAction === "settle"}>
-                  确认结算
+                  {settlementSubmitLabel}
                 </Button>
               </div>
             </form>
@@ -1507,9 +1637,13 @@ export function LootSubmitPage() {
             </form>
           </Card>
         ) : (
-          <Card className="orf-card-padding text-sm orf-text-secondary">
-            当前状态没有可提交的验收动作。
-          </Card>
+          <InactiveLootActionPanel
+            currentSettlementEvent={currentSettlementEvent}
+            latestAcceptanceReview={latestAcceptanceReview}
+            latestLoot={latestLoot}
+            message={inactiveActionMessage}
+            results={results}
+          />
         )}
       </div>
     </PageScaffold>
@@ -1518,13 +1652,9 @@ export function LootSubmitPage() {
 
 function LootSubmissionReviewPanel({
   loot,
-  results,
 }: {
   loot: ObjectiveLoot;
-  results: Result[];
 }) {
-  const resultById = new Map(results.map((result) => [result.id, result]));
-
   return (
     <div className="orf-loot-panel orf-loot-submission-review">
       <div className="orf-loot-panel-heading">
@@ -1563,36 +1693,6 @@ function LootSubmissionReviewPanel({
           )}
         </div>
       )}
-      <div className="orf-loot-table-wrap">
-        <table className="orf-loot-table orf-loot-submission-table">
-          <thead className="orf-surface-muted orf-text-secondary">
-            <tr>
-              <th className="px-3 py-2 font-semibold">指标</th>
-              <th className="px-3 py-2 font-semibold">主张</th>
-              <th className="px-3 py-2 font-semibold">证据</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loot.resultClaims.map((claim) => (
-              <tr key={claim.resultId}>
-                <td className="px-3 py-2 font-medium orf-text-primary">
-                  {resultById.get(claim.resultId)?.title ?? claim.resultId}
-                </td>
-                <td className="px-3 py-2 orf-text-secondary">
-                  {lootClaimLabel(claim.claim)}
-                </td>
-                <td className="px-3 py-2 orf-text-secondary">
-                  {claim.evidenceText ? (
-                    <LinkifiedText text={claim.evidenceText} />
-                  ) : (
-                    <span className="orf-text-muted">-</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
@@ -1627,12 +1727,12 @@ function linkifiedText(text: string): ReactNode[] {
 }
 
 function ResultReviewTable({
-  readOnly,
+  lootClaims,
   results,
   values,
   onChange,
 }: {
-  readOnly: boolean;
+  lootClaims: LootResultClaim[];
   results: Result[];
   values: Record<string, ResultAcceptedResult>;
   onChange: (resultId: string, value: ResultAcceptedResult) => void;
@@ -1645,20 +1745,25 @@ function ResultReviewTable({
     );
   }
 
+  const claimByResultId = new Map(
+    lootClaims.map((claim) => [claim.resultId, claim]),
+  );
+
   return (
     <div className="orf-loot-table-wrap">
       <table className="orf-loot-table orf-loot-result-review-table">
         <thead className="orf-surface-muted orf-text-secondary">
           <tr>
             <th className="px-3 py-2 font-semibold">指标</th>
+            <th className="px-3 py-2 font-semibold">完成声明与证据</th>
             <th className="px-3 py-2 font-semibold">结论</th>
           </tr>
         </thead>
         <tbody>
           {results.map((result) => {
-            const currentValue = readOnly
-              ? "failed"
-              : values[result.id] ?? "completed";
+            const claim = claimByResultId.get(result.id);
+            const currentValue =
+              values[result.id] ?? acceptedResultForClaim(claim?.claim);
             const detail = resultDetailText(result);
             return (
               <tr key={result.id}>
@@ -1669,20 +1774,30 @@ function ResultReviewTable({
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  {readOnly ? (
-                    <span className={resultReviewBadgeClass(currentValue)}>
-                      {resultReviewLabel(currentValue)}
+                  <div className="orf-loot-claim-cell">
+                    <span className={lootClaimBadgeClass(claim?.claim)}>
+                      {claim ? lootClaimLabel(claim.claim) : "未完成"}
                     </span>
-                  ) : (
-                    <FantasySelectMenu
-                      ariaLabel={`${result.title} 验收结论`}
-                      className="orf-loot-select orf-loot-table-select"
-                      onChange={(value) => onChange(result.id, value)}
-                      options={resultReviewOptions}
-                      value={currentValue}
-                      variant="filter"
-                    />
-                  )}
+                    {claim?.evidenceText ? (
+                      <div className="orf-loot-claim-evidence">
+                        <LinkifiedText text={claim.evidenceText} />
+                      </div>
+                    ) : (
+                      <div className="orf-loot-claim-evidence orf-text-muted">
+                        -
+                      </div>
+                    )}
+                  </div>
+                </td>
+                <td className="px-3 py-2">
+                  <FantasySelectMenu
+                    ariaLabel={`${result.title} 验收结论`}
+                    className="orf-loot-select orf-loot-table-select"
+                    onChange={(value) => onChange(result.id, value)}
+                    options={resultReviewOptions}
+                    value={currentValue}
+                    variant="filter"
+                  />
                 </td>
               </tr>
             );
@@ -2406,12 +2521,43 @@ function percentInputTotal(values: Record<string, string>, members: string[]) {
   }, 0);
 }
 
-function objectiveReviewResultLabel(
+function objectiveReviewResultPresentation(
   value: ReturnType<typeof objectiveAcceptedResultFromReviews>,
 ) {
-  if (value === "completed") return "全部指标完成，目标完成。";
-  if (value === "falsified") return "指标全部有效证伪，目标按有效证伪结算。";
-  return "存在未完成、失败或未验收指标，目标不按完成结算。";
+  if (value === "completed") {
+    return {
+      description: "全部指标完成；提交后目标进入已验收，挑战者可以继续匿名互评。",
+      reasonPlaceholder: "可填写验收说明，例如完成证据确认结果。",
+      submitLabel: "确认验收通过",
+      title: "目标将验收通过",
+    };
+  }
+  if (value === "falsified") {
+    return {
+      description: "指标全部有效证伪；提交后目标进入已验收，并按有效证伪口径结算。",
+      reasonPlaceholder: "可填写有效证伪的验收说明。",
+      submitLabel: "确认有效证伪",
+      title: "目标将按证伪通过",
+    };
+  }
+  return {
+    description: "存在未完成、失败或未验收指标；提交后目标进入待返工，挑战者需要继续完成并重新提交。",
+    reasonPlaceholder: "建议填写返工原因和需要补充的验收材料。",
+    submitLabel: "确认要求返工",
+    title: "目标将进入待返工",
+  };
+}
+
+function objectiveAcceptanceReviewLabel(value: ObjectiveAcceptanceReview["acceptedResult"]) {
+  if (value === "completed") return "验收通过";
+  if (value === "falsified") return "有效证伪";
+  if (value === "overdelivered") return "超额完成";
+  if (value === "overturned") return "结论改判";
+  return "验收不通过";
+}
+
+function settlementEventLabel(value: ObjectiveSettlementEvent["kind"]) {
+  return value === "deadlinePenalty" ? "逾期惩罚结算" : "最终结算";
 }
 
 function resultReviewLabel(value: ResultAcceptedResult) {
@@ -2422,6 +2568,16 @@ function resultReviewLabel(value: ResultAcceptedResult) {
 }
 
 function resultReviewBadgeClass(value: ResultAcceptedResult) {
+  if (value === "completed") {
+    return "orf-loot-result-badge orf-loot-result-badge-success";
+  }
+  if (value === "falsified") {
+    return "orf-loot-result-badge orf-loot-result-badge-info";
+  }
+  return "orf-loot-result-badge orf-loot-result-badge-warning";
+}
+
+function lootClaimBadgeClass(value: LootResultClaimStatus | undefined) {
   if (value === "completed") {
     return "orf-loot-result-badge orf-loot-result-badge-success";
   }
