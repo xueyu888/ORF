@@ -216,7 +216,7 @@ export function recruitmentDialog(page: Page) {
 }
 
 export function recruitMemberCheckbox(page: Page, memberName: string) {
-  return recruitmentDialog(page).getByLabel(`征召 ${memberName}`, { exact: true });
+  return recruitmentDialog(page).locator("label").filter({ hasText: memberName }).getByRole("checkbox");
 }
 
 export async function objectiveHasFlowStatus(objective: RecruitNeedAcceptObjective, flowStatus: string) {
