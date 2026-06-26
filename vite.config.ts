@@ -71,6 +71,9 @@ export default defineConfig(({ mode }) => {
         "/health": "http://127.0.0.1:8787",
         "/settings/backgrounds": "http://127.0.0.1:8787",
       },
+      watch: {
+        ignored: ["**/.artifacts/**", "**/.orf/**", "**/dist/**"],
+      },
     },
   };
 });
