@@ -25,7 +25,7 @@ test("deadline penalty settlement awards half points even when acceptance failed
   });
 });
 
-test("final completion settlement supplies the remaining half after penalty", () => {
+test("final completion settlement adds no points after deadline penalty", () => {
   const event = planObjectiveSettlementEvent({
     acceptedResult: "completed",
     basePoints: 100,
@@ -38,8 +38,8 @@ test("final completion settlement supplies the remaining half after penalty", ()
   assert.deepEqual(event, {
     kind: "finalCompletion",
     basePoints: 100,
-    multiplier: 0.5,
-    settlementPoints: 50,
+    multiplier: 0,
+    settlementPoints: 0,
   });
 });
 

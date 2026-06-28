@@ -145,7 +145,7 @@ export function settlementEventMultiplierFor(input: {
   lootSubmittedAt: string | null;
 }) {
   if (input.kind === "deadlinePenalty") return 0.5;
-  if (input.hasDeadlinePenaltyEvent) return 0.5;
+  if (input.kind === "finalCompletion" && input.hasDeadlinePenaltyEvent) return 0;
   return completionMultiplierFor(
     input.acceptedResult,
     input.lootSubmittedAt,
