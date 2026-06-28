@@ -24,6 +24,29 @@ export function objectiveAlignmentRequestStatusLabel(status: ObjectiveAlignmentR
   return "待对齐";
 }
 
+export function objectiveAlignmentNeedsWorkActionLabel(kind: ObjectiveAlignmentRequestKind) {
+  return kind === "reestimateCompletion" ? "打回重估" : "需补充";
+}
+
+export function objectiveAlignmentNeedsWorkFeedback(kind: ObjectiveAlignmentRequestKind) {
+  if (kind === "reestimateCompletion") return "请继续重估指标口径后再申请对齐。";
+  if (kind === "frozenReestimate") return "冻结后重估申请未通过，请补充需要修改的口径和原因。";
+  return "请补充验收材料后再申请对齐。";
+}
+
+export function objectiveAlignmentReviewStatusText(
+  kind: ObjectiveAlignmentRequestKind,
+  status: ObjectiveAlignmentRequest["status"],
+) {
+  if (status === "scheduled") return "已约定";
+  if (status === "completed") return "已完成";
+  if (status === "needsWork") {
+    return kind === "reestimateCompletion" ? "已打回重估" : "需要补充";
+  }
+  if (status === "cancelled") return "已取消";
+  return "待对齐";
+}
+
 export function isOpenObjectiveAlignmentRequest(request: Pick<ObjectiveAlignmentRequest, "status">) {
   return openObjectiveAlignmentRequestStatuses.includes(request.status as (typeof openObjectiveAlignmentRequestStatuses)[number]);
 }

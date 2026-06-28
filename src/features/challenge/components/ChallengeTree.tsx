@@ -14,6 +14,8 @@ import {
   canRequestObjectiveAlignment,
   isOpenObjectiveAlignmentRequest,
   latestOpenObjectiveAlignmentRequest,
+  objectiveAlignmentNeedsWorkActionLabel,
+  objectiveAlignmentNeedsWorkFeedback,
   objectiveAlignmentRequestActionLabel,
   objectiveAlignmentRequestKindLabel,
   objectiveAlignmentRequestStatusLabel,
@@ -549,16 +551,11 @@ function ObjectivePanel({
                   onClick={() =>
                     void handlers.onReviewAlignment(group.objective.id, request.id, {
                       status: "needsWork",
-                      commanderFeedback:
-                        request.kind === "reestimateCompletion"
-                          ? "请继续重估指标口径后再申请对齐。"
-                          : request.kind === "frozenReestimate"
-                            ? "冻结后重估申请未通过，请补充需要修改的口径和原因。"
-                            : "请补充验收材料后再申请对齐。",
+                      commanderFeedback: objectiveAlignmentNeedsWorkFeedback(request.kind),
                     })
                   }
                 >
-                  需补充
+                  {objectiveAlignmentNeedsWorkActionLabel(request.kind)}
                 </button>
               </span>
             </span>

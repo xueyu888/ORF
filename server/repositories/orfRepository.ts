@@ -77,6 +77,10 @@ import {
   objectiveLifecycleTransitions,
 } from "../../src/domain/orfLifecycle";
 import { objectiveChallengeEntryClosed as objectiveClosedForChallengeEntry } from "../../src/domain/orfChallengeEntry";
+import {
+  objectiveAlignmentNeedsWorkFeedback,
+  objectiveAlignmentReviewStatusText,
+} from "../../src/domain/orfAlignment";
 import { validateObjectiveDeadlineChange } from "../../src/domain/orfDeadline";
 import { db } from "../db/client";
 import {
@@ -651,14 +655,7 @@ async function notifyMemberOfObjectiveAlignmentReview(input: {
 }) {
   const actorName = await getUserNameById(input.actorUserId);
   const label = objectiveAlignmentKindLabel(input.kind);
-  const statusText =
-    input.status === "scheduled"
-      ? "已约定"
-      : input.status === "completed"
-        ? "已完成"
-        : input.status === "needsWork"
-          ? "需要补充"
-          : input.status;
+  const statusText = objectiveAlignmentReviewStatusText(input.kind, input.status);
   const feedback = input.commanderFeedback?.trim();
   await publishNotificationEvent({
     actorName: actorName || "指挥官",
@@ -1951,7 +1948,7 @@ export async function reviewObjectiveAlignmentRequest(
   }
 
   const reviewedAt = nowIso();
-  const feedback = input.commanderFeedback?.trim() || (input.status === "needsWork" ? "请补充后重新对齐。" : null);
+  const feedback = input.commanderFeedback?.trim() || (input.status === "needsWork" ? objectiveAlignmentNeedsWorkFeedback(request.kind) : null);
   const updated = await db.transaction(async (tx) => {
     const rows = await tx
       .update(objectiveAlignmentRequests)

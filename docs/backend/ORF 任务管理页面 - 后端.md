@@ -27,8 +27,8 @@
 | `PATCH`  | `/api/objectives/:objectiveId/challenge-applications/:applicationId/reject`  | 指挥官拒绝申请                                                                                                                                     |
 | `PATCH`  | `/api/objectives/:objectiveId/challenge`                                     | 被征召成员接受，写入挑战者并进入 `reestimating`                                                                                                    |
 | `PATCH`  | `/api/objectives/:objectiveId/freeze`                                        | 指挥官完成重估并冻结，进入 `frozen`                                                                                                                |
-| `POST`   | `/api/objectives/:objectiveId/alignment-requests`                            | 目标挑战者发起阶段对齐申请；`reestimating` 可申请完成重估，`frozen` 可申请重开重估，`submitted` 可申请验收对齐                                      |
-| `PATCH`  | `/api/objectives/:objectiveId/alignment-requests/:alignmentRequestId`         | 指挥官处理阶段对齐申请；完成冻结后重开重估申请时必须传 `confirmationDueAt`，通过后目标回到 `reestimating`                                           |
+| `POST`   | `/api/objectives/:objectiveId/alignment-requests`                            | 目标挑战者发起阶段对齐申请；`reestimating` 可申请完成重估，`frozen` 可申请重开重估，`submitted` 只能申请验收对齐                                    |
+| `PATCH`  | `/api/objectives/:objectiveId/alignment-requests/:alignmentRequestId`         | 指挥官处理阶段对齐申请；重估完成申请可完成冻结或打回重估；冻结后重开重估申请通过时必须传 `confirmationDueAt`，通过后目标回到 `reestimating`          |
 | `POST`   | `/api/objectives/:objectiveId/reinforcements`                                | 指挥官在 `frozen` 且尚未提交战利品前加派 active 普通成员，直接写入正式挑战者，目标仍保持 `frozen`                                                   |
 | `POST`   | `/api/objectives/:objectiveId/loot`                                          | 挑战者提交结构化战利品，进入 `submitted`                                                                                                           |
 | `POST`   | `/api/objectives/:objectiveId/trial-reviews`                                 | 挑战者发起一次试验收，目标仍保持 `frozen`                                                                                                          |
@@ -39,7 +39,7 @@
 | `POST`   | `/api/results`                                                               | 创建指标并返回 `{ result }`；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许 `Objective.challengerUserIds` 中的正式挑战者在未过期 `reestimating` 阶段创建 |
 | `PATCH`  | `/api/results/:resultId`                                                     | 更新指标标题；指挥官可编辑未冻结目标下指标，`Objective.challengerUserIds` 中的挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
 | `PATCH`  | `/api/results/:resultId/details`                                             | 更新指标详情字段：`detail`；权限和生命周期锁与指标标题编辑一致 |
-| `PATCH`  | `/api/results/:resultId/uncertainty`                                         | 更新指标难度和积分映射 |
+| `PATCH`  | `/api/results/:resultId/uncertainty`                                         | 更新指标难度和积分映射；仅未锁定目标可写，`submitted` 后不得修改 |
 | `PATCH`  | `/api/results/:resultId/confidence`                                          | 更新指标信心 |
 | `PATCH`  | `/api/results/:resultId/order`                                               | 更新指标在同目标内的排序 |
 | `POST`   | `/api/feedback`                                                              | 创建团队级内部反馈 issue，记录 `createdBy` 和文本处理人 `owner`，并同步创建首条评论正文和可选附件；新反馈不接收目标或指标绑定                      |
@@ -225,7 +225,7 @@ type ObjectiveFlowStatus =
 - 任务和子任务维护权限以 `Objective.challengerUserIds` 为身份边界；同一目标正式挑战者可以共同新增、编辑、勾选、移动和删除目标下任务与子任务，旁观成员返回 403，指挥官/管理员可维护任意目标任务。
 - `Task.assignee` 不表达所有权，`Task.createdBy` / `updatedBy` 只作为审计字段返回给前端和测试，不能参与维护授权判断；`Task.definitionContributorUserIds` 只表达谁定义过行动项，读模型派生的 `definitionContributorProfiles` 用于行动项定义者头像组展示。
 - 任务 ID 必须使用带单调计数和 UUID 后缀的 `ORF-*` 形式；同一毫秒内的并发创建不能因为时间戳或伪随机数相同而撞主键。
-- 冻结后不允许直接改指标口径；目标挑战者可以发起 `frozenReestimate` 对齐申请，指挥官审批通过时必须设置新的 `confirmationDueAt`，该时间必须晚于当前时间且不能超过 `Objective.finalDueAt` 当日 23:59。审批通过后目标从 `frozen/goalFrozen` 回到 `reestimating/orfReestimate`，清空当前 `confirmedAt`，复用现有重估权限和完成重估后再次冻结的状态链；申请记录保留审批时的 `confirmationDueAt` 快照。
+- 难度和指标口径只能在正式提交战利品前调整。`reestimating` 阶段挑战者申请完成重估后，指挥官可以完成并冻结，也可以把该对齐申请标记为 `needsWork` 打回重估，目标仍保持 `reestimating`。冻结后不允许直接改指标口径；目标挑战者可以发起 `frozenReestimate` 对齐申请，指挥官审批通过时必须设置新的 `confirmationDueAt`，该时间必须晚于当前时间且不能超过 `Objective.finalDueAt` 当日 23:59。审批通过后目标从 `frozen/goalFrozen` 回到 `reestimating/orfReestimate`，清空当前 `confirmedAt`，复用现有重估权限和完成重估后再次冻结的状态链；申请记录保留审批时的 `confirmationDueAt` 快照。目标进入 `submitted` 后，`objectiveLoot` 和 `Objective.lootSubmittedAt` 已成为正式提交事实，后端不得接受重开重估或难度修改。
 - 截止日期修改以 `Objective.finalDueAt` 为唯一输入；目标仍处于 `reestimating` 且日期实际变更时同步重算 `confirmationDueAt`，冻结后直接改截止日期只能延后，不会自动重开重估或修改 `confirmationDueAt`。重开重估必须走 `frozenReestimate` 对齐申请审批。
 - 任务、子任务和评论允许在挑战协作中维护，但不自动推导验收或结算。
 - 评论线程标题必须由后端根据真实目标、指标、任务或子任务解析；客户端提交的 `targetTitle` 只能作为兼容字段，不能覆盖真实标题。
