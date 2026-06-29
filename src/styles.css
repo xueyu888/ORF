@@ -11316,6 +11316,7 @@ body[data-dragging-floating="true"] {
 .orf-avatar-stack,
 .orf-status-chip,
 .orf-time-value,
+.orf-objective-time-summary,
 .orf-date-stack {
   min-width: 0;
   max-width: 100%;
@@ -11700,6 +11701,13 @@ body[data-dragging-floating="true"] {
 
 .orf-time-value {
   max-width: 100%;
+}
+
+.orf-time-value,
+.orf-objective-time-summary,
+.orf-date-stack,
+.orf-objective-deadline-display {
+  width: 100%;
 }
 
 .orf-time-value svg {
@@ -12205,6 +12213,7 @@ body[data-dragging-floating="true"] {
   .orf-avatar-stack,
   .orf-status-chip,
   .orf-time-value,
+  .orf-objective-time-summary,
   .orf-date-stack,
   .orf-progress-value,
   .orf-row-loot-action,
@@ -12810,6 +12819,7 @@ body[data-dragging-floating="true"] {
   .orf-avatar-stack,
   .orf-status-chip,
   .orf-time-value,
+  .orf-objective-time-summary,
   .orf-date-stack,
   .orf-progress-value,
   .orf-row-loot-action,
