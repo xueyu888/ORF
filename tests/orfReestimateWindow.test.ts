@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   calculateObjectiveReestimateDueAt,
+  isObjectiveReestimateDueAtElapsed,
   REESTIMATE_WINDOW_HALF_DAY_MS,
   resolveObjectiveReestimateWindowSync,
   validateFrozenReestimateReopenDueAt,
@@ -17,14 +18,14 @@ test("objective reestimate due date moves with the final deadline", () => {
   assert.ok(new Date(laterDueAt).getTime() > new Date(earlyDueAt).getTime());
 });
 
-test("objective reestimate due date keeps using the 30 percent window without a fixed maximum", () => {
+test("objective reestimate due date keeps using the 50 percent completion window without a fixed maximum", () => {
   const acceptedAt = "2026-06-01T00:00:00.000Z";
   const dueAt = calculateObjectiveReestimateDueAt("2026-12-31", acceptedAt);
 
   assert.ok(dueAt);
   const finalDueAt = new Date("2026-12-31T23:59:00").getTime();
   const acceptedAtTime = new Date(acceptedAt).getTime();
-  const roundedHalfDays = Math.round(((finalDueAt - acceptedAtTime) * 0.3) / REESTIMATE_WINDOW_HALF_DAY_MS);
+  const roundedHalfDays = Math.round(((finalDueAt - acceptedAtTime) * 0.5) / REESTIMATE_WINDOW_HALF_DAY_MS);
   const expectedWindowMs = Math.max(1, roundedHalfDays) * REESTIMATE_WINDOW_HALF_DAY_MS;
 
   assert.equal(
@@ -32,6 +33,32 @@ test("objective reestimate due date keeps using the 30 percent window without a 
     expectedWindowMs,
   );
   assert.ok(expectedWindowMs > 9 * 24 * 60 * 60 * 1000);
+});
+
+test("objective reestimate due date elapsed only applies to active reestimating objectives", () => {
+  const now = new Date("2026-06-08T12:00:00.000Z");
+
+  assert.equal(
+    isObjectiveReestimateDueAtElapsed(
+      { flowStatus: "reestimating", confirmationDueAt: "2026-06-08T12:00:00.000Z" },
+      now,
+    ),
+    true,
+  );
+  assert.equal(
+    isObjectiveReestimateDueAtElapsed(
+      { flowStatus: "reestimating", confirmationDueAt: "2026-06-08T13:00:00.000Z" },
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    isObjectiveReestimateDueAtElapsed(
+      { flowStatus: "frozen", confirmationDueAt: "2026-06-08T12:00:00.000Z" },
+      now,
+    ),
+    false,
+  );
 });
 
 test("objective reestimate due date rejects an invalid or too-short window", () => {

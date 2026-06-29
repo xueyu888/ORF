@@ -467,6 +467,11 @@ export function useOrfProviderObjectiveActions({
         }
       },
       requestObjectiveAlignment: async (objectiveId: string, input: RequestObjectiveAlignmentInput) => {
+        if (input.kind === "frozenReestimate" && !input.note?.trim()) {
+          notify("请先填写重新重估理由");
+          return false;
+        }
+
         try {
           await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/alignment-requests`, {
             method: "POST",
@@ -477,7 +482,7 @@ export function useOrfProviderObjectiveActions({
             input.kind === "reestimateCompletion"
               ? "已申请重估对齐，请约时间并定好会议室"
               : input.kind === "frozenReestimate"
-                ? "已申请重开重估，请等待指挥官审批"
+                ? "已申请重新重估，请等待指挥官审批"
                 : "已申请验收对齐，请约时间并定好会议室",
           );
           return true;

@@ -1,7 +1,7 @@
 import { clsx } from "clsx";
 import { CalendarDays, CheckCircle2, Clock3, FolderKanban, MessageSquare, Plus, Send, Trash2, UserPlus, type LucideIcon } from "lucide-react";
 import { createPortal } from "react-dom";
-import type { CSSProperties, MouseEvent, ReactNode } from "react";
+import type { CSSProperties, FormEvent, MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { FantasyDatePicker } from "../../../components/FantasyDatePicker";
@@ -349,6 +349,8 @@ function ObjectivePanel({
       ? handlers.peerReviewActionLabel(group.objective.id) ?? workbenchAction.label
       : workbenchAction?.label;
   const alignmentAction = isDraftObjective ? null : alignmentActionForObjective(group.objective, handlers.currentUser, objectiveAlignmentRequests);
+  const frozenReestimateAction = alignmentAction?.kind === "frozenReestimate" ? alignmentAction : null;
+  const headerAlignmentAction = alignmentAction?.kind === "frozenReestimate" ? null : alignmentAction;
   const showApplicationReview =
     handlers.canManageFlow &&
     canReviewObjectiveChallengeApplications(group.objective) &&
@@ -465,14 +467,22 @@ function ObjectivePanel({
             {workbenchActionLabel}
           </Link>
         ) : null}
-        {alignmentAction ? (
+        {headerAlignmentAction ? (
           <AlignmentActionButton
-            action={alignmentAction}
+            action={headerAlignmentAction}
             objectiveId={group.objective.id}
             onRequestAlignment={handlers.onRequestAlignment}
           />
         ) : null}
       </div>
+
+      {frozenReestimateAction ? (
+        <FrozenReestimateRequestStrip
+          action={frozenReestimateAction}
+          objectiveId={group.objective.id}
+          onRequestAlignment={handlers.onRequestAlignment}
+        />
+      ) : null}
 
       {showApplicationReview && (
         <div className="orf-objective-admin-strip">
@@ -520,6 +530,7 @@ function ObjectivePanel({
                 <span className="orf-objective-application-reason">
                   {request.requestedBy} · {objectiveAlignmentRequestStatusLabel(request.status)}
                   {request.meetingRoom ? ` · ${request.meetingRoom}` : " · 约时间并定会议室"}
+                  {request.note ? ` · ${request.note}` : ""}
                 </span>
               </span>
               <span className="orf-objective-application-actions">
@@ -673,15 +684,66 @@ function AlignmentActionButton({
       onClick={() =>
         void onRequestAlignment(objectiveId, {
           kind: action.kind,
-          note:
-            action.kind === "frozenReestimate"
-              ? "申请冻结后重新进入重估，需由指挥官设置新的重估截止时间。"
-              : "请和指挥官约时间，并定好会议室。",
+          note: "请和指挥官约时间，并定好会议室。",
         })
       }
     >
       {action.label}
     </button>
+  );
+}
+
+function FrozenReestimateRequestStrip({
+  action,
+  objectiveId,
+  onRequestAlignment,
+}: {
+  action: AlignmentAction;
+  objectiveId: string;
+  onRequestAlignment: RowHandlers["onRequestAlignment"];
+}) {
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const trimmedReason = reason.trim();
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!trimmedReason || submitting) return;
+
+    setSubmitting(true);
+    try {
+      const requested = await onRequestAlignment(objectiveId, {
+        kind: action.kind,
+        note: trimmedReason,
+      });
+      if (requested) setReason("");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="orf-objective-admin-strip orf-objective-reestimate-request-strip" data-no-row-edit="true">
+      <span className="orf-objective-admin-strip-label">重新重估</span>
+      <form className="orf-objective-reestimate-request-form" onSubmit={(event) => void submit(event)}>
+        <input
+          aria-label="重新重估理由"
+          className="orf-objective-reestimate-reason-input"
+          maxLength={200}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="说明需要重新重估的原因"
+          type="text"
+          value={reason}
+        />
+        <button
+          className={actionButtonClassName({ size: "sm", variant: "secondary" })}
+          disabled={!trimmedReason || submitting}
+          type="submit"
+        >
+          {submitting ? "提交中" : objectiveAlignmentRequestActionLabel(action.kind)}
+        </button>
+      </form>
+    </div>
   );
 }
 

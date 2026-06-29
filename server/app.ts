@@ -29,6 +29,7 @@ import { registerClientUpdateRoutes } from "./routes/clientUpdateRoutes";
 import { registerPushRoutes } from "./routes/pushRoutes";
 import { registerWorkLogRoutes } from "./routes/workLogRoutes";
 import { registerLocalSettlementRoutes } from "./routes/localSettlementRoutes";
+import { startReestimateAutoFreezeScheduler } from "./orf/reestimateAutoFreezeScheduler";
 import { startWorkLogReminderScheduler } from "./workLogs/workLogReminderScheduler";
 function corsOrigin() {
   if (env.CORS_ORIGIN === "*") {
@@ -120,10 +121,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   const stopClientUpdatePushScheduler = startClientUpdatePushScheduler(app.log);
   const stopNotificationDeliveryScheduler = startNotificationDeliveryScheduler(app.log);
+  const stopReestimateAutoFreezeScheduler = startReestimateAutoFreezeScheduler(app.log);
   const stopWorkLogReminderScheduler = startWorkLogReminderScheduler(app.log);
   app.addHook("onClose", async () => {
     stopClientUpdatePushScheduler();
     stopNotificationDeliveryScheduler();
+    stopReestimateAutoFreezeScheduler();
     stopWorkLogReminderScheduler();
   });
 

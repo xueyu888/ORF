@@ -1,7 +1,7 @@
 import type { ObjectiveFlowStatus } from "../../types/orf";
 
 export const REESTIMATE_WINDOW_HALF_DAY_MS = 12 * 60 * 60 * 1000;
-export const REESTIMATE_WINDOW_RATIO = 0.3;
+export const REESTIMATE_COMPLETION_RATIO = 0.5;
 
 export type ObjectiveReestimateWindowTarget = {
   acceptedAt?: string | null;
@@ -13,6 +13,11 @@ export type ObjectiveReestimateWindowSync =
   | { status: "unchanged" }
   | { status: "updated"; confirmationDueAt: string }
   | { status: "invalid" };
+
+export type ObjectiveReestimateDueAtTarget = {
+  confirmationDueAt?: string | null;
+  flowStatus: ObjectiveFlowStatus;
+};
 
 export type FrozenReestimateReopenBlockReason =
   | "lifecycleLocked"
@@ -44,9 +49,18 @@ export function calculateObjectiveReestimateDueAt(
   const remainingMs = finalDueDate.getTime() - acceptedDate.getTime();
   if (remainingMs < REESTIMATE_WINDOW_HALF_DAY_MS) return null;
 
-  const roundedHalfDays = Math.round((remainingMs * REESTIMATE_WINDOW_RATIO) / REESTIMATE_WINDOW_HALF_DAY_MS);
+  const roundedHalfDays = Math.round((remainingMs * REESTIMATE_COMPLETION_RATIO) / REESTIMATE_WINDOW_HALF_DAY_MS);
   const confirmationHalves = Math.max(1, roundedHalfDays);
   return new Date(acceptedDate.getTime() + confirmationHalves * REESTIMATE_WINDOW_HALF_DAY_MS).toISOString();
+}
+
+export function isObjectiveReestimateDueAtElapsed(
+  target: ObjectiveReestimateDueAtTarget | null | undefined,
+  now = new Date(),
+): boolean {
+  if (!target || target.flowStatus !== "reestimating" || !target.confirmationDueAt) return false;
+  const dueAt = new Date(target.confirmationDueAt).getTime();
+  return Number.isFinite(dueAt) && dueAt <= now.getTime();
 }
 
 export function resolveObjectiveReestimateWindowSync(

@@ -6,13 +6,13 @@ export const openObjectiveAlignmentRequestStatuses = ["requested", "scheduled"] 
 
 export function objectiveAlignmentRequestKindLabel(kind: ObjectiveAlignmentRequestKind) {
   if (kind === "reestimateCompletion") return "重估对齐";
-  if (kind === "frozenReestimate") return "冻结后重估";
+  if (kind === "frozenReestimate") return "重新重估";
   return "验收对齐";
 }
 
 export function objectiveAlignmentRequestActionLabel(kind: ObjectiveAlignmentRequestKind) {
   if (kind === "reestimateCompletion") return "申请完成重估";
-  if (kind === "frozenReestimate") return "申请重开重估";
+  if (kind === "frozenReestimate") return "申请重新重估";
   return "申请验收对齐";
 }
 
@@ -30,7 +30,7 @@ export function objectiveAlignmentNeedsWorkActionLabel(kind: ObjectiveAlignmentR
 
 export function objectiveAlignmentNeedsWorkFeedback(kind: ObjectiveAlignmentRequestKind) {
   if (kind === "reestimateCompletion") return "请继续重估指标口径后再申请对齐。";
-  if (kind === "frozenReestimate") return "冻结后重估申请未通过，请补充需要修改的口径和原因。";
+  if (kind === "frozenReestimate") return "重新重估申请未通过，请补充需要修改的指标、难度或原因。";
   return "请补充验收材料后再申请对齐。";
 }
 
