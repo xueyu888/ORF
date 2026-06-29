@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildLeaderboardRows } from "../src/features/reports/model/leaderboard";
-import type { Objective, PointLedgerEntry, OrfUser, OrfUserDisplayProfile } from "../src/types/orf";
+import { buildLeaderboardRows } from "../src/domain/reportsLeaderboard";
+import type { Objective, ObjectiveAcceptanceReview, PointLedgerEntry, OrfUser, OrfUserDisplayProfile } from "../src/types/orf";
 
 const users: OrfUser[] = [
   { id: "user-a", name: "成员甲", email: "a@example.com", role: "member", status: "active" },
@@ -56,13 +56,29 @@ function ledger(input: Partial<PointLedgerEntry>): PointLedgerEntry {
   };
 }
 
+function acceptanceReview(input: Partial<ObjectiveAcceptanceReview>): ObjectiveAcceptanceReview {
+  return {
+    acceptedResult: "completed",
+    id: `acceptance-${input.objectiveId ?? "objective-1"}-${input.acceptedResult ?? "completed"}`,
+    lootId: "loot-1",
+    objectiveId: "objective-1",
+    reason: null,
+    resultReviews: [],
+    reviewedAt: "2026-06-13T10:00:00.000Z",
+    reviewerUserId: "admin-1",
+    ...input,
+  };
+}
+
 function state(input: {
+  objectiveAcceptanceReviews?: ObjectiveAcceptanceReview[];
   objectives?: Objective[];
   pointLedger?: PointLedgerEntry[];
   userProfiles?: OrfUserDisplayProfile[];
   users?: OrfUser[];
 }) {
   return {
+    objectiveAcceptanceReviews: [],
     objectives: [],
     pointLedger: [],
     userProfiles: [],
@@ -129,6 +145,59 @@ test("leaderboard keeps formal failed evaluations with zero points", () => {
   assert.equal(rowsByMember.get("成员乙")?.points, 0);
   assert.equal(rowsByMember.get("成员甲")?.completionRate, 0);
   assert.equal(rowsByMember.get("成员乙")?.completionRate, 0);
+});
+
+test("leaderboard treats objectives with failed acceptance history as unfinished even after later settlement", () => {
+  const rows = buildLeaderboardRows(
+    state({
+      objectiveAcceptanceReviews: [
+        acceptanceReview({
+          acceptedResult: "abandoned",
+          objectiveId: "objective-reworked",
+          reason: "验收不通过，需返工",
+          resultReviews: [{ resultId: "result-1", acceptedResult: "failed" }],
+          reviewedAt: "2026-06-13T10:00:00.000Z",
+        }),
+        acceptanceReview({
+          acceptedResult: "completed",
+          objectiveId: "objective-reworked",
+          resultReviews: [{ resultId: "result-1", acceptedResult: "completed" }],
+          reviewedAt: "2026-06-13T15:00:00.000Z",
+        }),
+      ],
+      objectives: [
+        objective({
+          acceptedResult: "completed",
+          flowStatus: "settled",
+          id: "objective-reworked",
+          title: "先返工后结算目标",
+        }),
+        objective({
+          acceptedResult: "completed",
+          flowStatus: "settled",
+          id: "objective-clean",
+          title: "一次验收通过目标",
+        }),
+      ],
+      pointLedger: [
+        ledger({
+          id: "ledger-reworked-a",
+          objectiveId: "objective-reworked",
+          points: 60,
+          userId: "user-a",
+        }),
+        ledger({
+          id: "ledger-clean-a",
+          objectiveId: "objective-clean",
+          points: 40,
+          userId: "user-a",
+        }),
+      ],
+    }),
+    "all",
+  );
+
+  assert.equal(rows.find((row) => row.userId === "user-a")?.completionRate, 50);
 });
 
 test("quarterly leaderboard marks members without previous period ranks as new", () => {

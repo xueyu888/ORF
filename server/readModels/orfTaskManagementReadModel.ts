@@ -1,6 +1,6 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/initialOrfState";
-import type { TaskManagementData } from "../../src/domain/orfReadModel";
+import type { ReportsPageData, TaskManagementData } from "../../src/domain/orfReadModel";
 import type {
   CommentThread,
   Evidence,
@@ -205,6 +205,17 @@ export function userProfilesForTaskManagementData(
     }
   }
 
+  return profiles.filter((profile) => ids.has(profile.id));
+}
+
+export function userProfilesForReportsPageData(
+  data: ReportsPageData,
+  profiles: readonly OrfUserDisplayProfile[] = data.userProfiles,
+) {
+  const ids = new Set<string>();
+  for (const item of data.pointLedger) {
+    addUserId(ids, item.userId);
+  }
   return profiles.filter((profile) => ids.has(profile.id));
 }
 
@@ -462,6 +473,58 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   return {
     ...data,
     userProfiles: userProfilesForTaskManagementData(data, scopeUserProfiles),
+  };
+}
+
+export async function getReportsPageData(scope: TaskManagementDataScope = {}): Promise<ReportsPageData> {
+  const storageScopeId = scopedStorageId(scope);
+  const objectiveRows = storageScopeId
+    ? await db
+        .select({
+          acceptedResult: objectives.acceptedResult,
+          createdAt: objectives.createdAt,
+          flowStatus: objectives.flowStatus,
+          id: objectives.id,
+          updatedAt: objectives.updatedAt,
+        })
+        .from(objectives)
+        .where(eq(objectives.teamId, storageScopeId))
+        .orderBy(desc(objectives.createdAt), desc(objectives.id))
+    : await db
+        .select({
+          acceptedResult: objectives.acceptedResult,
+          createdAt: objectives.createdAt,
+          flowStatus: objectives.flowStatus,
+          id: objectives.id,
+          updatedAt: objectives.updatedAt,
+        })
+        .from(objectives)
+        .orderBy(desc(objectives.createdAt), desc(objectives.id));
+  const objectiveAcceptanceReviewRows = storageScopeId
+    ? await db
+        .select({
+          acceptedResult: objectiveAcceptanceReviews.acceptedResult,
+          objectiveId: objectiveAcceptanceReviews.objectiveId,
+        })
+        .from(objectiveAcceptanceReviews)
+        .where(eq(objectiveAcceptanceReviews.teamId, storageScopeId))
+    : await db
+        .select({
+          acceptedResult: objectiveAcceptanceReviews.acceptedResult,
+          objectiveId: objectiveAcceptanceReviews.objectiveId,
+        })
+        .from(objectiveAcceptanceReviews);
+  const pointLedgerRows = storageScopeId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId)) : await db.select().from(pointLedger);
+  const { userNameById, userProfiles: scopeUserProfiles } = await getUserMapsForStorageScope(storageScopeId);
+  const data: ReportsPageData = {
+    objectives: objectiveRows,
+    objectiveAcceptanceReviews: objectiveAcceptanceReviewRows,
+    pointLedger: mapPointLedgerRows({ pointLedgerRows, userNameById }),
+    userProfiles: [],
+  };
+  return {
+    ...data,
+    userProfiles: userProfilesForReportsPageData(data, scopeUserProfiles),
   };
 }
 

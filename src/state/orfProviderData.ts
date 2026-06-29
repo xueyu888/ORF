@@ -1,7 +1,7 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, useState } from "react";
-import { apiJson, getCurrentUserAccess, type CurrentUserAccessData, type PermissionRulesResponse, type TaskManagementData, type UsersResponse } from "./apiClient";
+import { apiJson, getCurrentUserAccess, type CurrentUserAccessData, type PermissionRulesResponse, type ReportsPageData, type TaskManagementData, type UsersResponse } from "./apiClient";
 import { normalizeState } from "./orfStateSnapshot";
-import { shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
+import { isReportsReadModelPath, reportsPagePath, shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
 import { mergeUserDisplayProfiles, userDisplayProfilesFromUsers } from "../domain/userDisplayProfile";
 import { getDesktopSystemIdleSnapshot, getDesktopWindowState, isDesktopShellAvailable } from "../features/desktop/desktopShellRuntime";
 import { readBrowserDocumentAttentionSnapshot } from "../features/interaction/appAttentionState";
@@ -50,8 +50,10 @@ interface OrfDataStateOptions {
   isApproved: boolean;
   isAuthenticated: boolean;
   loadTaskManagementData: boolean;
+  pathname: string;
   refreshNotifications: () => Promise<void>;
   resetNotificationState: () => void;
+  setReportsData: Dispatch<SetStateAction<ReportsPageData | null>>;
   setState: Dispatch<SetStateAction<OrfState>>;
 }
 
@@ -132,8 +134,10 @@ export function useOrfDataState({
   isApproved,
   isAuthenticated,
   loadTaskManagementData,
+  pathname,
   refreshNotifications,
   resetNotificationState,
+  setReportsData,
   setState,
 }: OrfDataStateOptions) {
   const [dataReady, setDataReady] = useState(false);
@@ -143,8 +147,16 @@ export function useOrfDataState({
   const applyTaskManagementData = useCallback(
     (data: TaskManagementData) => {
       setState((current) => mergeTaskManagementData(current, data));
+      setReportsData(null);
     },
-    [setState],
+    [setReportsData, setState],
+  );
+
+  const applyReportsPageData = useCallback(
+    (data: ReportsPageData) => {
+      setReportsData(data);
+    },
+    [setReportsData],
   );
 
   const applyCurrentUserAccess = useCallback(
@@ -160,10 +172,15 @@ export function useOrfDataState({
   }, [applyCurrentUserAccess]);
 
   const refreshTaskManagementData = useCallback(async () => {
-    const data = await apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole));
-    applyTaskManagementData(data);
+    if (isReportsReadModelPath(pathname)) {
+      const data = await apiJson<ReportsPageData>(reportsPagePath());
+      applyReportsPageData(data);
+    } else {
+      const data = await apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole));
+      applyTaskManagementData(data);
+    }
     setDataReady(true);
-  }, [applyTaskManagementData, currentUserRole]);
+  }, [applyReportsPageData, applyTaskManagementData, currentUserRole, pathname]);
 
   const applyPermissionRules = useCallback(
     (data: PermissionRulesResponse) => {
@@ -206,6 +223,7 @@ export function useOrfDataState({
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
       resetNotificationState();
+      setReportsData(null);
       setDataReady(false);
       return;
     }
@@ -227,8 +245,20 @@ export function useOrfDataState({
       })
       .catch(() => undefined);
 
+    if (loadTaskManagementData && isReportsReadModelPath(pathname)) {
+      setReportsData(null);
+    }
+
     const taskManagementLoad = loadTaskManagementData
-      ? apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole))
+      ? isReportsReadModelPath(pathname)
+        ? apiJson<ReportsPageData>(reportsPagePath())
+          .then((data) => {
+            if (!cancelled) {
+              applyReportsPageData(data);
+            }
+          })
+          .catch(() => undefined)
+        : apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole))
           .then((data) => {
             if (!cancelled) {
               applyTaskManagementData(data);
@@ -256,6 +286,7 @@ export function useOrfDataState({
     };
   }, [
     applyCurrentUserAccess,
+    applyReportsPageData,
     applyTaskManagementData,
     applyUsers,
     authReady,
@@ -263,8 +294,10 @@ export function useOrfDataState({
     isAuthenticated,
     isApproved,
     loadTaskManagementData,
+    pathname,
     refreshNotifications,
     resetNotificationState,
+    setReportsData,
   ]);
 
   useEffect(() => {

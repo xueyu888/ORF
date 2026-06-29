@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAdminContext, requireApiUser } from "../auth/accessPolicy";
 import {
   getOrfStateSnapshot,
+  getReportsPageData,
   getTaskManagementData,
 } from "../readModels/orfTaskManagementReadModel";
 import { getBountyHallData, getMyChallengesData } from "../readModels/orfChallengeReadModels";
@@ -27,6 +28,20 @@ export function registerOrfReadRoutes(app: FastifyInstance) {
     return user.role === "admin"
       ? getTaskManagementData({ scope })
       : getMyChallengesData(user.id, false, { scope });
+  });
+
+  app.get("/api/reports-page", async (request, reply) => {
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const scope = await getDefaultRuntimeScopeForUser(user.id);
+    if (!scope) {
+      return reply.code(404).send({ error: "Runtime scope not found" });
+    }
+
+    return getReportsPageData({ scope });
   });
 
   app.get("/api/bounties", async (request, reply) => {

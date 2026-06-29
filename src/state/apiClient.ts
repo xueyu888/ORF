@@ -28,7 +28,7 @@ import type {
   WorkLogReport,
   WorkLogReportScope,
 } from "../types/orf";
-import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
+import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
 import type { ChatTheme, UserDisplayPreferences } from "../domain/settings/personalPreferences";
 import type {
   VisualBackgroundConfig,
@@ -49,7 +49,7 @@ export type {
   VisualBackgroundSwitchOrder,
   VisualBackgroundSwitchTrigger,
 } from "../domain/settings/visualBackgrounds";
-export type { BountyHallData, BountyHallItem, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
+export type { BountyHallData, BountyHallItem, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
 export type UsersResponse = Pick<OrfState, "users">;
