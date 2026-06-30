@@ -19,6 +19,7 @@ test("work log target selection excludes completed objectives without date conte
     ["accepted", "settled", "closed"],
   );
   assert.ok(workLogObjectiveSelectionCandidateFlowStatuses.includes("accepted"));
+  assert.ok(workLogObjectiveSelectionCandidateFlowStatuses.includes("settled"));
 });
 
 test("work log target selection keeps accepted objectives writable on acceptance day only", () => {
@@ -31,5 +32,17 @@ test("work log target selection keeps accepted objectives writable on acceptance
   assert.equal(canSelectObjectiveForWorkLog(acceptedObjective, { workDate: "2026-06-29" }), false);
   assert.equal(canSelectObjectiveForWorkLog(acceptedObjective, { workDate: "2026-07-01" }), false);
   assert.equal(canSelectObjectiveForWorkLog({ ...acceptedObjective, acceptedAt: null }, { workDate: "2026-06-30" }), false);
-  assert.equal(canSelectObjectiveForWorkLog({ acceptedAt: acceptedObjective.acceptedAt, flowStatus: "settled" }, { workDate: "2026-06-30" }), false);
+});
+
+test("work log target selection keeps settled objectives writable on settlement day only", () => {
+  const settledObjective = {
+    flowStatus: "settled" as const,
+    settledAt: "2026-07-02T17:40:00",
+  };
+
+  assert.equal(canSelectObjectiveForWorkLog(settledObjective, { workDate: "2026-07-02" }), true);
+  assert.equal(canSelectObjectiveForWorkLog(settledObjective, { workDate: "2026-07-01" }), false);
+  assert.equal(canSelectObjectiveForWorkLog(settledObjective, { workDate: "2026-07-03" }), false);
+  assert.equal(canSelectObjectiveForWorkLog({ ...settledObjective, settledAt: null }, { workDate: "2026-07-02" }), false);
+  assert.equal(canSelectObjectiveForWorkLog({ flowStatus: "closed", settledAt: settledObjective.settledAt }, { workDate: "2026-07-02" }), false);
 });

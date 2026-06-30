@@ -19,7 +19,7 @@ import {
 } from "../../src/domain/orfWorkLogs";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { db } from "../db/client";
-import { objectives, teamMembers, users, workLogCategories, workLogEntries } from "../db/schema";
+import { objectiveSettlementEvents, objectives, teamMembers, users, workLogCategories, workLogEntries } from "../db/schema";
 import { publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
 import type { AuthenticatedOrfUser } from "../auth/accessPolicy";
 import type { RuntimeScope } from "./runtimeScope";
@@ -180,9 +180,17 @@ async function listAuthorWorkLogObjectiveRows(input: {
       finalDueAt: objectives.finalDueAt,
       flowStatus: objectives.flowStatus,
       id: objectives.id,
+      settledAt: objectiveSettlementEvents.createdAt,
       title: objectives.title,
     })
     .from(objectives)
+    .leftJoin(
+      objectiveSettlementEvents,
+      and(
+        eq(objectiveSettlementEvents.objectiveId, objectives.id),
+        eq(objectiveSettlementEvents.kind, "finalCompletion"),
+      ),
+    )
     .where(and(...filters))
     .orderBy(asc(objectives.finalDueAt), asc(objectives.title), asc(objectives.id));
   return rows.filter((row) => canSelectObjectiveForWorkLog(row, { workDate: input.workDate }));

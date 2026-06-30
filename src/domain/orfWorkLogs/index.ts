@@ -8,7 +8,7 @@ type WorkLogPermissionUser = {
 };
 
 type WorkLogObjectiveTarget =
-  | { acceptedAt?: string | null; flowStatus: ObjectiveFlowStatus }
+  | { acceptedAt?: string | null; flowStatus: ObjectiveFlowStatus; settledAt?: string | null }
   | ObjectiveFlowStatus
   | null
   | undefined;
@@ -23,6 +23,7 @@ export const workLogObjectiveAlwaysSelectableFlowStatuses = objectiveFlowStatuse
 export const workLogObjectiveSelectionCandidateFlowStatuses = [
   ...workLogObjectiveAlwaysSelectableFlowStatuses,
   "accepted",
+  "settled",
 ] as const satisfies readonly ObjectiveFlowStatus[];
 
 const unscopedWorkLogMemberNames = new Set<string>(unscopedWorkLogMemberNameList);
@@ -53,11 +54,15 @@ function acceptedAtForWorkLog(target: WorkLogObjectiveTarget) {
   return typeof target === "string" ? null : target?.acceptedAt ?? null;
 }
 
-function acceptedAtMatchesWorkDate(acceptedAt: string | null | undefined, workDate: string | null | undefined) {
-  if (!acceptedAt || !workDate) return false;
-  const acceptedDate = new Date(acceptedAt);
-  if (Number.isNaN(acceptedDate.getTime())) return false;
-  return localDateString(acceptedDate) === workDate;
+function settledAtForWorkLog(target: WorkLogObjectiveTarget) {
+  return typeof target === "string" ? null : target?.settledAt ?? null;
+}
+
+function timestampMatchesWorkDate(timestamp: string | null | undefined, workDate: string | null | undefined) {
+  if (!timestamp || !workDate) return false;
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return false;
+  return localDateString(date) === workDate;
 }
 
 export function isObjectiveCompletedForWorkLog(
@@ -67,7 +72,10 @@ export function isObjectiveCompletedForWorkLog(
   const flowStatus = objectiveFlowStatusForWorkLog(target);
   if (!flowStatus) return false;
   if (isObjectiveAcceptedByFlow(flowStatus)) {
-    return !acceptedAtMatchesWorkDate(acceptedAtForWorkLog(target), context.workDate);
+    return !timestampMatchesWorkDate(acceptedAtForWorkLog(target), context.workDate);
+  }
+  if (flowStatus === "settled") {
+    return !timestampMatchesWorkDate(settledAtForWorkLog(target), context.workDate);
   }
   return isObjectiveSettledOrClosed(flowStatus);
 }
