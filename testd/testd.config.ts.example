@@ -64,6 +64,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "target.member-target-mutation-forbidden-all-stages",
+    title: "普通用户在任何阶段都不允许修改删除目标",
+    doc: "testd-doc/cases/并行/02 My Challenge/target/普通用户在任何阶段都不允许修改删除目标.md",
+    changePolicy: "open",
+    spec: "testd/并行/02 My Challenge/target/member-target-mutation-forbidden-all-stages/_entry/member-target-mutation-forbidden-all-stages.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "work-log.member-submit-today-work-log",
     title: "成员可以成功填写并提交当天日志",
     doc: "testd-doc/cases/并行/03 Work Log/my log/成员可以成功填写并提交当天日志.md",
