@@ -15,6 +15,7 @@ import {
   scopeStateCaseSpec,
 } from "./run-scope";
 import {
+  acquireRolePermissionLock,
   acquireRolePermissionReadLock,
   releaseRolePermissionLock,
 } from "../_operators/role-permission-lock";
@@ -72,7 +73,7 @@ export async function runStateCase<
   const cleanupMarkerId = `${process.pid}-${randomUUID()}`;
   const runtime: StateCaseRuntime = { values: {} };
   let failedStage: StateCaseRunStageName | undefined;
-  let rolePermissionReadLockOwner: string | undefined;
+  let rolePermissionLockOwner: string | undefined;
   let cleanupRequired = false;
 
   options.testInfo?.annotations.push(
@@ -82,9 +83,9 @@ export async function runStateCase<
   );
 
   try {
-    if (!stateCaseWritesRolePermissions(testCase)) {
-      rolePermissionReadLockOwner = await acquireRolePermissionReadLock();
-    }
+    rolePermissionLockOwner = stateCaseWritesRolePermissions(testCase)
+      ? await acquireRolePermissionLock()
+      : await acquireRolePermissionReadLock();
 
     await registerTestdRecoveryRun(runScope.runId);
     await recoverStaleCasesForCurrentTestCase();
@@ -154,7 +155,7 @@ export async function runStateCase<
       throw primaryError;
     }
   } finally {
-    const releaseError = await releaseRolePermissionLock(rolePermissionReadLockOwner).catch((error: unknown) => error);
+    const releaseError = await releaseRolePermissionLock(rolePermissionLockOwner).catch((error: unknown) => error);
     if (failedStage) {
       await attachScreenshot(ctx, options.testInfo, failedStage, "after-failure");
     }

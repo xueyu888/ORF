@@ -53,6 +53,16 @@ export const testdCases = [
     fixtureLifecycle: "isolated",
     traceability: "verified",
   },
+  {
+    id: "target.member-create-target-forbidden",
+    title: "普通用户不允许新建目标",
+    doc: "testd-doc/cases/并行/02 My Challenge/target/普通用户不允许新建目标.md",
+    changePolicy: "open",
+    spec: "testd/并行/02 My Challenge/target/member-create-target-forbidden/_entry/member-create-target-forbidden.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
 ] satisfies TestdCaseConfig[];
 
 const enabledCasesWithoutSpec = testdCases.filter((testdCase) => testdCase.enabled && !testdCase.spec);
