@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
-import { and, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 import type {
   CommentAttachment,
   BountySource,
@@ -40,6 +40,7 @@ import {
 } from "../../src/domain/orfSettlement";
 import {
   calculateObjectiveReestimateDueAt,
+  isObjectiveReestimateDueAtElapsed,
   resolveObjectiveReestimateWindowSync,
   validateFrozenReestimateReopenDueAt,
   type FrozenReestimateReopenBlockReason,
@@ -77,6 +78,10 @@ import {
   objectiveLifecycleTransitions,
 } from "../../src/domain/orfLifecycle";
 import { objectiveChallengeEntryClosed as objectiveClosedForChallengeEntry } from "../../src/domain/orfChallengeEntry";
+import {
+  objectiveAlignmentNeedsWorkFeedback,
+  objectiveAlignmentReviewStatusText,
+} from "../../src/domain/orfAlignment";
 import { validateObjectiveDeadlineChange } from "../../src/domain/orfDeadline";
 import { db } from "../db/client";
 import {
@@ -601,7 +606,7 @@ async function notifyObjectiveChallengersOfSettlement(input: {
 
 function objectiveAlignmentKindLabel(kind: ObjectiveAlignmentRequestKind) {
   if (kind === "reestimateCompletion") return "重估完成";
-  if (kind === "frozenReestimate") return "冻结后重估";
+  if (kind === "frozenReestimate") return "重新重估";
   return "验收";
 }
 
@@ -651,14 +656,7 @@ async function notifyMemberOfObjectiveAlignmentReview(input: {
 }) {
   const actorName = await getUserNameById(input.actorUserId);
   const label = objectiveAlignmentKindLabel(input.kind);
-  const statusText =
-    input.status === "scheduled"
-      ? "已约定"
-      : input.status === "completed"
-        ? "已完成"
-        : input.status === "needsWork"
-          ? "需要补充"
-          : input.status;
+  const statusText = objectiveAlignmentReviewStatusText(input.kind, input.status);
   const feedback = input.commanderFeedback?.trim();
   await publishNotificationEvent({
     actorName: actorName || "指挥官",
@@ -1306,7 +1304,7 @@ export async function applyForObjectiveChallenge(objectiveId: string, actorUserI
   return applied ? { status: "applied", objective: applied } : { status: "notFound" };
 }
 
-export type ObjectiveMutationInvalidReason = ObjectiveFreezeBlockReason | FrozenReestimateReopenBlockReason;
+export type ObjectiveMutationInvalidReason = ObjectiveFreezeBlockReason | FrozenReestimateReopenBlockReason | "missingReestimateReason";
 
 export type ObjectiveFlowMutationOutcome =
   | { status: "ok"; objective: Objective }
@@ -1644,15 +1642,28 @@ export async function reinforceObjectiveChallengers(
   return outcome.status === "ok" ? { status: "ok", objective: outcome.objective } : { status: "notFound" };
 }
 
-export async function freezeObjectiveAfterReestimate(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
+const SYSTEM_REESTIMATE_FREEZE_REVIEWER = "ORF 系统";
+
+type FreezeObjectiveAfterReestimateInput = {
+  actorId?: string | null;
+  alignmentFeedback: string;
+  automatic: boolean;
+  objectiveId: string;
+};
+
+async function freezeObjectiveAfterReestimateCore(input: FreezeObjectiveAfterReestimateInput): Promise<ObjectiveFlowMutationOutcome> {
   const frozen = await db.transaction(async (tx) => {
-    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, input.objectiveId)).limit(1).for("update");
     if (!objective) return { status: "notFound" as const };
+
+    if (input.automatic && !isObjectiveReestimateDueAtElapsed(objective)) {
+      return { status: "invalid" as const, reason: "lifecycleLocked" as const };
+    }
 
     const objectiveResults = await tx
       .select({ objectiveId: results.objectiveId, uncertaintyLevel: results.uncertaintyLevel, uncertaintyScore: results.uncertaintyScore })
       .from(results)
-      .where(eq(results.objectiveId, objectiveId));
+      .where(eq(results.objectiveId, input.objectiveId));
     const freezeReadiness = objectiveFreezeReadinessAfterReestimate(objective, objectiveResults);
     if (freezeReadiness.status === "blocked") {
       return { status: "invalid" as const, reason: freezeReadiness.reason };
@@ -1661,9 +1672,10 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
     const decidedAt = nowIso();
     const challengeApplications = (objective.challengeApplications ?? []).map((application) =>
       application.status === "pending"
-        ? { ...application, status: "declined" as const, decidedAt, decidedBy: actorId }
+        ? { ...application, status: "declined" as const, decidedAt, decidedBy: input.actorId ?? null }
         : application,
     );
+    const reviewedBy = input.actorId ?? SYSTEM_REESTIMATE_FREEZE_REVIEWER;
 
     await tx
       .update(objectives)
@@ -1675,22 +1687,22 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
         stage: objectiveLifecycleTransitions.freezeAfterReestimate.stage,
         confirmedAt: decidedAt,
         updatedAt: today(),
-        updatedBy: actorId,
+        updatedBy: input.actorId ?? objective.updatedBy,
       })
-      .where(eq(objectives.id, objectiveId));
+      .where(eq(objectives.id, input.objectiveId));
 
     await tx
       .update(objectiveAlignmentRequests)
       .set({
         status: "completed",
-        commanderFeedback: "重估对齐完成，目标已冻结。",
-        reviewedBy: actorId,
-        reviewedByUserId: actorId,
+        commanderFeedback: input.alignmentFeedback,
+        reviewedBy,
+        reviewedByUserId: input.actorId ?? null,
         reviewedAt: decidedAt,
       })
       .where(
         and(
-          eq(objectiveAlignmentRequests.objectiveId, objectiveId),
+          eq(objectiveAlignmentRequests.objectiveId, input.objectiveId),
           eq(objectiveAlignmentRequests.kind, "reestimateCompletion"),
           inArray(objectiveAlignmentRequests.status, ["requested", "scheduled"]),
         ),
@@ -1701,15 +1713,63 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
 
   if (frozen.status === "ok") {
     publishObjectiveInvalidation({
-      actorUserId: actorId,
+      actorUserId: input.actorId ?? null,
       reason: "objective.lifecycle.changed",
-      objectiveId,
+      objectiveId: input.objectiveId,
       teamId: runtimeScopeStorageId(frozen.scope),
     });
-    return objectiveOutcome(objectiveId, frozen.scope);
+    return objectiveOutcome(input.objectiveId, frozen.scope);
   }
 
   return frozen;
+}
+
+export async function freezeObjectiveAfterReestimate(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
+  return freezeObjectiveAfterReestimateCore({
+    actorId,
+    alignmentFeedback: "重估对齐完成，目标已冻结。",
+    automatic: false,
+    objectiveId,
+  });
+}
+
+export type OverdueReestimateFreezeSweepResult = {
+  attempted: number;
+  frozen: number;
+  blocked: Partial<Record<ObjectiveMutationInvalidReason | "unknown", number>>;
+};
+
+export async function freezeOverdueReestimatingObjectives(now = new Date()): Promise<OverdueReestimateFreezeSweepResult> {
+  const dueAt = now.toISOString();
+  const candidates = await db
+    .select({ id: objectives.id })
+    .from(objectives)
+    .where(
+      and(
+        eq(objectives.flowStatus, "reestimating"),
+        isNotNull(objectives.confirmationDueAt),
+        lte(objectives.confirmationDueAt, dueAt),
+      ),
+    );
+  const result: OverdueReestimateFreezeSweepResult = { attempted: candidates.length, frozen: 0, blocked: {} };
+
+  for (const candidate of candidates) {
+    const outcome = await freezeObjectiveAfterReestimateCore({
+      actorId: null,
+      alignmentFeedback: "重估完成期限已到，系统自动冻结目标。",
+      automatic: true,
+      objectiveId: candidate.id,
+    });
+    if (outcome.status === "ok") {
+      result.frozen += 1;
+      continue;
+    }
+
+    const reason = outcome.status === "invalid" ? outcome.reason ?? "unknown" : "unknown";
+    result.blocked[reason] = (result.blocked[reason] ?? 0) + 1;
+  }
+
+  return result;
 }
 
 export interface CreateObjectiveAlignmentRequestInput {
@@ -1738,6 +1798,9 @@ export async function createObjectiveAlignmentRequest(
   input: CreateObjectiveAlignmentRequestInput,
   actor: Pick<CommentActor, "id" | "name" | "role">,
 ): Promise<ObjectiveAlignmentMutationOutcome> {
+  const note = input.note?.trim() || null;
+  if (input.kind === "frozenReestimate" && !note) return { status: "invalid", reason: "missingReestimateReason" };
+
   const requestId = makeId("alignment");
   const proposedAt = nowIso();
   const requested = await db.transaction(async (tx) => {
@@ -1773,7 +1836,7 @@ export async function createObjectiveAlignmentRequest(
       proposedAt,
       scheduledAt: input.scheduledAt?.trim() || null,
       meetingRoom: input.meetingRoom?.trim() || null,
-      note: input.note?.trim() || null,
+      note,
       confirmationDueAt: null,
       commanderFeedback: null,
       reviewedBy: null,
@@ -1841,7 +1904,7 @@ async function reopenFrozenObjectiveForReestimate(input: {
     }
 
     const reviewedAt = nowIso();
-    const feedback = input.commanderFeedback?.trim() || "冻结后重估申请已通过，目标已重新进入重估。";
+    const feedback = input.commanderFeedback?.trim() || "重新重估申请已通过，目标已重新进入重估。";
     const reviewed = await tx
       .update(objectiveAlignmentRequests)
       .set({
@@ -1951,7 +2014,7 @@ export async function reviewObjectiveAlignmentRequest(
   }
 
   const reviewedAt = nowIso();
-  const feedback = input.commanderFeedback?.trim() || (input.status === "needsWork" ? "请补充后重新对齐。" : null);
+  const feedback = input.commanderFeedback?.trim() || (input.status === "needsWork" ? objectiveAlignmentNeedsWorkFeedback(request.kind) : null);
   const updated = await db.transaction(async (tx) => {
     const rows = await tx
       .update(objectiveAlignmentRequests)

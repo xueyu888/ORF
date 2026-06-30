@@ -8,6 +8,7 @@ import type {
   Result,
 } from "../../types/orf";
 import type { PermissionKey } from "../../config/permissions";
+export type { ReportsPageData } from "../reportsLeaderboard";
 
 export type TaskManagementData = Pick<
   OrfState,

@@ -91,6 +91,14 @@ const createAlignmentRequestBodySchema = z.object({
   scheduledAt: optionalDateTimeSchema,
   meetingRoom: optionalTextSchema,
   note: optionalTextSchema,
+}).superRefine((body, context) => {
+  if (body.kind === "frozenReestimate" && !body.note?.trim()) {
+    context.addIssue({
+      code: "custom",
+      message: "Reestimate reason is required",
+      path: ["note"],
+    });
+  }
 });
 const reviewAlignmentRequestBodySchema = z.object({
   status: z.enum(["scheduled", "completed", "needsWork", "cancelled"]),
@@ -268,6 +276,7 @@ function objectiveInvalidErrorMessage(reason: ObjectiveMutationInvalidReason | u
   if (reason === "uncalibratedResults") return "Objective result points must be calibrated before freezing";
   if (reason === "lifecycleLocked") return "Objective status does not allow this operation";
   if (reason === "missingReestimateDueAt") return "Reestimate due time is required";
+  if (reason === "missingReestimateReason") return "Reestimate reason is required";
   if (reason === "invalidReestimateDueAt") return "Reestimate due time is invalid";
   if (reason === "reestimateDueAtNotFuture") return "Reestimate due time must be in the future";
   if (reason === "finalDueAtElapsed" || reason === "reestimateDueAtAfterFinalDueAt") return "Reestimate due time must not exceed objective final deadline";

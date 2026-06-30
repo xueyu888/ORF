@@ -10,6 +10,14 @@ const taskManagementReadModelRoutePrefixes = [
   "/system",
 ] as const;
 
+export function isReportsReadModelPath(pathname: string) {
+  return pathname === "/reports" || pathname.startsWith("/reports/");
+}
+
+export function reportsPagePath() {
+  return "/api/reports-page";
+}
+
 export function taskManagementPathForRole(role: UserRole | null | undefined) {
   return role === "admin" ? "/api/tasks-page" : "/api/my-challenges?scope=mine";
 }

@@ -14,6 +14,7 @@ import {
   canUseWorkLogCategories,
   requiresObjectiveProgressEstimate,
   unscopedWorkLogMemberNameList,
+  workLogObjectiveSelectableFlowStatuses,
 } from "../../src/domain/orfWorkLogs";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { db } from "../db/client";
@@ -159,6 +160,7 @@ function normalizeWorkLogEntryInput(user: AuthenticatedOrfUser, input: WorkLogDa
 async function listAuthorWorkLogObjectiveRows(input: { scope: RuntimeScope; user: AuthenticatedOrfUser; objectiveIds?: string[] }) {
   const storageScopeId = runtimeScopeStorageId(input.scope);
   const filters = [eq(objectives.teamId, storageScopeId)];
+  filters.push(inArray(objectives.flowStatus, [...workLogObjectiveSelectableFlowStatuses]));
   if (input.user.role !== "admin") {
     filters.push(sql`${objectives.challengerUserIds} ? ${input.user.id}`);
   }

@@ -28,7 +28,7 @@ import type {
   WorkLogReport,
   WorkLogReportScope,
 } from "../types/orf";
-import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
+import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
 import type { ChatTheme, UserDisplayPreferences } from "../domain/settings/personalPreferences";
 import type {
   VisualBackgroundConfig,
@@ -49,7 +49,7 @@ export type {
   VisualBackgroundSwitchOrder,
   VisualBackgroundSwitchTrigger,
 } from "../domain/settings/visualBackgrounds";
-export type { BountyHallData, BountyHallItem, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
+export type { BountyHallData, BountyHallItem, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
 export type UsersResponse = Pick<OrfState, "users">;
@@ -264,6 +264,20 @@ export class ApiError extends Error {
   }
 }
 
+function defaultApiErrorMessage(status: number, path: string) {
+  if (status === 502 || status === 503 || status === 504) {
+    return "服务暂时不可用，请稍后重试";
+  }
+  if (status >= 500) {
+    return "服务端暂时出错，请稍后重试";
+  }
+  return `API ${status}: ${path}`;
+}
+
+function textPayloadLooksLikeHtmlErrorPage(payload: string) {
+  return /<!doctype\s+html|<html[\s>]|<body[\s>]|<\/html>/i.test(payload);
+}
+
 function apiErrorMessage(payload: unknown, status: number, path: string) {
   if (status === 401 && !path.startsWith("/api/auth/")) {
     return "登录已失效，请重新登录";
@@ -277,10 +291,13 @@ function apiErrorMessage(payload: unknown, status: number, path: string) {
   }
 
   if (typeof payload === "string" && payload.trim()) {
-    return payload;
+    if (textPayloadLooksLikeHtmlErrorPage(payload) || status >= 500) {
+      return defaultApiErrorMessage(status, path);
+    }
+    return payload.trim();
   }
 
-  return `API ${status}: ${path}`;
+  return defaultApiErrorMessage(status, path);
 }
 
 function emitAuthenticationExpired(path: string, status: number) {

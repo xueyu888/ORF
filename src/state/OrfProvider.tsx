@@ -48,6 +48,7 @@ import {
 } from "../features/chat/chatNativeNotificationDelivery";
 import { getChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
 import type { ResultDetailsInput } from "../domain/orfResultDetails";
+import type { ReportsPageData } from "../domain/reportsLeaderboard";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
 import type { ChatRealtimeEvent, ClientUpdateAvailable, OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
 import type {
@@ -105,6 +106,7 @@ function chatRouteChannelIdFromPathname(pathname: string) {
 
 interface OrfContextValue {
   state: OrfState;
+  reportsData: ReportsPageData | null;
   currentUser: OrfUser | null;
   authConnectionError: string | null;
   authReady: boolean;
@@ -215,6 +217,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [state, setState] = useState(loadInitialState);
+  const [reportsData, setReportsData] = useState<ReportsPageData | null>(null);
   const { authenticateWithPassword, authConnectionError, authReady, authUserId, refreshAuthSession, setAuthUserId } = useAuthSessionState(setState);
   const appAttentionState = useAppAttentionState();
   const [toastEnabled, setToastEnabled] = useState(true);
@@ -260,8 +263,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     isApproved,
     isAuthenticated,
     loadTaskManagementData,
+    pathname: location.pathname,
     refreshNotifications,
     resetNotificationState,
+    setReportsData,
     setState,
   });
   useEffect(() => {
@@ -505,6 +510,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const value = useMemo<OrfContextValue>(
     () => ({
       state,
+      reportsData,
       currentUser,
       authConnectionError,
       authReady,
@@ -556,6 +562,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       notify,
       objectiveActions,
       readModelInvalidations,
+      reportsData,
       resultActions,
       feedbackActions,
       refreshChatUnreadSummary,

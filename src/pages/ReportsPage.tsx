@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { PageScaffold } from "../components/PageScaffold";
 import { UserAvatar } from "../components/UserAvatar";
 import { Card, ProgressBar } from "../components/ui";
-import { buildLeaderboardRows, type LeaderboardRankChange, type LeaderboardRow, type TimeRange } from "../features/reports/model/leaderboard";
+import { buildLeaderboardRows, type LeaderboardRankChange, type LeaderboardRow, type ReportsPageData, type TimeRange } from "../domain/reportsLeaderboard";
 import { useOrf } from "../state/OrfProvider";
 
 const timeRangeOptions: { label: string; value: TimeRange }[] = [
@@ -13,11 +13,18 @@ const timeRangeOptions: { label: string; value: TimeRange }[] = [
   { label: "全部", value: "all" },
 ];
 
+const emptyReportsData: ReportsPageData = {
+  objectives: [],
+  objectiveAcceptanceReviews: [],
+  pointLedger: [],
+  userProfiles: [],
+};
+
 export function ReportsPage() {
-  const { state } = useOrf();
+  const { reportsData } = useOrf();
   const [timeRange, setTimeRange] = useState<TimeRange>("quarter");
 
-  const rows = useMemo<LeaderboardRow[]>(() => buildLeaderboardRows(state, timeRange), [state, timeRange]);
+  const rows = useMemo<LeaderboardRow[]>(() => buildLeaderboardRows(reportsData ?? emptyReportsData, timeRange), [reportsData, timeRange]);
   const summary = useMemo(() => buildReportSummary(rows), [rows]);
   const maxPoints = Math.max(1, ...rows.map((row) => row.points));
 

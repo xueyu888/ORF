@@ -217,6 +217,9 @@ export function businessMutationFailureMessage(error: unknown, fallback: string)
       if (error.message === "Reestimate due time is required") {
         return "请先设置新的重估截止时间";
       }
+      if (error.message === "Reestimate reason is required") {
+        return "请先填写重新重估理由";
+      }
       if (error.message === "Reestimate due time is invalid") {
         return "新的重估截止时间无效";
       }

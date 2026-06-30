@@ -1,7 +1,25 @@
-import { userDisplayProfileMap } from "../../../domain/userDisplayProfile";
-import type { Objective, OrfState, OrfUser, OrfUserDisplayProfile, PointLedgerEntry } from "../../../types/orf";
+import { userDisplayProfileMap } from "../userDisplayProfile";
+import type { Objective, ObjectiveAcceptanceReview, OrfState, OrfUser, OrfUserDisplayProfile, PointLedgerEntry } from "../../types/orf";
 
 export type TimeRange = "month" | "quarter" | "year" | "all";
+
+export type LeaderboardObjectiveFact = Pick<Objective, "acceptedResult" | "createdAt" | "flowStatus" | "id" | "updatedAt">;
+
+export type LeaderboardAcceptanceReviewFact = Pick<ObjectiveAcceptanceReview, "acceptedResult" | "objectiveId">;
+
+export type ReportsPageData = {
+  objectives: LeaderboardObjectiveFact[];
+  objectiveAcceptanceReviews: LeaderboardAcceptanceReviewFact[];
+  pointLedger: PointLedgerEntry[];
+  userProfiles: OrfUserDisplayProfile[];
+};
+
+export type LeaderboardState = Pick<OrfState, "pointLedger"> & {
+  objectiveAcceptanceReviews?: readonly LeaderboardAcceptanceReviewFact[];
+  objectives: readonly LeaderboardObjectiveFact[];
+  userProfiles?: readonly OrfUserDisplayProfile[];
+  users?: readonly OrfUser[];
+};
 
 export type LeaderboardRankChange =
   | { kind: "unavailable" }
@@ -19,14 +37,15 @@ export type LeaderboardRow = {
   userId: string;
 };
 
-type LeaderboardState = Pick<OrfState, "objectives" | "pointLedger" | "users"> & {
-  userProfiles?: OrfUserDisplayProfile[];
-};
 type DateBounds = {
   end: string;
   start: string;
 };
 type PeriodLeaderboardRow = Omit<LeaderboardRow, "rankChange">;
+type ObjectiveCompletionCounts = { completed: number; total: number };
+type ObjectiveAcceptanceReviewSummary = {
+  hasFailedAcceptance: boolean;
+};
 
 function dateOnly(value: string | null | undefined) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
@@ -36,7 +55,7 @@ function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
-function latestDate(entries: PointLedgerEntry[], objectives: Objective[]) {
+function latestDate(entries: readonly PointLedgerEntry[], objectives: readonly LeaderboardObjectiveFact[]) {
   const ledgerDates = entries.map((entry) => dateOnly(entry.createdAt)).filter((value): value is string => Boolean(value));
   const dates = ledgerDates.length > 0
     ? ledgerDates
@@ -119,19 +138,40 @@ function isInBounds(value: string | null | undefined, bounds: DateBounds) {
 }
 
 function userIds(
-  users: OrfUser[],
+  users: readonly OrfUser[] | undefined,
   profiles: Map<string, OrfUserDisplayProfile>,
   pointsByUserId: Map<string, number>,
-  objectiveCounts: Map<string, { completed: number; total: number }>,
+  objectiveCounts: Map<string, ObjectiveCompletionCounts>,
 ) {
-  return Array.from(new Set([...profiles.keys(), ...users.map((user) => user.id), ...pointsByUserId.keys(), ...objectiveCounts.keys()])).filter(Boolean);
+  return Array.from(new Set([...profiles.keys(), ...(users ?? []).map((user) => user.id), ...pointsByUserId.keys(), ...objectiveCounts.keys()])).filter(Boolean);
+}
+
+function buildObjectiveAcceptanceReviewSummary(reviews: readonly LeaderboardAcceptanceReviewFact[]) {
+  const summaryByObjectiveId = new Map<string, ObjectiveAcceptanceReviewSummary>();
+  for (const review of reviews) {
+    const current = summaryByObjectiveId.get(review.objectiveId) ?? { hasFailedAcceptance: false };
+    if (review.acceptedResult === "abandoned") {
+      current.hasFailedAcceptance = true;
+    }
+    summaryByObjectiveId.set(review.objectiveId, current);
+  }
+  return summaryByObjectiveId;
+}
+
+function isObjectiveCreditedAsCompleted(
+  objective: LeaderboardObjectiveFact,
+  acceptanceReviewSummary: Map<string, ObjectiveAcceptanceReviewSummary>,
+) {
+  const reviewSummary = acceptanceReviewSummary.get(objective.id);
+  return objective.flowStatus === "settled" && objective.acceptedResult !== "abandoned" && !reviewSummary?.hasFailedAcceptance;
 }
 
 function buildPeriodRows(
-  users: OrfUser[],
-  userProfiles: OrfUserDisplayProfile[] | undefined,
-  ledger: PointLedgerEntry[],
-  objectives: Objective[],
+  users: readonly OrfUser[] | undefined,
+  userProfiles: readonly OrfUserDisplayProfile[] | undefined,
+  ledger: readonly PointLedgerEntry[],
+  objectives: readonly LeaderboardObjectiveFact[],
+  acceptanceReviewSummary: Map<string, ObjectiveAcceptanceReviewSummary>,
   limit?: number,
 ): PeriodLeaderboardRow[] {
   const displayProfiles = userDisplayProfileMap({ userProfiles, users });
@@ -146,7 +186,7 @@ function buildPeriodRows(
   }
 
   const objectiveById = new Map(objectives.map((objective) => [objective.id, objective]));
-  const objectiveCounts = new Map<string, { completed: number; total: number }>();
+  const objectiveCounts = new Map<string, ObjectiveCompletionCounts>();
   const seenParticipation = new Set<string>();
   for (const entry of ledger) {
     if (!entry.userId) continue;
@@ -158,7 +198,7 @@ function buildPeriodRows(
 
     const current = objectiveCounts.get(entry.userId) ?? { completed: 0, total: 0 };
     current.total += 1;
-    if (objective.flowStatus === "settled" && objective.acceptedResult !== "abandoned") {
+    if (isObjectiveCreditedAsCompleted(objective, acceptanceReviewSummary)) {
       current.completed += 1;
     }
     objectiveCounts.set(entry.userId, current);
@@ -210,7 +250,8 @@ export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRan
   const anchorDate = latestDate(state.pointLedger, state.objectives);
   const ledger = state.pointLedger.filter((entry) => isInRange(entry.createdAt, timeRange, anchorDate));
   const objectives = state.objectives.filter((objective) => isInRange(objective.updatedAt ?? objective.createdAt, timeRange, anchorDate));
-  const currentRows = buildPeriodRows(state.users, state.userProfiles, ledger, objectives, 10);
+  const acceptanceReviewSummary = buildObjectiveAcceptanceReviewSummary(state.objectiveAcceptanceReviews ?? []);
+  const currentRows = buildPeriodRows(state.users, state.userProfiles, ledger, objectives, acceptanceReviewSummary, 10);
   const previousBounds = previousRangeBounds(timeRange, anchorDate);
 
   if (!previousBounds) {
@@ -225,6 +266,7 @@ export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRan
     state.userProfiles,
     state.pointLedger.filter((entry) => isInBounds(entry.createdAt, previousBounds)),
     state.objectives.filter((objective) => isInBounds(objective.updatedAt ?? objective.createdAt, previousBounds)),
+    acceptanceReviewSummary,
   );
   const previousRanks = new Map(previousRows.map((row) => [row.userId, row.rank]));
 

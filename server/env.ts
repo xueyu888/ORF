@@ -44,6 +44,7 @@ const envSchema = z.object({
   ORF_CLIENT_UPDATE_PUSH_ENABLED: booleanString("true"),
   ORF_CLIENT_UPDATE_PUSH_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(10 * 60 * 1000),
   ORF_NOTIFICATION_DELIVERY_RETRY_INTERVAL_MS: z.coerce.number().int().positive().default(60 * 1000),
+  ORF_REESTIMATE_AUTO_FREEZE_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),
   ORF_CLIENT_UPDATE_BROADCAST_SECRET: optionalSecret,
   ORF_LOCAL_SETTLEMENT_SERVICE_URL: z.string().url().default("http://127.0.0.1:8799"),
   ORF_LOCAL_SETTLEMENT_SERVICE_TOKEN: optionalSecret,
