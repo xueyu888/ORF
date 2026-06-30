@@ -753,8 +753,9 @@ export async function getChatUnreadSummary() {
   return apiJson<ChatUnreadSummaryResponse>("/api/chat/unread-summary");
 }
 
-export async function getWorkLogObjectives() {
-  return apiJson<WorkLogObjectivesResponse>("/api/work-logs/objectives");
+export async function getWorkLogObjectives(date?: string) {
+  const query = date ? `?${new URLSearchParams({ date }).toString()}` : "";
+  return apiJson<WorkLogObjectivesResponse>(`/api/work-logs/objectives${query}`);
 }
 
 export async function getWorkLogReminderState() {
@@ -767,7 +768,7 @@ export async function snoozeWorkLogReminder() {
   });
 }
 
-export async function suggestWorkLogClassification(input: { bodyMarkdown: string }) {
+export async function suggestWorkLogClassification(input: { bodyMarkdown: string; workDate?: string }) {
   return apiJson<WorkLogClassificationSuggestionResponse>("/api/work-logs/classification-suggestion", {
     method: "POST",
     body: JSON.stringify(input),

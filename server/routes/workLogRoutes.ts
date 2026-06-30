@@ -29,6 +29,10 @@ const myDayQuerySchema = z.object({
   date: dateSchema,
 });
 
+const objectiveOptionsQuerySchema = z.object({
+  date: dateSchema.optional(),
+});
+
 const myDayParamsSchema = z.object({
   date: dateSchema,
 });
@@ -48,6 +52,7 @@ const entryBodySchema = z.object({
 
 const classificationSuggestionBodySchema = z.object({
   bodyMarkdown: z.string().trim().min(1).max(12000),
+  workDate: dateSchema.optional(),
 });
 
 const activityQuerySchema = z.object({
@@ -128,9 +133,10 @@ export function registerWorkLogRoutes(app: FastifyInstance) {
       return reply;
     }
 
+    const query = objectiveOptionsQuerySchema.parse(request.query);
     const [categories, objectives] = await Promise.all([
       canUseWorkLogCategories(context.user) ? listWorkLogCategoryOptions(context.scope) : Promise.resolve([]),
-      listWorkLogObjectiveOptions(context.user, context.scope),
+      listWorkLogObjectiveOptions(context.user, context.scope, { workDate: query.date }),
     ]);
     return {
       categories,
@@ -151,7 +157,7 @@ export function registerWorkLogRoutes(app: FastifyInstance) {
     const body = classificationSuggestionBodySchema.parse(request.body);
     const [categories, objectives] = await Promise.all([
       listWorkLogCategoryOptions(context.scope),
-      listWorkLogObjectiveOptions(context.user, context.scope),
+      listWorkLogObjectiveOptions(context.user, context.scope, { workDate: body.workDate }),
     ]);
     return {
       suggestion: await suggestWorkLogClassification({

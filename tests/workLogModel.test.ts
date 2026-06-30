@@ -3,10 +3,11 @@ import test from "node:test";
 import { objectiveFlowStatuses } from "../src/domain/orfLifecycle";
 import {
   canSelectObjectiveForWorkLog,
-  workLogObjectiveSelectableFlowStatuses,
+  workLogObjectiveAlwaysSelectableFlowStatuses,
+  workLogObjectiveSelectionCandidateFlowStatuses,
 } from "../src/domain/orfWorkLogs";
 
-test("work log target selection excludes accepted, settled and closed objectives", () => {
+test("work log target selection excludes completed objectives without date context", () => {
   assert.equal(canSelectObjectiveForWorkLog("accepted"), false);
   assert.equal(canSelectObjectiveForWorkLog("settled"), false);
   assert.equal(canSelectObjectiveForWorkLog({ flowStatus: "closed" }), false);
@@ -14,7 +15,21 @@ test("work log target selection excludes accepted, settled and closed objectives
   assert.equal(canSelectObjectiveForWorkLog("revisionRequired"), true);
 
   assert.deepEqual(
-    objectiveFlowStatuses.filter((flowStatus) => !workLogObjectiveSelectableFlowStatuses.includes(flowStatus)),
+    objectiveFlowStatuses.filter((flowStatus) => !workLogObjectiveAlwaysSelectableFlowStatuses.includes(flowStatus)),
     ["accepted", "settled", "closed"],
   );
+  assert.ok(workLogObjectiveSelectionCandidateFlowStatuses.includes("accepted"));
+});
+
+test("work log target selection keeps accepted objectives writable on acceptance day only", () => {
+  const acceptedObjective = {
+    acceptedAt: "2026-06-30T08:15:00",
+    flowStatus: "accepted" as const,
+  };
+
+  assert.equal(canSelectObjectiveForWorkLog(acceptedObjective, { workDate: "2026-06-30" }), true);
+  assert.equal(canSelectObjectiveForWorkLog(acceptedObjective, { workDate: "2026-06-29" }), false);
+  assert.equal(canSelectObjectiveForWorkLog(acceptedObjective, { workDate: "2026-07-01" }), false);
+  assert.equal(canSelectObjectiveForWorkLog({ ...acceptedObjective, acceptedAt: null }, { workDate: "2026-06-30" }), false);
+  assert.equal(canSelectObjectiveForWorkLog({ acceptedAt: acceptedObjective.acceptedAt, flowStatus: "settled" }, { workDate: "2026-06-30" }), false);
 });

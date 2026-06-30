@@ -191,7 +191,7 @@ export function WorkLogsPage() {
     setError("");
     try {
       const [objectiveResponse, dayResponse] = await Promise.all([
-        getWorkLogObjectives(),
+        getWorkLogObjectives(date),
         getMyWorkLogDay(date),
       ]);
       setObjectives(objectiveResponse.objectives);
@@ -361,7 +361,7 @@ export function WorkLogsPage() {
         : await createMyWorkLogEntry(selectedDate, draftInput);
       setMyEntries(response.entries);
       if (draftInput.categoryName) {
-        const objectiveResponse = await getWorkLogObjectives();
+        const objectiveResponse = await getWorkLogObjectives(selectedDate);
         setObjectives(objectiveResponse.objectives);
         setCategories(objectiveResponse.categories);
         setClassificationSuggestionEnabled(
@@ -442,6 +442,7 @@ export function WorkLogsPage() {
       setClassificationSuggestionLoading(true);
       void suggestWorkLogClassification({
         bodyMarkdown: editorDraft.bodyMarkdown,
+        workDate: selectedDate,
       })
         .then((response) => {
           if (!cancelled) {
@@ -468,6 +469,7 @@ export function WorkLogsPage() {
     canUseWorkLogCategoryControls,
     classificationSuggestionEnabled,
     editorDraft.bodyMarkdown,
+    selectedDate,
   ]);
 
   const applyClassificationSuggestion = (

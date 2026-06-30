@@ -10,11 +10,12 @@ import type {
   WorkLogReportScope,
 } from "../../src/types/orf";
 import {
+  canSelectObjectiveForWorkLog,
   canSaveUnscopedWorkLog,
   canUseWorkLogCategories,
   requiresObjectiveProgressEstimate,
   unscopedWorkLogMemberNameList,
-  workLogObjectiveSelectableFlowStatuses,
+  workLogObjectiveSelectionCandidateFlowStatuses,
 } from "../../src/domain/orfWorkLogs";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { db } from "../db/client";
@@ -157,10 +158,15 @@ function normalizeWorkLogEntryInput(user: AuthenticatedOrfUser, input: WorkLogDa
   };
 }
 
-async function listAuthorWorkLogObjectiveRows(input: { scope: RuntimeScope; user: AuthenticatedOrfUser; objectiveIds?: string[] }) {
+async function listAuthorWorkLogObjectiveRows(input: {
+  objectiveIds?: string[];
+  scope: RuntimeScope;
+  user: AuthenticatedOrfUser;
+  workDate?: string | null;
+}) {
   const storageScopeId = runtimeScopeStorageId(input.scope);
   const filters = [eq(objectives.teamId, storageScopeId)];
-  filters.push(inArray(objectives.flowStatus, [...workLogObjectiveSelectableFlowStatuses]));
+  filters.push(inArray(objectives.flowStatus, [...workLogObjectiveSelectionCandidateFlowStatuses]));
   if (input.user.role !== "admin") {
     filters.push(sql`${objectives.challengerUserIds} ? ${input.user.id}`);
   }
@@ -168,8 +174,9 @@ async function listAuthorWorkLogObjectiveRows(input: { scope: RuntimeScope; user
     filters.push(inArray(objectives.id, input.objectiveIds));
   }
 
-  return db
+  const rows = await db
     .select({
+      acceptedAt: objectives.acceptedAt,
       finalDueAt: objectives.finalDueAt,
       flowStatus: objectives.flowStatus,
       id: objectives.id,
@@ -178,6 +185,7 @@ async function listAuthorWorkLogObjectiveRows(input: { scope: RuntimeScope; user
     .from(objectives)
     .where(and(...filters))
     .orderBy(asc(objectives.finalDueAt), asc(objectives.title), asc(objectives.id));
+  return rows.filter((row) => canSelectObjectiveForWorkLog(row, { workDate: input.workDate }));
 }
 
 async function listLatestWorkLogObjectiveEstimateByObjectiveId(input: {
@@ -211,8 +219,12 @@ async function listLatestWorkLogObjectiveEstimateByObjectiveId(input: {
   return latestEstimateByObjectiveId;
 }
 
-export async function listWorkLogObjectiveOptions(user: AuthenticatedOrfUser, scope: RuntimeScope): Promise<WorkLogObjectiveOption[]> {
-  const rows = await listAuthorWorkLogObjectiveRows({ scope, user });
+export async function listWorkLogObjectiveOptions(
+  user: AuthenticatedOrfUser,
+  scope: RuntimeScope,
+  options: { workDate?: string | null } = {},
+): Promise<WorkLogObjectiveOption[]> {
+  const rows = await listAuthorWorkLogObjectiveRows({ scope, user, workDate: options.workDate });
   const latestEstimateByObjectiveId = await listLatestWorkLogObjectiveEstimateByObjectiveId({
     objectiveIds: rows.map((row) => row.id),
     scope,
@@ -371,6 +383,7 @@ async function resolveWorkLogObjectiveForInput(input: {
   objectiveId: string | null;
   scope: RuntimeScope;
   user: AuthenticatedOrfUser;
+  workDate: string;
 }) {
   if (!input.objectiveId) {
     return { status: "ok" as const, objective: null, preserveExistingSnapshot: false };
@@ -379,7 +392,12 @@ async function resolveWorkLogObjectiveForInput(input: {
     return { status: "ok" as const, objective: null, preserveExistingSnapshot: true };
   }
 
-  const [objective] = await listAuthorWorkLogObjectiveRows({ objectiveIds: [input.objectiveId], scope: input.scope, user: input.user });
+  const [objective] = await listAuthorWorkLogObjectiveRows({
+    objectiveIds: [input.objectiveId],
+    scope: input.scope,
+    user: input.user,
+    workDate: input.workDate,
+  });
   if (!objective) {
     return { status: "invalid" as const, reason: "invalidObjective" as const };
   }
@@ -406,6 +424,7 @@ export async function createMyWorkLogEntry(
     objectiveId: normalized.entry.objectiveId ?? null,
     scope,
     user,
+    workDate,
   });
   if (objectiveResult.status !== "ok") {
     return objectiveResult;
@@ -485,6 +504,7 @@ export async function updateMyWorkLogEntry(
     objectiveId: normalized.entry.objectiveId ?? null,
     scope,
     user,
+    workDate: existing.workDate,
   });
   if (objectiveResult.status !== "ok") {
     return objectiveResult;
