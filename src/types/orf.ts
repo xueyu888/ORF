@@ -366,6 +366,7 @@ export interface WorkLogObjectiveOption {
   title: string;
   flowStatus: ObjectiveFlowStatus;
   finalDueAt: string;
+  isUserChallenger: boolean;
   latestRemainingEstimatePercent?: number | null;
 }
 
@@ -377,6 +378,7 @@ export interface WorkLogCategoryOption {
 }
 
 export type WorkLogClassificationKind = "category" | "objective" | "uncategorized";
+export type WorkLogObjectiveSelectionAvailability = "default" | "searchOnly";
 
 export interface WorkLogClassificationSuggestion {
   kind: WorkLogClassificationKind | "newCategory";

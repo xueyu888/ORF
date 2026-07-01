@@ -1,6 +1,5 @@
-import type { ObjectiveFlowStatus } from "../../types/orf";
+import type { ObjectiveFlowStatus, WorkLogObjectiveSelectionAvailability } from "../../types/orf";
 import { isObjectiveAcceptedByFlow, isObjectiveSettledOrClosed, objectiveFlowStatuses } from "../orfLifecycle";
-import { localDateString } from "../../utils/date";
 
 type WorkLogPermissionUser = {
   name?: string | null;
@@ -8,26 +7,31 @@ type WorkLogPermissionUser = {
 };
 
 type WorkLogObjectiveTarget =
-  | { acceptedAt?: string | null; flowStatus: ObjectiveFlowStatus; settledAt?: string | null }
+  | { flowStatus: ObjectiveFlowStatus }
   | ObjectiveFlowStatus
   | null
   | undefined;
-type WorkLogObjectiveSelectionContext = {
-  workDate?: string | null;
-};
 
 export const unscopedWorkLogMemberNameList = ["邓滨虎", "何永杰"] as const;
-export const workLogObjectiveAlwaysSelectableFlowStatuses = objectiveFlowStatuses.filter(
+export const workLogObjectiveDefaultFlowStatuses = objectiveFlowStatuses.filter(
   (flowStatus) => !isObjectiveAcceptedByFlow(flowStatus) && !isObjectiveSettledOrClosed(flowStatus),
 );
-export const workLogObjectiveSelectionCandidateFlowStatuses = [
-  ...workLogObjectiveAlwaysSelectableFlowStatuses,
+export const workLogObjectiveCompletedSearchFlowStatuses = [
   "accepted",
   "settled",
 ] as const satisfies readonly ObjectiveFlowStatus[];
+export const workLogObjectiveSearchOnlyFlowStatuses = objectiveFlowStatuses.filter(
+  (flowStatus) => !workLogObjectiveDefaultFlowStatuses.includes(flowStatus),
+);
+export const workLogObjectiveSelectionCandidateFlowStatuses = [
+  ...workLogObjectiveDefaultFlowStatuses,
+  ...workLogObjectiveSearchOnlyFlowStatuses,
+] as const satisfies readonly ObjectiveFlowStatus[];
+export const workLogObjectiveAlwaysSelectableFlowStatuses = workLogObjectiveDefaultFlowStatuses;
 
 const unscopedWorkLogMemberNames = new Set<string>(unscopedWorkLogMemberNameList);
-const workLogObjectiveAlwaysSelectableFlowStatusSet = new Set<ObjectiveFlowStatus>(workLogObjectiveAlwaysSelectableFlowStatuses);
+const workLogObjectiveDefaultFlowStatusSet = new Set<ObjectiveFlowStatus>(workLogObjectiveDefaultFlowStatuses);
+const workLogObjectiveSearchOnlyFlowStatusSet = new Set<ObjectiveFlowStatus>(workLogObjectiveSearchOnlyFlowStatuses);
 
 function normalizedUserName(name: string | null | undefined) {
   return name?.trim() ?? "";
@@ -50,42 +54,34 @@ function objectiveFlowStatusForWorkLog(target: WorkLogObjectiveTarget) {
   return typeof target === "string" ? target : target?.flowStatus;
 }
 
-function acceptedAtForWorkLog(target: WorkLogObjectiveTarget) {
-  return typeof target === "string" ? null : target?.acceptedAt ?? null;
-}
-
-function settledAtForWorkLog(target: WorkLogObjectiveTarget) {
-  return typeof target === "string" ? null : target?.settledAt ?? null;
-}
-
-function timestampMatchesWorkDate(timestamp: string | null | undefined, workDate: string | null | undefined) {
-  if (!timestamp || !workDate) return false;
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return false;
-  return localDateString(date) === workDate;
-}
-
-export function isObjectiveCompletedForWorkLog(
-  target: WorkLogObjectiveTarget,
-  context: WorkLogObjectiveSelectionContext = {},
-) {
+export function isObjectiveCompletedForWorkLog(target: WorkLogObjectiveTarget) {
   const flowStatus = objectiveFlowStatusForWorkLog(target);
   if (!flowStatus) return false;
-  if (isObjectiveAcceptedByFlow(flowStatus)) {
-    return !timestampMatchesWorkDate(acceptedAtForWorkLog(target), context.workDate);
-  }
-  if (flowStatus === "settled") {
-    return !timestampMatchesWorkDate(settledAtForWorkLog(target), context.workDate);
-  }
-  return isObjectiveSettledOrClosed(flowStatus);
+  return isObjectiveAcceptedByFlow(flowStatus) || isObjectiveSettledOrClosed(flowStatus);
 }
 
-export function canSelectObjectiveForWorkLog(
+export function workLogObjectiveSelectionAvailability(
   target: WorkLogObjectiveTarget,
-  context: WorkLogObjectiveSelectionContext = {},
-) {
+): WorkLogObjectiveSelectionAvailability | null {
   const flowStatus = objectiveFlowStatusForWorkLog(target);
-  if (!flowStatus) return false;
-  if (workLogObjectiveAlwaysSelectableFlowStatusSet.has(flowStatus)) return true;
-  return !isObjectiveCompletedForWorkLog(target, context);
+  if (!flowStatus) return null;
+  if (workLogObjectiveDefaultFlowStatusSet.has(flowStatus)) return "default";
+  if (workLogObjectiveSearchOnlyFlowStatusSet.has(flowStatus)) return "searchOnly";
+  return null;
+}
+
+export function canShowObjectiveInDefaultWorkLogList(target: WorkLogObjectiveTarget) {
+  return workLogObjectiveSelectionAvailability(target) === "default";
+}
+
+export function canAttachObjectiveToWorkLog(target: WorkLogObjectiveTarget) {
+  return workLogObjectiveSelectionAvailability(target) !== null;
+}
+
+export function canSelectObjectiveForWorkLog(target: WorkLogObjectiveTarget) {
+  return canAttachObjectiveToWorkLog(target);
+}
+
+export function isWorkLogSearchOnlyObjective(target: WorkLogObjectiveTarget) {
+  return workLogObjectiveSelectionAvailability(target) === "searchOnly";
 }

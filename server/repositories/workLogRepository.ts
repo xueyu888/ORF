@@ -10,16 +10,18 @@ import type {
   WorkLogReportScope,
 } from "../../src/types/orf";
 import {
-  canSelectObjectiveForWorkLog,
+  canAttachObjectiveToWorkLog,
+  canShowObjectiveInDefaultWorkLogList,
   canSaveUnscopedWorkLog,
   canUseWorkLogCategories,
   requiresObjectiveProgressEstimate,
   unscopedWorkLogMemberNameList,
   workLogObjectiveSelectionCandidateFlowStatuses,
+  workLogObjectiveDefaultFlowStatuses,
 } from "../../src/domain/orfWorkLogs";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { db } from "../db/client";
-import { objectiveSettlementEvents, objectives, teamMembers, users, workLogCategories, workLogEntries } from "../db/schema";
+import { objectives, teamMembers, users, workLogCategories, workLogEntries } from "../db/schema";
 import { publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
 import type { AuthenticatedOrfUser } from "../auth/accessPolicy";
 import type { RuntimeScope } from "./runtimeScope";
@@ -67,6 +69,8 @@ export type WorkLogReportQuery = {
   to: string;
 };
 
+type WorkLogObjectiveListScope = "attachment" | "default" | "search";
+
 const nowIso = () => new Date().toISOString();
 const makeWorkLogId = () => `worklog-${Date.now()}-${Math.random().toString(16).slice(2)}-${randomUUID()}`;
 const makeWorkLogCategoryId = () => `worklog-category-${Date.now()}-${Math.random().toString(16).slice(2)}-${randomUUID()}`;
@@ -77,6 +81,18 @@ function normalizeWorkLogCategoryDisplayName(value: string) {
 
 function normalizeWorkLogCategoryNameKey(value: string) {
   return normalizeWorkLogCategoryDisplayName(value).toLocaleLowerCase();
+}
+
+function normalizeWorkLogObjectiveSearchQuery(value: string | null | undefined) {
+  return value?.replace(/\s+/g, " ").trim().slice(0, 80) ?? "";
+}
+
+function escapedWorkLogObjectiveSearchPattern(value: string) {
+  return `%${value.replace(/[\\%_]/g, "\\$&")}%`;
+}
+
+function isWorkLogObjectiveChallenger(row: { challengerUserIds: string[] }, userId: string) {
+  return row.challengerUserIds.includes(userId);
 }
 
 function toWorkLogEntry(row: typeof workLogEntries.$inferSelect): WorkLogEntry {
@@ -159,41 +175,48 @@ function normalizeWorkLogEntryInput(user: AuthenticatedOrfUser, input: WorkLogDa
 }
 
 async function listAuthorWorkLogObjectiveRows(input: {
+  listScope: WorkLogObjectiveListScope;
   objectiveIds?: string[];
+  searchQuery?: string | null;
   scope: RuntimeScope;
   user: AuthenticatedOrfUser;
-  workDate?: string | null;
 }) {
   const storageScopeId = runtimeScopeStorageId(input.scope);
+  const searchQuery = normalizeWorkLogObjectiveSearchQuery(input.searchQuery);
+  const flowStatuses =
+    input.listScope === "default"
+      ? workLogObjectiveDefaultFlowStatuses
+      : workLogObjectiveSelectionCandidateFlowStatuses;
   const filters = [eq(objectives.teamId, storageScopeId)];
-  filters.push(inArray(objectives.flowStatus, [...workLogObjectiveSelectionCandidateFlowStatuses]));
-  if (input.user.role !== "admin") {
+  filters.push(inArray(objectives.flowStatus, [...flowStatuses]));
+  if (input.listScope === "default") {
     filters.push(sql`${objectives.challengerUserIds} ? ${input.user.id}`);
   }
   if (input.objectiveIds) {
     filters.push(inArray(objectives.id, input.objectiveIds));
   }
+  if (input.listScope === "search" && searchQuery) {
+    const pattern = escapedWorkLogObjectiveSearchPattern(searchQuery);
+    filters.push(or(
+      sql`${objectives.title} ILIKE ${pattern} ESCAPE '\\'`,
+      sql`${objectives.id} ILIKE ${pattern} ESCAPE '\\'`,
+    )!);
+  }
 
   const rows = await db
     .select({
-      acceptedAt: objectives.acceptedAt,
       finalDueAt: objectives.finalDueAt,
       flowStatus: objectives.flowStatus,
       id: objectives.id,
-      settledAt: objectiveSettlementEvents.createdAt,
+      challengerUserIds: objectives.challengerUserIds,
       title: objectives.title,
     })
     .from(objectives)
-    .leftJoin(
-      objectiveSettlementEvents,
-      and(
-        eq(objectiveSettlementEvents.objectiveId, objectives.id),
-        eq(objectiveSettlementEvents.kind, "finalCompletion"),
-      ),
-    )
     .where(and(...filters))
     .orderBy(asc(objectives.finalDueAt), asc(objectives.title), asc(objectives.id));
-  return rows.filter((row) => canSelectObjectiveForWorkLog(row, { workDate: input.workDate }));
+  if (input.listScope === "default") return rows.filter(canShowObjectiveInDefaultWorkLogList);
+  if (input.listScope === "search" && !searchQuery) return rows.filter(canShowObjectiveInDefaultWorkLogList);
+  return rows.filter(canAttachObjectiveToWorkLog);
 }
 
 async function listLatestWorkLogObjectiveEstimateByObjectiveId(input: {
@@ -230,21 +253,29 @@ async function listLatestWorkLogObjectiveEstimateByObjectiveId(input: {
 export async function listWorkLogObjectiveOptions(
   user: AuthenticatedOrfUser,
   scope: RuntimeScope,
-  options: { workDate?: string | null } = {},
+  options: { mode?: "default" | "search"; searchQuery?: string | null } = {},
 ): Promise<WorkLogObjectiveOption[]> {
-  const rows = await listAuthorWorkLogObjectiveRows({ scope, user, workDate: options.workDate });
+  const rows = await listAuthorWorkLogObjectiveRows({
+    listScope: options.mode === "search" ? "search" : "default",
+    scope,
+    searchQuery: options.searchQuery,
+    user,
+  });
   const latestEstimateByObjectiveId = await listLatestWorkLogObjectiveEstimateByObjectiveId({
     objectiveIds: rows.map((row) => row.id),
     scope,
     user,
   });
-  return rows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    flowStatus: row.flowStatus,
-    finalDueAt: row.finalDueAt,
-    latestRemainingEstimatePercent: latestEstimateByObjectiveId.get(row.id) ?? null,
-  }));
+  return rows.map((row) => {
+    return {
+      id: row.id,
+      title: row.title,
+      flowStatus: row.flowStatus,
+      finalDueAt: row.finalDueAt,
+      isUserChallenger: isWorkLogObjectiveChallenger(row, user.id),
+      latestRemainingEstimatePercent: latestEstimateByObjectiveId.get(row.id) ?? null,
+    };
+  });
 }
 
 export async function listWorkLogCategoryOptions(scope: RuntimeScope): Promise<WorkLogCategoryOption[]> {
@@ -391,7 +422,6 @@ async function resolveWorkLogObjectiveForInput(input: {
   objectiveId: string | null;
   scope: RuntimeScope;
   user: AuthenticatedOrfUser;
-  workDate: string;
 }) {
   if (!input.objectiveId) {
     return { status: "ok" as const, objective: null, preserveExistingSnapshot: false };
@@ -401,10 +431,10 @@ async function resolveWorkLogObjectiveForInput(input: {
   }
 
   const [objective] = await listAuthorWorkLogObjectiveRows({
+    listScope: "attachment",
     objectiveIds: [input.objectiveId],
     scope: input.scope,
     user: input.user,
-    workDate: input.workDate,
   });
   if (!objective) {
     return { status: "invalid" as const, reason: "invalidObjective" as const };
@@ -432,7 +462,6 @@ export async function createMyWorkLogEntry(
     objectiveId: normalized.entry.objectiveId ?? null,
     scope,
     user,
-    workDate,
   });
   if (objectiveResult.status !== "ok") {
     return objectiveResult;
@@ -512,7 +541,6 @@ export async function updateMyWorkLogEntry(
     objectiveId: normalized.entry.objectiveId ?? null,
     scope,
     user,
-    workDate: existing.workDate,
   });
   if (objectiveResult.status !== "ok") {
     return objectiveResult;

@@ -753,8 +753,11 @@ export async function getChatUnreadSummary() {
   return apiJson<ChatUnreadSummaryResponse>("/api/chat/unread-summary");
 }
 
-export async function getWorkLogObjectives(date?: string) {
-  const query = date ? `?${new URLSearchParams({ date }).toString()}` : "";
+export async function getWorkLogObjectives(input: { mode?: "default" | "search"; q?: string } = {}) {
+  const params = new URLSearchParams();
+  if (input.mode) params.set("mode", input.mode);
+  if (input.q?.trim()) params.set("q", input.q.trim());
+  const query = params.toString() ? `?${params.toString()}` : "";
   return apiJson<WorkLogObjectivesResponse>(`/api/work-logs/objectives${query}`);
 }
 
@@ -768,7 +771,7 @@ export async function snoozeWorkLogReminder() {
   });
 }
 
-export async function suggestWorkLogClassification(input: { bodyMarkdown: string; workDate?: string }) {
+export async function suggestWorkLogClassification(input: { bodyMarkdown: string }) {
   return apiJson<WorkLogClassificationSuggestionResponse>("/api/work-logs/classification-suggestion", {
     method: "POST",
     body: JSON.stringify(input),
