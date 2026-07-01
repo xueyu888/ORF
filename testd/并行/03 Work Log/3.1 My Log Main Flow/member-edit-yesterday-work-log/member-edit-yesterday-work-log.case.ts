@@ -81,6 +81,7 @@ export const memberEditYesterdayWorkLogCase = {
       { source: { caseStepId: "S0-16", method: "playwright" }, id: "work_logs.history.original_progress", title: "\"当天记录\" 区域 应显示目标进度 `进 40%`", object: "page.work_logs.history", operator: "contains_progress", params: { bodyMarkerFrom: "data.originalLogBodyMarker", progressLabelFrom: "data.originalExpectedProgressLabel" } },
       { source: { caseStepId: "S0-17", method: "playwright" }, id: "work_logs.edit.visible", title: "本用例原始日志的 \"编辑\" 操作 应可见", object: "page.work_logs.edit_action", operator: "visible", params: { bodyMarkerFrom: "data.originalLogBodyMarker" } },
       { source: { caseStepId: "S0-18", method: "playwright" }, id: "work_logs.edit.enabled", title: "本用例原始日志的 \"编辑\" 操作 应可点击", object: "page.work_logs.edit_action", operator: "enabled", params: { bodyMarkerFrom: "data.originalLogBodyMarker" } },
+      { source: { caseStepId: "S0-19", method: "api" }, id: "work_log.objectives.current_challenger", title: "工作日志可选目标中的目标 `E2E-TARGET-WORK-LOG-EDIT-YESTERDAY` 对当前成员 应为 当前挑战者", object: "api.work_log.objectives", operator: "current_challenger", params: { titleFrom: "data.objectiveTitle" } },
     ],
   },
 

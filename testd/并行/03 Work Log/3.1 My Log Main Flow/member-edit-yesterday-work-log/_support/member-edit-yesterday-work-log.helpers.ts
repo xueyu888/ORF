@@ -130,6 +130,19 @@ export async function workLogObjectivesContain(page: Page, objectiveTitle: strin
   return Array.isArray(objectives) && objectives.some((item) => objectiveOptionHasTitle(item, objectiveTitle));
 }
 
+export async function workLogObjectiveIsCurrentChallenger(page: Page, objectiveTitle: string) {
+  const response = await page.evaluate(async () => {
+    const objectiveResponse = await fetch("/api/work-logs/objectives", { credentials: "include" });
+    return {
+      status: objectiveResponse.status,
+      body: await objectiveResponse.json().catch(() => ({})),
+    };
+  });
+  if (response.status !== 200) return false;
+  const objectives = (response.body as { objectives?: unknown }).objectives;
+  return Array.isArray(objectives) && objectives.some((item) => objectiveOptionHasTitle(item, objectiveTitle) && objectiveOptionIsUserChallenger(item));
+}
+
 export async function apiMyDayEntries(page: Page, scope: WorkLogDateScope) {
   const response = await page.evaluate(async (date) => {
     const dayResponse = await fetch(`/api/work-logs/my-day?date=${encodeURIComponent(date)}`, { credentials: "include" });
@@ -345,6 +358,10 @@ export function requiredWorkLogObjective(value: unknown): WorkLogObjectiveFixtur
 
 function objectiveOptionHasTitle(value: unknown, title: string) {
   return typeof value === "object" && value !== null && (value as { title?: unknown }).title === title;
+}
+
+function objectiveOptionIsUserChallenger(value: unknown) {
+  return typeof value === "object" && value !== null && (value as { isUserChallenger?: unknown }).isUserChallenger === true;
 }
 
 function workLogEntryHasBodyMarker(value: unknown, bodyMarker: string) {

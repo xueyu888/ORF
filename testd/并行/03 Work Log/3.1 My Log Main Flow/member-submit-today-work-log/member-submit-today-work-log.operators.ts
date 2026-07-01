@@ -22,6 +22,7 @@ import {
   workLogClassificationControl,
   workLogEditorPanel,
   workLogHistoryEntry,
+  workLogObjectiveIsCurrentChallenger,
   workLogObjectivesContain,
   workLogToast,
   workLogViewTab,
@@ -130,6 +131,10 @@ export const memberSubmitTodayWorkLogOperators: OperatorRegistry<TestContext, Me
   "api.work_log.objectives": {
     contains_title: async ({ ctx, params }) => {
       await expect.poll(() => workLogObjectivesContain(ctx.page, requiredString(params, "title"))).toBe(true);
+    },
+
+    current_challenger: async ({ ctx, params }) => {
+      await expect.poll(() => workLogObjectiveIsCurrentChallenger(ctx.page, requiredString(params, "title"))).toBe(true);
     },
   },
 

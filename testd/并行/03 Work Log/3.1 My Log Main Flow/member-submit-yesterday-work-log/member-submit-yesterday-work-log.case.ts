@@ -66,6 +66,7 @@ export const memberSubmitYesterdayWorkLogCase = {
       { source: { caseStepId: "S0-11", method: "playwright" }, id: "work_logs.editor.visible", title: "\"我的日志\" 面板 应可见", object: "page.work_logs.editor_panel", operator: "visible" },
       { source: { caseStepId: "S0-12", method: "playwright" }, id: "work_logs.classification.visible", title: "\"日志归类\" 控件 应可见", object: "page.work_logs.classification", operator: "visible" },
       { source: { caseStepId: "S0-13", method: "playwright" }, id: "work_logs.submit.disabled", title: "\"提交日志\" 操作 应不可点击", object: "page.work_logs.submit_action", operator: "disabled" },
+      { source: { caseStepId: "S0-14", method: "api" }, id: "work_log.objectives.current_challenger", title: "工作日志可选目标中的目标 `E2E-TARGET-WORK-LOG-YESTERDAY` 对当前成员 应为 当前挑战者", object: "api.work_log.objectives", operator: "current_challenger", params: { titleFrom: "data.objectiveTitle" } },
     ],
   },
 
