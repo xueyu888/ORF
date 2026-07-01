@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
-import { and, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 import type {
   CommentAttachment,
   BountySource,
@@ -3669,6 +3669,17 @@ export async function settleObjectiveLoot(
     settlementPoints: eventPlan.settlementPoints,
   });
   const createdAt = nowIso();
+  const [latestCompletedAcceptance] = settlementEventKind === "finalCompletion"
+    ? await db
+        .select({ reviewedAt: objectiveAcceptanceReviews.reviewedAt })
+        .from(objectiveAcceptanceReviews)
+        .where(and(eq(objectiveAcceptanceReviews.objectiveId, objectiveId), eq(objectiveAcceptanceReviews.acceptedResult, "completed")))
+        .orderBy(desc(objectiveAcceptanceReviews.reviewedAt))
+        .limit(1)
+    : [];
+  const settlementPeriodAt = settlementEventKind === "finalCompletion"
+    ? latestCompletedAcceptance?.reviewedAt ?? objective.acceptedAt ?? createdAt
+    : createdAt;
   const reason = input.reason?.trim() || input.contributionResolution?.reason.trim() || objectiveSettlementEventDefaultReason(settlementEventKind, objective.title);
   const settlementEventId = makeId("settlement-event");
   const existingPointRows = await db
@@ -3715,6 +3726,13 @@ export async function settleObjectiveLoot(
       return false;
     }
 
+    if (settlementEventKind === "finalCompletion") {
+      await tx
+        .update(pointLedger)
+        .set({ settlementPeriodAt })
+        .where(eq(pointLedger.objectiveId, objectiveId));
+    }
+
     await tx.insert(objectiveSettlementEvents).values({
       id: settlementEventId,
       teamId: objective.teamId,
@@ -3749,6 +3767,7 @@ export async function settleObjectiveLoot(
           memberName: item.memberName,
           points: item.points,
           reason,
+          settlementPeriodAt,
           createdAt,
         })),
       );

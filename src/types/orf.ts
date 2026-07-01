@@ -320,6 +320,7 @@ export interface PointLedgerEntry {
   memberName: string;
   points: number;
   reason: string;
+  settlementPeriodAt: string;
   createdAt: string;
 }
 
@@ -365,17 +366,20 @@ export interface WorkLogObjectiveOption {
   title: string;
   flowStatus: ObjectiveFlowStatus;
   finalDueAt: string;
+  isUserChallenger: boolean;
   latestRemainingEstimatePercent?: number | null;
 }
 
 export interface WorkLogCategoryOption {
   id: string;
   name: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  source: "builtIn" | "managed";
+  updatedAt?: string;
 }
 
 export type WorkLogClassificationKind = "category" | "objective" | "uncategorized";
+export type WorkLogObjectiveSelectionAvailability = "default" | "searchOnly";
 
 export interface WorkLogClassificationSuggestion {
   kind: WorkLogClassificationKind | "newCategory";

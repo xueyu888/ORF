@@ -8144,6 +8144,25 @@ button:disabled {
   font-weight: 720;
 }
 
+.work-logs-completed-objective-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--orf-warning-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--orf-warning-bg) 78%, var(--orf-bg-card));
+  color: var(--orf-warning-text);
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.5;
+}
+
+.work-logs-completed-objective-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 .work-logs-estimate-control {
   display: grid;
   gap: 9px;

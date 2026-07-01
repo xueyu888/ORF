@@ -26,6 +26,7 @@ export function FantasySelectMenu<Value extends string>({
   disabled = false,
   leadingIcon,
   onChange,
+  onSearchQueryChange,
   options,
   placeholder = "请选择",
   searchable = false,
@@ -40,6 +41,7 @@ export function FantasySelectMenu<Value extends string>({
   disabled?: boolean;
   leadingIcon?: ReactNode;
   onChange: (value: Value) => void;
+  onSearchQueryChange?: (query: string) => void;
   options: Array<FantasySelectOption<Value>>;
   placeholder?: string;
   searchable?: boolean;
@@ -59,6 +61,11 @@ export function FantasySelectMenu<Value extends string>({
   const selected = options.find((option) => option.value === value);
   const selectedLabel = selected?.label ?? placeholder;
   const visibleOptions = searchable ? filterFantasySelectOptions(options, searchQuery) : options;
+
+  const updateSearchQuery = useCallback((query: string) => {
+    setSearchQuery(query);
+    onSearchQueryChange?.(query);
+  }, [onSearchQueryChange]);
 
   const updatePopoverPosition = () => {
     const trigger = rootRef.current;
@@ -124,9 +131,9 @@ export function FantasySelectMenu<Value extends string>({
 
   useEffect(() => {
     if (!open && searchQuery) {
-      setSearchQuery("");
+      updateSearchQuery("");
     }
-  }, [open, searchQuery]);
+  }, [open, searchQuery, updateSearchQuery]);
 
   useEffect(() => {
     if (!open || !searchable) return;
@@ -143,12 +150,12 @@ export function FantasySelectMenu<Value extends string>({
 
   const selectOption = useCallback((option: FantasySelectOption<Value>) => {
     if (option.disabled || disabled) return;
-    setSearchQuery("");
+    updateSearchQuery("");
     setOpen(false);
     if (option.value !== value) {
       onChange(option.value);
     }
-  }, [disabled, onChange, value]);
+  }, [disabled, onChange, updateSearchQuery, value]);
 
   const setPopoverElement = useCallback(
     (node: HTMLDivElement | null) => {
@@ -189,7 +196,7 @@ export function FantasySelectMenu<Value extends string>({
         ariaLabel={ariaLabel}
         menuId={menuId}
         onSelect={selectOption}
-        onSearchQueryChange={setSearchQuery}
+        onSearchQueryChange={updateSearchQuery}
         open={open}
         options={options}
         popoverRef={setPopoverElement}

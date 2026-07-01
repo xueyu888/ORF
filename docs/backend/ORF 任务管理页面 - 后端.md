@@ -199,6 +199,7 @@ type ObjectiveFlowStatus =
 
 - `objectiveSettlementEvents`
 - 追加式 `pointLedger`
+- `pointLedger.settlementPeriodAt`，由该目标最后一条通过验收的 `objectiveAcceptanceReviews.reviewedAt` 派生，用于统计页月度、季度和年度归属；`pointLedger.createdAt` 仅表示写账时间
 - `Objective.objectiveBasePoints`
 - `Objective.objectiveSettlementPoints` 展示汇总
 - 最终结算时写入 `Result.acceptedResult`、`Objective.acceptedResult`、`Objective.completionMultiplier` 并进入 `settled`
@@ -209,7 +210,7 @@ type ObjectiveFlowStatus =
 
 `Result.detail` 是指标详情唯一事实源。评论只保存讨论记录，不承载指标详情定义；战利品提交和验收读取同一个 `Result.detail` 字段作为只读上下文。
 
-前端排行榜通过 `/api/reports-page` 读取 `ReportsPageData` 统计页公开读模型，管理员和普通成员使用同一口径。排行榜积分只读取公开 `pointLedger`，不自行计算个人贡献比例。完成率是 `src/domain/reportsLeaderboard` 的派生口径：以同一时间范围内有积分流水的成员-目标为统计对象，结合目标统计状态和最小验收结论判断。目标只要出现过 `objectiveAcceptanceReviews.acceptedResult = abandoned`，就代表截止验收未通过，该目标后续返工通过也不计入完成率已完成数。`/api/reports-page` 只返回目标统计状态、最小验收结论、公开积分流水和成员展示投影，不返回任务、评论、战利品正文、验收原因或匿名互评原始数据，也不构造完整 `TaskManagementData`。
+前端排行榜通过 `/api/reports-page` 读取 `ReportsPageData` 统计页公开读模型，管理员和普通成员使用同一口径。排行榜积分只读取公开 `pointLedger`，不自行计算个人贡献比例。月度、季度和年度范围按 `pointLedger.settlementPeriodAt` 判断，不能用互评结算完成或账本写入的 `pointLedger.createdAt`。完成率是 `src/domain/reportsLeaderboard` 的派生口径：以同一时间范围内有积分流水的成员-目标为统计对象，结合目标统计状态和最小验收结论判断。目标只要出现过 `objectiveAcceptanceReviews.acceptedResult = abandoned`，就代表截止验收未通过，该目标后续返工通过也不计入完成率已完成数。`/api/reports-page` 只返回目标统计状态、最小验收结论、公开积分流水和成员展示投影，不返回任务、评论、战利品正文、验收原因或匿名互评原始数据，也不构造完整 `TaskManagementData`。
 
 ## 权限约束
 

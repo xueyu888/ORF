@@ -55,8 +55,12 @@ function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+function ledgerPeriodAt(entry: PointLedgerEntry) {
+  return entry.settlementPeriodAt || entry.createdAt;
+}
+
 function latestDate(entries: readonly PointLedgerEntry[], objectives: readonly LeaderboardObjectiveFact[]) {
-  const ledgerDates = entries.map((entry) => dateOnly(entry.createdAt)).filter((value): value is string => Boolean(value));
+  const ledgerDates = entries.map((entry) => dateOnly(ledgerPeriodAt(entry))).filter((value): value is string => Boolean(value));
   const dates = ledgerDates.length > 0
     ? ledgerDates
     : objectives.map((objective) => dateOnly(objective.updatedAt) ?? dateOnly(objective.createdAt)).filter((value): value is string => Boolean(value));
@@ -248,10 +252,9 @@ function rankChangeFor(row: PeriodLeaderboardRow, previousRanks: Map<string, num
 
 export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRange): LeaderboardRow[] {
   const anchorDate = latestDate(state.pointLedger, state.objectives);
-  const ledger = state.pointLedger.filter((entry) => isInRange(entry.createdAt, timeRange, anchorDate));
-  const objectives = state.objectives.filter((objective) => isInRange(objective.updatedAt ?? objective.createdAt, timeRange, anchorDate));
+  const ledger = state.pointLedger.filter((entry) => isInRange(ledgerPeriodAt(entry), timeRange, anchorDate));
   const acceptanceReviewSummary = buildObjectiveAcceptanceReviewSummary(state.objectiveAcceptanceReviews ?? []);
-  const currentRows = buildPeriodRows(state.users, state.userProfiles, ledger, objectives, acceptanceReviewSummary, 10);
+  const currentRows = buildPeriodRows(state.users, state.userProfiles, ledger, state.objectives, acceptanceReviewSummary, 10);
   const previousBounds = previousRangeBounds(timeRange, anchorDate);
 
   if (!previousBounds) {
@@ -264,8 +267,8 @@ export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRan
   const previousRows = buildPeriodRows(
     state.users,
     state.userProfiles,
-    state.pointLedger.filter((entry) => isInBounds(entry.createdAt, previousBounds)),
-    state.objectives.filter((objective) => isInBounds(objective.updatedAt ?? objective.createdAt, previousBounds)),
+    state.pointLedger.filter((entry) => isInBounds(ledgerPeriodAt(entry), previousBounds)),
+    state.objectives,
     acceptanceReviewSummary,
   );
   const previousRanks = new Map(previousRows.map((row) => [row.userId, row.rank]));

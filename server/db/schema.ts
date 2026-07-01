@@ -300,6 +300,7 @@ export const pointLedger = pgTable("point_ledger", {
   memberName: text("member_name").notNull(),
   points: real("points").notNull(),
   reason: text("reason").notNull(),
+  settlementPeriodAt: timestamp("settlement_period_at", { mode: "string", withTimezone: true }).defaultNow().notNull(),
   createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
 });
 

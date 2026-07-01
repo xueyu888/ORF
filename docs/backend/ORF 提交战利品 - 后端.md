@@ -163,6 +163,7 @@
 - 写入一条 `objectiveSettlementEvents`，记录结算事件类型、关联战利品、基础分、事件倍率和事件分值。
 - 按本地匿名互评结算结果或指挥官处理结果追加生成 `pointLedger`，不得删除同一目标历史账本。
 - `pointLedger.userId` 来自目标挑战者的 `Objective.challengerUserIds`；`memberName` 只是结算时按 UUID 派生的展示名快照。
+- `pointLedger.settlementPeriodAt` 是积分归属周期时间，事实源是同目标最后一条 `objectiveAcceptanceReviews.acceptedResult = completed` 的 `reviewedAt`；`pointLedger.createdAt` 只表示账本写入时间，不能用于月度、季度或年度归属。若目标此前已有逾期惩罚积分，最终验收通过并结算时必须把同目标历史积分行同步到该最终验收通过时间。
 - `pointLedger.points` 以 `0.01` 为最小单位分配，使用最大余数法保证个人积分合计等于目标结算积分。
 - `Objective.objectiveSettlementPoints` 只是该目标已写入账本积分的展示汇总，生命周期仍以 `Objective.flowStatus` 为准。
 

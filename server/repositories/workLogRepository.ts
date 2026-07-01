@@ -10,11 +10,17 @@ import type {
   WorkLogReportScope,
 } from "../../src/types/orf";
 import {
+  canAttachObjectiveToWorkLog,
+  canShowObjectiveInDefaultWorkLogList,
   canSaveUnscopedWorkLog,
+  canUseWorkLogCategoryInput,
   canUseWorkLogCategories,
+  findBuiltInWorkLogCategoryForInput,
+  listBuiltInWorkLogCategoryOptions,
   requiresObjectiveProgressEstimate,
   unscopedWorkLogMemberNameList,
-  workLogObjectiveSelectableFlowStatuses,
+  workLogObjectiveSelectionCandidateFlowStatuses,
+  workLogObjectiveDefaultFlowStatuses,
 } from "../../src/domain/orfWorkLogs";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { db } from "../db/client";
@@ -66,6 +72,8 @@ export type WorkLogReportQuery = {
   to: string;
 };
 
+type WorkLogObjectiveListScope = "attachment" | "default" | "search";
+
 const nowIso = () => new Date().toISOString();
 const makeWorkLogId = () => `worklog-${Date.now()}-${Math.random().toString(16).slice(2)}-${randomUUID()}`;
 const makeWorkLogCategoryId = () => `worklog-category-${Date.now()}-${Math.random().toString(16).slice(2)}-${randomUUID()}`;
@@ -76,6 +84,18 @@ function normalizeWorkLogCategoryDisplayName(value: string) {
 
 function normalizeWorkLogCategoryNameKey(value: string) {
   return normalizeWorkLogCategoryDisplayName(value).toLocaleLowerCase();
+}
+
+function normalizeWorkLogObjectiveSearchQuery(value: string | null | undefined) {
+  return value?.replace(/\s+/g, " ").trim().slice(0, 80) ?? "";
+}
+
+function escapedWorkLogObjectiveSearchPattern(value: string) {
+  return `%${value.replace(/[\\%_]/g, "\\$&")}%`;
+}
+
+function isWorkLogObjectiveChallenger(row: { challengerUserIds: string[] }, userId: string) {
+  return row.challengerUserIds.includes(userId);
 }
 
 function toWorkLogEntry(row: typeof workLogEntries.$inferSelect): WorkLogEntry {
@@ -122,10 +142,10 @@ function normalizeWorkLogEntryInput(user: AuthenticatedOrfUser, input: WorkLogDa
   if ((objectiveId && (categoryId || categoryName)) || (categoryId && categoryName)) {
     return { status: "invalid" as const, reason: "classificationConflict" as const };
   }
-  if (!objectiveId && !canSaveUnscopedWorkLog(user)) {
+  if (!objectiveId && !categoryId && !categoryName && !canSaveUnscopedWorkLog(user)) {
     return { status: "invalid" as const, reason: "objectiveRequired" as const };
   }
-  if ((categoryId || categoryName) && !canUseWorkLogCategories(user)) {
+  if ((categoryId || categoryName) && !canUseWorkLogCategoryInput(user, { categoryId, categoryName })) {
     return { status: "invalid" as const, reason: "categoryForbidden" as const };
   }
   if (
@@ -157,27 +177,49 @@ function normalizeWorkLogEntryInput(user: AuthenticatedOrfUser, input: WorkLogDa
   };
 }
 
-async function listAuthorWorkLogObjectiveRows(input: { scope: RuntimeScope; user: AuthenticatedOrfUser; objectiveIds?: string[] }) {
+async function listAuthorWorkLogObjectiveRows(input: {
+  listScope: WorkLogObjectiveListScope;
+  objectiveIds?: string[];
+  searchQuery?: string | null;
+  scope: RuntimeScope;
+  user: AuthenticatedOrfUser;
+}) {
   const storageScopeId = runtimeScopeStorageId(input.scope);
+  const searchQuery = normalizeWorkLogObjectiveSearchQuery(input.searchQuery);
+  const flowStatuses =
+    input.listScope === "default"
+      ? workLogObjectiveDefaultFlowStatuses
+      : workLogObjectiveSelectionCandidateFlowStatuses;
   const filters = [eq(objectives.teamId, storageScopeId)];
-  filters.push(inArray(objectives.flowStatus, [...workLogObjectiveSelectableFlowStatuses]));
-  if (input.user.role !== "admin") {
+  filters.push(inArray(objectives.flowStatus, [...flowStatuses]));
+  if (input.listScope === "default") {
     filters.push(sql`${objectives.challengerUserIds} ? ${input.user.id}`);
   }
   if (input.objectiveIds) {
     filters.push(inArray(objectives.id, input.objectiveIds));
   }
+  if (input.listScope === "search" && searchQuery) {
+    const pattern = escapedWorkLogObjectiveSearchPattern(searchQuery);
+    filters.push(or(
+      sql`${objectives.title} ILIKE ${pattern} ESCAPE '\\'`,
+      sql`${objectives.id} ILIKE ${pattern} ESCAPE '\\'`,
+    )!);
+  }
 
-  return db
+  const rows = await db
     .select({
       finalDueAt: objectives.finalDueAt,
       flowStatus: objectives.flowStatus,
       id: objectives.id,
+      challengerUserIds: objectives.challengerUserIds,
       title: objectives.title,
     })
     .from(objectives)
     .where(and(...filters))
     .orderBy(asc(objectives.finalDueAt), asc(objectives.title), asc(objectives.id));
+  if (input.listScope === "default") return rows.filter(canShowObjectiveInDefaultWorkLogList);
+  if (input.listScope === "search" && !searchQuery) return rows.filter(canShowObjectiveInDefaultWorkLogList);
+  return rows.filter(canAttachObjectiveToWorkLog);
 }
 
 async function listLatestWorkLogObjectiveEstimateByObjectiveId(input: {
@@ -211,23 +253,42 @@ async function listLatestWorkLogObjectiveEstimateByObjectiveId(input: {
   return latestEstimateByObjectiveId;
 }
 
-export async function listWorkLogObjectiveOptions(user: AuthenticatedOrfUser, scope: RuntimeScope): Promise<WorkLogObjectiveOption[]> {
-  const rows = await listAuthorWorkLogObjectiveRows({ scope, user });
+export async function listWorkLogObjectiveOptions(
+  user: AuthenticatedOrfUser,
+  scope: RuntimeScope,
+  options: { mode?: "default" | "search"; searchQuery?: string | null } = {},
+): Promise<WorkLogObjectiveOption[]> {
+  const rows = await listAuthorWorkLogObjectiveRows({
+    listScope: options.mode === "search" ? "search" : "default",
+    scope,
+    searchQuery: options.searchQuery,
+    user,
+  });
   const latestEstimateByObjectiveId = await listLatestWorkLogObjectiveEstimateByObjectiveId({
     objectiveIds: rows.map((row) => row.id),
     scope,
     user,
   });
-  return rows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    flowStatus: row.flowStatus,
-    finalDueAt: row.finalDueAt,
-    latestRemainingEstimatePercent: latestEstimateByObjectiveId.get(row.id) ?? null,
-  }));
+  return rows.map((row) => {
+    return {
+      id: row.id,
+      title: row.title,
+      flowStatus: row.flowStatus,
+      finalDueAt: row.finalDueAt,
+      isUserChallenger: isWorkLogObjectiveChallenger(row, user.id),
+      latestRemainingEstimatePercent: latestEstimateByObjectiveId.get(row.id) ?? null,
+    };
+  });
 }
 
-export async function listWorkLogCategoryOptions(scope: RuntimeScope): Promise<WorkLogCategoryOption[]> {
+export async function listWorkLogCategoryOptions(
+  scope: RuntimeScope,
+  user: AuthenticatedOrfUser,
+): Promise<WorkLogCategoryOption[]> {
+  const builtInCategories = listBuiltInWorkLogCategoryOptions(user);
+  if (!canUseWorkLogCategories(user)) return builtInCategories;
+
+  const builtInNames = new Set(builtInCategories.map((category) => normalizeWorkLogCategoryNameKey(category.name)));
   const rows = await db
     .select({
       id: workLogCategories.id,
@@ -238,7 +299,15 @@ export async function listWorkLogCategoryOptions(scope: RuntimeScope): Promise<W
     .from(workLogCategories)
     .where(eq(workLogCategories.teamId, runtimeScopeStorageId(scope)))
     .orderBy(asc(workLogCategories.name), asc(workLogCategories.id));
-  return rows;
+  return [
+    ...builtInCategories,
+    ...rows
+      .filter((row) => !builtInNames.has(normalizeWorkLogCategoryNameKey(row.name)))
+      .map((row) => ({
+        ...row,
+        source: "managed" as const,
+      })),
+  ];
 }
 
 export async function listMyWorkLogDay(userId: string, scope: RuntimeScope, workDate: string): Promise<WorkLogEntry[]> {
@@ -266,7 +335,11 @@ async function getNextWorkLogSortOrder(scope: RuntimeScope, userId: string, work
   return Math.max(-1, ...rows.map((row) => row.sortOrder)) + 1;
 }
 
-type ResolvedWorkLogCategory = Pick<typeof workLogCategories.$inferSelect, "id" | "name">;
+type ResolvedWorkLogCategory = {
+  name: string;
+  snapshotCategoryId: string | null;
+  storageCategoryId: string | null;
+};
 
 async function findWorkLogCategoryById(scope: RuntimeScope, categoryId: string) {
   const [category] = await db
@@ -298,9 +371,33 @@ async function resolveOrCreateWorkLogCategoryForInput(input: {
   scope: RuntimeScope;
   user: AuthenticatedOrfUser;
 }): Promise<{ status: "ok"; category: ResolvedWorkLogCategory | null } | { status: "invalid"; reason: "invalidCategory" }> {
+  const builtInCategory = findBuiltInWorkLogCategoryForInput(input.user, {
+    categoryId: input.categoryId,
+    categoryName: input.categoryName,
+  });
+  if (builtInCategory) {
+    return {
+      status: "ok",
+      category: {
+        name: builtInCategory.name,
+        snapshotCategoryId: builtInCategory.id,
+        storageCategoryId: null,
+      },
+    };
+  }
+
   if (input.categoryId) {
     const category = await findWorkLogCategoryById(input.scope, input.categoryId);
-    return category ? { status: "ok", category } : { status: "invalid", reason: "invalidCategory" };
+    return category
+      ? {
+          status: "ok",
+          category: {
+            name: category.name,
+            snapshotCategoryId: category.id,
+            storageCategoryId: category.id,
+          },
+        }
+      : { status: "invalid", reason: "invalidCategory" };
   }
   if (!input.categoryName) {
     return { status: "ok", category: null };
@@ -308,7 +405,14 @@ async function resolveOrCreateWorkLogCategoryForInput(input: {
 
   const existing = await findWorkLogCategoryByName(input.scope, input.categoryName);
   if (existing) {
-    return { status: "ok", category: existing };
+    return {
+      status: "ok",
+      category: {
+        name: existing.name,
+        snapshotCategoryId: existing.id,
+        storageCategoryId: existing.id,
+      },
+    };
   }
 
   const now = nowIso();
@@ -329,12 +433,26 @@ async function resolveOrCreateWorkLogCategoryForInput(input: {
       name: workLogCategories.name,
     });
   if (created) {
-    return { status: "ok", category: created };
+    return {
+      status: "ok",
+      category: {
+        name: created.name,
+        snapshotCategoryId: created.id,
+        storageCategoryId: created.id,
+      },
+    };
   }
 
   const raced = await findWorkLogCategoryByName(input.scope, input.categoryName);
   return raced
-    ? { status: "ok", category: raced }
+    ? {
+        status: "ok",
+        category: {
+          name: raced.name,
+          snapshotCategoryId: raced.id,
+          storageCategoryId: raced.id,
+        },
+      }
     : { status: "invalid", reason: "invalidCategory" };
 }
 
@@ -379,7 +497,12 @@ async function resolveWorkLogObjectiveForInput(input: {
     return { status: "ok" as const, objective: null, preserveExistingSnapshot: true };
   }
 
-  const [objective] = await listAuthorWorkLogObjectiveRows({ objectiveIds: [input.objectiveId], scope: input.scope, user: input.user });
+  const [objective] = await listAuthorWorkLogObjectiveRows({
+    listScope: "attachment",
+    objectiveIds: [input.objectiveId],
+    scope: input.scope,
+    user: input.user,
+  });
   if (!objective) {
     return { status: "invalid" as const, reason: "invalidObjective" as const };
   }
@@ -433,8 +556,8 @@ export async function createMyWorkLogEntry(
     objectiveId: objective?.id ?? null,
     objectiveIdSnapshot: objective?.id ?? null,
     objectiveTitleSnapshot: objective?.title ?? null,
-    categoryId: category?.id ?? null,
-    categoryIdSnapshot: category?.id ?? null,
+    categoryId: category?.storageCategoryId ?? null,
+    categoryIdSnapshot: category?.snapshotCategoryId ?? null,
     categoryNameSnapshot: category?.name ?? null,
     bodyMarkdown: normalized.entry.bodyMarkdown,
     remainingEstimatePercent: normalized.entry.remainingEstimatePercent,
@@ -511,8 +634,8 @@ export async function updateMyWorkLogEntry(
   const categoryPatch = categoryResult.preserveExistingSnapshot
     ? {}
     : {
-        categoryId: categoryResult.category?.id ?? null,
-        categoryIdSnapshot: categoryResult.category?.id ?? null,
+        categoryId: categoryResult.category?.storageCategoryId ?? null,
+        categoryIdSnapshot: categoryResult.category?.snapshotCategoryId ?? null,
         categoryNameSnapshot: categoryResult.category?.name ?? null,
       };
   await db

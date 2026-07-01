@@ -209,6 +209,7 @@ export function mapPointLedgerRows(input: {
       memberName: nameForUserId(input.userNameById, item.userId, item.memberName),
       points: item.points,
       reason: item.reason,
+      settlementPeriodAt: item.settlementPeriodAt,
       createdAt: item.createdAt,
     }));
 }

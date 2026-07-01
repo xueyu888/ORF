@@ -1,6 +1,7 @@
 import { clsx } from "clsx";
 import {
   Activity,
+  AlertTriangle,
   BarChart3,
   BrainCircuit,
   CalendarDays,
@@ -42,6 +43,7 @@ import { readModelInvalidationKey } from "../features/realtime/readModelInvalida
 import {
   canSaveUnscopedWorkLog,
   canUseWorkLogCategories,
+  isWorkLogSearchOnlyObjective,
   requiresObjectiveProgressEstimate,
 } from "../domain/orfWorkLogs";
 import {
@@ -125,6 +127,47 @@ const workLogActivityCollapsedLimit = 20;
 const workLogActivityExpandedLimit = 80;
 
 const todayValue = () => localDateString(new Date());
+
+function mergeWorkLogObjectiveOptions(...groups: WorkLogObjectiveOption[][]) {
+  const merged = new Map<string, WorkLogObjectiveOption>();
+  for (const group of groups) {
+    for (const objective of group) {
+      if (!merged.has(objective.id)) {
+        merged.set(objective.id, objective);
+      }
+    }
+  }
+  return [...merged.values()];
+}
+
+function completedObjectiveStatusLabel(objective: WorkLogObjectiveOption) {
+  if (objective.flowStatus === "settled") return "已结算";
+  if (objective.flowStatus === "closed") return "已关闭";
+  return "已验收";
+}
+
+function completedObjectiveWorkLogNotice(objective: WorkLogObjectiveOption) {
+  if (objective.flowStatus === "closed") {
+    return "这个目标已关闭，本次日志只会作为历史记录，不会改变目标状态。";
+  }
+  return `这个目标${completedObjectiveStatusLabel(objective)}，本次日志会作为验收后工作/返工日志记录，不会改变目标状态。`;
+}
+
+function nonChallengerObjectiveWorkLogNotice(objective: WorkLogObjectiveOption) {
+  return objective.isUserChallenger ? "" : "你不是这个目标的挑战者，本次日志会记录到该目标下，请确认目标选择无误。";
+}
+
+function workLogObjectiveSelectionNotices(objective: WorkLogObjectiveOption) {
+  return [
+    isWorkLogSearchOnlyObjective(objective) ? completedObjectiveWorkLogNotice(objective) : "",
+    nonChallengerObjectiveWorkLogNotice(objective),
+  ].filter(Boolean);
+}
+
+function workLogObjectiveSelectionSubmitMessage(objective: WorkLogObjectiveOption) {
+  return `${workLogObjectiveSelectionNotices(objective).join("\n")}\n\n继续提交？`;
+}
+
 export function WorkLogsPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -140,6 +183,9 @@ export function WorkLogsPage() {
     dateFromSearch(location.search),
   );
   const [objectives, setObjectives] = useState<WorkLogObjectiveOption[]>([]);
+  const [objectiveSearchQuery, setObjectiveSearchQuery] = useState("");
+  const [objectiveSearchResults, setObjectiveSearchResults] = useState<WorkLogObjectiveOption[]>([]);
+  const [selectedObjectiveCache, setSelectedObjectiveCache] = useState<WorkLogObjectiveOption[]>([]);
   const [categories, setCategories] = useState<WorkLogCategoryOption[]>([]);
   const [classificationSuggestionEnabled, setClassificationSuggestionEnabled] =
     useState(false);
@@ -176,9 +222,27 @@ export function WorkLogsPage() {
   );
   const canWrite =
     currentUser?.role === "admin" || currentUser?.role === "member";
-  const canUseWorkLogCategoryControls = canUseWorkLogCategories(currentUser);
+  const canManageWorkLogCategories = canUseWorkLogCategories(currentUser);
+  const canSelectWorkLogCategories = canManageWorkLogCategories || categories.length > 0;
   const canSaveWithoutObjective = canSaveUnscopedWorkLog(currentUser);
   const objectiveProgressEstimateRequired = requiresObjectiveProgressEstimate(currentUser);
+  const objectiveSelectionOptions = useMemo(
+    () =>
+      mergeWorkLogObjectiveOptions(
+        objectives,
+        objectiveSearchResults,
+        selectedObjectiveCache.filter((objective) => objective.id === editorDraft.objectiveId),
+      ),
+    [editorDraft.objectiveId, objectiveSearchResults, objectives, selectedObjectiveCache],
+  );
+  const objectiveOptionsById = useMemo(
+    () => new Map(objectiveSelectionOptions.map((objective) => [objective.id, objective])),
+    [objectiveSelectionOptions],
+  );
+  const categoryOptionsById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories],
+  );
 
   useEffect(() => {
     const nextDate = dateFromSearch(location.search);
@@ -195,6 +259,9 @@ export function WorkLogsPage() {
         getMyWorkLogDay(date),
       ]);
       setObjectives(objectiveResponse.objectives);
+      setObjectiveSearchQuery("");
+      setObjectiveSearchResults([]);
+      setSelectedObjectiveCache([]);
       setCategories(objectiveResponse.categories);
       setClassificationSuggestionEnabled(
         objectiveResponse.classificationSuggestionEnabled,
@@ -210,6 +277,34 @@ export function WorkLogsPage() {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    const query = objectiveSearchQuery.trim();
+    if (!query) {
+      setObjectiveSearchResults([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      void getWorkLogObjectives({ mode: "search", q: query })
+        .then((response) => {
+          if (!cancelled) {
+            setObjectiveSearchResults(response.objectives);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setObjectiveSearchResults([]);
+          }
+        });
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [objectiveSearchQuery]);
 
   const loadActivity = useCallback(async (expanded: boolean) => {
     setActivityLoading(true);
@@ -305,6 +400,10 @@ export function WorkLogsPage() {
     });
   };
 
+  const rememberSelectedObjective = (objective: WorkLogObjectiveOption) => {
+    setSelectedObjectiveCache((current) => mergeWorkLogObjectiveOptions([objective], current));
+  };
+
   const editingEntry = editorDraft.editingEntryId
     ? (myEntries.find((entry) => entry.id === editorDraft.editingEntryId) ??
       null)
@@ -319,7 +418,8 @@ export function WorkLogsPage() {
   );
   const draftValidation = draftHasInput
     ? validateWorkLogEditorDraft(editorDraft, {
-        allowCategories: canUseWorkLogCategoryControls,
+        allowCategories: canSelectWorkLogCategories,
+        allowNewCategory: canManageWorkLogCategories,
         allowUncategorized: canSaveWithoutObjective,
         requireObjectiveProgressEstimate: objectiveProgressEstimateRequired,
       })
@@ -345,14 +445,14 @@ export function WorkLogsPage() {
     !draftHasInput ||
     Boolean(draftValidation) ||
     !hasChanges;
-  const memberHasNoWritableTargets =
-    currentUser?.role === "member" &&
-    !canSaveWithoutObjective &&
-    objectives.length === 0 &&
-    myEntries.length === 0;
 
   const saveEntry = async () => {
     if (saveDisabled) return;
+    const selectedObjective = draftInput.objectiveId ? objectiveOptionsById.get(draftInput.objectiveId) : undefined;
+    if (selectedObjective && workLogObjectiveSelectionNotices(selectedObjective).length > 0) {
+      const confirmed = window.confirm(workLogObjectiveSelectionSubmitMessage(selectedObjective));
+      if (!confirmed) return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -414,16 +514,8 @@ export function WorkLogsPage() {
     }
   };
 
-  const objectiveOptionsById = useMemo(
-    () => new Map(objectives.map((objective) => [objective.id, objective])),
-    [objectives],
-  );
-  const categoryOptionsById = useMemo(
-    () => new Map(categories.map((category) => [category.id, category])),
-    [categories],
-  );
   useEffect(() => {
-    if (!canUseWorkLogCategoryControls || !classificationSuggestionEnabled) {
+    if (!canManageWorkLogCategories || !classificationSuggestionEnabled) {
       setClassificationSuggestion(null);
       setClassificationSuggestionLoading(false);
       return undefined;
@@ -465,7 +557,7 @@ export function WorkLogsPage() {
       window.clearTimeout(timeout);
     };
   }, [
-    canUseWorkLogCategoryControls,
+    canManageWorkLogCategories,
     classificationSuggestionEnabled,
     editorDraft.bodyMarkdown,
   ]);
@@ -568,7 +660,7 @@ export function WorkLogsPage() {
                   <p>{currentUser?.name ?? ""}</p>
                 </div>
                 <div className="work-logs-editor-heading-actions">
-                  {canUseWorkLogCategoryControls && classificationSuggestionEnabled && (
+                  {canManageWorkLogCategories && classificationSuggestionEnabled && (
                     <WorkLogClassificationSuggestionSlot
                       categories={categories}
                       draft={editorDraft}
@@ -606,16 +698,11 @@ export function WorkLogsPage() {
                   <Loader2 className="h-5 w-5 animate-spin" />
                   加载中
                 </div>
-              ) : memberHasNoWritableTargets ? (
-                <div className="work-logs-empty">
-                  <NotebookPen className="h-6 w-6" />
-                  <span>当前账号没有可填写的个人目标日志</span>
-                </div>
               ) : (
                   <>
                     <div className="work-logs-draft-list">
                       <WorkLogEditorCard
-                        canUseCategories={canUseWorkLogCategoryControls}
+                        canUseCategories={canSelectWorkLogCategories}
                         category={
                           editorDraft.categoryId
                             ? categoryOptionsById.get(editorDraft.categoryId)
@@ -631,15 +718,18 @@ export function WorkLogsPage() {
                         }
                         classificationOptions={buildWorkLogClassificationChoices(
                           editorDraft,
-                          objectives,
+                          objectiveSelectionOptions,
                           {
-                            allowCategories: canUseWorkLogCategoryControls,
+                            allowCategories: canSelectWorkLogCategories,
+                            allowNewCategory: canManageWorkLogCategories,
                             allowUncategorized: canSaveWithoutObjective,
                           },
                           categories,
                         )}
-                        objectives={objectives}
+                        objectives={objectiveSelectionOptions}
                         onChange={updateEditorDraft}
+                        onObjectiveSearchQueryChange={setObjectiveSearchQuery}
+                        onObjectiveSelect={rememberSelectedObjective}
                         requireProgressEstimate={objectiveProgressEstimateRequired}
                       />
                     </div>
@@ -797,6 +887,8 @@ function WorkLogEditorCard({
   objective,
   objectives,
   onChange,
+  onObjectiveSearchQueryChange,
+  onObjectiveSelect,
   requireProgressEstimate,
 }: {
   canUseCategories: boolean;
@@ -808,6 +900,8 @@ function WorkLogEditorCard({
   objective?: WorkLogObjectiveOption;
   objectives: WorkLogObjectiveOption[];
   onChange: (patch: WorkLogEditorDraftPatch) => void;
+  onObjectiveSearchQueryChange: (query: string) => void;
+  onObjectiveSelect: (objective: WorkLogObjectiveOption) => void;
   requireProgressEstimate: boolean;
 }) {
   const estimateEnabled = draft.classificationKind === "objective" && Boolean(draft.objectiveId);
@@ -822,13 +916,24 @@ function WorkLogEditorCard({
       ? (inheritedProgressEstimate === null ? "本次日志必须填写" : "默认沿用上次估计，可调整")
       : "只作为这条日志的主观快照";
   const classificationValue = classificationSelectValueFromDraft(draft);
+  const objectiveSelectionNotices = objective ? workLogObjectiveSelectionNotices(objective) : [];
+  const changeClassification = (value: WorkLogClassificationChoice["value"]) => {
+    if (value.startsWith("objective:")) {
+      const objectiveId = value.slice("objective:".length);
+      const selectedObjective = objectives.find((item) => item.id === objectiveId);
+      if (selectedObjective) {
+        onObjectiveSelect(selectedObjective);
+      }
+    }
+    onChange(workLogDraftPatchFromClassificationSelect(value, { objectives }));
+  };
   return (
     <section className="work-logs-draft-entry">
       <div className="work-logs-draft-entry-header">
         <FantasySelectMenu
           ariaLabel="日志归类"
           className="work-logs-objective-select"
-          disabled={classificationOptions.length <= 1}
+          disabled={false}
           leadingIcon={
             draft.classificationKind === "category" ? (
               <Tags className="h-4 w-4" />
@@ -838,11 +943,12 @@ function WorkLogEditorCard({
               <NotebookPen className="h-4 w-4" />
             )
           }
-          onChange={(value) => onChange(workLogDraftPatchFromClassificationSelect(value, { objectives }))}
+          onChange={changeClassification}
+          onSearchQueryChange={onObjectiveSearchQueryChange}
           options={classificationOptions}
           placeholder="选择目标"
           searchable
-          searchPlaceholder={canUseCategories ? "搜索目标或分类" : "搜索目标"}
+          searchPlaceholder={canUseCategories ? "搜索目标或分类" : "搜索目标，可搜已验收/已结算"}
           value={classificationValue}
           variant="filter"
         />
@@ -865,6 +971,12 @@ function WorkLogEditorCard({
       {draft.objectiveTitleSnapshot && !objective && draft.classificationKind === "objective" && (
         <div className="work-logs-snapshot-note">
           历史目标：{draft.objectiveTitleSnapshot}
+        </div>
+      )}
+      {objectiveSelectionNotices.length > 0 && (
+        <div className="work-logs-completed-objective-note">
+          <AlertTriangle className="h-4 w-4" />
+          <span>{objectiveSelectionNotices.join(" ")}</span>
         </div>
       )}
       {draft.categoryNameSnapshot && !category && draft.classificationKind === "category" && (
