@@ -86,7 +86,7 @@ const reportQuerySchema = z
   });
 
 function workLogSaveFailureMessage(reason: string) {
-  if (reason === "categoryForbidden") return "只有管理员可以使用工作日志分类";
+  if (reason === "categoryForbidden") return "当前账号不能使用该工作日志分类";
   if (reason === "classificationConflict") return "工作日志只能选择一个目标或一个分类";
   if (reason === "emptyBody") return "工作日志内容不能为空";
   if (reason === "estimateRequired") return "请填写目标进度估计";
@@ -135,7 +135,7 @@ export function registerWorkLogRoutes(app: FastifyInstance) {
 
     const query = objectiveOptionsQuerySchema.parse(request.query);
     const [categories, objectives] = await Promise.all([
-      canUseWorkLogCategories(context.user) ? listWorkLogCategoryOptions(context.scope) : Promise.resolve([]),
+      listWorkLogCategoryOptions(context.scope, context.user),
       listWorkLogObjectiveOptions(context.user, context.scope, {
         mode: query.mode,
         searchQuery: query.q,
@@ -159,7 +159,7 @@ export function registerWorkLogRoutes(app: FastifyInstance) {
 
     const body = classificationSuggestionBodySchema.parse(request.body);
     const [categories, objectives] = await Promise.all([
-      listWorkLogCategoryOptions(context.scope),
+      listWorkLogCategoryOptions(context.scope, context.user),
       listWorkLogObjectiveOptions(context.user, context.scope),
     ]);
     return {

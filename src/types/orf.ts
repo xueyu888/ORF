@@ -373,8 +373,9 @@ export interface WorkLogObjectiveOption {
 export interface WorkLogCategoryOption {
   id: string;
   name: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  source: "builtIn" | "managed";
+  updatedAt?: string;
 }
 
 export type WorkLogClassificationKind = "category" | "objective" | "uncategorized";

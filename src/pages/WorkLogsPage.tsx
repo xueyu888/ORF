@@ -222,7 +222,8 @@ export function WorkLogsPage() {
   );
   const canWrite =
     currentUser?.role === "admin" || currentUser?.role === "member";
-  const canUseWorkLogCategoryControls = canUseWorkLogCategories(currentUser);
+  const canManageWorkLogCategories = canUseWorkLogCategories(currentUser);
+  const canSelectWorkLogCategories = canManageWorkLogCategories || categories.length > 0;
   const canSaveWithoutObjective = canSaveUnscopedWorkLog(currentUser);
   const objectiveProgressEstimateRequired = requiresObjectiveProgressEstimate(currentUser);
   const objectiveSelectionOptions = useMemo(
@@ -417,7 +418,8 @@ export function WorkLogsPage() {
   );
   const draftValidation = draftHasInput
     ? validateWorkLogEditorDraft(editorDraft, {
-        allowCategories: canUseWorkLogCategoryControls,
+        allowCategories: canSelectWorkLogCategories,
+        allowNewCategory: canManageWorkLogCategories,
         allowUncategorized: canSaveWithoutObjective,
         requireObjectiveProgressEstimate: objectiveProgressEstimateRequired,
       })
@@ -513,7 +515,7 @@ export function WorkLogsPage() {
   };
 
   useEffect(() => {
-    if (!canUseWorkLogCategoryControls || !classificationSuggestionEnabled) {
+    if (!canManageWorkLogCategories || !classificationSuggestionEnabled) {
       setClassificationSuggestion(null);
       setClassificationSuggestionLoading(false);
       return undefined;
@@ -555,7 +557,7 @@ export function WorkLogsPage() {
       window.clearTimeout(timeout);
     };
   }, [
-    canUseWorkLogCategoryControls,
+    canManageWorkLogCategories,
     classificationSuggestionEnabled,
     editorDraft.bodyMarkdown,
   ]);
@@ -658,7 +660,7 @@ export function WorkLogsPage() {
                   <p>{currentUser?.name ?? ""}</p>
                 </div>
                 <div className="work-logs-editor-heading-actions">
-                  {canUseWorkLogCategoryControls && classificationSuggestionEnabled && (
+                  {canManageWorkLogCategories && classificationSuggestionEnabled && (
                     <WorkLogClassificationSuggestionSlot
                       categories={categories}
                       draft={editorDraft}
@@ -700,7 +702,7 @@ export function WorkLogsPage() {
                   <>
                     <div className="work-logs-draft-list">
                       <WorkLogEditorCard
-                        canUseCategories={canUseWorkLogCategoryControls}
+                        canUseCategories={canSelectWorkLogCategories}
                         category={
                           editorDraft.categoryId
                             ? categoryOptionsById.get(editorDraft.categoryId)
@@ -718,7 +720,8 @@ export function WorkLogsPage() {
                           editorDraft,
                           objectiveSelectionOptions,
                           {
-                            allowCategories: canUseWorkLogCategoryControls,
+                            allowCategories: canSelectWorkLogCategories,
+                            allowNewCategory: canManageWorkLogCategories,
                             allowUncategorized: canSaveWithoutObjective,
                           },
                           categories,

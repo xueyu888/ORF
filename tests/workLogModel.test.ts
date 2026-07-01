@@ -5,8 +5,12 @@ import {
   canAttachObjectiveToWorkLog,
   canSelectObjectiveForWorkLog,
   canShowObjectiveInDefaultWorkLogList,
+  canSaveUnscopedWorkLog,
+  canUseWorkLogCategories,
+  canUseWorkLogCategoryInput,
   isObjectiveCompletedForWorkLog,
   isWorkLogSearchOnlyObjective,
+  listBuiltInWorkLogCategoryOptions,
   workLogObjectiveAlwaysSelectableFlowStatuses,
   workLogObjectiveCompletedSearchFlowStatuses,
   workLogObjectiveDefaultFlowStatuses,
@@ -53,4 +57,23 @@ test("work log target search and save include search-only objectives", () => {
   assert.equal(isObjectiveCompletedForWorkLog("settled"), true);
   assert.equal(isObjectiveCompletedForWorkLog("closed"), true);
   assert.equal(isObjectiveCompletedForWorkLog("frozen"), false);
+});
+
+test("work log built-in category policies keep leave open without granting managed categories", () => {
+  const member = { email: "member@sdr.com", name: "普通成员", role: "member", status: "active" };
+  const zhuRuixuan = { email: "zrx@sdr.com", name: "朱锐轩", role: "member", status: "active" };
+  const faeMember = { email: "fae@sdr.com", name: "邓滨虎", role: "member", status: "active" };
+  const admin = { email: "admin@sdr.com", name: "指挥官", role: "admin", status: "active" };
+
+  assert.deepEqual(listBuiltInWorkLogCategoryOptions(member).map((category) => category.name), ["请假"]);
+  assert.equal(canUseWorkLogCategoryInput(member, { categoryId: "builtin:leave" }), true);
+  assert.equal(canUseWorkLogCategoryInput(member, { categoryName: "请假" }), true);
+  assert.equal(canUseWorkLogCategoryInput(member, { categoryName: "管理事务" }), false);
+  assert.equal(canUseWorkLogCategoryInput(zhuRuixuan, { categoryName: "管理事务" }), false);
+  assert.equal(canUseWorkLogCategories(zhuRuixuan), false);
+
+  assert.equal(canUseWorkLogCategories(admin), true);
+  assert.equal(canUseWorkLogCategoryInput(admin, { categoryName: "管理事务" }), true);
+  assert.equal(canSaveUnscopedWorkLog(faeMember), true);
+  assert.equal(canSaveUnscopedWorkLog(member), false);
 });

@@ -13,7 +13,10 @@ import {
   canAttachObjectiveToWorkLog,
   canShowObjectiveInDefaultWorkLogList,
   canSaveUnscopedWorkLog,
+  canUseWorkLogCategoryInput,
   canUseWorkLogCategories,
+  findBuiltInWorkLogCategoryForInput,
+  listBuiltInWorkLogCategoryOptions,
   requiresObjectiveProgressEstimate,
   unscopedWorkLogMemberNameList,
   workLogObjectiveSelectionCandidateFlowStatuses,
@@ -139,10 +142,10 @@ function normalizeWorkLogEntryInput(user: AuthenticatedOrfUser, input: WorkLogDa
   if ((objectiveId && (categoryId || categoryName)) || (categoryId && categoryName)) {
     return { status: "invalid" as const, reason: "classificationConflict" as const };
   }
-  if (!objectiveId && !canSaveUnscopedWorkLog(user)) {
+  if (!objectiveId && !categoryId && !categoryName && !canSaveUnscopedWorkLog(user)) {
     return { status: "invalid" as const, reason: "objectiveRequired" as const };
   }
-  if ((categoryId || categoryName) && !canUseWorkLogCategories(user)) {
+  if ((categoryId || categoryName) && !canUseWorkLogCategoryInput(user, { categoryId, categoryName })) {
     return { status: "invalid" as const, reason: "categoryForbidden" as const };
   }
   if (
@@ -278,7 +281,14 @@ export async function listWorkLogObjectiveOptions(
   });
 }
 
-export async function listWorkLogCategoryOptions(scope: RuntimeScope): Promise<WorkLogCategoryOption[]> {
+export async function listWorkLogCategoryOptions(
+  scope: RuntimeScope,
+  user: AuthenticatedOrfUser,
+): Promise<WorkLogCategoryOption[]> {
+  const builtInCategories = listBuiltInWorkLogCategoryOptions(user);
+  if (!canUseWorkLogCategories(user)) return builtInCategories;
+
+  const builtInNames = new Set(builtInCategories.map((category) => normalizeWorkLogCategoryNameKey(category.name)));
   const rows = await db
     .select({
       id: workLogCategories.id,
@@ -289,7 +299,15 @@ export async function listWorkLogCategoryOptions(scope: RuntimeScope): Promise<W
     .from(workLogCategories)
     .where(eq(workLogCategories.teamId, runtimeScopeStorageId(scope)))
     .orderBy(asc(workLogCategories.name), asc(workLogCategories.id));
-  return rows;
+  return [
+    ...builtInCategories,
+    ...rows
+      .filter((row) => !builtInNames.has(normalizeWorkLogCategoryNameKey(row.name)))
+      .map((row) => ({
+        ...row,
+        source: "managed" as const,
+      })),
+  ];
 }
 
 export async function listMyWorkLogDay(userId: string, scope: RuntimeScope, workDate: string): Promise<WorkLogEntry[]> {
@@ -317,7 +335,11 @@ async function getNextWorkLogSortOrder(scope: RuntimeScope, userId: string, work
   return Math.max(-1, ...rows.map((row) => row.sortOrder)) + 1;
 }
 
-type ResolvedWorkLogCategory = Pick<typeof workLogCategories.$inferSelect, "id" | "name">;
+type ResolvedWorkLogCategory = {
+  name: string;
+  snapshotCategoryId: string | null;
+  storageCategoryId: string | null;
+};
 
 async function findWorkLogCategoryById(scope: RuntimeScope, categoryId: string) {
   const [category] = await db
@@ -349,9 +371,33 @@ async function resolveOrCreateWorkLogCategoryForInput(input: {
   scope: RuntimeScope;
   user: AuthenticatedOrfUser;
 }): Promise<{ status: "ok"; category: ResolvedWorkLogCategory | null } | { status: "invalid"; reason: "invalidCategory" }> {
+  const builtInCategory = findBuiltInWorkLogCategoryForInput(input.user, {
+    categoryId: input.categoryId,
+    categoryName: input.categoryName,
+  });
+  if (builtInCategory) {
+    return {
+      status: "ok",
+      category: {
+        name: builtInCategory.name,
+        snapshotCategoryId: builtInCategory.id,
+        storageCategoryId: null,
+      },
+    };
+  }
+
   if (input.categoryId) {
     const category = await findWorkLogCategoryById(input.scope, input.categoryId);
-    return category ? { status: "ok", category } : { status: "invalid", reason: "invalidCategory" };
+    return category
+      ? {
+          status: "ok",
+          category: {
+            name: category.name,
+            snapshotCategoryId: category.id,
+            storageCategoryId: category.id,
+          },
+        }
+      : { status: "invalid", reason: "invalidCategory" };
   }
   if (!input.categoryName) {
     return { status: "ok", category: null };
@@ -359,7 +405,14 @@ async function resolveOrCreateWorkLogCategoryForInput(input: {
 
   const existing = await findWorkLogCategoryByName(input.scope, input.categoryName);
   if (existing) {
-    return { status: "ok", category: existing };
+    return {
+      status: "ok",
+      category: {
+        name: existing.name,
+        snapshotCategoryId: existing.id,
+        storageCategoryId: existing.id,
+      },
+    };
   }
 
   const now = nowIso();
@@ -380,12 +433,26 @@ async function resolveOrCreateWorkLogCategoryForInput(input: {
       name: workLogCategories.name,
     });
   if (created) {
-    return { status: "ok", category: created };
+    return {
+      status: "ok",
+      category: {
+        name: created.name,
+        snapshotCategoryId: created.id,
+        storageCategoryId: created.id,
+      },
+    };
   }
 
   const raced = await findWorkLogCategoryByName(input.scope, input.categoryName);
   return raced
-    ? { status: "ok", category: raced }
+    ? {
+        status: "ok",
+        category: {
+          name: raced.name,
+          snapshotCategoryId: raced.id,
+          storageCategoryId: raced.id,
+        },
+      }
     : { status: "invalid", reason: "invalidCategory" };
 }
 
@@ -489,8 +556,8 @@ export async function createMyWorkLogEntry(
     objectiveId: objective?.id ?? null,
     objectiveIdSnapshot: objective?.id ?? null,
     objectiveTitleSnapshot: objective?.title ?? null,
-    categoryId: category?.id ?? null,
-    categoryIdSnapshot: category?.id ?? null,
+    categoryId: category?.storageCategoryId ?? null,
+    categoryIdSnapshot: category?.snapshotCategoryId ?? null,
     categoryNameSnapshot: category?.name ?? null,
     bodyMarkdown: normalized.entry.bodyMarkdown,
     remainingEstimatePercent: normalized.entry.remainingEstimatePercent,
@@ -567,8 +634,8 @@ export async function updateMyWorkLogEntry(
   const categoryPatch = categoryResult.preserveExistingSnapshot
     ? {}
     : {
-        categoryId: categoryResult.category?.id ?? null,
-        categoryIdSnapshot: categoryResult.category?.id ?? null,
+        categoryId: categoryResult.category?.storageCategoryId ?? null,
+        categoryIdSnapshot: categoryResult.category?.snapshotCategoryId ?? null,
         categoryNameSnapshot: categoryResult.category?.name ?? null,
       };
   await db

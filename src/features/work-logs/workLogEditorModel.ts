@@ -202,6 +202,7 @@ export function validateWorkLogEditorDraft(
   draft: WorkLogEditorDraft,
   options: {
     allowCategories: boolean;
+    allowNewCategory?: boolean;
     allowUncategorized: boolean;
     requireObjectiveProgressEstimate?: boolean;
   },
@@ -214,7 +215,14 @@ export function validateWorkLogEditorDraft(
     return "请选择目标";
   }
   if (draft.classificationKind === "category" && !options.allowCategories) {
-    return "只有管理员可以使用工作日志分类";
+    return "当前账号不能使用工作日志分类";
+  }
+  if (
+    draft.classificationKind === "category" &&
+    !draft.categoryId &&
+    !options.allowNewCategory
+  ) {
+    return "当前账号不能新建工作日志分类";
   }
   if (draft.classificationKind === "category" && !entry.categoryId && !entry.categoryName) {
     return "请填写分类名称";
@@ -400,6 +408,7 @@ export function buildWorkLogClassificationChoices(
   objectives: WorkLogObjectiveOption[],
   options: {
     allowCategories: boolean;
+    allowNewCategory?: boolean;
     allowUncategorized: boolean;
   },
   categories: WorkLogCategoryOption[],
@@ -420,17 +429,19 @@ export function buildWorkLogClassificationChoices(
         },
   ];
   if (options.allowCategories) {
-    choices.push(
-      {
+    if (options.allowNewCategory) {
+      choices.push({
         value: "category:new",
         label: draft.categoryName ? `新分类：${draft.categoryName}` : "新建分类",
         description: "仅管理员可用",
         alwaysVisible: true,
-      },
+      });
+    }
+    choices.push(
       ...categories.map((category) => ({
         value: `category:${category.id}` as const,
         label: category.name,
-        description: "日志分类",
+        description: category.source === "builtIn" ? "内置归类" : "日志分类",
       })),
     );
   }
