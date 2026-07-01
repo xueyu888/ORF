@@ -16,6 +16,7 @@ import {
   permissionStorageStage,
 } from "../../../../../_operators/testd-permissions";
 import type {
+  ObjectiveEditUiResult,
   MemberPermissionSnapshot,
   ObjectiveDeleteUiResult,
   ObjectiveMutationRequestResult,
@@ -58,8 +59,15 @@ export function objectiveTitleEditInput(page: Page) {
   return page.getByLabel("编辑目标标题", { exact: true });
 }
 
-export function permissionNotice(page: Page, text: string) {
-  return page.getByText(text, { exact: true }).first();
+export function permissionToast(page: Page, text: string) {
+  return page.locator(".orf-toast-card").filter({ hasText: text });
+}
+
+export async function clearPermissionToasts(page: Page) {
+  const closeButtons = page.locator(".orf-toast-card").getByRole("button", { name: "关闭提示", exact: true });
+  while (await closeButtons.count()) {
+    await closeButtons.first().click();
+  }
 }
 
 export async function clickObjectiveMenuAction(page: Page, title: string, action: "编辑" | "删除") {
@@ -70,15 +78,20 @@ export async function clickObjectiveMenuAction(page: Page, title: string, action
   await panel.locator(".orf-block-menu").getByRole("button", { name: action, exact: true }).click();
 }
 
-export async function clickEditForStageTargets(page: Page, targets: readonly ObjectiveStageTargetData[]) {
+export async function clickEditForStageTargets(page: Page, targets: readonly ObjectiveStageTargetData[]): Promise<ObjectiveEditUiResult> {
+  let deniedNoticeCount = 0;
   for (const target of targets) {
+    await clearPermissionToasts(page);
     await clickObjectiveMenuAction(page, target.title, "编辑");
-    await expect(permissionNotice(page, "只有指挥官可以编辑目标")).toBeVisible();
+    await expect(permissionToast(page, "只有指挥官可以编辑目标")).toHaveCount(1);
+    deniedNoticeCount += 1;
   }
+  return { targetCount: targets.length, deniedNoticeCount };
 }
 
 export async function clickDeleteForStageTargets(page: Page, targets: readonly ObjectiveStageTargetData[]): Promise<ObjectiveDeleteUiResult> {
   let dialogCount = 0;
+  let deniedNoticeCount = 0;
   const dialogHandler = async (dialog: Dialog) => {
     dialogCount += 1;
     await dialog.dismiss();
@@ -86,13 +99,15 @@ export async function clickDeleteForStageTargets(page: Page, targets: readonly O
   page.on("dialog", dialogHandler);
   try {
     for (const target of targets) {
+      await clearPermissionToasts(page);
       await clickObjectiveMenuAction(page, target.title, "删除");
-      await expect(permissionNotice(page, "没有删除目标权限")).toBeVisible();
+      await expect(permissionToast(page, "没有删除目标权限")).toHaveCount(1);
+      deniedNoticeCount += 1;
     }
   } finally {
     page.off("dialog", dialogHandler);
   }
-  return { dialogCount };
+  return { targetCount: targets.length, deniedNoticeCount, dialogCount };
 }
 
 export async function recordMemberPermissionSnapshot(): Promise<MemberPermissionSnapshot> {
@@ -277,6 +292,18 @@ export function allMutationResultsForbidden(value: unknown) {
 
 export function noDeleteConfirmDialog(value: unknown) {
   return typeof value === "object" && value !== null && (value as ObjectiveDeleteUiResult).dialogCount === 0;
+}
+
+export function allEditUiResultsForbidden(value: unknown) {
+  if (typeof value !== "object" || value === null) return false;
+  const result = value as ObjectiveEditUiResult;
+  return result.targetCount === 4 && result.deniedNoticeCount === result.targetCount;
+}
+
+export function allDeleteUiResultsForbidden(value: unknown) {
+  if (typeof value !== "object" || value === null) return false;
+  const result = value as ObjectiveDeleteUiResult;
+  return result.targetCount === 4 && result.deniedNoticeCount === result.targetCount;
 }
 
 function objectiveByTitle(title: string) {

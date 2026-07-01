@@ -38,7 +38,14 @@ export type ObjectiveMutationRequestResult = {
   forbidden: boolean;
 };
 
+export type ObjectiveEditUiResult = {
+  targetCount: number;
+  deniedNoticeCount: number;
+};
+
 export type ObjectiveDeleteUiResult = {
+  targetCount: number;
+  deniedNoticeCount: number;
   dialogCount: number;
 };
 

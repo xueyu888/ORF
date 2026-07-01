@@ -9,6 +9,8 @@ import type {
   TestUserAccountRecord,
 } from "./_support/member-target-mutation-forbidden-all-stages.context";
 import {
+  allDeleteUiResultsForbidden,
+  allEditUiResultsForbidden,
   allMutationResultsForbidden,
   challengeScopeTab,
   clickDeleteForStageTargets,
@@ -26,7 +28,6 @@ import {
   objectiveTitleEditInput,
   openMyChallenges,
   patchAllStageObjectiveTitles,
-  permissionNotice,
   prepareStageObjective,
   readSessionUserName,
   recordMemberPermissionSnapshot,
@@ -96,7 +97,7 @@ export const memberTargetMutationForbiddenAllStagesOperators: OperatorRegistry<T
     },
 
     click_all_edit: async ({ ctx, params }) => {
-      await clickEditForStageTargets(ctx.page, requiredStageTargets(params, "targets"));
+      return clickEditForStageTargets(ctx.page, requiredStageTargets(params, "targets"));
     },
 
     click_all_delete: async ({ ctx, params }) => {
@@ -104,15 +105,21 @@ export const memberTargetMutationForbiddenAllStagesOperators: OperatorRegistry<T
     },
   },
 
-  "page.challenge_notice": {
-    visible: async ({ ctx, params }) => {
-      await expect(permissionNotice(ctx.page, requiredString(params, "text"))).toBeVisible();
-    },
-  },
-
   "page.objective_title_editor": {
     hidden: async ({ ctx }) => {
       await expect(objectiveTitleEditInput(ctx.page)).toHaveCount(0);
+    },
+  },
+
+  "page.objective_edit_ui_result": {
+    all_forbidden: async ({ params }) => {
+      expect(allEditUiResultsForbidden(params.result)).toBe(true);
+    },
+  },
+
+  "page.objective_delete_ui_result": {
+    all_forbidden: async ({ params }) => {
+      expect(allDeleteUiResultsForbidden(params.result)).toBe(true);
     },
   },
 
