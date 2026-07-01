@@ -320,6 +320,7 @@ export interface PointLedgerEntry {
   memberName: string;
   points: number;
   reason: string;
+  settlementPeriodAt: string;
   createdAt: string;
 }
 

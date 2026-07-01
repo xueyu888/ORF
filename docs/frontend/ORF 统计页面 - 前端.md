@@ -6,12 +6,12 @@
 
 | 控件 | 规则 |
 | --- | --- |
-| 按月度 | 优先使用当前可见积分流水的最新日期作为锚点，只统计该自然月流水；没有流水时退回目标日期 |
-| 按季度 | 优先使用当前可见积分流水的最新日期作为锚点，只统计该季度流水；没有流水时退回目标日期 |
-| 按年度 | 优先使用当前可见积分流水的最新日期作为锚点，只统计该年度流水；没有流水时退回目标日期 |
+| 按月度 | 优先使用当前可见积分流水的最新 `settlementPeriodAt` 作为锚点，只统计该自然月归属流水；没有流水时退回目标日期 |
+| 按季度 | 优先使用当前可见积分流水的最新 `settlementPeriodAt` 作为锚点，只统计该季度归属流水；没有流水时退回目标日期 |
+| 按年度 | 优先使用当前可见积分流水的最新 `settlementPeriodAt` 作为锚点，只统计该年度归属流水；没有流水时退回目标日期 |
 | 全部时间 | 汇总当前可见的全部积分流水 |
 
-排行榜积分只来自 `pointLedger`，前端不重新计算结算分。榜单按 `pointLedger.userId` 分组，成员名和头像优先从任务/统计读模型返回的公开 `userProfiles` 展示投影派生，管理员完整 `users` 集合只作为同源覆盖；`pointLedger.memberName` 只保留结算写入时的文本快照，不参与分组、头像或排名变化判断。完成率和排名只由 `src/domain/reportsLeaderboard` 的同一套模型计算：按同一时间范围内有积分流水的成员-目标去重，目标必须最终进入 `settled` 且不是 `acceptedResult = abandoned`，并且该目标验收历史中不能出现 `objectiveAcceptanceReviews.acceptedResult = abandoned`。一旦正式验收不通过，说明截止验收未通过，该目标即使后续返工通过，也不再计入完成率的已完成数。
+排行榜积分只来自 `pointLedger`，前端不重新计算结算分。榜单按 `pointLedger.userId` 分组，成员名和头像优先从任务/统计读模型返回的公开 `userProfiles` 展示投影派生，管理员完整 `users` 集合只作为同源覆盖；`pointLedger.memberName` 只保留结算写入时的文本快照，不参与分组、头像或排名变化判断。`pointLedger.settlementPeriodAt` 是统计周期归属时间，由后端从同目标最后一条通过验收的 `objectiveAcceptanceReviews.reviewedAt` 写入；`pointLedger.createdAt` 只表示账本写入时间，不能决定月度、季度或年度归属。完成率和排名只由 `src/domain/reportsLeaderboard` 的同一套模型计算：按同一时间范围内有积分流水的成员-目标去重，目标必须最终进入 `settled` 且不是 `acceptedResult = abandoned`，并且该目标验收历史中不能出现 `objectiveAcceptanceReviews.acceptedResult = abandoned`。一旦正式验收不通过，说明截止验收未通过，该目标即使后续返工通过，也不再计入完成率的已完成数。
 `userProfiles` 只包含本次读模型已引用成员的 `id`、`name`、`avatarUrl`，用于统计榜单、目标参与者头像栈和非管理页面的成员展示；邮箱、角色、状态、最近在线等用户管理字段仍只来自管理员用户接口。
 表格里的积分占比只用于展示当前榜单成员相对榜首积分的条形长度，不是新的业务积分或目标进度事实源。
 

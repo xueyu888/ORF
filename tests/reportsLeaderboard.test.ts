@@ -51,6 +51,7 @@ function ledger(input: Partial<PointLedgerEntry>): PointLedgerEntry {
     objectiveId: "objective-1",
     points: 0,
     reason: "验收结算",
+    settlementPeriodAt: input.createdAt ?? "2026-06-13T10:00:00.000Z",
     userId: "user-a",
     ...input,
   };
@@ -271,6 +272,7 @@ test("monthly leaderboard compares against the previous month ranking only", () 
   );
 
   assert.equal(rows.find((row) => row.memberName === "成员甲")?.points, 30);
+  assert.equal(rows.find((row) => row.memberName === "成员甲")?.completionRate, 100);
   assert.deepEqual(rows.find((row) => row.memberName === "成员甲")?.rankChange, {
     delta: 1,
     direction: "up",
@@ -282,6 +284,56 @@ test("monthly leaderboard compares against the previous month ranking only", () 
     direction: "down",
     kind: "moved",
     previousRank: 1,
+  });
+});
+
+test("monthly leaderboard assigns settlement to final acceptance period instead of ledger write time", () => {
+  const rows = buildLeaderboardRows(
+    state({
+      objectives: [
+        objective({ id: "objective-may", createdAt: "2026-05-15", updatedAt: "2026-05-15" }),
+        objective({ id: "objective-boundary", createdAt: "2026-06-30", updatedAt: "2026-07-01" }),
+      ],
+      pointLedger: [
+        ledger({
+          createdAt: "2026-05-15T10:00:00.000Z",
+          id: "ledger-may-a",
+          memberName: "成员甲",
+          objectiveId: "objective-may",
+          points: 10,
+          settlementPeriodAt: "2026-05-15T10:00:00.000Z",
+          userId: "user-a",
+        }),
+        ledger({
+          createdAt: "2026-05-15T10:00:00.000Z",
+          id: "ledger-may-b",
+          memberName: "成员乙",
+          objectiveId: "objective-may",
+          points: 20,
+          settlementPeriodAt: "2026-05-15T10:00:00.000Z",
+          userId: "user-b",
+        }),
+        ledger({
+          createdAt: "2026-07-01T09:00:00.000Z",
+          id: "ledger-boundary-a",
+          memberName: "成员甲",
+          objectiveId: "objective-boundary",
+          points: 30,
+          settlementPeriodAt: "2026-06-30T18:00:00.000Z",
+          userId: "user-a",
+        }),
+      ],
+    }),
+    "month",
+  );
+
+  assert.equal(rows.find((row) => row.memberName === "成员甲")?.points, 30);
+  assert.equal(rows.find((row) => row.memberName === "成员甲")?.completionRate, 100);
+  assert.deepEqual(rows.find((row) => row.memberName === "成员甲")?.rankChange, {
+    delta: 1,
+    direction: "up",
+    kind: "moved",
+    previousRank: 2,
   });
 });
 
