@@ -1,0 +1,131 @@
+import { STATE_CASE_MODEL, type StateCaseSpec } from "../../../../_framework/types";
+import type { MemberSearchNonParticipantObjectiveSubmitWorkLogCaseData } from "./_support/member-search-non-participant-objective-submit-work-log.context";
+
+export const memberSearchNonParticipantObjectiveSubmitWorkLogCase = {
+  id: "work-log.member-search-non-participant-objective-submit-work-log",
+  title: "成员可通过搜索选择团队内非参与目标并确认提交日志",
+  model: STATE_CASE_MODEL,
+  tags: ["work-log", "objective-selection", "member", "search", "non-participant", "submit"],
+
+  data: {
+    memberEmail: "orf-member-search-non-participant-work-log-e2e@orf.local",
+    memberPassword: "OrfMemberSearchNonParticipantWorkLogE2E!2026",
+    memberName: "ORF Member Search Non Participant Work Log E2E",
+    memberRole: "member",
+    memberStatus: "active",
+    otherMemberEmail: "orf-other-search-non-participant-work-log-e2e@orf.local",
+    otherMemberName: "ORF Other Search Non Participant Work Log E2E",
+    otherMemberRole: "member",
+    otherMemberStatus: "active",
+    objectiveTitle: "E2E-TARGET-WORK-LOG-SEARCH-NON-PARTICIPANT",
+    objectiveFlowStatus: "open",
+    objectiveStage: "resultClaiming",
+    objectiveStatus: "On Track",
+    nonParticipantNotice: "你不是这个目标的挑战者，本次日志会记录到该目标下，请确认目标选择无误。",
+    logBodyMarker: "E2E-WORK-LOG-SEARCH-NON-PARTICIPANT-BODY",
+    logBody: "E2E-WORK-LOG-SEARCH-NON-PARTICIPANT-BODY：通过搜索选择团队内非参与目标并确认提交。",
+    durationMinutes: 50,
+    progressEstimatePercent: 25,
+    remainingEstimatePercent: 75,
+    expectedDurationLabel: "50m",
+    expectedProgressLabel: "进 25%",
+  },
+
+  B: {
+    description: "系统服务可用，浏览器处于未登录基准状态",
+    assertions: [
+      { source: { caseStepId: "B-1", method: "api" }, id: "frontend.ready", title: "前端服务 应可用", object: "frontend.service", operator: "available" },
+      { source: { caseStepId: "B-2", method: "api" }, id: "backend.ready", title: "后端服务 应可用", object: "api.health", operator: "ok" },
+      { source: { caseStepId: "B-3", method: "prisma" }, id: "db.ready", title: "ORF 数据库 应可连接", object: "db", operator: "ready" },
+      { source: { caseStepId: "B-4", method: "api" }, id: "session.unauthenticated", title: "当前会话 应为 未登录", object: "auth.session", operator: "unauthenticated" },
+      { source: { caseStepId: "B-5", method: "playwright" }, id: "storage.empty", title: "当前浏览器 应不保留本地登录态", object: "browser.auth_storage", operator: "empty" },
+    ],
+  },
+
+  Setup: {
+    description: "准备当前成员、同团队其他成员和团队内非参与目标并打开工作日志当天视图",
+    steps: [
+      { source: { caseStepId: "Setup-1", method: "prisma" }, id: "db.work_log.delete_residue", title: "删除 本用例残留的工作日志正文标记 `E2E-WORK-LOG-SEARCH-NON-PARTICIPANT-BODY` 对应的工作日志", object: "db.work_log_entry", operator: "delete_by_body_marker", params: { bodyMarkerFrom: "data.logBodyMarker" } },
+      { source: { caseStepId: "Setup-2", method: "prisma" }, id: "db.objective.delete_residue", title: "删除 本用例残留的目标 `E2E-TARGET-WORK-LOG-SEARCH-NON-PARTICIPANT` 及其派生数据", object: "db.objective", operator: "delete_by_title", params: { titleFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "Setup-3", method: "api" }, id: "ory.member_identity.upsert", title: "准备邮箱为 `orf-member-search-non-participant-work-log-e2e@orf.local`、使用固定测试密码的成员登录身份", object: "ory.identity", operator: "upsert_password", params: { emailFrom: "data.memberEmail", nameFrom: "data.memberName", passwordFrom: "data.memberPassword", saveAs: "memberIdentity" } },
+      { source: { caseStepId: "Setup-4", method: "prisma" }, id: "db.member_user.upsert", title: "准备 角色为 `member`、状态为 `active`、名称为 `ORF Member Search Non Participant Work Log E2E` 的本用例成员用户", object: "db.user", operator: "upsert", params: { emailFrom: "data.memberEmail", nameFrom: "data.memberName", roleFrom: "data.memberRole", statusFrom: "data.memberStatus", identityIdFrom: "runtime.memberIdentity.id", saveAs: "memberUser" } },
+      { source: { caseStepId: "Setup-5", method: "prisma" }, id: "db.other_member_user.upsert", title: "准备 角色为 `member`、状态为 `active`、名称为 `ORF Other Search Non Participant Work Log E2E`、与本用例成员属于同一团队的本用例其他成员用户", object: "db.user", operator: "upsert", params: { emailFrom: "data.otherMemberEmail", nameFrom: "data.otherMemberName", roleFrom: "data.otherMemberRole", statusFrom: "data.otherMemberStatus", saveAs: "otherMemberUser" } },
+      { source: { caseStepId: "Setup-6", method: "prisma" }, id: "db.non_participant_objective.prepare", title: "准备 标题为 `E2E-TARGET-WORK-LOG-SEARCH-NON-PARTICIPANT`、属于本用例成员团队、当前挑战者包含本用例其他成员且不包含本用例成员、流转状态为 `open` 的团队内未完成目标", object: "db.objective", operator: "upsert", params: { titleFrom: "data.objectiveTitle", teamIdFrom: "runtime.memberUser.teamId", challengersFrom: "data.otherMemberName", challengerUserIdsFrom: "runtime.otherMemberUser.userId", flowStatusFrom: "data.objectiveFlowStatus", stageFrom: "data.objectiveStage", statusFrom: "data.objectiveStatus", createdByFrom: "runtime.memberUser.userId", updatedByFrom: "runtime.memberUser.userId", saveAs: "nonParticipantObjective" } },
+      { source: { caseStepId: "Setup-7", method: "playwright" }, id: "auth.login.member", title: "使用 本用例成员账号 登录 ORF", object: "page.auth", operator: "login", params: { emailFrom: "data.memberEmail", passwordFrom: "data.memberPassword" } },
+      { source: { caseStepId: "Setup-8", method: "playwright" }, id: "work_logs.open_today", title: "打开 工作日志页面的当天日志视图", object: "page.work_logs", operator: "open_today" },
+    ],
+  },
+
+  S0: {
+    description: "成员已登录，团队内非参与目标已准备完成，默认目标列表不包含该目标且当天日志尚无本用例记录",
+    assertions: [
+      { source: { caseStepId: "S0-1", method: "api" }, id: "session.authenticated", title: "当前会话 应为 已登录", object: "auth.session", operator: "authenticated" },
+      { source: { caseStepId: "S0-2", method: "api" }, id: "session.email", title: "当前会话用户邮箱 应为 `orf-member-search-non-participant-work-log-e2e@orf.local`", object: "auth.session.user_email", operator: "equals", params: { emailFrom: "data.memberEmail" } },
+      { source: { caseStepId: "S0-3", method: "api" }, id: "session.role", title: "当前会话用户角色 应为 `member`", object: "auth.session.user_role", operator: "equals", params: { roleFrom: "data.memberRole" } },
+      { source: { caseStepId: "S0-4", method: "api" }, id: "session.name", title: "当前会话用户名称 应为 `ORF Member Search Non Participant Work Log E2E`", object: "auth.session.user_name", operator: "equals", params: { nameFrom: "data.memberName" } },
+      { source: { caseStepId: "S0-5", method: "prisma" }, id: "db.non_participant_objective.exists", title: "应存在 标题为 `E2E-TARGET-WORK-LOG-SEARCH-NON-PARTICIPANT`、属于本用例成员团队、当前挑战者包含本用例其他成员、当前挑战者不包含本用例成员、流转状态为 `open` 的目标", object: "db.work_log_objective_fixture", operator: "exists", params: { titleFrom: "data.objectiveTitle", teamIdFrom: "runtime.memberUser.teamId", flowStatusFrom: "data.objectiveFlowStatus", challengerUserIdFrom: "runtime.otherMemberUser.userId", excludedChallengerUserIdFrom: "runtime.memberUser.userId" } },
+      { source: { caseStepId: "S0-6", method: "api" }, id: "work_log.default_objectives.excludes_non_participant", title: "工作日志默认目标列表 应不包含目标 `E2E-TARGET-WORK-LOG-SEARCH-NON-PARTICIPANT`", object: "api.work_log.default_objectives", operator: "not_contains_title", params: { titleFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "S0-7", method: "api" }, id: "work_log.my_day.not_contains_marker", title: "当天工作日志数据 应不包含正文标记 `E2E-WORK-LOG-SEARCH-NON-PARTICIPANT-BODY`", object: "api.work_log.my_day", operator: "not_contains_body_marker", params: { bodyMarkerFrom: "data.logBodyMarker" } },
+      { source: { caseStepId: "S0-8", method: "prisma" }, id: "db.work_log.absent_today", title: "应不存在 本用例成员在测试执行当天提交的正文标记为 `E2E-WORK-LOG-SEARCH-NON-PARTICIPANT-BODY` 的工作日志", object: "db.work_log_entry", operator: "absent_by_body_marker", params: { bodyMarkerFrom: "data.logBodyMarker" } },
+      { source: { caseStepId: "S0-9", method: "playwright" }, id: "work_logs.page.visible", title: "页面 应进入 工作日志", object: "page.work_logs", operator: "visible" },
+      { source: { caseStepId: "S0-10", method: "playwright" }, id: "work_logs.today_tab.selected", title: "\"日志\" 视图 应处于选中状态", object: "page.work_logs.view_tab", operator: "selected", params: { label: "日志" } },
+      { source: { caseStepId: "S0-11", method: "playwright" }, id: "work_logs.editor.visible", title: "\"我的日志\" 面板 应可见", object: "page.work_logs.editor_panel", operator: "visible" },
+      { source: { caseStepId: "S0-12", method: "playwright" }, id: "work_logs.classification.visible", title: "\"日志归类\" 控件 应可见", object: "page.work_logs.classification", operator: "visible" },
+      { source: { caseStepId: "S0-13", method: "playwright" }, id: "work_logs.submit.disabled", title: "\"提交日志\" 操作 应不可点击", object: "page.work_logs.submit_action", operator: "disabled" },
+    ],
+  },
+
+  Action: {
+    description: "成员通过搜索选择团队内非参与目标，填写当天日志并确认提交",
+    steps: [
+      { source: { caseStepId: "Action-1", method: "playwright" }, id: "work_logs.classification.open_default_list", title: "打开 \"日志归类\" 控件的目标默认列表", object: "page.work_logs.classification", operator: "open_default_objective_list" },
+      { source: { caseStepId: "Action-2", method: "playwright" }, id: "work_logs.classification.search_objective", title: "在 \"日志归类\" 控件的搜索输入框输入 `E2E-TARGET-WORK-LOG-SEARCH-NON-PARTICIPANT`", object: "page.work_logs.classification", operator: "search_objective", params: { objectiveTitleFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "Action-3", method: "playwright" }, id: "work_logs.classification.select_search_result", title: "在 \"日志归类\" 控件的搜索结果中选择目标 `E2E-TARGET-WORK-LOG-SEARCH-NON-PARTICIPANT`", object: "page.work_logs.classification", operator: "select_search_result", params: { objectiveTitleFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "Action-4", method: "playwright" }, id: "work_logs.non_participant_notice.visible", title: "页面 应显示非参与目标提示 `你不是这个目标的挑战者，本次日志会记录到该目标下，请确认目标选择无误。`", object: "page.work_logs.non_participant_notice", operator: "visible", params: { noticeFrom: "data.nonParticipantNotice" } },
+      { source: { caseStepId: "Action-5", method: "playwright" }, id: "work_logs.fill_progress", title: "在 \"目标进度估计百分比\" 输入框输入 `25`", object: "page.work_logs.progress_estimate_input", operator: "fill", params: { valueFrom: "data.progressEstimatePercent" } },
+      { source: { caseStepId: "Action-6", method: "playwright" }, id: "work_logs.fill_duration", title: "在 \"记录时间分钟数\" 输入框输入 `50`", object: "page.work_logs.duration_input", operator: "fill", params: { valueFrom: "data.durationMinutes" } },
+      { source: { caseStepId: "Action-7", method: "playwright" }, id: "work_logs.fill_body", title: "在工作日志正文编辑器输入 `E2E-WORK-LOG-SEARCH-NON-PARTICIPANT-BODY：通过搜索选择团队内非参与目标并确认提交。`", object: "page.work_logs.body_editor", operator: "fill", params: { valueFrom: "data.logBody" } },
+      { source: { caseStepId: "Action-8", method: "playwright" }, id: "work_logs.submit", title: "点击 \"提交日志\" 操作", object: "page.work_logs.submit_action", operator: "submit_with_non_participant_confirm", params: { confirmMessageFrom: "data.nonParticipantNotice" } },
+      { source: { caseStepId: "Action-9", method: "playwright" }, id: "work_logs.browser_confirm.visible", title: "浏览器确认弹窗 应显示 `你不是这个目标的挑战者，本次日志会记录到该目标下，请确认目标选择无误。`", object: "page.work_logs.browser_confirm", operator: "message_visible", params: { confirmMessageFrom: "data.nonParticipantNotice" } },
+      { source: { caseStepId: "Action-10", method: "playwright" }, id: "work_logs.browser_confirm.confirm", title: "在浏览器确认弹窗中点击 \"确定\"", object: "page.work_logs.browser_confirm", operator: "confirm" },
+    ],
+  },
+
+  S1: {
+    description: "当天记录、接口和数据库均包含本用例提交到非参与目标下的工作日志",
+    assertions: [
+      { source: { caseStepId: "S1-1", method: "playwright" }, id: "work_logs.toast.submitted", title: "页面 应提示 `工作日志已提交`", object: "page.work_logs.toast", operator: "visible", params: { text: "工作日志已提交" } },
+      { source: { caseStepId: "S1-2", method: "playwright" }, id: "work_logs.history.body", title: "\"当天记录\" 区域 应显示日志正文 `E2E-WORK-LOG-SEARCH-NON-PARTICIPANT-BODY：通过搜索选择团队内非参与目标并确认提交。`", object: "page.work_logs.history", operator: "contains_body", params: { bodyMarkerFrom: "data.logBodyMarker", bodyFrom: "data.logBody" } },
+      { source: { caseStepId: "S1-3", method: "playwright" }, id: "work_logs.history.objective", title: "\"当天记录\" 区域 应显示目标 `E2E-TARGET-WORK-LOG-SEARCH-NON-PARTICIPANT`", object: "page.work_logs.history", operator: "contains_objective", params: { bodyMarkerFrom: "data.logBodyMarker", objectiveTitleFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "S1-4", method: "playwright" }, id: "work_logs.history.duration", title: "\"当天记录\" 区域 应显示记录时间 `50m`", object: "page.work_logs.history", operator: "contains_duration", params: { bodyMarkerFrom: "data.logBodyMarker", durationLabelFrom: "data.expectedDurationLabel" } },
+      { source: { caseStepId: "S1-5", method: "playwright" }, id: "work_logs.history.progress", title: "\"当天记录\" 区域 应显示目标进度 `进 25%`", object: "page.work_logs.history", operator: "contains_progress", params: { bodyMarkerFrom: "data.logBodyMarker", progressLabelFrom: "data.expectedProgressLabel" } },
+      { source: { caseStepId: "S1-6", method: "api" }, id: "work_log.my_day.contains_body", title: "当天工作日志数据 应包含正文为 `E2E-WORK-LOG-SEARCH-NON-PARTICIPANT-BODY：通过搜索选择团队内非参与目标并确认提交。` 的工作日志", object: "api.work_log.my_day", operator: "contains_body", params: { bodyMarkerFrom: "data.logBodyMarker" } },
+      { source: { caseStepId: "S1-7", method: "api" }, id: "work_log.my_day.objective_snapshot", title: "当天工作日志数据中的本用例工作日志目标标题快照 应为 `E2E-TARGET-WORK-LOG-SEARCH-NON-PARTICIPANT`", object: "api.work_log.my_day", operator: "objective_title_snapshot", params: { bodyMarkerFrom: "data.logBodyMarker", valueFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "S1-8", method: "api" }, id: "work_log.my_day.duration", title: "当天工作日志数据中的本用例工作日志记录时间分钟数 应为 `50`", object: "api.work_log.my_day", operator: "duration_minutes", params: { bodyMarkerFrom: "data.logBodyMarker", valueFrom: "data.durationMinutes" } },
+      { source: { caseStepId: "S1-9", method: "api" }, id: "work_log.my_day.remaining_estimate", title: "当天工作日志数据中的本用例工作日志剩余进度估计百分比 应为 `75`", object: "api.work_log.my_day", operator: "remaining_estimate_percent", params: { bodyMarkerFrom: "data.logBodyMarker", valueFrom: "data.remainingEstimatePercent" } },
+      { source: { caseStepId: "S1-10", method: "prisma" }, id: "db.work_log.exists_today", title: "应存在 本用例成员在测试执行当天提交的正文标记为 `E2E-WORK-LOG-SEARCH-NON-PARTICIPANT-BODY` 的工作日志", object: "db.work_log_entry", operator: "exists_today_for_member", params: { bodyMarkerFrom: "data.logBodyMarker", memberEmailFrom: "data.memberEmail", saveAs: "submittedWorkLogEntry" } },
+      { source: { caseStepId: "S1-11", method: "prisma" }, id: "db.work_log.objective_snapshot", title: "本用例工作日志的目标标题快照 应为 `E2E-TARGET-WORK-LOG-SEARCH-NON-PARTICIPANT`", object: "db.work_log_entry.objective_title_snapshot", operator: "equals", params: { entryFrom: "runtime.submittedWorkLogEntry", valueFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "S1-12", method: "prisma" }, id: "db.work_log.duration", title: "本用例工作日志的记录时间分钟数 应为 `50`", object: "db.work_log_entry.duration_minutes", operator: "equals", params: { entryFrom: "runtime.submittedWorkLogEntry", valueFrom: "data.durationMinutes" } },
+      { source: { caseStepId: "S1-13", method: "prisma" }, id: "db.work_log.remaining_estimate", title: "本用例工作日志的剩余进度估计百分比 应为 `75`", object: "db.work_log_entry.remaining_estimate_percent", operator: "equals", params: { entryFrom: "runtime.submittedWorkLogEntry", valueFrom: "data.remainingEstimatePercent" } },
+    ],
+  },
+
+  Clean: {
+    description: "删除本用例日志、目标、成员身份并清空登录态",
+    steps: [
+      { source: { caseStepId: "Clean-1", method: "prisma" }, id: "db.work_log.delete_created", title: "删除 本用例创建的工作日志正文标记 `E2E-WORK-LOG-SEARCH-NON-PARTICIPANT-BODY` 对应的工作日志", object: "db.work_log_entry", operator: "delete_by_body_marker", params: { bodyMarkerFrom: "data.logBodyMarker" } },
+      { source: { caseStepId: "Clean-2", method: "prisma" }, id: "db.objective.delete_created", title: "删除 本用例创建的目标 `E2E-TARGET-WORK-LOG-SEARCH-NON-PARTICIPANT` 及其派生数据", object: "db.objective", operator: "delete", params: { titleFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "Clean-3", method: "api" }, id: "auth.logout", title: "注销当前成员登录会话", object: "auth", operator: "logout" },
+      { source: { caseStepId: "Clean-4", method: "playwright" }, id: "browser.clear", title: "移除当前浏览器中的残留登录态", object: "browser", operator: "clear_state" },
+      { source: { caseStepId: "Clean-5", method: "api" }, id: "ory.member_identity.delete", title: "删除 本用例成员登录身份", object: "ory.identity", operator: "delete_by_email", params: { emailFrom: "data.memberEmail" } },
+      { source: { caseStepId: "Clean-6", method: "prisma" }, id: "db.member_user.delete", title: "删除 本用例成员用户", object: "db.user", operator: "delete", params: { emailFrom: "data.memberEmail" } },
+      { source: { caseStepId: "Clean-7", method: "prisma" }, id: "db.other_member_user.delete", title: "删除 本用例其他成员用户", object: "db.user", operator: "delete", params: { emailFrom: "data.otherMemberEmail" } },
+      { source: { caseStepId: "Clean-8", method: "prisma" }, id: "db.work_log.absent", title: "应不存在 正文标记为 `E2E-WORK-LOG-SEARCH-NON-PARTICIPANT-BODY` 的工作日志", object: "db.work_log_entry", operator: "absent_by_body_marker", params: { bodyMarkerFrom: "data.logBodyMarker" } },
+      { source: { caseStepId: "Clean-9", method: "prisma" }, id: "db.objective.absent", title: "应不存在 标题为 `E2E-TARGET-WORK-LOG-SEARCH-NON-PARTICIPANT` 的目标", object: "db.objective", operator: "absent", params: { titleFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "Clean-10", method: "api" }, id: "ory.member_identity.absent", title: "邮箱为 `orf-member-search-non-participant-work-log-e2e@orf.local` 的成员登录身份 应不存在", object: "ory.identity", operator: "absent", params: { emailFrom: "data.memberEmail" } },
+      { source: { caseStepId: "Clean-11", method: "prisma" }, id: "db.member_user.absent", title: "邮箱为 `orf-member-search-non-participant-work-log-e2e@orf.local` 的成员用户 应不存在", object: "db.user", operator: "absent", params: { emailFrom: "data.memberEmail" } },
+      { source: { caseStepId: "Clean-12", method: "prisma" }, id: "db.other_member_user.absent", title: "名称为 `ORF Other Search Non Participant Work Log E2E` 的本用例其他成员用户 应不存在", object: "db.user_by_name", operator: "absent", params: { nameFrom: "data.otherMemberName" } },
+      { source: { caseStepId: "Clean-13", method: "api" }, id: "session.unauthenticated", title: "当前会话 应为 未登录", object: "auth.session", operator: "unauthenticated" },
+    ],
+  },
+} satisfies StateCaseSpec<MemberSearchNonParticipantObjectiveSubmitWorkLogCaseData>;
