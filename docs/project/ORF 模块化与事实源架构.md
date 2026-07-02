@@ -3,7 +3,7 @@
 ## 业务状态链
 
 - `Objective` 是挑战流程的业务事实主体；`Objective.flowStatus` 是生命周期唯一业务状态，`stage` 只作为页面兼容阶段。
-- 主链路是 `candidate -> open/applying/recruiting -> reestimating -> frozen -> submitted -> accepted -> settled/closed`；`reestimating` 的默认完成期限由 `Objective.confirmationDueAt` 表达，到期后后端自动尝试冻结，手动提前完成和自动到期冻结共用同一套指标与难度校验。冻结后如需修改指标口径或难度，只能在正式提交战利品前由挑战者发起带理由的 `frozenReestimate` 对齐申请，指挥官审批并设置不超过 `finalDueAt` 的新 `confirmationDueAt` 后，目标从 `frozen` 回到现有 `reestimating` 链路。`submitted` 已有正式战利品和 `lootSubmittedAt`，不允许再重新重估或改难度。验收不通过走 `submitted -> revisionRequired -> submitted` 返工重提支线，发布、申请、征召、接受、冻结、重新重估、提交战利品、验收、返工重提和结算只能通过后端接口推进。
+- 主链路是 `candidate -> open/applying/recruiting -> reestimating -> frozen -> submitted -> accepted -> settled/closed`；`reestimating` 的默认完成期限由 `Objective.confirmationDueAt` 表达，到期后后端自动尝试冻结，手动提前完成和自动到期冻结共用同一套指标与等级积分校验。冻结后如需修改指标口径或等级积分，只能在正式提交战利品前由挑战者发起带理由的 `frozenReestimate` 对齐申请，指挥官审批并设置不超过 `finalDueAt` 的新 `confirmationDueAt` 后，目标从 `frozen` 回到现有 `reestimating` 链路。`submitted` 已有正式战利品和 `lootSubmittedAt`，不允许再重新重估或改等级积分。验收不通过走 `submitted -> revisionRequired -> submitted` 返工重提支线，发布、申请、征召、接受、冻结、重新重估、提交战利品、验收、返工重提和结算只能通过后端接口推进。
 - `Result`、`Task`、评论、试验收、对齐申请、战利品和积分账本都挂在 `Objective` 下；它们是子事实或派生读模型，不反向拥有目标生命周期。
 - 数据库是业务事实源；前端 `OrfState` 是服务端 read model 快照，`completion/title/creation` overlay 只是临时 UI 状态。
 - 悬赏大厅是发布后到结算的公开生命周期读模型，我的挑战是 `TaskManagementData` 的执行详情成员视图；它们都不是第二套事实源。
