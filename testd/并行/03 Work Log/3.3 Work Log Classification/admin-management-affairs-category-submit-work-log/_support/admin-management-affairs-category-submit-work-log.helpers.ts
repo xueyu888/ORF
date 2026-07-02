@@ -1,21 +1,23 @@
 import { expect, type Page } from "@playwright/test";
-import { and, eq, ilike, inArray, sql } from "drizzle-orm";
+import { and, eq, ilike, sql } from "drizzle-orm";
 import { teamMembers, teams, users, workLogCategories, workLogEntries } from "../../../../../../server/db/schema";
 import { localDateString } from "../../../../../../src/utils/date";
 import { createStableUuid } from "../../../../../_shared/ids";
+import { readResponseBody } from "../../../../../_operators/common.helpers";
 import { db } from "../../../../../_operators/testd-db-client";
 import type {
   WorkLogCategoryFixture,
   WorkLogCategoryOptionFixture,
   WorkLogEntryFixture,
-  WorkLogSaveResultFixture,
-} from "./member-management-category-forbidden.context";
+} from "./admin-management-affairs-category-submit-work-log.context";
+
+const RESPONSE_TIMEOUT_MS = 5_000;
 
 export function todayWorkDate() {
   return localDateString(new Date());
 }
 
-export async function loginAsMember(page: Page, input: { email: string; password: string }) {
+export async function loginAsAdmin(page: Page, input: { email: string; password: string }) {
   await page.goto("/auth");
   await page.getByLabel("Email").fill(input.email);
   await page.getByLabel("Password", { exact: true }).fill(input.password);
@@ -63,14 +65,44 @@ export function workLogClassificationOption(page: Page, title: string) {
   return page.locator(".orf-fantasy-select-option").filter({ hasText: title });
 }
 
-export async function openWorkLogClassification(page: Page) {
+export async function selectWorkLogCategory(page: Page, categoryName: string) {
   await workLogClassificationControl(page).click();
   await expect(workLogClassificationSearchInput(page)).toBeVisible();
+  await workLogClassificationSearchInput(page).fill(categoryName);
+  await expect(workLogClassificationOption(page, categoryName).first()).toBeVisible();
+  await workLogClassificationOption(page, categoryName).first().click();
+  await expect(workLogClassificationControl(page)).toContainText(categoryName);
 }
 
-export async function searchWorkLogClassification(page: Page, query: string) {
-  await expect(workLogClassificationSearchInput(page)).toBeVisible();
-  await workLogClassificationSearchInput(page).fill(query);
+export async function submitTodayWorkLog(page: Page) {
+  const responsePromise = page
+    .waitForResponse(
+      (response) =>
+        response.request().method().toUpperCase() === "POST" &&
+        /\/api\/work-logs\/my-day\/\d{4}-\d{2}-\d{2}$/.test(new URL(response.url()).pathname),
+      { timeout: RESPONSE_TIMEOUT_MS },
+    )
+    .then(async (response) => {
+      if (!response.ok()) {
+        throw new Error(`提交工作日志接口失败: ${response.status()} ${JSON.stringify(await readResponseBody(response))}`);
+      }
+      return response;
+    });
+
+  await submitWorkLogButton(page).click();
+  await responsePromise;
+}
+
+export function workLogHistory(page: Page) {
+  return page.locator(".work-logs-history").filter({ hasText: "当天记录" }).first();
+}
+
+export function workLogHistoryEntry(page: Page, bodyMarker: string) {
+  return workLogHistory(page).locator(".work-logs-history-entry").filter({ hasText: stableBodyMarker(bodyMarker) }).first();
+}
+
+export function workLogToast(page: Page, text: string) {
+  return page.getByText(text, { exact: true }).first();
 }
 
 export async function readSessionUserName(page: Page) {
@@ -99,6 +131,12 @@ export async function workLogCategoriesContain(page: Page, name: string) {
   return (await workLogCategoryOptions(page)).some((category) => category.name === name);
 }
 
+export async function workLogCategorySourceEquals(page: Page, input: { name: string; source: string }) {
+  return (await workLogCategoryOptions(page)).some(
+    (category) => category.name === input.name && category.source === input.source,
+  );
+}
+
 export async function apiMyDayEntries(page: Page) {
   const response = await page.evaluate(async (date) => {
     const dayResponse = await fetch(`/api/work-logs/my-day?date=${encodeURIComponent(date)}`, { credentials: "include" });
@@ -118,56 +156,41 @@ export async function apiMyDayContainsBodyMarker(page: Page, bodyMarker: string)
   return (await apiMyDayEntries(page)).some((entry) => workLogEntryHasBodyMarker(entry, bodyMarker));
 }
 
-export async function submitManagementCategoryWorkLogByApi(
+export async function apiMyDayEntryFieldEquals(
   page: Page,
-  input: { categoryName: string; bodyMarkdown: string },
-): Promise<WorkLogSaveResultFixture> {
-  return page.evaluate(
-    async ({ categoryName, bodyMarkdown, workDate }) => {
-      const response = await fetch(`/api/work-logs/my-day/${encodeURIComponent(workDate)}`, {
-        body: JSON.stringify({
-          bodyMarkdown,
-          categoryName,
-          durationMinutes: null,
-          objectiveId: null,
-          remainingEstimatePercent: null,
-        }),
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      return {
-        status: response.status,
-        body: await response.json().catch(() => null),
-      };
-    },
-    { ...input, workDate: todayWorkDate() },
-  );
-}
-
-export function requiredWorkLogSaveResult(value: unknown): WorkLogSaveResultFixture {
-  if (typeof value === "object" && value !== null && typeof (value as WorkLogSaveResultFixture).status === "number") {
-    return value as WorkLogSaveResultFixture;
+  input: {
+    bodyMarker: string;
+    field:
+      | "categoryIdSnapshot"
+      | "categoryNameSnapshot"
+      | "objectiveIdSnapshot"
+      | "objectiveTitleSnapshot"
+      | "durationMinutes"
+      | "remainingEstimatePercent";
+    value: string | number | null;
+  },
+) {
+  const entry = (await apiMyDayEntries(page)).find((item) => workLogEntryHasBodyMarker(item, input.bodyMarker));
+  if (typeof entry !== "object" || entry === null) {
+    return false;
   }
-  throw new Error("参数必须是本用例工作日志保存结果");
+  return (entry as Record<string, unknown>)[input.field] === input.value;
 }
 
 export async function prepareManagementWorkLogCategory(input: {
   categoryName: string;
   createdByUserId: string;
-  memberUserId: string;
   teamId: string;
   teamName: string;
 }): Promise<WorkLogCategoryFixture> {
   const now = new Date().toISOString();
   await ensureIsolatedTeam({
     adminUserId: input.createdByUserId,
-    memberUserId: input.memberUserId,
     teamId: input.teamId,
     teamName: input.teamName,
   });
   const id = createStableUuid(
-    "testd-work-log-management-category",
+    "testd-work-log-admin-management-category",
     `${input.teamId}:${input.createdByUserId}:${input.categoryName}`,
   );
   const [row] = await db
@@ -202,7 +225,7 @@ export async function prepareManagementWorkLogCategory(input: {
   return row;
 }
 
-async function ensureIsolatedTeam(input: { adminUserId: string; memberUserId: string; teamId: string; teamName: string }) {
+async function ensureIsolatedTeam(input: { adminUserId: string; teamId: string; teamName: string }) {
   await db
     .insert(teams)
     .values({
@@ -215,19 +238,12 @@ async function ensureIsolatedTeam(input: { adminUserId: string; memberUserId: st
       set: { name: input.teamName },
     });
 
-  await db.delete(teamMembers).where(inArray(teamMembers.userId, [input.adminUserId, input.memberUserId]));
-  await db.insert(teamMembers).values([
-    {
-      teamId: input.teamId,
-      userId: input.adminUserId,
-      role: "admin",
-    },
-    {
-      teamId: input.teamId,
-      userId: input.memberUserId,
-      role: "member",
-    },
-  ]);
+  await db.delete(teamMembers).where(eq(teamMembers.userId, input.adminUserId));
+  await db.insert(teamMembers).values({
+    teamId: input.teamId,
+    userId: input.adminUserId,
+    role: "admin",
+  });
 }
 
 export async function deleteWorkLogCategoryByFixture(value: unknown) {
@@ -284,8 +300,13 @@ export async function dbWorkLogEntryByBodyMarker(bodyMarker: string): Promise<Wo
       id: workLogEntries.id,
       authorUserId: workLogEntries.authorUserId,
       workDate: workLogEntries.workDate,
+      objectiveIdSnapshot: workLogEntries.objectiveIdSnapshot,
+      objectiveTitleSnapshot: workLogEntries.objectiveTitleSnapshot,
+      categoryIdSnapshot: workLogEntries.categoryIdSnapshot,
       categoryNameSnapshot: workLogEntries.categoryNameSnapshot,
       bodyMarkdown: workLogEntries.bodyMarkdown,
+      durationMinutes: workLogEntries.durationMinutes,
+      remainingEstimatePercent: workLogEntries.remainingEstimatePercent,
     })
     .from(workLogEntries)
     .where(ilike(workLogEntries.bodyMarkdown, `%${escapeLike(stableBodyMarker(bodyMarker))}%`))
@@ -294,23 +315,28 @@ export async function dbWorkLogEntryByBodyMarker(bodyMarker: string): Promise<Wo
   return row ?? null;
 }
 
-export async function dbWorkLogEntryForTodayByMemberAndMarker(input: {
+export async function dbWorkLogEntryForTodayByAdminAndMarker(input: {
   bodyMarker: string;
-  memberEmail: string;
+  adminEmail: string;
 }): Promise<WorkLogEntryFixture | null> {
   const [row] = await db
     .select({
       id: workLogEntries.id,
       authorUserId: workLogEntries.authorUserId,
       workDate: workLogEntries.workDate,
+      objectiveIdSnapshot: workLogEntries.objectiveIdSnapshot,
+      objectiveTitleSnapshot: workLogEntries.objectiveTitleSnapshot,
+      categoryIdSnapshot: workLogEntries.categoryIdSnapshot,
       categoryNameSnapshot: workLogEntries.categoryNameSnapshot,
       bodyMarkdown: workLogEntries.bodyMarkdown,
+      durationMinutes: workLogEntries.durationMinutes,
+      remainingEstimatePercent: workLogEntries.remainingEstimatePercent,
     })
     .from(workLogEntries)
     .innerJoin(users, eq(users.id, workLogEntries.authorUserId))
     .where(
       and(
-        sql`lower(${users.email}) = ${input.memberEmail.toLowerCase()}`,
+        sql`lower(${users.email}) = ${input.adminEmail.toLowerCase()}`,
         eq(workLogEntries.workDate, todayWorkDate()),
         ilike(workLogEntries.bodyMarkdown, `%${escapeLike(stableBodyMarker(input.bodyMarker))}%`),
       ),
@@ -320,30 +346,16 @@ export async function dbWorkLogEntryForTodayByMemberAndMarker(input: {
   return row ?? null;
 }
 
-export async function dbWorkLogEntryForTodayByMemberAndCategory(input: {
-  categoryName: string;
-  memberEmail: string;
-}): Promise<WorkLogEntryFixture | null> {
-  const [row] = await db
-    .select({
-      id: workLogEntries.id,
-      authorUserId: workLogEntries.authorUserId,
-      workDate: workLogEntries.workDate,
-      categoryNameSnapshot: workLogEntries.categoryNameSnapshot,
-      bodyMarkdown: workLogEntries.bodyMarkdown,
-    })
-    .from(workLogEntries)
-    .innerJoin(users, eq(users.id, workLogEntries.authorUserId))
-    .where(
-      and(
-        sql`lower(${users.email}) = ${input.memberEmail.toLowerCase()}`,
-        eq(workLogEntries.workDate, todayWorkDate()),
-        eq(workLogEntries.categoryNameSnapshot, input.categoryName),
-      ),
-    )
-    .limit(1);
-
-  return row ?? null;
+export function requiredWorkLogEntry(value: unknown): WorkLogEntryFixture {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as WorkLogEntryFixture).id === "string" &&
+    typeof (value as WorkLogEntryFixture).bodyMarkdown === "string"
+  ) {
+    return value as WorkLogEntryFixture;
+  }
+  throw new Error("参数必须是本用例工作日志");
 }
 
 function requiredWorkLogCategory(value: unknown): WorkLogCategoryFixture {

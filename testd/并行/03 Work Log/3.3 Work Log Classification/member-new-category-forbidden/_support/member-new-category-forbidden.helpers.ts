@@ -1,15 +1,14 @@
 import { expect, type Page } from "@playwright/test";
-import { and, eq, ilike, inArray, sql } from "drizzle-orm";
-import { teamMembers, teams, users, workLogCategories, workLogEntries } from "../../../../../../server/db/schema";
+import { and, eq, ilike, sql } from "drizzle-orm";
+import { users, workLogCategories, workLogEntries } from "../../../../../../server/db/schema";
 import { localDateString } from "../../../../../../src/utils/date";
-import { createStableUuid } from "../../../../../_shared/ids";
 import { db } from "../../../../../_operators/testd-db-client";
 import type {
   WorkLogCategoryFixture,
   WorkLogCategoryOptionFixture,
   WorkLogEntryFixture,
   WorkLogSaveResultFixture,
-} from "./member-management-category-forbidden.context";
+} from "./member-new-category-forbidden.context";
 
 export function todayWorkDate() {
   return localDateString(new Date());
@@ -61,6 +60,10 @@ export function workLogClassificationSearchInput(page: Page) {
 
 export function workLogClassificationOption(page: Page, title: string) {
   return page.locator(".orf-fantasy-select-option").filter({ hasText: title });
+}
+
+export function newCategoryNameInput(page: Page) {
+  return page.getByLabel("新建日志分类名称", { exact: true });
 }
 
 export async function openWorkLogClassification(page: Page) {
@@ -118,7 +121,7 @@ export async function apiMyDayContainsBodyMarker(page: Page, bodyMarker: string)
   return (await apiMyDayEntries(page)).some((entry) => workLogEntryHasBodyMarker(entry, bodyMarker));
 }
 
-export async function submitManagementCategoryWorkLogByApi(
+export async function submitNewCategoryWorkLogByApi(
   page: Page,
   input: { categoryName: string; bodyMarkdown: string },
 ): Promise<WorkLogSaveResultFixture> {
@@ -152,93 +155,13 @@ export function requiredWorkLogSaveResult(value: unknown): WorkLogSaveResultFixt
   throw new Error("参数必须是本用例工作日志保存结果");
 }
 
-export async function prepareManagementWorkLogCategory(input: {
-  categoryName: string;
-  createdByUserId: string;
-  memberUserId: string;
-  teamId: string;
-  teamName: string;
-}): Promise<WorkLogCategoryFixture> {
-  const now = new Date().toISOString();
-  await ensureIsolatedTeam({
-    adminUserId: input.createdByUserId,
-    memberUserId: input.memberUserId,
-    teamId: input.teamId,
-    teamName: input.teamName,
-  });
-  const id = createStableUuid(
-    "testd-work-log-management-category",
-    `${input.teamId}:${input.createdByUserId}:${input.categoryName}`,
-  );
-  const [row] = await db
-    .insert(workLogCategories)
-    .values({
-      id,
-      teamId: input.teamId,
-      name: input.categoryName,
-      normalizedName: normalizeWorkLogCategoryNameKey(input.categoryName),
-      createdByUserId: input.createdByUserId,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: [workLogCategories.teamId, workLogCategories.normalizedName],
-      set: {
-        createdByUserId: input.createdByUserId,
-        name: input.categoryName,
-        updatedAt: now,
-      },
-    })
-    .returning({
-      id: workLogCategories.id,
-      teamId: workLogCategories.teamId,
-      name: workLogCategories.name,
-      createdByUserId: workLogCategories.createdByUserId,
-    });
-
-  if (!row) {
-    throw new Error("工作日志管理分类准备后无法读取");
-  }
-  return row;
-}
-
-async function ensureIsolatedTeam(input: { adminUserId: string; memberUserId: string; teamId: string; teamName: string }) {
+export async function deleteWorkLogCategoriesByName(categoryName: string) {
   await db
-    .insert(teams)
-    .values({
-      id: input.teamId,
-      name: input.teamName,
-      createdAt: todayWorkDate(),
-    })
-    .onConflictDoUpdate({
-      target: teams.id,
-      set: { name: input.teamName },
-    });
-
-  await db.delete(teamMembers).where(inArray(teamMembers.userId, [input.adminUserId, input.memberUserId]));
-  await db.insert(teamMembers).values([
-    {
-      teamId: input.teamId,
-      userId: input.adminUserId,
-      role: "admin",
-    },
-    {
-      teamId: input.teamId,
-      userId: input.memberUserId,
-      role: "member",
-    },
-  ]);
+    .delete(workLogCategories)
+    .where(eq(workLogCategories.normalizedName, normalizeWorkLogCategoryNameKey(categoryName)));
 }
 
-export async function deleteWorkLogCategoryByFixture(value: unknown) {
-  const category = requiredWorkLogCategory(value);
-  await db.delete(workLogCategories).where(eq(workLogCategories.id, category.id));
-}
-
-export async function dbWorkLogCategoryByNameAndTeam(input: {
-  categoryName: string;
-  teamId: string;
-}): Promise<WorkLogCategoryFixture | null> {
+export async function dbWorkLogCategoryByName(categoryName: string): Promise<WorkLogCategoryFixture | null> {
   const [row] = await db
     .select({
       id: workLogCategories.id,
@@ -247,28 +170,7 @@ export async function dbWorkLogCategoryByNameAndTeam(input: {
       createdByUserId: workLogCategories.createdByUserId,
     })
     .from(workLogCategories)
-    .where(
-      and(
-        eq(workLogCategories.teamId, input.teamId),
-        eq(workLogCategories.normalizedName, normalizeWorkLogCategoryNameKey(input.categoryName)),
-      ),
-    )
-    .limit(1);
-
-  return row ?? null;
-}
-
-export async function dbWorkLogCategoryById(value: unknown): Promise<WorkLogCategoryFixture | null> {
-  const category = requiredWorkLogCategory(value);
-  const [row] = await db
-    .select({
-      id: workLogCategories.id,
-      teamId: workLogCategories.teamId,
-      name: workLogCategories.name,
-      createdByUserId: workLogCategories.createdByUserId,
-    })
-    .from(workLogCategories)
-    .where(eq(workLogCategories.id, category.id))
+    .where(eq(workLogCategories.normalizedName, normalizeWorkLogCategoryNameKey(categoryName)))
     .limit(1);
 
   return row ?? null;
@@ -344,18 +246,6 @@ export async function dbWorkLogEntryForTodayByMemberAndCategory(input: {
     .limit(1);
 
   return row ?? null;
-}
-
-function requiredWorkLogCategory(value: unknown): WorkLogCategoryFixture {
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as WorkLogCategoryFixture).id === "string" &&
-    typeof (value as WorkLogCategoryFixture).teamId === "string"
-  ) {
-    return value as WorkLogCategoryFixture;
-  }
-  throw new Error("参数必须是本用例工作日志管理分类");
 }
 
 function isWorkLogCategoryOptionFixture(value: unknown): value is WorkLogCategoryOptionFixture {

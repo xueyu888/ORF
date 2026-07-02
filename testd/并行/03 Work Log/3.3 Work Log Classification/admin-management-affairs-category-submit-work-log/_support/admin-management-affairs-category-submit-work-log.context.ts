@@ -6,22 +6,18 @@ export type TestContext = {
   page: Page;
 };
 
-export type MemberManagementCategoryForbiddenCaseData = {
+export type AdminManagementAffairsCategorySubmitWorkLogCaseData = {
   adminEmail: string;
   adminPassword: string;
   adminName: string;
   adminRole: Extract<UserRole, "admin">;
   adminStatus: Extract<UserStatus, "active">;
-  memberEmail: string;
-  memberPassword: string;
-  memberName: string;
-  memberRole: Extract<UserRole, "member">;
-  memberStatus: Extract<UserStatus, "active">;
   teamId: string;
   teamName: string;
   logBodyMarker: string;
   logBody: string;
-  expectedCategoryForbiddenMessage: string;
+  durationMinutes: number;
+  expectedDurationLabel: string;
 };
 
 export type WorkLogCategoryFixture = {
@@ -41,11 +37,11 @@ export type WorkLogEntryFixture = {
   id: string;
   authorUserId: string;
   workDate: string;
+  objectiveIdSnapshot: string | null;
+  objectiveTitleSnapshot: string | null;
+  categoryIdSnapshot: string | null;
   categoryNameSnapshot: string | null;
   bodyMarkdown: string;
-};
-
-export type WorkLogSaveResultFixture = {
-  status: number;
-  body: unknown;
+  durationMinutes: number | null;
+  remainingEstimatePercent: number | null;
 };

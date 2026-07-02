@@ -6,19 +6,13 @@ export type TestContext = {
   page: Page;
 };
 
-export type MemberManagementCategoryForbiddenCaseData = {
-  adminEmail: string;
-  adminPassword: string;
-  adminName: string;
-  adminRole: Extract<UserRole, "admin">;
-  adminStatus: Extract<UserStatus, "active">;
+export type MemberNewCategoryForbiddenCaseData = {
   memberEmail: string;
   memberPassword: string;
   memberName: string;
   memberRole: Extract<UserRole, "member">;
   memberStatus: Extract<UserStatus, "active">;
-  teamId: string;
-  teamName: string;
+  newCategory: string;
   logBodyMarker: string;
   logBody: string;
   expectedCategoryForbiddenMessage: string;

@@ -1,34 +1,33 @@
 import { expect } from "@playwright/test";
 import type { OperatorRegistry } from "../../../../_framework/types";
 import { requiredString } from "../../../../_operators/params";
-import type { MemberManagementCategoryForbiddenCaseData, TestContext } from "./_support/member-management-category-forbidden.context";
+import type { MemberNewCategoryForbiddenCaseData, TestContext } from "./_support/member-new-category-forbidden.context";
 import {
   apiMyDayContainsBodyMarker,
-  dbWorkLogCategoryById,
-  dbWorkLogCategoryByNameAndTeam,
+  dbWorkLogCategoryByName,
   dbWorkLogEntryByBodyMarker,
   dbWorkLogEntryForTodayByMemberAndCategory,
   dbWorkLogEntryForTodayByMemberAndMarker,
-  deleteWorkLogCategoryByFixture,
+  deleteWorkLogCategoriesByName,
   deleteWorkLogsByBodyMarker,
   loginAsMember,
+  newCategoryNameInput,
   openWorkLogClassification,
   openWorkLogTodayView,
-  prepareManagementWorkLogCategory,
   readSessionUserName,
   requiredWorkLogSaveResult,
   searchWorkLogClassification,
-  submitManagementCategoryWorkLogByApi,
+  submitNewCategoryWorkLogByApi,
   submitWorkLogButton,
   workLogCategoriesContain,
   workLogClassificationControl,
   workLogClassificationOption,
   workLogEditorPanel,
   workLogViewTab,
-} from "./_support/member-management-category-forbidden.helpers";
+} from "./_support/member-new-category-forbidden.helpers";
 
-export const memberManagementCategoryForbiddenOperators:
-  OperatorRegistry<TestContext, MemberManagementCategoryForbiddenCaseData> = {
+export const memberNewCategoryForbiddenOperators:
+  OperatorRegistry<TestContext, MemberNewCategoryForbiddenCaseData> = {
     "page.auth": {
       login: async ({ ctx, params }) => {
         await loginAsMember(ctx.page, {
@@ -77,8 +76,14 @@ export const memberManagementCategoryForbiddenOperators:
         await expect(workLogClassificationOption(ctx.page, requiredString(params, "categoryName"))).toHaveCount(0);
       },
 
-      not_displays_category: async ({ ctx, params }) => {
-        await expect(workLogClassificationControl(ctx.page)).not.toContainText(requiredString(params, "categoryName"));
+      create_action_not_visible: async ({ ctx, params }) => {
+        await expect(workLogClassificationOption(ctx.page, requiredString(params, "label"))).toHaveCount(0);
+      },
+    },
+
+    "page.work_logs.new_category_name_input": {
+      hidden: async ({ ctx }) => {
+        await expect(newCategoryNameInput(ctx.page)).toHaveCount(0);
       },
     },
 
@@ -95,12 +100,12 @@ export const memberManagementCategoryForbiddenOperators:
     },
 
     "api.work_log.categories": {
-      not_contains: async ({ ctx, params }) => {
-        await expect.poll(() => workLogCategoriesContain(ctx.page, requiredString(params, "name"))).toBe(false);
-      },
-
       contains_built_in: async ({ ctx, params }) => {
         await expect.poll(() => workLogCategoriesContain(ctx.page, requiredString(params, "name"))).toBe(true);
+      },
+
+      not_contains: async ({ ctx, params }) => {
+        await expect.poll(() => workLogCategoriesContain(ctx.page, requiredString(params, "name"))).toBe(false);
       },
     },
 
@@ -109,8 +114,8 @@ export const memberManagementCategoryForbiddenOperators:
         await expect.poll(() => apiMyDayContainsBodyMarker(ctx.page, requiredString(params, "bodyMarker"))).toBe(false);
       },
 
-      submit_management_category: async ({ ctx, params }) =>
-        submitManagementCategoryWorkLogByApi(ctx.page, {
+      submit_new_category: async ({ ctx, params }) =>
+        submitNewCategoryWorkLogByApi(ctx.page, {
           categoryName: requiredString(params, "categoryName"),
           bodyMarkdown: requiredString(params, "bodyMarkdown"),
         }),
@@ -131,41 +136,12 @@ export const memberManagementCategoryForbiddenOperators:
     },
 
     "db.work_log_category": {
-      upsert_management: async ({ params }) =>
-        prepareManagementWorkLogCategory({
-          categoryName: requiredString(params, "categoryName"),
-          createdByUserId: requiredString(params, "createdByUserId"),
-          memberUserId: requiredString(params, "memberUserId"),
-          teamId: requiredString(params, "teamId"),
-          teamName: requiredString(params, "teamName"),
-        }),
-
-      exists_in_team: async ({ params }) => {
-        await expect
-          .poll(() =>
-            dbWorkLogCategoryByNameAndTeam({
-              categoryName: requiredString(params, "categoryName"),
-              teamId: requiredString(params, "teamId"),
-            }),
-          )
-          .not.toBeNull();
+      delete_by_name: async ({ params }) => {
+        await deleteWorkLogCategoriesByName(requiredString(params, "categoryName"));
       },
 
-      exists_by_fixture: async ({ params }) => {
-        await expect.poll(() => dbWorkLogCategoryById(params.category)).not.toBeNull();
-      },
-
-      delete_by_fixture: async ({ params }) => {
-        if (params.category !== undefined) {
-          await deleteWorkLogCategoryByFixture(params.category);
-        }
-      },
-
-      absent_by_fixture: async ({ params }) => {
-        if (params.category === undefined) {
-          return;
-        }
-        await expect.poll(() => dbWorkLogCategoryById(params.category)).toBeNull();
+      absent_by_name: async ({ params }) => {
+        await expect.poll(() => dbWorkLogCategoryByName(requiredString(params, "categoryName"))).toBeNull();
       },
     },
 
