@@ -50,6 +50,11 @@ export function clientUpdateApiEndpoint(value, pathname) {
   return url.toString();
 }
 
+function clientUpdateTransferTimeoutMs() {
+  const raw = Number(process.env.ORF_CLIENT_UPDATE_TRANSFER_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 30 * 60_000;
+}
+
 export async function publishClientUpdateReleaseToOrf(input) {
   const { release, secret, targetUrl } = input;
   if (!secret?.trim()) {
@@ -139,7 +144,7 @@ async function downloadReleaseAssetToTemp(asset, tempDir) {
     headers: {
       "user-agent": "ORF Client Release Publisher",
     },
-    signal: AbortSignal.timeout(5 * 60_000),
+    signal: AbortSignal.timeout(clientUpdateTransferTimeoutMs()),
   }).catch((error) => {
     throw new Error(`下载 Release 资产失败: ${fileName}: ${error instanceof Error ? error.message : String(error)}`);
   });
@@ -169,7 +174,7 @@ async function uploadClientUpdateAsset(input) {
       authorization: `Bearer ${input.secret}`,
     },
     method: "POST",
-    signal: AbortSignal.timeout(5 * 60_000),
+    signal: AbortSignal.timeout(clientUpdateTransferTimeoutMs()),
   }).catch((error) => {
     throw new Error(`上传 ORF 主更新源资产失败: ${input.fileName}: ${error instanceof Error ? error.message : String(error)}`);
   });
