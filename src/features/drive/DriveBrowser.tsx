@@ -210,8 +210,18 @@ export function DriveBrowser({
       : mode === "recent" ? `${recentItemCount} 项最近更新`
         : mode === "search" ? `${searchResults.length} 项搜索结果`
           : `${trashNodes.length} 项可恢复资源`;
+  const compactModeSummary = mode === "browse" ? `${links.length} 项群聊资源` : activeModeSummary;
   const uploadTargetLabel = uploadTarget?.name ?? "未选择上传位置";
   const showCompactLinkAction = Boolean(onAddLink && effectiveNode && canManageLinks && !selectedAlreadyLinked && !effectiveNode.deletedAt);
+
+  useEffect(() => {
+    if (!compact || compactToolsOpen || mode !== "browse" || links.length === 0) return;
+    const firstLinkedNodeId = links[0].node.id;
+    setSelectedNodeId((current) => {
+      if (current && current !== bootstrap?.root.id) return current;
+      return firstLinkedNodeId;
+    });
+  }, [bootstrap?.root.id, compact, compactToolsOpen, links, mode]);
 
   useEffect(() => {
     const nodeId = selectedNodeId;
@@ -295,7 +305,7 @@ export function DriveBrowser({
     try {
       const nodes = await onSearch({ query: nextQuery, type: nextType });
       setSearchResults(nodes);
-      if (nodes[0]) setSelectedNodeId(nodes[0].id);
+      setSelectedNodeId(nodes[0]?.id ?? null);
     } catch (error) {
       const message = error instanceof Error ? error.message : "搜索失败";
       setErrorMessage(message);
@@ -313,7 +323,7 @@ export function DriveBrowser({
     try {
       const nodes = await onListTrash();
       setTrashNodes(nodes);
-      if (nodes[0]) setSelectedNodeId(nodes[0].id);
+      setSelectedNodeId(nodes[0]?.id ?? null);
     } catch (error) {
       const message = error instanceof Error ? error.message : "回收站加载失败";
       setErrorMessage(message);
@@ -460,6 +470,11 @@ export function DriveBrowser({
     setErrorMessage(null);
     try {
       await onAddLink({ isDefaultUploadTarget, node });
+      if (compact) {
+        setMode("browse");
+        setCompactToolsOpen(false);
+        setSelectedNodeId(node.id);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "群聊云盘绑定失败";
       setErrorMessage(message);
@@ -530,6 +545,10 @@ export function DriveBrowser({
       : mode === "trash"
         ? trashNodes
         : [];
+  const compactShowsTeamFolders = compact && compactToolsOpen && mode === "browse";
+  const compactResourceNodes = mode === "browse" ? links.map((link) => link.node) : resourceList;
+  const compactResourceTitle = mode === "browse" ? "群聊资源" : modeLabels[mode];
+  const compactResourceCount = compactResourceNodes.length;
 
   const modebar = (
     <div className="orf-drive-modebar">
@@ -595,7 +614,7 @@ export function DriveBrowser({
         <div className="orf-drive-workbench-title">
           <span>{compact ? "频道资源" : "团队云盘"}</span>
           <strong>{activeScopeLabel}</strong>
-          <small>{activeModeSummary}</small>
+          <small>{compact ? compactModeSummary : activeModeSummary}</small>
         </div>
         <div className="orf-drive-workbench-meta" aria-label="云盘状态摘要">
           <span><Folder className="h-3.5 w-3.5" />{rootItemCount}</span>
@@ -604,7 +623,7 @@ export function DriveBrowser({
         </div>
       </div>
 
-      {links.length > 0 && (
+      {!compact && links.length > 0 && (
         <div className="orf-drive-linked-card">
           <div className="orf-drive-linked-heading">
             <strong>已绑定到群聊</strong>
@@ -632,39 +651,46 @@ export function DriveBrowser({
       {!compact && modebar}
 
       <form
-        className="orf-drive-searchbar"
+        className={clsx("orf-drive-searchbar", compact && "orf-drive-searchbar-compact")}
         onSubmit={(event) => {
           event.preventDefault();
           void runSearch();
         }}
       >
         <Search className="h-4 w-4" />
-        <input value={searchQuery} placeholder={compact ? "搜索云盘并绑定" : "搜索文件名、类型、内容线索"} onChange={(event) => setSearchQuery(event.target.value)} />
-        <select
-          value={searchType}
-          onChange={(event) => {
-            const nextType = event.target.value as DriveSearchType;
-            setSearchType(nextType);
-            if (mode === "search") void runSearch(searchQuery, nextType);
-          }}
-        >
-          <option value="all">全部</option>
-          <option value="file">文件</option>
-          <option value="folder">文件夹</option>
-        </select>
-        <Button size="sm" variant="secondary">搜索</Button>
+        <input value={searchQuery} placeholder={compact ? "搜索群聊资源或团队云盘" : "搜索文件名、类型、内容线索"} onChange={(event) => setSearchQuery(event.target.value)} />
+        {compact ? (
+          <IconButton icon={Search} label="搜索" size="sm" type="submit" variant="ghost" />
+        ) : (
+          <>
+            <select
+              value={searchType}
+              onChange={(event) => {
+                const nextType = event.target.value as DriveSearchType;
+                setSearchType(nextType);
+                if (mode === "search") void runSearch(searchQuery, nextType);
+              }}
+            >
+              <option value="all">全部</option>
+              <option value="file">文件</option>
+              <option value="folder">文件夹</option>
+            </select>
+            <Button size="sm" variant="secondary">搜索</Button>
+          </>
+        )}
       </form>
 
       {compact ? (
         <>
           <div className={clsx("orf-drive-compact-primary-actions", !showCompactLinkAction && "is-minimal")}>
-            <Button disabled={!canMutateDrive || !uploadTarget || mode === "trash"} size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()}>
+            <Button disabled={!canMutateDrive || !uploadTarget || mode === "trash"} size="sm" type="button" variant="secondary" onClick={() => fileInputRef.current?.click()}>
               <Upload className="h-3.5 w-3.5" />
               上传
             </Button>
             {showCompactLinkAction && (
               <Button
                 size="sm"
+                type="button"
                 variant="secondary"
                 onClick={() => void addSelectedLink(false)}
               >
@@ -717,9 +743,22 @@ export function DriveBrowser({
         <div className="orf-drive-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载云盘</div>
       ) : bootstrap ? (
         <div className="orf-drive-layout">
-          <div className="orf-drive-tree" role="tree">
+          <div className={clsx("orf-drive-tree", compact && !compactShowsTeamFolders && "orf-drive-resource-pane")} role={compact && !compactShowsTeamFolders ? "listbox" : "tree"}>
             {resourceLoading ? (
               <div className="orf-drive-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载资源</div>
+            ) : compact && !compactShowsTeamFolders ? (
+              <>
+                <div className="orf-drive-resource-pane-heading">
+                  <span>{compactResourceTitle}</span>
+                  <small>{compactResourceCount} 项</small>
+                </div>
+                <DriveResourceList
+                  emptyLabel={mode === "browse" ? "暂无群聊资源" : "没有资源"}
+                  nodes={compactResourceNodes}
+                  selectedNodeId={selectedNodeId}
+                  onSelect={(node) => setSelectedNodeId(node.id)}
+                />
+              </>
             ) : mode === "browse" ? (
               <DriveTreeRow
                 childrenByFolderId={childrenByFolderId}
@@ -764,9 +803,19 @@ export function DriveBrowser({
   );
 }
 
-function DriveResourceList({ nodes, onSelect, selectedNodeId }: { nodes: DriveNode[]; onSelect: (node: DriveNode) => void; selectedNodeId: string | null }) {
+function DriveResourceList({
+  emptyLabel = "没有资源",
+  nodes,
+  onSelect,
+  selectedNodeId,
+}: {
+  emptyLabel?: string;
+  nodes: DriveNode[];
+  onSelect: (node: DriveNode) => void;
+  selectedNodeId: string | null;
+}) {
   if (nodes.length === 0) {
-    return <div className="orf-drive-empty">没有资源</div>;
+    return <div className="orf-drive-empty">{emptyLabel}</div>;
   }
   return (
     <div className="orf-drive-resource-list">
