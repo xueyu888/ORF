@@ -150,6 +150,17 @@ export function validateNotificationStreamEnum(snapshot: RuntimeEnumSnapshot) {
     : [`notification_stream enum must be exactly personalNotification,teamAnnouncement; got ${labels}.`];
 }
 
+export function validateDriveContextTypeEnum(snapshot: RuntimeEnumSnapshot) {
+  const labels = new Set(snapshot.labels);
+  const errors: string[] = [];
+  for (const label of ["project", "objective", "result", "task", "feedback", "workLog", "chatChannel", "chatMessage", "chatThread"]) {
+    if (!labels.has(label)) {
+      errors.push(`drive_context_type enum value ${label} is missing.`);
+    }
+  }
+  return errors;
+}
+
 export function validateNotificationConversationSchema(snapshot: { columns: RuntimeTableColumn[] }) {
   const errors: string[] = [];
   const columnsByTable = snapshot.columns.reduce((map, column) => {
@@ -486,6 +497,7 @@ export async function assertRuntimeDatabaseSchema() {
     evidenceColumnsResult,
     feedbackStatusResult,
     notificationStreamResult,
+    driveContextTypeResult,
     notificationConversationColumnsResult,
     systemChatNotificationColumnsResult,
     driveManagementColumnsResult,
@@ -580,6 +592,17 @@ export async function assertRuntimeDatabaseSchema() {
         join pg_namespace nsp on nsp.oid = t.typnamespace
         where nsp.nspname = current_schema()
           and t.typname = 'notification_stream'
+        order by e.enumsortorder
+      `,
+    ),
+    pool.query<{ label: string }>(
+      `
+        select e.enumlabel as "label"
+        from pg_enum e
+        join pg_type t on t.oid = e.enumtypid
+        join pg_namespace nsp on nsp.oid = t.typnamespace
+        where nsp.nspname = current_schema()
+          and t.typname = 'drive_context_type'
         order by e.enumsortorder
       `,
     ),
@@ -687,6 +710,9 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateNotificationStreamEnum({
       labels: notificationStreamResult.rows.map((row) => row.label),
+    }),
+    ...validateDriveContextTypeEnum({
+      labels: driveContextTypeResult.rows.map((row) => row.label),
     }),
     ...validateNotificationConversationSchema({
       columns: notificationConversationColumnsResult.rows,

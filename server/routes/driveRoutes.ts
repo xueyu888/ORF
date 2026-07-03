@@ -63,7 +63,7 @@ const chatDriveLinkPatchBodySchema = z.object({
 });
 const driveContextLinkBodySchema = z.object({
   contextId: z.string().min(1),
-  contextType: z.enum(["project", "objective", "chatChannel"]),
+  contextType: z.enum(["project", "objective", "result", "task", "feedback", "workLog", "chatChannel", "chatMessage", "chatThread"]),
   label: z.string().trim().max(160).optional().nullable(),
 });
 

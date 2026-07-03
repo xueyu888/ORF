@@ -51,7 +51,17 @@ export const driveNodeEventActionEnum = pgEnum("drive_node_event_action", [
   "chat_linked",
   "chat_unlinked",
 ]);
-export const driveContextTypeEnum = pgEnum("drive_context_type", ["project", "objective", "chatChannel"]);
+export const driveContextTypeEnum = pgEnum("drive_context_type", [
+  "project",
+  "objective",
+  "result",
+  "task",
+  "feedback",
+  "workLog",
+  "chatChannel",
+  "chatMessage",
+  "chatThread",
+]);
 export const notificationStreamEnum = pgEnum("notification_stream", ["personalNotification", "teamAnnouncement"]);
 export const teams = pgTable("teams", {
   id: text("id").primaryKey(),

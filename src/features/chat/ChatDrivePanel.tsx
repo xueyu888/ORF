@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
-import { Download, ExternalLink, File, FileText, Folder, Image, Link2, Loader2, Search, Unlink, Upload, X } from "lucide-react";
+import { Download, ExternalLink, File, FileText, Folder, Image, Link2, Loader2, MoreHorizontal, Search, Unlink, Upload, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button, IconButton } from "../../components/ui";
 import {
@@ -25,6 +25,7 @@ type ChatDrivePanelProps = {
 };
 
 type ChatResourceSource = "folderChild" | "linked" | "search" | "uploaded";
+type ChatResourceMode = "channel" | "search";
 
 type ChatResourceItem = {
   key: string;
@@ -52,6 +53,7 @@ export function ChatDrivePanel({
   const [folderChildrenLoading, setFolderChildrenLoading] = useState(false);
   const [links, setLinks] = useState<ChatDriveLink[]>([]);
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<ChatResourceMode>("channel");
   const [query, setQuery] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<DriveNode[]>([]);
@@ -121,7 +123,7 @@ export function ChatDrivePanel({
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (!trimmed) {
+    if (mode !== "search" || !trimmed) {
       setSearchLoading(false);
       setSearchResults([]);
       return undefined;
@@ -148,7 +150,7 @@ export function ChatDrivePanel({
       disposed = true;
       window.clearTimeout(timer);
     };
-  }, [notify, query]);
+  }, [mode, notify, query]);
 
   const linkedNodeIds = useMemo(() => new Set(links.map((link) => link.node.id)), [links]);
   const defaultUploadFolder = useMemo(
@@ -192,8 +194,8 @@ export function ChatDrivePanel({
     sourceLabel: linkedNodeIds.has(node.id) ? "已在频道" : "团队资源",
   })), [linkedNodeIds, searchResults]);
 
-  const searchActive = query.trim().length > 0;
-  const visibleItems = searchActive ? searchItems : channelItems;
+  const searchActive = mode === "search" && query.trim().length > 0;
+  const visibleItems = mode === "search" ? searchItems : channelItems;
 
   useEffect(() => {
     if (selectedNodeId && visibleItems.some((item) => item.node.id === selectedNodeId)) return;
@@ -257,6 +259,7 @@ export function ChatDrivePanel({
         });
         setSessionNodes((items) => dedupeDriveNodes([response.node, ...items]));
         setSelectedNodeId(response.node.id);
+        setMode("channel");
         setQuery("");
         if (response.announcementMessage) onAnnouncementMessage?.(response.announcementMessage);
         void loadLinkedFolderChildren(links);
@@ -279,6 +282,7 @@ export function ChatDrivePanel({
       const response = await addChatDriveLinkRequest({ channelId: channel.id, nodeId: selectedNode.id });
       setBootstrap(response.drive);
       setLinks(response.links);
+      setMode("channel");
       setQuery("");
       setSelectedNodeId(selectedNode.id);
       void loadLinkedFolderChildren(response.links);
@@ -309,43 +313,69 @@ export function ChatDrivePanel({
 
   return (
     <div className="orf-chat-resource-panel">
-      <div className="orf-chat-resource-hero">
-        <div>
-          <span>频道资源</span>
+      <div className="orf-chat-resource-overview">
+        <div className="orf-chat-resource-overview-copy">
+          <span>资源托盘</span>
           <strong>{contextLabel}</strong>
           <small>{summary}</small>
         </div>
-        <Link to="/resources" aria-label="打开资源库" title="打开资源库">
-          <ExternalLink className="h-4 w-4" />
-        </Link>
+        <div className="orf-chat-resource-top-actions">
+          <IconButton
+            icon={Upload}
+            label={uploadTarget ? `上传到 ${uploadTarget.name}` : "上传资源"}
+            disabled={!canWrite || !uploadTarget || loading}
+            size="sm"
+            variant="secondary"
+            onClick={() => fileInputRef.current?.click()}
+          />
+          <Link className="orf-chat-resource-icon-link" to="/resources" aria-label="打开资源工作台" title="打开资源工作台">
+            <ExternalLink className="h-4 w-4" />
+          </Link>
+        </div>
       </div>
 
-      <form
-        className="orf-chat-resource-search"
-        onSubmit={(event) => {
-          event.preventDefault();
-        }}
-      >
-        <Search className="h-4 w-4" />
-        <input
-          value={query}
-          placeholder="搜索本群或团队资源"
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        {query.trim() ? (
-          <button type="button" aria-label="清空资源搜索" onClick={() => setQuery("")}>
-            <X className="h-4 w-4" />
-          </button>
-        ) : null}
-      </form>
-
-      <div className="orf-chat-resource-action-row">
-        <Button disabled={!canWrite || !uploadTarget || loading} size="sm" type="button" variant="secondary" onClick={() => fileInputRef.current?.click()}>
-          <Upload className="h-3.5 w-3.5" />
-          上传
-        </Button>
-        <span>{uploadTarget ? uploadTarget.name : "未选择上传位置"}</span>
+      <div className="orf-chat-resource-modebar" role="tablist" aria-label="群聊资源范围">
+        <button
+          type="button"
+          className={clsx(mode === "channel" && "is-active")}
+          role="tab"
+          aria-selected={mode === "channel"}
+          onClick={() => setMode("channel")}
+        >
+          本频道
+          <small>{resourceCount}</small>
+        </button>
+        <button
+          type="button"
+          className={clsx(mode === "search" && "is-active")}
+          role="tab"
+          aria-selected={mode === "search"}
+          onClick={() => setMode("search")}
+        >
+          查找资源
+        </button>
       </div>
+
+      {mode === "search" && (
+        <form
+          className="orf-chat-resource-search"
+          onSubmit={(event) => {
+            event.preventDefault();
+          }}
+        >
+          <Search className="h-4 w-4" />
+          <input
+            value={query}
+            placeholder="搜索团队云盘资源"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {query.trim() ? (
+            <button type="button" aria-label="清空资源搜索" onClick={() => setQuery("")}>
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
+        </form>
+      )}
       <input ref={fileInputRef} hidden multiple type="file" onChange={(event) => void uploadFiles(event.currentTarget.files)} />
 
       {uploadTask && (
@@ -363,6 +393,8 @@ export function ChatDrivePanel({
             <div className="orf-chat-resource-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载资源</div>
           ) : searchLoading ? (
             <div className="orf-chat-resource-empty"><Loader2 className="h-5 w-5 animate-spin" /> 搜索资源</div>
+          ) : mode === "search" && !query.trim() ? (
+            <div className="orf-chat-resource-empty">输入关键词查找团队资源</div>
           ) : visibleItems.length > 0 ? (
             visibleItems.map((item) => (
               <ChatResourceRow
@@ -375,7 +407,7 @@ export function ChatDrivePanel({
             ))
           ) : (
             <div className="orf-chat-resource-empty">
-              {searchActive ? "没有匹配资源" : "暂无资源"}
+              {searchActive ? "没有匹配资源" : "暂无频道资源"}
             </div>
           )}
         </div>
@@ -445,12 +477,32 @@ function ChatResourcePreview({
   textPreview?: string;
   textPreviewLoading: boolean;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [node?.id]);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) return;
+      setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [menuOpen]);
+
   if (!node) {
-    return <div className="orf-chat-resource-preview-empty">选择资源预览</div>;
+    return <div className="orf-chat-resource-preview-empty">选择一个资源查看预览</div>;
   }
   const file = node.file ?? null;
   const previewUrl = file?.previewUrl ? drivePreviewUrl(file) : undefined;
   const Icon = iconForNode(node);
+  const detailHref = `/resources/${encodeURIComponent(node.id)}`;
+  const showDownloadPrimary = Boolean(file && (linked || !canManage || node.deletedAt));
   return (
     <div className="orf-chat-resource-preview">
       <div className="orf-chat-resource-preview-header">
@@ -468,17 +520,52 @@ function ChatResourcePreview({
               加入频道
             </Button>
           )}
-          {canManage && link && (
-            <IconButton icon={Unlink} label="移出频道资源" size="sm" variant="ghost" onClick={onRemoveFromChannel} />
-          )}
-          <Link to={`/resources/${encodeURIComponent(node.id)}`} aria-label="打开资源详情" title="打开资源详情">
-            <ExternalLink className="h-4 w-4" />
-          </Link>
-          {file && (
-            <a href={file.downloadUrl} aria-label="下载资源" title="下载资源">
-              <Download className="h-4 w-4" />
+          {showDownloadPrimary && file && (
+            <a className="orf-chat-resource-primary-link" href={file.downloadUrl}>
+              <Download className="h-3.5 w-3.5" />
+              下载
             </a>
           )}
+          {!file && (
+            <Link className="orf-chat-resource-primary-link" to={detailHref}>
+              <ExternalLink className="h-3.5 w-3.5" />
+              打开
+            </Link>
+          )}
+          <div className="orf-chat-resource-more" ref={menuRef}>
+            <IconButton
+              icon={MoreHorizontal}
+              label="更多资源操作"
+              size="sm"
+              variant="ghost"
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              onClick={() => setMenuOpen((value) => !value)}
+            />
+            {menuOpen && (
+              <div className="orf-chat-resource-more-menu" role="menu">
+                <Link to={detailHref} role="menuitem" onClick={() => setMenuOpen(false)}>
+                  <ExternalLink className="h-4 w-4" />
+                  打开详情
+                </Link>
+                {file && (
+                  <a href={file.downloadUrl} role="menuitem" onClick={() => setMenuOpen(false)}>
+                    <Download className="h-4 w-4" />
+                    下载文件
+                  </a>
+                )}
+                {canManage && link && (
+                  <button type="button" className="is-danger" role="menuitem" onClick={() => {
+                    setMenuOpen(false);
+                    onRemoveFromChannel();
+                  }}>
+                    <Unlink className="h-4 w-4" />
+                    移出频道
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
       {node.type === "folder" ? (

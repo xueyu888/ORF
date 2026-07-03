@@ -66,7 +66,16 @@ export type DriveNodeEventAction =
   | "context_unlinked"
   | "chat_linked"
   | "chat_unlinked";
-export type DriveContextType = "project" | "objective" | "chatChannel";
+export type DriveContextType =
+  | "project"
+  | "objective"
+  | "result"
+  | "task"
+  | "feedback"
+  | "workLog"
+  | "chatChannel"
+  | "chatMessage"
+  | "chatThread";
 export type DriveSearchScope = "active" | "trash";
 export type DriveSearchType = "all" | "file" | "folder";
 

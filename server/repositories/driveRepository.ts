@@ -623,14 +623,26 @@ async function listDriveContextLinks(nodeId: string, teamId: string) {
              CASE
                WHEN l.context_type = 'project' THEN p.name
                WHEN l.context_type = 'objective' THEN o.title
-               WHEN l.context_type = 'chatChannel' THEN c.display_name
+               WHEN l.context_type = 'result' THEN r.title
+               WHEN l.context_type = 'task' THEN t.title
+               WHEN l.context_type = 'feedback' THEN f.phenomenon
+               WHEN l.context_type = 'workLog' THEN wl.work_date || ' · ' || wl.author_name_snapshot
+               WHEN l.context_type = 'chatChannel' THEN COALESCE(c.display_name, c.name)
+               WHEN l.context_type = 'chatMessage' THEN COALESCE(NULLIF(left(regexp_replace(cm.body, '\\s+', ' ', 'g'), 80), ''), '聊天消息')
+               WHEN l.context_type = 'chatThread' THEN COALESCE(NULLIF(left(regexp_replace(ct.body, '\\s+', ' ', 'g'), 80), ''), '聊天话题')
                ELSE NULL
              END AS context_title
       FROM drive_node_context_links l
       LEFT JOIN users creator ON creator.id = l.created_by
       LEFT JOIN projects p ON p.id = l.context_id AND p.team_id = l.team_id AND l.context_type = 'project'
       LEFT JOIN objectives o ON o.id = l.context_id AND o.team_id = l.team_id AND l.context_type = 'objective'
+      LEFT JOIN results r ON r.id = l.context_id AND r.team_id = l.team_id AND l.context_type = 'result'
+      LEFT JOIN tasks t ON t.id = l.context_id AND t.team_id = l.team_id AND l.context_type = 'task'
+      LEFT JOIN feedback f ON f.id = l.context_id AND f.team_id = l.team_id AND l.context_type = 'feedback'
+      LEFT JOIN work_log_entries wl ON wl.id = l.context_id AND wl.team_id = l.team_id AND l.context_type = 'workLog'
       LEFT JOIN chat_channels c ON c.id = l.context_id AND c.team_id = l.team_id AND l.context_type = 'chatChannel'
+      LEFT JOIN chat_messages cm ON cm.id = l.context_id AND cm.team_id = l.team_id AND cm.deleted_at IS NULL AND l.context_type = 'chatMessage'
+      LEFT JOIN chat_messages ct ON ct.id = l.context_id AND ct.team_id = l.team_id AND ct.deleted_at IS NULL AND ct.root_message_id IS NULL AND l.context_type = 'chatThread'
       WHERE l.team_id = $1
         AND l.node_id = $2
       ORDER BY l.created_at DESC
@@ -1323,8 +1335,60 @@ async function resolveDriveContext(teamId: string, contextType: DriveContextType
     );
     return rows[0]?.title ?? null;
   }
+  if (contextType === "result") {
+    const { rows } = await pool.query<{ title: string }>(
+      "SELECT title FROM results WHERE team_id = $1 AND id = $2 LIMIT 1",
+      [teamId, contextId],
+    );
+    return rows[0]?.title ?? null;
+  }
+  if (contextType === "task") {
+    const { rows } = await pool.query<{ title: string }>(
+      "SELECT title FROM tasks WHERE team_id = $1 AND id = $2 LIMIT 1",
+      [teamId, contextId],
+    );
+    return rows[0]?.title ?? null;
+  }
+  if (contextType === "feedback") {
+    const { rows } = await pool.query<{ title: string }>(
+      "SELECT phenomenon AS title FROM feedback WHERE team_id = $1 AND id = $2 LIMIT 1",
+      [teamId, contextId],
+    );
+    return rows[0]?.title ?? null;
+  }
+  if (contextType === "workLog") {
+    const { rows } = await pool.query<{ title: string }>(
+      `
+        SELECT work_date || ' · ' || author_name_snapshot AS title
+        FROM work_log_entries
+        WHERE team_id = $1 AND id = $2
+        LIMIT 1
+      `,
+      [teamId, contextId],
+    );
+    return rows[0]?.title ?? null;
+  }
+  if (contextType === "chatMessage" || contextType === "chatThread") {
+    const { rows } = await pool.query<{ title: string }>(
+      `
+        SELECT
+          COALESCE(
+            NULLIF(left(regexp_replace(m.body, '\\s+', ' ', 'g'), 80), ''),
+            CASE WHEN $3 = 'chatThread' THEN '聊天话题' ELSE '聊天消息' END
+          ) AS title
+        FROM chat_messages m
+        WHERE m.team_id = $1
+          AND m.id = $2
+          AND m.deleted_at IS NULL
+          AND ($3 <> 'chatThread' OR m.root_message_id IS NULL)
+        LIMIT 1
+      `,
+      [teamId, contextId, contextType],
+    );
+    return rows[0]?.title ?? null;
+  }
   const { rows } = await pool.query<{ title: string }>(
-    "SELECT display_name AS title FROM chat_channels WHERE team_id = $1 AND id = $2 AND archived_at IS NULL LIMIT 1",
+    "SELECT COALESCE(display_name, name) AS title FROM chat_channels WHERE team_id = $1 AND id = $2 AND archived_at IS NULL LIMIT 1",
     [teamId, contextId],
   );
   return rows[0]?.title ?? null;

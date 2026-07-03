@@ -6,7 +6,7 @@
 - 文件元数据的事实源是 `drive_files`。文件原件只放对象存储，`drive_files.object_key` 不暴露给前端。
 - 文件版本历史的事实源是 `drive_file_versions`。`drive_files` 保存当前版本投影，历史版本不可由 UI 状态反推。
 - 文件活动审计的事实源是 `drive_node_events`。新建、上传、删除、恢复、版本变化、上下文绑定都进入同一活动流。
-- 工作上下文的事实源是 `drive_node_context_links`。文件或文件夹可以关联项目、目标或群聊上下文，但上下文不拥有文件。
+- 工作上下文的事实源是 `drive_node_context_links`。文件或文件夹可以关联项目、目标、指标、任务、反馈、工作日志、群聊频道、聊天消息或话题上下文，但上下文不拥有文件。
 - 群聊快捷入口的事实源是 `chat_channel_drive_links`。群聊可以绑定多个云盘文件或文件夹，其中最多一个文件夹作为默认上传目标。
 - `chat_channels.project_id` 仍然只是频道项目元数据，不再决定文件归属、文件权限或云盘树。
 - `chat_attachments` 仍然只是聊天消息附件事实源，不自动迁移、不反向定义云盘库。
@@ -40,7 +40,7 @@
 - `POST /api/drive/upload`：上传文件到指定父文件夹。
 - `DELETE /api/drive/nodes/:nodeId`：软删除文件或文件夹。
 - `POST /api/drive/nodes/:nodeId/restore`：从回收站恢复文件或文件夹。
-- `POST /api/drive/nodes/:nodeId/context-links`：把文件或文件夹关联到项目、目标或群聊上下文。
+- `POST /api/drive/nodes/:nodeId/context-links`：把文件或文件夹关联到项目、目标、指标、任务、反馈、工作日志、群聊频道、聊天消息或话题上下文。
 - `DELETE /api/drive/nodes/:nodeId/context-links/:linkId`：移除上下文关联。
 - `GET /api/drive/files/:fileId/versions`：返回文件版本历史。
 - `POST /api/drive/files/:fileId/versions`：上传并切换到新版本。
@@ -62,16 +62,16 @@
 
 ## 对标产品能力映射
 
-- Slack 式群聊资源入口：`chat_channel_drive_links` 让频道显示已绑定资源和默认上传文件夹。
+- Slack 式群聊资源入口：`chat_channel_drive_links` 让频道以轻量资源托盘显示已绑定资源和默认上传文件夹；完整管理、回收站和版本操作留在 `/resources`。
 - Google Drive 式搜索预览：`/api/drive/search`、详情面板和安全预览 URL 都由后端统一输出。
 - Dropbox 式可靠恢复：`drive_nodes.deleted_at` 驱动回收站，`drive_file_versions` 支持版本恢复，`drive_node_events` 保留操作证据。
-- Linear 式工作上下文：`drive_node_context_links` 把文件显式关联到项目或目标，但不改变项目、目标、聊天或云盘自身事实源。
+- Linear 式工作上下文：`drive_node_context_links` 把文件显式关联到项目、目标、指标、任务、反馈、工作日志或聊天上下文，但不改变这些业务对象或云盘自身事实源。
 
 ## 不做的事
 
 - 不把旧聊天附件批量导入云盘库。
 - 不把 Project 本身提升为文件权限、文件归属或数据隔离边界。
 - 不把 MinIO object key 暴露给前端。
-- 不把群聊快捷绑定、项目上下文或目标上下文当作文件归属。
+- 不把群聊快捷绑定、项目上下文、目标上下文或其他工作对象上下文当作文件归属。
 - 不做永久删除、配额、外链分享、全文内容索引或 AI 摘要；这些需要单独的保留、安全和权限决策。
 - 不用测试或 UI 临时状态反向定义云盘契约。

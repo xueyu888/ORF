@@ -51,7 +51,7 @@ type DriveUploadResult = {
 export type DriveContextOption = {
   id: string;
   title: string;
-  type: Exclude<DriveContextType, "chatChannel">;
+  type: Exclude<DriveContextType, "chatChannel" | "chatMessage" | "chatThread">;
 };
 
 type DriveBrowserProps = {
@@ -1087,7 +1087,7 @@ function DriveDetailsContent({
             ))}
           </div>
         ) : (
-          <p>未关联目标或项目</p>
+          <p>未关联工作对象</p>
         )}
         {canWrite && onAddContext && contextOptions.length > 0 && (
           <select defaultValue="" onChange={(event) => {
@@ -1095,7 +1095,7 @@ function DriveDetailsContent({
             event.currentTarget.value = "";
             if (value) onAddContext(value);
           }}>
-            <option value="">关联目标或项目</option>
+            <option value="">关联工作对象</option>
             {contextOptions.map((option) => (
               <option key={`${option.type}:${option.id}`} value={`${option.type}:${option.id}`}>
                 {contextTypeLabel(option.type)} · {option.title}
@@ -1194,6 +1194,12 @@ function hasNode(root: DriveNode, childrenByFolderId: Map<string, DriveNode[]>, 
 function contextTypeLabel(type: DriveContextType) {
   if (type === "project") return "项目";
   if (type === "objective") return "目标";
+  if (type === "result") return "指标";
+  if (type === "task") return "任务";
+  if (type === "feedback") return "反馈";
+  if (type === "workLog") return "工作日志";
+  if (type === "chatMessage") return "聊天消息";
+  if (type === "chatThread") return "聊天话题";
   return "群聊";
 }
 
