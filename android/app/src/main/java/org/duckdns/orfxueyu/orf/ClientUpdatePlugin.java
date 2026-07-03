@@ -296,13 +296,24 @@ public class ClientUpdatePlugin extends Plugin {
     private boolean isTrustedClientUpdateUrl(String rawUrl) {
         try {
             Uri uri = Uri.parse(rawUrl);
-            return "https".equals(uri.getScheme())
-                && "github.com".equals(uri.getHost())
-                && uri.getPath() != null
-                && uri.getPath().startsWith("/xueyu888/ORF/releases/");
+            return isTrustedGitHubReleaseUrl(uri) || isTrustedOrfClientUpdateAssetUrl(uri);
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    private boolean isTrustedGitHubReleaseUrl(Uri uri) {
+        return "https".equals(uri.getScheme())
+            && "github.com".equals(uri.getHost())
+            && uri.getPath() != null
+            && uri.getPath().startsWith("/xueyu888/ORF/releases/");
+    }
+
+    private boolean isTrustedOrfClientUpdateAssetUrl(Uri uri) {
+        return "https".equals(uri.getScheme())
+            && "orf-xueyu.duckdns.org".equals(uri.getHost())
+            && uri.getPath() != null
+            && uri.getPath().matches("^/api/client-updates/assets/[^/]+/[^/]+$");
     }
 
     private String sanitizeApkName(String value) {

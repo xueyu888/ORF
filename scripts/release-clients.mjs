@@ -4,6 +4,12 @@ import "dotenv/config";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import process from "node:process";
+import {
+  clientUpdateApiEndpoint,
+  formatBytes,
+  normalizeReleaseVersion,
+  publishClientUpdateReleaseToOrf as publishReleaseToOrf,
+} from "./client-update-publisher.mjs";
 
 const defaultRepository = "xueyu888/ORF";
 
@@ -63,7 +69,7 @@ const release = readJsonWithRetry(() => runGh([
   "--repo",
   repository,
   "--json",
-  "tagName,name,url,assets,publishedAt,isDraft,isPrerelease",
+  "tagName,name,url,assets,body,publishedAt,isDraft,isPrerelease",
 ], { capture: true, throwOnError: true }));
 
 console.log(`${release.name} ${release.url}`);
@@ -71,17 +77,30 @@ for (const asset of release.assets ?? []) {
   console.log(`- ${asset.name} (${formatBytes(asset.size)})`);
 }
 
+await publishClientUpdateReleaseToOrf(release);
 await broadcastClientUpdateRelease(release);
 
 function parseArgs(args) {
-  const parsed = { branch: null, broadcast: true, broadcastUrl: null, help: false, repository: null, tag: null, watch: false };
+  const parsed = {
+    branch: null,
+    broadcast: true,
+    broadcastUrl: null,
+    help: false,
+    publishAssets: true,
+    publishUrl: null,
+    repository: null,
+    tag: null,
+    watch: false,
+  };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--help" || arg === "-h") parsed.help = true;
     else if (arg === "--watch") parsed.watch = true;
     else if (arg === "--no-watch") parsed.watch = false;
     else if (arg === "--no-broadcast") parsed.broadcast = false;
+    else if (arg === "--no-publish-assets") parsed.publishAssets = false;
     else if (arg === "--broadcast-url") parsed.broadcastUrl = readValue(args, ++index, arg);
+    else if (arg === "--publish-url") parsed.publishUrl = readValue(args, ++index, arg);
     else if (arg === "--branch") parsed.branch = readValue(args, ++index, arg);
     else if (arg === "--repo") parsed.repository = readValue(args, ++index, arg);
     else if (arg === "--tag") parsed.tag = readValue(args, ++index, arg);
@@ -108,8 +127,10 @@ function printHelp() {
   - 使用 package.json 版本作为默认 tag，也可用 --tag 指定。
   - 使用 git push --no-verify 推送分支和 tag，避免发布时触发本地 testd pre-push 门禁。
   - 默认只触发 .github/workflows/release-clients.yml，不等待 GitHub Actions。
-  - 加 --watch 时才等待工作流完成并核对 GitHub Release 资产。
+  - 加 --watch 时才等待工作流完成并核对 GitHub Release 镜像资产。
+  - --watch 核对 GitHub Release 镜像资产后，会在配置 ORF_CLIENT_UPDATE_PUBLISH_SECRET 时把安装包同步到 ORF 主更新源。
   - --watch 确认 Release 资产后，会在配置 ORF_CLIENT_UPDATE_BROADCAST_SECRET 时调用 ORF 服务端广播在线客户端。
+  - 可用 --no-publish-assets 跳过 ORF 主更新源同步，或用 --publish-url 覆盖 ORF_CLIENT_UPDATE_PUBLISH_URL / ORF_APP_URL。
   - 可用 --no-broadcast 跳过发布后广播，或用 --broadcast-url 覆盖 ORF_CLIENT_UPDATE_BROADCAST_URL / ORF_APP_URL。
 `);
 }
@@ -204,11 +225,29 @@ function logSection(label) {
   console.log(`\n== ${label} ==`);
 }
 
-function formatBytes(value) {
-  if (!Number.isFinite(value)) return "unknown size";
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+async function publishClientUpdateReleaseToOrf(release) {
+  if (!options.publishAssets) {
+    console.log("已按 --no-publish-assets 跳过 ORF 主更新源同步。");
+    return;
+  }
+
+  const secret = process.env.ORF_CLIENT_UPDATE_PUBLISH_SECRET?.trim();
+  const targetUrl =
+    options.publishUrl ??
+    process.env.ORF_CLIENT_UPDATE_PUBLISH_URL ??
+    process.env.ORF_APP_URL;
+  if (!secret || !targetUrl) {
+    console.log("未配置 ORF_CLIENT_UPDATE_PUBLISH_SECRET 或 ORF_CLIENT_UPDATE_PUBLISH_URL/ORF_APP_URL，已跳过 ORF 主更新源同步。");
+    return;
+  }
+
+  const releaseVersion = normalizeReleaseVersion(release.tagName);
+  logSection(`同步 ORF 主更新源 ${releaseVersion}`);
+  try {
+    await publishReleaseToOrf({ release, secret, targetUrl });
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
 }
 
 async function broadcastClientUpdateRelease(release) {
@@ -250,15 +289,7 @@ async function broadcastClientUpdateRelease(release) {
 }
 
 function clientUpdateBroadcastEndpoint(value) {
-  const url = new URL(value);
-  if (url.pathname === "/" || url.pathname === "") {
-    return new URL("/api/client-updates/broadcast-release", url).toString();
-  }
-  return url.toString();
-}
-
-function normalizeReleaseVersion(value) {
-  return String(value ?? "").trim().replace(/^v/i, "");
+  return clientUpdateApiEndpoint(value, "/api/client-updates/broadcast-release");
 }
 
 function fail(message) {

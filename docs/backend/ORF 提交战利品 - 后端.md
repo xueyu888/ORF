@@ -170,7 +170,7 @@
 结算事件分为两类：
 
 - `deadlinePenalty`：目标已到截止日且验收不通过时，在 `revisionRequired` 状态执行；事件倍率为 `50%`，写入惩罚积分后目标仍保持 `revisionRequired`，挑战者必须继续完成并重新提交。
-- `finalCompletion`：最终验收通过后在 `accepted` 状态执行；如果此前已有 `deadlinePenalty`，该事件写入剩余 `50%`；否则沿用原按时/延期完成倍率。该事件完成后将 `Objective.flowStatus` 改为 `settled`。
+- `finalCompletion`：最终验收通过后在 `accepted` 状态执行；如果此前已有 `deadlinePenalty`，该事件写入 `0` 分，本期扣掉的分不补回；否则沿用原按时/延期完成倍率。该事件完成后将 `Objective.flowStatus` 改为 `settled`。
 
 ## 约束
 

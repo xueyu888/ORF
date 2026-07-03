@@ -1163,14 +1163,26 @@ function sendDesktopWindowState(targetWindow) {
 function isTrustedClientUpdateUrl(value) {
   try {
     const url = new URL(value);
-    return (
-      url.protocol === "https:" &&
-      url.hostname === "github.com" &&
-      /^\/xueyu888\/ORF\/releases(?:\/|$)/.test(url.pathname)
-    );
+    return isTrustedGitHubReleaseUrl(url) || isTrustedOrfClientUpdateAssetUrl(url);
   } catch {
     return false;
   }
+}
+
+function isTrustedGitHubReleaseUrl(url) {
+  return (
+    url.protocol === "https:" &&
+    url.hostname === "github.com" &&
+    /^\/xueyu888\/ORF\/releases(?:\/|$)/.test(url.pathname)
+  );
+}
+
+function isTrustedOrfClientUpdateAssetUrl(url) {
+  return (
+    url.protocol === "https:" &&
+    url.hostname === "orf-xueyu.duckdns.org" &&
+    /^\/api\/client-updates\/assets\/[^/]+\/[^/]+$/.test(url.pathname)
+  );
 }
 
 function registerNativeRuntimeBridge() {

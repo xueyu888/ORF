@@ -1,6 +1,12 @@
 import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
-import { isClientReleaseVersion, isTrustedClientUpdateUrl, type ClientReleaseAsset, type ClientUpdatePlatform } from "./clientUpdateModel";
+import {
+  isClientReleaseVersion,
+  isTrustedClientUpdateUrl,
+  selectClientUpdateMirrorFallbackUrl,
+  type ClientReleaseAsset,
+  type ClientUpdatePlatform,
+} from "./clientUpdateModel";
 
 export type NativeRuntimeInfo = {
   deviceManufacturer?: string | null;
@@ -52,6 +58,11 @@ type ClientUpdateInstallPayload = {
   name: string;
   url: string;
 };
+
+type NativeInstallUpdate = NonNullable<NativeRuntimeBridge["installUpdate"]>;
+type ClientUpdateProgressEmitter = (
+  progress: Partial<ClientUpdateInstallProgress> & { stage: ClientUpdateInstallProgressStage },
+) => void;
 
 type AndroidClientUpdatePlugin = {
   addListener: (eventName: "installProgress", listenerFunc: ClientUpdateInstallProgressHandler) => Promise<PluginListenerHandle>;
@@ -126,7 +137,7 @@ export async function installClientUpdateAsset(
     const removeProgressListener = subscribeDesktopInstallProgress(installId, asset, options.onProgress);
     try {
       emitProgress({ downloadedBytes: 0, stage: "preparing" });
-      const result = normalizeClientUpdateInstallResult(await window.orfNativeRuntime.installUpdate(payload));
+      const result = await installDesktopClientUpdateWithMirrorFallback(window.orfNativeRuntime.installUpdate, asset, payload, emitProgress);
       emitTerminalInstallProgress(result, emitProgress);
       return result;
     } finally {
@@ -171,6 +182,27 @@ export async function openClientUpdateUrl(url: string) {
 
 function normalizeClientUpdateInstallResult(result: ClientUpdateInstallResult | undefined): ClientUpdateInstallResult {
   return result?.status ? result : { status: "success" };
+}
+
+async function installDesktopClientUpdateWithMirrorFallback(
+  installUpdate: NativeInstallUpdate,
+  asset: ClientReleaseAsset,
+  payload: ClientUpdateInstallPayload,
+  emitProgress: ClientUpdateProgressEmitter,
+) {
+  const primaryResult = await installDesktopClientUpdatePayload(installUpdate, payload);
+  const fallbackUrl = selectClientUpdateMirrorFallbackUrl(asset, {
+    attemptedUrl: payload.url,
+    reason: primaryResult.reason,
+  });
+  if (!fallbackUrl) return primaryResult;
+
+  emitProgress({ downloadedBytes: 0, stage: "preparing" });
+  return installDesktopClientUpdatePayload(installUpdate, { ...payload, url: fallbackUrl });
+}
+
+async function installDesktopClientUpdatePayload(installUpdate: NativeInstallUpdate, payload: ClientUpdateInstallPayload) {
+  return normalizeClientUpdateInstallResult(await installUpdate(payload));
 }
 
 function createClientUpdateInstallId() {
@@ -229,7 +261,7 @@ async function subscribeAndroidInstallProgress(
 
 function emitTerminalInstallProgress(
   result: ClientUpdateInstallResult,
-  emitProgress: (progress: Partial<ClientUpdateInstallProgress> & { stage: ClientUpdateInstallProgressStage }) => void,
+  emitProgress: ClientUpdateProgressEmitter,
 ) {
   if (result.status === "success") {
     emitProgress({ percent: 100, stage: "complete" });

@@ -241,6 +241,7 @@ export function ChatComposer({
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     if (disabled) return;
+    if (event.defaultPrevented) return;
     const files = Array.from(event.dataTransfer.files ?? []).filter((file) => file.size > 0);
     if (files.length === 0) return;
     event.preventDefault();

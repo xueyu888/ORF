@@ -574,16 +574,19 @@ export function OrfRichTextEditor({
     const filesHandled = files.length > 0 ? onFilesInsertRef.current?.(files) : false;
     if (filesHandled) {
       event.preventDefault();
+      event.stopPropagation();
       return;
     }
     if (files.length > 0 && onUploadAttachmentRef.current) {
       event.preventDefault();
+      event.stopPropagation();
       void uploadAttachments(files);
       return;
     }
     const image = files.find(isImageFile);
     if (!image || !onUploadImageRef.current) return;
     event.preventDefault();
+    event.stopPropagation();
     uploadAttachmentRef.current(image);
   };
 
