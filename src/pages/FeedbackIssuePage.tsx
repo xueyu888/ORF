@@ -313,7 +313,7 @@ export function FeedbackIssuePage() {
         </section>
 
         <aside className="feedback-issue-sidebar" aria-label="反馈属性">
-          <RelatedResourcesPanel contextId={feedback.id} contextType="feedback" />
+          <RelatedResourcesPanel canEdit={Boolean(currentUser)} contextId={feedback.id} contextType="feedback" notify={notify} />
           <IssueSidebar comments={threads} feedback={feedback} feedbackItems={state.feedback} users={state.users} />
         </aside>
       </main>

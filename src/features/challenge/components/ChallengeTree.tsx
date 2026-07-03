@@ -75,6 +75,7 @@ type RowHandlers = {
   editingTarget: ChallengeTarget | null;
   trialReviews: ObjectiveTrialReview[];
   canManageFlow: boolean;
+  notify: (message: string) => void;
   canEditTargetTitle: (target: ChallengeTarget) => boolean;
   peerReviewActionLabel: (objectiveId: string) => string | null;
   settlementEventsForObjective: (objectiveId: string) => readonly ObjectiveSettlementEvent[];
@@ -576,11 +577,13 @@ function ObjectivePanel({
       )}
 
       <RelatedResourcesPanel
+        canEdit={Boolean(handlers.currentUser)}
         className="orf-objective-related-resources"
         compact
         contextId={group.objective.id}
         contextType="objective"
         hideWhenEmpty
+        notify={handlers.notify}
         title="目标资源"
       />
 
@@ -1270,12 +1273,14 @@ function ActionRow({
 
       {action && open && (
         <RelatedResourcesPanel
+          canEdit={Boolean(handlers.currentUser)}
           className="orf-task-related-resources"
           compact
           contextId={action.id}
           contextType="task"
           hideWhenEmpty
           limit={4}
+          notify={handlers.notify}
           title="任务资源"
         />
       )}

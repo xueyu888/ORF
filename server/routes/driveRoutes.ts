@@ -54,7 +54,12 @@ const createFolderBodySchema = z.object({
   parentNodeId: z.string().min(1),
 });
 const uploadFieldsSchema = z.object({
+  contextId: z.string().min(1).optional(),
+  contextLabel: z.string().trim().max(160).optional(),
+  contextType: z.enum(["project", "objective", "result", "task", "feedback", "workLog", "chatChannel", "chatMessage", "chatThread"]).optional(),
   parentNodeId: z.string().min(1),
+}).refine((value) => Boolean(value.contextId) === Boolean(value.contextType), {
+  message: "contextId and contextType must be provided together",
 });
 const chatDriveLinkBodySchema = z.object({
   isDefaultUploadTarget: z.boolean().optional(),
@@ -106,7 +111,7 @@ function sendDriveOutcome<T extends { status: string }>(reply: FastifyReply, out
 
 async function uploadDriveFromRequest(request: FastifyRequest, input: { actor: ChatActor; channelId?: string | null }) {
   const fields: Record<string, string> = {};
-  for await (const part of request.parts({ limits: { fields: 2, files: 1, fileSize: env.ORF_INFRA_UPLOAD_MAX_BYTES } })) {
+  for await (const part of request.parts({ limits: { fields: 4, files: 1, fileSize: env.ORF_INFRA_UPLOAD_MAX_BYTES } })) {
     if (part.type === "field" && typeof part.value === "string") {
       fields[part.fieldname] = part.value;
       continue;
@@ -124,6 +129,11 @@ async function uploadDriveFromRequest(request: FastifyRequest, input: { actor: C
       return uploadDriveFile({
         body: part.file,
         channelId: input.channelId,
+        contextLink: parsed.data.contextId && parsed.data.contextType ? {
+          contextId: parsed.data.contextId,
+          contextType: parsed.data.contextType,
+          label: parsed.data.contextLabel,
+        } : undefined,
         fileName: part.filename,
         mimeType: part.mimetype,
         parentNodeId: parsed.data.parentNodeId,

@@ -111,7 +111,6 @@ export function ChatHeader({
           </button>
         )}
         <IconButton icon={Search} label="搜索消息" onClick={onSearch} />
-        <IconButton icon={Info} label={infoLabel} onClick={onInfo} />
         <div className="orf-chat-header-more" ref={moreMenuRef}>
           <IconButton
             icon={MoreHorizontal}
@@ -122,6 +121,10 @@ export function ChatHeader({
           />
           {moreOpen && (
             <div className="orf-chat-header-more-menu" role="menu">
+              <button type="button" role="menuitem" onClick={() => runMenuAction(onInfo)}>
+                <Info className="h-4 w-4" />
+                {infoLabel}
+              </button>
               <button type="button" role="menuitem" onClick={() => runMenuAction(onToggleFavorite)}>
                 <Star className="h-4 w-4" />
                 {membership?.favorite ? "取消收藏" : "收藏频道"}

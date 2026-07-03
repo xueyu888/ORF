@@ -1051,7 +1051,14 @@ export async function createDriveFolder(
 }
 
 export async function uploadDriveFile(
-  input: { body: Readable; channelId?: string | null; fileName: string; mimeType: string; parentNodeId: string },
+  input: {
+    body: Readable;
+    channelId?: string | null;
+    contextLink?: { contextId: string; contextType: DriveContextType; label?: string | null };
+    fileName: string;
+    mimeType: string;
+    parentNodeId: string;
+  },
   actor: ChatActor,
 ): Promise<DriveUploadOutcome> {
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
@@ -1060,6 +1067,10 @@ export async function uploadDriveFile(
   const teamId = storageTeamId(actor);
   const parent = await findFolderNode(input.parentNodeId, teamId);
   if (!parent) return { status: "notFound" };
+  const contextTitle = input.contextLink
+    ? await resolveDriveContext(teamId, input.contextLink.contextType, input.contextLink.contextId)
+    : null;
+  if (input.contextLink && !contextTitle) return { status: "notFound" };
 
   const fileId = makeId("drive-file");
   const nodeId = makeId("drive-node");
@@ -1155,6 +1166,40 @@ export async function uploadDriveFile(
         teamId,
         timestamp: now,
       });
+      if (input.contextLink) {
+        const label = input.contextLink.label?.trim() || null;
+        await client.query(
+          `
+            INSERT INTO drive_node_context_links (id, team_id, node_id, context_type, context_id, label, created_by, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (team_id, node_id, context_type, context_id)
+            DO UPDATE SET label = EXCLUDED.label
+          `,
+          [
+            makeId("drive-context-link"),
+            teamId,
+            nodeId,
+            input.contextLink.contextType,
+            input.contextLink.contextId,
+            label,
+            actor.id,
+            now,
+          ],
+        );
+        await recordDriveEvent(client, {
+          action: "context_linked",
+          actorUserId: actor.id,
+          metadata: {
+            contextId: input.contextLink.contextId,
+            contextTitle,
+            contextType: input.contextLink.contextType,
+            label,
+          },
+          nodeId,
+          teamId,
+          timestamp: now,
+        });
+      }
       await client.query("commit");
       persisted = true;
       const node = driveNodeDto(nodeRow);

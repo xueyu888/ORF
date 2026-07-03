@@ -849,12 +849,18 @@ export async function createDriveFolderRequest(input: { name: string; parentNode
 }
 
 export async function uploadDriveRequest(input: {
+  contextLink?: { contextId: string; contextType: DriveContextType; label?: string | null };
   file: File;
   onProgress?: (progress: ApiUploadProgress) => void;
   parentNodeId: string;
 }) {
   const formData = new FormData();
   formData.set("parentNodeId", input.parentNodeId);
+  if (input.contextLink) {
+    formData.set("contextId", input.contextLink.contextId);
+    formData.set("contextType", input.contextLink.contextType);
+    if (input.contextLink.label) formData.set("contextLabel", input.contextLink.label);
+  }
   formData.set("file", input.file);
   return uploadFormDataJson<DriveNodeResponse>(
     "/api/drive/upload",

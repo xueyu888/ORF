@@ -17813,38 +17813,27 @@ button.orf-chat-image-attachment {
   padding: 10px 12px 12px;
 }
 
-.orf-chat-resource-panel.is-dragging .orf-chat-resource-command {
-  border-color: var(--orf-accent-border);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--orf-chat-panel-chip-active-bg) 72%, var(--orf-chat-panel-control-hover-bg)),
-      color-mix(in srgb, var(--orf-chat-panel-control-hover-bg) 88%, var(--orf-chat-panel-chip-active-bg))
-    );
-  box-shadow: var(--orf-chat-panel-focus-ring);
-}
-
 .orf-chat-resource-topline {
   display: grid;
   min-width: 0;
-  row-gap: 2px;
-  align-items: end;
-  padding: 1px 0 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0 4px;
 }
 
-.orf-chat-resource-topline span,
-.orf-chat-resource-topline strong {
+.orf-chat-resource-topline > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.orf-chat-resource-topline strong,
+.orf-chat-resource-topline small {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.orf-chat-resource-topline span {
-  color: var(--orf-accent-text);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0;
 }
 
 .orf-chat-resource-topline strong {
@@ -17853,22 +17842,73 @@ button.orf-chat-image-attachment {
   font-weight: 950;
 }
 
-.orf-chat-resource-command {
-  display: grid;
-  width: 100%;
-  min-width: 0;
-  grid-template-columns: minmax(0, 1fr) 38px;
+.orf-chat-resource-topline small {
+  color: var(--orf-chat-panel-text-muted);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.orf-chat-resource-command-toggle {
+  display: inline-flex;
+  height: 32px;
   align-items: center;
-  gap: 8px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: transparent;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--orf-chat-panel-border) 82%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--orf-chat-panel-control-bg) 84%, transparent);
   color: var(--orf-chat-panel-text);
-  padding: 0;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 850;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease;
+}
+
+.orf-chat-resource-command-toggle:hover,
+.orf-chat-resource-command-toggle:focus-visible,
+.orf-chat-resource-command-toggle[aria-expanded="true"] {
+  border-color: var(--orf-accent-border);
+  background: var(--orf-chat-panel-control-hover-bg);
+  box-shadow: var(--orf-chat-panel-focus-ring);
+  color: var(--orf-accent-text);
+  outline: 0;
+}
+
+.orf-chat-resource-command-drawer {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--orf-chat-panel-border) 76%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--orf-chat-panel-item-bg) 72%, transparent);
+  color: var(--orf-chat-panel-text);
+  padding: 8px;
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--orf-chat-panel-text-strong) 5%, transparent);
   transition:
     border-color 140ms ease,
     background 140ms ease,
     box-shadow 140ms ease;
+}
+
+.orf-chat-resource-panel.is-dragging .orf-chat-resource-command-drawer,
+.orf-chat-resource-panel.is-dragging .orf-chat-resource-topline {
+  border-color: var(--orf-accent-border);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--orf-chat-panel-chip-active-bg) 64%, var(--orf-chat-panel-control-hover-bg)),
+      color-mix(in srgb, var(--orf-chat-panel-control-hover-bg) 86%, var(--orf-chat-panel-chip-active-bg))
+    );
+  box-shadow: var(--orf-chat-panel-focus-ring);
+}
+
+.orf-chat-resource-panel.is-dragging .orf-chat-resource-topline {
+  border-radius: 10px;
+  padding-inline: 8px;
 }
 
 .orf-chat-resource-search {
@@ -17889,16 +17929,19 @@ button.orf-chat-image-attachment {
 }
 
 .orf-chat-resource-upload-button {
-  display: inline-flex;
-  width: 38px;
-  height: 36px;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
-  justify-content: center;
+  gap: 8px;
   border: 1px solid var(--orf-chat-panel-border);
   border-radius: 9px;
   background: var(--orf-chat-panel-control-bg);
   color: var(--orf-chat-panel-text);
-  padding: 0;
+  padding: 8px 10px;
+  text-align: left;
   transition:
     border-color 140ms ease,
     background 140ms ease,
@@ -17919,6 +17962,54 @@ button.orf-chat-image-attachment {
   cursor: not-allowed;
   color: var(--orf-chat-panel-control-disabled-text);
   opacity: 1;
+}
+
+.orf-chat-resource-upload-button > span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.orf-chat-resource-upload-button strong,
+.orf-chat-resource-upload-button small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-chat-resource-upload-button strong {
+  color: var(--orf-chat-panel-text-strong);
+  font-size: 12px;
+  font-weight: 860;
+}
+
+.orf-chat-resource-upload-button small {
+  color: var(--orf-chat-panel-text-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.orf-chat-resource-open-drive {
+  display: grid;
+  min-width: 0;
+  min-height: 34px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  border-radius: 8px;
+  color: var(--orf-chat-panel-text-muted);
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.orf-chat-resource-open-drive:hover,
+.orf-chat-resource-open-drive:focus-visible {
+  background: var(--orf-chat-panel-item-hover-bg);
+  color: var(--orf-accent-text);
+  outline: 0;
 }
 
 .orf-chat-resource-upload-status {
@@ -18382,8 +18473,14 @@ button.orf-chat-image-attachment {
   gap: 8px;
 }
 
+.orf-related-resources-header > span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
 .orf-related-resources-header strong,
-.orf-related-resources-header span {
+.orf-related-resources-header small {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -18396,10 +18493,198 @@ button.orf-chat-image-attachment {
   font-weight: 900;
 }
 
-.orf-related-resources-header span {
+.orf-related-resources-header small {
   color: var(--orf-related-resource-muted);
   font-size: 11px;
   font-weight: 760;
+}
+
+.orf-related-resources-add {
+  display: inline-flex;
+  min-width: 0;
+  height: 28px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--orf-related-resource-border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--orf-bg-elevated) 80%, transparent);
+  color: var(--orf-related-resource-muted);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 820;
+  white-space: nowrap;
+}
+
+.orf-related-resources-add:hover,
+.orf-related-resources-add:focus-visible {
+  border-color: var(--orf-accent-border);
+  background: var(--orf-related-resource-hover);
+  color: var(--orf-accent-text);
+  outline: 0;
+}
+
+.orf-related-resource-tools {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--orf-related-resource-border) 78%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--orf-bg-muted) 48%, transparent);
+  padding: 7px;
+}
+
+.orf-related-resource-tool-tabs {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.orf-related-resource-tool-tabs button {
+  display: inline-flex;
+  min-width: 0;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--orf-related-resource-border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--orf-bg-card) 82%, transparent);
+  color: var(--orf-related-resource-muted);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.orf-related-resource-tool-tabs button.is-active {
+  border-color: var(--orf-accent-border);
+  background: var(--orf-accent-soft);
+  color: var(--orf-accent-text);
+}
+
+.orf-related-resource-upload,
+.orf-related-resource-search {
+  display: grid;
+  min-width: 0;
+  align-items: center;
+  border: 1px solid var(--orf-related-resource-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--orf-bg-elevated) 84%, transparent);
+  color: var(--orf-related-resource-text);
+}
+
+.orf-related-resource-upload {
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px;
+  text-align: left;
+}
+
+.orf-related-resource-upload:not(:disabled):hover,
+.orf-related-resource-upload:not(:disabled):focus-visible,
+.orf-related-resource-search:focus-within {
+  border-color: var(--orf-accent-border);
+  background: var(--orf-related-resource-hover);
+  outline: 0;
+}
+
+.orf-related-resource-upload span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.orf-related-resource-upload strong,
+.orf-related-resource-upload small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-related-resource-upload strong {
+  color: var(--orf-related-resource-text);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.orf-related-resource-upload small {
+  color: var(--orf-related-resource-muted);
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.orf-related-resource-search {
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 7px;
+  padding: 0 8px;
+}
+
+.orf-related-resource-search input {
+  min-width: 0;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--orf-related-resource-text);
+  font-size: 12px;
+  font-weight: 760;
+  outline: 0;
+}
+
+.orf-related-resource-search-results {
+  display: grid;
+  min-width: 0;
+  max-height: 190px;
+  gap: 3px;
+  overflow: auto;
+}
+
+.orf-related-resource-search-results button {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 18px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--orf-related-resource-text);
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.orf-related-resource-search-results button:hover,
+.orf-related-resource-search-results button:focus-visible {
+  background: var(--orf-related-resource-hover);
+  color: var(--orf-accent-text);
+  outline: 0;
+}
+
+.orf-related-resource-search-results button > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.orf-related-resource-search-results strong,
+.orf-related-resource-search-results small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-related-resource-search-results strong {
+  color: inherit;
+  font-size: 12px;
+  font-weight: 830;
+}
+
+.orf-related-resource-search-results small {
+  color: var(--orf-related-resource-muted);
+  font-size: 11px;
+  font-weight: 720;
 }
 
 .orf-related-resources-list {
@@ -18408,9 +18693,23 @@ button.orf-chat-image-attachment {
   gap: 3px;
 }
 
+.orf-related-resource-row-shell {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px;
+  border-radius: 7px;
+}
+
+.orf-related-resource-row-shell:hover {
+  background: var(--orf-related-resource-hover);
+}
+
 .orf-related-resource-row {
   display: grid;
   min-width: 0;
+  width: 100%;
   min-height: 40px;
   grid-template-columns: 18px minmax(0, 1fr) 16px;
   align-items: center;
@@ -18423,7 +18722,6 @@ button.orf-chat-image-attachment {
 
 .orf-related-resource-row:hover,
 .orf-related-resource-row:focus-visible {
-  background: var(--orf-related-resource-hover);
   color: var(--orf-accent-text);
   outline: 0;
 }
@@ -18452,6 +18750,38 @@ button.orf-chat-image-attachment {
   color: var(--orf-related-resource-muted);
   font-size: 11px;
   font-weight: 720;
+}
+
+.orf-related-resource-unlink {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--orf-related-resource-muted);
+  opacity: 0;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease;
+}
+
+.orf-related-resource-row-shell:hover .orf-related-resource-unlink,
+.orf-related-resource-unlink:focus-visible,
+.orf-related-resource-unlink:disabled {
+  opacity: 1;
+}
+
+.orf-related-resource-unlink:hover,
+.orf-related-resource-unlink:focus-visible {
+  border-color: var(--orf-danger-border);
+  background: var(--orf-danger-bg);
+  color: var(--orf-danger-text);
+  outline: 0;
 }
 
 .orf-related-resources-empty {

@@ -15,7 +15,7 @@
 
 1. 用户打开一级云盘或群聊云盘入口时，后端确保当前团队有一个云盘根文件夹。
 2. 创建文件夹只写 `drive_nodes`；同一父文件夹下的未删除节点名唯一。
-3. 上传文件先把原件流式写入对象存储，再写入 `drive_nodes`、`drive_files` 和 `drive_file_versions` 的初始版本。
+3. 上传文件先校验可选工作上下文，再把原件流式写入对象存储，随后在同一数据库事务中写入 `drive_nodes`、`drive_files`、`drive_file_versions` 和可选 `drive_node_context_links`。
 4. 上传新版本只追加 `drive_file_versions`，再更新 `drive_files` 当前版本投影和 `drive_nodes.updated_at`。
 5. 搜索、最近列表、详情面板、版本列表和活动流都是后端读模型；前端不维护第二套文件事实。
 6. 群聊上传只是选择一个云盘文件夹作为落点；上传成功后可以在当前群聊生成一条普通消息动态。
@@ -37,7 +37,7 @@
 - `GET /api/drive/nodes/:nodeId/children`：按文件夹懒加载子节点。
 - `GET /api/drive/nodes/:nodeId/details`：返回节点详情、路径、工作上下文、版本和活动。
 - `POST /api/drive/folders`：在指定父文件夹下创建子文件夹。
-- `POST /api/drive/upload`：上传文件到指定父文件夹。
+- `POST /api/drive/upload`：上传文件到指定父文件夹；可选 `contextType`、`contextId`、`contextLabel` 会在同一事务中把新文件关联到工作上下文。
 - `DELETE /api/drive/nodes/:nodeId`：软删除文件或文件夹。
 - `POST /api/drive/nodes/:nodeId/restore`：从回收站恢复文件或文件夹。
 - `POST /api/drive/nodes/:nodeId/context-links`：把文件或文件夹关联到项目、目标、指标、任务、反馈、工作日志、群聊频道、聊天消息或话题上下文。
@@ -62,10 +62,10 @@
 
 ## 对标产品能力映射
 
-- Slack 式群聊资源入口：`chat_channel_drive_links` 让频道以轻量资源流显示已绑定资源、默认上传文件夹、搜索命令行、上传图标、面板拖拽上传、团队资源查找和选中资源预览；固定到频道、下载、打开详情等次级操作收在资源菜单里，版本、回收站、上下文管理等完整操作留在 `/resources`。
+- Slack 式群聊资源入口：`chat_channel_drive_links` 让频道默认以轻量资源流显示已绑定资源、默认上传文件夹和选中资源预览；上传、团队资源查找、打开完整云盘等动作进入命令抽屉，面板仍支持拖拽上传；固定到频道、下载、打开详情等次级操作收在资源菜单里，版本、回收站、上下文管理等完整操作留在 `/resources`。
 - Google Drive 式搜索预览：`/api/drive/search`、详情面板和安全预览 URL 都由后端统一输出；搜索读模型会合并 `drive_node_context_links` 与 `chat_channel_drive_links`，但不读取对象存储正文做全文索引。
 - Dropbox 式可靠恢复：`drive_nodes.deleted_at` 驱动回收站，`drive_file_versions` 支持版本恢复，`drive_node_events` 保留操作证据。
-- Linear 式工作上下文：`drive_node_context_links` 把文件显式关联到项目、目标、指标、任务、反馈、工作日志或聊天上下文，但不改变这些业务对象或云盘自身事实源；目标、任务和反馈页面只通过 `/api/drive/search?contextType=...&contextId=...` 读取相关资源投影，不在业务页复制云盘管理状态机。
+- Linear 式工作上下文：`drive_node_context_links` 把文件显式关联到项目、目标、指标、任务、反馈、工作日志或聊天上下文，但不改变这些业务对象或云盘自身事实源；目标、任务和反馈页面通过 `/api/drive/search?contextType=...&contextId=...` 读取相关资源投影，并通过云盘上传和 context-link API 编排上传、关联已有资源、取消关联，不在业务页复制云盘删除、恢复、版本或详情状态机。
 
 ## 不做的事
 

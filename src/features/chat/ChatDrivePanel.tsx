@@ -1,6 +1,6 @@
 import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
-import { Download, ExternalLink, File, FileText, Folder, Image, Link2, Loader2, MoreHorizontal, Search, Unlink, Upload } from "lucide-react";
+import { Download, ExternalLink, File, FileText, Folder, Image, Link2, Loader2, MoreHorizontal, Plus, Search, Unlink, Upload, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { IconButton } from "../../components/ui";
 import {
@@ -53,6 +53,7 @@ export function ChatDrivePanel({
   const [links, setLinks] = useState<ChatDriveLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
+  const [commandOpen, setCommandOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<DriveNode[]>([]);
@@ -214,9 +215,12 @@ export function ChatDrivePanel({
   const uploadDisabled = !canWrite || !uploadTarget || loading || Boolean(uploadTask);
   const uploadTitle = !canWrite
     ? "当前频道不可上传资源"
-    : uploadTarget
+    : loading
+      ? "正在确认上传位置"
+      : uploadTarget
       ? `上传到 ${uploadTarget.name}`
       : "没有可用上传位置";
+  const uploadTargetLabel = uploadTarget ? uploadTarget.name : loading ? "正在确认上传位置" : "暂无可用上传位置";
 
   useEffect(() => {
     const file = selectedFile;
@@ -262,6 +266,7 @@ export function ChatDrivePanel({
         setSessionNodes((items) => dedupeDriveNodes([response.node, ...items]));
         setSelectedNodeId(response.node.id);
         setQuery("");
+        setCommandOpen(false);
         if (response.announcementMessage) onAnnouncementMessage?.(response.announcementMessage);
         void loadLinkedFolderChildren(links);
       } catch (error) {
@@ -310,6 +315,7 @@ export function ChatDrivePanel({
       setBootstrap(response.drive);
       setLinks(response.links);
       setQuery("");
+      setCommandOpen(false);
       setSelectedNodeId(node.id);
       void loadLinkedFolderChildren(response.links);
       notify("已加入频道资源");
@@ -346,36 +352,67 @@ export function ChatDrivePanel({
       onDrop={handlePanelDrop}
     >
       <div className="orf-chat-resource-topline">
-        <span>频道资源</span>
-        <strong title={contextLabel}>{contextLabel}</strong>
-      </div>
-
-      <div className="orf-chat-resource-command">
-        <form
-          className="orf-chat-resource-search"
-          onSubmit={(event) => {
-            event.preventDefault();
-          }}
-        >
-          <Search className="h-4 w-4" />
-          <input
-            value={query}
-            placeholder="搜索频道资源或团队云盘"
-            aria-label="搜索团队云盘资源"
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </form>
+        <span>
+          <strong title={contextLabel}>{contextLabel}</strong>
+          <small>
+            {loading ? "同步频道资源" : `${resourceCount} 项资源`}
+            {uploadTarget ? ` · 上传到 ${uploadTarget.name}` : ""}
+          </small>
+        </span>
         <button
           type="button"
-          className="orf-chat-resource-upload-button"
-          disabled={uploadDisabled}
-          title={uploadTitle}
-          aria-label={uploadTask ? "正在上传资源" : "上传资源"}
-          onClick={() => fileInputRef.current?.click()}
+          className="orf-chat-resource-command-toggle"
+          aria-expanded={commandOpen}
+          onClick={() => setCommandOpen((value) => !value)}
         >
-          {uploadTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {commandOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+          <span>{commandOpen ? "收起" : canWrite || canManage ? "添加" : "查找"}</span>
         </button>
       </div>
+
+      {commandOpen && (
+        <div className="orf-chat-resource-command-drawer">
+          {canWrite && (
+            <button
+              type="button"
+              className="orf-chat-resource-upload-button"
+              disabled={uploadDisabled}
+              title={uploadTitle}
+              aria-label={uploadTask ? "正在上传资源" : "上传资源"}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploadTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              <span>
+                <strong>{uploadTask?.fileName ?? "上传文件到频道资源"}</strong>
+                <small>
+                  {uploadTask
+                    ? uploadTask.percent === null ? "上传中" : `${Math.round(uploadTask.percent)}%`
+                    : uploadTargetLabel}
+                </small>
+              </span>
+            </button>
+          )}
+          <form
+            className="orf-chat-resource-search"
+            onSubmit={(event) => {
+              event.preventDefault();
+            }}
+          >
+            <Search className="h-4 w-4" />
+            <input
+              value={query}
+              placeholder={canManage ? "搜索并固定团队云盘资源" : "搜索频道资源和团队云盘"}
+              aria-label="搜索团队云盘资源"
+              autoFocus
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </form>
+          <Link className="orf-chat-resource-open-drive" to="/resources">
+            <ExternalLink className="h-4 w-4" />
+            <span>打开完整云盘</span>
+          </Link>
+        </div>
+      )}
       <input ref={fileInputRef} hidden multiple type="file" onChange={(event) => void uploadFiles(event.currentTarget.files)} />
       {(uploadTask || dragActive) && (
         <div className="orf-chat-resource-upload-status">
