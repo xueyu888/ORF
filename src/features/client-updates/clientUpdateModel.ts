@@ -103,11 +103,15 @@ export function selectClientUpdateMirrorFallbackUrl(
   asset: ClientReleaseAsset,
   rejection: { attemptedUrl: string; reason?: string | null },
 ) {
-  if (rejection.reason !== "invalid_payload") return null;
+  if (!isClientUpdateMirrorFallbackReason(rejection.reason)) return null;
   const mirrorDownloadUrl = cleanClientUpdateUrl(asset.mirrorDownloadUrl);
   if (!mirrorDownloadUrl || !isTrustedClientUpdateUrl(mirrorDownloadUrl)) return null;
   const attemptedUrl = cleanClientUpdateUrl(rejection.attemptedUrl);
   return mirrorDownloadUrl !== attemptedUrl ? mirrorDownloadUrl : null;
+}
+
+function isClientUpdateMirrorFallbackReason(reason: string | null | undefined) {
+  return reason === "invalid_payload" || reason === "untrusted_url";
 }
 
 function isTrustedGitHubReleaseUrl(url: URL) {
