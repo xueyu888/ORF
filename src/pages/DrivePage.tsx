@@ -58,6 +58,7 @@ export function DrivePage() {
         <DriveBrowser
           bootstrap={bootstrap}
           canWrite
+          contextLabel="团队空间"
           contextOptions={contextOptions}
           loading={loading}
           notify={notify}

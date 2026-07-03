@@ -76,6 +76,7 @@ export function ChatDrivePanel({
       canManageLinks={canManage}
       canWrite={canWrite}
       compact
+      contextLabel={channel.displayName || channel.name || "当前群聊"}
       contextOptions={contextOptions}
       links={links}
       loading={loading}

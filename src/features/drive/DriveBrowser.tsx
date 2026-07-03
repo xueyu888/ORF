@@ -52,6 +52,7 @@ type DriveBrowserProps = {
   canManageLinks?: boolean;
   canWrite: boolean;
   compact?: boolean;
+  contextLabel?: string;
   contextOptions?: DriveContextOption[];
   links?: ChatDriveLink[];
   loading: boolean;
@@ -93,6 +94,7 @@ export function DriveBrowser({
   canManageLinks = false,
   canWrite,
   compact = false,
+  contextLabel,
   contextOptions = [],
   links = [],
   loading,
@@ -197,6 +199,15 @@ export function DriveBrowser({
   const selectedFile = effectiveNode?.file ?? null;
   const textPreview = selectedFile ? textPreviewByFileId.get(selectedFile.id) : undefined;
   const textPreviewLoading = Boolean(selectedFile && textPreviewLoadingIds.has(selectedFile.id));
+  const rootItemCount = bootstrap?.children.length ?? 0;
+  const recentItemCount = bootstrap?.recentNodes?.length ?? 0;
+  const activeScopeLabel = contextLabel ?? (compact ? "当前群聊" : "团队空间");
+  const activeModeSummary =
+    mode === "browse" ? `${rootItemCount} 项根资源`
+      : mode === "recent" ? `${recentItemCount} 项最近更新`
+        : mode === "search" ? `${searchResults.length} 项搜索结果`
+          : `${trashNodes.length} 项可恢复资源`;
+  const uploadTargetLabel = uploadTarget?.name ?? "未选择上传位置";
 
   useEffect(() => {
     const nodeId = selectedNodeId;
@@ -518,22 +529,41 @@ export function DriveBrowser({
 
   return (
     <div className={clsx("orf-drive-panel", compact && "orf-drive-panel-compact")}>
+      <div className="orf-drive-workbench-header">
+        <div className="orf-drive-workbench-title">
+          <span>{compact ? "频道资源" : "团队云盘"}</span>
+          <strong>{activeScopeLabel}</strong>
+          <small>{activeModeSummary}</small>
+        </div>
+        <div className="orf-drive-workbench-meta" aria-label="云盘状态摘要">
+          <span><Folder className="h-3.5 w-3.5" />{rootItemCount}</span>
+          <span><Clock3 className="h-3.5 w-3.5" />{recentItemCount}</span>
+          <span><Trash2 className="h-3.5 w-3.5" />{bootstrap?.trashCount ?? 0}</span>
+        </div>
+      </div>
+
       {links.length > 0 && (
-        <div className="orf-drive-linked-strip" aria-label="群聊已绑定云盘资源">
-          {links.map((link) => (
-            <div key={link.id} className={clsx("orf-drive-linked-item", link.isDefaultUploadTarget && "is-default")}>
-              <button type="button" onClick={() => setSelectedNodeId(link.node.id)}>
-                {link.node.type === "folder" ? <Folder className="h-4 w-4" /> : <File className="h-4 w-4" />}
-                <span>{link.label || link.node.name}</span>
-                {link.isDefaultUploadTarget && <Star className="h-3.5 w-3.5" />}
-              </button>
-              {canManageLinks && onRemoveLink && (
-                <button type="button" className="orf-drive-linked-remove" aria-label="取消绑定" onClick={() => void removeLink(link.id)}>
-                  <Unlink className="h-3.5 w-3.5" />
+        <div className="orf-drive-linked-card">
+          <div className="orf-drive-linked-heading">
+            <strong>已绑定到群聊</strong>
+            <small>{links.length} 项</small>
+          </div>
+          <div className="orf-drive-linked-strip" aria-label="群聊已绑定云盘资源">
+            {links.map((link) => (
+              <div key={link.id} className={clsx("orf-drive-linked-item", link.isDefaultUploadTarget && "is-default")}>
+                <button type="button" onClick={() => setSelectedNodeId(link.node.id)}>
+                  {link.node.type === "folder" ? <Folder className="h-4 w-4" /> : <File className="h-4 w-4" />}
+                  <span>{link.label || link.node.name}</span>
+                  {link.isDefaultUploadTarget && <Star className="h-3.5 w-3.5" />}
                 </button>
-              )}
-            </div>
-          ))}
+                {canManageLinks && onRemoveLink && (
+                  <button type="button" className="orf-drive-linked-remove" aria-label="取消绑定" onClick={() => void removeLink(link.id)}>
+                    <Unlink className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -543,6 +573,9 @@ export function DriveBrowser({
             key={item}
             type="button"
             className={clsx(mode === item && "is-active")}
+            aria-label={item === "trash" && bootstrap?.trashCount ? `${modeLabels[item]} ${bootstrap.trashCount}` : modeLabels[item]}
+            aria-pressed={mode === item}
+            title={modeLabels[item]}
             onClick={() => {
               if (item === "trash") void loadTrash();
               else setMode(item);
@@ -566,7 +599,7 @@ export function DriveBrowser({
         }}
       >
         <Search className="h-4 w-4" />
-        <input value={searchQuery} placeholder="搜索文件名、类型、内容线索" onChange={(event) => setSearchQuery(event.target.value)} />
+        <input value={searchQuery} placeholder={compact ? "搜索频道文件" : "搜索文件名、类型、内容线索"} onChange={(event) => setSearchQuery(event.target.value)} />
         <select
           value={searchType}
           onChange={(event) => {
@@ -595,6 +628,7 @@ export function DriveBrowser({
           </>
         )}
         <IconButton icon={RefreshCw} label="刷新" loading={loading} onClick={() => void onRefresh()} />
+        <span className="orf-drive-upload-target" title={uploadTargetLabel}>{uploadTargetLabel}</span>
         <input ref={fileInputRef} hidden multiple type="file" onChange={(event) => void uploadFiles(event.currentTarget.files)} />
         <input ref={versionInputRef} hidden type="file" onChange={(event) => void uploadVersion(event.currentTarget.files)} />
       </div>
@@ -651,6 +685,7 @@ export function DriveBrowser({
             node={effectiveNode}
             onAddContext={onAddContextLink ? addContext : undefined}
             onRemoveContext={onRemoveContextLink ? removeContext : undefined}
+            onRestoreNode={onRestoreNode ? () => void restoreSelectedNode() : undefined}
             onRestoreVersion={onRestoreVersion ? restoreVersion : undefined}
             textPreview={textPreview}
             textPreviewLoading={textPreviewLoading}
@@ -686,7 +721,7 @@ function DriveResourceList({ nodes, onSelect, selectedNodeId }: { nodes: DriveNo
             <span className="orf-drive-row-spacer" />
             <Icon className="h-4 w-4" />
             <span>{node.name}</span>
-            {node.file && <small>{formatFileSize(node.file.fileSize)}</small>}
+            <small>{driveNodeMetaLabel(node)}</small>
           </button>
         );
       })}
@@ -736,7 +771,7 @@ function DriveTreeRow({
         )}
         <Icon className="h-4 w-4" />
         <span>{node.name}</span>
-        {node.file && <small>{formatFileSize(node.file.fileSize)}</small>}
+        <small>{driveNodeMetaLabel(node)}</small>
       </button>
       {folder && expanded && children.map((child) => (
         <DriveTreeRow
@@ -764,6 +799,7 @@ function DrivePreview({
   node,
   onAddContext,
   onRemoveContext,
+  onRestoreNode,
   onRestoreVersion,
   textPreview,
   textPreviewLoading,
@@ -777,6 +813,7 @@ function DrivePreview({
   node: DriveNode | null;
   onAddContext?: (contextKey: string) => void;
   onRemoveContext?: (linkId: string) => void;
+  onRestoreNode?: () => void;
   onRestoreVersion?: (versionId: string) => void;
   textPreview?: string;
   textPreviewLoading?: boolean;
@@ -787,22 +824,36 @@ function DrivePreview({
   }
   const file = node.file ?? null;
   const previewUrl = file?.previewUrl ? drivePreviewUrl(file) : undefined;
+  const PreviewIcon = node.type === "folder" ? Folder : iconForFile(node);
   return (
     <div className="orf-drive-preview-stack">
       {node.type === "folder" ? (
-        <div className="orf-drive-preview-empty">
-          <Folder className="h-8 w-8" />
-          <strong>{node.name}</strong>
-          {node.deletedAt && <span>已在回收站</span>}
-          {uploadTarget?.id === node.id && !node.deletedAt && <span>上传目标</span>}
-          {defaultUploadFolder?.id === node.id && <span>群聊默认上传</span>}
+        <div className="orf-drive-folder-preview">
+          <div className="orf-drive-folder-preview-icon"><Folder className="h-7 w-7" /></div>
+          <div>
+            <strong>{node.name}</strong>
+            <small>{node.deletedAt ? "已在回收站" : "文件夹"}</small>
+          </div>
+          <div className="orf-drive-preview-badges">
+            {uploadTarget?.id === node.id && !node.deletedAt && <span>上传目标</span>}
+            {defaultUploadFolder?.id === node.id && <span>群聊默认上传</span>}
+          </div>
         </div>
       ) : file ? (
         <div className="orf-drive-preview">
           <div className="orf-drive-preview-meta">
-            <strong>{file.fileName}</strong>
-            <small>{formatFileSize(file.fileSize)} · {file.createdByName ?? "未知成员"} · v{file.latestVersionNumber ?? 1}</small>
-            <a href={file.downloadUrl}>
+            <div className="orf-drive-preview-title">
+              <PreviewIcon className="h-4 w-4" />
+              <div>
+                <strong>{file.fileName}</strong>
+                <small>{formatFileSize(file.fileSize)} · {file.createdByName ?? "未知成员"} · {formatDateTime(node.updatedAt)}</small>
+              </div>
+            </div>
+            <div className="orf-drive-preview-badges">
+              <span>v{file.latestVersionNumber ?? 1}</span>
+              <span>{drivePreviewKindLabel(file.previewKind)}</span>
+            </div>
+            <a className="orf-drive-download-link" href={file.downloadUrl}>
               <Download className="h-4 w-4" />
               下载
             </a>
@@ -839,6 +890,7 @@ function DrivePreview({
         node={node}
         onAddContext={onAddContext}
         onRemoveContext={onRemoveContext}
+        onRestoreNode={onRestoreNode}
         onRestoreVersion={onRestoreVersion}
       />
     </div>
@@ -853,6 +905,7 @@ function DriveDetails({
   node,
   onAddContext,
   onRemoveContext,
+  onRestoreNode,
   onRestoreVersion,
 }: {
   canWrite: boolean;
@@ -862,17 +915,18 @@ function DriveDetails({
   node: DriveNode | null;
   onAddContext?: (contextKey: string) => void;
   onRemoveContext?: (linkId: string) => void;
+  onRestoreNode?: () => void;
   onRestoreVersion?: (versionId: string) => void;
 }) {
   if (loading) {
-    if (details) return <DriveDetailsContent canWrite={canWrite} contextOptions={contextOptions} details={details} onAddContext={onAddContext} onRemoveContext={onRemoveContext} onRestoreVersion={onRestoreVersion} />;
-    return <DriveDetailsLoading node={node} />;
+    if (details) return <DriveDetailsContent canWrite={canWrite} contextOptions={contextOptions} details={details} onAddContext={onAddContext} onRemoveContext={onRemoveContext} onRestoreNode={onRestoreNode} onRestoreVersion={onRestoreVersion} />;
+    return <DriveDetailsLoading canWrite={canWrite} node={node} onRestoreNode={onRestoreNode} />;
   }
   if (!details) return null;
-  return <DriveDetailsContent canWrite={canWrite} contextOptions={contextOptions} details={details} onAddContext={onAddContext} onRemoveContext={onRemoveContext} onRestoreVersion={onRestoreVersion} />;
+  return <DriveDetailsContent canWrite={canWrite} contextOptions={contextOptions} details={details} onAddContext={onAddContext} onRemoveContext={onRemoveContext} onRestoreNode={onRestoreNode} onRestoreVersion={onRestoreVersion} />;
 }
 
-function DriveDetailsLoading({ node }: { node: DriveNode | null }) {
+function DriveDetailsLoading({ canWrite, node, onRestoreNode }: { canWrite: boolean; node: DriveNode | null; onRestoreNode?: () => void }) {
   const file = node?.file ?? null;
   return (
     <div className="orf-drive-details" aria-busy="true">
@@ -882,7 +936,10 @@ function DriveDetailsLoading({ node }: { node: DriveNode | null }) {
       </div>
 
       <div className="orf-drive-detail-section">
-        <h3>详情</h3>
+        <div className="orf-drive-detail-heading">
+          <h3>详情</h3>
+          {node?.deletedAt && <span>可恢复</span>}
+        </div>
         <p>{node?.name ?? "正在同步详情"}</p>
         {node ? (
           <dl>
@@ -893,6 +950,12 @@ function DriveDetailsLoading({ node }: { node: DriveNode | null }) {
             {node.deletedAt && <div><dt>删除</dt><dd>{formatDateTime(node.deletedAt)}</dd></div>}
           </dl>
         ) : null}
+        {node?.deletedAt && canWrite && onRestoreNode && (
+          <Button className="orf-drive-restore-callout" size="sm" variant="secondary" onClick={onRestoreNode}>
+            <RotateCcw className="h-3.5 w-3.5" />
+            恢复此{node.type === "folder" ? "文件夹" : "文件"}
+          </Button>
+        )}
       </div>
 
       <div className="orf-drive-detail-section">
@@ -914,6 +977,7 @@ function DriveDetailsContent({
   details,
   onAddContext,
   onRemoveContext,
+  onRestoreNode,
   onRestoreVersion,
 }: {
   canWrite: boolean;
@@ -921,29 +985,44 @@ function DriveDetailsContent({
   details: DriveNodeDetails;
   onAddContext?: (contextKey: string) => void;
   onRemoveContext?: (linkId: string) => void;
+  onRestoreNode?: () => void;
   onRestoreVersion?: (versionId: string) => void;
 }) {
   const node = details.node;
   return (
-    <div className="orf-drive-details">
+    <div className="orf-drive-details" data-deleted={node.deletedAt ? "true" : "false"}>
       <div className="orf-drive-detail-section">
-        <h3>详情</h3>
+        <div className="orf-drive-detail-heading">
+          <h3>详情</h3>
+          {node.deletedAt && <span>可恢复</span>}
+        </div>
         <p>{details.path.map((item) => item.name).join(" / ")}</p>
         <dl>
           <div><dt>类型</dt><dd>{node.type === "folder" ? "文件夹" : node.file?.mimeType ?? "文件"}</dd></div>
+          {node.file && <div><dt>大小</dt><dd>{formatFileSize(node.file.fileSize)}</dd></div>}
           <div><dt>创建</dt><dd>{formatDateTime(node.createdAt)}</dd></div>
           <div><dt>更新</dt><dd>{formatDateTime(node.updatedAt)}</dd></div>
           {node.deletedAt && <div><dt>删除</dt><dd>{formatDateTime(node.deletedAt)}</dd></div>}
         </dl>
+        {node.deletedAt && canWrite && onRestoreNode && (
+          <Button className="orf-drive-restore-callout" size="sm" variant="secondary" onClick={onRestoreNode}>
+            <RotateCcw className="h-3.5 w-3.5" />
+            恢复此{node.type === "folder" ? "文件夹" : "文件"}
+          </Button>
+        )}
       </div>
 
       <div className="orf-drive-detail-section">
-        <h3>工作上下文</h3>
+        <div className="orf-drive-detail-heading">
+          <h3>工作上下文</h3>
+          <span>{details.contextLinks.length} 个关联</span>
+        </div>
         {details.contextLinks.length > 0 ? (
           <div className="orf-drive-context-list">
             {details.contextLinks.map((link) => (
-              <span key={link.id}>
-                {contextTypeLabel(link.contextType)} · {link.contextTitle}
+              <span key={link.id} className="orf-drive-context-item" data-context-type={link.contextType}>
+                <strong>{contextTypeLabel(link.contextType)}</strong>
+                <em>{link.contextTitle}</em>
                 {canWrite && onRemoveContext && (
                   <button type="button" aria-label="移除上下文" onClick={() => onRemoveContext(link.id)}>
                     <Unlink className="h-3.5 w-3.5" />
@@ -973,13 +1052,17 @@ function DriveDetailsContent({
 
       {details.versions.length > 0 && (
         <div className="orf-drive-detail-section">
-          <h3>版本</h3>
+          <div className="orf-drive-detail-heading">
+            <h3>版本</h3>
+            <span>{details.versions.length} 个快照</span>
+          </div>
           <div className="orf-drive-version-list">
             {details.versions.map((version, index) => (
-              <div key={version.id}>
+              <div key={version.id} className={index === 0 ? "is-current" : undefined}>
                 <span>v{version.versionNumber}</span>
                 <strong>{version.fileName}</strong>
                 <small>{formatFileSize(version.fileSize)} · {formatDateTime(version.createdAt)}</small>
+                {index === 0 && <em>当前</em>}
                 {index > 0 && canWrite && onRestoreVersion && (
                   <button type="button" onClick={() => onRestoreVersion(version.id)}>
                     <RotateCcw className="h-3.5 w-3.5" />
@@ -993,7 +1076,10 @@ function DriveDetailsContent({
       )}
 
       <div className="orf-drive-detail-section">
-        <h3>活动</h3>
+        <div className="orf-drive-detail-heading">
+          <h3>活动</h3>
+          <span>{details.activity.length} 条</span>
+        </div>
         {details.activity.length > 0 ? (
           <div className="orf-drive-activity-list">
             {details.activity.map((event) => (
@@ -1016,6 +1102,21 @@ function iconForFile(node: DriveNode) {
   if (node.file?.previewKind === "image") return Image;
   if (node.file?.previewKind === "pdf" || node.file?.previewKind === "markdown" || node.file?.previewKind === "text") return FileText;
   return File;
+}
+
+function driveNodeMetaLabel(node: DriveNode) {
+  if (node.deletedAt) return `已删除 · ${formatDateTime(node.deletedAt)}`;
+  if (node.type === "folder") return "文件夹";
+  if (!node.file) return "文件";
+  return `${drivePreviewKindLabel(node.file.previewKind)} · ${formatFileSize(node.file.fileSize)}`;
+}
+
+function drivePreviewKindLabel(kind: Drive["previewKind"]) {
+  if (kind === "image") return "图片";
+  if (kind === "pdf") return "PDF";
+  if (kind === "markdown") return "Markdown";
+  if (kind === "text") return "文本";
+  return "文件";
 }
 
 function appendChildNode(items: Map<string, DriveNode[]>, parentId: string, node: DriveNode) {
