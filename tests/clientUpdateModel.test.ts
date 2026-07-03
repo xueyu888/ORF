@@ -6,6 +6,7 @@ import {
   isClientReleaseVersion,
   isTrustedClientUpdateUrl,
   selectClientUpdateAsset,
+  selectClientUpdateMirrorFallbackUrl,
   toClientReleaseTag,
   type ClientReleaseInfo,
 } from "../src/features/client-updates/clientUpdateModel";
@@ -88,4 +89,41 @@ test("client update external URLs are restricted to ORF assets and GitHub mirror
   assert.equal(isTrustedClientUpdateUrl("https://github.com/xueyu888/Other/releases/tag/v0.0.2"), false);
   assert.equal(isTrustedClientUpdateUrl("https://orf-xueyu.duckdns.org:8443/api/auth/session"), false);
   assert.equal(isTrustedClientUpdateUrl("https://example.com/xueyu888/ORF/releases/tag/v0.0.2"), false);
+});
+
+test("client update desktop install falls back to GitHub mirror only after native payload rejection", () => {
+  const asset = {
+    downloadUrl: "https://orf-xueyu.duckdns.org:8443/api/client-updates/assets/0.0.2/ORF-0.0.2-win11-x64-setup.exe",
+    mirrorDownloadUrl: "https://github.com/xueyu888/ORF/releases/download/v0.0.2/ORF-0.0.2-win11-x64-setup.exe",
+    name: "ORF-0.0.2-win11-x64-setup.exe",
+  };
+
+  assert.equal(
+    selectClientUpdateMirrorFallbackUrl(asset, {
+      attemptedUrl: asset.downloadUrl,
+      reason: "invalid_payload",
+    }),
+    asset.mirrorDownloadUrl,
+  );
+  assert.equal(
+    selectClientUpdateMirrorFallbackUrl(asset, {
+      attemptedUrl: asset.downloadUrl,
+      reason: "installer_download_failed",
+    }),
+    null,
+  );
+  assert.equal(
+    selectClientUpdateMirrorFallbackUrl({ ...asset, mirrorDownloadUrl: "https://example.com/ORF.exe" }, {
+      attemptedUrl: asset.downloadUrl,
+      reason: "invalid_payload",
+    }),
+    null,
+  );
+  assert.equal(
+    selectClientUpdateMirrorFallbackUrl({ ...asset, mirrorDownloadUrl: asset.downloadUrl }, {
+      attemptedUrl: asset.downloadUrl,
+      reason: "invalid_payload",
+    }),
+    null,
+  );
 });

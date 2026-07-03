@@ -99,6 +99,17 @@ export function isTrustedClientUpdateUrl(value: string) {
   }
 }
 
+export function selectClientUpdateMirrorFallbackUrl(
+  asset: ClientReleaseAsset,
+  rejection: { attemptedUrl: string; reason?: string | null },
+) {
+  if (rejection.reason !== "invalid_payload") return null;
+  const mirrorDownloadUrl = cleanClientUpdateUrl(asset.mirrorDownloadUrl);
+  if (!mirrorDownloadUrl || !isTrustedClientUpdateUrl(mirrorDownloadUrl)) return null;
+  const attemptedUrl = cleanClientUpdateUrl(rejection.attemptedUrl);
+  return mirrorDownloadUrl !== attemptedUrl ? mirrorDownloadUrl : null;
+}
+
 function isTrustedGitHubReleaseUrl(url: URL) {
   return (
     url.protocol === "https:" &&
@@ -113,6 +124,11 @@ function isTrustedOrfClientUpdateAssetUrl(url: URL) {
     trustedOrfClientUpdateHosts.has(url.hostname) &&
     /^\/api\/client-updates\/assets\/[^/]+\/[^/]+$/.test(url.pathname)
   );
+}
+
+function cleanClientUpdateUrl(value: string | null | undefined) {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return trimmed || null;
 }
 
 function parseReleaseVersion(value: string): ParsedVersion {

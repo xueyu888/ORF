@@ -80,6 +80,7 @@ ORF 客户端运行时默认使用 ORF 主更新源：
 - 安装包存储在 `ORF_CLIENT_UPDATE_ASSET_DIR/<version>/<assetName>`。
 - 客户端收到的默认下载地址是 `https://orf-xueyu.duckdns.org:8443/api/client-updates/assets/<version>/<assetName>`。
 - GitHub Release 只作为外部镜像页面和 ORF 资产缺失时的兜底下载来源。
+- 已安装旧版 Win11 原生壳如果尚未信任 ORF 主更新源，会在拒绝安装参数后由 Web 运行时自动改用 GitHub 镜像地址重试；这只用于旧壳兼容，不改变新客户端默认走 ORF 主更新源的规则。
 
 GitHub Actions 在两个平台产物都生成后，只上传 GitHub Release 镜像。发布脚本的 `--watch` 会等待工作流完成、核对镜像资产，再由本机把安装包同步到 ORF 主更新源，并把 ORF 发布清单作为最后一步写入，让客户端只在主源资产和镜像地址都准备好后看到新版本。自动化不会把管理员登录态写进发布流程；服务端和发布环境必须配置同一个 `ORF_CLIENT_UPDATE_PUBLISH_SECRET` 才能同步主更新源，必须配置同一个 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 才会广播在线客户端。
 
