@@ -65,14 +65,21 @@ npm run client:android:assemble:release
 推送 `v*` 标签会触发客户端发布流程：
 
 ```bash
-npm run release:clients -- --tag v0.0.1
+npm run release:clients -- --tag v0.0.1 --notes "说明本版本面向用户更新了什么"
 ```
 
 需要等待 GitHub Actions 完成、核对 ORF 主更新源和 GitHub 镜像资产时运行：
 
 ```bash
-npm run release:clients -- --tag v0.0.1 --watch
+npm run release:clients -- --tag v0.0.1 --notes-file release-notes/v0.0.1.md --watch
 ```
+
+客户端发布有两个必须分开的事实源：
+
+- 版本号事实源：根 `package.json`，由 `scripts/sync-client-versions.mjs` 同步到 Win11 和 Android 客户端工程。
+- 发布说明事实源：本次发布输入的 `--notes` 或 `--notes-file`。`scripts/release-clients.mjs` 会把说明写入 annotated tag 的 `更新说明：` 段落；`.github/workflows/release-clients.yml` 只从该段落或手动触发输入读取用户可见更新说明。没有更新说明的 tag 不能继续生成客户端 Release。
+
+GitHub Release 标题必须包含 `ORF vX.Y.Z`，正文必须包含 `主要更新：`。正文会继续附带提交记录、客户端包、安装后提示、数据和权限来源、已知边界；其中“主要更新”说明本版本面向用户更新了什么，提交记录只作为代码证据，不能替代用户可读版本说明。
 
 ORF 客户端运行时默认使用 ORF 主更新源：
 

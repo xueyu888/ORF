@@ -10,6 +10,9 @@ on:
         description: "Release tag to publish, for example v0.0.1"
         required: true
         default: "v0.0.1"
+      release_notes:
+        description: "User-facing Chinese update notes for this release"
+        required: true
 
 permissions:
   contents: write
@@ -192,6 +195,8 @@ jobs:
 
       - name: Write release notes
         shell: bash
+        env:
+          RELEASE_NOTES_INPUT: ${{ inputs.release_notes }}
         run: |
           set -euo pipefail
           git fetch --tags --force
@@ -205,20 +210,53 @@ jobs:
             range_label="初始版本到 ${RELEASE_TAG}"
           fi
 
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            printf '%s\n' "${RELEASE_NOTES_INPUT:-}" > release-summary.raw
+          else
+            tag_type="$(git cat-file -t "refs/tags/${RELEASE_TAG}" 2>/dev/null || true)"
+            if [ "$tag_type" != "tag" ]; then
+              echo "客户端发布 tag ${RELEASE_TAG} 必须是带更新说明的 annotated tag。" >&2
+              exit 1
+            fi
+            git tag -l "$RELEASE_TAG" --format='%(contents)' > release-tag-message.tmp
+            awk 'found { print } $0 == "更新说明：" { found = 1 }' release-tag-message.tmp > release-summary.raw
+          fi
+
+          if ! grep -Eq '[^[:space:]]' release-summary.raw; then
+            echo "客户端发布必须提供用户可读更新说明，说明本版本更新了什么。" >&2
+            exit 1
+          fi
+          awk '
+            {
+              sub(/[ \t\r]+$/, "");
+              if ($0 ~ /[^[:space:]]/) started = 1;
+              if (started) {
+                lines[++count] = $0;
+                if ($0 ~ /[^[:space:]]/) last = count;
+              }
+            }
+            END {
+              for (index = 1; index <= last; index++) print lines[index];
+            }
+          ' release-summary.raw > release-summary.md
+
           {
             echo "ORF ${RELEASE_TAG}"
             echo
             echo "本次更新范围：${range_label}。"
             echo
-            echo "主要改动："
+            echo "主要更新："
+            cat release-summary.md
+            echo
+            echo "提交记录："
             if git log --reverse --pretty=format:'- %s' "$commit_range" | sed '/^$/d' >> release-notes.tmp; then
               if [ -s release-notes.tmp ]; then
                 cat release-notes.tmp
               else
-                echo "- 本次版本主要包含客户端构建和发布流程整理。"
+                echo "- 未检测到独立提交记录。"
               fi
             else
-              echo "- 本次版本主要包含客户端构建和发布流程整理。"
+              echo "- 未能读取提交记录。"
             fi
             rm -f release-notes.tmp
             echo
