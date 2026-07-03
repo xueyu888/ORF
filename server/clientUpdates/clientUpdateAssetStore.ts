@@ -5,6 +5,7 @@ import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import {
   compareReleaseVersions,
+  isTrustedClientUpdateUrl,
   isClientReleaseVersion,
   normalizeReleaseVersion,
   toClientReleaseTag,
@@ -127,10 +128,13 @@ function normalizeStoredClientRelease(input: ClientReleaseInfo): ClientReleaseIn
 }
 
 function normalizeStoredAsset(version: string, asset: ClientReleaseAsset): ClientReleaseAsset {
+  const defaultDownloadUrl = buildClientUpdateAssetDownloadUrl(version, asset.name);
+  const downloadUrl = trustedStoredAssetUrl(asset.downloadUrl) ?? defaultDownloadUrl;
+  const mirrorDownloadUrl = trustedStoredAssetUrl(asset.mirrorDownloadUrl) ?? (downloadUrl === defaultDownloadUrl ? null : defaultDownloadUrl);
   return {
     contentType: asset.contentType ?? null,
-    downloadUrl: buildClientUpdateAssetDownloadUrl(version, asset.name),
-    mirrorDownloadUrl: asset.mirrorDownloadUrl ?? asset.downloadUrl ?? null,
+    downloadUrl,
+    mirrorDownloadUrl,
     name: asset.name,
     size: asset.size ?? null,
   };
@@ -138,6 +142,11 @@ function normalizeStoredAsset(version: string, asset: ClientReleaseAsset): Clien
 
 function isValidStoredAsset(asset: ClientReleaseAsset) {
   return isClientUpdateAssetFileName(asset.name);
+}
+
+function trustedStoredAssetUrl(value: string | null | undefined) {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return trimmed && isTrustedClientUpdateUrl(trimmed) ? trimmed : null;
 }
 
 async function readClientUpdateReleaseManifest(): Promise<ClientUpdateReleaseManifest> {

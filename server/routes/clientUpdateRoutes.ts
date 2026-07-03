@@ -39,6 +39,7 @@ const releaseManifestBodySchema = z.object({
   release: z.object({
     assets: z.array(z.object({
       contentType: z.string().trim().min(1).nullable().optional(),
+      downloadUrl: z.string().trim().url().nullable().optional(),
       mirrorDownloadUrl: z.string().trim().url().nullable().optional(),
       name: z.string().trim().min(1).refine(isClientUpdateAssetFileName, { message: "Invalid client update asset file name" }),
       size: z.number().int().nonnegative().nullable().optional(),
@@ -287,7 +288,7 @@ function toPublishedClientUpdateRelease(release: z.infer<typeof releaseManifestB
   return {
     assets: release.assets.map((asset) => ({
       contentType: asset.contentType ?? null,
-      downloadUrl: buildClientUpdateAssetDownloadUrl(release.version, asset.name),
+      downloadUrl: asset.downloadUrl ?? buildClientUpdateAssetDownloadUrl(release.version, asset.name),
       mirrorDownloadUrl: asset.mirrorDownloadUrl ?? null,
       name: asset.name,
       size: asset.size ?? null,
