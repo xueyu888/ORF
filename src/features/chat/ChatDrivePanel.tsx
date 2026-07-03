@@ -1,6 +1,6 @@
 import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
-import { Download, ExternalLink, File, FileText, Folder, Image, Link2, Loader2, MoreHorizontal, Plus, Search, Unlink, Upload, X } from "lucide-react";
+import { Download, ExternalLink, File, FileText, Folder, Image, Link2, Loader2, MoreHorizontal, Search, Unlink, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
 import { IconButton } from "../../components/ui";
 import {
@@ -53,7 +53,7 @@ export function ChatDrivePanel({
   const [links, setLinks] = useState<ChatDriveLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
-  const [commandOpen, setCommandOpen] = useState(false);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<DriveNode[]>([]);
@@ -63,6 +63,7 @@ export function ChatDrivePanel({
   const [textPreviewLoadingIds, setTextPreviewLoadingIds] = useState<Set<string>>(new Set());
   const [uploadTask, setUploadTask] = useState<UploadTaskState | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const folderRequestIdRef = useRef(0);
   const requestIdRef = useRef(0);
 
@@ -120,6 +121,22 @@ export function ChatDrivePanel({
   useEffect(() => {
     void loadDrive();
   }, [loadDrive]);
+
+  useEffect(() => {
+    setActionMenuOpen(false);
+    setQuery("");
+  }, [channel.id]);
+
+  useEffect(() => {
+    if (!actionMenuOpen) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && actionMenuRef.current?.contains(target)) return;
+      setActionMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [actionMenuOpen]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -220,7 +237,6 @@ export function ChatDrivePanel({
       : uploadTarget
       ? `上传到 ${uploadTarget.name}`
       : "没有可用上传位置";
-  const uploadTargetLabel = uploadTarget ? uploadTarget.name : loading ? "正在确认上传位置" : "暂无可用上传位置";
 
   useEffect(() => {
     const file = selectedFile;
@@ -266,7 +282,7 @@ export function ChatDrivePanel({
         setSessionNodes((items) => dedupeDriveNodes([response.node, ...items]));
         setSelectedNodeId(response.node.id);
         setQuery("");
-        setCommandOpen(false);
+        setActionMenuOpen(false);
         if (response.announcementMessage) onAnnouncementMessage?.(response.announcementMessage);
         void loadLinkedFolderChildren(links);
       } catch (error) {
@@ -315,7 +331,7 @@ export function ChatDrivePanel({
       setBootstrap(response.drive);
       setLinks(response.links);
       setQuery("");
-      setCommandOpen(false);
+      setActionMenuOpen(false);
       setSelectedNodeId(node.id);
       void loadLinkedFolderChildren(response.links);
       notify("已加入频道资源");
@@ -359,60 +375,54 @@ export function ChatDrivePanel({
             {uploadTarget ? ` · 上传到 ${uploadTarget.name}` : ""}
           </small>
         </span>
-        <button
-          type="button"
-          className="orf-chat-resource-command-toggle"
-          aria-expanded={commandOpen}
-          onClick={() => setCommandOpen((value) => !value)}
-        >
-          {commandOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-          <span>{commandOpen ? "收起" : canWrite || canManage ? "添加" : "查找"}</span>
-        </button>
+        <div className="orf-chat-resource-primary-actions">
+          {canWrite && (
+            <IconButton
+              disabled={uploadDisabled}
+              icon={uploadTask ? Loader2 : Upload}
+              label={uploadTask ? "正在上传资源" : uploadTitle}
+              loading={Boolean(uploadTask)}
+              onClick={() => fileInputRef.current?.click()}
+              size="sm"
+              variant="ghost"
+            />
+          )}
+          <div className="orf-chat-resource-more" ref={actionMenuRef}>
+            <IconButton
+              icon={MoreHorizontal}
+              label="资源更多操作"
+              size="sm"
+              variant="ghost"
+              aria-expanded={actionMenuOpen}
+              aria-haspopup="menu"
+              onClick={() => setActionMenuOpen((value) => !value)}
+            />
+            {actionMenuOpen && (
+              <div className="orf-chat-resource-more-menu orf-chat-resource-panel-menu" role="menu">
+                <Link to="/resources" role="menuitem" onClick={() => setActionMenuOpen(false)}>
+                  <ExternalLink className="h-4 w-4" />
+                  打开完整云盘
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {commandOpen && (
-        <div className="orf-chat-resource-command-drawer">
-          {canWrite && (
-            <button
-              type="button"
-              className="orf-chat-resource-upload-button"
-              disabled={uploadDisabled}
-              title={uploadTitle}
-              aria-label={uploadTask ? "正在上传资源" : "上传资源"}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {uploadTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              <span>
-                <strong>{uploadTask?.fileName ?? "上传文件到频道资源"}</strong>
-                <small>
-                  {uploadTask
-                    ? uploadTask.percent === null ? "上传中" : `${Math.round(uploadTask.percent)}%`
-                    : uploadTargetLabel}
-                </small>
-              </span>
-            </button>
-          )}
-          <form
-            className="orf-chat-resource-search"
-            onSubmit={(event) => {
-              event.preventDefault();
-            }}
-          >
-            <Search className="h-4 w-4" />
-            <input
-              value={query}
-              placeholder={canManage ? "搜索并固定团队云盘资源" : "搜索频道资源和团队云盘"}
-              aria-label="搜索团队云盘资源"
-              autoFocus
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </form>
-          <Link className="orf-chat-resource-open-drive" to="/resources">
-            <ExternalLink className="h-4 w-4" />
-            <span>打开完整云盘</span>
-          </Link>
-        </div>
-      )}
+      <form
+        className="orf-chat-resource-search"
+        onSubmit={(event) => {
+          event.preventDefault();
+        }}
+      >
+        <Search className="h-4 w-4" />
+        <input
+          value={query}
+          placeholder={canManage ? "搜索频道资源或团队云盘" : "搜索频道资源"}
+          aria-label="搜索群聊资源"
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </form>
       <input ref={fileInputRef} hidden multiple type="file" onChange={(event) => void uploadFiles(event.currentTarget.files)} />
       {(uploadTask || dragActive) && (
         <div className="orf-chat-resource-upload-status">
@@ -548,10 +558,17 @@ function ChatResourcePreview({
   const file = node.file ?? null;
   const previewUrl = file?.previewUrl ? drivePreviewUrl(file) : undefined;
   const detailHref = `/resources/${encodeURIComponent(node.id)}/preview`;
+  const Icon = iconForNode(node);
   return (
     <div className="orf-chat-resource-preview">
       <div className="orf-chat-resource-preview-toolbar">
-        <span>{previewSummary(node)}</span>
+        <span className="orf-chat-resource-preview-title">
+          <Icon className="h-4 w-4" />
+          <span>
+            <strong>{node.name}</strong>
+            <small>{previewSummary(node)}</small>
+          </span>
+        </span>
         <div className="orf-chat-resource-preview-actions">
           <div className="orf-chat-resource-more" ref={menuRef}>
             <IconButton
