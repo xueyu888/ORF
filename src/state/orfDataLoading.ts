@@ -4,6 +4,7 @@ const taskManagementReadModelRoutePrefixes = [
   "/dashboard",
   "/tasks",
   "/feedback",
+  "/resources",
   "/strategy-map",
   "/ai-evaluation",
   "/reports",

@@ -14,26 +14,32 @@ import {
   Image,
   Link2,
   Loader2,
-  MoreHorizontal,
   RefreshCw,
   RotateCcw,
   Search,
-  Star,
   Trash2,
   Unlink,
   Upload,
 } from "lucide-react";
 import { Button, IconButton } from "../../components/ui";
+import { OrfRichTextMarkdownViewer } from "../rich-text/OrfRichTextMarkdownViewer";
+import {
+  compareDriveNodes,
+  driveNodeMetaLabel,
+  drivePreviewKindLabel,
+  drivePreviewUrl,
+  formatDriveDateTime as formatDateTime,
+  formatDriveFileSize as formatFileSize,
+} from "./drivePresentation";
 import type { ApiUploadProgress } from "../../state/apiClient";
 import type {
-  ChatDriveLink,
   ChatMessage,
-  Drive,
   DriveBootstrap,
   DriveContextType,
   DriveFileVersion,
   DriveNode,
   DriveNodeDetails,
+  DrivePreviewKind,
   DriveSearchType,
 } from "../../types/orf";
 
@@ -50,16 +56,13 @@ export type DriveContextOption = {
 
 type DriveBrowserProps = {
   bootstrap: DriveBootstrap | null;
-  canManageLinks?: boolean;
   canWrite: boolean;
-  compact?: boolean;
   contextLabel?: string;
   contextOptions?: DriveContextOption[];
-  links?: ChatDriveLink[];
+  initialSelectedNodeId?: string | null;
   loading: boolean;
   notify: (message: string) => void;
   onAddContextLink?: (input: { contextId: string; contextType: DriveContextType; nodeId: string }) => Promise<DriveNodeDetails>;
-  onAddLink?: (input: { isDefaultUploadTarget?: boolean; node: DriveNode }) => Promise<void>;
   onCreateFolder: (input: { name: string; parentNodeId: string }) => Promise<DriveNode>;
   onDeleteNode: (nodeId: string) => Promise<void>;
   onListTrash?: () => Promise<DriveNode[]>;
@@ -67,13 +70,14 @@ type DriveBrowserProps = {
   onLoadDetails?: (nodeId: string) => Promise<DriveNodeDetails>;
   onRefresh: () => Promise<void> | void;
   onRemoveContextLink?: (input: { linkId: string; nodeId: string }) => Promise<DriveNodeDetails>;
-  onRemoveLink?: (linkId: string) => Promise<void>;
   onRestoreNode?: (nodeId: string) => Promise<DriveNode>;
   onRestoreVersion?: (input: { fileId: string; versionId: string }) => Promise<{ node: DriveNode; versions: DriveFileVersion[] }>;
-  onSearch?: (input: { query?: string; type?: DriveSearchType }) => Promise<DriveNode[]>;
+  onSearch?: (input: { previewKind?: DrivePreviewKind | "all"; query?: string; type?: DriveSearchType }) => Promise<DriveNode[]>;
+  onSelectedNodeIdChange?: (nodeId: string | null) => void;
   onUploadedAnnouncement?: (message: ChatMessage) => void;
   onUploadFile: (input: { file: File; onProgress?: (progress: ApiUploadProgress) => void; parentNodeId: string }) => Promise<DriveUploadResult>;
   onUploadVersion?: (input: { file: File; fileId: string; onProgress?: (progress: ApiUploadProgress) => void }) => Promise<{ node: DriveNode; versions: DriveFileVersion[] }>;
+  resourceHref?: (nodeId: string) => string;
 };
 
 type UploadTaskState = {
@@ -92,16 +96,13 @@ const modeLabels: Record<DriveMode, string> = {
 
 export function DriveBrowser({
   bootstrap,
-  canManageLinks = false,
   canWrite,
-  compact = false,
   contextLabel,
   contextOptions = [],
-  links = [],
+  initialSelectedNodeId = null,
   loading,
   notify,
   onAddContextLink,
-  onAddLink,
   onCreateFolder,
   onDeleteNode,
   onListTrash,
@@ -109,13 +110,14 @@ export function DriveBrowser({
   onLoadDetails,
   onRefresh,
   onRemoveContextLink,
-  onRemoveLink,
   onRestoreNode,
   onRestoreVersion,
   onSearch,
+  onSelectedNodeIdChange,
   onUploadedAnnouncement,
   onUploadFile,
   onUploadVersion,
+  resourceHref,
 }: DriveBrowserProps) {
   const [childrenByFolderId, setChildrenByFolderId] = useState<Map<string, DriveNode[]>>(new Map());
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -128,6 +130,7 @@ export function DriveBrowser({
   const [newFolderName, setNewFolderName] = useState("");
   const [resourceLoading, setResourceLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchPreviewKind, setSearchPreviewKind] = useState<DrivePreviewKind | "all">("all");
   const [searchResults, setSearchResults] = useState<DriveNode[]>([]);
   const [searchType, setSearchType] = useState<DriveSearchType>("all");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -135,9 +138,8 @@ export function DriveBrowser({
   const [textPreviewLoadingIds, setTextPreviewLoadingIds] = useState<Set<string>>(new Set());
   const [trashNodes, setTrashNodes] = useState<DriveNode[]>([]);
   const [uploadTask, setUploadTask] = useState<UploadTaskState | null>(null);
-  const [compactDetailsOpen, setCompactDetailsOpen] = useState(false);
-  const [compactToolsOpen, setCompactToolsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const initialSelectedNodeIdRef = useRef<string | null>(initialSelectedNodeId);
   const loadDetailsRef = useRef(onLoadDetails);
   const notifyRef = useRef(notify);
   const versionInputRef = useRef<HTMLInputElement | null>(null);
@@ -146,6 +148,11 @@ export function DriveBrowser({
     loadDetailsRef.current = onLoadDetails;
     notifyRef.current = notify;
   }, [notify, onLoadDetails]);
+
+  useEffect(() => {
+    initialSelectedNodeIdRef.current = initialSelectedNodeId;
+    if (initialSelectedNodeId) setSelectedNodeId(initialSelectedNodeId);
+  }, [initialSelectedNodeId]);
 
   useEffect(() => {
     if (!bootstrap) {
@@ -159,12 +166,17 @@ export function DriveBrowser({
     setChildrenByFolderId(nextChildren);
     setExpandedFolderIds(new Set([bootstrap.root.id]));
     setSelectedNodeId((current) => {
+      const initialNodeId = initialSelectedNodeIdRef.current;
+      if (initialNodeId) return initialNodeId;
       if (mode !== "browse") return current;
       return current && hasNode(bootstrap.root, nextChildren, current) ? current : bootstrap.root.id;
     });
   }, [bootstrap]);
 
-  const linkedNodeById = useMemo(() => new Map(links.map((link) => [link.node.id, link.node])), [links]);
+  useEffect(() => {
+    onSelectedNodeIdChange?.(selectedNodeId);
+  }, [onSelectedNodeIdChange, selectedNodeId]);
+
   const adHocNodeById = useMemo(() => {
     const items = [...searchResults, ...trashNodes, ...(bootstrap?.recentNodes ?? [])];
     return new Map(items.map((node) => [node.id, node]));
@@ -182,46 +194,29 @@ export function DriveBrowser({
     if (mode !== "browse" && modeNode) return modeNode;
     const adHocNode = adHocNodeById.get(selectedNodeId) ?? null;
     return findNode(bootstrap?.root ?? null, childrenByFolderId, selectedNodeId)
-      ?? linkedNodeById.get(selectedNodeId)
       ?? adHocNode
       ?? null;
-  }, [adHocNodeById, bootstrap?.recentNodes, bootstrap?.root, childrenByFolderId, linkedNodeById, mode, searchResults, selectedNodeId, trashNodes]);
+  }, [adHocNodeById, bootstrap?.recentNodes, bootstrap?.root, childrenByFolderId, mode, searchResults, selectedNodeId, trashNodes]);
   const effectiveNode = details?.node ?? selectedNode;
   const selectedFolder = useMemo(() => {
     if (effectiveNode?.type === "folder" && !effectiveNode.deletedAt) return effectiveNode;
     if (!effectiveNode?.parentId) return null;
-    return findNode(bootstrap?.root ?? null, childrenByFolderId, effectiveNode.parentId) ?? linkedNodeById.get(effectiveNode.parentId) ?? null;
-  }, [bootstrap?.root, childrenByFolderId, effectiveNode, linkedNodeById]);
-  const defaultUploadFolder = useMemo(
-    () => links.find((link) => link.isDefaultUploadTarget && link.node.type === "folder")?.node ?? null,
-    [links],
-  );
-  const uploadTarget = selectedFolder ?? defaultUploadFolder ?? bootstrap?.root ?? null;
+    return findNode(bootstrap?.root ?? null, childrenByFolderId, effectiveNode.parentId) ?? null;
+  }, [bootstrap?.root, childrenByFolderId, effectiveNode]);
+  const uploadTarget = selectedFolder ?? bootstrap?.root ?? null;
   const canMutateDrive = canWrite && Boolean(bootstrap);
-  const selectedAlreadyLinked = Boolean(effectiveNode && linkedNodeById.has(effectiveNode.id));
   const selectedFile = effectiveNode?.file ?? null;
   const textPreview = selectedFile ? textPreviewByFileId.get(selectedFile.id) : undefined;
   const textPreviewLoading = Boolean(selectedFile && textPreviewLoadingIds.has(selectedFile.id));
   const rootItemCount = bootstrap?.children.length ?? 0;
   const recentItemCount = bootstrap?.recentNodes?.length ?? 0;
-  const activeScopeLabel = contextLabel ?? (compact ? "当前群聊" : "团队空间");
+  const activeScopeLabel = contextLabel ?? "团队空间";
   const activeModeSummary =
     mode === "browse" ? `${rootItemCount} 项根资源`
       : mode === "recent" ? `${recentItemCount} 项最近更新`
         : mode === "search" ? `${searchResults.length} 项搜索结果`
           : `${trashNodes.length} 项可恢复资源`;
-  const compactModeSummary = mode === "browse" ? `${links.length} 项群聊资源` : activeModeSummary;
   const uploadTargetLabel = uploadTarget?.name ?? "未选择上传位置";
-  const showCompactLinkAction = Boolean(onAddLink && effectiveNode && canManageLinks && !selectedAlreadyLinked && !effectiveNode.deletedAt);
-
-  useEffect(() => {
-    if (!compact || compactToolsOpen || mode !== "browse" || links.length === 0) return;
-    const firstLinkedNodeId = links[0].node.id;
-    setSelectedNodeId((current) => {
-      if (current && current !== bootstrap?.root.id) return current;
-      return firstLinkedNodeId;
-    });
-  }, [bootstrap?.root.id, compact, compactToolsOpen, links, mode]);
 
   useEffect(() => {
     const nodeId = selectedNodeId;
@@ -297,13 +292,17 @@ export function DriveBrowser({
     }
   };
 
-  const runSearch = async (nextQuery = searchQuery, nextType = searchType) => {
+  const runSearch = async (
+    nextQuery = searchQuery,
+    nextType = searchType,
+    nextPreviewKind = searchPreviewKind,
+  ) => {
     if (!onSearch) return;
     setMode("search");
     setResourceLoading(true);
     setErrorMessage(null);
     try {
-      const nodes = await onSearch({ query: nextQuery, type: nextType });
+      const nodes = await onSearch({ previewKind: nextPreviewKind, query: nextQuery, type: nextType });
       setSearchResults(nodes);
       setSelectedNodeId(nodes[0]?.id ?? null);
     } catch (error) {
@@ -464,36 +463,6 @@ export function DriveBrowser({
     }
   };
 
-  const addSelectedLink = async (isDefaultUploadTarget = false) => {
-    const node = isDefaultUploadTarget ? uploadTarget : effectiveNode;
-    if (!onAddLink || !canManageLinks || !node || node.deletedAt) return;
-    setErrorMessage(null);
-    try {
-      await onAddLink({ isDefaultUploadTarget, node });
-      if (compact) {
-        setMode("browse");
-        setCompactToolsOpen(false);
-        setSelectedNodeId(node.id);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "群聊云盘绑定失败";
-      setErrorMessage(message);
-      notify(message);
-    }
-  };
-
-  const removeLink = async (linkId: string) => {
-    if (!onRemoveLink || !canManageLinks) return;
-    setErrorMessage(null);
-    try {
-      await onRemoveLink(linkId);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "取消绑定失败";
-      setErrorMessage(message);
-      notify(message);
-    }
-  };
-
   const restoreVersion = async (versionId: string) => {
     const file = selectedFile;
     if (!file || !onRestoreVersion || !canMutateDrive) return;
@@ -545,10 +514,16 @@ export function DriveBrowser({
       : mode === "trash"
         ? trashNodes
         : [];
-  const compactShowsTeamFolders = compact && compactToolsOpen && mode === "browse";
-  const compactResourceNodes = mode === "browse" ? links.map((link) => link.node) : resourceList;
-  const compactResourceTitle = mode === "browse" ? "群聊资源" : modeLabels[mode];
-  const compactResourceCount = compactResourceNodes.length;
+
+  const copyResourceLink = async (node: DriveNode) => {
+    const href = resourceHref?.(node.id) ?? `${window.location.origin}/resources/${encodeURIComponent(node.id)}`;
+    try {
+      await navigator.clipboard.writeText(href);
+      notify("资源链接已复制");
+    } catch {
+      notify("复制链接失败，请检查浏览器剪贴板权限");
+    }
+  };
 
   const modebar = (
     <div className="orf-drive-modebar">
@@ -576,45 +551,25 @@ export function DriveBrowser({
     </div>
   );
 
-  const fullActions = (
+  const actions = (
     <div className="orf-drive-actions">
       <IconButton disabled={!canMutateDrive || !uploadTarget || mode === "trash"} icon={Upload} label={uploadTarget ? `上传到 ${uploadTarget.name}` : "上传文件"} onClick={() => fileInputRef.current?.click()} />
       <IconButton disabled={!canMutateDrive || !uploadTarget || mode === "trash"} icon={FolderPlus} label="新建文件夹" onClick={() => setNewFolderName((value) => value || "新建文件夹")} />
       <IconButton disabled={!effectiveNode || effectiveNode.id === bootstrap?.root.id || !canMutateDrive || Boolean(effectiveNode.deletedAt)} icon={Trash2} label="删除" onClick={() => void deleteSelectedNode()} />
       <IconButton disabled={!effectiveNode?.deletedAt || !onRestoreNode || !canMutateDrive} icon={RotateCcw} label="恢复" onClick={() => void restoreSelectedNode()} />
       <IconButton disabled={!selectedFile || !onUploadVersion || !canMutateDrive || Boolean(effectiveNode?.deletedAt)} icon={FileClock} label="上传新版本" onClick={() => versionInputRef.current?.click()} />
-      {onAddLink && (
-        <>
-          <IconButton disabled={!effectiveNode || !canManageLinks || selectedAlreadyLinked || Boolean(effectiveNode.deletedAt)} icon={Link2} label="绑定到群聊" onClick={() => void addSelectedLink(false)} />
-          <IconButton disabled={!uploadTarget || !canManageLinks || mode === "trash"} icon={Star} label="设为默认上传文件夹" onClick={() => void addSelectedLink(true)} />
-        </>
-      )}
-      <IconButton icon={RefreshCw} label="刷新" loading={loading} onClick={() => void onRefresh()} />
-      <span className="orf-drive-upload-target" title={uploadTargetLabel}>{uploadTargetLabel}</span>
-    </div>
-  );
-
-  const compactAdvancedActions = (
-    <div className="orf-drive-actions orf-drive-actions-advanced">
-      <IconButton disabled={!canMutateDrive || !uploadTarget || mode === "trash"} icon={FolderPlus} label="新建文件夹" onClick={() => setNewFolderName((value) => value || "新建文件夹")} />
-      <IconButton disabled={!effectiveNode || effectiveNode.id === bootstrap?.root.id || !canMutateDrive || Boolean(effectiveNode.deletedAt)} icon={Trash2} label="删除" onClick={() => void deleteSelectedNode()} />
-      <IconButton disabled={!effectiveNode?.deletedAt || !onRestoreNode || !canMutateDrive} icon={RotateCcw} label="恢复" onClick={() => void restoreSelectedNode()} />
-      <IconButton disabled={!selectedFile || !onUploadVersion || !canMutateDrive || Boolean(effectiveNode?.deletedAt)} icon={FileClock} label="上传新版本" onClick={() => versionInputRef.current?.click()} />
-      {onAddLink && (
-        <IconButton disabled={!uploadTarget || !canManageLinks || mode === "trash"} icon={Star} label="设为默认上传文件夹" onClick={() => void addSelectedLink(true)} />
-      )}
       <IconButton icon={RefreshCw} label="刷新" loading={loading} onClick={() => void onRefresh()} />
       <span className="orf-drive-upload-target" title={uploadTargetLabel}>{uploadTargetLabel}</span>
     </div>
   );
 
   return (
-    <div className={clsx("orf-drive-panel", compact && "orf-drive-panel-compact")}>
+    <div className="orf-drive-panel">
       <div className="orf-drive-workbench-header">
         <div className="orf-drive-workbench-title">
-          <span>{compact ? "频道资源" : "团队云盘"}</span>
+          <span>团队云盘</span>
           <strong>{activeScopeLabel}</strong>
-          <small>{compact ? compactModeSummary : activeModeSummary}</small>
+          <small>{activeModeSummary}</small>
         </div>
         <div className="orf-drive-workbench-meta" aria-label="云盘状态摘要">
           <span><Folder className="h-3.5 w-3.5" />{rootItemCount}</span>
@@ -623,98 +578,40 @@ export function DriveBrowser({
         </div>
       </div>
 
-      {!compact && links.length > 0 && (
-        <div className="orf-drive-linked-card">
-          <div className="orf-drive-linked-heading">
-            <strong>已绑定到群聊</strong>
-            <small>{links.length} 项</small>
-          </div>
-          <div className="orf-drive-linked-strip" aria-label="群聊已绑定云盘资源">
-            {links.map((link) => (
-              <div key={link.id} className={clsx("orf-drive-linked-item", link.isDefaultUploadTarget && "is-default")}>
-                <button type="button" onClick={() => setSelectedNodeId(link.node.id)}>
-                  {link.node.type === "folder" ? <Folder className="h-4 w-4" /> : <File className="h-4 w-4" />}
-                  <span>{link.label || link.node.name}</span>
-                  {link.isDefaultUploadTarget && <Star className="h-3.5 w-3.5" />}
-                </button>
-                {canManageLinks && onRemoveLink && (
-                  <button type="button" className="orf-drive-linked-remove" aria-label="取消绑定" onClick={() => void removeLink(link.id)}>
-                    <Unlink className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!compact && modebar}
+      {modebar}
 
       <form
-        className={clsx("orf-drive-searchbar", compact && "orf-drive-searchbar-compact")}
+        className="orf-drive-searchbar"
         onSubmit={(event) => {
           event.preventDefault();
           void runSearch();
         }}
       >
         <Search className="h-4 w-4" />
-        <input value={searchQuery} placeholder={compact ? "搜索群聊资源或团队云盘" : "搜索文件名、类型、内容线索"} onChange={(event) => setSearchQuery(event.target.value)} />
-        {compact ? (
-          <IconButton icon={Search} label="搜索" size="sm" type="submit" variant="ghost" />
-        ) : (
-          <>
-            <select
-              value={searchType}
-              onChange={(event) => {
-                const nextType = event.target.value as DriveSearchType;
-                setSearchType(nextType);
-                if (mode === "search") void runSearch(searchQuery, nextType);
-              }}
-            >
-              <option value="all">全部</option>
-              <option value="file">文件</option>
-              <option value="folder">文件夹</option>
-            </select>
-            <Button size="sm" variant="secondary">搜索</Button>
-          </>
-        )}
+        <input value={searchQuery} placeholder="搜索文件名、类型、内容线索" onChange={(event) => setSearchQuery(event.target.value)} />
+        <select
+          value={searchType}
+          onChange={(event) => {
+            const nextType = event.target.value as DriveSearchType;
+            setSearchType(nextType);
+            if (mode === "search") void runSearch(searchQuery, nextType, searchPreviewKind);
+          }}
+        >
+          <option value="all">全部</option>
+          <option value="file">文件</option>
+          <option value="folder">文件夹</option>
+        </select>
+        <Button size="sm" variant="secondary">搜索</Button>
       </form>
+      <DriveSearchFacets
+        activePreviewKind={searchPreviewKind}
+        onChangePreviewKind={(nextPreviewKind) => {
+          setSearchPreviewKind(nextPreviewKind);
+          if (mode === "search") void runSearch(searchQuery, searchType, nextPreviewKind);
+        }}
+      />
 
-      {compact ? (
-        <>
-          <div className={clsx("orf-drive-compact-primary-actions", !showCompactLinkAction && "is-minimal")}>
-            <Button disabled={!canMutateDrive || !uploadTarget || mode === "trash"} size="sm" type="button" variant="secondary" onClick={() => fileInputRef.current?.click()}>
-              <Upload className="h-3.5 w-3.5" />
-              上传
-            </Button>
-            {showCompactLinkAction && (
-              <Button
-                size="sm"
-                type="button"
-                variant="secondary"
-                onClick={() => void addSelectedLink(false)}
-              >
-                <Link2 className="h-3.5 w-3.5" />
-                绑定到群聊
-              </Button>
-            )}
-            <IconButton
-              icon={MoreHorizontal}
-              label={compactToolsOpen ? "收起更多操作" : "更多操作"}
-              onClick={() => setCompactToolsOpen((value) => !value)}
-              variant={compactToolsOpen ? "secondary" : "ghost"}
-            />
-          </div>
-          {compactToolsOpen && (
-            <div className="orf-drive-compact-tools">
-              {modebar}
-              {compactAdvancedActions}
-            </div>
-          )}
-        </>
-      ) : (
-        fullActions
-      )}
+      {actions}
       <input ref={fileInputRef} hidden multiple type="file" onChange={(event) => void uploadFiles(event.currentTarget.files)} />
       <input ref={versionInputRef} hidden type="file" onChange={(event) => void uploadVersion(event.currentTarget.files)} />
 
@@ -743,22 +640,9 @@ export function DriveBrowser({
         <div className="orf-drive-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载云盘</div>
       ) : bootstrap ? (
         <div className="orf-drive-layout">
-          <div className={clsx("orf-drive-tree", compact && !compactShowsTeamFolders && "orf-drive-resource-pane")} role={compact && !compactShowsTeamFolders ? "listbox" : "tree"}>
+          <div className="orf-drive-tree" role="tree">
             {resourceLoading ? (
               <div className="orf-drive-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载资源</div>
-            ) : compact && !compactShowsTeamFolders ? (
-              <>
-                <div className="orf-drive-resource-pane-heading">
-                  <span>{compactResourceTitle}</span>
-                  <small>{compactResourceCount} 项</small>
-                </div>
-                <DriveResourceList
-                  emptyLabel={mode === "browse" ? "暂无群聊资源" : "没有资源"}
-                  nodes={compactResourceNodes}
-                  selectedNodeId={selectedNodeId}
-                  onSelect={(node) => setSelectedNodeId(node.id)}
-                />
-              </>
             ) : mode === "browse" ? (
               <DriveTreeRow
                 childrenByFolderId={childrenByFolderId}
@@ -776,18 +660,15 @@ export function DriveBrowser({
           </div>
           <DrivePreview
             canWrite={canMutateDrive}
-            compact={compact}
-            compactDetailsOpen={compactDetailsOpen}
             contextOptions={contextOptions}
-            defaultUploadFolder={defaultUploadFolder}
             details={details}
             detailsLoading={detailsLoading}
             node={effectiveNode}
             onAddContext={onAddContextLink ? addContext : undefined}
+            onCopyResourceLink={resourceHref ? copyResourceLink : undefined}
             onRemoveContext={onRemoveContextLink ? removeContext : undefined}
             onRestoreNode={onRestoreNode ? () => void restoreSelectedNode() : undefined}
             onRestoreVersion={onRestoreVersion ? restoreVersion : undefined}
-            onToggleCompactDetails={() => setCompactDetailsOpen((value) => !value)}
             textPreview={textPreview}
             textPreviewLoading={textPreviewLoading}
             uploadTarget={uploadTarget}
@@ -836,6 +717,39 @@ function DriveResourceList({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+const drivePreviewKindFilters: Array<{ label: string; value: DrivePreviewKind | "all" }> = [
+  { label: "全部类型", value: "all" },
+  { label: "Markdown", value: "markdown" },
+  { label: "图片", value: "image" },
+  { label: "PDF", value: "pdf" },
+  { label: "文本", value: "text" },
+  { label: "其他", value: "download" },
+];
+
+function DriveSearchFacets({
+  activePreviewKind,
+  onChangePreviewKind,
+}: {
+  activePreviewKind: DrivePreviewKind | "all";
+  onChangePreviewKind: (previewKind: DrivePreviewKind | "all") => void;
+}) {
+  return (
+    <div className="orf-drive-filter-chips" aria-label="资源类型筛选">
+      {drivePreviewKindFilters.map((filter) => (
+        <button
+          key={filter.value}
+          type="button"
+          className={clsx(activePreviewKind === filter.value && "is-active")}
+          aria-pressed={activePreviewKind === filter.value}
+          onClick={() => onChangePreviewKind(filter.value)}
+        >
+          {filter.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -903,45 +817,46 @@ function DriveTreeRow({
 
 function DrivePreview({
   canWrite,
-  compact = false,
-  compactDetailsOpen = false,
   contextOptions,
-  defaultUploadFolder,
   details,
   detailsLoading,
   node,
   onAddContext,
+  onCopyResourceLink,
   onRemoveContext,
   onRestoreNode,
   onRestoreVersion,
-  onToggleCompactDetails,
   textPreview,
   textPreviewLoading,
   uploadTarget,
 }: {
   canWrite: boolean;
-  compact?: boolean;
-  compactDetailsOpen?: boolean;
   contextOptions: DriveContextOption[];
-  defaultUploadFolder: DriveNode | null;
   details: DriveNodeDetails | null;
   detailsLoading: boolean;
   node: DriveNode | null;
   onAddContext?: (contextKey: string) => void;
+  onCopyResourceLink?: (node: DriveNode) => void;
   onRemoveContext?: (linkId: string) => void;
   onRestoreNode?: () => void;
   onRestoreVersion?: (versionId: string) => void;
-  onToggleCompactDetails?: () => void;
   textPreview?: string;
   textPreviewLoading?: boolean;
   uploadTarget: DriveNode | null;
 }) {
+  const [markdownViewMode, setMarkdownViewMode] = useState<"rendered" | "source">("rendered");
+  const file = node?.file ?? null;
+
+  useEffect(() => {
+    setMarkdownViewMode("rendered");
+  }, [file?.id]);
+
   if (!node) {
     return <div className="orf-drive-preview-empty">选择文件</div>;
   }
-  const file = node.file ?? null;
   const previewUrl = file?.previewUrl ? drivePreviewUrl(file) : undefined;
   const PreviewIcon = node.type === "folder" ? Folder : iconForFile(node);
+
   return (
     <div className="orf-drive-preview-stack">
       {node.type === "folder" ? (
@@ -953,7 +868,6 @@ function DrivePreview({
           </div>
           <div className="orf-drive-preview-badges">
             {uploadTarget?.id === node.id && !node.deletedAt && <span>上传目标</span>}
-            {defaultUploadFolder?.id === node.id && <span>群聊默认上传</span>}
           </div>
         </div>
       ) : file ? (
@@ -970,6 +884,12 @@ function DrivePreview({
               <span>v{file.latestVersionNumber ?? 1}</span>
               <span>{drivePreviewKindLabel(file.previewKind)}</span>
             </div>
+            {onCopyResourceLink && (
+              <button type="button" className="orf-drive-copy-link" onClick={() => onCopyResourceLink(node)}>
+                <Link2 className="h-4 w-4" />
+                复制链接
+              </button>
+            )}
             <a className="orf-drive-download-link" href={file.downloadUrl}>
               <Download className="h-4 w-4" />
               下载
@@ -979,7 +899,25 @@ function DrivePreview({
             <div className="orf-drive-image-preview">
               <img alt={file.fileName} src={previewUrl} />
             </div>
-          ) : (file.previewKind === "markdown" || file.previewKind === "text") && previewUrl ? (
+          ) : file.previewKind === "markdown" && previewUrl ? (
+            <div className="orf-drive-markdown-preview">
+              <div className="orf-drive-markdown-toolbar" aria-label="Markdown 预览模式">
+                <button type="button" className={clsx(markdownViewMode === "rendered" && "is-active")} onClick={() => setMarkdownViewMode("rendered")}>渲染</button>
+                <button type="button" className={clsx(markdownViewMode === "source" && "is-active")} onClick={() => setMarkdownViewMode("source")}>原文</button>
+              </div>
+              {textPreviewLoading && textPreview === undefined ? (
+                <div className="orf-drive-preview-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载预览</div>
+              ) : markdownViewMode === "rendered" && textPreview ? (
+                <div className="orf-drive-markdown-rendered">
+                  <OrfRichTextMarkdownViewer body={textPreview} classNamePrefix="orf-drive-markdown" />
+                </div>
+              ) : (
+                <div className="orf-drive-text-preview is-markdown-source">
+                  <pre>{textPreview ?? ""}</pre>
+                </div>
+              )}
+            </div>
+          ) : file.previewKind === "text" && previewUrl ? (
             <div className="orf-drive-text-preview">
               {textPreviewLoading && textPreview === undefined ? (
                 <div className="orf-drive-preview-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载预览</div>
@@ -999,43 +937,17 @@ function DrivePreview({
       ) : (
         <div className="orf-drive-preview-empty">文件不可用</div>
       )}
-      {compact ? (
-        <div className={clsx("orf-drive-compact-details", compactDetailsOpen && "is-open")}>
-          <button type="button" className="orf-drive-compact-details-toggle" onClick={onToggleCompactDetails} aria-expanded={compactDetailsOpen}>
-            <span>详情、版本和工作上下文</span>
-            <small>
-              {detailsLoading ? "同步中"
-                : details ? `${details.contextLinks.length} 关联 · ${details.versions.length} 版本`
-                  : "选择资源后查看"}
-            </small>
-          </button>
-          {compactDetailsOpen && (
-            <DriveDetails
-              canWrite={canWrite}
-              contextOptions={contextOptions}
-              details={details}
-              loading={detailsLoading}
-              node={node}
-              onAddContext={onAddContext}
-              onRemoveContext={onRemoveContext}
-              onRestoreNode={onRestoreNode}
-              onRestoreVersion={onRestoreVersion}
-            />
-          )}
-        </div>
-      ) : (
-        <DriveDetails
-          canWrite={canWrite}
-          contextOptions={contextOptions}
-          details={details}
-          loading={detailsLoading}
-          node={node}
-          onAddContext={onAddContext}
-          onRemoveContext={onRemoveContext}
-          onRestoreNode={onRestoreNode}
-          onRestoreVersion={onRestoreVersion}
-        />
-      )}
+      <DriveDetails
+        canWrite={canWrite}
+        contextOptions={contextOptions}
+        details={details}
+        loading={detailsLoading}
+        node={node}
+        onAddContext={onAddContext}
+        onRemoveContext={onRemoveContext}
+        onRestoreNode={onRestoreNode}
+        onRestoreVersion={onRestoreVersion}
+      />
     </div>
   );
 }
@@ -1247,21 +1159,6 @@ function iconForFile(node: DriveNode) {
   return File;
 }
 
-function driveNodeMetaLabel(node: DriveNode) {
-  if (node.deletedAt) return `已删除 · ${formatDateTime(node.deletedAt)}`;
-  if (node.type === "folder") return "文件夹";
-  if (!node.file) return "文件";
-  return `${drivePreviewKindLabel(node.file.previewKind)} · ${formatFileSize(node.file.fileSize)}`;
-}
-
-function drivePreviewKindLabel(kind: Drive["previewKind"]) {
-  if (kind === "image") return "图片";
-  if (kind === "pdf") return "PDF";
-  if (kind === "markdown") return "Markdown";
-  if (kind === "text") return "文本";
-  return "文件";
-}
-
 function appendChildNode(items: Map<string, DriveNode[]>, parentId: string, node: DriveNode) {
   const next = new Map(items);
   const children = next.get(parentId) ?? [];
@@ -1275,18 +1172,6 @@ function removeTextPreview(items: Map<string, string>, fileId: string) {
   const next = new Map(items);
   next.delete(fileId);
   return next;
-}
-
-function drivePreviewUrl(file: Drive) {
-  const base = file.previewUrl ?? file.contentUrl;
-  const separator = base.includes("?") ? "&" : "?";
-  const cacheKey = file.latestVersionNumber ?? file.versionCount ?? file.createdAt;
-  return `${base}${separator}v=${encodeURIComponent(String(cacheKey))}`;
-}
-
-function compareDriveNodes(left: DriveNode, right: DriveNode) {
-  if (left.type !== right.type) return left.type === "folder" ? -1 : 1;
-  return left.name.localeCompare(right.name, "zh-CN");
 }
 
 function findNode(root: DriveNode | null, childrenByFolderId: Map<string, DriveNode[]>, nodeId: string): DriveNode | null {
@@ -1304,28 +1189,6 @@ function findNode(root: DriveNode | null, childrenByFolderId: Map<string, DriveN
 
 function hasNode(root: DriveNode, childrenByFolderId: Map<string, DriveNode[]>, nodeId: string) {
   return Boolean(findNode(root, childrenByFolderId, nodeId));
-}
-
-function formatFileSize(bytes: number) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let size = bytes;
-  let unitIndex = 0;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-  const digits = unitIndex === 0 || size >= 10 ? 0 : 1;
-  return `${size.toFixed(digits)} ${units[unitIndex]}`;
-}
-
-function formatDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("zh-CN", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(date);
 }
 
 function contextTypeLabel(type: DriveContextType) {

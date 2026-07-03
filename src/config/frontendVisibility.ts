@@ -23,6 +23,7 @@ export const frontendVisibilityByPath: Record<string, FrontendVisibilityKey> = {
   "/tasks": "nav.tasks",
   "/work-logs": "nav.workLogs",
   "/drive": "nav.drive",
+  "/resources": "nav.drive",
   "/chat": "nav.chat",
   "/feedback": "nav.feedback",
   "/reports": "nav.reports",

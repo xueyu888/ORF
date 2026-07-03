@@ -82,7 +82,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
         : props.activePanel === "search" ? "搜索"
             : props.activePanel === "pins" ? "固定消息"
               : props.activePanel === "saved" ? "已保存"
-                : props.activePanel === "files" ? "群聊云盘"
+                : props.activePanel === "files" ? "群聊资源"
               : infoTitle;
   return (
     <aside className="orf-chat-right-panel" data-active-panel={props.activePanel}>

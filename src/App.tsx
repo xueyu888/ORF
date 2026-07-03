@@ -44,7 +44,10 @@ export function App() {
         <Route path="bounties" element={<LazyRoute><BountyHallPage /></LazyRoute>} />
         <Route path="tasks" element={<LazyRoute><ChallengePlanPage /></LazyRoute>} />
         <Route path="work-logs" element={<LazyRoute><WorkLogsPage /></LazyRoute>} />
-        <Route path="drive" element={<LazyRoute><DrivePage /></LazyRoute>} />
+        <Route path="drive" element={<Navigate to="/resources" replace />} />
+        <Route path="resources" element={<LazyRoute><DrivePage /></LazyRoute>} />
+        <Route path="resources/:nodeId" element={<LazyRoute><DrivePage /></LazyRoute>} />
+        <Route path="resources/:nodeId/preview" element={<LazyRoute><DrivePage /></LazyRoute>} />
         <Route path="tasks/objectives/:objectiveId/loot" element={<LazyRoute><LootSubmitPage /></LazyRoute>} />
         <Route path="chat" element={<LazyRoute><ChatPage /></LazyRoute>} />
         <Route path="chat/system/:systemConversationId" element={<LazyRoute><ChatPage /></LazyRoute>} />

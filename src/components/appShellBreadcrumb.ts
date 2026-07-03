@@ -3,7 +3,8 @@ const titleMap: Record<string, string> = {
   bounties: "悬赏大厅",
   tasks: "我的挑战",
   "work-logs": "工作日志",
-  drive: "云盘",
+  drive: "资源",
+  resources: "资源",
   chat: "聊天",
   "fantasy-ui": "Fantasy UI",
   "genshin-ui-kit": "Genshin UI Kit",
@@ -29,6 +30,14 @@ export function breadcrumb(pathname: string) {
 
   if (/^\/feedback\/[^/]+\/?$/.test(pathname)) {
     return "反馈 / Issue";
+  }
+
+  if (/^\/resources\/[^/]+\/preview\/?$/.test(pathname)) {
+    return "资源 / 预览";
+  }
+
+  if (/^\/resources\/[^/]+\/?$/.test(pathname)) {
+    return "资源 / 详情";
   }
 
   if (/^\/tasks\/objectives\/[^/]+\/loot\/?$/.test(pathname)) {

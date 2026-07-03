@@ -219,9 +219,9 @@ export function AppShell() {
               <button
                 onClick={() => setCommandOpen(true)}
                 className="orf-search-trigger h-8 w-full pl-8 pr-3 text-left text-xs transition"
-                aria-label="搜索页面、目标、指标、任务、反馈"
+                aria-label="搜索页面、资源、目标、指标、任务、反馈"
               >
-                <span className="orf-search-trigger-label">搜索页面、目标、指标、任务、反馈</span>
+                <span className="orf-search-trigger-label">搜索页面、资源、目标、指标、任务、反馈</span>
               </button>
             </div>
             {!isBountyHall && canCreateFeedback && (
