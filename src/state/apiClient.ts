@@ -12,6 +12,12 @@ import type {
   ChatUnreadSummary,
   ChatUser,
   ChatDriveLink,
+  DriveContextType,
+  DriveFileVersion,
+  DriveNodeDetails,
+  DrivePreviewKind,
+  DriveSearchScope,
+  DriveSearchType,
   CommentThread,
   CommentAttachmentUploadResult,
   CommentTargetType,
@@ -148,10 +154,32 @@ export type DriveChildrenResponse = {
   children: DriveNode[];
   parentNodeId: string;
 };
+export type DriveSearchResponse = {
+  status?: "ok";
+  nodes: DriveNode[];
+};
 export type DriveNodeResponse = {
   status?: "ok";
   announcementMessage?: ChatMessage | null;
   node: DriveNode;
+};
+export type DriveNodeDetailsResponse = {
+  status?: "ok";
+  details: DriveNodeDetails;
+};
+export type DriveNodeRestoreResponse = {
+  status?: "ok";
+  node: DriveNode;
+  restoredNodeIds: string[];
+};
+export type DriveFileVersionsResponse = {
+  status?: "ok";
+  versions: DriveFileVersion[];
+};
+export type DriveVersionMutationResponse = {
+  status?: "ok";
+  node: DriveNode;
+  versions: DriveFileVersion[];
 };
 export type ApiUploadProgress = {
   lengthComputable: boolean;
@@ -767,6 +795,33 @@ export async function getDriveChildren(input: { parentNodeId: string }) {
   );
 }
 
+export async function searchDriveRequest(input: {
+  limit?: number;
+  previewKind?: DrivePreviewKind | "all";
+  query?: string;
+  scope?: DriveSearchScope;
+  type?: DriveSearchType;
+}) {
+  const query = new URLSearchParams();
+  if (input.query?.trim()) query.set("q", input.query.trim());
+  if (input.type) query.set("type", input.type);
+  if (input.scope) query.set("scope", input.scope);
+  if (input.previewKind) query.set("previewKind", input.previewKind);
+  if (input.limit) query.set("limit", String(input.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiJson<DriveSearchResponse>(`/api/drive/search${suffix}`);
+}
+
+export async function getDriveTrashRequest() {
+  return apiJson<DriveSearchResponse>("/api/drive/trash");
+}
+
+export async function getDriveNodeDetailsRequest(input: { nodeId: string }) {
+  return apiJson<DriveNodeDetailsResponse>(
+    `/api/drive/nodes/${encodeURIComponent(input.nodeId)}/details`,
+  );
+}
+
 export async function createDriveFolderRequest(input: { name: string; parentNodeId: string }) {
   return apiJson<DriveNodeResponse>("/api/drive/folders", {
     method: "POST",
@@ -811,6 +866,66 @@ export async function uploadChatDriveFileRequest(input: {
 export async function deleteDriveNodeRequest(input: { nodeId: string }) {
   return apiJson<{ status?: "ok"; deletedNodeIds: string[] }>(
     `/api/drive/nodes/${encodeURIComponent(input.nodeId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function restoreDriveNodeRequest(input: { nodeId: string }) {
+  return apiJson<DriveNodeRestoreResponse>(
+    `/api/drive/nodes/${encodeURIComponent(input.nodeId)}/restore`,
+    { method: "POST" },
+  );
+}
+
+export async function getDriveFileVersionsRequest(input: { fileId: string }) {
+  return apiJson<DriveFileVersionsResponse>(
+    `/api/drive/files/${encodeURIComponent(input.fileId)}/versions`,
+  );
+}
+
+export async function uploadDriveFileVersionRequest(input: {
+  file: File;
+  fileId: string;
+  onProgress?: (progress: ApiUploadProgress) => void;
+}) {
+  const formData = new FormData();
+  formData.set("file", input.file);
+  return uploadFormDataJson<DriveVersionMutationResponse>(
+    `/api/drive/files/${encodeURIComponent(input.fileId)}/versions`,
+    formData,
+    { onProgress: input.onProgress },
+  );
+}
+
+export async function restoreDriveFileVersionRequest(input: { fileId: string; versionId: string }) {
+  return apiJson<DriveVersionMutationResponse>(
+    `/api/drive/files/${encodeURIComponent(input.fileId)}/versions/${encodeURIComponent(input.versionId)}/restore`,
+    { method: "POST" },
+  );
+}
+
+export async function addDriveContextLinkRequest(input: {
+  contextId: string;
+  contextType: DriveContextType;
+  label?: string | null;
+  nodeId: string;
+}) {
+  return apiJson<DriveNodeDetailsResponse>(
+    `/api/drive/nodes/${encodeURIComponent(input.nodeId)}/context-links`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        contextId: input.contextId,
+        contextType: input.contextType,
+        label: input.label ?? null,
+      }),
+    },
+  );
+}
+
+export async function deleteDriveContextLinkRequest(input: { linkId: string; nodeId: string }) {
+  return apiJson<DriveNodeDetailsResponse>(
+    `/api/drive/nodes/${encodeURIComponent(input.nodeId)}/context-links/${encodeURIComponent(input.linkId)}`,
     { method: "DELETE" },
   );
 }

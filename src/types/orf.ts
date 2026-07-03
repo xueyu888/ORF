@@ -55,6 +55,20 @@ export type ClientPresenceSource = "android" | "browser" | "desktop" | "unknown"
 export type ClientSystemIdleState = "active" | "idle" | "locked" | "unknown";
 export type DriveNodeType = "folder" | "file";
 export type DrivePreviewKind = "download" | "image" | "markdown" | "pdf" | "text";
+export type DriveNodeEventAction =
+  | "folder_created"
+  | "file_uploaded"
+  | "file_version_uploaded"
+  | "file_version_restored"
+  | "node_deleted"
+  | "node_restored"
+  | "context_linked"
+  | "context_unlinked"
+  | "chat_linked"
+  | "chat_unlinked";
+export type DriveContextType = "project" | "objective" | "chatChannel";
+export type DriveSearchScope = "active" | "trash";
+export type DriveSearchType = "all" | "file" | "folder";
 
 export interface OrfUser {
   id: string;
@@ -216,6 +230,8 @@ export interface Drive {
   createdBy?: string | null;
   createdByName?: string | null;
   createdAt: string;
+  latestVersionNumber?: number;
+  versionCount?: number;
 }
 
 export interface DriveNode {
@@ -226,8 +242,54 @@ export interface DriveNode {
   createdBy?: string | null;
   createdByName?: string | null;
   createdAt: string;
+  deletedAt?: string | null;
   updatedAt: string;
   file?: Drive;
+}
+
+export interface DriveFileVersion {
+  id: string;
+  fileId: string;
+  versionNumber: number;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  previewKind: DrivePreviewKind;
+  width?: number | null;
+  height?: number | null;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  createdAt: string;
+}
+
+export interface DriveNodeEvent {
+  id: string;
+  nodeId: string;
+  actorUserId?: string | null;
+  actorName?: string | null;
+  action: DriveNodeEventAction;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface DriveContextLink {
+  id: string;
+  nodeId: string;
+  contextType: DriveContextType;
+  contextId: string;
+  contextTitle: string;
+  label?: string | null;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  createdAt: string;
+}
+
+export interface DriveNodeDetails {
+  activity: DriveNodeEvent[];
+  contextLinks: DriveContextLink[];
+  node: DriveNode;
+  path: DriveNode[];
+  versions: DriveFileVersion[];
 }
 
 export interface ChatDriveLink {
@@ -242,7 +304,9 @@ export interface ChatDriveLink {
 
 export interface DriveBootstrap {
   children: DriveNode[];
+  recentNodes?: DriveNode[];
   root: DriveNode;
+  trashCount?: number;
   uploadMaxBytes: number;
 }
 

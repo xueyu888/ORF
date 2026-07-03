@@ -299,6 +299,61 @@ export function validateDriveManagementSchema(snapshot: { columns: RuntimeTableC
     }
   }
 
+  const versionColumns = columnsByTable.get("drive_file_versions") ?? new Map();
+  for (const columnName of [
+    "id",
+    "team_id",
+    "file_id",
+    "node_id",
+    "version_number",
+    "object_key",
+    "file_name",
+    "mime_type",
+    "file_size",
+    "preview_kind",
+    "created_at",
+  ]) {
+    const column = versionColumns.get(columnName);
+    if (!column) {
+      errors.push(`drive_file_versions.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`drive_file_versions.${columnName} must be NOT NULL.`);
+    }
+  }
+  for (const columnName of ["width", "height", "created_by"]) {
+    if (!versionColumns.has(columnName)) {
+      errors.push(`drive_file_versions.${columnName} is missing.`);
+    }
+  }
+
+  const eventColumns = columnsByTable.get("drive_node_events") ?? new Map();
+  for (const columnName of ["id", "team_id", "node_id", "action", "metadata", "created_at"]) {
+    const column = eventColumns.get(columnName);
+    if (!column) {
+      errors.push(`drive_node_events.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`drive_node_events.${columnName} must be NOT NULL.`);
+    }
+  }
+  if (!eventColumns.has("actor_user_id")) {
+    errors.push("drive_node_events.actor_user_id is missing.");
+  }
+
+  const contextColumns = columnsByTable.get("drive_node_context_links") ?? new Map();
+  for (const columnName of ["id", "team_id", "node_id", "context_type", "context_id", "created_at"]) {
+    const column = contextColumns.get(columnName);
+    if (!column) {
+      errors.push(`drive_node_context_links.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`drive_node_context_links.${columnName} must be NOT NULL.`);
+    }
+  }
+  for (const columnName of ["label", "created_by"]) {
+    if (!contextColumns.has(columnName)) {
+      errors.push(`drive_node_context_links.${columnName} is missing.`);
+    }
+  }
+
   return errors;
 }
 
@@ -559,7 +614,7 @@ export async function assertRuntimeDatabaseSchema() {
           is_nullable as "isNullable"
         from information_schema.columns
         where table_schema = current_schema()
-          and table_name in ('drive_nodes', 'drive_files', 'chat_channel_drive_links')
+          and table_name in ('drive_nodes', 'drive_files', 'drive_file_versions', 'drive_node_events', 'drive_node_context_links', 'chat_channel_drive_links')
       `,
     ),
     pool.query<RuntimeTableColumn>(

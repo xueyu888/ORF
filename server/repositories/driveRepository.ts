@@ -4,8 +4,16 @@ import type {
   ChatMessage,
   Drive,
   DriveBootstrap,
+  DriveContextLink,
+  DriveContextType,
+  DriveFileVersion,
+  DriveNodeDetails,
+  DriveNodeEvent,
+  DriveNodeEventAction,
   DriveNode,
   DrivePreviewKind,
+  DriveSearchScope,
+  DriveSearchType,
 } from "../../src/types/orf";
 import { commentAttachmentPreviewKind } from "./commentAttachmentRepository";
 import { env } from "../env";
@@ -28,17 +36,20 @@ type DriveRow = {
   created_at: Date | string;
   created_by: string | null;
   created_by_name: string | null;
+  deleted_at?: Date | string | null;
   file_id: string | null;
   file_name: string | null;
   file_size: number | string | null;
   height: number | null;
   id: string;
+  latest_version_number?: number | string | null;
   mime_type: string | null;
   name: string;
   node_type: "folder" | "file";
   parent_id: string | null;
   preview_kind: DrivePreviewKind | null;
   updated_at: Date | string;
+  version_count?: number | string | null;
   width: number | null;
 };
 
@@ -50,6 +61,12 @@ type DriveContentRow = {
   object_key: string;
   preview_kind: DrivePreviewKind;
   team_id: string;
+};
+
+type DriveMutableFileRow = DriveContentRow & {
+  latest_version_number: number | string | null;
+  node_id: string;
+  node_name: string;
 };
 
 type ChatDriveLinkRow = DriveRow & {
@@ -65,6 +82,47 @@ type ChatChannelAccessRow = {
   id: string;
   member_role: "owner" | "admin" | "member";
   type: "public" | "private";
+};
+
+type DriveFileVersionRow = {
+  created_at: Date | string;
+  created_by: string | null;
+  created_by_name: string | null;
+  file_id: string;
+  file_name: string;
+  file_size: number | string;
+  height: number | null;
+  id: string;
+  mime_type: string;
+  preview_kind: DrivePreviewKind;
+  version_number: number | string;
+  width: number | null;
+};
+
+type DriveFileVersionContentRow = DriveFileVersionRow & {
+  object_key: string;
+};
+
+type DriveNodeEventRow = {
+  action: DriveNodeEventAction;
+  actor_name: string | null;
+  actor_user_id: string | null;
+  created_at: Date | string;
+  id: string;
+  metadata: Record<string, unknown>;
+  node_id: string;
+};
+
+type DriveContextLinkRow = {
+  context_id: string;
+  context_title: string | null;
+  context_type: DriveContextType;
+  created_at: Date | string;
+  created_by: string | null;
+  created_by_name: string | null;
+  id: string;
+  label: string | null;
+  node_id: string;
 };
 
 export type DriveUploadOutcome = Outcome<{
@@ -104,6 +162,8 @@ function driveFileDto(row: DriveRow): Drive | undefined {
     createdBy: row.created_by,
     createdByName: row.created_by_name,
     createdAt: iso(row.created_at) ?? nowIso(),
+    latestVersionNumber: row.latest_version_number === undefined || row.latest_version_number === null ? undefined : Number(row.latest_version_number),
+    versionCount: row.version_count === undefined || row.version_count === null ? undefined : Number(row.version_count),
   };
 }
 
@@ -116,6 +176,7 @@ function driveNodeDto(row: DriveRow): DriveNode {
     createdBy: row.created_by,
     createdByName: row.created_by_name,
     createdAt: iso(row.created_at) ?? nowIso(),
+    deletedAt: iso(row.deleted_at ?? null),
     updatedAt: iso(row.updated_at) ?? nowIso(),
     file: driveFileDto(row),
   };
@@ -130,6 +191,49 @@ function chatDriveLinkDto(row: ChatDriveLinkRow): ChatDriveLink {
     isDefaultUploadTarget: row.is_default_upload_target,
     createdAt: iso(row.link_created_at) ?? nowIso(),
     updatedAt: iso(row.link_updated_at) ?? nowIso(),
+  };
+}
+
+function driveFileVersionDto(row: DriveFileVersionRow): DriveFileVersion {
+  return {
+    id: row.id,
+    fileId: row.file_id,
+    versionNumber: Number(row.version_number),
+    fileName: row.file_name,
+    mimeType: row.mime_type,
+    fileSize: Number(row.file_size),
+    previewKind: row.preview_kind,
+    width: row.width,
+    height: row.height,
+    createdBy: row.created_by,
+    createdByName: row.created_by_name,
+    createdAt: iso(row.created_at) ?? nowIso(),
+  };
+}
+
+function driveNodeEventDto(row: DriveNodeEventRow): DriveNodeEvent {
+  return {
+    id: row.id,
+    nodeId: row.node_id,
+    actorUserId: row.actor_user_id,
+    actorName: row.actor_name,
+    action: row.action,
+    metadata: row.metadata ?? {},
+    createdAt: iso(row.created_at) ?? nowIso(),
+  };
+}
+
+function driveContextLinkDto(row: DriveContextLinkRow): DriveContextLink {
+  return {
+    id: row.id,
+    nodeId: row.node_id,
+    contextType: row.context_type,
+    contextId: row.context_id,
+    contextTitle: row.context_title ?? row.label ?? row.context_id,
+    label: row.label,
+    createdBy: row.created_by,
+    createdByName: row.created_by_name,
+    createdAt: iso(row.created_at) ?? nowIso(),
   };
 }
 
@@ -186,6 +290,38 @@ function storedDriveMetadata(input: { fileName: string; mimeType: string; peeked
 
 function escapeMarkdownLinkText(value: string) {
   return value.replace(/[[\]\\]/g, "\\$&").replace(/\r?\n/g, " ");
+}
+
+type QueryExecutor = {
+  query: (text: string, params?: unknown[]) => Promise<unknown>;
+};
+
+async function recordDriveEvent(
+  executor: QueryExecutor,
+  input: {
+    action: DriveNodeEventAction;
+    actorUserId?: string | null;
+    metadata?: Record<string, unknown>;
+    nodeId: string;
+    teamId: string;
+    timestamp?: string;
+  },
+) {
+  await executor.query(
+    `
+      INSERT INTO drive_node_events (id, team_id, node_id, actor_user_id, action, metadata, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+    `,
+    [
+      makeId("drive-event"),
+      input.teamId,
+      input.nodeId,
+      input.actorUserId ?? null,
+      input.action,
+      JSON.stringify(input.metadata ?? {}),
+      input.timestamp ?? nowIso(),
+    ],
+  );
 }
 
 async function findRootNode(teamId: string) {
@@ -248,6 +384,65 @@ async function listChildren(parentNodeId: string, teamId: string) {
   return rows.map(driveNodeDto);
 }
 
+async function getDriveNodeById(nodeId: string, teamId: string, options: { includeDeleted?: boolean } = {}) {
+  const { rows } = await pool.query<DriveRow>(
+    `
+      SELECT n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
+             n.created_at, n.updated_at, n.deleted_at,
+             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind, f.width, f.height,
+             version_stats.version_count, version_stats.latest_version_number
+      FROM drive_nodes n
+      LEFT JOIN drive_files f ON f.node_id = n.id
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS version_count, MAX(version_number)::int AS latest_version_number
+        FROM drive_file_versions
+        WHERE file_id = f.id
+      ) version_stats ON true
+      LEFT JOIN users creator ON creator.id = n.created_by
+      WHERE n.team_id = $1
+        AND n.id = $2
+        AND ($3::boolean OR n.deleted_at IS NULL)
+      LIMIT 1
+    `,
+    [teamId, nodeId, Boolean(options.includeDeleted)],
+  );
+  return rows[0] ? driveNodeDto(rows[0]) : null;
+}
+
+async function listRecentNodes(teamId: string, limit = 12) {
+  const { rows } = await pool.query<DriveRow>(
+    `
+      SELECT n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
+             n.created_at, n.updated_at, n.deleted_at,
+             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind, f.width, f.height,
+             version_stats.version_count, version_stats.latest_version_number
+      FROM drive_nodes n
+      LEFT JOIN drive_files f ON f.node_id = n.id
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS version_count, MAX(version_number)::int AS latest_version_number
+        FROM drive_file_versions
+        WHERE file_id = f.id
+      ) version_stats ON true
+      LEFT JOIN users creator ON creator.id = n.created_by
+      WHERE n.team_id = $1
+        AND n.parent_id IS NOT NULL
+        AND n.deleted_at IS NULL
+      ORDER BY n.updated_at DESC, n.created_at DESC
+      LIMIT $2
+    `,
+    [teamId, limit],
+  );
+  return rows.map(driveNodeDto);
+}
+
+async function countTrashNodes(teamId: string) {
+  const { rows } = await pool.query<{ count: string }>(
+    "SELECT COUNT(*)::text AS count FROM drive_nodes WHERE team_id = $1 AND deleted_at IS NOT NULL",
+    [teamId],
+  );
+  return Number(rows[0]?.count ?? 0);
+}
+
 async function findFolderNode(nodeId: string, teamId: string) {
   const { rows } = await pool.query<{ id: string }>(
     `
@@ -279,12 +474,36 @@ async function findNode(nodeId: string, teamId: string) {
   return rows[0] ?? null;
 }
 
+async function findDriveFileForVersion(fileId: string, teamId: string) {
+  const { rows } = await pool.query<DriveMutableFileRow>(
+    `
+      SELECT f.id, f.team_id, f.node_id, n.name AS node_name, f.object_key, f.file_name, f.mime_type,
+             f.file_size, f.preview_kind, COALESCE(version_stats.latest_version_number, 0) AS latest_version_number
+      FROM drive_files f
+      INNER JOIN drive_nodes n ON n.id = f.node_id
+      LEFT JOIN LATERAL (
+        SELECT MAX(version_number)::int AS latest_version_number
+        FROM drive_file_versions
+        WHERE file_id = f.id
+      ) version_stats ON true
+      WHERE f.id = $1
+        AND f.team_id = $2
+        AND n.deleted_at IS NULL
+      LIMIT 1
+    `,
+    [fileId, teamId],
+  );
+  return rows[0] ?? null;
+}
+
 async function driveBootstrap(actor: ChatActor): Promise<DriveBootstrap> {
   const teamId = storageTeamId(actor);
   const root = await ensureTeamDriveRoot(actor);
   return {
     children: await listChildren(root.id, teamId),
+    recentNodes: await listRecentNodes(teamId),
     root,
+    trashCount: await countTrashNodes(teamId),
     uploadMaxBytes: env.ORF_INFRA_UPLOAD_MAX_BYTES,
   };
 }
@@ -364,6 +583,203 @@ export async function listDriveChildren(
   });
 }
 
+async function listDriveFileVersions(fileId: string, teamId: string) {
+  const { rows } = await pool.query<DriveFileVersionRow>(
+    `
+      SELECT v.id, v.file_id, v.version_number, v.file_name, v.mime_type, v.file_size,
+             v.preview_kind, v.width, v.height, v.created_by, creator.name AS created_by_name, v.created_at
+      FROM drive_file_versions v
+      LEFT JOIN users creator ON creator.id = v.created_by
+      WHERE v.team_id = $1
+        AND v.file_id = $2
+      ORDER BY v.version_number DESC
+    `,
+    [teamId, fileId],
+  );
+  return rows.map(driveFileVersionDto);
+}
+
+async function listDriveNodeEvents(nodeId: string, teamId: string, limit = 20) {
+  const { rows } = await pool.query<DriveNodeEventRow>(
+    `
+      SELECT e.id, e.node_id, e.actor_user_id, actor.name AS actor_name, e.action, e.metadata, e.created_at
+      FROM drive_node_events e
+      LEFT JOIN users actor ON actor.id = e.actor_user_id
+      WHERE e.team_id = $1
+        AND e.node_id = $2
+      ORDER BY e.created_at DESC
+      LIMIT $3
+    `,
+    [teamId, nodeId, limit],
+  );
+  return rows.map(driveNodeEventDto);
+}
+
+async function listDriveContextLinks(nodeId: string, teamId: string) {
+  const { rows } = await pool.query<DriveContextLinkRow>(
+    `
+      SELECT l.id, l.node_id, l.context_type, l.context_id, l.label, l.created_by, creator.name AS created_by_name,
+             l.created_at,
+             CASE
+               WHEN l.context_type = 'project' THEN p.name
+               WHEN l.context_type = 'objective' THEN o.title
+               WHEN l.context_type = 'chatChannel' THEN c.display_name
+               ELSE NULL
+             END AS context_title
+      FROM drive_node_context_links l
+      LEFT JOIN users creator ON creator.id = l.created_by
+      LEFT JOIN projects p ON p.id = l.context_id AND p.team_id = l.team_id AND l.context_type = 'project'
+      LEFT JOIN objectives o ON o.id = l.context_id AND o.team_id = l.team_id AND l.context_type = 'objective'
+      LEFT JOIN chat_channels c ON c.id = l.context_id AND c.team_id = l.team_id AND l.context_type = 'chatChannel'
+      WHERE l.team_id = $1
+        AND l.node_id = $2
+      ORDER BY l.created_at DESC
+    `,
+    [teamId, nodeId],
+  );
+  return rows.map(driveContextLinkDto);
+}
+
+async function listDriveNodePath(nodeId: string, teamId: string) {
+  const { rows } = await pool.query<DriveRow & { depth: number }>(
+    `
+      WITH RECURSIVE ancestors AS (
+        SELECT n.*, 0 AS depth
+        FROM drive_nodes n
+        WHERE n.team_id = $1 AND n.id = $2
+        UNION ALL
+        SELECT parent.*, ancestors.depth + 1
+        FROM drive_nodes parent
+        INNER JOIN ancestors ON ancestors.parent_id = parent.id
+        WHERE parent.team_id = $1
+      )
+      SELECT a.id, a.parent_id, a.node_type, a.name, a.created_by, creator.name AS created_by_name,
+             a.created_at, a.updated_at, a.deleted_at,
+             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind, f.width, f.height,
+             null AS version_count, null AS latest_version_number,
+             a.depth
+      FROM ancestors a
+      LEFT JOIN drive_files f ON f.node_id = a.id
+      LEFT JOIN users creator ON creator.id = a.created_by
+      ORDER BY a.depth DESC
+    `,
+    [teamId, nodeId],
+  );
+  return rows.map(driveNodeDto);
+}
+
+export async function getDriveNodeDetails(
+  input: { nodeId: string },
+  actor: ChatActor,
+): Promise<Outcome<{ details: DriveNodeDetails }>> {
+  if (!actor.canRead) return { status: "forbidden" };
+  const teamId = storageTeamId(actor);
+  const node = await getDriveNodeById(input.nodeId, teamId, { includeDeleted: true });
+  if (!node) return { status: "notFound" };
+  const [activity, contextLinks, path, versions] = await Promise.all([
+    listDriveNodeEvents(node.id, teamId),
+    listDriveContextLinks(node.id, teamId),
+    listDriveNodePath(node.id, teamId),
+    node.file ? listDriveFileVersions(node.file.id, teamId) : Promise.resolve([]),
+  ]);
+  return ok({
+    details: {
+      activity,
+      contextLinks,
+      node,
+      path,
+      versions,
+    },
+  });
+}
+
+export async function searchDriveNodes(
+  input: {
+    limit?: number;
+    previewKind?: DrivePreviewKind | "all";
+    query?: string;
+    scope?: DriveSearchScope;
+    type?: DriveSearchType;
+  },
+  actor: ChatActor,
+): Promise<Outcome<{ nodes: DriveNode[] }>> {
+  if (!actor.canRead) return { status: "forbidden" };
+  const teamId = storageTeamId(actor);
+  const params: unknown[] = [teamId];
+  const conditions = ["n.team_id = $1", "n.parent_id IS NOT NULL"];
+  const scope = input.scope ?? "active";
+  if (scope === "trash") {
+    conditions.push("n.deleted_at IS NOT NULL");
+  } else {
+    conditions.push("n.deleted_at IS NULL");
+  }
+  if (input.type && input.type !== "all") {
+    params.push(input.type);
+    conditions.push(`n.node_type = $${params.length}`);
+  }
+  if (input.previewKind && input.previewKind !== "all") {
+    params.push(input.previewKind);
+    conditions.push(`f.preview_kind = $${params.length}`);
+  }
+  const query = input.query?.trim().toLowerCase();
+  if (query) {
+    params.push(`%${query}%`);
+    conditions.push(`(lower(n.name) LIKE $${params.length} OR lower(COALESCE(f.file_name, '')) LIKE $${params.length} OR lower(COALESCE(f.mime_type, '')) LIKE $${params.length})`);
+  }
+  const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
+  params.push(limit);
+  const { rows } = await pool.query<DriveRow>(
+    `
+      SELECT n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
+             n.created_at, n.updated_at, n.deleted_at,
+             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind, f.width, f.height,
+             version_stats.version_count, version_stats.latest_version_number
+      FROM drive_nodes n
+      LEFT JOIN drive_files f ON f.node_id = n.id
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS version_count, MAX(version_number)::int AS latest_version_number
+        FROM drive_file_versions
+        WHERE file_id = f.id
+      ) version_stats ON true
+      LEFT JOIN users creator ON creator.id = n.created_by
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY n.updated_at DESC, lower(n.name)
+      LIMIT $${params.length}
+    `,
+    params,
+  );
+  return ok({ nodes: rows.map(driveNodeDto) });
+}
+
+export async function listDriveTrash(actor: ChatActor): Promise<Outcome<{ nodes: DriveNode[] }>> {
+  if (!actor.canRead) return { status: "forbidden" };
+  const teamId = storageTeamId(actor);
+  const { rows } = await pool.query<DriveRow>(
+    `
+      SELECT n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
+             n.created_at, n.updated_at, n.deleted_at,
+             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind, f.width, f.height,
+             version_stats.version_count, version_stats.latest_version_number
+      FROM drive_nodes n
+      LEFT JOIN drive_nodes parent ON parent.id = n.parent_id
+      LEFT JOIN drive_files f ON f.node_id = n.id
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS version_count, MAX(version_number)::int AS latest_version_number
+        FROM drive_file_versions
+        WHERE file_id = f.id
+      ) version_stats ON true
+      LEFT JOIN users creator ON creator.id = n.created_by
+      WHERE n.team_id = $1
+        AND n.deleted_at IS NOT NULL
+        AND (n.parent_id IS NULL OR parent.deleted_at IS NULL)
+      ORDER BY n.deleted_at DESC, lower(n.name)
+      LIMIT 100
+    `,
+    [teamId],
+  );
+  return ok({ nodes: rows.map(driveNodeDto) });
+}
+
 export async function createDriveFolder(
   input: { name: string; parentNodeId: string },
   actor: ChatActor,
@@ -377,8 +793,10 @@ export async function createDriveFolder(
 
   const nodeId = makeId("drive-node");
   const now = nowIso();
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query<DriveRow>(
+    await client.query("begin");
+    const { rows } = await client.query<DriveRow>(
       `
         WITH inserted AS (
           INSERT INTO drive_nodes (id, team_id, parent_id, node_type, name, created_by, updated_by, created_at, updated_at)
@@ -394,11 +812,26 @@ export async function createDriveFolder(
       [nodeId, teamId, parent.id, folderName, actor.id, now],
     );
     const node = rows[0];
-    if (!node) return { status: "invalid" };
+    if (!node) {
+      await client.query("rollback").catch(() => undefined);
+      return { status: "invalid" };
+    }
+    await recordDriveEvent(client, {
+      action: "folder_created",
+      actorUserId: actor.id,
+      metadata: { name: folderName, parentNodeId: parent.id },
+      nodeId: node.id,
+      teamId,
+      timestamp: now,
+    });
+    await client.query("commit");
     return ok({ node: driveNodeDto(node) });
   } catch (error) {
+    await client.query("rollback").catch(() => undefined);
     if (error instanceof Error && "code" in error && error.code === "23505") return { status: "conflict" };
     throw error;
+  } finally {
+    client.release();
   }
 }
 
@@ -451,13 +884,22 @@ export async function uploadDriveFile(
             SELECT $7, inserted_node.id, $2, $8, $9, $10, $11, $12, $13, $14, $5, $6
             FROM inserted_node
             RETURNING id, node_id, file_name, mime_type, file_size, preview_kind, width, height
+          ),
+          inserted_version AS (
+            INSERT INTO drive_file_versions (id, team_id, file_id, node_id, version_number, object_key, file_name, mime_type, file_size, preview_kind, width, height, created_by, created_at)
+            SELECT $15, $2, inserted_file.id, inserted_node.id, 1, $8, $9, $10, $11, $12, $13, $14, $5, $6
+            FROM inserted_node
+            INNER JOIN inserted_file ON inserted_file.node_id = inserted_node.id
+            RETURNING file_id, version_number
           )
           SELECT inserted_node.id, inserted_node.parent_id, inserted_node.node_type, inserted_node.name,
                  inserted_node.created_by, creator.name AS created_by_name, inserted_node.created_at, inserted_node.updated_at,
                  inserted_file.id AS file_id, inserted_file.file_name, inserted_file.mime_type, inserted_file.file_size,
-                 inserted_file.preview_kind, inserted_file.width, inserted_file.height
+                 inserted_file.preview_kind, inserted_file.width, inserted_file.height,
+                 1 AS version_count, inserted_version.version_number AS latest_version_number
           FROM inserted_node
           INNER JOIN inserted_file ON inserted_file.node_id = inserted_node.id
+          INNER JOIN inserted_version ON inserted_version.file_id = inserted_file.id
           LEFT JOIN users creator ON creator.id = inserted_node.created_by
         `,
         [
@@ -475,12 +917,31 @@ export async function uploadDriveFile(
           metadata.previewKind,
           metadata.width,
           metadata.height,
+          makeId("drive-version"),
         ],
       );
+      const nodeRow = rows[0];
+      if (!nodeRow) {
+        await client.query("rollback").catch(() => undefined);
+        return { status: "invalid" };
+      }
+      await recordDriveEvent(client, {
+        action: "file_uploaded",
+        actorUserId: actor.id,
+        metadata: {
+          fileId,
+          fileName,
+          fileSize: stored.contentLength,
+          parentNodeId: parent.id,
+          previewKind: metadata.previewKind,
+          versionNumber: 1,
+        },
+        nodeId,
+        teamId,
+        timestamp: now,
+      });
       await client.query("commit");
       persisted = true;
-      const nodeRow = rows[0];
-      if (!nodeRow) return { status: "invalid" };
       const node = driveNodeDto(nodeRow);
       const announcementMessage = input.channelId
         ? await announceDriveFileUpload(input.channelId, node, actor).catch(() => null)
@@ -554,7 +1015,410 @@ export async function deleteDriveNode(
     `,
     [input.nodeId, teamId, now, actor.id],
   );
+  if (rows.length > 0) {
+    await recordDriveEvent(pool, {
+      action: "node_deleted",
+      actorUserId: actor.id,
+      metadata: { deletedNodeIds: rows.map((row) => row.id) },
+      nodeId: input.nodeId,
+      teamId,
+      timestamp: now,
+    });
+  }
   return ok({ deletedNodeIds: rows.map((row) => row.id) });
+}
+
+export async function restoreDriveNode(
+  input: { nodeId: string },
+  actor: ChatActor,
+): Promise<Outcome<{ node: DriveNode; restoredNodeIds: string[] }>> {
+  if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
+  const teamId = storageTeamId(actor);
+  const existing = await getDriveNodeById(input.nodeId, teamId, { includeDeleted: true });
+  if (!existing || !existing.deletedAt || existing.parentId === null) return { status: "notFound" };
+
+  const now = nowIso();
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const { rows } = await client.query<{ id: string }>(
+      `
+        WITH RECURSIVE target_nodes AS (
+          SELECT id
+          FROM drive_nodes
+          WHERE id = $1
+            AND team_id = $2
+            AND deleted_at IS NOT NULL
+          UNION ALL
+          SELECT child.id
+          FROM drive_nodes child
+          INNER JOIN target_nodes parent ON parent.id = child.parent_id
+        ),
+        updated AS (
+          UPDATE drive_nodes
+          SET deleted_at = NULL,
+              deleted_by = NULL,
+              updated_at = $3,
+              updated_by = $4
+          WHERE id IN (SELECT id FROM target_nodes)
+          RETURNING id
+        )
+        SELECT id FROM updated
+      `,
+      [input.nodeId, teamId, now, actor.id],
+    );
+    if (rows.length === 0) {
+      await client.query("rollback").catch(() => undefined);
+      return { status: "notFound" };
+    }
+    await recordDriveEvent(client, {
+      action: "node_restored",
+      actorUserId: actor.id,
+      metadata: { restoredNodeIds: rows.map((row) => row.id) },
+      nodeId: input.nodeId,
+      teamId,
+      timestamp: now,
+    });
+    await client.query("commit");
+    const node = await getDriveNodeById(input.nodeId, teamId);
+    if (!node) return { status: "notFound" };
+    return ok({ node, restoredNodeIds: rows.map((row) => row.id) });
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    if (error instanceof Error && "code" in error && error.code === "23505") return { status: "conflict" };
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getDriveFileVersions(
+  input: { fileId: string },
+  actor: ChatActor,
+): Promise<Outcome<{ versions: DriveFileVersion[] }>> {
+  if (!actor.canRead) return { status: "forbidden" };
+  const teamId = storageTeamId(actor);
+  const file = await findDriveFileForVersion(input.fileId, teamId);
+  if (!file) return { status: "notFound" };
+  return ok({ versions: await listDriveFileVersions(input.fileId, teamId) });
+}
+
+export async function uploadDriveFileVersion(
+  input: { body: Readable; fileId: string; fileName: string; mimeType: string },
+  actor: ChatActor,
+): Promise<Outcome<{ node: DriveNode; versions: DriveFileVersion[] }>> {
+  if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
+  const uploadedFileName = sanitizeDriveName(input.fileName);
+  if (!uploadedFileName) return { status: "invalid" };
+  const teamId = storageTeamId(actor);
+  const file = await findDriveFileForVersion(input.fileId, teamId);
+  if (!file) return { status: "notFound" };
+
+  const versionId = makeId("drive-version");
+  const nextVersion = Number(file.latest_version_number ?? 0) + 1;
+  const objectKey = `drive-files/${safePathSegment(teamId)}/${file.id}/versions/${versionId}/${safePathSegment(uploadedFileName)}`;
+  const declaredMimeType = normalizeMimeType(input.mimeType);
+  let stored: { contentLength: number; peeked: Buffer };
+  try {
+    stored = await objectStorage.putObjectStream({
+      body: input.body,
+      contentType: declaredMimeType || "application/octet-stream",
+      key: objectKey,
+      maxBytes: env.ORF_INFRA_UPLOAD_MAX_BYTES,
+      peekBytes: 4096,
+    });
+  } catch (error) {
+    if (error instanceof ObjectStorageUploadTooLargeError) return { status: "tooLarge" };
+    if (error instanceof ObjectStorageUploadEmptyError) return { status: "invalid" };
+    throw error;
+  }
+
+  const metadata = storedDriveMetadata({ fileName: uploadedFileName, mimeType: declaredMimeType, peeked: stored.peeked });
+  const now = nowIso();
+  let persisted = false;
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query(
+      `
+        INSERT INTO drive_file_versions (id, team_id, file_id, node_id, version_number, object_key, file_name, mime_type, file_size, preview_kind, width, height, created_by, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      `,
+      [
+        versionId,
+        teamId,
+        file.id,
+        file.node_id,
+        nextVersion,
+        objectKey,
+        uploadedFileName,
+        metadata.mimeType,
+        stored.contentLength,
+        metadata.previewKind,
+        metadata.width,
+        metadata.height,
+        actor.id,
+        now,
+      ],
+    );
+    await client.query(
+      `
+        UPDATE drive_files
+        SET object_key = $3,
+            file_name = $4,
+            mime_type = $5,
+            file_size = $6,
+            preview_kind = $7,
+            width = $8,
+            height = $9
+        WHERE id = $1 AND team_id = $2
+      `,
+      [file.id, teamId, objectKey, uploadedFileName, metadata.mimeType, stored.contentLength, metadata.previewKind, metadata.width, metadata.height],
+    );
+    await client.query(
+      "UPDATE drive_nodes SET updated_at = $3, updated_by = $4 WHERE id = $1 AND team_id = $2",
+      [file.node_id, teamId, now, actor.id],
+    );
+    await recordDriveEvent(client, {
+      action: "file_version_uploaded",
+      actorUserId: actor.id,
+      metadata: {
+        fileId: file.id,
+        fileName: uploadedFileName,
+        fileSize: stored.contentLength,
+        previewKind: metadata.previewKind,
+        versionNumber: nextVersion,
+      },
+      nodeId: file.node_id,
+      teamId,
+      timestamp: now,
+    });
+    await client.query("commit");
+    persisted = true;
+    const [node, versions] = await Promise.all([
+      getDriveNodeById(file.node_id, teamId),
+      listDriveFileVersions(file.id, teamId),
+    ]);
+    if (!node) return { status: "notFound" };
+    return ok({ node, versions });
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    if (!persisted) await objectStorage.deleteObject(objectKey).catch(() => undefined);
+    if (error instanceof Error && "code" in error && error.code === "23505") return { status: "conflict" };
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function restoreDriveFileVersion(
+  input: { fileId: string; versionId: string },
+  actor: ChatActor,
+): Promise<Outcome<{ node: DriveNode; versions: DriveFileVersion[] }>> {
+  if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
+  const teamId = storageTeamId(actor);
+  const file = await findDriveFileForVersion(input.fileId, teamId);
+  if (!file) return { status: "notFound" };
+  const { rows } = await pool.query<DriveFileVersionContentRow>(
+    `
+      SELECT v.id, v.file_id, v.version_number, v.object_key, v.file_name, v.mime_type, v.file_size,
+             v.preview_kind, v.width, v.height, v.created_by, creator.name AS created_by_name, v.created_at
+      FROM drive_file_versions v
+      LEFT JOIN users creator ON creator.id = v.created_by
+      WHERE v.team_id = $1
+        AND v.file_id = $2
+        AND v.id = $3
+      LIMIT 1
+    `,
+    [teamId, input.fileId, input.versionId],
+  );
+  const version = rows[0];
+  if (!version) return { status: "notFound" };
+  const nextVersion = Number(file.latest_version_number ?? 0) + 1;
+  const now = nowIso();
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query(
+      `
+        INSERT INTO drive_file_versions (id, team_id, file_id, node_id, version_number, object_key, file_name, mime_type, file_size, preview_kind, width, height, created_by, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      `,
+      [
+        makeId("drive-version"),
+        teamId,
+        file.id,
+        file.node_id,
+        nextVersion,
+        version.object_key,
+        version.file_name,
+        version.mime_type,
+        Number(version.file_size),
+        version.preview_kind,
+        version.width,
+        version.height,
+        actor.id,
+        now,
+      ],
+    );
+    await client.query(
+      `
+        UPDATE drive_files
+        SET object_key = $3,
+            file_name = $4,
+            mime_type = $5,
+            file_size = $6,
+            preview_kind = $7,
+            width = $8,
+            height = $9
+        WHERE id = $1 AND team_id = $2
+      `,
+      [file.id, teamId, version.object_key, version.file_name, version.mime_type, Number(version.file_size), version.preview_kind, version.width, version.height],
+    );
+    await client.query(
+      "UPDATE drive_nodes SET updated_at = $3, updated_by = $4 WHERE id = $1 AND team_id = $2",
+      [file.node_id, teamId, now, actor.id],
+    );
+    await recordDriveEvent(client, {
+      action: "file_version_restored",
+      actorUserId: actor.id,
+      metadata: {
+        fileId: file.id,
+        restoredFromVersionId: version.id,
+        restoredFromVersionNumber: Number(version.version_number),
+        versionNumber: nextVersion,
+      },
+      nodeId: file.node_id,
+      teamId,
+      timestamp: now,
+    });
+    await client.query("commit");
+    const [node, versions] = await Promise.all([
+      getDriveNodeById(file.node_id, teamId),
+      listDriveFileVersions(file.id, teamId),
+    ]);
+    if (!node) return { status: "notFound" };
+    return ok({ node, versions });
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    if (error instanceof Error && "code" in error && error.code === "23505") return { status: "conflict" };
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function resolveDriveContext(teamId: string, contextType: DriveContextType, contextId: string) {
+  if (contextType === "project") {
+    const { rows } = await pool.query<{ title: string }>(
+      "SELECT name AS title FROM projects WHERE team_id = $1 AND id = $2 LIMIT 1",
+      [teamId, contextId],
+    );
+    return rows[0]?.title ?? null;
+  }
+  if (contextType === "objective") {
+    const { rows } = await pool.query<{ title: string }>(
+      "SELECT title FROM objectives WHERE team_id = $1 AND id = $2 LIMIT 1",
+      [teamId, contextId],
+    );
+    return rows[0]?.title ?? null;
+  }
+  const { rows } = await pool.query<{ title: string }>(
+    "SELECT display_name AS title FROM chat_channels WHERE team_id = $1 AND id = $2 AND archived_at IS NULL LIMIT 1",
+    [teamId, contextId],
+  );
+  return rows[0]?.title ?? null;
+}
+
+export async function addDriveContextLink(
+  input: { contextId: string; contextType: DriveContextType; label?: string | null; nodeId: string },
+  actor: ChatActor,
+): Promise<Outcome<{ details: DriveNodeDetails }>> {
+  if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
+  const teamId = storageTeamId(actor);
+  const node = await findNode(input.nodeId, teamId);
+  if (!node) return { status: "notFound" };
+  const contextTitle = await resolveDriveContext(teamId, input.contextType, input.contextId);
+  if (!contextTitle) return { status: "notFound" };
+  const now = nowIso();
+  const label = input.label?.trim() || null;
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query(
+      `
+        INSERT INTO drive_node_context_links (id, team_id, node_id, context_type, context_id, label, created_by, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (team_id, node_id, context_type, context_id)
+        DO UPDATE SET label = EXCLUDED.label
+      `,
+      [makeId("drive-context-link"), teamId, input.nodeId, input.contextType, input.contextId, label, actor.id, now],
+    );
+    await recordDriveEvent(client, {
+      action: "context_linked",
+      actorUserId: actor.id,
+      metadata: {
+        contextId: input.contextId,
+        contextTitle,
+        contextType: input.contextType,
+        label,
+      },
+      nodeId: input.nodeId,
+      teamId,
+      timestamp: now,
+    });
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+  return getDriveNodeDetails({ nodeId: input.nodeId }, actor);
+}
+
+export async function deleteDriveContextLink(
+  input: { linkId: string; nodeId: string },
+  actor: ChatActor,
+): Promise<Outcome<{ details: DriveNodeDetails }>> {
+  if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
+  const teamId = storageTeamId(actor);
+  const { rows } = await pool.query<{ context_id: string; context_type: DriveContextType; label: string | null; node_id: string }>(
+    `
+      SELECT node_id, context_type, context_id, label
+      FROM drive_node_context_links
+      WHERE id = $1 AND team_id = $2 AND node_id = $3
+      LIMIT 1
+    `,
+    [input.linkId, teamId, input.nodeId],
+  );
+  const link = rows[0];
+  if (!link) return { status: "notFound" };
+  const now = nowIso();
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query("DELETE FROM drive_node_context_links WHERE id = $1 AND team_id = $2", [input.linkId, teamId]);
+    await recordDriveEvent(client, {
+      action: "context_unlinked",
+      actorUserId: actor.id,
+      metadata: {
+        contextId: link.context_id,
+        contextType: link.context_type,
+        label: link.label,
+      },
+      nodeId: link.node_id,
+      teamId,
+      timestamp: now,
+    });
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+  return getDriveNodeDetails({ nodeId: input.nodeId }, actor);
 }
 
 export async function getDriveFileContent(
@@ -637,6 +1501,18 @@ export async function addChatDriveLink(
       `,
       [linkId, teamId, input.channelId, input.nodeId, label, Boolean(input.isDefaultUploadTarget), actor.id, now],
     );
+    await recordDriveEvent(client, {
+      action: "chat_linked",
+      actorUserId: actor.id,
+      metadata: {
+        channelId: input.channelId,
+        isDefaultUploadTarget: Boolean(input.isDefaultUploadTarget),
+        label,
+      },
+      nodeId: input.nodeId,
+      teamId,
+      timestamp: now,
+    });
     await client.query("commit");
   } catch (error) {
     await client.query("rollback").catch(() => undefined);
@@ -713,10 +1589,44 @@ export async function deleteChatDriveLink(
   const channel = await getChatChannelAccess(input.channelId, actor);
   if (channel.status !== "ok") return channel;
   if (!canManageChatDriveLinks(actor, channel.channel)) return { status: "forbidden" };
-  const result = await pool.query(
-    "DELETE FROM chat_channel_drive_links WHERE id = $1 AND team_id = $2 AND channel_id = $3",
-    [input.linkId, storageTeamId(actor), input.channelId],
+  const teamId = storageTeamId(actor);
+  const { rows } = await pool.query<{ node_id: string; label: string | null; is_default_upload_target: boolean }>(
+    `
+      SELECT node_id, label, is_default_upload_target
+      FROM chat_channel_drive_links
+      WHERE id = $1 AND team_id = $2 AND channel_id = $3
+      LIMIT 1
+    `,
+    [input.linkId, teamId, input.channelId],
   );
-  if (result.rowCount === 0) return { status: "notFound" };
+  const link = rows[0];
+  if (!link) return { status: "notFound" };
+  const now = nowIso();
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query(
+      "DELETE FROM chat_channel_drive_links WHERE id = $1 AND team_id = $2 AND channel_id = $3",
+      [input.linkId, teamId, input.channelId],
+    );
+    await recordDriveEvent(client, {
+      action: "chat_unlinked",
+      actorUserId: actor.id,
+      metadata: {
+        channelId: input.channelId,
+        isDefaultUploadTarget: link.is_default_upload_target,
+        label: link.label,
+      },
+      nodeId: link.node_id,
+      teamId,
+      timestamp: now,
+    });
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
   return getChatDriveBootstrap(input.channelId, actor);
 }

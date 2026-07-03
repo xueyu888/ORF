@@ -6,24 +6,42 @@ import { env } from "../env";
 import { getRolePermissionKeysForScope } from "../repositories/permissionRepository";
 import {
   addChatDriveLink,
+  addDriveContextLink,
   createDriveFolder,
+  deleteDriveContextLink,
   deleteDriveNode,
   deleteChatDriveLink,
+  getDriveFileVersions,
   getChatDriveBootstrap,
   getDriveBootstrap,
   getDriveFileContent,
+  getDriveNodeDetails,
+  listDriveTrash,
   listDriveChildren,
+  restoreDriveFileVersion,
+  restoreDriveNode,
+  searchDriveNodes,
   updateChatDriveLink,
   uploadDriveFile,
+  uploadDriveFileVersion,
 } from "../repositories/driveRepository";
 import type { ChatActor } from "../repositories/chatRepository";
 
 const channelIdParamsSchema = z.object({ channelId: z.string().min(1) });
 const nodeParamsSchema = z.object({ nodeId: z.string().min(1) });
+const nodeContextLinkParamsSchema = nodeParamsSchema.extend({ linkId: z.string().min(1) });
 const channelLinkParamsSchema = channelIdParamsSchema.extend({ linkId: z.string().min(1) });
 const driveFileParamsSchema = z.object({ fileId: z.string().min(1) });
+const driveFileVersionParamsSchema = driveFileParamsSchema.extend({ versionId: z.string().min(1) });
 const driveContentQuerySchema = z.object({
   disposition: z.enum(["attachment", "inline"]).optional(),
+});
+const driveSearchQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).optional(),
+  previewKind: z.enum(["all", "download", "image", "markdown", "pdf", "text"]).optional(),
+  q: z.string().trim().max(200).optional(),
+  scope: z.enum(["active", "trash"]).optional(),
+  type: z.enum(["all", "file", "folder"]).optional(),
 });
 const createFolderBodySchema = z.object({
   name: z.string().trim().min(1).max(160),
@@ -42,6 +60,11 @@ const chatDriveLinkPatchBodySchema = z.object({
   label: z.string().trim().max(160).optional().nullable(),
 }).refine((value) => value.isDefaultUploadTarget !== undefined || value.label !== undefined, {
   message: "At least one field is required",
+});
+const driveContextLinkBodySchema = z.object({
+  contextId: z.string().min(1),
+  contextType: z.enum(["project", "objective", "chatChannel"]),
+  label: z.string().trim().max(160).optional().nullable(),
 });
 
 async function chatActorFromRequest(request: FastifyRequest, reply: FastifyReply): Promise<ChatActor | null> {
@@ -111,11 +134,37 @@ export function registerDriveRoutes(app: FastifyInstance) {
     return sendDriveOutcome(reply, await getDriveBootstrap(actor));
   });
 
+  app.get("/api/drive/search", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const query = driveSearchQuerySchema.parse(request.query);
+    return sendDriveOutcome(reply, await searchDriveNodes({
+      limit: query.limit,
+      previewKind: query.previewKind,
+      query: query.q,
+      scope: query.scope,
+      type: query.type,
+    }, actor));
+  });
+
+  app.get("/api/drive/trash", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    return sendDriveOutcome(reply, await listDriveTrash(actor));
+  });
+
   app.get("/api/drive/nodes/:nodeId/children", async (request, reply) => {
     const actor = await chatActorFromRequest(request, reply);
     if (!actor) return reply;
     const params = nodeParamsSchema.parse(request.params);
     return sendDriveOutcome(reply, await listDriveChildren({ parentNodeId: params.nodeId }, actor));
+  });
+
+  app.get("/api/drive/nodes/:nodeId/details", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const params = nodeParamsSchema.parse(request.params);
+    return sendDriveOutcome(reply, await getDriveNodeDetails({ nodeId: params.nodeId }, actor));
   });
 
   app.post("/api/drive/folders", async (request, reply) => {
@@ -141,6 +190,36 @@ export function registerDriveRoutes(app: FastifyInstance) {
     if (!actor) return reply;
     const params = nodeParamsSchema.parse(request.params);
     return sendDriveOutcome(reply, await deleteDriveNode({ nodeId: params.nodeId }, actor));
+  });
+
+  app.post("/api/drive/nodes/:nodeId/restore", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const params = nodeParamsSchema.parse(request.params);
+    return sendDriveOutcome(reply, await restoreDriveNode({ nodeId: params.nodeId }, actor));
+  });
+
+  app.post("/api/drive/nodes/:nodeId/context-links", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const params = nodeParamsSchema.parse(request.params);
+    const body = driveContextLinkBodySchema.parse(request.body);
+    return sendDriveOutcome(reply, await addDriveContextLink({
+      contextId: body.contextId,
+      contextType: body.contextType,
+      label: body.label,
+      nodeId: params.nodeId,
+    }, actor));
+  });
+
+  app.delete("/api/drive/nodes/:nodeId/context-links/:linkId", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const params = nodeContextLinkParamsSchema.parse(request.params);
+    return sendDriveOutcome(reply, await deleteDriveContextLink({
+      linkId: params.linkId,
+      nodeId: params.nodeId,
+    }, actor));
   });
 
   app.get("/api/chat/channels/:channelId/drive", async (request, reply) => {
@@ -193,6 +272,43 @@ export function registerDriveRoutes(app: FastifyInstance) {
     const outcome = await uploadDriveFromRequest(request, { actor, channelId: params.channelId });
     if (!outcome) return reply.code(400).send({ error: "File is required" });
     return sendDriveOutcome(reply, outcome);
+  });
+
+  app.get("/api/drive/files/:fileId/versions", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const params = driveFileParamsSchema.parse(request.params);
+    return sendDriveOutcome(reply, await getDriveFileVersions({ fileId: params.fileId }, actor));
+  });
+
+  app.post("/api/drive/files/:fileId/versions", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const params = driveFileParamsSchema.parse(request.params);
+    for await (const part of request.parts({ limits: { fields: 1, files: 1, fileSize: env.ORF_INFRA_UPLOAD_MAX_BYTES } })) {
+      if (part.type === "file" && part.fieldname === "file") {
+        return sendDriveOutcome(reply, await uploadDriveFileVersion({
+          body: part.file,
+          fileId: params.fileId,
+          fileName: part.filename,
+          mimeType: part.mimetype,
+        }, actor));
+      }
+      if (part.type === "file") {
+        part.file.resume();
+      }
+    }
+    return reply.code(400).send({ error: "File is required" });
+  });
+
+  app.post("/api/drive/files/:fileId/versions/:versionId/restore", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const params = driveFileVersionParamsSchema.parse(request.params);
+    return sendDriveOutcome(reply, await restoreDriveFileVersion({
+      fileId: params.fileId,
+      versionId: params.versionId,
+    }, actor));
   });
 
   app.get("/api/drive/files/:fileId/content", async (request, reply) => {

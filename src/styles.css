@@ -17756,7 +17756,7 @@ button.orf-chat-image-attachment {
   --orf-drive-preview-frame-bg: var(--orf-chat-panel-preview-frame-bg);
   display: grid;
   min-height: 0;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  grid-template-rows: repeat(6, auto) minmax(0, 1fr);
   gap: 10px;
   overflow: hidden;
   padding: 12px;
@@ -17798,6 +17798,8 @@ button.orf-chat-image-attachment {
 .orf-drive-toolbar,
 .orf-drive-actions,
 .orf-drive-create,
+.orf-drive-modebar,
+.orf-drive-searchbar,
 .orf-drive-uploading,
 .orf-drive-preview-meta {
   display: flex;
@@ -17818,6 +17820,9 @@ button.orf-chat-image-attachment {
 }
 
 .orf-drive-binding select,
+.orf-drive-searchbar input,
+.orf-drive-searchbar select,
+.orf-drive-details select,
 .orf-drive-create input {
   min-width: 0;
   height: 34px;
@@ -17839,6 +17844,80 @@ button.orf-chat-image-attachment {
 .orf-drive-binding select option {
   background: var(--orf-drive-control-bg);
   color: var(--orf-drive-control-text);
+}
+
+.orf-drive-modebar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.orf-drive-modebar button {
+  display: inline-flex;
+  min-width: 0;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--orf-chat-panel-border);
+  border-radius: var(--orf-radius-control);
+  background: var(--orf-drive-surface);
+  color: var(--orf-drive-text);
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.orf-drive-modebar button.is-active {
+  border-color: var(--orf-accent-border);
+  background: var(--orf-chat-panel-chip-active-bg);
+  color: var(--orf-chat-panel-chip-active-text);
+}
+
+.orf-drive-modebar button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-drive-modebar button small {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--orf-danger-bg);
+  color: var(--orf-danger-text);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.orf-drive-searchbar {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) minmax(76px, 0.28fr) auto;
+  border: 1px solid var(--orf-chat-panel-border);
+  border-radius: var(--orf-radius-control);
+  background: var(--orf-drive-control-bg);
+  padding: 4px;
+}
+
+.orf-drive-searchbar > svg {
+  color: var(--orf-drive-text-muted);
+  margin-left: 4px;
+}
+
+.orf-drive-searchbar input,
+.orf-drive-searchbar select {
+  height: 28px;
+  border: 0;
+  background: transparent;
+  padding: 0 6px;
+}
+
+.orf-drive-searchbar select {
+  border-left: 1px solid var(--orf-chat-panel-border);
+  border-radius: 0;
 }
 
 .orf-drive-project-name {
@@ -17868,12 +17947,10 @@ button.orf-chat-image-attachment {
 }
 
 .orf-drive-linked-item {
-  display: inline-grid;
-  grid-template-columns: 16px minmax(0, max-content) auto;
+  display: inline-flex;
   max-width: 100%;
   min-height: 30px;
   align-items: center;
-  gap: 6px;
   border: 1px solid var(--orf-chat-panel-border);
   border-radius: var(--orf-radius-control);
   background: var(--orf-chat-panel-chip-bg);
@@ -17881,6 +17958,19 @@ button.orf-chat-image-attachment {
   padding: 0 8px;
   font-size: 12px;
   font-weight: 800;
+}
+
+.orf-drive-linked-item > button:first-child {
+  display: inline-grid;
+  grid-template-columns: 16px minmax(0, max-content) auto;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font: inherit;
 }
 
 .orf-drive-linked-item:hover,
@@ -17899,9 +17989,14 @@ button.orf-chat-image-attachment {
 
 .orf-drive-linked-remove {
   display: inline-flex;
+  width: 22px;
+  height: 22px;
   align-items: center;
   justify-content: center;
+  border: 0;
+  background: transparent;
   color: inherit;
+  padding: 0;
 }
 
 .orf-drive-create {
@@ -17982,7 +18077,35 @@ button.orf-chat-image-attachment {
 
 @media (max-width: 768px) {
   .orf-drive-page {
+    min-height: 0;
     padding-bottom: calc(var(--orf-mobile-bottom-nav-height) + 16px);
+  }
+
+  .orf-drive-page > .orf-drive-panel {
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .orf-drive-page .orf-drive-layout {
+    grid-template-rows: auto auto;
+  }
+
+  .orf-drive-page .orf-drive-tree {
+    max-height: min(280px, 42dvh);
+    min-height: 0;
+  }
+
+  .orf-drive-page .orf-drive-preview-stack {
+    grid-template-rows: auto auto;
+    overflow: visible;
+  }
+
+  .orf-drive-page .orf-drive-preview {
+    min-height: 260px;
+  }
+
+  .orf-drive-page .orf-drive-details {
+    overflow: visible;
   }
 }
 
@@ -18017,6 +18140,10 @@ button.orf-chat-image-attachment {
   color: var(--orf-drive-row-active-text);
 }
 
+.orf-drive-row.is-deleted {
+  color: var(--orf-danger-text);
+}
+
 .orf-drive-row span {
   min-width: 0;
   overflow: hidden;
@@ -18037,6 +18164,14 @@ button.orf-chat-image-attachment {
 .orf-drive-row-spacer {
   width: 16px;
   height: 16px;
+}
+
+.orf-drive-preview-stack {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: minmax(220px, 0.9fr) minmax(220px, 1fr);
+  gap: 10px;
+  overflow: hidden;
 }
 
 .orf-drive-preview {
@@ -18152,6 +18287,161 @@ button.orf-chat-image-attachment {
   color: var(--orf-drive-text-muted);
   font-size: 12px;
   font-weight: 800;
+}
+
+.orf-drive-details {
+  display: grid;
+  min-height: 0;
+  align-content: start;
+  gap: 10px;
+  overflow: auto;
+  border: 1px solid var(--orf-chat-panel-border);
+  border-radius: var(--orf-radius-card);
+  background: var(--orf-drive-surface-strong);
+  color: var(--orf-drive-text);
+  padding: 10px;
+}
+
+.orf-drive-detail-section {
+  display: grid;
+  gap: 8px;
+  border-bottom: 1px solid var(--orf-chat-panel-border);
+  padding-bottom: 10px;
+}
+
+.orf-drive-detail-section:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.orf-drive-detail-section h3 {
+  margin: 0;
+  color: var(--orf-drive-text-strong);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.orf-drive-detail-section p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--orf-drive-text-muted);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.orf-drive-detail-section dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.orf-drive-detail-section dl > div {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.orf-drive-detail-section dt,
+.orf-drive-detail-section dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.orf-drive-detail-section dt {
+  color: var(--orf-drive-text-muted);
+  font-weight: 800;
+}
+
+.orf-drive-detail-section dd {
+  overflow-wrap: anywhere;
+  color: var(--orf-drive-text);
+  font-weight: 800;
+}
+
+.orf-drive-context-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.orf-drive-context-list span {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 26px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--orf-chat-panel-border);
+  border-radius: 999px;
+  background: var(--orf-chat-panel-chip-bg);
+  color: var(--orf-drive-text);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.orf-drive-context-list button,
+.orf-drive-version-list button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--orf-accent-text);
+  padding: 0;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.orf-drive-version-list,
+.orf-drive-activity-list {
+  display: grid;
+  gap: 7px;
+}
+
+.orf-drive-version-list > div,
+.orf-drive-activity-list > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  border-radius: var(--orf-radius-control);
+  background: var(--orf-drive-surface-muted);
+  padding: 7px 8px;
+}
+
+.orf-drive-version-list span,
+.orf-drive-version-list strong,
+.orf-drive-version-list small,
+.orf-drive-activity-list span,
+.orf-drive-activity-list small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-drive-version-list span {
+  color: var(--orf-accent-text);
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.orf-drive-version-list strong,
+.orf-drive-activity-list span {
+  color: var(--orf-drive-text);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.orf-drive-version-list small,
+.orf-drive-activity-list small {
+  color: var(--orf-drive-text-muted);
+  font-size: 11px;
+  font-weight: 750;
 }
 
 .orf-chat-info-section {
