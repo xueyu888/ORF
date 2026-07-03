@@ -1060,6 +1060,7 @@ export function ChatPage() {
                 setChannels((items) => items.filter((channel) => channel.id !== activeChannel.id));
                 navigate("/chat", { replace: true });
               }}
+              onFiles={() => togglePanel("files")}
               onInfo={() => togglePanel("info")}
               onMarkUnread={() => void markActiveChannelUnread()}
               onMemberSearch={handleOpenMemberSearch}
@@ -1144,6 +1145,7 @@ export function ChatPage() {
           attachmentMaxBytes={bootstrap.settings.attachmentMaxBytes}
           canDeleteAnyMessage={canManageRightPanelChannel}
           canManage={canManageRightPanelChannel}
+          canWrite={bootstrap.permissions.canWrite && !Boolean((rightPanelChannel ?? activeChannel).systemKind)}
           channel={rightPanelChannel ?? activeChannel}
           currentUserId={currentUser?.id}
           editingMessageId={editingMessage?.id ?? null}
@@ -1159,6 +1161,8 @@ export function ChatPage() {
               throw error;
             }
           }}
+          onAnnouncementMessage={applyMessage}
+          onChannelUpdated={applyChannel}
           onClose={closePanel}
           onCancelEdit={() => setEditingMessage(null)}
           collectionLoading={collectionLoading}
@@ -1188,6 +1192,8 @@ export function ChatPage() {
             const response = await updateChatChannelRequest((rightPanelChannel ?? activeChannel).id, input);
             applyChannel(response.channel);
           }}
+          notify={notify}
+          projects={state.projects}
           searchLoading={searchLoading}
           searchFocusSignal={searchFocusSignal}
           searchPerformed={searchPerformed}

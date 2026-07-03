@@ -15,6 +15,8 @@ import type {
   CommentAttachmentUploadResult,
   CommentTargetType,
   OrfState,
+  ProjectFileNode,
+  ProjectFileTreeBootstrap,
   OrfUser,
   SystemConversationId,
   SystemConversationMessage,
@@ -131,6 +133,21 @@ export type ChatThreadsResponse = { status?: "ok"; threads: ChatThreadSummary[] 
 export type ChatAttachmentUploadResponse = { status?: "ok"; attachment: ChatAttachment };
 export type ChatMentionableUsersResponse = { status?: "ok"; users: ChatUser[] };
 export type ChatSearchResponse = { status?: "ok"; results: ChatSearchResult[] };
+export type ProjectFileBootstrapResponse = {
+  status?: "ok";
+  binding: Pick<OrfState["projects"][number], "id" | "name"> | null;
+  tree: ProjectFileTreeBootstrap | null;
+};
+export type ProjectFileChildrenResponse = {
+  status?: "ok";
+  children: ProjectFileNode[];
+  parentNodeId: string;
+};
+export type ProjectFileNodeResponse = {
+  status?: "ok";
+  announcementMessage?: ChatMessage | null;
+  node: ProjectFileNode;
+};
 export type ApiUploadProgress = {
   lengthComputable: boolean;
   loadedBytes: number;
@@ -592,6 +609,7 @@ export async function updateChatChannelRequest(
     favorite?: boolean;
     muted?: boolean;
     name?: string;
+    projectId?: string | null;
   },
 ) {
   return apiJson<ChatChannelResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}`, {
@@ -727,6 +745,49 @@ export async function uploadChatAttachment(input: { channelId: string; file: Fil
     `/api/chat/channels/${encodeURIComponent(input.channelId)}/attachments`,
     formData,
     { onProgress: input.onProgress },
+  );
+}
+
+export async function getProjectFileBootstrap(channelId: string) {
+  return apiJson<ProjectFileBootstrapResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}/project-files`);
+}
+
+export async function getProjectFileChildren(input: { channelId: string; parentNodeId: string }) {
+  return apiJson<ProjectFileChildrenResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/project-files/nodes/${encodeURIComponent(input.parentNodeId)}/children`,
+  );
+}
+
+export async function createProjectFolderRequest(input: { channelId: string; name: string; parentNodeId: string }) {
+  return apiJson<ProjectFileNodeResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/project-files/folders`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: input.name,
+      parentNodeId: input.parentNodeId,
+    }),
+  });
+}
+
+export async function uploadProjectFileRequest(input: {
+  channelId: string;
+  file: File;
+  onProgress?: (progress: ApiUploadProgress) => void;
+  parentNodeId: string;
+}) {
+  const formData = new FormData();
+  formData.set("parentNodeId", input.parentNodeId);
+  formData.set("file", input.file);
+  return uploadFormDataJson<ProjectFileNodeResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/project-files/upload`,
+    formData,
+    { onProgress: input.onProgress },
+  );
+}
+
+export async function deleteProjectFileNodeRequest(input: { channelId: string; nodeId: string }) {
+  return apiJson<{ status?: "ok"; deletedNodeIds: string[] }>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/project-files/nodes/${encodeURIComponent(input.nodeId)}`,
+    { method: "DELETE" },
   );
 }
 

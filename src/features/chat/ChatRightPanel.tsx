@@ -1,6 +1,6 @@
 import { Loader2, MessageSquare, X } from "lucide-react";
 import { IconButton } from "../../components/ui";
-import type { ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback } from "../../types/orf";
+import type { ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback, OrfProject } from "../../types/orf";
 import { ChatChannelInfoPanel } from "./ChatChannelInfoPanel";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import { chatChannelInfoLabel } from "./chatChannelPresentation";
@@ -10,12 +10,14 @@ import type { ActivePanel, ChatSearchScope, ChatSearchTypeFilter } from "./chatP
 import { ChatSearchPanel } from "./ChatSearchPanel";
 import { ChatThreadInboxPanel } from "./ChatThreadInboxPanel";
 import { ChatThreadPanel } from "./ChatThreadPanel";
+import { ProjectFilePanel } from "./ProjectFilePanel";
 
 type ChatRightPanelProps = {
   activePanel: ActivePanel;
   allUsers: ChatUser[];
   attachmentMaxBytes: number;
   canManage: boolean;
+  canWrite: boolean;
   canDeleteAnyMessage: boolean;
   channel: ChatChannel;
   collectionLoading: boolean;
@@ -25,9 +27,11 @@ type ChatRightPanelProps = {
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   memberSearchFocusSignal?: number;
   onAddMembers: (userIds: string[]) => Promise<void>;
+  onAnnouncementMessage: (message: ChatMessage) => void;
   onAttachmentPreview: ChatAttachmentPreviewHandler;
   onCancelEdit: () => void;
   onClose: () => void;
+  onChannelUpdated: (channel: ChatChannel) => void;
   onCopyLink: (message: ChatMessage) => void;
   onCopyMessage: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
@@ -47,7 +51,9 @@ type ChatRightPanelProps = {
   onSendThreadReply: ChatSendHandler;
   onToggleFollow: (following: boolean) => void;
   onTyping: (channelId: string) => void;
-  onUpdateChannel: (input: Partial<Pick<ChatChannel, "displayName" | "header" | "purpose">>) => Promise<void>;
+  onUpdateChannel: (input: Partial<Pick<ChatChannel, "displayName" | "header" | "projectId" | "purpose">>) => Promise<void>;
+  notify: (message: string) => void;
+  projects: OrfProject[];
   searchPerformed: boolean;
   searchFocusSignal: number;
   searchLoading: boolean;
@@ -74,11 +80,12 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
     props.activePanel === "thread" ? "话题"
       : props.activePanel === "threads" ? "话题收件箱"
         : props.activePanel === "search" ? "搜索"
-          : props.activePanel === "pins" ? "固定消息"
-            : props.activePanel === "saved" ? "已保存"
+            : props.activePanel === "pins" ? "固定消息"
+              : props.activePanel === "saved" ? "已保存"
+                : props.activePanel === "files" ? "项目文件"
               : infoTitle;
   return (
-    <aside className="orf-chat-right-panel">
+    <aside className="orf-chat-right-panel" data-active-panel={props.activePanel}>
       <div className="orf-chat-right-header">
         <strong>{title}</strong>
         <IconButton icon={X} label="关闭" onClick={props.onClose} />
@@ -163,6 +170,17 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
           usersById={props.usersById}
         />
       )}
+      {props.activePanel === "files" && (
+        <ProjectFilePanel
+          canManage={props.canManage}
+          canWrite={props.canWrite}
+          channel={props.channel}
+          notify={props.notify}
+          onAnnouncementMessage={props.onAnnouncementMessage}
+          onChannelUpdated={props.onChannelUpdated}
+          projects={props.projects}
+        />
+      )}
       {props.activePanel === "info" && (
         <ChatChannelInfoPanel
           canManage={props.canManage}
@@ -172,6 +190,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
           onAddMembers={props.onAddMembers}
           onRemoveMember={props.onRemoveMember}
           onUpdateChannel={props.onUpdateChannel}
+          projects={props.projects}
           users={props.allUsers}
           usersById={props.usersById}
         />

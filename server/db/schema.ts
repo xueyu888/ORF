@@ -37,6 +37,8 @@ export const commentTargetTypeEnum = pgEnum("comment_target_type", ["objective",
 export const commentStatusEnum = pgEnum("comment_status", ["open", "resolved"]);
 export const chatChannelTypeEnum = pgEnum("chat_channel_type", ["public", "private", "direct"]);
 export const chatMemberRoleEnum = pgEnum("chat_member_role", ["owner", "admin", "member"]);
+export const projectFileNodeTypeEnum = pgEnum("project_file_node_type", ["folder", "file"]);
+export const projectFilePreviewKindEnum = pgEnum("project_file_preview_kind", ["download", "image", "markdown", "pdf", "text"]);
 export const notificationStreamEnum = pgEnum("notification_stream", ["personalNotification", "teamAnnouncement"]);
 export const teams = pgTable("teams", {
   id: text("id").primaryKey(),
@@ -108,6 +110,86 @@ export const projects = pgTable(
   },
   (table) => ({
     teamNameUnique: uniqueIndex("projects_team_name_unique").on(table.teamId, table.name),
+  }),
+);
+
+export const projectFileTrees = pgTable(
+  "project_file_trees",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    projectUnique: uniqueIndex("project_file_trees_team_project_unique").on(table.teamId, table.projectId),
+  }),
+);
+
+export const projectFileNodes = pgTable(
+  "project_file_nodes",
+  {
+    id: text("id").primaryKey(),
+    treeId: text("tree_id")
+      .notNull()
+      .references(() => projectFileTrees.id, { onDelete: "cascade" }),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    parentId: text("parent_id"),
+    nodeType: projectFileNodeTypeEnum("node_type").notNull(),
+    name: text("name").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+    deletedAt: timestamp("deleted_at", { mode: "string", withTimezone: true }),
+  },
+  (table) => ({
+    projectParent: index("project_file_nodes_project_parent_idx").on(table.projectId, table.parentId),
+    treeParent: index("project_file_nodes_tree_parent_idx").on(table.treeId, table.parentId),
+  }),
+);
+
+export const projectFiles = pgTable(
+  "project_files",
+  {
+    id: text("id").primaryKey(),
+    nodeId: text("node_id")
+      .notNull()
+      .references(() => projectFileNodes.id, { onDelete: "cascade" }),
+    treeId: text("tree_id")
+      .notNull()
+      .references(() => projectFileTrees.id, { onDelete: "cascade" }),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    objectKey: text("object_key").notNull(),
+    fileName: text("file_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    fileSize: bigint("file_size", { mode: "number" }).notNull(),
+    previewKind: projectFilePreviewKindEnum("preview_kind").notNull().default("download"),
+    width: integer("width"),
+    height: integer("height"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    nodeUnique: uniqueIndex("project_files_node_unique").on(table.nodeId),
+    projectCreated: index("project_files_project_created_idx").on(table.projectId, table.createdAt),
   }),
 );
 
@@ -795,6 +877,7 @@ export const chatChannels = pgTable(
     name: text("name"),
     systemKind: text("system_kind").$type<ChatSystemKind>(),
     systemRecipientUserId: uuid("system_recipient_user_id").references(() => users.id, { onDelete: "cascade" }),
+    projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
     displayName: text("display_name").notNull(),
     purpose: text("purpose").notNull().default(""),
     header: text("header").notNull().default(""),
@@ -814,6 +897,7 @@ export const chatChannels = pgTable(
     teamSystemPersonalUnique: uniqueIndex("chat_channels_team_system_personal_unique")
       .on(table.teamId, table.systemKind, table.systemRecipientUserId)
       .where(sql`system_kind = 'personalNotification'`),
+    project: index("chat_channels_project_idx").on(table.teamId, table.projectId),
   }),
 );
 

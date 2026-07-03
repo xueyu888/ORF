@@ -235,6 +235,78 @@ export function validateSystemChatNotificationSchema(snapshot: { columns: Runtim
   return errors;
 }
 
+export function validateProjectFileManagementSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const errors: string[] = [];
+  const columnsByTable = snapshot.columns.reduce((map, column) => {
+    const columns = map.get(column.tableName) ?? new Map<string, RuntimeTableColumn>();
+    columns.set(column.columnName, column);
+    map.set(column.tableName, columns);
+    return map;
+  }, new Map<string, Map<string, RuntimeTableColumn>>());
+
+  const channelColumns = columnsByTable.get("chat_channels") ?? new Map();
+  const channelProjectId = channelColumns.get("project_id");
+  if (!channelProjectId) {
+    errors.push("chat_channels.project_id is missing.");
+  } else if (channelProjectId.isNullable !== "YES") {
+    errors.push("chat_channels.project_id must be nullable.");
+  }
+
+  const treeColumns = columnsByTable.get("project_file_trees") ?? new Map();
+  for (const columnName of ["id", "team_id", "project_id", "created_at", "updated_at"]) {
+    const column = treeColumns.get(columnName);
+    if (!column) {
+      errors.push(`project_file_trees.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`project_file_trees.${columnName} must be NOT NULL.`);
+    }
+  }
+
+  const nodeColumns = columnsByTable.get("project_file_nodes") ?? new Map();
+  for (const columnName of ["id", "tree_id", "team_id", "project_id", "node_type", "name", "created_at", "updated_at"]) {
+    const column = nodeColumns.get(columnName);
+    if (!column) {
+      errors.push(`project_file_nodes.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`project_file_nodes.${columnName} must be NOT NULL.`);
+    }
+  }
+  for (const columnName of ["parent_id", "created_by", "updated_by", "deleted_by", "deleted_at"]) {
+    if (!nodeColumns.has(columnName)) {
+      errors.push(`project_file_nodes.${columnName} is missing.`);
+    }
+  }
+
+  const fileColumns = columnsByTable.get("project_files") ?? new Map();
+  for (const columnName of [
+    "id",
+    "node_id",
+    "tree_id",
+    "team_id",
+    "project_id",
+    "object_key",
+    "file_name",
+    "mime_type",
+    "file_size",
+    "preview_kind",
+    "created_at",
+  ]) {
+    const column = fileColumns.get(columnName);
+    if (!column) {
+      errors.push(`project_files.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`project_files.${columnName} must be NOT NULL.`);
+    }
+  }
+  for (const columnName of ["width", "height", "created_by"]) {
+    if (!fileColumns.has(columnName)) {
+      errors.push(`project_files.${columnName} is missing.`);
+    }
+  }
+
+  return errors;
+}
+
 export function validateGitLabOrfChatIntegrationSchema(snapshot: { columns: RuntimeTableColumn[] }) {
   const errors: string[] = [];
   const columnsByTable = snapshot.columns.reduce((map, column) => {
@@ -366,6 +438,7 @@ export async function assertRuntimeDatabaseSchema() {
     notificationStreamResult,
     notificationConversationColumnsResult,
     systemChatNotificationColumnsResult,
+    projectFileManagementColumnsResult,
     gitLabOrfChatColumnsResult,
     gitHubOrfChatColumnsResult,
     workLogReminderStateColumnsResult,
@@ -491,6 +564,20 @@ export async function assertRuntimeDatabaseSchema() {
           is_nullable as "isNullable"
         from information_schema.columns
         where table_schema = current_schema()
+          and (
+            (table_name = 'chat_channels' and column_name = 'project_id')
+            or table_name in ('project_file_trees', 'project_file_nodes', 'project_files')
+          )
+      `,
+    ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
           and table_name in ('gitlab_orf_channel_subscriptions', 'gitlab_orf_event_deliveries')
       `,
     ),
@@ -559,6 +646,9 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateSystemChatNotificationSchema({
       columns: systemChatNotificationColumnsResult.rows,
+    }),
+    ...validateProjectFileManagementSchema({
+      columns: projectFileManagementColumnsResult.rows,
     }),
     ...validateGitLabOrfChatIntegrationSchema({
       columns: gitLabOrfChatColumnsResult.rows,

@@ -53,6 +53,8 @@ export type ChatMemberRole = "owner" | "admin" | "member";
 export type ChatPresenceState = "active" | "idle" | "recent" | "offline";
 export type ClientPresenceSource = "android" | "browser" | "desktop" | "unknown";
 export type ClientSystemIdleState = "active" | "idle" | "locked" | "unknown";
+export type ProjectFileNodeType = "folder" | "file";
+export type ProjectFilePreviewKind = "download" | "image" | "markdown" | "pdf" | "text";
 
 export interface OrfUser {
   id: string;
@@ -198,6 +200,41 @@ export interface OrfProject {
   name: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProjectFile {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  contentUrl: string;
+  downloadUrl: string;
+  previewKind: ProjectFilePreviewKind;
+  previewUrl?: string;
+  width?: number | null;
+  height?: number | null;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  createdAt: string;
+}
+
+export interface ProjectFileNode {
+  id: string;
+  parentId?: string | null;
+  type: ProjectFileNodeType;
+  name: string;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  file?: ProjectFile;
+}
+
+export interface ProjectFileTreeBootstrap {
+  children: ProjectFileNode[];
+  project: OrfProject;
+  root: ProjectFileNode;
+  uploadMaxBytes: number;
 }
 
 export interface ObjectiveParticipantProfile {
@@ -748,6 +785,8 @@ export interface ChatChannel {
   name?: string | null;
   systemKind?: ChatSystemKind | null;
   systemRecipientUserId?: string | null;
+  projectId?: string | null;
+  projectName?: string | null;
   displayName: string;
   purpose: string;
   header: string;

@@ -484,6 +484,13 @@
       "when": 1782941000000,
       "tag": "0068_repair_point_ledger_settlement_period",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1783030000000,
+      "tag": "0069_project_chat_file_management",
+      "breakpoints": true
     }
   ]
 }

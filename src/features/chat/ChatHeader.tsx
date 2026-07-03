@@ -1,4 +1,4 @@
-import { Archive, ArrowLeft, Bell, BellOff, Bookmark, EyeOff, Info, Pin, Reply, Search, Star, UserPlus, Users } from "lucide-react";
+import { Archive, ArrowLeft, Bell, BellOff, Bookmark, EyeOff, Folder, Info, Pin, Reply, Search, Star, UserPlus, Users } from "lucide-react";
 import { IconButton, actionButtonClassName } from "../../components/ui";
 import { isChatConversation } from "../../domain/chatConversation";
 import type { ChatChannel, ChatUser } from "../../types/orf";
@@ -12,6 +12,7 @@ type ChatHeaderProps = {
   currentUserId?: string;
   onArchive: () => void;
   onInfo: () => void;
+  onFiles: () => void;
   onMarkUnread: () => void;
   onMemberSearch: () => void;
   onMobileBack?: () => void;
@@ -30,6 +31,7 @@ export function ChatHeader({
   currentUserId,
   onArchive,
   onInfo,
+  onFiles,
   onMarkUnread,
   onMemberSearch,
   onMobileBack,
@@ -45,6 +47,7 @@ export function ChatHeader({
   const integrationBrand = chatChannelIntegrationBrand(channel);
   const membership = currentMembership(channel, currentUserId);
   const canManageMembership = canManage && channel.type === "private";
+  const canUseProjectFiles = !channel.systemKind && (channel.type === "public" || channel.type === "private");
   const infoLabel = chatChannelInfoLabel(channel);
   const title = chatChannelDisplayLabel(channel, currentUserId, usersById);
   const headerText = channel.header.trim();
@@ -83,6 +86,7 @@ export function ChatHeader({
           onClick={onToggleMuted}
         />
         {canManageMembership && <IconButton icon={UserPlus} label="添加成员" onClick={onMemberSearch} />}
+        {canUseProjectFiles && <IconButton icon={Folder} label="项目文件" onClick={onFiles} />}
         <IconButton icon={Pin} label="固定消息" onClick={onPins} />
         <IconButton icon={Bookmark} label="已保存消息" onClick={onSaved} />
         <button
