@@ -143,6 +143,7 @@ export const memberReestimateCompleteRequestOperators: OperatorRegistry<TestCont
             targetTitle: requiredString(params, "targetTitle"),
             metricTitle: requiredString(params, "metricTitle"),
             difficulty: requiredDifficulty(params, "difficulty"),
+            score: requiredNumber(params, "score"),
           }),
         )
         .toBe(true);
@@ -213,6 +214,7 @@ export const memberReestimateCompleteRequestOperators: OperatorRegistry<TestCont
             target: requiredTarget(params, "target"),
             title: requiredString(params, "title"),
             difficulty: requiredDifficulty(params, "difficulty"),
+            score: requiredNumber(params, "score"),
           }),
         )
         .toBe(true);

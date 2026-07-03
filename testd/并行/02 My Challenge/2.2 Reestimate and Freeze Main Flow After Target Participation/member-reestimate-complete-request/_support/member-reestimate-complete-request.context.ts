@@ -31,6 +31,7 @@ export type MemberReestimateCompleteRequestCaseData = {
   target: ReestimateObjectiveTargetData;
   metricTitle: string;
   metricDifficulty: Extract<UncertaintyLevel, "进阶">;
+  metricScore: 30;
   alignmentKind: Extract<ObjectiveAlignmentRequestKind, "reestimateCompletion">;
   alignmentStatus: Extract<ObjectiveAlignmentRequestStatus, "requested">;
 };
@@ -48,6 +49,7 @@ export type MyChallengeApiResult = {
   objectiveId: string;
   title: string;
   uncertaintyLevel?: UncertaintyLevel | null;
+  uncertaintyScore: number;
 };
 
 export type MyChallengeApiAlignmentRequest = {

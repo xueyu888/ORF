@@ -248,6 +248,7 @@ export async function myChallengesContainsMetricWithDifficulty(page: Page, input
   targetTitle: string;
   metricTitle: string;
   difficulty: UncertaintyLevel;
+  score: number;
 }) {
   const data = await readMyChallenges(page);
   const objective = data.objectives.find((item) => item.title === input.targetTitle);
@@ -256,7 +257,8 @@ export async function myChallengesContainsMetricWithDifficulty(page: Page, input
     (result) =>
       result.objectiveId === objective.id &&
       result.title === input.metricTitle &&
-      result.uncertaintyLevel === input.difficulty,
+      result.uncertaintyLevel === input.difficulty &&
+      result.uncertaintyScore === input.score,
   );
 }
 
@@ -279,11 +281,12 @@ export async function metricExistsWithDifficulty(input: {
   target: ReestimateObjectiveTargetData;
   title: string;
   difficulty: UncertaintyLevel;
+  score: number;
 }) {
   const objective = await objectiveByTitle(input.target.title);
   if (!objective) return false;
   const row = await metricByTitle(input.title);
-  return row?.objectiveId === objective.id && row.uncertaintyLevel === input.difficulty;
+  return row?.objectiveId === objective.id && row.uncertaintyLevel === input.difficulty && row.uncertaintyScore === input.score;
 }
 
 async function metricDifficultyEquals(input: { metricTitle: string; difficulty: UncertaintyLevel }) {
@@ -314,6 +317,7 @@ async function metricByTitle(title: string) {
       objectiveId: results.objectiveId,
       title: results.title,
       uncertaintyLevel: results.uncertaintyLevel,
+      uncertaintyScore: results.uncertaintyScore,
     })
     .from(results)
     .where(eq(results.title, title))

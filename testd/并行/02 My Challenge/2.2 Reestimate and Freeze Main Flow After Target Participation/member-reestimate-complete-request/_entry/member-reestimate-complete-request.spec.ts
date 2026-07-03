@@ -9,7 +9,7 @@ import {
 import { memberReestimateCompleteRequestCase } from "../member-reestimate-complete-request.case";
 import { memberReestimateCompleteRequestOperators } from "../member-reestimate-complete-request.operators";
 
-test.describe("参与的普通成员可在重估中阶段维护目标估算并申请完成重估测试用例", () => {
+test.describe("参与的普通成员可在重估中阶段维护指标口径和等级积分并申请完成重估测试用例", () => {
   test(memberReestimateCompleteRequestCase.title, async ({ context, page }, testInfo) => {
     const ctx: TestContext = { context, page };
 
