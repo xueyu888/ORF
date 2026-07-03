@@ -800,6 +800,7 @@ export async function getDriveChildren(input: { parentNodeId: string }) {
 }
 
 export async function searchDriveRequest(input: {
+  contextId?: string;
   contextType?: DriveSearchContextFilter;
   limit?: number;
   previewKind?: DrivePreviewKind | "all";
@@ -820,6 +821,7 @@ export async function searchDriveRequest(input: {
   if (input.source) query.set("source", input.source);
   if (input.uploaderId) query.set("uploaderId", input.uploaderId);
   if (input.updated) query.set("updated", input.updated);
+  if (input.contextId) query.set("contextId", input.contextId);
   if (input.contextType) query.set("contextType", input.contextType);
   if (input.limit) query.set("limit", String(input.limit));
   const suffix = query.toString() ? `?${query.toString()}` : "";

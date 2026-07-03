@@ -10,6 +10,7 @@ import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTree
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
 import { UserAvatar } from "../../../components/UserAvatar";
 import { Button, IconButton, actionButtonClassName } from "../../../components/ui";
+import { RelatedResourcesPanel } from "../../drive/RelatedResourcesPanel";
 import {
   canRequestObjectiveAlignment,
   isOpenObjectiveAlignmentRequest,
@@ -573,6 +574,15 @@ function ObjectivePanel({
           ))}
         </div>
       )}
+
+      <RelatedResourcesPanel
+        className="orf-objective-related-resources"
+        compact
+        contextId={group.objective.id}
+        contextType="objective"
+        hideWhenEmpty
+        title="目标资源"
+      />
 
       <div className="orf-objective-body">
         {group.bounties.map((bounty) => (
@@ -1257,6 +1267,18 @@ function ActionRow({
         <TimeValue icon={Clock3} value={action?.updatedAt || "未设置"} />
         <EmptySlot />
       </div>
+
+      {action && open && (
+        <RelatedResourcesPanel
+          className="orf-task-related-resources"
+          compact
+          contextId={action.id}
+          contextType="task"
+          hideWhenEmpty
+          limit={4}
+          title="任务资源"
+        />
+      )}
 
       {action && open &&
         subActionRows(action.checklist, temporarySubtask).map((subActionRow) => (

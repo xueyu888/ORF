@@ -791,6 +791,7 @@ export async function getDriveNodeDetails(
 
 export async function searchDriveNodes(
   input: {
+    contextId?: string;
     contextType?: DriveSearchContextFilter;
     limit?: number;
     previewKind?: DrivePreviewKind | "all";
@@ -845,7 +846,20 @@ export async function searchDriveNodes(
       WHERE context.value->>'contextType' = $${params.length}
     )`);
   }
-  if (input.contextType && input.contextType !== "all") {
+  if (input.contextId && input.contextType && input.contextType !== "all") {
+    params.push(input.contextType, input.contextId);
+    conditions.push(`EXISTS (
+      SELECT 1 FROM jsonb_array_elements(search_meta.search_contexts) AS context(value)
+      WHERE context.value->>'contextType' = $${params.length - 1}
+        AND context.value->>'contextId' = $${params.length}
+    )`);
+  } else if (input.contextId) {
+    params.push(input.contextId);
+    conditions.push(`EXISTS (
+      SELECT 1 FROM jsonb_array_elements(search_meta.search_contexts) AS context(value)
+      WHERE context.value->>'contextId' = $${params.length}
+    )`);
+  } else if (input.contextType && input.contextType !== "all") {
     params.push(input.contextType);
     conditions.push(`EXISTS (
       SELECT 1 FROM jsonb_array_elements(search_meta.search_contexts) AS context(value)

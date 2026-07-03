@@ -37,6 +37,7 @@ const driveContentQuerySchema = z.object({
   disposition: z.enum(["attachment", "inline"]).optional(),
 });
 const driveSearchQuerySchema = z.object({
+  contextId: z.string().trim().min(1).max(120).optional(),
   contextType: z.enum(["all", "project", "objective", "result", "task", "feedback", "workLog", "chatChannel", "chatMessage", "chatThread"]).optional(),
   limit: z.coerce.number().int().positive().max(100).optional(),
   previewKind: z.enum(["all", "download", "image", "markdown", "pdf", "text"]).optional(),
@@ -144,6 +145,7 @@ export function registerDriveRoutes(app: FastifyInstance) {
     if (!actor) return reply;
     const query = driveSearchQuerySchema.parse(request.query);
     return sendDriveOutcome(reply, await searchDriveNodes({
+      contextId: query.contextId,
       contextType: query.contextType,
       limit: query.limit,
       previewKind: query.previewKind,
