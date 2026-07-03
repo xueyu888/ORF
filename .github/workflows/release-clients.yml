@@ -236,7 +236,7 @@ jobs:
               }
             }
             END {
-              for (index = 1; index <= last; index++) print lines[index];
+              for (line_number = 1; line_number <= last; line_number++) print lines[line_number];
             }
           ' release-summary.raw > release-summary.md
 
