@@ -6,6 +6,7 @@ import {
   canSelectObjectiveForWorkLog,
   canShowObjectiveInDefaultWorkLogList,
   canSaveUnscopedWorkLog,
+  canUseAllWorkLogObjectiveOptions,
   canUseWorkLogCategories,
   canUseWorkLogCategoryInput,
   isObjectiveCompletedForWorkLog,
@@ -73,6 +74,9 @@ test("work log built-in category policies keep leave open without granting manag
   assert.equal(canUseWorkLogCategories(zhuRuixuan), false);
 
   assert.equal(canUseWorkLogCategories(admin), true);
+  assert.equal(canUseAllWorkLogObjectiveOptions(admin), true);
+  assert.equal(canUseAllWorkLogObjectiveOptions(member), false);
+  assert.equal(canUseAllWorkLogObjectiveOptions(faeMember), false);
   assert.equal(canUseWorkLogCategoryInput(admin, { categoryName: "管理事务" }), true);
   assert.equal(canSaveUnscopedWorkLog(faeMember), true);
   assert.equal(canSaveUnscopedWorkLog(member), false);

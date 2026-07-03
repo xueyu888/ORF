@@ -13,6 +13,7 @@ import {
   canAttachObjectiveToWorkLog,
   canShowObjectiveInDefaultWorkLogList,
   canSaveUnscopedWorkLog,
+  canUseAllWorkLogObjectiveOptions,
   canUseWorkLogCategoryInput,
   canUseWorkLogCategories,
   findBuiltInWorkLogCategoryForInput,
@@ -186,13 +187,15 @@ async function listAuthorWorkLogObjectiveRows(input: {
 }) {
   const storageScopeId = runtimeScopeStorageId(input.scope);
   const searchQuery = normalizeWorkLogObjectiveSearchQuery(input.searchQuery);
+  const usesAllObjectiveOptions =
+    input.listScope === "default" && canUseAllWorkLogObjectiveOptions(input.user);
   const flowStatuses =
-    input.listScope === "default"
+    input.listScope === "default" && !usesAllObjectiveOptions
       ? workLogObjectiveDefaultFlowStatuses
       : workLogObjectiveSelectionCandidateFlowStatuses;
   const filters = [eq(objectives.teamId, storageScopeId)];
   filters.push(inArray(objectives.flowStatus, [...flowStatuses]));
-  if (input.listScope === "default") {
+  if (input.listScope === "default" && !usesAllObjectiveOptions) {
     filters.push(sql`${objectives.challengerUserIds} ? ${input.user.id}`);
   }
   if (input.objectiveIds) {
@@ -217,7 +220,11 @@ async function listAuthorWorkLogObjectiveRows(input: {
     .from(objectives)
     .where(and(...filters))
     .orderBy(asc(objectives.finalDueAt), asc(objectives.title), asc(objectives.id));
-  if (input.listScope === "default") return rows.filter(canShowObjectiveInDefaultWorkLogList);
+  if (input.listScope === "default") {
+    return rows.filter(
+      usesAllObjectiveOptions ? canAttachObjectiveToWorkLog : canShowObjectiveInDefaultWorkLogList,
+    );
+  }
   if (input.listScope === "search" && !searchQuery) return rows.filter(canShowObjectiveInDefaultWorkLogList);
   return rows.filter(canAttachObjectiveToWorkLog);
 }
