@@ -133,7 +133,14 @@ export function DriveBrowser({
   const [trashNodes, setTrashNodes] = useState<DriveNode[]>([]);
   const [uploadTask, setUploadTask] = useState<UploadTaskState | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const loadDetailsRef = useRef(onLoadDetails);
+  const notifyRef = useRef(notify);
   const versionInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    loadDetailsRef.current = onLoadDetails;
+    notifyRef.current = notify;
+  }, [notify, onLoadDetails]);
 
   useEffect(() => {
     if (!bootstrap) {
@@ -193,21 +200,22 @@ export function DriveBrowser({
 
   useEffect(() => {
     const nodeId = selectedNodeId;
-    if (!nodeId || !onLoadDetails) {
+    const loadDetails = loadDetailsRef.current;
+    if (!nodeId || !loadDetails) {
       setDetails(null);
       return;
     }
     let disposed = false;
     setDetails((current) => current?.node.id === nodeId ? current : null);
     setDetailsLoading(true);
-    onLoadDetails(nodeId)
+    loadDetails(nodeId)
       .then((loaded) => {
         if (!disposed) setDetails(loaded);
       })
       .catch((error) => {
         if (disposed) return;
         const message = error instanceof Error ? error.message : "文件详情加载失败";
-        notify(message);
+        notifyRef.current(message);
         setDetails(null);
       })
       .finally(() => {
@@ -216,7 +224,7 @@ export function DriveBrowser({
     return () => {
       disposed = true;
     };
-  }, [notify, onLoadDetails, selectedNodeId]);
+  }, [selectedNodeId]);
 
   useEffect(() => {
     const file = selectedFile;
@@ -828,6 +836,7 @@ function DrivePreview({
         contextOptions={contextOptions}
         details={details}
         loading={detailsLoading}
+        node={node}
         onAddContext={onAddContext}
         onRemoveContext={onRemoveContext}
         onRestoreVersion={onRestoreVersion}
@@ -841,6 +850,7 @@ function DriveDetails({
   contextOptions,
   details,
   loading,
+  node,
   onAddContext,
   onRemoveContext,
   onRestoreVersion,
@@ -849,14 +859,42 @@ function DriveDetails({
   contextOptions: DriveContextOption[];
   details: DriveNodeDetails | null;
   loading: boolean;
+  node: DriveNode | null;
   onAddContext?: (contextKey: string) => void;
   onRemoveContext?: (linkId: string) => void;
   onRestoreVersion?: (versionId: string) => void;
 }) {
   if (loading) {
-    return <div className="orf-drive-details"><Loader2 className="h-4 w-4 animate-spin" /> 加载详情</div>;
+    if (details) return <DriveDetailsContent canWrite={canWrite} contextOptions={contextOptions} details={details} onAddContext={onAddContext} onRemoveContext={onRemoveContext} onRestoreVersion={onRestoreVersion} />;
+    return (
+      <div className="orf-drive-details orf-drive-details-loading">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <div>
+          <strong>{node?.name ?? "正在同步详情"}</strong>
+          <span>正在同步版本、活动和工作上下文</span>
+        </div>
+      </div>
+    );
   }
   if (!details) return null;
+  return <DriveDetailsContent canWrite={canWrite} contextOptions={contextOptions} details={details} onAddContext={onAddContext} onRemoveContext={onRemoveContext} onRestoreVersion={onRestoreVersion} />;
+}
+
+function DriveDetailsContent({
+  canWrite,
+  contextOptions,
+  details,
+  onAddContext,
+  onRemoveContext,
+  onRestoreVersion,
+}: {
+  canWrite: boolean;
+  contextOptions: DriveContextOption[];
+  details: DriveNodeDetails;
+  onAddContext?: (contextKey: string) => void;
+  onRemoveContext?: (linkId: string) => void;
+  onRestoreVersion?: (versionId: string) => void;
+}) {
   const node = details.node;
   return (
     <div className="orf-drive-details">

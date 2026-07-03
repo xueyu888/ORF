@@ -17784,11 +17784,13 @@ button.orf-chat-image-attachment {
   --orf-chat-panel-danger-bg: var(--orf-danger-bg);
   --orf-chat-panel-focus-ring: 0 0 0 3px var(--orf-accent-soft);
   --orf-chat-panel-preview-frame-bg: var(--orf-bg-elevated);
-  min-height: min(760px, calc(100dvh - 190px));
+  height: clamp(560px, calc(100dvh - var(--orf-topbar-height) - 124px), 820px);
+  min-height: 0;
 }
 
 .orf-drive-page > .orf-drive-panel {
-  min-height: min(760px, calc(100dvh - 190px));
+  height: 100%;
+  min-height: 0;
   border: 1px solid var(--orf-chat-panel-border);
   border-radius: var(--orf-radius-card);
   background: var(--orf-chat-panel-surface);
@@ -18070,13 +18072,19 @@ button.orf-chat-image-attachment {
 
 @media (min-width: 900px) {
   .orf-drive-page .orf-drive-layout {
-    grid-template-columns: minmax(260px, 0.45fr) minmax(0, 1fr);
+    grid-template-columns: minmax(300px, 0.52fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .orf-drive-page .orf-drive-preview-stack {
+    grid-template-columns: minmax(360px, 1fr) minmax(300px, 0.72fr);
     grid-template-rows: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 768px) {
   .orf-drive-page {
+    height: auto;
     min-height: 0;
     padding-bottom: calc(var(--orf-mobile-bottom-nav-height) + 16px);
   }
@@ -18300,6 +18308,39 @@ button.orf-chat-image-attachment {
   background: var(--orf-drive-surface-strong);
   color: var(--orf-drive-text);
   padding: 10px;
+}
+
+.orf-drive-details-loading {
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  align-content: center;
+  min-height: 120px;
+}
+
+.orf-drive-details-loading div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.orf-drive-details-loading strong,
+.orf-drive-details-loading span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-drive-details-loading strong {
+  color: var(--orf-drive-text-strong);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.orf-drive-details-loading span {
+  color: var(--orf-drive-text-muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .orf-drive-detail-section {
