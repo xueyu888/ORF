@@ -2,12 +2,22 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
   isClientReleaseVersion,
+  isTrustedClientUpdateUrl,
   normalizeReleaseVersion,
   selectClientUpdateAsset,
+  type ClientReleaseInfo,
 } from "../../src/features/client-updates/clientUpdateModel";
 import { requireAdminContext } from "../auth/accessPolicy";
 import { publishClientUpdateAnnouncement } from "../clientUpdates/clientUpdateAnnouncement";
-import { getCachedClientReleaseByVersion, getCachedLatestClientRelease } from "../clientUpdates/clientReleaseRepository";
+import { clearClientReleaseCache, getCachedClientReleaseByVersion, getCachedLatestClientRelease } from "../clientUpdates/clientReleaseRepository";
+import {
+  buildClientUpdateAssetDownloadUrl,
+  getStoredClientUpdateAsset,
+  isClientUpdateAssetFileName,
+  storeClientUpdateAssetFile,
+  upsertStoredClientUpdateRelease,
+} from "../clientUpdates/clientUpdateAssetStore";
+import { env } from "../env";
 import { getDefaultRuntimeScope, runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 
 const releaseVersionParamsSchema = z.object({
@@ -25,13 +35,79 @@ const releaseBroadcastBodySchema = z.object({
     .transform(normalizeReleaseVersion)
     .refine(isClientReleaseVersion, { message: "Invalid client release version" }),
 });
+const releaseManifestBodySchema = z.object({
+  release: z.object({
+    assets: z.array(z.object({
+      contentType: z.string().trim().min(1).nullable().optional(),
+      mirrorDownloadUrl: z.string().trim().url().nullable().optional(),
+      name: z.string().trim().min(1).refine(isClientUpdateAssetFileName, { message: "Invalid client update asset file name" }),
+      size: z.number().int().nonnegative().nullable().optional(),
+    })).min(1),
+    body: z.string().nullable().optional(),
+    htmlUrl: z.string().trim().url(),
+    isDraft: z.boolean(),
+    isPrerelease: z.boolean(),
+    name: z.string().nullable().optional(),
+    publishedAt: z.string().nullable().optional(),
+    tagName: z.string()
+      .trim()
+      .min(1)
+      .transform(normalizeReleaseVersion)
+      .refine(isClientReleaseVersion, { message: "Invalid client release version" }),
+    version: z.string()
+      .trim()
+      .min(1)
+      .transform(normalizeReleaseVersion)
+      .refine(isClientReleaseVersion, { message: "Invalid client release version" }),
+  }),
+});
+const releaseAssetParamsSchema = z.object({
+  fileName: z.string().trim().min(1).refine(isClientUpdateAssetFileName, { message: "Invalid client update asset file name" }),
+  version: z.string()
+    .trim()
+    .min(1)
+    .transform(normalizeReleaseVersion)
+    .refine(isClientReleaseVersion, { message: "Invalid client release version" }),
+});
 
 type ClientUpdateBroadcastRequest = FastifyRequest & { orfClientUpdateBroadcastAuthorized?: boolean };
+type ClientUpdateAssetPublishRequest = FastifyRequest & { orfClientUpdatePublishAuthorized?: boolean };
 type ClientUpdateBroadcastContext =
   | { kind: "machine"; scope: RuntimeScope }
   | ({ kind: "admin" } & NonNullable<Awaited<ReturnType<typeof requireAdminContext>>>);
 
 export function registerClientUpdateRoutes(app: FastifyInstance) {
+  app.get("/api/client-updates/assets/:version/:fileName", async (request, reply) => {
+    try {
+      const params = releaseAssetParamsSchema.parse(request.params);
+      const storedAsset = await getStoredClientUpdateAsset(params);
+      if (storedAsset) {
+        reply.header("Cache-Control", "public, max-age=31536000, immutable");
+        reply.header("Content-Disposition", `attachment; filename="${params.fileName.replace(/"/g, "")}"`);
+        reply.header("Content-Length", storedAsset.contentLength);
+        reply.header("Content-Type", storedAsset.contentType);
+        reply.header("X-Content-Type-Options", "nosniff");
+        return reply.send(storedAsset.stream);
+      }
+
+      const { release } = await getCachedClientReleaseByVersion(params.version);
+      const asset = release.assets.find((candidate) => candidate.name === params.fileName) ?? null;
+      if (!asset) {
+        return reply.code(404).send({ error: "Client update asset not found" });
+      }
+      if (asset.mirrorDownloadUrl && isTrustedClientUpdateUrl(asset.mirrorDownloadUrl)) {
+        return reply.redirect(asset.mirrorDownloadUrl, 302);
+      }
+      return reply.code(404).send({ error: "Client update asset not stored" });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({ error: "Invalid client update asset" });
+      }
+      request.log.warn({ error }, "Client update asset download failed");
+      return reply.code(502).send({ error: "Client update asset download failed" });
+    }
+  });
+
   app.get("/api/client-updates/latest", async (_request, reply) => {
     try {
       return await getCachedLatestClientRelease();
@@ -51,6 +127,59 @@ export function registerClientUpdateRoutes(app: FastifyInstance) {
       }
       app.log.warn({ error }, "Client update release lookup failed");
       return reply.code(502).send({ error: "Client update release lookup failed" });
+    }
+  });
+
+  app.put("/api/client-updates/releases/:version/manifest", async (request, reply) => {
+    if (!(request as ClientUpdateAssetPublishRequest).orfClientUpdatePublishAuthorized) {
+      return reply.code(401).send({ error: "Unauthorized" });
+    }
+
+    try {
+      const { version } = releaseVersionParamsSchema.parse(request.params);
+      const body = releaseManifestBodySchema.parse(request.body);
+      if (body.release.version !== version || body.release.tagName !== version) {
+        return reply.code(409).send({ error: "Client release manifest version mismatch" });
+      }
+
+      const release = toPublishedClientUpdateRelease(body.release);
+      const storedRelease = await upsertStoredClientUpdateRelease(release);
+      clearClientReleaseCache(version);
+      return { ok: true, release: storedRelease };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({ error: "Invalid client release manifest" });
+      }
+      request.log.warn({ error }, "Client update release manifest publish failed");
+      return reply.code(502).send({ error: "Client update release manifest publish failed" });
+    }
+  });
+
+  app.post("/api/client-updates/assets/:version/:fileName", async (request, reply) => {
+    if (!(request as ClientUpdateAssetPublishRequest).orfClientUpdatePublishAuthorized) {
+      return reply.code(401).send({ error: "Unauthorized" });
+    }
+
+    try {
+      const params = releaseAssetParamsSchema.parse(request.params);
+      const outcome = await storeClientUpdateAssetUpload(request, params);
+      if (outcome.status === "missing") {
+        return reply.code(400).send({ error: "Client update asset file is required" });
+      }
+      if (outcome.status === "fileNameMismatch") {
+        return reply.code(409).send({ error: "Client update asset file name mismatch" });
+      }
+      return {
+        contentLength: outcome.contentLength,
+        downloadUrl: buildClientUpdateAssetDownloadUrl(params.version, params.fileName),
+        ok: true,
+      };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({ error: "Invalid client update asset" });
+      }
+      request.log.warn({ error }, "Client update asset publish failed");
+      return reply.code(502).send({ error: "Client update asset publish failed" });
     }
   });
 
@@ -124,6 +253,54 @@ export function registerClientUpdateRoutes(app: FastifyInstance) {
       return reply.code(502).send({ error: "Client update release broadcast failed" });
     }
   });
+}
+
+async function storeClientUpdateAssetUpload(
+  request: FastifyRequest,
+  params: z.infer<typeof releaseAssetParamsSchema>,
+): Promise<
+  | { status: "fileNameMismatch" }
+  | { status: "missing" }
+  | { contentLength: number; status: "ok" }
+> {
+  for await (const part of request.parts({ limits: { fileSize: env.ORF_INFRA_UPLOAD_MAX_BYTES, files: 1 } })) {
+    if (part.type !== "file") continue;
+    if (part.fieldname !== "file") {
+      part.file.resume();
+      continue;
+    }
+    if (part.filename !== params.fileName) {
+      part.file.resume();
+      return { status: "fileNameMismatch" };
+    }
+    const stored = await storeClientUpdateAssetFile({
+      body: part.file,
+      fileName: params.fileName,
+      version: params.version,
+    });
+    return { contentLength: stored.contentLength, status: "ok" };
+  }
+  return { status: "missing" };
+}
+
+function toPublishedClientUpdateRelease(release: z.infer<typeof releaseManifestBodySchema>["release"]): ClientReleaseInfo {
+  return {
+    assets: release.assets.map((asset) => ({
+      contentType: asset.contentType ?? null,
+      downloadUrl: buildClientUpdateAssetDownloadUrl(release.version, asset.name),
+      mirrorDownloadUrl: asset.mirrorDownloadUrl ?? null,
+      name: asset.name,
+      size: asset.size ?? null,
+    })),
+    body: release.body ?? null,
+    htmlUrl: release.htmlUrl,
+    isDraft: release.isDraft,
+    isPrerelease: release.isPrerelease,
+    name: release.name ?? null,
+    publishedAt: release.publishedAt ?? null,
+    tagName: `v${release.version}`,
+    version: release.version,
+  };
 }
 
 async function requireClientUpdateBroadcastContext(

@@ -5,6 +5,11 @@ import {
   selectClientUpdateAsset,
   toClientReleaseTag,
 } from "../../src/features/client-updates/clientUpdateModel";
+import {
+  buildClientUpdateAssetDownloadUrl,
+  getStoredClientUpdateReleaseByVersion,
+  listStoredClientUpdateReleases,
+} from "./clientUpdateAssetStore";
 
 const githubRepository = process.env.ORF_CLIENT_UPDATE_GITHUB_REPOSITORY ?? process.env.GITHUB_REPOSITORY_FULL_NAME ?? "xueyu888/ORF";
 const githubApiUrl = process.env.ORF_CLIENT_UPDATE_GITHUB_API_URL ?? process.env.GITHUB_API_URL ?? "https://api.github.com";
@@ -16,6 +21,7 @@ export type ClientUpdateReleaseResponse = {
     assets: Array<{
       contentType?: string | null;
       downloadUrl: string;
+      mirrorDownloadUrl?: string | null;
       name: string;
       size?: number | null;
     }>;
@@ -70,7 +76,34 @@ export async function getCachedClientReleaseByVersion(version: string) {
   return value;
 }
 
+export function clearClientReleaseCache(version?: string) {
+  cachedLatestRelease = null;
+  if (version) {
+    cachedReleaseByVersion.delete(normalizeReleaseVersion(version));
+    return;
+  }
+  cachedReleaseByVersion.clear();
+}
+
 async function fetchLatestClientRelease(): Promise<ClientUpdateReleaseResponse> {
+  const storedRelease = selectLatestClientReleaseInfo(await listStoredClientUpdateReleases());
+  if (storedRelease) {
+    return { release: storedRelease };
+  }
+
+  return fetchLatestGitHubClientRelease();
+}
+
+async function fetchClientReleaseByVersion(version: string): Promise<ClientUpdateReleaseResponse> {
+  const storedRelease = await getStoredClientUpdateReleaseByVersion(version);
+  if (storedRelease) {
+    return { release: storedRelease };
+  }
+
+  return fetchGitHubClientReleaseByVersion(version);
+}
+
+async function fetchLatestGitHubClientRelease(): Promise<ClientUpdateReleaseResponse> {
   const response = await fetch(`${trimSlash(githubApiUrl)}/repos/${githubRepository}/releases?per_page=100`, {
     headers: githubApiHeaders(),
     signal: AbortSignal.timeout(10_000),
@@ -78,14 +111,18 @@ async function fetchLatestClientRelease(): Promise<ClientUpdateReleaseResponse> 
   if (!response.ok) {
     throw new Error(`GitHub release API returned ${response.status}`);
   }
-  const release = selectLatestClientRelease(await response.json() as GitHubRelease[]);
+  const release = selectLatestClientReleaseInfo(
+    (await response.json() as GitHubRelease[])
+      .filter(isPublishedGitHubClientRelease)
+      .map(toClientUpdateRelease),
+  );
   if (!release) {
     throw new Error("No published client release found");
   }
   return { release };
 }
 
-async function fetchClientReleaseByVersion(version: string): Promise<ClientUpdateReleaseResponse> {
+async function fetchGitHubClientReleaseByVersion(version: string): Promise<ClientUpdateReleaseResponse> {
   const tagName = encodeURIComponent(toClientReleaseTag(version));
   const response = await fetch(`${trimSlash(githubApiUrl)}/repos/${githubRepository}/releases/tags/${tagName}`, {
     headers: githubApiHeaders(),
@@ -110,12 +147,14 @@ function githubApiHeaders() {
 
 function toClientUpdateRelease(release: GitHubRelease): ClientUpdateReleaseResponse["release"] {
   const tagName = release.tag_name ?? "";
+  const version = normalizeReleaseVersion(tagName);
   return {
     assets: (release.assets ?? []).flatMap((asset) => {
       if (!asset.name || !asset.browser_download_url) return [];
       return [{
         contentType: asset.content_type ?? null,
-        downloadUrl: asset.browser_download_url,
+        downloadUrl: buildClientUpdateAssetDownloadUrl(version, asset.name),
+        mirrorDownloadUrl: asset.browser_download_url,
         name: asset.name,
         size: asset.size ?? null,
       }];
@@ -127,23 +166,28 @@ function toClientUpdateRelease(release: GitHubRelease): ClientUpdateReleaseRespo
     name: release.name ?? null,
     publishedAt: release.published_at ?? null,
     tagName,
-    version: normalizeReleaseVersion(tagName),
+    version,
   };
 }
 
-function selectLatestClientRelease(releases: GitHubRelease[]) {
+function selectLatestClientReleaseInfo(releases: ClientUpdateReleaseResponse["release"][]) {
   return releases
-    .filter(isPublishedClientRelease)
-    .map(toClientUpdateRelease)
+    .filter(isPublishedClientReleaseInfo)
     .sort(compareClientReleaseInfoDesc)[0] ?? null;
 }
 
-function isPublishedClientRelease(release: GitHubRelease) {
+function isPublishedGitHubClientRelease(release: GitHubRelease) {
   const tagName = release.tag_name ?? "";
   if (release.draft || release.prerelease || !isClientReleaseVersion(tagName)) {
     return false;
   }
-  const clientRelease = toClientUpdateRelease(release);
+  return isPublishedClientReleaseInfo(toClientUpdateRelease(release));
+}
+
+function isPublishedClientReleaseInfo(clientRelease: ClientUpdateReleaseResponse["release"]) {
+  if (clientRelease.isDraft || clientRelease.isPrerelease || !isClientReleaseVersion(clientRelease.version)) {
+    return false;
+  }
   return Boolean(
     selectClientUpdateAsset(clientRelease.assets, "android") ||
     selectClientUpdateAsset(clientRelease.assets, "desktop-windows"),

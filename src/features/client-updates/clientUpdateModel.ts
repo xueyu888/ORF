@@ -3,6 +3,7 @@ export type ClientUpdatePlatform = "android" | "desktop-windows" | "desktop-othe
 export type ClientReleaseAsset = {
   contentType?: string | null;
   downloadUrl: string;
+  mirrorDownloadUrl?: string | null;
   name: string;
   size?: number | null;
 };
@@ -33,6 +34,7 @@ type ParsedVersion = {
 };
 
 const clientReleaseVersionPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const trustedOrfClientUpdateHosts = new Set(["orf-xueyu.duckdns.org"]);
 
 export function buildClientUpdateDecision(input: {
   currentVersion: string;
@@ -91,14 +93,26 @@ export function toClientReleaseTag(version: string) {
 export function isTrustedClientUpdateUrl(value: string) {
   try {
     const url = new URL(value);
-    return (
-      url.protocol === "https:" &&
-      url.hostname === "github.com" &&
-      /^\/xueyu888\/ORF\/releases(?:\/|$)/.test(url.pathname)
-    );
+    return isTrustedGitHubReleaseUrl(url) || isTrustedOrfClientUpdateAssetUrl(url);
   } catch {
     return false;
   }
+}
+
+function isTrustedGitHubReleaseUrl(url: URL) {
+  return (
+    url.protocol === "https:" &&
+    url.hostname === "github.com" &&
+    /^\/xueyu888\/ORF\/releases(?:\/|$)/.test(url.pathname)
+  );
+}
+
+function isTrustedOrfClientUpdateAssetUrl(url: URL) {
+  return (
+    url.protocol === "https:" &&
+    trustedOrfClientUpdateHosts.has(url.hostname) &&
+    /^\/api\/client-updates\/assets\/[^/]+\/[^/]+$/.test(url.pathname)
+  );
 }
 
 function parseReleaseVersion(value: string): ParsedVersion {

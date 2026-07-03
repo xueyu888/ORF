@@ -20,7 +20,7 @@ npm run client:env:check -- --strict
 
 检查项包括：
 
-- GitHub Release 相关工具：`git`、`gh`。
+- 客户端发布相关工具：`git`、`gh`。`gh` 仍用于等待 GitHub Actions 打包和核对镜像资产，客户端默认下载源以 ORF 主更新源为准。
 - Android 构建和设备工具：`java`、`adb`、`emulator`、`sdkmanager`、`ANDROID_HOME`。
 - WSL Android 虚拟机关键条件：`/dev/kvm` 是否存在、当前用户是否在 `kvm` 组。
 - 当前连接的 ADB 设备和已配置的 AVD。
@@ -29,7 +29,7 @@ npm run client:env:check -- --strict
 
 ## Win11 验证
 
-Win11 客户端验证优先使用 GitHub Release 里的安装器：
+Win11 客户端验证优先使用 ORF 主更新源里的安装器；GitHub Release 只作为镜像兜底：
 
 1. 安装 `ORF-<version>-win11-x64-setup.exe`。
 2. 打开 ORF，确认窗口加载 `https://orf-xueyu.duckdns.org:8443/`。
@@ -80,7 +80,7 @@ adb shell dumpsys package org.duckdns.orfxueyu.orf | grep -E 'versionName|versio
 自动更新验证：
 
 1. 先安装低版本 APK。
-2. 发布高版本 GitHub Release。
+2. 发布高版本客户端，并确认 ORF 主更新源已同步发布清单和 APK。
 3. 打开低版本客户端，确认更新提示读取的是系统已安装版本。
 4. 点击下载并安装。
 5. 安装完成后再次用 `dumpsys package` 核对版本。

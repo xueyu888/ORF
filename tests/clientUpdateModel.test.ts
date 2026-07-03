@@ -75,12 +75,17 @@ test("client update decision requires a newer compatible release", () => {
   assert.equal(web.status, "unsupported_platform");
 });
 
-test("client update external URLs are restricted to ORF GitHub releases", () => {
+test("client update external URLs are restricted to ORF assets and GitHub mirrors", () => {
   assert.equal(isTrustedClientUpdateUrl("https://github.com/xueyu888/ORF/releases/tag/v0.0.2"), true);
   assert.equal(
     isTrustedClientUpdateUrl("https://github.com/xueyu888/ORF/releases/download/v0.0.2/ORF-0.0.2-win11-x64-setup.exe"),
     true,
   );
+  assert.equal(
+    isTrustedClientUpdateUrl("https://orf-xueyu.duckdns.org:8443/api/client-updates/assets/0.0.2/ORF-0.0.2-win11-x64-setup.exe"),
+    true,
+  );
   assert.equal(isTrustedClientUpdateUrl("https://github.com/xueyu888/Other/releases/tag/v0.0.2"), false);
+  assert.equal(isTrustedClientUpdateUrl("https://orf-xueyu.duckdns.org:8443/api/auth/session"), false);
   assert.equal(isTrustedClientUpdateUrl("https://example.com/xueyu888/ORF/releases/tag/v0.0.2"), false);
 });
