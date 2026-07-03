@@ -2,6 +2,7 @@ import { clsx } from "clsx";
 import { UsersRound } from "lucide-react";
 import { UserAvatar } from "../../components/UserAvatar";
 import type { ChatChannel, ChatUser } from "../../types/orf";
+import { ChatIntegrationBrandMark, chatChannelIntegrationBrand } from "./chatIntegrationBrand";
 import { chatChannelAvatarUsers, chatChannelDisplayLabel } from "./chatChannelPresentation";
 
 type ChatGroupAvatarProps = {
@@ -13,11 +14,14 @@ type ChatGroupAvatarProps = {
 
 export function ChatGroupAvatar({ channel, className, currentUserId, usersById }: ChatGroupAvatarProps) {
   const label = chatChannelDisplayLabel(channel, currentUserId, usersById);
+  const integrationBrand = chatChannelIntegrationBrand(channel);
   const visibleMembers = chatChannelAvatarUsers(channel, currentUserId, usersById);
 
   return (
     <span className={clsx("orf-chat-group-avatar", className)} title={`${label} · ${channel.memberCount} 位成员`}>
-      {visibleMembers.length > 0 ? (
+      {integrationBrand ? (
+        <ChatIntegrationBrandMark brand={integrationBrand} className="orf-chat-integration-brand-avatar" />
+      ) : visibleMembers.length > 0 ? (
         <span className="orf-chat-group-avatar-stack" data-count={visibleMembers.length}>
           {visibleMembers.map((user, index) => (
             <span className="orf-chat-group-avatar-member-slot" data-index={index} key={user.id}>

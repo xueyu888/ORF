@@ -2,6 +2,7 @@ import { Archive, ArrowLeft, Bell, BellOff, Bookmark, EyeOff, Info, Pin, Reply, 
 import { IconButton, actionButtonClassName } from "../../components/ui";
 import { isChatConversation } from "../../domain/chatConversation";
 import type { ChatChannel, ChatUser } from "../../types/orf";
+import { ChatIntegrationBrandMark, chatChannelIntegrationBrand } from "./chatIntegrationBrand";
 import { channelIcon, chatChannelDisplayLabel, chatChannelInfoLabel } from "./chatChannelPresentation";
 import { currentMembership } from "./chatModels";
 
@@ -41,6 +42,7 @@ export function ChatHeader({
   usersById,
 }: ChatHeaderProps) {
   const Icon = channelIcon(channel);
+  const integrationBrand = chatChannelIntegrationBrand(channel);
   const membership = currentMembership(channel, currentUserId);
   const canManageMembership = canManage && channel.type === "private";
   const infoLabel = chatChannelInfoLabel(channel);
@@ -58,7 +60,11 @@ export function ChatHeader({
         <IconButton className="orf-chat-header-back" icon={ArrowLeft} label="返回聊天列表" onClick={onMobileBack} />
       )}
       <button type="button" className="orf-chat-header-title" onClick={onInfo}>
-        <Icon className="h-5 w-5" />
+        {integrationBrand ? (
+          <ChatIntegrationBrandMark brand={integrationBrand} className="orf-chat-header-brand-mark" />
+        ) : (
+          <Icon className="h-5 w-5" />
+        )}
         <span>{title}</span>
       </button>
       <div className="orf-chat-header-meta">
