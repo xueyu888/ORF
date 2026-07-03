@@ -41,6 +41,7 @@ import {
   registerTestdRecoveryRun,
   type TestdRecoveryCaseRecord,
 } from "./recovery";
+import { dismissWorkLogReminderModalIfVisible } from "../_operators/common.helpers";
 
 const SCREENSHOT_ATTACHMENT_PREFIX = "state-case-screenshot";
 
@@ -252,6 +253,8 @@ export async function runStateCase<
           throw createTestdInterruptError();
         }
 
+        await dismissGlobalUiInterruptions(ctx, activeTestCase, step);
+
         const operator = options.operators[step.object]?.[step.operator];
         if (!operator) {
           throw new Error(`未注册测试算子: ${formatStepOperator(step)}`);
@@ -272,6 +275,8 @@ export async function runStateCase<
         if (typeof saveAs === "string" && result !== undefined) {
           activeRuntime.values[saveAs] = result;
         }
+
+        await dismissGlobalUiInterruptions(ctx, activeTestCase, step);
 
         if (recoveryTarget) {
           await recordTestdRecoveryStepComplete({
@@ -420,6 +425,29 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && Object.getPrototypeOf(value) === Object.prototype;
 }
 
+async function dismissGlobalUiInterruptions<TContext>(
+  ctx: TContext,
+  testCase: StateCaseSpec,
+  step: StepSpec,
+) {
+  if (step.source?.method !== "playwright") {
+    return;
+  }
+  if (process.env.TESTD_AUTO_DISMISS_WORK_LOG_REMINDER === "0") {
+    return;
+  }
+  if (testCase.tags?.includes("work-log-reminder")) {
+    return;
+  }
+
+  const page = getBrowserPage(ctx);
+  if (!page) {
+    return;
+  }
+
+  await dismissWorkLogReminderModalIfVisible(page);
+}
+
 async function attachScreenshot<TContext>(
   ctx: TContext,
   testInfo: TestInfo | undefined,
@@ -457,4 +485,13 @@ function getScreenshotPage(ctx: unknown): Pick<Page, "screenshot"> | null {
   }
 
   return page as Pick<Page, "screenshot">;
+}
+
+function getBrowserPage(ctx: unknown): Page | null {
+  if (!ctx || typeof ctx !== "object" || !("page" in ctx)) {
+    return null;
+  }
+
+  const page = (ctx as { page?: Page }).page;
+  return page && typeof page.getByRole === "function" ? page : null;
 }

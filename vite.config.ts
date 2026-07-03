@@ -72,7 +72,14 @@ export default defineConfig(({ mode }) => {
         "/settings/backgrounds": "http://127.0.0.1:8787",
       },
       watch: {
-        ignored: ["**/.artifacts/**", "**/.orf/**", "**/dist/**"],
+        ignored: [
+          "**/.artifacts/**",
+          "**/.orf/**",
+          "**/android/**",
+          "**/dist/**",
+          "**/ios/**",
+          "**/public/settings/**",
+        ],
       },
     },
   };

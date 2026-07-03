@@ -88,6 +88,18 @@ export async function clearBrowserState(page: Page) {
     .catch(() => undefined);
 }
 
+export async function dismissWorkLogReminderModalIfVisible(page: Page) {
+  const dialog = page.getByRole("dialog", { name: "工作日志欠账强提醒" }).first();
+  const visible = await dialog.isVisible({ timeout: 250 }).catch(() => false);
+  if (!visible) {
+    return false;
+  }
+
+  await dialog.getByRole("button", { name: "10 分钟后提醒", exact: true }).first().click({ timeout: 5_000 });
+  await dialog.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
+  return true;
+}
+
 export async function readBrowserSession(page: Page): Promise<BrowserSession> {
   if (!page.url().startsWith("about:")) {
     try {
