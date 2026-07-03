@@ -14,6 +14,7 @@ import {
   Image,
   Link2,
   Loader2,
+  MoreHorizontal,
   RefreshCw,
   RotateCcw,
   Search,
@@ -134,6 +135,8 @@ export function DriveBrowser({
   const [textPreviewLoadingIds, setTextPreviewLoadingIds] = useState<Set<string>>(new Set());
   const [trashNodes, setTrashNodes] = useState<DriveNode[]>([]);
   const [uploadTask, setUploadTask] = useState<UploadTaskState | null>(null);
+  const [compactDetailsOpen, setCompactDetailsOpen] = useState(false);
+  const [compactToolsOpen, setCompactToolsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const loadDetailsRef = useRef(onLoadDetails);
   const notifyRef = useRef(notify);
@@ -208,6 +211,7 @@ export function DriveBrowser({
         : mode === "search" ? `${searchResults.length} 项搜索结果`
           : `${trashNodes.length} 项可恢复资源`;
   const uploadTargetLabel = uploadTarget?.name ?? "未选择上传位置";
+  const showCompactLinkAction = Boolean(onAddLink && effectiveNode && canManageLinks && !selectedAlreadyLinked && !effectiveNode.deletedAt);
 
   useEffect(() => {
     const nodeId = selectedNodeId;
@@ -527,6 +531,64 @@ export function DriveBrowser({
         ? trashNodes
         : [];
 
+  const modebar = (
+    <div className="orf-drive-modebar">
+      {(Object.keys(modeLabels) as DriveMode[]).map((item) => (
+        <button
+          key={item}
+          type="button"
+          className={clsx(mode === item && "is-active")}
+          aria-label={item === "trash" && bootstrap?.trashCount ? `${modeLabels[item]} ${bootstrap.trashCount}` : modeLabels[item]}
+          aria-pressed={mode === item}
+          title={modeLabels[item]}
+          onClick={() => {
+            if (item === "trash") void loadTrash();
+            else setMode(item);
+          }}
+        >
+          {item === "browse" && <Folder className="h-4 w-4" />}
+          {item === "recent" && <Clock3 className="h-4 w-4" />}
+          {item === "search" && <Search className="h-4 w-4" />}
+          {item === "trash" && <Trash2 className="h-4 w-4" />}
+          <span>{modeLabels[item]}</span>
+          {item === "trash" && bootstrap?.trashCount ? <small>{bootstrap.trashCount}</small> : null}
+        </button>
+      ))}
+    </div>
+  );
+
+  const fullActions = (
+    <div className="orf-drive-actions">
+      <IconButton disabled={!canMutateDrive || !uploadTarget || mode === "trash"} icon={Upload} label={uploadTarget ? `上传到 ${uploadTarget.name}` : "上传文件"} onClick={() => fileInputRef.current?.click()} />
+      <IconButton disabled={!canMutateDrive || !uploadTarget || mode === "trash"} icon={FolderPlus} label="新建文件夹" onClick={() => setNewFolderName((value) => value || "新建文件夹")} />
+      <IconButton disabled={!effectiveNode || effectiveNode.id === bootstrap?.root.id || !canMutateDrive || Boolean(effectiveNode.deletedAt)} icon={Trash2} label="删除" onClick={() => void deleteSelectedNode()} />
+      <IconButton disabled={!effectiveNode?.deletedAt || !onRestoreNode || !canMutateDrive} icon={RotateCcw} label="恢复" onClick={() => void restoreSelectedNode()} />
+      <IconButton disabled={!selectedFile || !onUploadVersion || !canMutateDrive || Boolean(effectiveNode?.deletedAt)} icon={FileClock} label="上传新版本" onClick={() => versionInputRef.current?.click()} />
+      {onAddLink && (
+        <>
+          <IconButton disabled={!effectiveNode || !canManageLinks || selectedAlreadyLinked || Boolean(effectiveNode.deletedAt)} icon={Link2} label="绑定到群聊" onClick={() => void addSelectedLink(false)} />
+          <IconButton disabled={!uploadTarget || !canManageLinks || mode === "trash"} icon={Star} label="设为默认上传文件夹" onClick={() => void addSelectedLink(true)} />
+        </>
+      )}
+      <IconButton icon={RefreshCw} label="刷新" loading={loading} onClick={() => void onRefresh()} />
+      <span className="orf-drive-upload-target" title={uploadTargetLabel}>{uploadTargetLabel}</span>
+    </div>
+  );
+
+  const compactAdvancedActions = (
+    <div className="orf-drive-actions orf-drive-actions-advanced">
+      <IconButton disabled={!canMutateDrive || !uploadTarget || mode === "trash"} icon={FolderPlus} label="新建文件夹" onClick={() => setNewFolderName((value) => value || "新建文件夹")} />
+      <IconButton disabled={!effectiveNode || effectiveNode.id === bootstrap?.root.id || !canMutateDrive || Boolean(effectiveNode.deletedAt)} icon={Trash2} label="删除" onClick={() => void deleteSelectedNode()} />
+      <IconButton disabled={!effectiveNode?.deletedAt || !onRestoreNode || !canMutateDrive} icon={RotateCcw} label="恢复" onClick={() => void restoreSelectedNode()} />
+      <IconButton disabled={!selectedFile || !onUploadVersion || !canMutateDrive || Boolean(effectiveNode?.deletedAt)} icon={FileClock} label="上传新版本" onClick={() => versionInputRef.current?.click()} />
+      {onAddLink && (
+        <IconButton disabled={!uploadTarget || !canManageLinks || mode === "trash"} icon={Star} label="设为默认上传文件夹" onClick={() => void addSelectedLink(true)} />
+      )}
+      <IconButton icon={RefreshCw} label="刷新" loading={loading} onClick={() => void onRefresh()} />
+      <span className="orf-drive-upload-target" title={uploadTargetLabel}>{uploadTargetLabel}</span>
+    </div>
+  );
+
   return (
     <div className={clsx("orf-drive-panel", compact && "orf-drive-panel-compact")}>
       <div className="orf-drive-workbench-header">
@@ -567,29 +629,7 @@ export function DriveBrowser({
         </div>
       )}
 
-      <div className="orf-drive-modebar">
-        {(Object.keys(modeLabels) as DriveMode[]).map((item) => (
-          <button
-            key={item}
-            type="button"
-            className={clsx(mode === item && "is-active")}
-            aria-label={item === "trash" && bootstrap?.trashCount ? `${modeLabels[item]} ${bootstrap.trashCount}` : modeLabels[item]}
-            aria-pressed={mode === item}
-            title={modeLabels[item]}
-            onClick={() => {
-              if (item === "trash") void loadTrash();
-              else setMode(item);
-            }}
-          >
-            {item === "browse" && <Folder className="h-4 w-4" />}
-            {item === "recent" && <Clock3 className="h-4 w-4" />}
-            {item === "search" && <Search className="h-4 w-4" />}
-            {item === "trash" && <Trash2 className="h-4 w-4" />}
-            <span>{modeLabels[item]}</span>
-            {item === "trash" && bootstrap?.trashCount ? <small>{bootstrap.trashCount}</small> : null}
-          </button>
-        ))}
-      </div>
+      {!compact && modebar}
 
       <form
         className="orf-drive-searchbar"
@@ -599,7 +639,7 @@ export function DriveBrowser({
         }}
       >
         <Search className="h-4 w-4" />
-        <input value={searchQuery} placeholder={compact ? "搜索频道文件" : "搜索文件名、类型、内容线索"} onChange={(event) => setSearchQuery(event.target.value)} />
+        <input value={searchQuery} placeholder={compact ? "搜索云盘并绑定" : "搜索文件名、类型、内容线索"} onChange={(event) => setSearchQuery(event.target.value)} />
         <select
           value={searchType}
           onChange={(event) => {
@@ -615,23 +655,42 @@ export function DriveBrowser({
         <Button size="sm" variant="secondary">搜索</Button>
       </form>
 
-      <div className="orf-drive-actions">
-        <IconButton disabled={!canMutateDrive || !uploadTarget || mode === "trash"} icon={Upload} label={uploadTarget ? `上传到 ${uploadTarget.name}` : "上传文件"} onClick={() => fileInputRef.current?.click()} />
-        <IconButton disabled={!canMutateDrive || !uploadTarget || mode === "trash"} icon={FolderPlus} label="新建文件夹" onClick={() => setNewFolderName((value) => value || "新建文件夹")} />
-        <IconButton disabled={!effectiveNode || effectiveNode.id === bootstrap?.root.id || !canMutateDrive || Boolean(effectiveNode.deletedAt)} icon={Trash2} label="删除" onClick={() => void deleteSelectedNode()} />
-        <IconButton disabled={!effectiveNode?.deletedAt || !onRestoreNode || !canMutateDrive} icon={RotateCcw} label="恢复" onClick={() => void restoreSelectedNode()} />
-        <IconButton disabled={!selectedFile || !onUploadVersion || !canMutateDrive || Boolean(effectiveNode?.deletedAt)} icon={FileClock} label="上传新版本" onClick={() => versionInputRef.current?.click()} />
-        {onAddLink && (
-          <>
-            <IconButton disabled={!effectiveNode || !canManageLinks || selectedAlreadyLinked || Boolean(effectiveNode.deletedAt)} icon={Link2} label="绑定到群聊" onClick={() => void addSelectedLink(false)} />
-            <IconButton disabled={!uploadTarget || !canManageLinks || mode === "trash"} icon={Star} label="设为默认上传文件夹" onClick={() => void addSelectedLink(true)} />
-          </>
-        )}
-        <IconButton icon={RefreshCw} label="刷新" loading={loading} onClick={() => void onRefresh()} />
-        <span className="orf-drive-upload-target" title={uploadTargetLabel}>{uploadTargetLabel}</span>
-        <input ref={fileInputRef} hidden multiple type="file" onChange={(event) => void uploadFiles(event.currentTarget.files)} />
-        <input ref={versionInputRef} hidden type="file" onChange={(event) => void uploadVersion(event.currentTarget.files)} />
-      </div>
+      {compact ? (
+        <>
+          <div className={clsx("orf-drive-compact-primary-actions", !showCompactLinkAction && "is-minimal")}>
+            <Button disabled={!canMutateDrive || !uploadTarget || mode === "trash"} size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()}>
+              <Upload className="h-3.5 w-3.5" />
+              上传
+            </Button>
+            {showCompactLinkAction && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void addSelectedLink(false)}
+              >
+                <Link2 className="h-3.5 w-3.5" />
+                绑定到群聊
+              </Button>
+            )}
+            <IconButton
+              icon={MoreHorizontal}
+              label={compactToolsOpen ? "收起更多操作" : "更多操作"}
+              onClick={() => setCompactToolsOpen((value) => !value)}
+              variant={compactToolsOpen ? "secondary" : "ghost"}
+            />
+          </div>
+          {compactToolsOpen && (
+            <div className="orf-drive-compact-tools">
+              {modebar}
+              {compactAdvancedActions}
+            </div>
+          )}
+        </>
+      ) : (
+        fullActions
+      )}
+      <input ref={fileInputRef} hidden multiple type="file" onChange={(event) => void uploadFiles(event.currentTarget.files)} />
+      <input ref={versionInputRef} hidden type="file" onChange={(event) => void uploadVersion(event.currentTarget.files)} />
 
       {newFolderName && (
         <form className="orf-drive-create" onSubmit={(event) => {
@@ -678,6 +737,8 @@ export function DriveBrowser({
           </div>
           <DrivePreview
             canWrite={canMutateDrive}
+            compact={compact}
+            compactDetailsOpen={compactDetailsOpen}
             contextOptions={contextOptions}
             defaultUploadFolder={defaultUploadFolder}
             details={details}
@@ -687,6 +748,7 @@ export function DriveBrowser({
             onRemoveContext={onRemoveContextLink ? removeContext : undefined}
             onRestoreNode={onRestoreNode ? () => void restoreSelectedNode() : undefined}
             onRestoreVersion={onRestoreVersion ? restoreVersion : undefined}
+            onToggleCompactDetails={() => setCompactDetailsOpen((value) => !value)}
             textPreview={textPreview}
             textPreviewLoading={textPreviewLoading}
             uploadTarget={uploadTarget}
@@ -792,6 +854,8 @@ function DriveTreeRow({
 
 function DrivePreview({
   canWrite,
+  compact = false,
+  compactDetailsOpen = false,
   contextOptions,
   defaultUploadFolder,
   details,
@@ -801,11 +865,14 @@ function DrivePreview({
   onRemoveContext,
   onRestoreNode,
   onRestoreVersion,
+  onToggleCompactDetails,
   textPreview,
   textPreviewLoading,
   uploadTarget,
 }: {
   canWrite: boolean;
+  compact?: boolean;
+  compactDetailsOpen?: boolean;
   contextOptions: DriveContextOption[];
   defaultUploadFolder: DriveNode | null;
   details: DriveNodeDetails | null;
@@ -815,6 +882,7 @@ function DrivePreview({
   onRemoveContext?: (linkId: string) => void;
   onRestoreNode?: () => void;
   onRestoreVersion?: (versionId: string) => void;
+  onToggleCompactDetails?: () => void;
   textPreview?: string;
   textPreviewLoading?: boolean;
   uploadTarget: DriveNode | null;
@@ -882,17 +950,43 @@ function DrivePreview({
       ) : (
         <div className="orf-drive-preview-empty">文件不可用</div>
       )}
-      <DriveDetails
-        canWrite={canWrite}
-        contextOptions={contextOptions}
-        details={details}
-        loading={detailsLoading}
-        node={node}
-        onAddContext={onAddContext}
-        onRemoveContext={onRemoveContext}
-        onRestoreNode={onRestoreNode}
-        onRestoreVersion={onRestoreVersion}
-      />
+      {compact ? (
+        <div className={clsx("orf-drive-compact-details", compactDetailsOpen && "is-open")}>
+          <button type="button" className="orf-drive-compact-details-toggle" onClick={onToggleCompactDetails} aria-expanded={compactDetailsOpen}>
+            <span>详情、版本和工作上下文</span>
+            <small>
+              {detailsLoading ? "同步中"
+                : details ? `${details.contextLinks.length} 关联 · ${details.versions.length} 版本`
+                  : "选择资源后查看"}
+            </small>
+          </button>
+          {compactDetailsOpen && (
+            <DriveDetails
+              canWrite={canWrite}
+              contextOptions={contextOptions}
+              details={details}
+              loading={detailsLoading}
+              node={node}
+              onAddContext={onAddContext}
+              onRemoveContext={onRemoveContext}
+              onRestoreNode={onRestoreNode}
+              onRestoreVersion={onRestoreVersion}
+            />
+          )}
+        </div>
+      ) : (
+        <DriveDetails
+          canWrite={canWrite}
+          contextOptions={contextOptions}
+          details={details}
+          loading={detailsLoading}
+          node={node}
+          onAddContext={onAddContext}
+          onRemoveContext={onRemoveContext}
+          onRestoreNode={onRestoreNode}
+          onRestoreVersion={onRestoreVersion}
+        />
+      )}
     </div>
   );
 }

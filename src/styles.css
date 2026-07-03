@@ -18003,6 +18003,44 @@ button.orf-chat-image-attachment {
   height: 32px;
 }
 
+.orf-drive-compact-primary-actions {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 7px;
+}
+
+.orf-drive-compact-primary-actions.is-minimal {
+  grid-template-columns: minmax(0, 1fr) 34px;
+}
+
+.orf-drive-compact-primary-actions .orf-action-button {
+  min-width: 0;
+  justify-content: center;
+  gap: 6px;
+}
+
+.orf-drive-compact-primary-actions .orf-action-icon-button {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+}
+
+.orf-drive-compact-tools {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  border: 1px solid var(--orf-chat-panel-border);
+  border-radius: var(--orf-radius-card);
+  background: var(--orf-drive-surface-strong);
+  padding: 8px;
+}
+
+.orf-drive-actions-advanced {
+  gap: 7px;
+}
+
 .orf-drive-upload-target {
   display: inline-flex;
   max-width: 180px;
@@ -18412,6 +18450,14 @@ button.orf-chat-image-attachment {
   overflow: hidden;
 }
 
+.orf-drive-panel-compact .orf-drive-preview-stack {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.orf-drive-panel-compact .orf-drive-preview {
+  min-height: 0;
+}
+
 .orf-drive-preview {
   display: grid;
   min-height: 0;
@@ -18602,6 +18648,56 @@ button.orf-chat-image-attachment {
   color: var(--orf-drive-text-muted);
   font-size: 12px;
   font-weight: 800;
+}
+
+.orf-drive-compact-details {
+  display: grid;
+  min-width: 0;
+}
+
+.orf-drive-compact-details.is-open {
+  gap: 8px;
+}
+
+.orf-drive-compact-details-toggle {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--orf-chat-panel-border);
+  border-radius: var(--orf-radius-control);
+  background: var(--orf-drive-surface-strong);
+  color: var(--orf-drive-text);
+  padding: 8px 9px;
+  text-align: left;
+}
+
+.orf-drive-compact-details-toggle:hover,
+.orf-drive-compact-details-toggle[aria-expanded="true"] {
+  border-color: var(--orf-accent-border);
+  background: var(--orf-chat-panel-chip-active-bg);
+  color: var(--orf-chat-panel-chip-active-text);
+}
+
+.orf-drive-compact-details-toggle span,
+.orf-drive-compact-details-toggle small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-drive-compact-details-toggle span {
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.orf-drive-compact-details-toggle small {
+  color: inherit;
+  font-size: 11px;
+  font-weight: 780;
+  opacity: 0.82;
 }
 
 .orf-drive-details {
