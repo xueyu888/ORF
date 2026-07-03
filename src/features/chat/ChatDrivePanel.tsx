@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
-import { Download, ExternalLink, File, FileText, Folder, Image, Link2, Loader2, MoreHorizontal, Search, Unlink, Upload, X } from "lucide-react";
+import { Download, ExternalLink, File, FileText, Folder, Image, Link2, Loader2, MoreHorizontal, Search, Unlink, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Button, IconButton } from "../../components/ui";
+import { IconButton } from "../../components/ui";
 import {
   addChatDriveLinkRequest,
   deleteChatDriveLinkRequest,
@@ -53,7 +53,6 @@ export function ChatDrivePanel({
   const [links, setLinks] = useState<ChatDriveLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<DriveNode[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -122,7 +121,7 @@ export function ChatDrivePanel({
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (!searchOpen || !trimmed) {
+    if (!trimmed) {
       setSearchLoading(false);
       setSearchResults([]);
       return undefined;
@@ -130,7 +129,7 @@ export function ChatDrivePanel({
     let disposed = false;
     const timer = window.setTimeout(() => {
       setSearchLoading(true);
-      searchDriveRequest({ limit: 30, query: trimmed, type: "all" })
+      searchDriveRequest({ limit: 30, query: trimmed, status: "active", type: "all" })
         .then((response) => {
           if (!disposed) setSearchResults(response.nodes);
         })
@@ -149,7 +148,7 @@ export function ChatDrivePanel({
       disposed = true;
       window.clearTimeout(timer);
     };
-  }, [notify, query, searchOpen]);
+  }, [notify, query]);
 
   const linkedNodeIds = useMemo(() => new Set(links.map((link) => link.node.id)), [links]);
   const defaultUploadFolder = useMemo(
@@ -193,7 +192,7 @@ export function ChatDrivePanel({
     sourceLabel: linkedNodeIds.has(node.id) ? "已在频道" : "团队资源",
   })), [linkedNodeIds, searchResults]);
 
-  const searchActive = searchOpen && query.trim().length > 0;
+  const searchActive = query.trim().length > 0;
   const visibleItems = searchActive ? searchItems : channelItems;
 
   useEffect(() => {
@@ -258,7 +257,6 @@ export function ChatDrivePanel({
         });
         setSessionNodes((items) => dedupeDriveNodes([response.node, ...items]));
         setSelectedNodeId(response.node.id);
-        setSearchOpen(false);
         setQuery("");
         if (response.announcementMessage) onAnnouncementMessage?.(response.announcementMessage);
         void loadLinkedFolderChildren(links);
@@ -281,7 +279,6 @@ export function ChatDrivePanel({
       const response = await addChatDriveLinkRequest({ channelId: channel.id, nodeId: selectedNode.id });
       setBootstrap(response.drive);
       setLinks(response.links);
-      setSearchOpen(false);
       setQuery("");
       setSelectedNodeId(selectedNode.id);
       void loadLinkedFolderChildren(response.links);
@@ -314,57 +311,35 @@ export function ChatDrivePanel({
     <div className="orf-chat-resource-panel">
       <div className="orf-chat-resource-overview">
         <div className="orf-chat-resource-overview-copy">
-          <span>资源托盘</span>
+          <span>频道资料</span>
           <strong>{contextLabel}</strong>
           <small>{summary}</small>
         </div>
       </div>
 
       <div className="orf-chat-resource-commandbar">
-        {searchOpen ? (
-          <form
-            className="orf-chat-resource-search"
-            onSubmit={(event) => {
-              event.preventDefault();
-            }}
-          >
-            <Search className="h-4 w-4" />
-            <input
-              value={query}
-              placeholder="搜索团队云盘资源"
-              autoFocus
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <button
-              type="button"
-              aria-label="关闭资源搜索"
-              onClick={() => {
-                setQuery("");
-                setSearchOpen(false);
-              }}
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </form>
-        ) : (
-          <button type="button" className="orf-chat-resource-search-trigger" onClick={() => setSearchOpen(true)}>
-            <Search className="h-4 w-4" />
-            <span>搜索团队资源</span>
-          </button>
-        )}
-        <div className="orf-chat-resource-top-actions">
-          <IconButton
-            icon={Upload}
-            label={uploadTarget ? `上传到 ${uploadTarget.name}` : "上传资源"}
-            disabled={!canWrite || !uploadTarget || loading}
-            size="sm"
-            variant="secondary"
-            onClick={() => fileInputRef.current?.click()}
+        <form
+          className="orf-chat-resource-search"
+          onSubmit={(event) => {
+            event.preventDefault();
+          }}
+        >
+          <Search className="h-4 w-4" />
+          <input
+            value={query}
+            placeholder="搜索频道和团队资源"
+            aria-label="搜索团队云盘资源"
+            onChange={(event) => setQuery(event.target.value)}
           />
-          <Link className="orf-chat-resource-icon-link" to="/resources" aria-label="打开资源工作台" title="打开资源工作台">
-            <ExternalLink className="h-4 w-4" />
-          </Link>
-        </div>
+        </form>
+        <IconButton
+          icon={Upload}
+          label={uploadTarget ? `上传到 ${uploadTarget.name}` : "上传资源"}
+          disabled={!canWrite || !uploadTarget || loading}
+          size="sm"
+          variant="secondary"
+          onClick={() => fileInputRef.current?.click()}
+        />
       </div>
       <input ref={fileInputRef} hidden multiple type="file" onChange={(event) => void uploadFiles(event.currentTarget.files)} />
 
@@ -513,29 +488,16 @@ function ChatResourcePreview({
   const file = node.file ?? null;
   const previewUrl = file?.previewUrl ? drivePreviewUrl(file) : undefined;
   const detailHref = `/resources/${encodeURIComponent(node.id)}`;
-  const showDownloadPrimary = Boolean(file && (linked || !canManage || node.deletedAt));
   return (
     <div className="orf-chat-resource-preview">
       <div className="orf-chat-resource-preview-toolbar">
         <span>{previewSummary(node)}</span>
         <div className="orf-chat-resource-preview-actions">
           {canManage && !linked && !node.deletedAt && (
-            <Button size="sm" type="button" variant="secondary" onClick={onAddToChannel}>
+            <button className="orf-chat-resource-join" type="button" onClick={onAddToChannel}>
               <Link2 className="h-3.5 w-3.5" />
               加入频道
-            </Button>
-          )}
-          {showDownloadPrimary && file && (
-            <a className="orf-chat-resource-primary-link" href={file.downloadUrl}>
-              <Download className="h-3.5 w-3.5" />
-              下载
-            </a>
-          )}
-          {!file && (
-            <Link className="orf-chat-resource-primary-link" to={detailHref}>
-              <ExternalLink className="h-3.5 w-3.5" />
-              打开
-            </Link>
+            </button>
           )}
           <div className="orf-chat-resource-more" ref={menuRef}>
             <IconButton

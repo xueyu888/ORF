@@ -22,7 +22,7 @@ import { useOrf } from "../state/OrfProvider";
 import type { DriveBootstrap } from "../types/orf";
 
 export function DrivePage() {
-  const { notify, state } = useOrf();
+  const { currentUser, notify, state } = useOrf();
   const navigate = useNavigate();
   const location = useLocation();
   const { nodeId } = useParams<{ nodeId?: string }>();
@@ -80,6 +80,7 @@ export function DrivePage() {
         <DriveBrowser
           bootstrap={bootstrap}
           canWrite
+          currentUserId={currentUser?.id ?? null}
           initialSelectedNodeId={nodeId ?? null}
           contextLabel="团队空间"
           contextOptions={contextOptions}
@@ -139,6 +140,7 @@ export function DrivePage() {
             const response = await uploadDriveFileVersionRequest({ file, fileId, onProgress });
             return { node: response.node, versions: response.versions };
           }}
+          uploaderOptions={state.users.filter((user) => user.status === "active").map((user) => ({ id: user.id, name: user.name }))}
         />
       </div>
     </PageScaffold>

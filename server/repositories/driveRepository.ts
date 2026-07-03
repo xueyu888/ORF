@@ -12,8 +12,13 @@ import type {
   DriveNodeEventAction,
   DriveNode,
   DrivePreviewKind,
+  DriveSearchContextFilter,
+  DriveSearchMeta,
   DriveSearchScope,
+  DriveSearchSource,
+  DriveSearchStatus,
   DriveSearchType,
+  DriveSearchUpdatedRange,
 } from "../../src/types/orf";
 import { commentAttachmentPreviewKind } from "./commentAttachmentRepository";
 import { env } from "../env";
@@ -51,6 +56,10 @@ type DriveRow = {
   updated_at: Date | string;
   version_count?: number | string | null;
   width: number | null;
+};
+
+type DriveSearchRow = DriveRow & {
+  search_contexts: unknown[] | null;
 };
 
 type DriveContentRow = {
@@ -180,6 +189,81 @@ function driveNodeDto(row: DriveRow): DriveNode {
     updatedAt: iso(row.updated_at) ?? nowIso(),
     file: driveFileDto(row),
   };
+}
+
+function driveSearchNodeDto(row: DriveSearchRow, query?: string): DriveNode {
+  const node = driveNodeDto(row);
+  const contexts = parseDriveSearchContexts(row.search_contexts);
+  const sourceLabels = driveSearchSourceLabels(contexts);
+  const searchMeta: DriveSearchMeta = {
+    contexts,
+    snippet: driveSearchSnippet(node, contexts, query),
+    sourceLabels,
+    status: node.deletedAt ? "trash" : "active",
+    uploadedById: node.createdBy,
+    uploadedByName: node.createdByName,
+    updatedAt: node.updatedAt,
+  };
+  return { ...node, searchMeta };
+}
+
+function parseDriveSearchContexts(value: unknown): DriveSearchMeta["contexts"] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const input = item as Record<string, unknown>;
+    if (typeof input.contextId !== "string" || typeof input.contextType !== "string") return [];
+    if (!isDriveContextType(input.contextType)) return [];
+    const title = typeof input.contextTitle === "string" && input.contextTitle.trim()
+      ? input.contextTitle.trim()
+      : driveContextTypeLabel(input.contextType);
+    return [{
+      contextId: input.contextId,
+      contextTitle: title,
+      contextType: input.contextType,
+      label: typeof input.label === "string" ? input.label : null,
+    }];
+  });
+}
+
+function isDriveContextType(value: string): value is DriveContextType {
+  return ["project", "objective", "result", "task", "feedback", "workLog", "chatChannel", "chatMessage", "chatThread"].includes(value);
+}
+
+function driveContextTypeLabel(type: DriveContextType) {
+  if (type === "project") return "项目";
+  if (type === "objective") return "目标";
+  if (type === "result") return "指标";
+  if (type === "task") return "任务";
+  if (type === "feedback") return "反馈";
+  if (type === "workLog") return "工作日志";
+  if (type === "chatMessage") return "聊天消息";
+  if (type === "chatThread") return "聊天话题";
+  return "群聊";
+}
+
+function driveSearchSourceLabels(contexts: DriveSearchMeta["contexts"]) {
+  const labels: string[] = [];
+  if (contexts.some((item) => item.contextType === "chatChannel" || item.contextType === "chatMessage" || item.contextType === "chatThread")) {
+    labels.push("聊天");
+  }
+  for (const context of contexts) {
+    const label = driveContextTypeLabel(context.contextType);
+    if (!labels.includes(label)) labels.push(label);
+  }
+  return labels.length > 0 ? labels.slice(0, 4) : ["手动上传"];
+}
+
+function driveSearchSnippet(node: DriveNode, contexts: DriveSearchMeta["contexts"], query?: string) {
+  const normalizedQuery = query?.trim().toLowerCase();
+  const candidates = [
+    node.name,
+    node.file?.fileName,
+    node.file?.mimeType,
+    ...contexts.map((item) => `${driveContextTypeLabel(item.contextType)}：${item.contextTitle}`),
+  ].filter((value): value is string => Boolean(value?.trim()));
+  if (!normalizedQuery) return candidates[0] ?? null;
+  return candidates.find((value) => value.toLowerCase().includes(normalizedQuery)) ?? candidates[0] ?? null;
 }
 
 function chatDriveLinkDto(row: ChatDriveLinkRow): ChatDriveLink {
@@ -707,11 +791,16 @@ export async function getDriveNodeDetails(
 
 export async function searchDriveNodes(
   input: {
+    contextType?: DriveSearchContextFilter;
     limit?: number;
     previewKind?: DrivePreviewKind | "all";
     query?: string;
     scope?: DriveSearchScope;
+    source?: DriveSearchSource;
+    status?: DriveSearchStatus;
     type?: DriveSearchType;
+    updated?: DriveSearchUpdatedRange;
+    uploaderId?: string;
   },
   actor: ChatActor,
 ): Promise<Outcome<{ nodes: DriveNode[] }>> {
@@ -719,10 +808,10 @@ export async function searchDriveNodes(
   const teamId = storageTeamId(actor);
   const params: unknown[] = [teamId];
   const conditions = ["n.team_id = $1", "n.parent_id IS NOT NULL"];
-  const scope = input.scope ?? "active";
-  if (scope === "trash") {
+  const status = input.status ?? (input.scope === "trash" ? "trash" : "active");
+  if (status === "trash") {
     conditions.push("n.deleted_at IS NOT NULL");
-  } else {
+  } else if (status === "active") {
     conditions.push("n.deleted_at IS NULL");
   }
   if (input.type && input.type !== "all") {
@@ -733,19 +822,55 @@ export async function searchDriveNodes(
     params.push(input.previewKind);
     conditions.push(`f.preview_kind = $${params.length}`);
   }
+  if (input.uploaderId) {
+    params.push(input.uploaderId);
+    conditions.push(`n.created_by = $${params.length}`);
+  }
+  if (input.updated === "7d") {
+    conditions.push("n.updated_at >= now() - interval '7 days'");
+  } else if (input.updated === "30d") {
+    conditions.push("n.updated_at >= now() - interval '30 days'");
+  }
+  if (input.source === "manual") {
+    conditions.push("jsonb_array_length(search_meta.search_contexts) = 0");
+  } else if (input.source === "chat") {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM jsonb_array_elements(search_meta.search_contexts) AS context(value)
+      WHERE context.value->>'contextType' IN ('chatChannel', 'chatMessage', 'chatThread')
+    )`);
+  } else if (input.source && input.source !== "all") {
+    params.push(input.source);
+    conditions.push(`EXISTS (
+      SELECT 1 FROM jsonb_array_elements(search_meta.search_contexts) AS context(value)
+      WHERE context.value->>'contextType' = $${params.length}
+    )`);
+  }
+  if (input.contextType && input.contextType !== "all") {
+    params.push(input.contextType);
+    conditions.push(`EXISTS (
+      SELECT 1 FROM jsonb_array_elements(search_meta.search_contexts) AS context(value)
+      WHERE context.value->>'contextType' = $${params.length}
+    )`);
+  }
   const query = input.query?.trim().toLowerCase();
   if (query) {
     params.push(`%${query}%`);
-    conditions.push(`(lower(n.name) LIKE $${params.length} OR lower(COALESCE(f.file_name, '')) LIKE $${params.length} OR lower(COALESCE(f.mime_type, '')) LIKE $${params.length})`);
+    conditions.push(`(
+      lower(n.name) LIKE $${params.length}
+      OR lower(COALESCE(f.file_name, '')) LIKE $${params.length}
+      OR lower(COALESCE(f.mime_type, '')) LIKE $${params.length}
+      OR lower(COALESCE(search_meta.search_text, '')) LIKE $${params.length}
+    )`);
   }
   const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
   params.push(limit);
-  const { rows } = await pool.query<DriveRow>(
+  const { rows } = await pool.query<DriveSearchRow>(
     `
       SELECT n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
              n.created_at, n.updated_at, n.deleted_at,
              f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind, f.width, f.height,
-             version_stats.version_count, version_stats.latest_version_number
+             version_stats.version_count, version_stats.latest_version_number,
+             search_meta.search_contexts
       FROM drive_nodes n
       LEFT JOIN drive_files f ON f.node_id = n.id
       LEFT JOIN LATERAL (
@@ -753,6 +878,70 @@ export async function searchDriveNodes(
         FROM drive_file_versions
         WHERE file_id = f.id
       ) version_stats ON true
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(
+          jsonb_agg(
+            jsonb_build_object(
+              'contextType', context_items.context_type,
+              'contextId', context_items.context_id,
+              'contextTitle', context_items.context_title,
+              'label', context_items.label
+            )
+            ORDER BY context_items.sort_rank, context_items.context_title
+          ),
+          '[]'::jsonb
+        ) AS search_contexts,
+        string_agg(context_items.context_title || ' ' || COALESCE(context_items.label, ''), ' ') AS search_text
+        FROM (
+          SELECT DISTINCT ON (raw_contexts.context_type, raw_contexts.context_id)
+                 raw_contexts.context_type, raw_contexts.context_id, raw_contexts.context_title, raw_contexts.label, raw_contexts.sort_rank
+          FROM (
+            SELECT l.context_type::text AS context_type,
+                   l.context_id,
+                   COALESCE(
+                     l.label,
+                     CASE
+                       WHEN l.context_type = 'project' THEN p.name
+                       WHEN l.context_type = 'objective' THEN o.title
+                       WHEN l.context_type = 'result' THEN r.title
+                       WHEN l.context_type = 'task' THEN t.title
+                       WHEN l.context_type = 'feedback' THEN fb.phenomenon
+                       WHEN l.context_type = 'workLog' THEN wl.work_date || ' · ' || wl.author_name_snapshot
+                       WHEN l.context_type = 'chatChannel' THEN COALESCE(c.display_name, c.name)
+                       WHEN l.context_type = 'chatMessage' THEN COALESCE(NULLIF(left(regexp_replace(cm.body, '\\s+', ' ', 'g'), 80), ''), '聊天消息')
+                       WHEN l.context_type = 'chatThread' THEN COALESCE(NULLIF(left(regexp_replace(ct.body, '\\s+', ' ', 'g'), 80), ''), '聊天话题')
+                       ELSE NULL
+                     END,
+                     l.context_type::text
+                   ) AS context_title,
+                   l.label,
+                   1 AS sort_rank
+            FROM drive_node_context_links l
+            LEFT JOIN projects p ON p.id = l.context_id AND p.team_id = l.team_id AND l.context_type = 'project'
+            LEFT JOIN objectives o ON o.id = l.context_id AND o.team_id = l.team_id AND l.context_type = 'objective'
+            LEFT JOIN results r ON r.id = l.context_id AND r.team_id = l.team_id AND l.context_type = 'result'
+            LEFT JOIN tasks t ON t.id = l.context_id AND t.team_id = l.team_id AND l.context_type = 'task'
+            LEFT JOIN feedback fb ON fb.id = l.context_id AND fb.team_id = l.team_id AND l.context_type = 'feedback'
+            LEFT JOIN work_log_entries wl ON wl.id = l.context_id AND wl.team_id = l.team_id AND l.context_type = 'workLog'
+            LEFT JOIN chat_channels c ON c.id = l.context_id AND c.team_id = l.team_id AND l.context_type = 'chatChannel'
+            LEFT JOIN chat_messages cm ON cm.id = l.context_id AND cm.team_id = l.team_id AND cm.deleted_at IS NULL AND l.context_type = 'chatMessage'
+            LEFT JOIN chat_messages ct ON ct.id = l.context_id AND ct.team_id = l.team_id AND ct.deleted_at IS NULL AND ct.root_message_id IS NULL AND l.context_type = 'chatThread'
+            WHERE l.team_id = n.team_id
+              AND l.node_id = n.id
+            UNION ALL
+            SELECT 'chatChannel' AS context_type,
+                   channel.id AS context_id,
+                   COALESCE(link.label, channel.display_name, channel.name, '群聊') AS context_title,
+                   link.label,
+                   0 AS sort_rank
+            FROM chat_channel_drive_links link
+            INNER JOIN chat_channels channel ON channel.id = link.channel_id AND channel.team_id = link.team_id
+            WHERE link.team_id = n.team_id
+              AND (link.node_id = n.id OR link.node_id = n.parent_id)
+          ) raw_contexts
+          ORDER BY raw_contexts.context_type, raw_contexts.context_id, raw_contexts.sort_rank
+        ) context_items
+      ) search_meta ON true
       LEFT JOIN users creator ON creator.id = n.created_by
       WHERE ${conditions.join(" AND ")}
       ORDER BY n.updated_at DESC, lower(n.name)
@@ -760,7 +949,7 @@ export async function searchDriveNodes(
     `,
     params,
   );
-  return ok({ nodes: rows.map(driveNodeDto) });
+  return ok({ nodes: rows.map((row) => driveSearchNodeDto(row, query)) });
 }
 
 export async function listDriveTrash(actor: ChatActor): Promise<Outcome<{ nodes: DriveNode[] }>> {

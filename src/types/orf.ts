@@ -77,6 +77,10 @@ export type DriveContextType =
   | "chatMessage"
   | "chatThread";
 export type DriveSearchScope = "active" | "trash";
+export type DriveSearchContextFilter = "all" | DriveContextType;
+export type DriveSearchSource = "all" | "manual" | "chat" | "project" | "objective" | "result" | "task" | "feedback" | "workLog";
+export type DriveSearchStatus = "active" | "all" | "trash";
+export type DriveSearchUpdatedRange = "all" | "7d" | "30d";
 export type DriveSearchType = "all" | "file" | "folder";
 
 export interface OrfUser {
@@ -254,6 +258,24 @@ export interface DriveNode {
   deletedAt?: string | null;
   updatedAt: string;
   file?: Drive;
+  searchMeta?: DriveSearchMeta;
+}
+
+export interface DriveSearchContextSummary {
+  contextId: string;
+  contextTitle: string;
+  contextType: DriveContextType;
+  label?: string | null;
+}
+
+export interface DriveSearchMeta {
+  contexts: DriveSearchContextSummary[];
+  snippet?: string | null;
+  sourceLabels: string[];
+  status: "active" | "trash";
+  uploadedById?: string | null;
+  uploadedByName?: string | null;
+  updatedAt: string;
 }
 
 export interface DriveFileVersion {

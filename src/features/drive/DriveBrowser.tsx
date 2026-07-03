@@ -14,6 +14,7 @@ import {
   Image,
   Link2,
   Loader2,
+  MoreHorizontal,
   RefreshCw,
   RotateCcw,
   Search,
@@ -35,12 +36,16 @@ import type { ApiUploadProgress } from "../../state/apiClient";
 import type {
   ChatMessage,
   DriveBootstrap,
+  DriveSearchContextFilter,
   DriveContextType,
   DriveFileVersion,
   DriveNode,
   DriveNodeDetails,
   DrivePreviewKind,
+  DriveSearchSource,
+  DriveSearchStatus,
   DriveSearchType,
+  DriveSearchUpdatedRange,
 } from "../../types/orf";
 
 type DriveUploadResult = {
@@ -54,11 +59,27 @@ export type DriveContextOption = {
   type: Exclude<DriveContextType, "chatChannel" | "chatMessage" | "chatThread">;
 };
 
+export type DriveUploaderOption = {
+  id: string;
+  name: string;
+};
+
+type DriveSearchFilters = {
+  contextType: DriveSearchContextFilter;
+  previewKind: DrivePreviewKind | "all";
+  source: DriveSearchSource;
+  status: DriveSearchStatus;
+  type: DriveSearchType;
+  updated: DriveSearchUpdatedRange;
+  uploaderId: string;
+};
+
 type DriveBrowserProps = {
   bootstrap: DriveBootstrap | null;
   canWrite: boolean;
   contextLabel?: string;
   contextOptions?: DriveContextOption[];
+  currentUserId?: string | null;
   initialSelectedNodeId?: string | null;
   loading: boolean;
   notify: (message: string) => void;
@@ -72,12 +93,22 @@ type DriveBrowserProps = {
   onRemoveContextLink?: (input: { linkId: string; nodeId: string }) => Promise<DriveNodeDetails>;
   onRestoreNode?: (nodeId: string) => Promise<DriveNode>;
   onRestoreVersion?: (input: { fileId: string; versionId: string }) => Promise<{ node: DriveNode; versions: DriveFileVersion[] }>;
-  onSearch?: (input: { previewKind?: DrivePreviewKind | "all"; query?: string; type?: DriveSearchType }) => Promise<DriveNode[]>;
+  onSearch?: (input: {
+    contextType?: DriveSearchContextFilter;
+    previewKind?: DrivePreviewKind | "all";
+    query?: string;
+    source?: DriveSearchSource;
+    status?: DriveSearchStatus;
+    type?: DriveSearchType;
+    updated?: DriveSearchUpdatedRange;
+    uploaderId?: string;
+  }) => Promise<DriveNode[]>;
   onSelectedNodeIdChange?: (nodeId: string | null) => void;
   onUploadedAnnouncement?: (message: ChatMessage) => void;
   onUploadFile: (input: { file: File; onProgress?: (progress: ApiUploadProgress) => void; parentNodeId: string }) => Promise<DriveUploadResult>;
   onUploadVersion?: (input: { file: File; fileId: string; onProgress?: (progress: ApiUploadProgress) => void }) => Promise<{ node: DriveNode; versions: DriveFileVersion[] }>;
   resourceHref?: (nodeId: string) => string;
+  uploaderOptions?: DriveUploaderOption[];
 };
 
 type UploadTaskState = {
@@ -94,11 +125,22 @@ const modeLabels: Record<DriveMode, string> = {
   trash: "回收站",
 };
 
+const defaultDriveSearchFilters: DriveSearchFilters = {
+  contextType: "all",
+  previewKind: "all",
+  source: "all",
+  status: "active",
+  type: "all",
+  updated: "all",
+  uploaderId: "all",
+};
+
 export function DriveBrowser({
   bootstrap,
   canWrite,
   contextLabel,
   contextOptions = [],
+  currentUserId = null,
   initialSelectedNodeId = null,
   loading,
   notify,
@@ -118,6 +160,7 @@ export function DriveBrowser({
   onUploadFile,
   onUploadVersion,
   resourceHref,
+  uploaderOptions = [],
 }: DriveBrowserProps) {
   const [childrenByFolderId, setChildrenByFolderId] = useState<Map<string, DriveNode[]>>(new Map());
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -129,15 +172,16 @@ export function DriveBrowser({
   const [mode, setMode] = useState<DriveMode>("browse");
   const [newFolderName, setNewFolderName] = useState("");
   const [resourceLoading, setResourceLoading] = useState(false);
+  const [searchFilters, setSearchFilters] = useState<DriveSearchFilters>(defaultDriveSearchFilters);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchPreviewKind, setSearchPreviewKind] = useState<DrivePreviewKind | "all">("all");
   const [searchResults, setSearchResults] = useState<DriveNode[]>([]);
-  const [searchType, setSearchType] = useState<DriveSearchType>("all");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [textPreviewByFileId, setTextPreviewByFileId] = useState<Map<string, string>>(new Map());
   const [textPreviewLoadingIds, setTextPreviewLoadingIds] = useState<Set<string>>(new Set());
   const [trashNodes, setTrashNodes] = useState<DriveNode[]>([]);
   const [uploadTask, setUploadTask] = useState<UploadTaskState | null>(null);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const initialSelectedNodeIdRef = useRef<string | null>(initialSelectedNodeId);
   const loadDetailsRef = useRef(onLoadDetails);
@@ -148,6 +192,17 @@ export function DriveBrowser({
     loadDetailsRef.current = onLoadDetails;
     notifyRef.current = notify;
   }, [notify, onLoadDetails]);
+
+  useEffect(() => {
+    if (!actionsMenuOpen) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && actionsMenuRef.current?.contains(target)) return;
+      setActionsMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [actionsMenuOpen]);
 
   useEffect(() => {
     initialSelectedNodeIdRef.current = initialSelectedNodeId;
@@ -294,15 +349,23 @@ export function DriveBrowser({
 
   const runSearch = async (
     nextQuery = searchQuery,
-    nextType = searchType,
-    nextPreviewKind = searchPreviewKind,
+    nextFilters = searchFilters,
   ) => {
     if (!onSearch) return;
     setMode("search");
     setResourceLoading(true);
     setErrorMessage(null);
     try {
-      const nodes = await onSearch({ previewKind: nextPreviewKind, query: nextQuery, type: nextType });
+      const nodes = await onSearch({
+        contextType: nextFilters.contextType,
+        previewKind: nextFilters.previewKind,
+        query: nextQuery,
+        source: nextFilters.source,
+        status: nextFilters.status,
+        type: nextFilters.type,
+        updated: nextFilters.updated,
+        uploaderId: nextFilters.uploaderId === "all" ? undefined : nextFilters.uploaderId,
+      });
       setSearchResults(nodes);
       setSelectedNodeId(nodes[0]?.id ?? null);
     } catch (error) {
@@ -312,6 +375,12 @@ export function DriveBrowser({
     } finally {
       setResourceLoading(false);
     }
+  };
+
+  const updateSearchFilter = <Key extends keyof DriveSearchFilters>(key: Key, value: DriveSearchFilters[Key]) => {
+    const nextFilters = { ...searchFilters, [key]: value };
+    setSearchFilters(nextFilters);
+    if (mode === "search") void runSearch(searchQuery, nextFilters);
   };
 
   const loadTrash = async () => {
@@ -555,10 +624,67 @@ export function DriveBrowser({
     <div className="orf-drive-actions">
       <IconButton disabled={!canMutateDrive || !uploadTarget || mode === "trash"} icon={Upload} label={uploadTarget ? `上传到 ${uploadTarget.name}` : "上传文件"} onClick={() => fileInputRef.current?.click()} />
       <IconButton disabled={!canMutateDrive || !uploadTarget || mode === "trash"} icon={FolderPlus} label="新建文件夹" onClick={() => setNewFolderName((value) => value || "新建文件夹")} />
-      <IconButton disabled={!effectiveNode || effectiveNode.id === bootstrap?.root.id || !canMutateDrive || Boolean(effectiveNode.deletedAt)} icon={Trash2} label="删除" onClick={() => void deleteSelectedNode()} />
-      <IconButton disabled={!effectiveNode?.deletedAt || !onRestoreNode || !canMutateDrive} icon={RotateCcw} label="恢复" onClick={() => void restoreSelectedNode()} />
-      <IconButton disabled={!selectedFile || !onUploadVersion || !canMutateDrive || Boolean(effectiveNode?.deletedAt)} icon={FileClock} label="上传新版本" onClick={() => versionInputRef.current?.click()} />
-      <IconButton icon={RefreshCw} label="刷新" loading={loading} onClick={() => void onRefresh()} />
+      <div className="orf-drive-actions-menu" ref={actionsMenuRef}>
+        <IconButton
+          icon={MoreHorizontal}
+          label="更多云盘操作"
+          aria-expanded={actionsMenuOpen}
+          aria-haspopup="menu"
+          onClick={() => setActionsMenuOpen((value) => !value)}
+        />
+        {actionsMenuOpen && (
+          <div className="orf-drive-actions-popover" role="menu">
+            <button
+              type="button"
+              disabled={!effectiveNode || effectiveNode.id === bootstrap?.root.id || !canMutateDrive || Boolean(effectiveNode.deletedAt)}
+              role="menuitem"
+              onClick={() => {
+                setActionsMenuOpen(false);
+                void deleteSelectedNode();
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+              删除
+            </button>
+            <button
+              type="button"
+              disabled={!effectiveNode?.deletedAt || !onRestoreNode || !canMutateDrive}
+              role="menuitem"
+              onClick={() => {
+                setActionsMenuOpen(false);
+                void restoreSelectedNode();
+              }}
+            >
+              <RotateCcw className="h-4 w-4" />
+              恢复
+            </button>
+            <button
+              type="button"
+              disabled={!selectedFile || !onUploadVersion || !canMutateDrive || Boolean(effectiveNode?.deletedAt)}
+              role="menuitem"
+              onClick={() => {
+                setActionsMenuOpen(false);
+                versionInputRef.current?.click();
+              }}
+            >
+              <FileClock className="h-4 w-4" />
+              上传新版本
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              role="menuitem"
+              onClick={() => {
+                setActionsMenuOpen(false);
+                void onRefresh();
+              }}
+            >
+              <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
+              刷新
+            </button>
+          </div>
+        )}
+      </div>
       <span className="orf-drive-upload-target" title={uploadTargetLabel}>{uploadTargetLabel}</span>
     </div>
   );
@@ -590,11 +716,11 @@ export function DriveBrowser({
         <Search className="h-4 w-4" />
         <input value={searchQuery} placeholder="搜索文件名、类型、内容线索" onChange={(event) => setSearchQuery(event.target.value)} />
         <select
-          value={searchType}
+          aria-label="资源节点类型"
+          value={searchFilters.type}
           onChange={(event) => {
             const nextType = event.target.value as DriveSearchType;
-            setSearchType(nextType);
-            if (mode === "search") void runSearch(searchQuery, nextType, searchPreviewKind);
+            updateSearchFilter("type", nextType);
           }}
         >
           <option value="all">全部</option>
@@ -604,11 +730,13 @@ export function DriveBrowser({
         <Button size="sm" variant="secondary">搜索</Button>
       </form>
       <DriveSearchFacets
-        activePreviewKind={searchPreviewKind}
+        activeFilters={searchFilters}
+        currentUserId={currentUserId}
         onChangePreviewKind={(nextPreviewKind) => {
-          setSearchPreviewKind(nextPreviewKind);
-          if (mode === "search") void runSearch(searchQuery, searchType, nextPreviewKind);
+          updateSearchFilter("previewKind", nextPreviewKind);
         }}
+        onChangeFilter={updateSearchFilter}
+        uploaderOptions={uploaderOptions}
       />
 
       {actions}
@@ -702,18 +830,41 @@ function DriveResourceList({
     <div className="orf-drive-resource-list">
       {nodes.map((node) => {
         const Icon = node.type === "folder" ? Folder : iconForFile(node);
+        const meta = node.searchMeta;
+        const contextBadges = meta?.contexts.slice(0, 3) ?? [];
         return (
           <button
             key={node.id}
             type="button"
-            className={clsx("orf-drive-row", selectedNodeId === node.id && "orf-drive-row-active", node.deletedAt && "is-deleted")}
+            className={clsx("orf-drive-resource-card", selectedNodeId === node.id && "orf-drive-resource-card-active", node.deletedAt && "is-deleted")}
             title={node.name}
             onClick={() => onSelect(node)}
           >
-            <span className="orf-drive-row-spacer" />
             <Icon className="h-4 w-4" />
-            <span>{node.name}</span>
-            <small>{driveNodeMetaLabel(node)}</small>
+            <span className="orf-drive-resource-card-main">
+              <strong>{node.name}</strong>
+              <small>
+                {(meta?.sourceLabels ?? [node.type === "folder" ? "文件夹" : drivePreviewKindLabel(node.file?.previewKind ?? "download")]).join(" / ")}
+                {" · "}
+                {node.file ? drivePreviewKindLabel(node.file.previewKind) : "文件夹"}
+                {node.file ? ` · ${formatFileSize(node.file.fileSize)}` : ""}
+              </small>
+              {meta?.snippet && <em>{meta.snippet}</em>}
+              {contextBadges.length > 0 && (
+                <span className="orf-drive-resource-contexts">
+                  {contextBadges.map((context) => (
+                    <span key={`${context.contextType}:${context.contextId}`}>
+                      {contextTypeLabel(context.contextType)} · {context.contextTitle}
+                    </span>
+                  ))}
+                </span>
+              )}
+            </span>
+            <span className="orf-drive-resource-card-side">
+              <strong>{node.deletedAt ? "已删除" : "正常"}</strong>
+              <small>{meta?.uploadedByName ?? node.createdByName ?? "未知成员"}</small>
+              <small>{formatDateTime(meta?.updatedAt ?? node.updatedAt)}</small>
+            </span>
           </button>
         );
       })}
@@ -731,25 +882,105 @@ const drivePreviewKindFilters: Array<{ label: string; value: DrivePreviewKind | 
 ];
 
 function DriveSearchFacets({
-  activePreviewKind,
+  activeFilters,
+  currentUserId,
+  onChangeFilter,
   onChangePreviewKind,
+  uploaderOptions,
 }: {
-  activePreviewKind: DrivePreviewKind | "all";
+  activeFilters: DriveSearchFilters;
+  currentUserId: string | null;
+  onChangeFilter: <Key extends keyof DriveSearchFilters>(key: Key, value: DriveSearchFilters[Key]) => void;
   onChangePreviewKind: (previewKind: DrivePreviewKind | "all") => void;
+  uploaderOptions: DriveUploaderOption[];
 }) {
   return (
-    <div className="orf-drive-filter-chips" aria-label="资源类型筛选">
-      {drivePreviewKindFilters.map((filter) => (
-        <button
-          key={filter.value}
-          type="button"
-          className={clsx(activePreviewKind === filter.value && "is-active")}
-          aria-pressed={activePreviewKind === filter.value}
-          onClick={() => onChangePreviewKind(filter.value)}
-        >
-          {filter.label}
-        </button>
-      ))}
+    <div className="orf-drive-filter-panel" aria-label="资源搜索筛选">
+      <div className="orf-drive-filter-chips" aria-label="资源类型筛选">
+        {drivePreviewKindFilters.map((filter) => (
+          <button
+            key={filter.value}
+            type="button"
+            className={clsx(activeFilters.previewKind === filter.value && "is-active")}
+            aria-pressed={activeFilters.previewKind === filter.value}
+            onClick={() => onChangePreviewKind(filter.value)}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+      <div className="orf-drive-filter-selects">
+        <label>
+          <span>来源</span>
+          <select
+            value={activeFilters.source}
+            onChange={(event) => onChangeFilter("source", event.target.value as DriveSearchSource)}
+          >
+            <option value="all">全部来源</option>
+            <option value="chat">聊天</option>
+            <option value="project">项目</option>
+            <option value="objective">目标</option>
+            <option value="result">指标</option>
+            <option value="task">任务</option>
+            <option value="feedback">反馈</option>
+            <option value="workLog">工作日志</option>
+            <option value="manual">手动上传</option>
+          </select>
+        </label>
+        <label>
+          <span>上传人</span>
+          <select
+            value={activeFilters.uploaderId}
+            onChange={(event) => onChangeFilter("uploaderId", event.target.value)}
+          >
+            <option value="all">全部上传人</option>
+            {currentUserId && <option value={currentUserId}>我上传的</option>}
+            {uploaderOptions
+              .filter((user) => user.id !== currentUserId)
+              .map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>时间</span>
+          <select
+            value={activeFilters.updated}
+            onChange={(event) => onChangeFilter("updated", event.target.value as DriveSearchUpdatedRange)}
+          >
+            <option value="all">全部时间</option>
+            <option value="7d">最近 7 天</option>
+            <option value="30d">最近 30 天</option>
+          </select>
+        </label>
+        <label>
+          <span>状态</span>
+          <select
+            value={activeFilters.status}
+            onChange={(event) => onChangeFilter("status", event.target.value as DriveSearchStatus)}
+          >
+            <option value="active">正常</option>
+            <option value="trash">已删除</option>
+            <option value="all">全部状态</option>
+          </select>
+        </label>
+        <label>
+          <span>关联</span>
+          <select
+            value={activeFilters.contextType}
+            onChange={(event) => onChangeFilter("contextType", event.target.value as DriveSearchContextFilter)}
+          >
+            <option value="all">全部关联</option>
+            <option value="project">项目</option>
+            <option value="objective">目标</option>
+            <option value="result">指标</option>
+            <option value="task">任务</option>
+            <option value="feedback">反馈</option>
+            <option value="workLog">工作日志</option>
+            <option value="chatChannel">群聊</option>
+            <option value="chatMessage">聊天消息</option>
+            <option value="chatThread">聊天话题</option>
+          </select>
+        </label>
+      </div>
     </div>
   );
 }

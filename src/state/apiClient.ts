@@ -16,8 +16,12 @@ import type {
   DriveFileVersion,
   DriveNodeDetails,
   DrivePreviewKind,
+  DriveSearchContextFilter,
   DriveSearchScope,
+  DriveSearchSource,
+  DriveSearchStatus,
   DriveSearchType,
+  DriveSearchUpdatedRange,
   CommentThread,
   CommentAttachmentUploadResult,
   CommentTargetType,
@@ -796,17 +800,27 @@ export async function getDriveChildren(input: { parentNodeId: string }) {
 }
 
 export async function searchDriveRequest(input: {
+  contextType?: DriveSearchContextFilter;
   limit?: number;
   previewKind?: DrivePreviewKind | "all";
   query?: string;
   scope?: DriveSearchScope;
+  source?: DriveSearchSource;
+  status?: DriveSearchStatus;
   type?: DriveSearchType;
+  updated?: DriveSearchUpdatedRange;
+  uploaderId?: string;
 }) {
   const query = new URLSearchParams();
   if (input.query?.trim()) query.set("q", input.query.trim());
   if (input.type) query.set("type", input.type);
   if (input.scope) query.set("scope", input.scope);
+  if (input.status) query.set("status", input.status);
   if (input.previewKind) query.set("previewKind", input.previewKind);
+  if (input.source) query.set("source", input.source);
+  if (input.uploaderId) query.set("uploaderId", input.uploaderId);
+  if (input.updated) query.set("updated", input.updated);
+  if (input.contextType) query.set("contextType", input.contextType);
   if (input.limit) query.set("limit", String(input.limit));
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return apiJson<DriveSearchResponse>(`/api/drive/search${suffix}`);

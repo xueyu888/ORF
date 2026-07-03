@@ -32,7 +32,7 @@
 ## API
 
 - `GET /api/drive`：返回团队云盘根节点、首层节点和上传大小限制。
-- `GET /api/drive/search?q=&type=&previewKind=&scope=`：按名称、文件名和 MIME 搜索活动资源或回收站资源。
+- `GET /api/drive/search?q=&type=&previewKind=&status=&source=&contextType=&uploaderId=&updated=`：按名称、文件名、MIME、上下文标题和绑定标签搜索资源，并支持节点类型、预览类型、状态、来源、上下文、上传人和更新时间筛选；`scope=trash` 仅作为旧参数兼容。
 - `GET /api/drive/trash`：返回回收站顶层资源。
 - `GET /api/drive/nodes/:nodeId/children`：按文件夹懒加载子节点。
 - `GET /api/drive/nodes/:nodeId/details`：返回节点详情、路径、工作上下文、版本和活动。
@@ -62,8 +62,8 @@
 
 ## 对标产品能力映射
 
-- Slack 式群聊资源入口：`chat_channel_drive_links` 让频道以轻量资源托盘显示已绑定资源和默认上传文件夹；完整管理、回收站和版本操作留在 `/resources`。
-- Google Drive 式搜索预览：`/api/drive/search`、详情面板和安全预览 URL 都由后端统一输出。
+- Slack 式群聊资源入口：`chat_channel_drive_links` 让频道以轻量资源流显示已绑定资源、默认上传文件夹、频道内快速上传和团队资源查找；版本、回收站、上下文管理等完整操作留在 `/resources`。
+- Google Drive 式搜索预览：`/api/drive/search`、详情面板和安全预览 URL 都由后端统一输出；搜索读模型会合并 `drive_node_context_links` 与 `chat_channel_drive_links`，但不读取对象存储正文做全文索引。
 - Dropbox 式可靠恢复：`drive_nodes.deleted_at` 驱动回收站，`drive_file_versions` 支持版本恢复，`drive_node_events` 保留操作证据。
 - Linear 式工作上下文：`drive_node_context_links` 把文件显式关联到项目、目标、指标、任务、反馈、工作日志或聊天上下文，但不改变这些业务对象或云盘自身事实源。
 

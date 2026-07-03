@@ -37,11 +37,16 @@ const driveContentQuerySchema = z.object({
   disposition: z.enum(["attachment", "inline"]).optional(),
 });
 const driveSearchQuerySchema = z.object({
+  contextType: z.enum(["all", "project", "objective", "result", "task", "feedback", "workLog", "chatChannel", "chatMessage", "chatThread"]).optional(),
   limit: z.coerce.number().int().positive().max(100).optional(),
   previewKind: z.enum(["all", "download", "image", "markdown", "pdf", "text"]).optional(),
   q: z.string().trim().max(200).optional(),
   scope: z.enum(["active", "trash"]).optional(),
+  source: z.enum(["all", "manual", "chat", "project", "objective", "result", "task", "feedback", "workLog"]).optional(),
+  status: z.enum(["active", "all", "trash"]).optional(),
   type: z.enum(["all", "file", "folder"]).optional(),
+  updated: z.enum(["all", "7d", "30d"]).optional(),
+  uploaderId: z.string().trim().min(1).max(80).optional(),
 });
 const createFolderBodySchema = z.object({
   name: z.string().trim().min(1).max(160),
@@ -139,11 +144,16 @@ export function registerDriveRoutes(app: FastifyInstance) {
     if (!actor) return reply;
     const query = driveSearchQuerySchema.parse(request.query);
     return sendDriveOutcome(reply, await searchDriveNodes({
+      contextType: query.contextType,
       limit: query.limit,
       previewKind: query.previewKind,
       query: query.q,
       scope: query.scope,
+      source: query.source,
+      status: query.status,
       type: query.type,
+      updated: query.updated,
+      uploaderId: query.uploaderId,
     }, actor));
   });
 
