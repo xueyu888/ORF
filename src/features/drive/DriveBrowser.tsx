@@ -866,18 +866,46 @@ function DriveDetails({
 }) {
   if (loading) {
     if (details) return <DriveDetailsContent canWrite={canWrite} contextOptions={contextOptions} details={details} onAddContext={onAddContext} onRemoveContext={onRemoveContext} onRestoreVersion={onRestoreVersion} />;
-    return (
-      <div className="orf-drive-details orf-drive-details-loading">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <div>
-          <strong>{node?.name ?? "正在同步详情"}</strong>
-          <span>正在同步版本、活动和工作上下文</span>
-        </div>
-      </div>
-    );
+    return <DriveDetailsLoading node={node} />;
   }
   if (!details) return null;
   return <DriveDetailsContent canWrite={canWrite} contextOptions={contextOptions} details={details} onAddContext={onAddContext} onRemoveContext={onRemoveContext} onRestoreVersion={onRestoreVersion} />;
+}
+
+function DriveDetailsLoading({ node }: { node: DriveNode | null }) {
+  const file = node?.file ?? null;
+  return (
+    <div className="orf-drive-details" aria-busy="true">
+      <div className="orf-drive-detail-sync" role="status">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span>正在同步版本、活动和工作上下文</span>
+      </div>
+
+      <div className="orf-drive-detail-section">
+        <h3>详情</h3>
+        <p>{node?.name ?? "正在同步详情"}</p>
+        {node ? (
+          <dl>
+            <div><dt>类型</dt><dd>{node.type === "folder" ? "文件夹" : file?.mimeType ?? "文件"}</dd></div>
+            {file && <div><dt>大小</dt><dd>{formatFileSize(file.fileSize)}</dd></div>}
+            <div><dt>创建</dt><dd>{formatDateTime(node.createdAt)}</dd></div>
+            <div><dt>更新</dt><dd>{formatDateTime(node.updatedAt)}</dd></div>
+            {node.deletedAt && <div><dt>删除</dt><dd>{formatDateTime(node.deletedAt)}</dd></div>}
+          </dl>
+        ) : null}
+      </div>
+
+      <div className="orf-drive-detail-section">
+        <h3>工作上下文</h3>
+        <div className="orf-drive-detail-skeleton" />
+      </div>
+
+      <div className="orf-drive-detail-section">
+        <h3>活动</h3>
+        <div className="orf-drive-detail-skeleton" />
+      </div>
+    </div>
+  );
 }
 
 function DriveDetailsContent({

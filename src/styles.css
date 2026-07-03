@@ -18310,37 +18310,46 @@ button.orf-chat-image-attachment {
   padding: 10px;
 }
 
-.orf-drive-details-loading {
-  grid-template-columns: 18px minmax(0, 1fr);
+.orf-drive-detail-sync {
+  display: inline-grid;
+  width: fit-content;
+  max-width: 100%;
+  grid-template-columns: 16px minmax(0, 1fr);
   align-items: center;
-  align-content: center;
-  min-height: 120px;
+  gap: 7px;
+  border: 1px solid var(--orf-chat-panel-border);
+  border-radius: 999px;
+  background: var(--orf-drive-surface-muted);
+  color: var(--orf-drive-text-muted);
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 850;
 }
 
-.orf-drive-details-loading div {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.orf-drive-details-loading strong,
-.orf-drive-details-loading span {
+.orf-drive-detail-sync span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.orf-drive-details-loading strong {
-  color: var(--orf-drive-text-strong);
-  font-size: 13px;
-  font-weight: 900;
+.orf-drive-detail-skeleton {
+  width: min(100%, 260px);
+  height: 26px;
+  border-radius: var(--orf-radius-control);
+  background: linear-gradient(90deg, var(--orf-drive-surface-muted), var(--orf-drive-surface), var(--orf-drive-surface-muted));
+  background-size: 200% 100%;
+  animation: orf-drive-skeleton 1.3s ease-in-out infinite;
 }
 
-.orf-drive-details-loading span {
-  color: var(--orf-drive-text-muted);
-  font-size: 12px;
-  font-weight: 800;
+@keyframes orf-drive-skeleton {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .orf-drive-detail-section {
