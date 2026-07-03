@@ -10,7 +10,7 @@ import type { ActivePanel, ChatSearchScope, ChatSearchTypeFilter } from "./chatP
 import { ChatSearchPanel } from "./ChatSearchPanel";
 import { ChatThreadInboxPanel } from "./ChatThreadInboxPanel";
 import { ChatThreadPanel } from "./ChatThreadPanel";
-import { ProjectFilePanel } from "./ProjectFilePanel";
+import { ChatDrivePanel } from "./ChatDrivePanel";
 
 type ChatRightPanelProps = {
   activePanel: ActivePanel;
@@ -82,7 +82,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
         : props.activePanel === "search" ? "搜索"
             : props.activePanel === "pins" ? "固定消息"
               : props.activePanel === "saved" ? "已保存"
-                : props.activePanel === "files" ? "项目文件"
+                : props.activePanel === "files" ? "群聊云盘"
               : infoTitle;
   return (
     <aside className="orf-chat-right-panel" data-active-panel={props.activePanel}>
@@ -171,14 +171,12 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
         />
       )}
       {props.activePanel === "files" && (
-        <ProjectFilePanel
+        <ChatDrivePanel
           canManage={props.canManage}
           canWrite={props.canWrite}
           channel={props.channel}
           notify={props.notify}
           onAnnouncementMessage={props.onAnnouncementMessage}
-          onChannelUpdated={props.onChannelUpdated}
-          projects={props.projects}
         />
       )}
       {props.activePanel === "info" && (

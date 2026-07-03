@@ -3,6 +3,7 @@ const titleMap: Record<string, string> = {
   bounties: "悬赏大厅",
   tasks: "我的挑战",
   "work-logs": "工作日志",
+  drive: "云盘",
   chat: "聊天",
   "fantasy-ui": "Fantasy UI",
   "genshin-ui-kit": "Genshin UI Kit",

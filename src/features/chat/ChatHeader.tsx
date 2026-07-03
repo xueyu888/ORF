@@ -47,7 +47,7 @@ export function ChatHeader({
   const integrationBrand = chatChannelIntegrationBrand(channel);
   const membership = currentMembership(channel, currentUserId);
   const canManageMembership = canManage && channel.type === "private";
-  const canUseProjectFiles = !channel.systemKind && (channel.type === "public" || channel.type === "private");
+  const canUseChatDrive = !channel.systemKind && (channel.type === "public" || channel.type === "private");
   const infoLabel = chatChannelInfoLabel(channel);
   const title = chatChannelDisplayLabel(channel, currentUserId, usersById);
   const headerText = channel.header.trim();
@@ -86,7 +86,7 @@ export function ChatHeader({
           onClick={onToggleMuted}
         />
         {canManageMembership && <IconButton icon={UserPlus} label="添加成员" onClick={onMemberSearch} />}
-        {canUseProjectFiles && <IconButton icon={Folder} label="项目文件" onClick={onFiles} />}
+        {canUseChatDrive && <IconButton icon={Folder} label="群聊云盘" onClick={onFiles} />}
         <IconButton icon={Pin} label="固定消息" onClick={onPins} />
         <IconButton icon={Bookmark} label="已保存消息" onClick={onSaved} />
         <button

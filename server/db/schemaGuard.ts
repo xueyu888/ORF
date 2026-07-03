@@ -235,7 +235,7 @@ export function validateSystemChatNotificationSchema(snapshot: { columns: Runtim
   return errors;
 }
 
-export function validateProjectFileManagementSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+export function validateDriveManagementSchema(snapshot: { columns: RuntimeTableColumn[] }) {
   const errors: string[] = [];
   const columnsByTable = snapshot.columns.reduce((map, column) => {
     const columns = map.get(column.tableName) ?? new Map<string, RuntimeTableColumn>();
@@ -244,46 +244,26 @@ export function validateProjectFileManagementSchema(snapshot: { columns: Runtime
     return map;
   }, new Map<string, Map<string, RuntimeTableColumn>>());
 
-  const channelColumns = columnsByTable.get("chat_channels") ?? new Map();
-  const channelProjectId = channelColumns.get("project_id");
-  if (!channelProjectId) {
-    errors.push("chat_channels.project_id is missing.");
-  } else if (channelProjectId.isNullable !== "YES") {
-    errors.push("chat_channels.project_id must be nullable.");
-  }
-
-  const treeColumns = columnsByTable.get("project_file_trees") ?? new Map();
-  for (const columnName of ["id", "team_id", "project_id", "created_at", "updated_at"]) {
-    const column = treeColumns.get(columnName);
-    if (!column) {
-      errors.push(`project_file_trees.${columnName} is missing.`);
-    } else if (column.isNullable !== "NO") {
-      errors.push(`project_file_trees.${columnName} must be NOT NULL.`);
-    }
-  }
-
-  const nodeColumns = columnsByTable.get("project_file_nodes") ?? new Map();
-  for (const columnName of ["id", "tree_id", "team_id", "project_id", "node_type", "name", "created_at", "updated_at"]) {
+  const nodeColumns = columnsByTable.get("drive_nodes") ?? new Map();
+  for (const columnName of ["id", "team_id", "node_type", "name", "created_at", "updated_at"]) {
     const column = nodeColumns.get(columnName);
     if (!column) {
-      errors.push(`project_file_nodes.${columnName} is missing.`);
+      errors.push(`drive_nodes.${columnName} is missing.`);
     } else if (column.isNullable !== "NO") {
-      errors.push(`project_file_nodes.${columnName} must be NOT NULL.`);
+      errors.push(`drive_nodes.${columnName} must be NOT NULL.`);
     }
   }
   for (const columnName of ["parent_id", "created_by", "updated_by", "deleted_by", "deleted_at"]) {
     if (!nodeColumns.has(columnName)) {
-      errors.push(`project_file_nodes.${columnName} is missing.`);
+      errors.push(`drive_nodes.${columnName} is missing.`);
     }
   }
 
-  const fileColumns = columnsByTable.get("project_files") ?? new Map();
+  const fileColumns = columnsByTable.get("drive_files") ?? new Map();
   for (const columnName of [
     "id",
     "node_id",
-    "tree_id",
     "team_id",
-    "project_id",
     "object_key",
     "file_name",
     "mime_type",
@@ -293,14 +273,29 @@ export function validateProjectFileManagementSchema(snapshot: { columns: Runtime
   ]) {
     const column = fileColumns.get(columnName);
     if (!column) {
-      errors.push(`project_files.${columnName} is missing.`);
+      errors.push(`drive_files.${columnName} is missing.`);
     } else if (column.isNullable !== "NO") {
-      errors.push(`project_files.${columnName} must be NOT NULL.`);
+      errors.push(`drive_files.${columnName} must be NOT NULL.`);
     }
   }
   for (const columnName of ["width", "height", "created_by"]) {
     if (!fileColumns.has(columnName)) {
-      errors.push(`project_files.${columnName} is missing.`);
+      errors.push(`drive_files.${columnName} is missing.`);
+    }
+  }
+
+  const linkColumns = columnsByTable.get("chat_channel_drive_links") ?? new Map();
+  for (const columnName of ["id", "team_id", "channel_id", "node_id", "is_default_upload_target", "created_at", "updated_at"]) {
+    const column = linkColumns.get(columnName);
+    if (!column) {
+      errors.push(`chat_channel_drive_links.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`chat_channel_drive_links.${columnName} must be NOT NULL.`);
+    }
+  }
+  for (const columnName of ["label", "created_by"]) {
+    if (!linkColumns.has(columnName)) {
+      errors.push(`chat_channel_drive_links.${columnName} is missing.`);
     }
   }
 
@@ -438,7 +433,7 @@ export async function assertRuntimeDatabaseSchema() {
     notificationStreamResult,
     notificationConversationColumnsResult,
     systemChatNotificationColumnsResult,
-    projectFileManagementColumnsResult,
+    driveManagementColumnsResult,
     gitLabOrfChatColumnsResult,
     gitHubOrfChatColumnsResult,
     workLogReminderStateColumnsResult,
@@ -564,10 +559,7 @@ export async function assertRuntimeDatabaseSchema() {
           is_nullable as "isNullable"
         from information_schema.columns
         where table_schema = current_schema()
-          and (
-            (table_name = 'chat_channels' and column_name = 'project_id')
-            or table_name in ('project_file_trees', 'project_file_nodes', 'project_files')
-          )
+          and table_name in ('drive_nodes', 'drive_files', 'chat_channel_drive_links')
       `,
     ),
     pool.query<RuntimeTableColumn>(
@@ -647,8 +639,8 @@ export async function assertRuntimeDatabaseSchema() {
     ...validateSystemChatNotificationSchema({
       columns: systemChatNotificationColumnsResult.rows,
     }),
-    ...validateProjectFileManagementSchema({
-      columns: projectFileManagementColumnsResult.rows,
+    ...validateDriveManagementSchema({
+      columns: driveManagementColumnsResult.rows,
     }),
     ...validateGitLabOrfChatIntegrationSchema({
       columns: gitLabOrfChatColumnsResult.rows,

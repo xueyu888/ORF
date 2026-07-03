@@ -15,6 +15,7 @@ const BountyHallPage = lazyNamed(() => import("./pages/BountyHallPage"), "Bounty
 const ChallengePlanPage = lazyNamed(() => import("./pages/TasksPage"), "ChallengePlanPage");
 const ChatPage = lazyNamed(() => import("./pages/ChatPage"), "ChatPage");
 const DashboardPage = lazyNamed(() => import("./pages/DashboardPage"), "DashboardPage");
+const DrivePage = lazyNamed(() => import("./pages/DrivePage"), "DrivePage");
 const FantasyUiPreviewPage = lazyNamed(() => import("./features/fantasy-ui"), "FantasyUiPreviewPage");
 const FeedbackInboxPage = lazyNamed(() => import("./pages/FeedbackInboxPage"), "FeedbackInboxPage");
 const FeedbackCreatePage = lazyNamed(() => import("./pages/FeedbackCreatePage"), "FeedbackCreatePage");
@@ -43,6 +44,7 @@ export function App() {
         <Route path="bounties" element={<LazyRoute><BountyHallPage /></LazyRoute>} />
         <Route path="tasks" element={<LazyRoute><ChallengePlanPage /></LazyRoute>} />
         <Route path="work-logs" element={<LazyRoute><WorkLogsPage /></LazyRoute>} />
+        <Route path="drive" element={<LazyRoute><DrivePage /></LazyRoute>} />
         <Route path="tasks/objectives/:objectiveId/loot" element={<LazyRoute><LootSubmitPage /></LazyRoute>} />
         <Route path="chat" element={<LazyRoute><ChatPage /></LazyRoute>} />
         <Route path="chat/system/:systemConversationId" element={<LazyRoute><ChatPage /></LazyRoute>} />

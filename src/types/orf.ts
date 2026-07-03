@@ -53,8 +53,8 @@ export type ChatMemberRole = "owner" | "admin" | "member";
 export type ChatPresenceState = "active" | "idle" | "recent" | "offline";
 export type ClientPresenceSource = "android" | "browser" | "desktop" | "unknown";
 export type ClientSystemIdleState = "active" | "idle" | "locked" | "unknown";
-export type ProjectFileNodeType = "folder" | "file";
-export type ProjectFilePreviewKind = "download" | "image" | "markdown" | "pdf" | "text";
+export type DriveNodeType = "folder" | "file";
+export type DrivePreviewKind = "download" | "image" | "markdown" | "pdf" | "text";
 
 export interface OrfUser {
   id: string;
@@ -202,14 +202,14 @@ export interface OrfProject {
   updatedAt: string;
 }
 
-export interface ProjectFile {
+export interface Drive {
   id: string;
   fileName: string;
   mimeType: string;
   fileSize: number;
   contentUrl: string;
   downloadUrl: string;
-  previewKind: ProjectFilePreviewKind;
+  previewKind: DrivePreviewKind;
   previewUrl?: string;
   width?: number | null;
   height?: number | null;
@@ -218,22 +218,31 @@ export interface ProjectFile {
   createdAt: string;
 }
 
-export interface ProjectFileNode {
+export interface DriveNode {
   id: string;
   parentId?: string | null;
-  type: ProjectFileNodeType;
+  type: DriveNodeType;
   name: string;
   createdBy?: string | null;
   createdByName?: string | null;
   createdAt: string;
   updatedAt: string;
-  file?: ProjectFile;
+  file?: Drive;
 }
 
-export interface ProjectFileTreeBootstrap {
-  children: ProjectFileNode[];
-  project: OrfProject;
-  root: ProjectFileNode;
+export interface ChatDriveLink {
+  id: string;
+  channelId: string;
+  node: DriveNode;
+  label?: string | null;
+  isDefaultUploadTarget: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DriveBootstrap {
+  children: DriveNode[];
+  root: DriveNode;
   uploadMaxBytes: number;
 }
 

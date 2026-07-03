@@ -17335,9 +17335,9 @@ button.orf-chat-image-attachment {
   --orf-chat-panel-header-surface: color-mix(in srgb, var(--orf-bg-elevated) 78%, var(--orf-bg-muted));
   --orf-chat-panel-border: var(--orf-border);
   --orf-chat-panel-border-strong: var(--orf-border-strong);
-  --orf-chat-panel-text: var(--orf-text-secondary);
+  --orf-chat-panel-text: color-mix(in srgb, var(--orf-text-primary) 72%, var(--orf-text-secondary));
   --orf-chat-panel-text-strong: var(--orf-text-primary);
-  --orf-chat-panel-text-muted: var(--orf-text-muted);
+  --orf-chat-panel-text-muted: color-mix(in srgb, var(--orf-text-secondary) 78%, var(--orf-text-muted));
   --orf-chat-panel-placeholder: var(--orf-text-faint);
   --orf-chat-panel-control-bg: color-mix(in srgb, var(--orf-bg-elevated) 88%, var(--orf-bg-muted));
   --orf-chat-panel-control-hover-bg: var(--orf-bg-elevated);
@@ -17741,74 +17741,107 @@ button.orf-chat-image-attachment {
   height: 32px;
 }
 
-.orf-project-file-panel {
-  --orf-project-file-control-bg: var(--orf-chat-panel-control-bg);
-  --orf-project-file-control-text: var(--orf-chat-panel-text-strong);
-  --orf-project-file-control-muted: var(--orf-chat-panel-control-disabled-text);
-  --orf-project-file-surface: var(--orf-chat-panel-item-bg);
-  --orf-project-file-surface-strong: var(--orf-chat-panel-item-bg);
-  --orf-project-file-surface-muted: var(--orf-chat-panel-empty-bg);
-  --orf-project-file-text: var(--orf-chat-panel-text);
-  --orf-project-file-text-strong: var(--orf-chat-panel-text-strong);
-  --orf-project-file-text-muted: var(--orf-chat-panel-text-muted);
-  --orf-project-file-row-hover: var(--orf-chat-panel-item-hover-bg);
-  --orf-project-file-row-active-text: var(--orf-accent-text);
-  --orf-project-file-preview-frame-bg: var(--orf-chat-panel-preview-frame-bg);
+.orf-drive-panel {
+  --orf-drive-control-bg: var(--orf-chat-panel-control-bg);
+  --orf-drive-control-text: var(--orf-chat-panel-text-strong);
+  --orf-drive-control-muted: var(--orf-chat-panel-control-disabled-text);
+  --orf-drive-surface: var(--orf-chat-panel-item-bg);
+  --orf-drive-surface-strong: var(--orf-chat-panel-item-bg);
+  --orf-drive-surface-muted: var(--orf-chat-panel-empty-bg);
+  --orf-drive-text: var(--orf-chat-panel-text);
+  --orf-drive-text-strong: var(--orf-chat-panel-text-strong);
+  --orf-drive-text-muted: var(--orf-chat-panel-text-muted);
+  --orf-drive-row-hover: var(--orf-chat-panel-item-hover-bg);
+  --orf-drive-row-active-text: var(--orf-accent-text);
+  --orf-drive-preview-frame-bg: var(--orf-chat-panel-preview-frame-bg);
   display: grid;
   min-height: 0;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   gap: 10px;
   overflow: hidden;
   padding: 12px;
 }
 
-.orf-project-file-toolbar,
-.orf-project-file-actions,
-.orf-project-file-create,
-.orf-project-file-uploading,
-.orf-project-file-preview-meta {
+.orf-drive-page {
+  --orf-chat-panel-surface: color-mix(in srgb, var(--orf-bg-card) 90%, var(--orf-bg-elevated));
+  --orf-chat-panel-header-surface: color-mix(in srgb, var(--orf-bg-elevated) 78%, var(--orf-bg-muted));
+  --orf-chat-panel-border: var(--orf-border);
+  --orf-chat-panel-border-strong: var(--orf-border-strong);
+  --orf-chat-panel-text: color-mix(in srgb, var(--orf-text-primary) 72%, var(--orf-text-secondary));
+  --orf-chat-panel-text-strong: var(--orf-text-primary);
+  --orf-chat-panel-text-muted: color-mix(in srgb, var(--orf-text-secondary) 78%, var(--orf-text-muted));
+  --orf-chat-panel-placeholder: var(--orf-text-faint);
+  --orf-chat-panel-control-bg: color-mix(in srgb, var(--orf-bg-elevated) 88%, var(--orf-bg-muted));
+  --orf-chat-panel-control-hover-bg: var(--orf-bg-elevated);
+  --orf-chat-panel-control-disabled-bg: color-mix(in srgb, var(--orf-bg-muted) 78%, var(--orf-bg-card));
+  --orf-chat-panel-control-disabled-text: var(--orf-text-faint);
+  --orf-chat-panel-item-bg: color-mix(in srgb, var(--orf-bg-card) 88%, var(--orf-bg-elevated));
+  --orf-chat-panel-item-hover-bg: var(--orf-bg-row-hover);
+  --orf-chat-panel-empty-bg: color-mix(in srgb, var(--orf-bg-muted) 70%, var(--orf-bg-elevated));
+  --orf-chat-panel-chip-bg: color-mix(in srgb, var(--orf-bg-muted) 82%, var(--orf-bg-elevated));
+  --orf-chat-panel-chip-active-bg: var(--orf-accent-soft);
+  --orf-chat-panel-chip-active-text: var(--orf-accent-text);
+  --orf-chat-panel-danger-bg: var(--orf-danger-bg);
+  --orf-chat-panel-focus-ring: 0 0 0 3px var(--orf-accent-soft);
+  --orf-chat-panel-preview-frame-bg: var(--orf-bg-elevated);
+  min-height: min(760px, calc(100dvh - 190px));
+}
+
+.orf-drive-page > .orf-drive-panel {
+  min-height: min(760px, calc(100dvh - 190px));
+  border: 1px solid var(--orf-chat-panel-border);
+  border-radius: var(--orf-radius-card);
+  background: var(--orf-chat-panel-surface);
+  box-shadow: var(--orf-shadow-card);
+}
+
+.orf-drive-toolbar,
+.orf-drive-actions,
+.orf-drive-create,
+.orf-drive-uploading,
+.orf-drive-preview-meta {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 8px;
 }
 
-.orf-project-file-toolbar {
+.orf-drive-toolbar {
   align-items: stretch;
   flex-direction: column;
 }
 
-.orf-project-file-binding {
+.orf-drive-binding {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
 }
 
-.orf-project-file-binding select,
-.orf-project-file-create input {
+.orf-drive-binding select,
+.orf-drive-create input {
   min-width: 0;
   height: 34px;
   border: 1px solid var(--orf-chat-panel-border);
   border-radius: var(--orf-radius-control);
-  background: var(--orf-project-file-control-bg);
-  color: var(--orf-project-file-control-text);
+  background: var(--orf-drive-control-bg);
+  color: var(--orf-drive-control-text);
   padding: 0 9px;
   font-size: 13px;
   font-weight: 750;
 }
 
-.orf-project-file-binding select:disabled {
+.orf-drive-binding select:disabled {
   background: var(--orf-chat-panel-control-disabled-bg);
-  color: var(--orf-project-file-control-muted);
+  color: var(--orf-drive-control-muted);
   opacity: 1;
 }
 
-.orf-project-file-binding select option {
-  background: var(--orf-project-file-control-bg);
-  color: var(--orf-project-file-control-text);
+.orf-drive-binding select option {
+  background: var(--orf-drive-control-bg);
+  color: var(--orf-drive-control-text);
 }
 
-.orf-project-file-project-name {
+.orf-drive-project-name {
   overflow: hidden;
   color: var(--orf-accent-text);
   font-size: 13px;
@@ -17817,71 +17850,116 @@ button.orf-chat-image-attachment {
   white-space: nowrap;
 }
 
-.orf-project-file-actions {
+.orf-drive-actions {
   flex-wrap: wrap;
 }
 
-.orf-project-file-actions .orf-control {
+.orf-drive-actions .orf-control {
   width: 32px;
   height: 32px;
 }
 
-.orf-project-file-create {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+.orf-drive-linked-strip {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 
-.orf-project-file-uploading,
-.orf-project-file-error,
-.orf-project-file-empty {
+.orf-drive-linked-item {
+  display: inline-grid;
+  grid-template-columns: 16px minmax(0, max-content) auto;
+  max-width: 100%;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
   border: 1px solid var(--orf-chat-panel-border);
   border-radius: var(--orf-radius-control);
-  background: var(--orf-project-file-surface-strong);
-  color: var(--orf-project-file-text);
-  padding: 9px 10px;
+  background: var(--orf-chat-panel-chip-bg);
+  color: var(--orf-drive-text);
+  padding: 0 8px;
   font-size: 12px;
   font-weight: 800;
 }
 
-.orf-project-file-uploading {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+.orf-drive-linked-item:hover,
+.orf-drive-linked-item.is-default {
+  border-color: var(--orf-accent-border);
+  background: var(--orf-chat-panel-chip-active-bg);
+  color: var(--orf-chat-panel-chip-active-text);
 }
 
-.orf-project-file-uploading span {
+.orf-drive-linked-item span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.orf-project-file-error {
+.orf-drive-linked-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+}
+
+.orf-drive-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.orf-drive-uploading,
+.orf-drive-error,
+.orf-drive-empty {
+  border: 1px solid var(--orf-chat-panel-border);
+  border-radius: var(--orf-radius-control);
+  background: var(--orf-drive-surface-strong);
+  color: var(--orf-drive-text);
+  padding: 9px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.orf-drive-uploading {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+}
+
+.orf-drive-uploading span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-drive-error {
   border-color: var(--orf-danger-border);
   background: var(--orf-danger-bg);
   color: var(--orf-danger-text);
 }
 
-.orf-project-file-empty {
+.orf-drive-empty {
   display: grid;
   min-height: 120px;
   place-items: center;
   gap: 8px;
-  color: var(--orf-project-file-text);
+  color: var(--orf-drive-text);
   text-align: center;
 }
 
-.orf-project-file-empty strong {
-  color: var(--orf-project-file-text-strong);
+.orf-drive-empty strong {
+  color: var(--orf-drive-text-strong);
   font-size: 14px;
   font-weight: 900;
 }
 
-.orf-project-file-empty span {
-  color: var(--orf-project-file-text);
+.orf-drive-empty span {
+  color: var(--orf-drive-text);
   font-size: 12px;
   font-weight: 800;
 }
 
-.orf-project-file-layout {
+.orf-drive-layout {
   display: grid;
   min-height: 0;
   grid-template-rows: minmax(160px, 0.8fr) minmax(180px, 1fr);
@@ -17889,22 +17967,35 @@ button.orf-chat-image-attachment {
 }
 
 @media (min-width: 769px) {
-  .orf-chat-right-panel[data-active-panel="files"] .orf-project-file-layout {
+  .orf-chat-right-panel[data-active-panel="files"] .orf-drive-layout {
     grid-template-columns: minmax(170px, 0.8fr) minmax(230px, 1.2fr);
     grid-template-rows: minmax(0, 1fr);
   }
 }
 
-.orf-project-file-tree {
+@media (min-width: 900px) {
+  .orf-drive-page .orf-drive-layout {
+    grid-template-columns: minmax(260px, 0.45fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .orf-drive-page {
+    padding-bottom: calc(var(--orf-mobile-bottom-nav-height) + 16px);
+  }
+}
+
+.orf-drive-tree {
   min-height: 0;
   overflow: auto;
   border: 1px solid var(--orf-chat-panel-border);
   border-radius: var(--orf-radius-card);
-  background: var(--orf-project-file-surface-strong);
+  background: var(--orf-drive-surface-strong);
   padding: 6px;
 }
 
-.orf-project-file-row {
+.orf-drive-row {
   display: grid;
   grid-template-columns: 16px 18px minmax(0, 1fr) auto;
   width: 100%;
@@ -17914,19 +18005,19 @@ button.orf-chat-image-attachment {
   border: 0;
   border-radius: var(--orf-radius-control);
   background: transparent;
-  color: var(--orf-project-file-text);
+  color: var(--orf-drive-text);
   padding-block: 5px;
   padding-right: 7px;
   text-align: left;
 }
 
-.orf-project-file-row:hover,
-.orf-project-file-row-active {
-  background: var(--orf-project-file-row-hover);
-  color: var(--orf-project-file-row-active-text);
+.orf-drive-row:hover,
+.orf-drive-row-active {
+  background: var(--orf-drive-row-hover);
+  color: var(--orf-drive-row-active-text);
 }
 
-.orf-project-file-row span {
+.orf-drive-row span {
   min-width: 0;
   overflow: hidden;
   color: inherit;
@@ -17936,19 +18027,19 @@ button.orf-chat-image-attachment {
   white-space: nowrap;
 }
 
-.orf-project-file-row small {
-  color: var(--orf-project-file-text-muted);
+.orf-drive-row small {
+  color: var(--orf-drive-text-muted);
   font-size: 11px;
   font-weight: 750;
   white-space: nowrap;
 }
 
-.orf-project-file-row-spacer {
+.orf-drive-row-spacer {
   width: 16px;
   height: 16px;
 }
 
-.orf-project-file-preview {
+.orf-drive-preview {
   display: grid;
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr);
@@ -17956,37 +18047,37 @@ button.orf-chat-image-attachment {
   overflow: hidden;
   border: 1px solid var(--orf-chat-panel-border);
   border-radius: var(--orf-radius-card);
-  background: var(--orf-project-file-surface-strong);
+  background: var(--orf-drive-surface-strong);
   padding: 8px;
 }
 
-.orf-project-file-preview-meta {
+.orf-drive-preview-meta {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 2px 8px;
 }
 
-.orf-project-file-preview-meta strong,
-.orf-project-file-preview-meta small {
+.orf-drive-preview-meta strong,
+.orf-drive-preview-meta small {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.orf-project-file-preview-meta strong {
-  color: var(--orf-project-file-text-strong);
+.orf-drive-preview-meta strong {
+  color: var(--orf-drive-text-strong);
   font-size: 13px;
   font-weight: 850;
 }
 
-.orf-project-file-preview-meta small {
-  color: var(--orf-project-file-text-muted);
+.orf-drive-preview-meta small {
+  color: var(--orf-drive-text-muted);
   font-size: 11px;
   font-weight: 750;
 }
 
-.orf-project-file-preview-meta a {
+.orf-drive-preview-meta a {
   grid-row: 1 / span 2;
   grid-column: 2;
   display: inline-flex;
@@ -17998,38 +18089,69 @@ button.orf-chat-image-attachment {
   text-decoration: none;
 }
 
-.orf-project-file-image-preview,
-.orf-project-file-preview-empty {
+.orf-drive-image-preview,
+.orf-drive-text-preview,
+.orf-drive-preview-empty {
   display: grid;
   min-height: 0;
   place-items: center;
   overflow: hidden;
   border-radius: var(--orf-radius-control);
-  background: var(--orf-project-file-surface-muted);
-  color: var(--orf-project-file-text-muted);
+  background: var(--orf-drive-surface-muted);
+  color: var(--orf-drive-text-muted);
 }
 
-.orf-project-file-image-preview img {
+.orf-drive-image-preview img {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
 }
 
-.orf-project-file-inline-preview {
+.orf-drive-text-preview {
+  place-items: stretch;
+  padding: 12px;
+}
+
+.orf-drive-text-preview pre {
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  color: var(--orf-drive-text-strong);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.orf-drive-inline-preview {
   width: 100%;
   min-width: 0;
   height: 100%;
   min-height: 240px;
   border: 0;
   border-radius: var(--orf-radius-control);
-  background: var(--orf-project-file-preview-frame-bg);
+  background: var(--orf-drive-preview-frame-bg);
 }
 
-.orf-project-file-preview-empty {
+.orf-drive-preview-empty {
   gap: 8px;
   min-height: 160px;
   padding: 16px;
   text-align: center;
+}
+
+.orf-drive-preview-empty strong {
+  color: var(--orf-drive-text-strong);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.orf-drive-preview-empty span {
+  color: var(--orf-drive-text-muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .orf-chat-info-section {

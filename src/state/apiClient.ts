@@ -11,12 +11,13 @@ import type {
   ChatThreadSummary,
   ChatUnreadSummary,
   ChatUser,
+  ChatDriveLink,
   CommentThread,
   CommentAttachmentUploadResult,
   CommentTargetType,
   OrfState,
-  ProjectFileNode,
-  ProjectFileTreeBootstrap,
+  DriveBootstrap,
+  DriveNode,
   OrfUser,
   SystemConversationId,
   SystemConversationMessage,
@@ -133,20 +134,24 @@ export type ChatThreadsResponse = { status?: "ok"; threads: ChatThreadSummary[] 
 export type ChatAttachmentUploadResponse = { status?: "ok"; attachment: ChatAttachment };
 export type ChatMentionableUsersResponse = { status?: "ok"; users: ChatUser[] };
 export type ChatSearchResponse = { status?: "ok"; results: ChatSearchResult[] };
-export type ProjectFileBootstrapResponse = {
+export type DriveBootstrapResponse = {
   status?: "ok";
-  binding: Pick<OrfState["projects"][number], "id" | "name"> | null;
-  tree: ProjectFileTreeBootstrap | null;
+  drive: DriveBootstrap;
 };
-export type ProjectFileChildrenResponse = {
+export type ChatDriveBootstrapResponse = {
   status?: "ok";
-  children: ProjectFileNode[];
+  drive: DriveBootstrap;
+  links: ChatDriveLink[];
+};
+export type DriveChildrenResponse = {
+  status?: "ok";
+  children: DriveNode[];
   parentNodeId: string;
 };
-export type ProjectFileNodeResponse = {
+export type DriveNodeResponse = {
   status?: "ok";
   announcementMessage?: ChatMessage | null;
-  node: ProjectFileNode;
+  node: DriveNode;
 };
 export type ApiUploadProgress = {
   lengthComputable: boolean;
@@ -748,18 +753,22 @@ export async function uploadChatAttachment(input: { channelId: string; file: Fil
   );
 }
 
-export async function getProjectFileBootstrap(channelId: string) {
-  return apiJson<ProjectFileBootstrapResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}/project-files`);
+export async function getDriveBootstrap() {
+  return apiJson<DriveBootstrapResponse>("/api/drive");
 }
 
-export async function getProjectFileChildren(input: { channelId: string; parentNodeId: string }) {
-  return apiJson<ProjectFileChildrenResponse>(
-    `/api/chat/channels/${encodeURIComponent(input.channelId)}/project-files/nodes/${encodeURIComponent(input.parentNodeId)}/children`,
+export async function getChatDriveBootstrap(channelId: string) {
+  return apiJson<ChatDriveBootstrapResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}/drive`);
+}
+
+export async function getDriveChildren(input: { parentNodeId: string }) {
+  return apiJson<DriveChildrenResponse>(
+    `/api/drive/nodes/${encodeURIComponent(input.parentNodeId)}/children`,
   );
 }
 
-export async function createProjectFolderRequest(input: { channelId: string; name: string; parentNodeId: string }) {
-  return apiJson<ProjectFileNodeResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/project-files/folders`, {
+export async function createDriveFolderRequest(input: { name: string; parentNodeId: string }) {
+  return apiJson<DriveNodeResponse>("/api/drive/folders", {
     method: "POST",
     body: JSON.stringify({
       name: input.name,
@@ -768,7 +777,22 @@ export async function createProjectFolderRequest(input: { channelId: string; nam
   });
 }
 
-export async function uploadProjectFileRequest(input: {
+export async function uploadDriveRequest(input: {
+  file: File;
+  onProgress?: (progress: ApiUploadProgress) => void;
+  parentNodeId: string;
+}) {
+  const formData = new FormData();
+  formData.set("parentNodeId", input.parentNodeId);
+  formData.set("file", input.file);
+  return uploadFormDataJson<DriveNodeResponse>(
+    "/api/drive/upload",
+    formData,
+    { onProgress: input.onProgress },
+  );
+}
+
+export async function uploadChatDriveFileRequest(input: {
   channelId: string;
   file: File;
   onProgress?: (progress: ApiUploadProgress) => void;
@@ -777,16 +801,57 @@ export async function uploadProjectFileRequest(input: {
   const formData = new FormData();
   formData.set("parentNodeId", input.parentNodeId);
   formData.set("file", input.file);
-  return uploadFormDataJson<ProjectFileNodeResponse>(
-    `/api/chat/channels/${encodeURIComponent(input.channelId)}/project-files/upload`,
+  return uploadFormDataJson<DriveNodeResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/drive/upload`,
     formData,
     { onProgress: input.onProgress },
   );
 }
 
-export async function deleteProjectFileNodeRequest(input: { channelId: string; nodeId: string }) {
+export async function deleteDriveNodeRequest(input: { nodeId: string }) {
   return apiJson<{ status?: "ok"; deletedNodeIds: string[] }>(
-    `/api/chat/channels/${encodeURIComponent(input.channelId)}/project-files/nodes/${encodeURIComponent(input.nodeId)}`,
+    `/api/drive/nodes/${encodeURIComponent(input.nodeId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function addChatDriveLinkRequest(input: {
+  channelId: string;
+  isDefaultUploadTarget?: boolean;
+  label?: string | null;
+  nodeId: string;
+}) {
+  return apiJson<ChatDriveBootstrapResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/drive/links`, {
+    method: "POST",
+    body: JSON.stringify({
+      isDefaultUploadTarget: input.isDefaultUploadTarget,
+      label: input.label,
+      nodeId: input.nodeId,
+    }),
+  });
+}
+
+export async function updateChatDriveLinkRequest(input: {
+  channelId: string;
+  isDefaultUploadTarget?: boolean;
+  label?: string | null;
+  linkId: string;
+}) {
+  return apiJson<ChatDriveBootstrapResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/drive/links/${encodeURIComponent(input.linkId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        isDefaultUploadTarget: input.isDefaultUploadTarget,
+        label: input.label,
+      }),
+    },
+  );
+}
+
+export async function deleteChatDriveLinkRequest(input: { channelId: string; linkId: string }) {
+  return apiJson<ChatDriveBootstrapResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/drive/links/${encodeURIComponent(input.linkId)}`,
     { method: "DELETE" },
   );
 }
