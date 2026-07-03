@@ -128,7 +128,7 @@ function printHelp() {
   - 使用 git push --no-verify 推送分支和 tag，避免发布时触发本地 testd pre-push 门禁。
   - 默认只触发 .github/workflows/release-clients.yml，不等待 GitHub Actions。
   - 加 --watch 时才等待工作流完成并核对 GitHub Release 镜像资产。
-  - 工作流会把安装包同步到 ORF 主更新源；--watch 在本机配置 ORF_CLIENT_UPDATE_PUBLISH_SECRET 时会复用同一接口补同步一次。
+  - --watch 核对 GitHub Release 镜像资产后，会在配置 ORF_CLIENT_UPDATE_PUBLISH_SECRET 时把安装包同步到 ORF 主更新源。
   - --watch 确认 Release 资产后，会在配置 ORF_CLIENT_UPDATE_BROADCAST_SECRET 时调用 ORF 服务端广播在线客户端。
   - 可用 --no-publish-assets 跳过 ORF 主更新源同步，或用 --publish-url 覆盖 ORF_CLIENT_UPDATE_PUBLISH_URL / ORF_APP_URL。
   - 可用 --no-broadcast 跳过发布后广播，或用 --broadcast-url 覆盖 ORF_CLIENT_UPDATE_BROADCAST_URL / ORF_APP_URL。

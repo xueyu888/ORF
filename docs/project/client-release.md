@@ -12,7 +12,7 @@ ORF 客户端只提供安装入口，不复制业务逻辑。Win11 PC 端和 And
 - `capacitor.config.ts`: Android Capacitor 客户端配置。
 - `android/`: Capacitor 生成的 Android 原生工程。
 - `scripts/sync-client-versions.mjs`: 以根 `package.json` 为唯一版本事实源，同步桌面客户端和 Android 版本。
-- `.github/workflows/release-clients.yml`: 标签触发的客户端打包、ORF 主更新源发布和 GitHub Release 镜像流程。
+- `.github/workflows/release-clients.yml`: 标签触发的客户端打包和 GitHub Release 镜像流程。
 
 默认客户端地址是 `https://orf-xueyu.duckdns.org:8443/`。构建时可以通过 `ORF_CLIENT_URL` 覆盖，例如：
 
@@ -58,7 +58,7 @@ export ORF_ANDROID_KEY_PASSWORD=...
 npm run client:android:assemble:release
 ```
 
-本机如果缺少 Java、Android SDK 或 Windows 打包工具，可以继续使用 GitHub Actions 打包；工作流会从同一批 CI 产物生成 GitHub Release 镜像，并把 ORF 发布清单作为最后一步写入主更新源。
+本机如果缺少 Java、Android SDK 或 Windows 打包工具，可以继续使用 GitHub Actions 打包；工作流会生成 GitHub Release 镜像，本机发布脚本在镜像资产核对后把同一版本同步到 ORF 主更新源。
 
 ## ORF 主更新源与 GitHub 镜像
 
@@ -81,9 +81,9 @@ ORF 客户端运行时默认使用 ORF 主更新源：
 - 客户端收到的默认下载地址是 `https://orf-xueyu.duckdns.org:8443/api/client-updates/assets/<version>/<assetName>`。
 - GitHub Release 只作为外部镜像页面和 ORF 资产缺失时的兜底下载来源。
 
-GitHub Actions 在两个平台产物都生成后，会先上传 GitHub Release 镜像，再用同一批 CI 产物上传 ORF 主更新源资产，并把 ORF 发布清单作为最后一步写入，让客户端只在主源资产和镜像地址都准备好后看到新版本。发布脚本的 `--watch` 会等待工作流完成、核对镜像资产，并在需要时复用同一套 ORF 发布接口补同步主更新源，然后按本次 tag 的精确版本调用 ORF 服务端广播在线客户端。自动化不会把管理员登录态写进发布流程；服务端和发布环境必须配置同一个 `ORF_CLIENT_UPDATE_PUBLISH_SECRET` 才能同步主更新源，必须配置同一个 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 才会广播在线客户端。
+GitHub Actions 在两个平台产物都生成后，只上传 GitHub Release 镜像。发布脚本的 `--watch` 会等待工作流完成、核对镜像资产，再由本机把安装包同步到 ORF 主更新源，并把 ORF 发布清单作为最后一步写入，让客户端只在主源资产和镜像地址都准备好后看到新版本。自动化不会把管理员登录态写进发布流程；服务端和发布环境必须配置同一个 `ORF_CLIENT_UPDATE_PUBLISH_SECRET` 才能同步主更新源，必须配置同一个 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 才会广播在线客户端。
 
-工作流发布目标取 GitHub repository variables 中的 `ORF_CLIENT_UPDATE_PUBLISH_URL` / `ORF_APP_URL` / `ORF_CLIENT_URL`，本地发布脚本目标默认取 `ORF_APP_URL`，也可以通过 `ORF_CLIENT_UPDATE_PUBLISH_URL` 或 `--publish-url` 覆盖。广播目标默认取 `ORF_APP_URL`，也可以通过 `ORF_CLIENT_UPDATE_BROADCAST_URL` 或 `--broadcast-url` 覆盖。本地脚本未配置对应 secret 或目标地址时会明确提示已跳过主更新源同步或在线广播；需要刻意跳过时分别使用 `--no-publish-assets` 或 `--no-broadcast`。
+本地发布脚本目标默认取 `ORF_APP_URL`，也可以通过 `ORF_CLIENT_UPDATE_PUBLISH_URL` 或 `--publish-url` 覆盖；在 ORF 服务和发布脚本运行在同一台机器时，建议把 `ORF_CLIENT_UPDATE_PUBLISH_URL` 指向本机 API 地址以避免公网回环上传大包。广播目标默认取 `ORF_APP_URL`，也可以通过 `ORF_CLIENT_UPDATE_BROADCAST_URL` 或 `--broadcast-url` 覆盖。本地脚本未配置对应 secret 或目标地址时会明确提示已跳过主更新源同步或在线广播；需要刻意跳过时分别使用 `--no-publish-assets` 或 `--no-broadcast`。
 
 发布资产：
 

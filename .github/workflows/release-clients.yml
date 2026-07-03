@@ -158,7 +158,7 @@ jobs:
           if-no-files-found: error
 
   github-release:
-    name: Publish ORF release and GitHub mirror
+    name: Publish GitHub release mirror
     runs-on: ubuntu-latest
     needs:
       - windows-client
@@ -228,7 +228,7 @@ jobs:
             echo
             echo "安装后提示："
             echo "- 用户安装新客户端后，应用会读取本 Release 的中文说明并在首次启动时提示。"
-            echo "- 本发布流程会把 Release 说明同步到 ORF 主更新源；GitHub Release 保留为外部镜像页面。"
+            echo "- 本地发布脚本会把本 Release 说明同步到 ORF 主更新源；GitHub Release 保留为外部镜像页面。"
             echo
             echo "数据和权限来源："
             echo "- 客户端不保存业务数据。"
@@ -257,15 +257,3 @@ jobs:
           else
             gh release create "$RELEASE_TAG" "${assets[@]}" --title "ORF $RELEASE_TAG" --notes-file release-notes.md
           fi
-
-      - name: Publish ORF main update source
-        shell: bash
-        env:
-          ORF_CLIENT_UPDATE_PUBLISH_SECRET: ${{ secrets.ORF_CLIENT_UPDATE_PUBLISH_SECRET }}
-          ORF_CLIENT_UPDATE_PUBLISH_URL: ${{ vars.ORF_CLIENT_UPDATE_PUBLISH_URL || vars.ORF_APP_URL || vars.ORF_CLIENT_URL || 'https://orf-xueyu.duckdns.org:8443/' }}
-        run: |
-          node scripts/publish-client-update-to-orf.mjs \
-            --tag "$RELEASE_TAG" \
-            --assets-dir release-assets \
-            --notes-file release-notes.md \
-            --repo "${{ github.repository }}"
