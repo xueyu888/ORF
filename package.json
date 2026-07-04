@@ -1,6 +1,6 @@
 {
   "name": "orf",
-  "version": "0.0.71",
+  "version": "0.0.72",
   "private": true,
   "description": "ORF project management tool built from ORF documentation.",
   "bin": {
