@@ -26,8 +26,6 @@ type ChatHeaderProps = {
   usersById: Map<string, ChatUser>;
 };
 
-const chatDrivePanelEntryEnabled = false;
-
 export function ChatHeader({
   canManage,
   channel,
@@ -50,7 +48,7 @@ export function ChatHeader({
   const integrationBrand = chatChannelIntegrationBrand(channel);
   const membership = currentMembership(channel, currentUserId);
   const canManageMembership = canManage && channel.type === "private";
-  const canUseChatDrive = chatDrivePanelEntryEnabled && !channel.systemKind && (channel.type === "public" || channel.type === "private");
+  const canUseChatDrive = !channel.systemKind && (channel.type === "public" || channel.type === "private");
   const infoLabel = chatChannelInfoLabel(channel);
   const title = chatChannelDisplayLabel(channel, currentUserId, usersById);
   const headerText = channel.header.trim();
@@ -99,6 +97,21 @@ export function ChatHeader({
         {memberNames && <span className="orf-chat-header-member-names truncate">{memberNames}</span>}
       </div>
       <div className="orf-chat-header-actions">
+        <IconButton className="orf-chat-header-action-secondary" icon={Info} label={infoLabel} onClick={onInfo} />
+        <IconButton
+          className={membership?.favorite ? "orf-chat-header-action-secondary orf-chat-starred" : "orf-chat-header-action-secondary"}
+          icon={Star}
+          label={membership?.favorite ? "取消收藏" : "收藏频道"}
+          onClick={onToggleFavorite}
+        />
+        <IconButton className="orf-chat-header-action-secondary" icon={EyeOff} label="标记未读" onClick={onMarkUnread} />
+        <IconButton
+          className={membership?.muted ? "orf-chat-header-action-secondary orf-chat-muted" : "orf-chat-header-action-secondary"}
+          icon={membership?.muted ? BellOff : Bell}
+          label={membership?.muted ? "取消静音" : "静音频道"}
+          onClick={onToggleMuted}
+        />
+        {canManageMembership && <IconButton className="orf-chat-header-action-secondary" icon={UserPlus} label="添加成员" onClick={onMemberSearch} />}
         {canUseChatDrive && <IconButton icon={Folder} label="群聊资源" onClick={onFiles} />}
         {showThreadShortcut && (
           <button
@@ -123,24 +136,24 @@ export function ChatHeader({
           />
           {moreOpen && (
             <div className="orf-chat-header-more-menu" role="menu">
-              <button type="button" role="menuitem" onClick={() => runMenuAction(onInfo)}>
+              <button type="button" className="orf-chat-header-mobile-menu-item" role="menuitem" onClick={() => runMenuAction(onInfo)}>
                 <Info className="h-4 w-4" />
                 {infoLabel}
               </button>
-              <button type="button" role="menuitem" onClick={() => runMenuAction(onToggleFavorite)}>
+              <button type="button" className="orf-chat-header-mobile-menu-item" role="menuitem" onClick={() => runMenuAction(onToggleFavorite)}>
                 <Star className="h-4 w-4" />
                 {membership?.favorite ? "取消收藏" : "收藏频道"}
               </button>
-              <button type="button" role="menuitem" onClick={() => runMenuAction(onMarkUnread)}>
+              <button type="button" className="orf-chat-header-mobile-menu-item" role="menuitem" onClick={() => runMenuAction(onMarkUnread)}>
                 <EyeOff className="h-4 w-4" />
                 标记未读
               </button>
-              <button type="button" role="menuitem" onClick={() => runMenuAction(onToggleMuted)}>
+              <button type="button" className="orf-chat-header-mobile-menu-item" role="menuitem" onClick={() => runMenuAction(onToggleMuted)}>
                 {membership?.muted ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
                 {membership?.muted ? "取消静音" : "静音频道"}
               </button>
               {canManageMembership && (
-                <button type="button" role="menuitem" onClick={() => runMenuAction(onMemberSearch)}>
+                <button type="button" className="orf-chat-header-mobile-menu-item" role="menuitem" onClick={() => runMenuAction(onMemberSearch)}>
                   <UserPlus className="h-4 w-4" />
                   添加成员
                 </button>

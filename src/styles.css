@@ -15840,6 +15840,10 @@ a.orf-sidebar-link,
   color: var(--orf-danger-text);
 }
 
+.orf-chat-header-mobile-menu-item {
+  display: none !important;
+}
+
 .orf-chat-page-with-panel .orf-chat-header-member-names {
   display: none;
 }
@@ -21268,6 +21272,14 @@ button.orf-chat-image-attachment {
     width: 32px;
     height: 32px;
     flex: 0 0 auto;
+  }
+
+  .orf-chat-header-actions .orf-chat-header-action-secondary {
+    display: none;
+  }
+
+  .orf-chat-header-mobile-menu-item {
+    display: grid !important;
   }
 
   .orf-chat-main {
