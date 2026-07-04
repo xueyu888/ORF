@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEventHandler } from "react";
+import { useEffect, useRef, useState, type MouseEventHandler } from "react";
 import { clsx } from "clsx";
 import { Download, File as FileIcon, FileText, Image as ImageIcon, Loader2, X } from "lucide-react";
 import mammoth from "mammoth";
@@ -39,6 +39,7 @@ export function DriveDocxPreview({
   file: Drive;
 }) {
   const previewUrl = file.previewUrl ? drivePreviewUrl(file) : undefined;
+  const previewRef = useRef<HTMLDivElement | null>(null);
   const [state, setState] = useState<DriveDocxPreviewState>({ status: "loading" });
 
   useEffect(() => {
@@ -73,8 +74,13 @@ export function DriveDocxPreview({
     return () => controller.abort();
   }, [file.id, previewUrl]);
 
+  useEffect(() => {
+    if (state.status !== "ready") return;
+    previewRef.current?.scrollTo({ left: 0, top: 0 });
+  }, [file.id, state.status]);
+
   return (
-    <div className={clsx("orf-drive-docx-preview", compact && "is-compact", className)}>
+    <div ref={previewRef} className={clsx("orf-drive-docx-preview", compact && "is-compact", className)}>
       {state.status === "loading" ? (
         <div className="orf-drive-preview-empty">
           <Loader2 className="h-5 w-5 animate-spin" />
