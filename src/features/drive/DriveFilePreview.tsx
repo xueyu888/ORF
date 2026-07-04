@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type MouseEventHandler } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEventHandler, type WheelEventHandler } from "react";
 import { clsx } from "clsx";
-import { Download, File as FileIcon, FileText, Image as ImageIcon, Loader2, X } from "lucide-react";
+import { Download, File as FileIcon, FileText, Image as ImageIcon, Loader2, Minus, Plus, RotateCcw, Type, X } from "lucide-react";
 import mammoth from "mammoth";
 import { useParams } from "react-router-dom";
 import { IconButton } from "../../components/ui";
@@ -28,15 +28,25 @@ type DriveFilePreviewPayload = {
 const driveFilePreviewPayloadPrefix = "orf:drive-file-preview-popout:";
 const driveFilePreviewWindowName = "orf-drive-file-preview-popout";
 const driveFilePreviewPayloadMaxAgeMs = 12 * 60 * 60 * 1000;
+const driveFilePreviewFontSizeStorageKey = "orf.driveFilePreview.fontSizePx.v1";
+const driveFilePreviewFontSizeDefaultPx = 18;
+const driveFilePreviewFontSizeMinPx = 14;
+const driveFilePreviewFontSizeMaxPx = 26;
+
+type DrivePreviewFontSizeStyle = CSSProperties & {
+  "--orf-drive-preview-font-size"?: string;
+};
 
 export function DriveDocxPreview({
   className,
   compact,
   file,
+  fontSizePx,
 }: {
   className?: string;
   compact?: boolean;
   file: Drive;
+  fontSizePx?: number;
 }) {
   const previewUrl = file.previewUrl ? drivePreviewUrl(file) : undefined;
   const previewRef = useRef<HTMLDivElement | null>(null);
@@ -80,7 +90,7 @@ export function DriveDocxPreview({
   }, [file.id, state.status]);
 
   return (
-    <div ref={previewRef} className={clsx("orf-drive-docx-preview", compact && "is-compact", className)}>
+    <div ref={previewRef} className={clsx("orf-drive-docx-preview", compact && "is-compact", className)} style={drivePreviewFontSizeStyle(fontSizePx)}>
       {state.status === "loading" ? (
         <div className="orf-drive-preview-empty">
           <Loader2 className="h-5 w-5 animate-spin" />
@@ -147,10 +157,12 @@ export function DriveFilePreviewPopoutPage() {
 
 export function DriveFilePreviewSurface({
   file,
+  fontSizePx,
   textPreview,
   textPreviewLoading,
 }: {
   file: Drive;
+  fontSizePx?: number;
   textPreview?: string;
   textPreviewLoading?: boolean;
 }) {
@@ -174,7 +186,7 @@ export function DriveFilePreviewSurface({
 
   if (file.previewKind === "markdown" && previewUrl) {
     return (
-      <div className="orf-drive-markdown-preview">
+      <div className="orf-drive-markdown-preview" style={drivePreviewFontSizeStyle(fontSizePx)}>
         <div className="orf-drive-markdown-toolbar" aria-label="Markdown 预览模式">
           <button type="button" className={clsx(markdownViewMode === "rendered" && "is-active")} onClick={() => setMarkdownViewMode("rendered")}>渲染</button>
           <button type="button" className={clsx(markdownViewMode === "source" && "is-active")} onClick={() => setMarkdownViewMode("source")}>原文</button>
@@ -196,7 +208,7 @@ export function DriveFilePreviewSurface({
 
   if (file.previewKind === "text" && previewUrl) {
     return (
-      <div className="orf-drive-text-preview">
+      <div className="orf-drive-text-preview" style={drivePreviewFontSizeStyle(fontSizePx)}>
         {effectiveTextLoading && effectiveTextPreview === undefined ? (
           <div className="orf-drive-preview-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载预览</div>
         ) : (
@@ -211,7 +223,7 @@ export function DriveFilePreviewSurface({
   }
 
   if (file.previewKind === "docx" && previewUrl) {
-    return <DriveDocxPreview file={file} />;
+    return <DriveDocxPreview file={file} fontSizePx={fontSizePx} />;
   }
 
   return (
@@ -269,8 +281,54 @@ function DriveFilePreviewChrome({
   onMouseDown?: MouseEventHandler<HTMLElement>;
 }) {
   const PreviewIcon = driveFilePreviewIcon(file.previewKind);
+  const [fontSizePx, setFontSizePx] = useState(readStoredDrivePreviewFontSize);
+  const adjustableFontSize = canAdjustDriveFilePreviewFontSize(file.previewKind);
+
+  const updateFontSizePx = useCallback((nextValue: number) => {
+    const nextFontSize = clampDrivePreviewFontSize(nextValue);
+    setFontSizePx(nextFontSize);
+    writeStoredDrivePreviewFontSize(nextFontSize);
+  }, []);
+
+  const adjustFontSizeBy = useCallback((delta: number) => {
+    setFontSizePx((current) => {
+      const nextFontSize = clampDrivePreviewFontSize(current + delta);
+      writeStoredDrivePreviewFontSize(nextFontSize);
+      return nextFontSize;
+    });
+  }, []);
+
+  const handlePreviewWheel = useCallback<WheelEventHandler<HTMLElement>>((event) => {
+    if (!adjustableFontSize || (!event.ctrlKey && !event.metaKey)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    adjustFontSizeBy(event.deltaY < 0 ? 1 : -1);
+  }, [adjustFontSizeBy, adjustableFontSize]);
+
+  useEffect(() => {
+    if (!adjustableFontSize) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || (!event.ctrlKey && !event.metaKey)) return;
+      const action = drivePreviewFontKeyboardAction(event);
+      if (!action) return;
+      event.preventDefault();
+      if (action === "increase") adjustFontSizeBy(1);
+      else if (action === "decrease") adjustFontSizeBy(-1);
+      else updateFontSizePx(driveFilePreviewFontSizeDefaultPx);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [adjustFontSizeBy, adjustableFontSize, updateFontSizePx]);
+
   return (
-    <section className={clsx("orf-drive-file-preview-shell", className)} role="dialog" aria-modal="true" aria-label={`${file.fileName} 文件预览`} onMouseDown={onMouseDown}>
+    <section
+      className={clsx("orf-drive-file-preview-shell", className)}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${file.fileName} 文件预览`}
+      onMouseDown={onMouseDown}
+      onWheel={handlePreviewWheel}
+    >
       <header className="orf-drive-file-preview-header">
         <div className="orf-drive-file-preview-title">
           <PreviewIcon className="h-5 w-5" />
@@ -280,6 +338,9 @@ function DriveFilePreviewChrome({
           </span>
         </div>
         <div className="orf-drive-file-preview-actions">
+          {adjustableFontSize ? (
+            <DrivePreviewFontSizeControls value={fontSizePx} onChange={updateFontSizePx} />
+          ) : null}
           <a href={file.downloadUrl}>
             <Download className="h-4 w-4" />
             下载
@@ -288,10 +349,86 @@ function DriveFilePreviewChrome({
         </div>
       </header>
       <div className="orf-drive-file-preview-body">
-        <DriveFilePreviewSurface file={file} />
+        <DriveFilePreviewSurface file={file} fontSizePx={adjustableFontSize ? fontSizePx : undefined} />
       </div>
     </section>
   );
+}
+
+function drivePreviewFontKeyboardAction(event: KeyboardEvent): "decrease" | "increase" | "reset" | null {
+  if (event.altKey) return null;
+  if (event.key === "+" || event.key === "=") return "increase";
+  if (event.key === "-" || event.key === "_") return "decrease";
+  if (event.key === "0") return "reset";
+  return null;
+}
+
+function DrivePreviewFontSizeControls({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  const canDecrease = value > driveFilePreviewFontSizeMinPx;
+  const canIncrease = value < driveFilePreviewFontSizeMaxPx;
+  return (
+    <div className="orf-drive-preview-font-controls" aria-label="预览字号">
+      <Type className="h-4 w-4" aria-hidden="true" />
+      <IconButton
+        disabled={!canDecrease}
+        icon={Minus}
+        label="减小预览字号"
+        size="sm"
+        variant="ghost"
+        onClick={() => onChange(value - 1)}
+      />
+      <span aria-live="polite" title={`当前预览字号 ${value}px`}>{value}px</span>
+      <IconButton
+        disabled={!canIncrease}
+        icon={Plus}
+        label="增大预览字号"
+        size="sm"
+        variant="ghost"
+        onClick={() => onChange(value + 1)}
+      />
+      <IconButton
+        disabled={value === driveFilePreviewFontSizeDefaultPx}
+        icon={RotateCcw}
+        label="恢复默认预览字号"
+        size="sm"
+        variant="ghost"
+        onClick={() => onChange(driveFilePreviewFontSizeDefaultPx)}
+      />
+    </div>
+  );
+}
+
+function canAdjustDriveFilePreviewFontSize(kind: DrivePreviewKind) {
+  return kind === "docx" || kind === "markdown" || kind === "text";
+}
+
+function drivePreviewFontSizeStyle(fontSizePx?: number): DrivePreviewFontSizeStyle | undefined {
+  if (!fontSizePx) return undefined;
+  return {
+    "--orf-drive-preview-font-size": `${clampDrivePreviewFontSize(fontSizePx)}px`,
+  };
+}
+
+function readStoredDrivePreviewFontSize() {
+  if (typeof window === "undefined") return driveFilePreviewFontSizeDefaultPx;
+  const rawValue = window.localStorage.getItem(driveFilePreviewFontSizeStorageKey);
+  if (!rawValue) return driveFilePreviewFontSizeDefaultPx;
+  const value = Number(rawValue);
+  return clampDrivePreviewFontSize(value);
+}
+
+function writeStoredDrivePreviewFontSize(value: number) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(driveFilePreviewFontSizeStorageKey, String(clampDrivePreviewFontSize(value)));
+  } catch {
+    // Preview font size is a local display preference; persistence is best-effort.
+  }
+}
+
+function clampDrivePreviewFontSize(value: number) {
+  if (!Number.isFinite(value)) return driveFilePreviewFontSizeDefaultPx;
+  return Math.min(driveFilePreviewFontSizeMaxPx, Math.max(driveFilePreviewFontSizeMinPx, Math.round(value)));
 }
 
 function useDriveTextPreview(file: Drive): DriveTextPreviewState {

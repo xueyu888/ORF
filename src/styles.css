@@ -20244,7 +20244,7 @@ button.orf-chat-image-attachment {
   overflow: auto;
   color: var(--orf-drive-text-strong);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 13px;
+  font-size: var(--orf-drive-preview-font-size, 13px);
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
@@ -20292,7 +20292,7 @@ button.orf-chat-image-attachment {
   background: var(--orf-drive-surface-muted);
   color: var(--orf-drive-text-strong);
   padding: 16px;
-  font-size: 13px;
+  font-size: var(--orf-drive-preview-font-size, 13px);
   line-height: 1.65;
 }
 
@@ -20312,18 +20312,18 @@ button.orf-chat-image-attachment {
 }
 
 .orf-drive-markdown-heading-1 {
-  font-size: 21px;
+  font-size: calc(var(--orf-drive-preview-font-size, 13px) + 8px);
 }
 
 .orf-drive-markdown-heading-2 {
-  font-size: 18px;
+  font-size: calc(var(--orf-drive-preview-font-size, 13px) + 5px);
 }
 
 .orf-drive-markdown-heading-3,
 .orf-drive-markdown-heading-4,
 .orf-drive-markdown-heading-5,
 .orf-drive-markdown-heading-6 {
-  font-size: 15px;
+  font-size: calc(var(--orf-drive-preview-font-size, 13px) + 2px);
 }
 
 .orf-drive-markdown-list {
@@ -20362,7 +20362,7 @@ button.orf-chat-image-attachment {
 
 .orf-drive-markdown-code-block code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-size: max(12px, calc(var(--orf-drive-preview-font-size, 13px) - 1px));
   line-height: 1.55;
   white-space: pre;
 }
@@ -20443,7 +20443,7 @@ button.orf-chat-image-attachment {
   box-shadow: 0 12px 32px rgba(31, 49, 74, 0.1);
   color: #1f2937;
   padding: 34px 42px;
-  font-size: 14px;
+  font-size: var(--orf-drive-preview-font-size, 14px);
   line-height: 1.68;
 }
 
@@ -20591,7 +20591,52 @@ button.orf-chat-image-attachment {
 .orf-drive-file-preview-actions {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
+}
+
+.orf-drive-preview-font-controls {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--orf-chat-panel-border, var(--orf-border));
+  border-radius: 999px;
+  background: var(--orf-chat-panel-control-bg, var(--orf-bg-elevated));
+  color: var(--orf-chat-panel-text-muted, var(--orf-text-muted));
+  padding: 0 5px 0 9px;
+}
+
+.orf-drive-preview-font-controls > svg {
+  color: var(--orf-accent-text);
+}
+
+.orf-drive-preview-font-controls .orf-control {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.orf-drive-preview-font-controls .orf-control:hover:not(:disabled),
+.orf-drive-preview-font-controls .orf-control:focus-visible {
+  border-color: color-mix(in srgb, var(--orf-accent-border) 78%, transparent);
+  background: var(--orf-chat-panel-control-hover-bg, var(--orf-bg-row-hover));
+}
+
+.orf-drive-preview-font-controls .orf-control:disabled {
+  opacity: 0.45;
+}
+
+.orf-drive-preview-font-controls span {
+  min-width: 35px;
+  color: var(--orf-chat-panel-text-strong, var(--orf-text-primary));
+  font-size: 12px;
+  font-weight: 880;
+  line-height: 1;
+  text-align: center;
 }
 
 .orf-drive-file-preview-actions a {
