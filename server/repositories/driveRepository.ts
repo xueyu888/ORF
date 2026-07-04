@@ -1,4 +1,4 @@
-import type { Readable } from "node:stream";
+import { Readable } from "node:stream";
 import type {
   ChatDriveLink,
   ChatMessage,
@@ -20,10 +20,14 @@ import type {
   DriveSearchType,
   DriveSearchUpdatedRange,
 } from "../../src/types/orf";
-import { commentAttachmentPreviewKind } from "./commentAttachmentRepository";
 import { env } from "../env";
 import { pool } from "../db/client";
-import { readImageMetadata } from "../storage/images";
+import {
+  buildDrivePreviewArtifact,
+  detectDriveStoredPreviewMetadata,
+  DrivePreviewSourceTooLargeError,
+  type DriveStoredPreviewMetadata,
+} from "../drive/drivePreviewService";
 import { objectStorage, ObjectStorageUploadEmptyError, ObjectStorageUploadTooLargeError } from "../storage/objectStorage";
 import { sendChatMessage, type ChatActor } from "./chatRepository";
 import {
@@ -52,7 +56,12 @@ type DriveRow = {
   name: string;
   node_type: "folder" | "file";
   parent_id: string | null;
+  preview_error?: string | null;
+  preview_file_size?: number | string | null;
+  preview_generated_at?: Date | string | null;
   preview_kind: DrivePreviewKind | null;
+  preview_mime_type?: string | null;
+  preview_object_key?: string | null;
   updated_at: Date | string;
   version_count?: number | string | null;
   width: number | null;
@@ -68,6 +77,10 @@ type DriveContentRow = {
   id: string;
   mime_type: string;
   object_key: string;
+  preview_error: string | null;
+  preview_file_size: number | string | null;
+  preview_mime_type: string | null;
+  preview_object_key: string | null;
   preview_kind: DrivePreviewKind;
   team_id: string;
 };
@@ -103,7 +116,12 @@ type DriveFileVersionRow = {
   height: number | null;
   id: string;
   mime_type: string;
+  preview_error?: string | null;
+  preview_file_size?: number | string | null;
+  preview_generated_at?: Date | string | null;
   preview_kind: DrivePreviewKind;
+  preview_mime_type?: string | null;
+  preview_object_key?: string | null;
   version_number: number | string;
   width: number | null;
 };
@@ -156,7 +174,8 @@ function driveContentUrl(id: string, disposition: "attachment" | "inline" = "inl
 
 function driveFileDto(row: DriveRow): Drive | undefined {
   if (!row.file_id || !row.file_name || !row.mime_type || row.file_size === null || !row.preview_kind) return undefined;
-  const previewUrl = row.preview_kind === "download" ? undefined : driveContentUrl(row.file_id, "inline");
+  const previewStatus = drivePreviewStatus(row.preview_kind, row.preview_error);
+  const previewUrl = previewStatus === "ready" ? driveContentUrl(row.file_id, "inline") : undefined;
   return {
     id: row.file_id,
     fileName: row.file_name,
@@ -165,7 +184,10 @@ function driveFileDto(row: DriveRow): Drive | undefined {
     contentUrl: driveContentUrl(row.file_id, "inline"),
     downloadUrl: driveContentUrl(row.file_id, "attachment"),
     previewKind: row.preview_kind,
+    previewStatus,
+    previewError: row.preview_error ?? undefined,
     previewUrl,
+    previewGeneratedAt: row.preview_generated_at ? iso(row.preview_generated_at) : undefined,
     width: row.width,
     height: row.height,
     createdBy: row.created_by,
@@ -174,6 +196,11 @@ function driveFileDto(row: DriveRow): Drive | undefined {
     latestVersionNumber: row.latest_version_number === undefined || row.latest_version_number === null ? undefined : Number(row.latest_version_number),
     versionCount: row.version_count === undefined || row.version_count === null ? undefined : Number(row.version_count),
   };
+}
+
+function drivePreviewStatus(previewKind: DrivePreviewKind, previewError?: string | null) {
+  if (previewKind === "download") return previewError ? "failed" : "unavailable";
+  return "ready";
 }
 
 function driveNodeDto(row: DriveRow): DriveNode {
@@ -279,6 +306,7 @@ function chatDriveLinkDto(row: ChatDriveLinkRow): ChatDriveLink {
 }
 
 function driveFileVersionDto(row: DriveFileVersionRow): DriveFileVersion {
+  const previewStatus = drivePreviewStatus(row.preview_kind, row.preview_error);
   return {
     id: row.id,
     fileId: row.file_id,
@@ -287,6 +315,9 @@ function driveFileVersionDto(row: DriveFileVersionRow): DriveFileVersion {
     mimeType: row.mime_type,
     fileSize: Number(row.file_size),
     previewKind: row.preview_kind,
+    previewStatus,
+    previewError: row.preview_error ?? undefined,
+    previewGeneratedAt: row.preview_generated_at ? iso(row.preview_generated_at) : undefined,
     width: row.width,
     height: row.height,
     createdBy: row.created_by,
@@ -330,69 +361,108 @@ function sanitizeFolderName(value: string) {
   return sanitizeDriveName(value).replace(/\.+$/g, "").trim();
 }
 
-function extensionFromFileName(fileName: string) {
-  const match = /\.([A-Za-z0-9]{1,16})$/.exec(fileName);
-  return match?.[1]?.toLowerCase() ?? "";
-}
+type PreparedDriveMetadata = DriveStoredPreviewMetadata & {
+  previewError: string | null;
+  previewFileSize: number | null;
+  previewGeneratedAt: string | null;
+  previewMimeType: string | null;
+  previewObjectKey: string | null;
+};
 
-function isPdf(buffer: Buffer) {
-  return buffer.length >= 5 && buffer.subarray(0, 5).toString("ascii") === "%PDF-";
-}
+async function storedDriveMetadata(input: {
+  fileId: string;
+  fileName: string;
+  mimeType: string;
+  objectKey: string;
+  peeked: Buffer;
+  teamId: string;
+  versionId: string;
+}): Promise<PreparedDriveMetadata> {
+  const metadata = detectDriveStoredPreviewMetadata(input);
+  const prepared: PreparedDriveMetadata = {
+    ...metadata,
+    previewError: null,
+    previewFileSize: null,
+    previewGeneratedAt: null,
+    previewMimeType: null,
+    previewObjectKey: null,
+  };
+  if (!metadata.previewBuildIntent) return prepared;
 
-const docxMimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-
-function isZipContainer(buffer: Buffer) {
-  if (buffer.length < 4) return false;
-  const signature = buffer.subarray(0, 4).toString("binary");
-  return signature === "PK\u0003\u0004" || signature === "PK\u0005\u0006" || signature === "PK\u0007\b";
-}
-
-function isDocx(input: { fileName: string; mimeType: string; peeked: Buffer }) {
-  const extension = extensionFromFileName(input.fileName);
-  if (extension !== "docx" || !isZipContainer(input.peeked)) return false;
-  const normalizedMimeType = normalizeMimeType(input.mimeType);
-  return (
-    !normalizedMimeType
-    || normalizedMimeType === docxMimeType
-    || normalizedMimeType === "application/zip"
-    || normalizedMimeType === "application/octet-stream"
-  );
-}
-
-function storedDriveMetadata(input: { fileName: string; mimeType: string; peeked: Buffer }) {
-  const imageMetadata = readImageMetadata(input.peeked);
-  if (imageMetadata) {
+  const source = await readObjectBufferForPreview(input.objectKey).catch((error) => {
+    if (error instanceof DrivePreviewSourceTooLargeError) {
+      return { error: `文件超过 ${formatBytes(error.maxBytes)}，未生成预览` } as const;
+    }
+    return { error: error instanceof Error ? error.message : String(error) } as const;
+  });
+  if (!Buffer.isBuffer(source)) {
     return {
-      height: imageMetadata.height,
-      mimeType: imageMetadata.mimeType,
-      previewKind: "image" as DrivePreviewKind,
-      width: imageMetadata.width,
+      ...prepared,
+      previewBuildIntent: null,
+      previewError: source.error,
+      previewKind: "download",
     };
   }
 
-  const normalizedMimeType = normalizeMimeType(input.mimeType);
-  const verifiedPdf = isPdf(input.peeked);
-  const verifiedDocx = isDocx(input);
-  let mimeType = normalizedMimeType || "application/octet-stream";
-  if (verifiedPdf) {
-    mimeType = "application/pdf";
-  } else if (verifiedDocx) {
-    mimeType = docxMimeType;
-  } else if (input.fileName.toLowerCase().endsWith(".md") || input.fileName.toLowerCase().endsWith(".markdown")) {
-    mimeType = "text/markdown; charset=utf-8";
-  } else if (["csv", "json", "log", "txt"].includes(extensionFromFileName(input.fileName))) {
-    mimeType = "text/plain; charset=utf-8";
-  }
-  if (!verifiedPdf && (normalizedMimeType.startsWith("image/") || normalizedMimeType === "application/pdf")) {
-    mimeType = "application/octet-stream";
+  const built = await buildDrivePreviewArtifact({ body: source, fileName: input.fileName, metadata });
+  if (built.status !== "ok") {
+    return {
+      ...prepared,
+      previewBuildIntent: null,
+      previewError: built.status === "failed" ? built.error : "未生成预览",
+      previewKind: "download",
+    };
   }
 
+  const previewObjectKey = drivePreviewObjectKey({
+    extension: built.artifact.extension,
+    fileId: input.fileId,
+    teamId: input.teamId,
+    versionId: input.versionId,
+  });
+  await objectStorage.putObject({
+    body: built.artifact.body,
+    contentLength: built.artifact.body.byteLength,
+    contentType: built.artifact.mimeType,
+    key: previewObjectKey,
+  });
+
   return {
-    height: null,
-    mimeType,
-    previewKind: verifiedDocx ? "docx" : commentAttachmentPreviewKind({ fileName: input.fileName, mimeType }),
-    width: null,
+    ...prepared,
+    previewBuildIntent: null,
+    previewFileSize: built.artifact.body.byteLength,
+    previewGeneratedAt: nowIso(),
+    previewKind: built.artifact.previewKind,
+    previewMimeType: built.artifact.mimeType,
+    previewObjectKey,
   };
+}
+
+function drivePreviewObjectKey(input: { extension: string; fileId: string; teamId: string; versionId: string }) {
+  return `drive-previews/${safePathSegment(input.teamId)}/${safePathSegment(input.fileId)}/${safePathSegment(input.versionId)}/preview.${safePathSegment(input.extension)}`;
+}
+
+async function readObjectBufferForPreview(objectKey: string) {
+  const stored = await objectStorage.getObject(objectKey);
+  if (!stored) throw new Error("原始文件不存在，无法生成预览");
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const rawChunk of stored.body) {
+    const chunk = Buffer.isBuffer(rawChunk) ? rawChunk : Buffer.from(rawChunk as Uint8Array);
+    size += chunk.byteLength;
+    if (size > env.ORF_DRIVE_PREVIEW_MAX_BYTES) {
+      stored.body.destroy(new DrivePreviewSourceTooLargeError(env.ORF_DRIVE_PREVIEW_MAX_BYTES));
+      throw new DrivePreviewSourceTooLargeError(env.ORF_DRIVE_PREVIEW_MAX_BYTES);
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks, size);
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${Math.round(bytes / 1024 / 1024)} MB`;
 }
 
 function escapeMarkdownLinkText(value: string) {
@@ -436,7 +506,8 @@ async function findRootNode(teamId: string) {
     `
       SELECT n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
              n.created_at, n.updated_at, null AS file_id, null AS file_name, null AS mime_type, null AS file_size,
-             null AS preview_kind, null AS width, null AS height
+             null AS preview_kind, null AS preview_object_key, null AS preview_mime_type, null AS preview_file_size,
+             null AS preview_generated_at, null AS preview_error, null AS width, null AS height
       FROM drive_nodes n
       LEFT JOIN users creator ON creator.id = n.created_by
       WHERE n.team_id = $1
@@ -477,7 +548,9 @@ async function listChildren(parentNodeId: string, teamId: string) {
     `
       SELECT n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
              n.created_at, n.updated_at,
-             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind, f.width, f.height
+             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind,
+             f.preview_object_key, f.preview_mime_type, f.preview_file_size, f.preview_generated_at, f.preview_error,
+             f.width, f.height
       FROM drive_nodes n
       LEFT JOIN drive_files f ON f.node_id = n.id
       LEFT JOIN users creator ON creator.id = n.created_by
@@ -496,7 +569,9 @@ async function getDriveNodeById(nodeId: string, teamId: string, options: { inclu
     `
       SELECT n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
              n.created_at, n.updated_at, n.deleted_at,
-             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind, f.width, f.height,
+             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind,
+             f.preview_object_key, f.preview_mime_type, f.preview_file_size, f.preview_generated_at, f.preview_error,
+             f.width, f.height,
              version_stats.version_count, version_stats.latest_version_number
       FROM drive_nodes n
       LEFT JOIN drive_files f ON f.node_id = n.id
@@ -521,7 +596,9 @@ async function listRecentNodes(teamId: string, limit = 12) {
     `
       SELECT n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
              n.created_at, n.updated_at, n.deleted_at,
-             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind, f.width, f.height,
+             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind,
+             f.preview_object_key, f.preview_mime_type, f.preview_file_size, f.preview_generated_at, f.preview_error,
+             f.width, f.height,
              version_stats.version_count, version_stats.latest_version_number
       FROM drive_nodes n
       LEFT JOIN drive_files f ON f.node_id = n.id
@@ -585,7 +662,8 @@ async function findDriveFileForVersion(fileId: string, teamId: string) {
   const { rows } = await pool.query<DriveMutableFileRow>(
     `
       SELECT f.id, f.team_id, f.node_id, n.name AS node_name, f.object_key, f.file_name, f.mime_type,
-             f.file_size, f.preview_kind, COALESCE(version_stats.latest_version_number, 0) AS latest_version_number
+             f.file_size, f.preview_kind, f.preview_object_key, f.preview_mime_type, f.preview_file_size,
+             f.preview_generated_at, f.preview_error, COALESCE(version_stats.latest_version_number, 0) AS latest_version_number
       FROM drive_files f
       INNER JOIN drive_nodes n ON n.id = f.node_id
       LEFT JOIN LATERAL (
@@ -646,7 +724,9 @@ async function listChatDriveLinks(channelId: string, teamId: string) {
              l.created_at AS link_created_at, l.updated_at AS link_updated_at,
              n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
              n.created_at, n.updated_at,
-             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind, f.width, f.height
+             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind,
+             f.preview_object_key, f.preview_mime_type, f.preview_file_size, f.preview_generated_at, f.preview_error,
+             f.width, f.height
       FROM chat_channel_drive_links l
       INNER JOIN drive_nodes n ON n.id = l.node_id AND n.team_id = l.team_id AND n.deleted_at IS NULL
       LEFT JOIN drive_files f ON f.node_id = n.id
@@ -694,7 +774,8 @@ async function listDriveFileVersions(fileId: string, teamId: string) {
   const { rows } = await pool.query<DriveFileVersionRow>(
     `
       SELECT v.id, v.file_id, v.version_number, v.file_name, v.mime_type, v.file_size,
-             v.preview_kind, v.width, v.height, v.created_by, creator.name AS created_by_name, v.created_at
+             v.preview_kind, v.preview_object_key, v.preview_mime_type, v.preview_file_size, v.preview_generated_at, v.preview_error,
+             v.width, v.height, v.created_by, creator.name AS created_by_name, v.created_at
       FROM drive_file_versions v
       LEFT JOIN users creator ON creator.id = v.created_by
       WHERE v.team_id = $1
@@ -774,7 +855,9 @@ async function listDriveNodePath(nodeId: string, teamId: string) {
       )
       SELECT a.id, a.parent_id, a.node_type, a.name, a.created_by, creator.name AS created_by_name,
              a.created_at, a.updated_at, a.deleted_at,
-             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind, f.width, f.height,
+             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind,
+             f.preview_object_key, f.preview_mime_type, f.preview_file_size, f.preview_generated_at, f.preview_error,
+             f.width, f.height,
              null AS version_count, null AS latest_version_number,
              a.depth
       FROM ancestors a
@@ -905,7 +988,9 @@ export async function searchDriveNodes(
     `
       SELECT n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
              n.created_at, n.updated_at, n.deleted_at,
-             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind, f.width, f.height,
+             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind,
+             f.preview_object_key, f.preview_mime_type, f.preview_file_size, f.preview_generated_at, f.preview_error,
+             f.width, f.height,
              version_stats.version_count, version_stats.latest_version_number,
              search_meta.search_contexts
       FROM drive_nodes n
@@ -996,7 +1081,9 @@ export async function listDriveTrash(actor: ChatActor): Promise<Outcome<{ nodes:
     `
       SELECT n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
              n.created_at, n.updated_at, n.deleted_at,
-             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind, f.width, f.height,
+             f.id AS file_id, f.file_name, f.mime_type, f.file_size, f.preview_kind,
+             f.preview_object_key, f.preview_mime_type, f.preview_file_size, f.preview_generated_at, f.preview_error,
+             f.width, f.height,
              version_stats.version_count, version_stats.latest_version_number
       FROM drive_nodes n
       LEFT JOIN drive_nodes parent ON parent.id = n.parent_id
@@ -1043,7 +1130,8 @@ export async function createDriveFolder(
         )
         SELECT inserted.id, inserted.parent_id, inserted.node_type, inserted.name, inserted.created_by, creator.name AS created_by_name,
                inserted.created_at, inserted.updated_at, null AS file_id, null AS file_name, null AS mime_type, null AS file_size,
-               null AS preview_kind, null AS width, null AS height
+               null AS preview_kind, null AS preview_object_key, null AS preview_mime_type, null AS preview_file_size,
+               null AS preview_generated_at, null AS preview_error, null AS width, null AS height
         FROM inserted
         LEFT JOIN users creator ON creator.id = inserted.created_by
       `,
@@ -1097,6 +1185,7 @@ export async function uploadDriveFile(
 
   const fileId = makeId("drive-file");
   const nodeId = makeId("drive-node");
+  const versionId = makeId("drive-version");
   const objectKey = `drive-files/${safePathSegment(teamId)}/${fileId}/${safePathSegment(fileName)}`;
   const declaredMimeType = normalizeMimeType(input.mimeType);
   let stored: { contentLength: number; peeked: Buffer };
@@ -1114,7 +1203,13 @@ export async function uploadDriveFile(
     throw error;
   }
 
-  const metadata = storedDriveMetadata({ fileName, mimeType: declaredMimeType, peeked: stored.peeked });
+  let metadata: PreparedDriveMetadata;
+  try {
+    metadata = await storedDriveMetadata({ fileId, fileName, mimeType: declaredMimeType, objectKey, peeked: stored.peeked, teamId, versionId });
+  } catch (error) {
+    await objectStorage.deleteObject(objectKey).catch(() => undefined);
+    throw error;
+  }
   const now = nowIso();
   let persisted = false;
   try {
@@ -1129,14 +1224,24 @@ export async function uploadDriveFile(
             RETURNING id, parent_id, node_type, name, created_by, created_at, updated_at
           ),
           inserted_file AS (
-            INSERT INTO drive_files (id, node_id, team_id, object_key, file_name, mime_type, file_size, preview_kind, width, height, created_by, created_at)
-            SELECT $7, inserted_node.id, $2, $8, $9, $10, $11, $12, $13, $14, $5, $6
+            INSERT INTO drive_files (
+              id, node_id, team_id, object_key, file_name, mime_type, file_size, preview_kind,
+              preview_object_key, preview_mime_type, preview_file_size, preview_generated_at, preview_error,
+              width, height, created_by, created_at
+            )
+            SELECT $7, inserted_node.id, $2, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $5, $6
             FROM inserted_node
-            RETURNING id, node_id, file_name, mime_type, file_size, preview_kind, width, height
+            RETURNING id, node_id, file_name, mime_type, file_size, preview_kind,
+                      preview_object_key, preview_mime_type, preview_file_size, preview_generated_at, preview_error,
+                      width, height
           ),
           inserted_version AS (
-            INSERT INTO drive_file_versions (id, team_id, file_id, node_id, version_number, object_key, file_name, mime_type, file_size, preview_kind, width, height, created_by, created_at)
-            SELECT $15, $2, inserted_file.id, inserted_node.id, 1, $8, $9, $10, $11, $12, $13, $14, $5, $6
+            INSERT INTO drive_file_versions (
+              id, team_id, file_id, node_id, version_number, object_key, file_name, mime_type, file_size, preview_kind,
+              preview_object_key, preview_mime_type, preview_file_size, preview_generated_at, preview_error,
+              width, height, created_by, created_at
+            )
+            SELECT $20, $2, inserted_file.id, inserted_node.id, 1, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $5, $6
             FROM inserted_node
             INNER JOIN inserted_file ON inserted_file.node_id = inserted_node.id
             RETURNING file_id, version_number
@@ -1144,7 +1249,9 @@ export async function uploadDriveFile(
           SELECT inserted_node.id, inserted_node.parent_id, inserted_node.node_type, inserted_node.name,
                  inserted_node.created_by, creator.name AS created_by_name, inserted_node.created_at, inserted_node.updated_at,
                  inserted_file.id AS file_id, inserted_file.file_name, inserted_file.mime_type, inserted_file.file_size,
-                 inserted_file.preview_kind, inserted_file.width, inserted_file.height,
+                 inserted_file.preview_kind, inserted_file.preview_object_key, inserted_file.preview_mime_type,
+                 inserted_file.preview_file_size, inserted_file.preview_generated_at, inserted_file.preview_error,
+                 inserted_file.width, inserted_file.height,
                  1 AS version_count, inserted_version.version_number AS latest_version_number
           FROM inserted_node
           INNER JOIN inserted_file ON inserted_file.node_id = inserted_node.id
@@ -1164,9 +1271,14 @@ export async function uploadDriveFile(
           metadata.mimeType,
           stored.contentLength,
           metadata.previewKind,
+          metadata.previewObjectKey,
+          metadata.previewMimeType,
+          metadata.previewFileSize,
+          metadata.previewGeneratedAt,
+          metadata.previewError,
           metadata.width,
           metadata.height,
-          makeId("drive-version"),
+          versionId,
         ],
       );
       const nodeRow = rows[0];
@@ -1259,8 +1371,9 @@ export async function uploadDriveFile(
     } catch (error) {
       await client.query("rollback").catch(() => undefined);
       if (error instanceof Error && "code" in error && error.code === "23505") {
-        await objectStorage.deleteObject(objectKey).catch(() => undefined);
-        return { status: "conflict" };
+      await objectStorage.deleteObject(objectKey).catch(() => undefined);
+      if (metadata.previewObjectKey) await objectStorage.deleteObject(metadata.previewObjectKey).catch(() => undefined);
+      return { status: "conflict" };
       }
       throw error;
     } finally {
@@ -1269,6 +1382,7 @@ export async function uploadDriveFile(
   } catch (error) {
     if (!persisted) {
       await objectStorage.deleteObject(objectKey).catch(() => undefined);
+      if (metadata.previewObjectKey) await objectStorage.deleteObject(metadata.previewObjectKey).catch(() => undefined);
     }
     throw error;
   }
@@ -1446,7 +1560,21 @@ export async function uploadDriveFileVersion(
     throw error;
   }
 
-  const metadata = storedDriveMetadata({ fileName: uploadedFileName, mimeType: declaredMimeType, peeked: stored.peeked });
+  let metadata: PreparedDriveMetadata;
+  try {
+    metadata = await storedDriveMetadata({
+      fileId: file.id,
+      fileName: uploadedFileName,
+      mimeType: declaredMimeType,
+      objectKey,
+      peeked: stored.peeked,
+      teamId,
+      versionId,
+    });
+  } catch (error) {
+    await objectStorage.deleteObject(objectKey).catch(() => undefined);
+    throw error;
+  }
   const now = nowIso();
   let persisted = false;
   const client = await pool.connect();
@@ -1454,8 +1582,12 @@ export async function uploadDriveFileVersion(
     await client.query("begin");
     await client.query(
       `
-        INSERT INTO drive_file_versions (id, team_id, file_id, node_id, version_number, object_key, file_name, mime_type, file_size, preview_kind, width, height, created_by, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        INSERT INTO drive_file_versions (
+          id, team_id, file_id, node_id, version_number, object_key, file_name, mime_type, file_size, preview_kind,
+          preview_object_key, preview_mime_type, preview_file_size, preview_generated_at, preview_error,
+          width, height, created_by, created_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       `,
       [
         versionId,
@@ -1468,6 +1600,11 @@ export async function uploadDriveFileVersion(
         metadata.mimeType,
         stored.contentLength,
         metadata.previewKind,
+        metadata.previewObjectKey,
+        metadata.previewMimeType,
+        metadata.previewFileSize,
+        metadata.previewGeneratedAt,
+        metadata.previewError,
         metadata.width,
         metadata.height,
         actor.id,
@@ -1482,11 +1619,31 @@ export async function uploadDriveFileVersion(
             mime_type = $5,
             file_size = $6,
             preview_kind = $7,
-            width = $8,
-            height = $9
+            preview_object_key = $8,
+            preview_mime_type = $9,
+            preview_file_size = $10,
+            preview_generated_at = $11,
+            preview_error = $12,
+            width = $13,
+            height = $14
         WHERE id = $1 AND team_id = $2
       `,
-      [file.id, teamId, objectKey, uploadedFileName, metadata.mimeType, stored.contentLength, metadata.previewKind, metadata.width, metadata.height],
+      [
+        file.id,
+        teamId,
+        objectKey,
+        uploadedFileName,
+        metadata.mimeType,
+        stored.contentLength,
+        metadata.previewKind,
+        metadata.previewObjectKey,
+        metadata.previewMimeType,
+        metadata.previewFileSize,
+        metadata.previewGeneratedAt,
+        metadata.previewError,
+        metadata.width,
+        metadata.height,
+      ],
     );
     await client.query(
       "UPDATE drive_nodes SET updated_at = $3, updated_by = $4 WHERE id = $1 AND team_id = $2",
@@ -1516,7 +1673,10 @@ export async function uploadDriveFileVersion(
     return ok({ node, versions });
   } catch (error) {
     await client.query("rollback").catch(() => undefined);
-    if (!persisted) await objectStorage.deleteObject(objectKey).catch(() => undefined);
+    if (!persisted) {
+      await objectStorage.deleteObject(objectKey).catch(() => undefined);
+      if (metadata.previewObjectKey) await objectStorage.deleteObject(metadata.previewObjectKey).catch(() => undefined);
+    }
     if (error instanceof Error && "code" in error && error.code === "23505") return { status: "conflict" };
     throw error;
   } finally {
@@ -1535,7 +1695,8 @@ export async function restoreDriveFileVersion(
   const { rows } = await pool.query<DriveFileVersionContentRow>(
     `
       SELECT v.id, v.file_id, v.version_number, v.object_key, v.file_name, v.mime_type, v.file_size,
-             v.preview_kind, v.width, v.height, v.created_by, creator.name AS created_by_name, v.created_at
+             v.preview_kind, v.preview_object_key, v.preview_mime_type, v.preview_file_size, v.preview_generated_at, v.preview_error,
+             v.width, v.height, v.created_by, creator.name AS created_by_name, v.created_at
       FROM drive_file_versions v
       LEFT JOIN users creator ON creator.id = v.created_by
       WHERE v.team_id = $1
@@ -1554,8 +1715,12 @@ export async function restoreDriveFileVersion(
     await client.query("begin");
     await client.query(
       `
-        INSERT INTO drive_file_versions (id, team_id, file_id, node_id, version_number, object_key, file_name, mime_type, file_size, preview_kind, width, height, created_by, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        INSERT INTO drive_file_versions (
+          id, team_id, file_id, node_id, version_number, object_key, file_name, mime_type, file_size, preview_kind,
+          preview_object_key, preview_mime_type, preview_file_size, preview_generated_at, preview_error,
+          width, height, created_by, created_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       `,
       [
         makeId("drive-version"),
@@ -1568,6 +1733,11 @@ export async function restoreDriveFileVersion(
         version.mime_type,
         Number(version.file_size),
         version.preview_kind,
+        version.preview_object_key,
+        version.preview_mime_type,
+        version.preview_file_size === undefined || version.preview_file_size === null ? null : Number(version.preview_file_size),
+        version.preview_generated_at,
+        version.preview_error,
         version.width,
         version.height,
         actor.id,
@@ -1582,11 +1752,31 @@ export async function restoreDriveFileVersion(
             mime_type = $5,
             file_size = $6,
             preview_kind = $7,
-            width = $8,
-            height = $9
+            preview_object_key = $8,
+            preview_mime_type = $9,
+            preview_file_size = $10,
+            preview_generated_at = $11,
+            preview_error = $12,
+            width = $13,
+            height = $14
         WHERE id = $1 AND team_id = $2
       `,
-      [file.id, teamId, version.object_key, version.file_name, version.mime_type, Number(version.file_size), version.preview_kind, version.width, version.height],
+      [
+        file.id,
+        teamId,
+        version.object_key,
+        version.file_name,
+        version.mime_type,
+        Number(version.file_size),
+        version.preview_kind,
+        version.preview_object_key,
+        version.preview_mime_type,
+        version.preview_file_size === undefined || version.preview_file_size === null ? null : Number(version.preview_file_size),
+        version.preview_generated_at,
+        version.preview_error,
+        version.width,
+        version.height,
+      ],
     );
     await client.query(
       "UPDATE drive_nodes SET updated_at = $3, updated_by = $4 WHERE id = $1 AND team_id = $2",
@@ -1798,7 +1988,8 @@ export async function getDriveFileContent(
   if (!actor.canRead) return { status: "forbidden" };
   const { rows } = await pool.query<DriveContentRow>(
     `
-      SELECT f.id, f.team_id, f.object_key, f.file_name, f.mime_type, f.file_size, f.preview_kind
+      SELECT f.id, f.team_id, f.object_key, f.file_name, f.mime_type, f.file_size, f.preview_kind,
+             f.preview_object_key, f.preview_mime_type, f.preview_file_size, f.preview_error
       FROM drive_files f
       INNER JOIN drive_nodes n ON n.id = f.node_id
       WHERE f.id = $1
@@ -1811,19 +2002,18 @@ export async function getDriveFileContent(
   const row = rows[0];
   if (!row) return { status: "notFound" };
 
-  const stored = await objectStorage.getObject(row.object_key);
-  if (!stored) return { status: "notFound" };
-  const canPreview = row.preview_kind !== "download";
+  const canPreview = row.preview_kind !== "download" && !row.preview_error;
   const contentDisposition = options.disposition === "attachment" ? "attachment" : canPreview ? "inline" : "attachment";
+  const servingPreviewObject = contentDisposition === "inline" && Boolean(row.preview_object_key);
+  const stored = await objectStorage.getObject(servingPreviewObject ? row.preview_object_key! : row.object_key);
+  if (!stored) return { status: "notFound" };
   return {
     status: "ok",
     body: stored.body,
     contentDisposition,
-    contentLength: stored.contentLength,
+    contentLength: servingPreviewObject && row.preview_file_size !== null ? Number(row.preview_file_size) : stored.contentLength,
     contentType: contentDisposition === "inline"
-      ? row.preview_kind === "markdown" || row.preview_kind === "text"
-        ? "text/plain; charset=utf-8"
-        : row.mime_type
+      ? row.preview_mime_type ?? (row.preview_kind === "markdown" || row.preview_kind === "text" ? "text/plain; charset=utf-8" : row.mime_type)
       : canPreview
         ? (stored.contentType ?? row.mime_type)
         : "application/octet-stream",

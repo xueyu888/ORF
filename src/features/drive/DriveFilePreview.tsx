@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEventHandler, type WheelEventHandler } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEventHandler } from "react";
 import { clsx } from "clsx";
 import { Download, File as FileIcon, FileText, Image as ImageIcon, Loader2, Minus, Plus, RotateCcw, Type, X } from "lucide-react";
 import mammoth from "mammoth";
@@ -229,13 +229,13 @@ export function DriveFilePreviewSurface({
   return (
     <div className="orf-drive-preview-empty">
       <FileIcon className="h-8 w-8" />
-      <span>无法预览</span>
+      <span>{drivePreviewUnavailableMessage(file)}</span>
     </div>
   );
 }
 
 export function canOpenDriveFilePreview(file?: Drive | null) {
-  return Boolean(file?.previewUrl && file.previewKind !== "download");
+  return Boolean(file?.previewUrl && file.previewKind !== "download" && file.previewStatus !== "failed");
 }
 
 export function openDriveFilePreviewPopoutWindow(file: Drive) {
@@ -283,6 +283,7 @@ function DriveFilePreviewChrome({
   const PreviewIcon = driveFilePreviewIcon(file.previewKind);
   const [fontSizePx, setFontSizePx] = useState(readStoredDrivePreviewFontSize);
   const adjustableFontSize = canAdjustDriveFilePreviewFontSize(file.previewKind);
+  const shellRef = useRef<HTMLElement | null>(null);
 
   const updateFontSizePx = useCallback((nextValue: number) => {
     const nextFontSize = clampDrivePreviewFontSize(nextValue);
@@ -298,12 +299,19 @@ function DriveFilePreviewChrome({
     });
   }, []);
 
-  const handlePreviewWheel = useCallback<WheelEventHandler<HTMLElement>>((event) => {
+  const handlePreviewWheel = useCallback((event: WheelEvent) => {
     if (!adjustableFontSize || (!event.ctrlKey && !event.metaKey)) return;
     event.preventDefault();
     event.stopPropagation();
     adjustFontSizeBy(event.deltaY < 0 ? 1 : -1);
   }, [adjustFontSizeBy, adjustableFontSize]);
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell || !adjustableFontSize) return undefined;
+    shell.addEventListener("wheel", handlePreviewWheel, { passive: false });
+    return () => shell.removeEventListener("wheel", handlePreviewWheel);
+  }, [adjustableFontSize, handlePreviewWheel]);
 
   useEffect(() => {
     if (!adjustableFontSize) return undefined;
@@ -322,12 +330,12 @@ function DriveFilePreviewChrome({
 
   return (
     <section
+      ref={shellRef}
       className={clsx("orf-drive-file-preview-shell", className)}
       role="dialog"
       aria-modal="true"
       aria-label={`${file.fileName} 文件预览`}
       onMouseDown={onMouseDown}
-      onWheel={handlePreviewWheel}
     >
       <header className="orf-drive-file-preview-header">
         <div className="orf-drive-file-preview-title">
@@ -596,7 +604,10 @@ function normalizeDriveFilePreviewFile(value: unknown): Drive | null {
     contentUrl,
     downloadUrl,
     previewKind,
+    previewStatus: safeDrivePreviewStatus(file.previewStatus),
+    previewError: safeDrivePreviewText(file.previewError) || null,
     previewUrl: previewUrl || undefined,
+    previewGeneratedAt: safeDrivePreviewText(file.previewGeneratedAt) || null,
     width: safeDrivePreviewNumber(file.width),
     height: safeDrivePreviewNumber(file.height),
     createdBy: safeDrivePreviewText(file.createdBy) || null,
@@ -693,4 +704,13 @@ function safeDrivePreviewKind(value: unknown): DrivePreviewKind | null {
     || value === "text"
     ? value
     : null;
+}
+
+function safeDrivePreviewStatus(value: unknown): Drive["previewStatus"] {
+  return value === "failed" || value === "ready" || value === "unavailable" ? value : undefined;
+}
+
+function drivePreviewUnavailableMessage(file: Drive) {
+  if (file.previewStatus === "failed") return file.previewError || "预览生成失败，请下载文件查看";
+  return "无法预览";
 }

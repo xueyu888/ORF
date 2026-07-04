@@ -858,11 +858,16 @@ function ChatResourceInlinePreview({
       ) : (
         <div className="orf-chat-resource-preview-empty">
           <FileIcon className="h-8 w-8" />
-          <span>无法预览</span>
+          <span>{chatResourcePreviewUnavailableMessage(file)}</span>
         </div>
       )}
     </div>
   );
+}
+
+function chatResourcePreviewUnavailableMessage(file: DriveNode["file"] | null) {
+  if (file?.previewStatus === "failed") return file.previewError || "预览生成失败，请下载文件查看";
+  return "无法预览";
 }
 
 function iconForNode(node: DriveNode) {

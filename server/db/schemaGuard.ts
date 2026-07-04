@@ -300,7 +300,7 @@ export function validateDriveManagementSchema(snapshot: { columns: RuntimeTableC
       errors.push(`drive_files.${columnName} must be NOT NULL.`);
     }
   }
-  for (const columnName of ["width", "height", "created_by"]) {
+  for (const columnName of ["preview_object_key", "preview_mime_type", "preview_file_size", "preview_generated_at", "preview_error", "width", "height", "created_by"]) {
     if (!fileColumns.has(columnName)) {
       errors.push(`drive_files.${columnName} is missing.`);
     }
@@ -342,7 +342,7 @@ export function validateDriveManagementSchema(snapshot: { columns: RuntimeTableC
       errors.push(`drive_file_versions.${columnName} must be NOT NULL.`);
     }
   }
-  for (const columnName of ["width", "height", "created_by"]) {
+  for (const columnName of ["preview_object_key", "preview_mime_type", "preview_file_size", "preview_generated_at", "preview_error", "width", "height", "created_by"]) {
     if (!versionColumns.has(columnName)) {
       errors.push(`drive_file_versions.${columnName} is missing.`);
     }

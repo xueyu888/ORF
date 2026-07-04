@@ -16742,6 +16742,12 @@ a.orf-sidebar-link,
   visibility: visible;
 }
 
+.orf-chat-message:has(.orf-chat-message-text a:is(:hover, :focus-visible)) .orf-chat-message-actions {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
 .orf-chat-message-actions .orf-control {
   width: 28px;
   height: 28px;

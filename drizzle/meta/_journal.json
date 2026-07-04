@@ -533,6 +533,13 @@
       "when": 1783194000000,
       "tag": "0075_backfill_docx_preview_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1783195000000,
+      "tag": "0076_drive_derived_previews",
+      "breakpoints": true
     }
   ]
 }

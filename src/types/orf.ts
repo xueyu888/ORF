@@ -55,6 +55,7 @@ export type ClientPresenceSource = "android" | "browser" | "desktop" | "unknown"
 export type ClientSystemIdleState = "active" | "idle" | "locked" | "unknown";
 export type DriveNodeType = "folder" | "file";
 export type DrivePreviewKind = "download" | "docx" | "image" | "markdown" | "pdf" | "text";
+export type DrivePreviewStatus = "failed" | "ready" | "unavailable";
 export type DriveNodeEventAction =
   | "folder_created"
   | "file_uploaded"
@@ -237,7 +238,10 @@ export interface Drive {
   contentUrl: string;
   downloadUrl: string;
   previewKind: DrivePreviewKind;
+  previewStatus?: DrivePreviewStatus;
+  previewError?: string | null;
   previewUrl?: string;
+  previewGeneratedAt?: string | null;
   width?: number | null;
   height?: number | null;
   createdBy?: string | null;
@@ -286,6 +290,9 @@ export interface DriveFileVersion {
   mimeType: string;
   fileSize: number;
   previewKind: DrivePreviewKind;
+  previewStatus?: DrivePreviewStatus;
+  previewError?: string | null;
+  previewGeneratedAt?: string | null;
   width?: number | null;
   height?: number | null;
   createdBy?: string | null;
