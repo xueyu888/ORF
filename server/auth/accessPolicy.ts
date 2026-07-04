@@ -1,9 +1,12 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { PermissionKey } from "../../src/config/permissions";
 import { canEditObjectiveContentForUser } from "../../src/domain/orfObjectiveContent";
-import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "./errors";
-import { getAuthenticatedOrfUser } from "./ory";
-import { databaseUnavailablePayload, isDatabaseUnavailableError } from "../db/errors";
+import {
+  authResolutionLogContext,
+  authResolutionShouldLog,
+  resolveAuthenticatedOrfUser,
+  sendAuthResolutionFailure,
+} from "./sessionResolution";
 import {
   getRolePermissionKeysForScope,
   getPermissionRulesForScope,
@@ -18,7 +21,7 @@ import {
 } from "../access/orfTargetAccess";
 import { getDefaultRuntimeScopeForUser, runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 
-export type AuthenticatedOrfUser = NonNullable<Awaited<ReturnType<typeof getAuthenticatedOrfUser>>>;
+export type AuthenticatedOrfUser = Extract<Awaited<ReturnType<typeof resolveAuthenticatedOrfUser>>, { status: "authenticated" }>["user"];
 type RequestWithOrfUser = FastifyRequest & { orfUser?: AuthenticatedOrfUser | null };
 
 async function getRequestOrfUser(request: FastifyRequest, reply: FastifyReply, logMessage: string) {
@@ -27,20 +30,22 @@ async function getRequestOrfUser(request: FastifyRequest, reply: FastifyReply, l
     return requestWithUser.orfUser;
   }
 
-  const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
-    request.log.warn(error, logMessage);
-    if (isDatabaseUnavailableError(error) || isAuthServiceUnavailableError(error)) {
-      reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : authServiceUnavailablePayload());
-      return undefined;
-    }
-    return null;
-  });
-
-  if (user !== undefined) {
-    requestWithUser.orfUser = user;
+  const resolution = await resolveAuthenticatedOrfUser(request.headers.cookie);
+  if (resolution.status === "authenticated") {
+    requestWithUser.orfUser = resolution.user;
+    return resolution.user;
   }
 
-  return user;
+  if (resolution.status === "anonymous") {
+    requestWithUser.orfUser = null;
+    return null;
+  }
+
+  if (authResolutionShouldLog(resolution)) {
+    request.log.warn(authResolutionLogContext(resolution), logMessage);
+  }
+  sendAuthResolutionFailure(reply, resolution);
+  return undefined;
 }
 
 export async function requireApiUser(request: FastifyRequest, reply: FastifyReply) {
