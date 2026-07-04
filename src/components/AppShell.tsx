@@ -75,7 +75,7 @@ export function AppShell() {
     }
 
     const refreshPreferences = () => {
-      void getUserPreferences()
+      void getUserPreferences({ userId: currentUser.id })
         .then((preferences) => {
           if (!cancelled) {
             setSidebarCollapsed(preferences.sidebarCollapsed ?? false);

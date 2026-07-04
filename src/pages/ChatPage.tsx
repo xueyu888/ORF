@@ -55,6 +55,7 @@ import {
   createChatChannel,
   deleteChatMessageRequest,
   getChatBootstrap,
+  getChatUsers,
   getFeedbackReferences,
   markChatChannelReadRequest,
   openChatConversation,
@@ -83,6 +84,8 @@ import {
 
 const chatFeedPrefetchDelayMs = 250;
 const chatLocatedMessageHighlightMs = 3_200;
+const chatPresenceRefreshThrottleMs = 15_000;
+const chatConnectionRestoredBootstrapThrottleMs = 15_000;
 
 function isChatGlobalShortcutEditableTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable]"));
@@ -168,8 +171,12 @@ export function ChatPage() {
   const [memberSearchFocusSignal, setMemberSearchFocusSignal] = useState(0);
   const driveSelectionRequestIdRef = useRef(0);
   const handledBootstrapInvalidationKeyRef = useRef("");
+  const handledPresenceInvalidationKeyRef = useRef("");
+  const lastConnectionRestoredBootstrapRefreshAtRef = useRef(0);
+  const lastPresenceRefreshAtRef = useRef(0);
   const locatedMessageTimerRef = useRef<number | null>(null);
   const openChannelRequestIdRef = useRef(0);
+  const presenceRefreshTimerRef = useRef<number | null>(null);
   const { openImagePreview } = useChatFloatingImagePreview();
   const openAttachmentPreview = useCallback<ChatAttachmentPreviewHandler>((attachment, messageAttachments) => {
     const preview = createChatAttachmentPreviewState(messageAttachments, attachment);
@@ -190,7 +197,14 @@ export function ChatPage() {
   const activeMentionableUsers = useMemo(() => {
     return mentionableUsersForChannel(activeChannel, bootstrap?.users);
   }, [activeChannel, bootstrap?.users]);
-  const usersInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "users"), [readModelInvalidations]);
+  const usersInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "users", { excludeReasons: ["user.presence.changed"] }),
+    [readModelInvalidations],
+  );
+  const presenceInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "users", { includeReasons: ["user.presence.changed"] }),
+    [readModelInvalidations],
+  );
   const settingsInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "settings"), [readModelInvalidations]);
   const bootstrapInvalidationKey = `${usersInvalidationKey}|${settingsInvalidationKey}`;
   const myMembership = currentMembership(activeChannel, currentUser?.id);
@@ -362,6 +376,9 @@ export function ChatPage() {
       if (locatedMessageTimerRef.current !== null) {
         window.clearTimeout(locatedMessageTimerRef.current);
       }
+      if (presenceRefreshTimerRef.current !== null) {
+        window.clearTimeout(presenceRefreshTimerRef.current);
+      }
     };
   }, []);
 
@@ -489,12 +506,49 @@ export function ChatPage() {
     return data;
   }, [currentUser?.id]);
 
+  const refreshChatUsers = useCallback(async () => {
+    const data = await getChatUsers();
+    if (hasChatPresenceProtocolMismatch(data.users)) {
+      requestClientUpdateCenterOpen({ notice: chatPresenceProtocolUpgradeMessage });
+      throw new Error(chatPresenceProtocolUpgradeMessage);
+    }
+    setBootstrap((current) => (current ? { ...current, users: data.users } : current));
+    return data;
+  }, []);
+
+  const queuePresenceRefresh = useCallback(() => {
+    const run = () => {
+      presenceRefreshTimerRef.current = null;
+      lastPresenceRefreshAtRef.current = Date.now();
+      void refreshChatUsers().catch(() => undefined);
+    };
+    const elapsed = Date.now() - lastPresenceRefreshAtRef.current;
+    if (elapsed >= chatPresenceRefreshThrottleMs) {
+      if (presenceRefreshTimerRef.current !== null) {
+        window.clearTimeout(presenceRefreshTimerRef.current);
+        presenceRefreshTimerRef.current = null;
+      }
+      run();
+      return;
+    }
+    if (presenceRefreshTimerRef.current === null) {
+      presenceRefreshTimerRef.current = window.setTimeout(run, chatPresenceRefreshThrottleMs - elapsed);
+    }
+  }, [refreshChatUsers]);
+
   useEffect(() => {
     if (!bootstrapInvalidationKey || bootstrapInvalidationKey === "|" || loading || bootstrapError) return;
     if (handledBootstrapInvalidationKeyRef.current === bootstrapInvalidationKey) return;
     handledBootstrapInvalidationKeyRef.current = bootstrapInvalidationKey;
     void refreshBootstrap().catch(() => undefined);
   }, [bootstrapError, bootstrapInvalidationKey, loading, refreshBootstrap]);
+
+  useEffect(() => {
+    if (!presenceInvalidationKey || loading || bootstrapError || !bootstrap) return;
+    if (handledPresenceInvalidationKeyRef.current === presenceInvalidationKey) return;
+    handledPresenceInvalidationKeyRef.current = presenceInvalidationKey;
+    queuePresenceRefresh();
+  }, [bootstrap, bootstrapError, loading, presenceInvalidationKey, queuePresenceRefresh]);
 
   const handleDraftStateChange = useCallback((channelId: string, hasDraft: boolean) => {
     setDraftChannelIds((items) => {
@@ -715,7 +769,11 @@ export function ChatPage() {
   }, [channels]);
 
   const handleRealtimeConnectionRestored = useCallback(() => {
-    void refreshBootstrap();
+    const now = Date.now();
+    if (now - lastConnectionRestoredBootstrapRefreshAtRef.current >= chatConnectionRestoredBootstrapThrottleMs) {
+      lastConnectionRestoredBootstrapRefreshAtRef.current = now;
+      void refreshBootstrap();
+    }
     syncLatestMessagesIfFollowing();
   }, [refreshBootstrap, syncLatestMessagesIfFollowing]);
 

@@ -987,6 +987,13 @@ export async function getChatBootstrap(actor: ChatActor): Promise<ChatBootstrap>
   };
 }
 
+export async function listChatUsers(actor: ChatActor): Promise<ChatUser[]> {
+  if (!actor.canRead) {
+    return [];
+  }
+  return listActiveTeamUsers(storageTeamId(actor));
+}
+
 export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnreadSummary> {
   if (!actor.canRead) {
     return {

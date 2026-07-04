@@ -133,6 +133,7 @@ export type CommentAttachmentUploadResponse = CommentAttachmentUploadResult & {
   ok: true;
 };
 export type ChatBootstrapResponse = ChatBootstrap;
+export type ChatUsersResponse = { status?: "ok"; users: ChatUser[] };
 export type ChatUnreadSummaryResponse = ChatUnreadSummary;
 export type ChatMessagesResponse = { status?: "ok"; messages: ChatMessage[] };
 export type ChatMessageContextResponse = { status?: "ok" } & ChatMessageContext;
@@ -296,6 +297,14 @@ export type UserPreferences = {
 export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "workspaceLayout" | "backgrounds">> & {
   notificationDisplay?: Partial<UserPreferences["notificationDisplay"]>;
 };
+export type UserPreferencesRequestOptions = {
+  force?: boolean;
+  userId?: string | null;
+};
+type UserPreferencesCacheEntry = {
+  preferences: UserPreferences;
+  userId: string;
+};
 export type PersonalBackgroundsData = VisualBackgroundsData & {
   preferences: UserPreferences;
 };
@@ -306,6 +315,11 @@ type ApiEnvelope<T> = {
 };
 
 export const API_AUTHENTICATION_EXPIRED_EVENT = "orf:api-authentication-expired";
+
+let userPreferencesCache: UserPreferencesCacheEntry | null = null;
+let userPreferencesRequest: Promise<UserPreferences> | null = null;
+let chatBootstrapRequest: Promise<ChatBootstrapResponse> | null = null;
+let chatUsersRequest: Promise<ChatUsersResponse> | null = null;
 
 export class ApiError extends Error {
   status: number;
@@ -585,7 +599,31 @@ export async function getFeedbackReferences(feedbackIds: string[]) {
 }
 
 export async function getChatBootstrap() {
-  return apiJson<ChatBootstrapResponse>("/api/chat/bootstrap");
+  if (chatBootstrapRequest) {
+    return chatBootstrapRequest;
+  }
+  const request = apiJson<ChatBootstrapResponse>("/api/chat/bootstrap")
+    .finally(() => {
+      if (chatBootstrapRequest === request) {
+        chatBootstrapRequest = null;
+      }
+    });
+  chatBootstrapRequest = request;
+  return request;
+}
+
+export async function getChatUsers() {
+  if (chatUsersRequest) {
+    return chatUsersRequest;
+  }
+  const request = apiJson<ChatUsersResponse>("/api/chat/users")
+    .finally(() => {
+      if (chatUsersRequest === request) {
+        chatUsersRequest = null;
+      }
+    });
+  chatUsersRequest = request;
+  return request;
 }
 
 export async function getChatMessages(input: { before?: string; channelId: string; limit?: number }) {
@@ -1218,9 +1256,48 @@ export async function saveVisualBackgroundConfig(scene: VisualBackgroundScene, c
   return response.data;
 }
 
-export async function getUserPreferences() {
-  const response = await apiJson<ApiEnvelope<UserPreferences>>("/api/settings/personal/preferences");
-  return response.data;
+function cacheUserPreferences(preferences: UserPreferences) {
+  userPreferencesCache = {
+    preferences,
+    userId: preferences.userId,
+  };
+  return preferences;
+}
+
+export function invalidateUserPreferencesCache(userId?: string | null) {
+  if (!userId || userPreferencesCache?.userId === userId) {
+    userPreferencesCache = null;
+  }
+  userPreferencesRequest = null;
+}
+
+export async function getUserPreferences(options: UserPreferencesRequestOptions = {}) {
+  const expectedUserId = options.userId ?? null;
+  if (!options.force && expectedUserId && userPreferencesCache?.userId === expectedUserId) {
+    return userPreferencesCache.preferences;
+  }
+
+  if (!options.force && userPreferencesRequest) {
+    const preferences = await userPreferencesRequest;
+    if (!expectedUserId || preferences.userId === expectedUserId) {
+      return preferences;
+    }
+  }
+
+  const request = apiJson<ApiEnvelope<UserPreferences>>("/api/settings/personal/preferences")
+    .then((response) => cacheUserPreferences(response.data))
+    .finally(() => {
+      if (userPreferencesRequest === request) {
+        userPreferencesRequest = null;
+      }
+    });
+  userPreferencesRequest = request;
+  const preferences = await request;
+  if (expectedUserId && preferences.userId !== expectedUserId) {
+    invalidateUserPreferencesCache(preferences.userId);
+    throw new ApiError(409, "/api/settings/personal/preferences", "个人设置用户不一致，请刷新后重试");
+  }
+  return preferences;
 }
 
 export async function saveUserPreferences(input: UserPreferencesPatch) {
@@ -1228,7 +1305,8 @@ export async function saveUserPreferences(input: UserPreferencesPatch) {
     method: "PUT",
     body: JSON.stringify(input),
   });
-  return response.data;
+  userPreferencesRequest = null;
+  return cacheUserPreferences(response.data);
 }
 
 export async function getPersonalBackgrounds(scene: VisualBackgroundScene = "sidebar_background") {

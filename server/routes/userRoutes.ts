@@ -54,7 +54,7 @@ function publishUserPresenceInvalidation(scope: Parameters<typeof runtimeScopeSt
   publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
     actorUserId,
     models: ["users"],
-    reason: "user.changed",
+    reason: "user.presence.changed",
     target: { id: actorUserId, type: "user" },
   });
 }

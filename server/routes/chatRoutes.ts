@@ -17,6 +17,7 @@ import {
   getChatUnreadSummary,
   getChatThread,
   listChatMentionableUsers,
+  listChatUsers,
   listChatMessages,
   listChatThreads,
   listPinnedChatMessages,
@@ -182,6 +183,12 @@ export function registerChatRoutes(app: FastifyInstance) {
     const actor = await chatActorFromRequest(request, reply);
     if (!actor) return reply;
     return getChatBootstrap(actor);
+  });
+
+  app.get("/api/chat/users", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    return { users: await listChatUsers(actor) };
   });
 
   app.get("/api/chat/unread-summary", async (request, reply) => {

@@ -58,7 +58,7 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function AuthPage() {
   const navigate = useNavigate();
-  const { authReady, isApproved, isAuthenticated, loginWithPassword, notify, registerWithPassword } = useOrf();
+  const { authReady, currentUser, isApproved, isAuthenticated, loginWithPassword, notify, registerWithPassword } = useOrf();
   const [cachedHero] = useState<AuthHeroOption | null>(() => {
     const cached = readCachedLoginBackgroundPreview();
     return cached
@@ -113,7 +113,7 @@ export function AuthPage() {
     }
 
     let cancelled = false;
-    void getUserPreferences()
+    void getUserPreferences({ userId: currentUser?.id })
       .then((preferences) => {
         if (!cancelled) {
           navigate(preferences.defaultLandingPath ?? "/tasks");
@@ -128,7 +128,7 @@ export function AuthPage() {
     return () => {
       cancelled = true;
     };
-  }, [authReady, isApproved, isAuthenticated, navigate]);
+  }, [authReady, currentUser?.id, isApproved, isAuthenticated, navigate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -264,7 +264,7 @@ export function AuthPage() {
       setSelectedSavedAccountId("");
     }
 
-    const landingPath = await getUserPreferences()
+    const landingPath = await getUserPreferences({ force: true })
       .then((preferences) => preferences.defaultLandingPath ?? "/tasks")
       .catch(() => "/tasks");
     navigate(landingPath);

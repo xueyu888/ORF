@@ -28,6 +28,7 @@ export type OrfReadModelInvalidationReason =
   | "workLog.changed"
   | "project.changed"
   | "user.changed"
+  | "user.presence.changed"
   | "permission.changed"
   | "notification.changed"
   | "setting.changed";

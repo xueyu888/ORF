@@ -286,7 +286,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
     const refreshPersonalPreferences = () => {
-      void getUserPreferences()
+      void getUserPreferences({ userId: currentUser.id })
         .then((preferences) => {
           if (!cancelled) {
             setToastEnabled(preferences.notificationDisplay.toastEnabled);
@@ -302,7 +302,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       unsubscribe();
     };
-  }, [authReady, isApproved, isAuthenticated]);
+  }, [authReady, currentUser?.id, isApproved, isAuthenticated]);
 
   const dismissSystemBroadcast = useCallback((id: string) => {
     setSystemBroadcasts((items) => items.filter((item) => item.id !== id));
@@ -451,7 +451,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     () => readModelInvalidationKey(readModelInvalidations, "taskManagement"),
     [readModelInvalidations],
   );
-  const usersInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "users"), [readModelInvalidations]);
+  const usersInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "users", { excludeReasons: ["user.presence.changed"] }),
+    [readModelInvalidations],
+  );
   const permissionsInvalidationKey = useMemo(
     () => readModelInvalidationKey(readModelInvalidations, "permissions"),
     [readModelInvalidations],

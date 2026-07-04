@@ -70,7 +70,7 @@ export function PersonalSettingsPage() {
   const loadSettings = async () => {
     setErrorMessage(null);
     try {
-      const data = await getUserPreferences();
+      const data = await getUserPreferences({ force: Boolean(settingsInvalidationKey), userId: currentUser?.id });
       setPreferences(data);
     } catch (error) {
       const message = error instanceof Error ? error.message : "个人设置加载失败";
@@ -81,7 +81,7 @@ export function PersonalSettingsPage() {
 
   useEffect(() => {
     void loadSettings();
-  }, [settingsInvalidationKey]);
+  }, [currentUser?.id, settingsInvalidationKey]);
 
   useEffect(() => {
     if (!currentUser?.avatarUrl) {
