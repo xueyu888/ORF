@@ -42,7 +42,7 @@ import type {
   WorkLogReportScope,
 } from "../types/orf";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
-import type { ChatTheme, UserDisplayPreferences } from "../domain/settings/personalPreferences";
+import type { ChatTheme, UserDisplayPreferences, WorkspaceLayoutPreferences } from "../domain/settings/personalPreferences";
 import type {
   VisualBackgroundConfig,
   VisualBackgroundCrop,
@@ -285,6 +285,7 @@ export type UserPreferences = {
   sidebarCollapsed: boolean | null;
   chatTheme: ChatTheme;
   display: UserDisplayPreferences;
+  workspaceLayout: WorkspaceLayoutPreferences;
   /** Compatibility projection for legacy clients. New writes must use backgrounds[scene]. */
   appBackground: VisualBackgroundConfig | null;
   backgrounds: Partial<Record<VisualBackgroundScene, VisualBackgroundConfig | null>>;
@@ -292,7 +293,7 @@ export type UserPreferences = {
     toastEnabled: boolean;
   };
 };
-export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "backgrounds">> & {
+export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "workspaceLayout" | "backgrounds">> & {
   notificationDisplay?: Partial<UserPreferences["notificationDisplay"]>;
 };
 export type PersonalBackgroundsData = VisualBackgroundsData & {

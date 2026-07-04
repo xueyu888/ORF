@@ -2,6 +2,8 @@ import { useCallback, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { ChatUser, Feedback } from "../../types/orf";
 import { feedbackIssueHref, feedbackIssueIdFromHref, feedbackIssueMarkdownLabel } from "../feedback/model/feedbackIssue";
+import { workspaceSelectionFromHref } from "../workspace/workspaceLinks";
+import type { WorkspaceSelection } from "../workspace/workspaceTypes";
 import {
   OrfRichTextMarkdownViewer,
   type OrfRichTextResolvedLink,
@@ -19,6 +21,7 @@ type ChatMarkdownProps = {
   compact?: boolean;
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
+  onWorkspaceTargetLink?: (selection: WorkspaceSelection) => void;
   usersById: Map<string, ChatUser>;
 };
 
@@ -41,7 +44,25 @@ function renderMarkdownLink(
   children: ReactNode,
   key: string,
   onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void,
+  onWorkspaceTargetLink?: (selection: WorkspaceSelection) => void,
 ) {
+  const workspaceSelection = workspaceSelectionFromHref(href);
+  if (workspaceSelection && onWorkspaceTargetLink) {
+    return (
+      <a
+        href={href}
+        key={key}
+        onClick={(event) => {
+          if (shouldLetBrowserOpenLink(event)) return;
+          event.preventDefault();
+          onWorkspaceTargetLink(workspaceSelection);
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
+
   const driveResourceTarget = parseChatDriveResourceHref(href);
   if (driveResourceTarget && onDriveResourceLink) {
     return (
@@ -123,11 +144,11 @@ function renderChatMention(reference: OrfMentionReference, usersById: Map<string
   );
 }
 
-export function ChatMarkdown({ body, compact = false, feedbackItems = [], onDriveResourceLink, usersById }: ChatMarkdownProps) {
+export function ChatMarkdown({ body, compact = false, feedbackItems = [], onDriveResourceLink, onWorkspaceTargetLink, usersById }: ChatMarkdownProps) {
   const feedbackById = new Map(feedbackItems.map((feedback) => [feedback.id, feedback]));
   const renderLink = useCallback(
-    (href: string, children: ReactNode, key: string) => renderMarkdownLink(href, children, key, onDriveResourceLink),
-    [onDriveResourceLink],
+    (href: string, children: ReactNode, key: string) => renderMarkdownLink(href, children, key, onDriveResourceLink, onWorkspaceTargetLink),
+    [onDriveResourceLink, onWorkspaceTargetLink],
   );
   const resolveLink = (href: string, label: ReactNode): OrfRichTextResolvedLink => {
     const feedbackLink = feedbackLinkForHref(href, feedbackById);

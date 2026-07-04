@@ -1,6 +1,7 @@
 import { Bell, BellOff } from "lucide-react";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { ChatMessage, ChatThread, ChatUser, Feedback } from "../../types/orf";
+import type { WorkspaceSelection } from "../workspace/workspaceTypes";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessageItem } from "./ChatMessageItem";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
@@ -37,6 +38,7 @@ type ChatThreadPanelProps = {
   onSend: ChatSendHandler;
   onToggleFollow: (following: boolean) => void;
   onTyping: (channelId: string) => void;
+  onWorkspaceTargetLink?: (selection: WorkspaceSelection) => void;
   thread: ChatThread;
   users: ChatUser[];
   usersById: Map<string, ChatUser>;
@@ -69,6 +71,7 @@ export function ChatThreadPanel({
   onSend,
   onToggleFollow,
   onTyping,
+  onWorkspaceTargetLink,
   thread,
   users,
   usersById,
@@ -184,6 +187,7 @@ export function ChatThreadPanel({
           onRetryPending={onRetryPending}
           onSave={onSave}
           onSaveEdit={onSaveEdit}
+          onWorkspaceTargetLink={onWorkspaceTargetLink}
           reactionPickerSignal={reactionPickerRequest.messageId === thread.rootMessage.id ? reactionPickerRequest.signal : undefined}
           usersById={usersById}
         />
@@ -220,6 +224,7 @@ export function ChatThreadPanel({
                 onRetryPending={onRetryPending}
                 onSave={onSave}
                 onSaveEdit={onSaveEdit}
+                onWorkspaceTargetLink={onWorkspaceTargetLink}
                 reactionPickerSignal={reactionPickerRequest.messageId === reply.id ? reactionPickerRequest.signal : undefined}
                 usersById={usersById}
               />

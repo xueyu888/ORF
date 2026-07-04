@@ -3,6 +3,7 @@ import type { UserRole } from "../types/orf";
 const taskManagementReadModelRoutePrefixes = [
   "/dashboard",
   "/tasks",
+  "/chat",
   "/feedback",
   "/resources",
   "/strategy-map",

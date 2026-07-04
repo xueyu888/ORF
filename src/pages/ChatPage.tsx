@@ -46,6 +46,8 @@ import { useChatPanelState } from "../features/chat/useChatPanelState";
 import { useChatRealtimeEvents } from "../features/chat/useChatRealtimeEvents";
 import { useChatThreadState } from "../features/chat/useChatThreadState";
 import { useChatTypingState } from "../features/chat/useChatTypingState";
+import { useWorkspace } from "../features/workspace/WorkspaceContext";
+import type { WorkspaceSelection } from "../features/workspace/workspaceTypes";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import {
   addChatChannelMembersRequest,
@@ -143,6 +145,7 @@ export function ChatPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { appAttentionState, currentUser, notify, readModelInvalidations, refreshChatUnreadSummary, state } = useOrf();
+  const { openChallengePanel, secondaryPanelOpen } = useWorkspace();
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
@@ -277,6 +280,14 @@ export function ChatPage() {
   const handleDriveSelectionRequestHandled = useCallback((requestId: number) => {
     setDriveSelectionRequest((current) => (current?.requestId === requestId ? null : current));
   }, []);
+
+  const handleOpenChallengeWorkspace = useCallback(() => {
+    openChallengePanel(null);
+  }, [openChallengePanel]);
+
+  const handleWorkspaceTargetLink = useCallback((selection: WorkspaceSelection) => {
+    openChallengePanel(selection);
+  }, [openChallengePanel]);
 
   useEffect(() => {
     setDriveSelectionRequest(null);
@@ -1088,6 +1099,7 @@ export function ChatPage() {
               onMarkUnread={() => void markActiveChannelUnread()}
               onMemberSearch={handleOpenMemberSearch}
               onMobileBack={handleBackToChatList}
+              onWorkspaceTargets={handleOpenChallengeWorkspace}
               onPins={() => void loadPinnedMessages()}
               onSaved={() => void loadSavedMessages()}
               onSearch={openSearchPanel}
@@ -1100,6 +1112,7 @@ export function ChatPage() {
                 const response = await updateChatChannelRequest(activeChannel.id, { muted: !myMembership?.muted });
                 applyChannel(response.channel);
               }}
+              workspaceTargetsOpen={secondaryPanelOpen}
               usersById={usersById}
             />
             <ChatMessageFeed
@@ -1136,6 +1149,7 @@ export function ChatPage() {
               onSaveEdit={handleEditMessage}
               onScroll={handleMessageScroll}
               onThread={openThread}
+              onWorkspaceTargetLink={handleWorkspaceTargetLink}
               pendingNewMessageCount={pendingNewMessageCount}
               reactionPickerMessageId={reactionPickerRequest.messageId}
               reactionPickerSignal={reactionPickerRequest.signal}
@@ -1192,6 +1206,7 @@ export function ChatPage() {
           onCancelEdit={() => setEditingMessage(null)}
           onDriveResourceLink={handleOpenDriveResourceLink}
           onDriveSelectionRequestHandled={handleDriveSelectionRequestHandled}
+          onWorkspaceTargetLink={handleWorkspaceTargetLink}
           collectionLoading={collectionLoading}
           collectionResults={collectionResults}
           threadSummaries={threadSummaries}
