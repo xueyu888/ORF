@@ -1,7 +1,10 @@
-import { ShieldAlert } from "lucide-react";
-import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { ShieldAlert, X } from "lucide-react";
+import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { IconButton } from "../../../components/ui";
 import { canApplyForObjectiveChallenge } from "../../../domain/orfLifecycle";
-import { resultDetailPreviewText } from "../../../domain/orfResultDetails";
+import { resultDetailPreviewText, resultDetailText } from "../../../domain/orfResultDetails";
+import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
+import type { Result } from "../../../types/orf";
 import { remainingTime } from "../../challenge/model/challengeDates";
 import { BountyBadge } from "../BountyHallSkin";
 import { bountyPointsLabel, currentUserApplication, highestDifficultyLabel, publishedDateLabel, resultCountLabel } from "../model/bountyHallItems";
@@ -30,32 +33,54 @@ export function BountyObjectiveList({
   showDeclinedApplicationState?: boolean;
   onAction: (item: BountyItem, action: ChallengeAction) => void;
 }) {
+  const [metricDetailTarget, setMetricDetailTarget] = useState<{ objectiveId: string; resultId: string } | null>(null);
+  const selectedMetricDetail = useMemo(() => {
+    if (!metricDetailTarget) return null;
+    const item = items.find((candidate) => candidate.objective.id === metricDetailTarget.objectiveId);
+    const result = item?.results.find((candidate) => candidate.id === metricDetailTarget.resultId);
+    return item && result ? { item, result } : null;
+  }, [items, metricDetailTarget]);
+
+  useEffect(() => {
+    if (metricDetailTarget && !selectedMetricDetail) setMetricDetailTarget(null);
+  }, [metricDetailTarget, selectedMetricDetail]);
+
   return (
-    <div className="bounty-list-table" role="table" aria-label="悬赏目标">
-      <div className="bounty-list-head" role="row">
-        <span>奖励</span>
-        <span>悬赏目标</span>
-        <span>参与状态</span>
-        <span>指标</span>
-        <span>发布时间</span>
-        <span>剩余时间</span>
-        <span>操作</span>
+    <>
+      <div className="bounty-list-table" role="table" aria-label="悬赏目标">
+        <div className="bounty-list-head" role="row">
+          <span>奖励</span>
+          <span>悬赏目标</span>
+          <span>参与状态</span>
+          <span>指标</span>
+          <span>发布时间</span>
+          <span>剩余时间</span>
+          <span>操作</span>
+        </div>
+        {items.map((item) => (
+          <BountyListRow
+            key={item.objective.id}
+            active={item.objective.id === activeObjectiveId}
+            currentUserId={currentUserId}
+            item={item}
+            now={now}
+            onOpenChallengeWork={onOpenChallengeWork}
+            onOpenMetricDetail={(result) => setMetricDetailTarget({ objectiveId: item.objective.id, resultId: result.id })}
+            onOpenObjective={onOpenObjective}
+            processing={processingBountyId === item.objective.id}
+            showDeclinedApplicationState={showDeclinedApplicationState}
+            onAction={(action) => onAction(item, action)}
+          />
+        ))}
       </div>
-      {items.map((item) => (
-        <BountyListRow
-          key={item.objective.id}
-          active={item.objective.id === activeObjectiveId}
-          currentUserId={currentUserId}
-          item={item}
-          now={now}
-          onOpenChallengeWork={onOpenChallengeWork}
-          onOpenObjective={onOpenObjective}
-          processing={processingBountyId === item.objective.id}
-          showDeclinedApplicationState={showDeclinedApplicationState}
-          onAction={(action) => onAction(item, action)}
+      {selectedMetricDetail ? (
+        <BountyMetricDetailPanel
+          item={selectedMetricDetail.item}
+          result={selectedMetricDetail.result}
+          onClose={() => setMetricDetailTarget(null)}
         />
-      ))}
-    </div>
+      ) : null}
+    </>
   );
 }
 
@@ -64,6 +89,7 @@ function BountyListRow({
   currentUserId,
   now,
   onOpenChallengeWork,
+  onOpenMetricDetail,
   onOpenObjective,
   processing,
   showDeclinedApplicationState,
@@ -75,6 +101,7 @@ function BountyListRow({
   item: BountyItem;
   now: Date;
   onOpenChallengeWork: (objectiveId: string) => void;
+  onOpenMetricDetail: (result: Result) => void;
   onOpenObjective?: (objectiveId: string) => void;
   processing: boolean;
   showDeclinedApplicationState: boolean;
@@ -134,7 +161,7 @@ function BountyListRow({
         <ParticipationPreview currentUserId={currentUserId} item={item} />
       </div>
       <div className="bounty-row-results" data-label="指标">
-        <ResultPreview item={item} />
+        <ResultPreview item={item} onOpenMetricDetail={onOpenMetricDetail} />
       </div>
       <div className="bounty-row-published" data-label="发布时间">
         <span className="bounty-date-value">{publishedDateLabel(item)}</span>
@@ -167,22 +194,90 @@ function BountyListRow({
   );
 }
 
-function ResultPreview({ item }: { item: BountyItem }) {
+function ResultPreview({ item, onOpenMetricDetail }: { item: BountyItem; onOpenMetricDetail: (result: Result) => void }) {
   return (
     <>
       <span className="bounty-result-summary">{resultCountLabel(item)}</span>
       <div className="bounty-result-preview" aria-label="指标预览">
         {item.results.length > 0 ? (
           item.results.map((result) => (
-            <div key={result.id} className="bounty-result-preview-item">
-              {resultDetailPreviewText(result) || result.title}
-            </div>
+            <button
+              key={result.id}
+              type="button"
+              className="bounty-result-preview-item"
+              aria-label={`查看指标详情：${result.title}`}
+              title={result.title}
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenMetricDetail(result);
+              }}
+            >
+              <strong>{result.title}</strong>
+              <span>{resultDetailPreviewText(result) || "未填写指标说明"}</span>
+            </button>
           ))
         ) : (
           <div className="bounty-result-preview-item">待定义指标</div>
         )}
       </div>
     </>
+  );
+}
+
+function BountyMetricDetailPanel({ item, onClose, result }: { item: BountyItem; onClose: () => void; result: Result }) {
+  const panelDrag = useDraggableFloating<HTMLElement>({ resetKey: result.id });
+  const detailText = resultDetailText(result);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <aside
+      ref={panelDrag.ref}
+      className="orf-metric-inspector-panel orf-draggable-floating bounty-metric-detail-panel"
+      data-no-row-edit="true"
+      style={panelDrag.style}
+    >
+      <header className="orf-metric-inspector-header orf-drag-handle" {...panelDrag.handleProps}>
+        <div className="min-w-0">
+          <div className="orf-metric-inspector-kicker">指标详情</div>
+          <h2 className="orf-metric-inspector-title" title={result.title}>{result.title}</h2>
+          <div className="orf-metric-inspector-objective" title={item.objective.title}>{item.objective.title}</div>
+        </div>
+        <IconButton
+          icon={X}
+          label="收起指标详情"
+          onClick={onClose}
+          size="sm"
+          type="button"
+          variant="ghost"
+        />
+      </header>
+
+      <section className="orf-metric-inspector-section">
+        <div className="orf-metric-inspector-section-head">
+          <div className="orf-metric-inspector-label">难度等级</div>
+        </div>
+        <div className="bounty-metric-detail-difficulty">
+          <Chip tone={result.uncertaintyLevel ? "accent" : "neutral"}>{result.uncertaintyLevel ?? "待校准"}</Chip>
+          <Chip tone="gold">{result.uncertaintyScore > 0 ? `${result.uncertaintyScore} 分` : "待校准"}</Chip>
+        </div>
+      </section>
+
+      <section className="orf-metric-inspector-section orf-metric-inspector-detail-section">
+        <div className="orf-metric-inspector-section-head">
+          <div className="orf-metric-inspector-label">指标说明</div>
+        </div>
+        <div className={detailText ? "orf-metric-inspector-detail" : "orf-metric-inspector-detail orf-metric-inspector-detail-empty"}>
+          {detailText || "未填写指标说明。"}
+        </div>
+      </section>
+    </aside>
   );
 }
 
