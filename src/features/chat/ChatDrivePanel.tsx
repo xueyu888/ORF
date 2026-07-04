@@ -1,6 +1,6 @@
 import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
-import { Download, ExternalLink, File, FileText, Folder, Image, Link2, Loader2, MoreHorizontal, Search, Unlink, Upload } from "lucide-react";
+import { Download, ExternalLink, File as FileIcon, FileText, Folder, Image, Link2, Loader2, MoreHorizontal, Plus, Search, Unlink, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
 import { IconButton } from "../../components/ui";
 import {
@@ -359,34 +359,31 @@ export function ChatDrivePanel({
             {uploadTargetLabel ? ` · ${uploadTargetLabel}` : ""}
           </small>
         </span>
-        {canWrite && (
-          <button
-            type="button"
-            className="orf-chat-resource-upload-button"
-            disabled={uploadDisabled}
-            title={uploadTask ? "正在上传资源" : uploadTitle}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {uploadTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            <span>{uploadTask ? "上传中" : "上传"}</span>
-          </button>
-        )}
       </div>
 
-      <form
-        className="orf-chat-resource-search"
-        onSubmit={(event) => {
-          event.preventDefault();
-        }}
-      >
-        <Search className="h-4 w-4" />
-        <input
-          value={query}
-          placeholder={canManage ? "搜索频道资源或团队文件" : "搜索频道资源"}
-          aria-label="搜索群聊资源"
-          onChange={(event) => setQuery(event.target.value)}
+      <div className="orf-chat-resource-commandbar">
+        <form
+          className="orf-chat-resource-search"
+          onSubmit={(event) => {
+            event.preventDefault();
+          }}
+        >
+          <Search className="h-4 w-4" />
+          <input
+            value={query}
+            placeholder={canManage ? "搜索频道资源或团队文件" : "搜索频道资源"}
+            aria-label="搜索群聊资源"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </form>
+        <ChatResourceCommandMenu
+          canWrite={canWrite}
+          uploadDisabled={uploadDisabled}
+          uploadTask={uploadTask}
+          uploadTitle={uploadTitle}
+          onUpload={() => fileInputRef.current?.click()}
         />
-      </form>
+      </div>
       <input ref={fileInputRef} hidden multiple type="file" onChange={(event) => void uploadFiles(event.currentTarget.files)} />
       {(uploadTask || dragActive) && (
         <div className="orf-chat-resource-upload-status">
@@ -404,9 +401,29 @@ export function ChatDrivePanel({
 
       {errorMessage && <div className="orf-chat-resource-error">{errorMessage}</div>}
 
+      <div className="orf-chat-resource-stage">
+        {selectedItem ? (
+          <ChatResourceSpotlight
+            canManage={canManage}
+            item={selectedItem}
+            link={selectedItem.link ?? links.find((link) => link.node.id === selectedItem.node.id) ?? null}
+            linked={linkedNodeIds.has(selectedItem.node.id)}
+            onAddToChannel={() => void addNodeToChannel(selectedItem.node)}
+            onRemoveFromChannel={(link) => void removeLinkFromChannel(link)}
+            textPreview={textPreview}
+            textPreviewLoading={textPreviewLoading}
+          />
+        ) : (
+          <div className="orf-chat-resource-stage-empty">
+            {loading || searchLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Folder className="h-5 w-5" />}
+            <span>{searchActive ? "没有匹配资源" : "暂无频道资源"}</span>
+          </div>
+        )}
+      </div>
+
       <div className="orf-chat-resource-body">
         <div className="orf-chat-resource-section-heading">
-          <span>{searchActive ? "团队文件" : "频道文件"}</span>
+          <span>{searchActive ? "搜索结果" : "资源流"}</span>
           <small>{searchActive ? `${searchResults.length} 项结果` : folderChildrenLoading ? `${resourceCount} 项，同步中` : `${resourceCount} 项资源`}</small>
         </div>
         <div className="orf-chat-resource-list" role="list" aria-label={searchActive ? "资源搜索结果" : "群聊资源"}>
@@ -416,18 +433,12 @@ export function ChatDrivePanel({
             <div className="orf-chat-resource-empty"><Loader2 className="h-5 w-5 animate-spin" /> 搜索资源</div>
           ) : visibleItems.length > 0 ? (
             visibleItems.map((item) => (
-              <ChatResourceCard
-                canManage={canManage}
+              <ChatResourceRow
                 item={item}
                 key={item.key}
-                link={item.link ?? links.find((link) => link.node.id === item.node.id) ?? null}
                 linked={linkedNodeIds.has(item.node.id)}
-                onAddToChannel={() => void addNodeToChannel(item.node)}
-                onRemoveFromChannel={(link) => void removeLinkFromChannel(link)}
                 onSelect={() => setSelectedNodeId(item.node.id)}
                 selected={selectedNodeId === item.node.id}
-                textPreview={item.node.id === selectedNode?.id ? textPreview : undefined}
-                textPreviewLoading={item.node.id === selectedNode?.id ? textPreviewLoading : false}
               />
             ))
           ) : (
@@ -436,21 +447,86 @@ export function ChatDrivePanel({
             </div>
           )}
         </div>
-        <Link className="orf-chat-resource-open-drive" to="/resources">打开完整资源库</Link>
       </div>
     </div>
   );
 }
 
-function ChatResourceCard({
+function ChatResourceCommandMenu({
+  canWrite,
+  uploadDisabled,
+  uploadTask,
+  uploadTitle,
+  onUpload,
+}: {
+  canWrite: boolean;
+  uploadDisabled: boolean;
+  uploadTask: UploadTaskState | null;
+  uploadTitle: string;
+  onUpload: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) return;
+      setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [menuOpen]);
+
+  return (
+    <div className="orf-chat-resource-command-menu" ref={menuRef}>
+      <button
+        type="button"
+        className="orf-chat-resource-action-button"
+        aria-expanded={menuOpen}
+        aria-haspopup="menu"
+        aria-label="添加或打开资源"
+        title="添加或打开资源"
+        onClick={() => setMenuOpen((value) => !value)}
+      >
+        {uploadTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+      </button>
+      {menuOpen && (
+        <div className="orf-chat-resource-more-menu orf-chat-resource-command-popover" role="menu">
+          {canWrite && (
+            <button
+              type="button"
+              disabled={uploadDisabled}
+              role="menuitem"
+              title={uploadTask ? "正在上传资源" : uploadTitle}
+              onClick={() => {
+                if (uploadDisabled) return;
+                setMenuOpen(false);
+                onUpload();
+              }}
+            >
+              <Upload className="h-4 w-4" />
+              上传到频道
+            </button>
+          )}
+          <Link to="/resources" role="menuitem" onClick={() => setMenuOpen(false)}>
+            <ExternalLink className="h-4 w-4" />
+            打开完整云盘
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChatResourceSpotlight({
   canManage,
   item,
   link,
   linked,
   onAddToChannel,
   onRemoveFromChannel,
-  onSelect,
-  selected,
   textPreview,
   textPreviewLoading,
 }: {
@@ -460,29 +536,18 @@ function ChatResourceCard({
   linked: boolean;
   onAddToChannel: () => void;
   onRemoveFromChannel: (link: ChatDriveLink) => void;
-  onSelect: () => void;
-  selected: boolean;
   textPreview?: string;
   textPreviewLoading: boolean;
 }) {
   const Icon = iconForNode(item.node);
   return (
-    <article className={clsx("orf-chat-resource-card", selected && "is-active")} role="listitem">
-      <div className="orf-chat-resource-row-shell">
-        <button
-          type="button"
-          className="orf-chat-resource-row"
-          aria-expanded={selected}
-          title={item.node.name}
-          onClick={onSelect}
-        >
-          <Icon className="h-4 w-4" />
-          <span>
-            <strong>{item.node.name}</strong>
-            <small>{item.sourceLabel} · {driveNodeMetaLabel(item.node)}</small>
-          </span>
-          {item.source === "search" && !linked ? <em>可固定</em> : null}
-        </button>
+    <article className="orf-chat-resource-spotlight">
+      <div className="orf-chat-resource-spotlight-head">
+        <Icon className="h-4 w-4" />
+        <span>
+          <strong title={item.node.name}>{item.node.name}</strong>
+          <small>{item.sourceLabel} · {driveNodeMetaLabel(item.node)}</small>
+        </span>
         <ChatResourceItemMenu
           canManage={canManage}
           linked={linked}
@@ -492,13 +557,43 @@ function ChatResourceCard({
           onRemoveFromChannel={onRemoveFromChannel}
         />
       </div>
-      {selected && (
-        <ChatResourceInlinePreview
-          node={item.node}
-          textPreview={textPreview}
-          textPreviewLoading={textPreviewLoading}
-        />
-      )}
+      <ChatResourceInlinePreview
+        node={item.node}
+        textPreview={textPreview}
+        textPreviewLoading={textPreviewLoading}
+      />
+    </article>
+  );
+}
+
+function ChatResourceRow({
+  item,
+  linked,
+  onSelect,
+  selected,
+}: {
+  item: ChatResourceItem;
+  linked: boolean;
+  onSelect: () => void;
+  selected: boolean;
+}) {
+  const Icon = iconForNode(item.node);
+  return (
+    <article className={clsx("orf-chat-resource-card", selected && "is-active")} role="listitem">
+      <button
+        type="button"
+        className="orf-chat-resource-row"
+        aria-current={selected ? "true" : undefined}
+        title={item.node.name}
+        onClick={onSelect}
+      >
+        <Icon className="h-4 w-4" />
+        <span>
+          <strong>{item.node.name}</strong>
+          <small>{item.sourceLabel} · {driveNodeMetaLabel(item.node)}</small>
+        </span>
+        {item.source === "search" && !linked ? <Link2 className="h-3.5 w-3.5" aria-label="可固定到频道" /> : null}
+      </button>
     </article>
   );
 }
@@ -628,7 +723,7 @@ function ChatResourceInlinePreview({
         <iframe className="orf-chat-resource-inline-preview" src={previewUrl} title={file.fileName} />
       ) : (
         <div className="orf-chat-resource-preview-empty">
-          <File className="h-8 w-8" />
+          <FileIcon className="h-8 w-8" />
           <span>无法预览</span>
         </div>
       )}
@@ -640,7 +735,7 @@ function iconForNode(node: DriveNode) {
   if (node.type === "folder") return Folder;
   if (node.file?.previewKind === "image") return Image;
   if (node.file?.previewKind === "pdf" || node.file?.previewKind === "markdown" || node.file?.previewKind === "text") return FileText;
-  return File;
+  return FileIcon;
 }
 
 function dedupeChatResourceItems(items: ChatResourceItem[]) {

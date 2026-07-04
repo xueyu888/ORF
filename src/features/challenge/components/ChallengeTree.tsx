@@ -1123,6 +1123,18 @@ function MetricRow({
         <ProgressValue value={bounty ? bounty.progress : 0} />
         {scope === "mine" ? <EmptySlot /> : null}
       </div>
+      {bounty && selected && (
+        <RelatedResourcesPanel
+          canEdit={Boolean(handlers.currentUser)}
+          className="orf-result-related-resources"
+          compact
+          contextId={bounty.result.id}
+          contextType="result"
+          limit={4}
+          notify={handlers.notify}
+          title="指标资源"
+        />
+      )}
     </div>
   );
 }

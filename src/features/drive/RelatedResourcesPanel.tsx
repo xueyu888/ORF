@@ -24,6 +24,7 @@ type RelatedResourcesPanelProps = {
   hideWhenEmpty?: boolean;
   limit?: number;
   notify?: (message: string) => void;
+  onChanged?: () => void;
   title?: string;
 };
 
@@ -37,6 +38,7 @@ export function RelatedResourcesPanel({
   hideWhenEmpty = false,
   limit = 6,
   notify,
+  onChanged,
   title = "相关资源",
 }: RelatedResourcesPanelProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -138,7 +140,9 @@ export function RelatedResourcesPanel({
           },
         });
         report("资源已上传并关联");
+        setToolsOpen(false);
         loadResources();
+        onChanged?.();
       } catch (error) {
         const message = error instanceof Error ? error.message : "资源上传失败";
         setErrorMessage(message);
@@ -158,8 +162,11 @@ export function RelatedResourcesPanel({
     try {
       await addDriveContextLinkRequest({ contextId, contextType, nodeId: node.id });
       setSearchResults((items) => items.filter((item) => item.id !== node.id));
+      setSearchQuery("");
+      setToolsOpen(false);
       report("资源已关联");
       loadResources();
+      onChanged?.();
     } catch (error) {
       const message = error instanceof Error ? error.message : "资源关联失败";
       setErrorMessage(message);
@@ -186,6 +193,7 @@ export function RelatedResourcesPanel({
       await deleteDriveContextLinkRequest({ linkId: link.id, nodeId: node.id });
       report("资源已取消关联");
       loadResources();
+      onChanged?.();
     } catch (error) {
       const message = error instanceof Error ? error.message : "取消资源关联失败";
       setErrorMessage(message);
