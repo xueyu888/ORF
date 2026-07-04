@@ -30,8 +30,9 @@ export type NotificationKind =
   | "comment.reply.created"
   | "comment.thread.status.changed"
   | "comment.mention.created"
+  | "data.sync.conflict"
   | "worklog.reminder";
-export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog";
+export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog" | "dataSync";
 export type NotificationStream = "personalNotification" | "teamAnnouncement";
 export type ChatSystemKind = NotificationStream;
 export type ChatMessageSource = "user" | "system";

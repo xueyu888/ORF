@@ -52,6 +52,7 @@
     "db:audit:leaderboard": "tsx scripts/audit-leaderboard-data.ts",
     "gitlab:orf-chat:reconcile": "node scripts/with-public-ca.mjs tsx scripts/reconcile-gitlab-orf-chat.ts",
     "notify:email": "tsx scripts/send-email-notification.ts",
+    "notify:data-sync": "node scripts/with-public-ca.mjs tsx scripts/send-data-sync-notification.ts",
     "push:diagnose": "node scripts/with-public-ca.mjs tsx scripts/diagnose-push.ts",
     "client:icons:generate": "node scripts/generate-client-icons.mjs",
     "client:sync-versions": "node scripts/sync-client-versions.mjs",

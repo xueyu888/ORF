@@ -32,6 +32,11 @@ export const notificationPolicyRegistry: Record<NotificationKind, NotificationPo
     replyTarget: "metadata-comment-target",
     stream: "personalNotification",
   },
+  "data.sync.conflict": {
+    kind: "data.sync.conflict",
+    replyTarget: "none",
+    stream: "personalNotification",
+  },
   "feedback.commented": {
     kind: "feedback.commented",
     replyTarget: "notification-target",
