@@ -6,8 +6,10 @@ import type { ChatChannel, ChatUser } from "../../types/orf";
 import { ChatIntegrationBrandMark, chatChannelIntegrationBrand } from "./chatIntegrationBrand";
 import { channelIcon, chatChannelDisplayLabel, chatChannelInfoLabel } from "./chatChannelPresentation";
 import { currentMembership } from "./chatModels";
+import type { ActivePanel } from "./chatPanelTypes";
 
 type ChatHeaderProps = {
+  activePanel: ActivePanel;
   canManage: boolean;
   channel: ChatChannel;
   currentUserId?: string;
@@ -27,6 +29,7 @@ type ChatHeaderProps = {
 };
 
 export function ChatHeader({
+  activePanel,
   canManage,
   channel,
   currentUserId,
@@ -97,9 +100,31 @@ export function ChatHeader({
         {memberNames && <span className="orf-chat-header-member-names truncate">{memberNames}</span>}
       </div>
       <div className="orf-chat-header-actions">
-        {canUseChatDrive && <IconButton className="orf-chat-header-resource-action" icon={Folder} label="群聊资源" onClick={onFiles} />}
-        <IconButton icon={Search} label="搜索消息" onClick={onSearch} />
-        <IconButton className="orf-chat-header-action-secondary" icon={Info} label={infoLabel} onClick={onInfo} />
+        {canUseChatDrive && (
+          <IconButton
+            aria-pressed={activePanel === "files"}
+            className="orf-chat-header-resource-action"
+            data-active={activePanel === "files" ? "true" : undefined}
+            icon={Folder}
+            label="群聊资源"
+            onClick={onFiles}
+          />
+        )}
+        <IconButton
+          aria-pressed={activePanel === "search"}
+          data-active={activePanel === "search" ? "true" : undefined}
+          icon={Search}
+          label="搜索消息"
+          onClick={onSearch}
+        />
+        <IconButton
+          aria-pressed={activePanel === "info"}
+          className="orf-chat-header-action-secondary"
+          data-active={activePanel === "info" ? "true" : undefined}
+          icon={Info}
+          label={infoLabel}
+          onClick={onInfo}
+        />
         <IconButton
           className={membership?.favorite ? "orf-chat-header-action-secondary orf-chat-starred" : "orf-chat-header-action-secondary"}
           icon={Star}

@@ -1074,6 +1074,7 @@ export function ChatPage() {
         {activeChannel ? (
           <>
             <ChatHeader
+              activePanel={activePanel}
               canManage={canManageActiveChannel}
               channel={activeChannel}
               currentUserId={currentUser?.id}
