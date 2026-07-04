@@ -1,3 +1,4 @@
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -140,6 +141,14 @@ async function downloadReleaseAssetToTemp(asset, tempDir) {
     throw new Error(`Release 资产缺少下载地址: ${fileName}`);
   }
 
+  const filePath = path.join(tempDir, fileName);
+  const downloadedWithCurl = await downloadReleaseAssetWithCurl({
+    fileName,
+    targetPath: filePath,
+    url: asset.url,
+  });
+  if (downloadedWithCurl) return filePath;
+
   const response = await fetch(asset.url, {
     headers: {
       "user-agent": "ORF Client Release Publisher",
@@ -152,9 +161,99 @@ async function downloadReleaseAssetToTemp(asset, tempDir) {
     throw new Error(`下载 Release 资产失败: ${fileName}: HTTP ${response.status}`);
   }
 
-  const filePath = path.join(tempDir, fileName);
   await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(filePath));
   return filePath;
+}
+
+async function downloadReleaseAssetWithCurl(input) {
+  const curl = spawnSync("curl", ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  if (curl.status !== 0) return false;
+
+  const proxyUrl = releaseAssetDownloadProxyUrl(input.url);
+  const args = [
+    "--fail",
+    "--location",
+    "--show-error",
+    "--silent",
+    "--retry",
+    "3",
+    "--retry-delay",
+    "2",
+    "--connect-timeout",
+    "20",
+    "--max-time",
+    String(Math.ceil(clientUpdateTransferTimeoutMs() / 1000)),
+    "--user-agent",
+    "ORF Client Release Publisher",
+    "--output",
+    input.targetPath,
+  ];
+  if (proxyUrl) {
+    console.log(`通过代理 ${redactProxyUrl(proxyUrl)} 下载 GitHub Release 资产: ${input.fileName}`);
+    args.push("--proxy", proxyUrl);
+  }
+  args.push(input.url);
+
+  await new Promise((resolve, reject) => {
+    const child = spawn("curl", args, { stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", reject);
+    child.on("exit", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`curl 下载 Release 资产失败: ${input.fileName}: ${signal ?? code}${stderr ? `\n${stderr.trim()}` : ""}`));
+    });
+  });
+  return true;
+}
+
+function releaseAssetDownloadProxyUrl(assetUrl) {
+  if (!isGitHubReleaseAssetUrl(assetUrl)) return null;
+  return firstNonEmpty([
+    process.env.ORF_GITHUB_RELEASE_ASSET_PROXY,
+    process.env.HTTPS_PROXY,
+    process.env.https_proxy,
+    process.env.HTTP_PROXY,
+    process.env.http_proxy,
+    gitConfigValue("https.proxy"),
+    gitConfigValue("http.proxy"),
+  ]);
+}
+
+function isGitHubReleaseAssetUrl(value) {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hostname === "github.com" || hostname.endsWith(".github.com") || hostname === "githubusercontent.com" || hostname.endsWith(".githubusercontent.com");
+  } catch {
+    return false;
+  }
+}
+
+function gitConfigValue(key) {
+  const result = spawnSync("git", ["config", "--get", key], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  return result.status === 0 ? result.stdout.trim() : "";
+}
+
+function firstNonEmpty(values) {
+  return values.map((value) => String(value ?? "").trim()).find(Boolean) ?? null;
+}
+
+function redactProxyUrl(value) {
+  try {
+    const url = new URL(value);
+    if (url.username || url.password) {
+      url.username = url.username ? "***" : "";
+      url.password = url.password ? "***" : "";
+    }
+    return url.toString();
+  } catch {
+    return value.replace(/\/\/([^:@\s]+):([^@\s]+)@/, "//***:***@");
+  }
 }
 
 async function uploadClientUpdateAsset(input) {
