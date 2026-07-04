@@ -218,7 +218,15 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [state, setState] = useState(loadInitialState);
   const [reportsData, setReportsData] = useState<ReportsPageData | null>(null);
-  const { authenticateWithPassword, authConnectionError, authReady, authUserId, refreshAuthSession, setAuthUserId } = useAuthSessionState(setState);
+  const {
+    authenticateWithPassword,
+    authConnectionError,
+    authReady,
+    authUserId,
+    confirmApiAuthenticationExpired,
+    refreshAuthSession,
+    setAuthUserId,
+  } = useAuthSessionState(setState);
   const appAttentionState = useAppAttentionState();
   const [toastEnabled, setToastEnabled] = useState(true);
   const [modal, setModal] = useState<ModalState>({ type: null });
@@ -227,6 +235,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [systemBroadcasts, setSystemBroadcasts] = useState<SystemBroadcast[]>([]);
   const [workLogReminderState, setWorkLogReminderState] = useState<WorkLogReminderState | null>(null);
   const [chatUnreadSummary, setChatUnreadSummary] = useState<ChatUnreadSummary>(emptyChatUnreadSummary);
+  const authenticationExpiryConfirmationRef = useRef<Promise<void> | null>(null);
   const notifiedChatMessageIdsRef = useRef<string[]>([]);
   const notify = useCallback((message: string) => {
     if (!toastEnabled) {
@@ -417,13 +426,26 @@ export function OrfProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleAuthenticationExpired = () => {
-      setAuthUserId(null);
-      notify("登录已失效，请重新登录。");
+      if (authenticationExpiryConfirmationRef.current) {
+        return;
+      }
+
+      authenticationExpiryConfirmationRef.current = confirmApiAuthenticationExpired()
+        .then((result) => {
+          if (result === "expired") {
+            notify("登录已失效，请重新登录。");
+          } else if (result === "unavailable") {
+            notify("登录状态暂时无法确认，请稍后重试。");
+          }
+        })
+        .finally(() => {
+          authenticationExpiryConfirmationRef.current = null;
+        });
     };
 
     window.addEventListener(API_AUTHENTICATION_EXPIRED_EVENT, handleAuthenticationExpired);
     return () => window.removeEventListener(API_AUTHENTICATION_EXPIRED_EVENT, handleAuthenticationExpired);
-  }, [notify, setAuthUserId]);
+  }, [confirmApiAuthenticationExpired, notify]);
 
   const taskManagementInvalidationKey = useMemo(
     () => readModelInvalidationKey(readModelInvalidations, "taskManagement"),
