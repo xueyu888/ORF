@@ -2,7 +2,7 @@ import { ShieldAlert, X } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { IconButton } from "../../../components/ui";
 import { canApplyForObjectiveChallenge } from "../../../domain/orfLifecycle";
-import { resultDetailPreviewText, resultDetailText } from "../../../domain/orfResultDetails";
+import { resultDetailText } from "../../../domain/orfResultDetails";
 import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
 import type { Result } from "../../../types/orf";
 import { remainingTime } from "../../challenge/model/challengeDates";
@@ -11,6 +11,8 @@ import { bountyPointsLabel, currentUserApplication, highestDifficultyLabel, publ
 import type { BountyItem, ChallengeAction } from "../model/bountyHallTypes";
 import { BountyRowActions } from "./BountyRowActions";
 import { ParticipationPreview } from "./ParticipationPreview";
+
+const EMPTY_OBJECTIVE_DESCRIPTION_LABEL = "待补充";
 
 export function BountyObjectiveList({
   activeObjectiveId,
@@ -110,6 +112,16 @@ function BountyListRow({
   const currentApplication = currentUserApplication(item, currentUserId, { includeDeclined: showDeclinedApplicationState });
   const canApply = item.isRecruitment || canApplyForObjectiveChallenge(item.objective);
   const openable = Boolean(onOpenObjective);
+  const visibleObjectiveDescription = objectiveDescriptionText(item.objective.description);
+  const showObjectiveDefiner = item.source === "memberProposed" && Boolean(item.definer);
+  const hasRevealedObjectiveInfo = Boolean(visibleObjectiveDescription || showObjectiveDefiner);
+  const rowAriaLabel = [
+    item.objective.title,
+    openable ? "双击打开挑战页目标" : null,
+    hasRevealedObjectiveInfo ? "单击、移入或聚焦后显示补充信息" : null,
+  ]
+    .filter(Boolean)
+    .join("，");
   const openObjective = () => onOpenObjective?.(item.objective.id);
   const openChallengeWork = () => onOpenChallengeWork(item.objective.id);
   const handleRowClick = (event: ReactMouseEvent<HTMLElement>) => {
@@ -133,7 +145,7 @@ function BountyListRow({
       data-linked-target={active ? "true" : undefined}
       data-open-target={openable ? "true" : undefined}
       tabIndex={0}
-      aria-label={`${item.objective.title}，${openable ? "双击打开挑战页目标；" : ""}单击、移入或聚焦后显示完整信息`}
+      aria-label={rowAriaLabel}
       onClick={handleRowClick}
       onDoubleClick={handleRowDoubleClick}
       onKeyDown={handleRowKeyDown}
@@ -151,10 +163,12 @@ function BountyListRow({
       <div className="bounty-row-main" data-label="悬赏目标">
         <div className="bounty-row-title">
           <h3>{item.objective.title}</h3>
-          <div className="bounty-row-revealed">
-            <p>{item.objective.description}</p>
-            {item.source === "memberProposed" && item.definer && <span className="bounty-row-definer">提出人：{item.definer}</span>}
-          </div>
+          {hasRevealedObjectiveInfo ? (
+            <div className="bounty-row-revealed">
+              {visibleObjectiveDescription ? <p>{visibleObjectiveDescription}</p> : null}
+              {showObjectiveDefiner ? <span className="bounty-row-definer">提出人：{item.definer}</span> : null}
+            </div>
+          ) : null}
         </div>
       </div>
       <div className="bounty-row-participants" data-label="参与状态">
@@ -194,6 +208,11 @@ function BountyListRow({
   );
 }
 
+function objectiveDescriptionText(description: string) {
+  const normalizedDescription = description.trim();
+  return normalizedDescription === EMPTY_OBJECTIVE_DESCRIPTION_LABEL ? "" : normalizedDescription;
+}
+
 function ResultPreview({ item, onOpenMetricDetail }: { item: BountyItem; onOpenMetricDetail: (result: Result) => void }) {
   return (
     <>
@@ -213,11 +232,10 @@ function ResultPreview({ item, onOpenMetricDetail }: { item: BountyItem; onOpenM
               }}
             >
               <strong>{result.title}</strong>
-              <span>{resultDetailPreviewText(result) || "未填写指标说明"}</span>
             </button>
           ))
         ) : (
-          <div className="bounty-result-preview-item">待定义指标</div>
+          <div className="bounty-result-preview-empty">待定义指标</div>
         )}
       </div>
     </>
