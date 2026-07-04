@@ -10,7 +10,6 @@ import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTree
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
 import { UserAvatar } from "../../../components/UserAvatar";
 import { Button, IconButton, actionButtonClassName } from "../../../components/ui";
-import { RelatedResourcesPanel } from "../../drive/RelatedResourcesPanel";
 import {
   canRequestObjectiveAlignment,
   isOpenObjectiveAlignmentRequest,
@@ -576,17 +575,6 @@ function ObjectivePanel({
         </div>
       )}
 
-      <RelatedResourcesPanel
-        canEdit={Boolean(handlers.currentUser)}
-        className="orf-objective-related-resources"
-        compact
-        contextId={group.objective.id}
-        contextType="objective"
-        hideWhenEmpty
-        notify={handlers.notify}
-        title="目标资源"
-      />
-
       <div className="orf-objective-body">
         {group.bounties.map((bounty) => (
           <MetricRow
@@ -1123,18 +1111,6 @@ function MetricRow({
         <ProgressValue value={bounty ? bounty.progress : 0} />
         {scope === "mine" ? <EmptySlot /> : null}
       </div>
-      {bounty && selected && (
-        <RelatedResourcesPanel
-          canEdit={Boolean(handlers.currentUser)}
-          className="orf-result-related-resources"
-          compact
-          contextId={bounty.result.id}
-          contextType="result"
-          limit={4}
-          notify={handlers.notify}
-          title="指标资源"
-        />
-      )}
     </div>
   );
 }
@@ -1282,20 +1258,6 @@ function ActionRow({
         <TimeValue icon={Clock3} value={action?.updatedAt || "未设置"} />
         <EmptySlot />
       </div>
-
-      {action && open && (
-        <RelatedResourcesPanel
-          canEdit={Boolean(handlers.currentUser)}
-          className="orf-task-related-resources"
-          compact
-          contextId={action.id}
-          contextType="task"
-          hideWhenEmpty
-          limit={4}
-          notify={handlers.notify}
-          title="任务资源"
-        />
-      )}
 
       {action && open &&
         subActionRows(action.checklist, temporarySubtask).map((subActionRow) => (

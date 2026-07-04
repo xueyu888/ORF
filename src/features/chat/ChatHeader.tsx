@@ -26,6 +26,8 @@ type ChatHeaderProps = {
   usersById: Map<string, ChatUser>;
 };
 
+const chatDrivePanelEntryEnabled = false;
+
 export function ChatHeader({
   canManage,
   channel,
@@ -48,7 +50,7 @@ export function ChatHeader({
   const integrationBrand = chatChannelIntegrationBrand(channel);
   const membership = currentMembership(channel, currentUserId);
   const canManageMembership = canManage && channel.type === "private";
-  const canUseChatDrive = !channel.systemKind && (channel.type === "public" || channel.type === "private");
+  const canUseChatDrive = chatDrivePanelEntryEnabled && !channel.systemKind && (channel.type === "public" || channel.type === "private");
   const infoLabel = chatChannelInfoLabel(channel);
   const title = chatChannelDisplayLabel(channel, currentUserId, usersById);
   const headerText = channel.header.trim();

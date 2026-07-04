@@ -12,15 +12,22 @@ import {
   Folder,
   FolderPlus,
   Image,
+  Inbox,
   Link2,
+  ListChecks,
   Loader2,
+  MessageSquare,
   MoreHorizontal,
+  NotebookPen,
   RefreshCw,
   RotateCcw,
   Search,
+  Target,
   Trash2,
   Unlink,
   Upload,
+  UserRound,
+  type LucideIcon,
 } from "lucide-react";
 import { Button, IconButton } from "../../components/ui";
 import { OrfRichTextMarkdownViewer } from "../rich-text/OrfRichTextMarkdownViewer";
@@ -118,11 +125,28 @@ type UploadTaskState = {
 
 type DriveMode = "browse" | "recent" | "search" | "trash";
 
-const modeLabels: Record<DriveMode, string> = {
-  browse: "文件夹",
-  recent: "最近",
-  search: "搜索",
-  trash: "回收站",
+type DriveCollectionKey =
+  | "all"
+  | "folders"
+  | "recent"
+  | "mine"
+  | "chat"
+  | "objective"
+  | "result"
+  | "task"
+  | "feedback"
+  | "workLog"
+  | "trash"
+  | "search";
+
+type DriveCollectionItem = {
+  count?: number;
+  description: string;
+  disabled?: boolean;
+  icon: LucideIcon;
+  key: DriveCollectionKey;
+  label: string;
+  onSelect: () => void;
 };
 
 const defaultDriveSearchFilters: DriveSearchFilters = {
@@ -186,6 +210,7 @@ export function DriveBrowser({
   const initialSelectedNodeIdRef = useRef<string | null>(initialSelectedNodeId);
   const loadDetailsRef = useRef(onLoadDetails);
   const notifyRef = useRef(notify);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const versionInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -377,10 +402,39 @@ export function DriveBrowser({
     }
   };
 
+  const runCollectionSearch = async (nextFilters: Partial<DriveSearchFilters>, nextQuery = "") => {
+    const mergedFilters: DriveSearchFilters = { ...defaultDriveSearchFilters, ...nextFilters };
+    setSearchQuery(nextQuery);
+    setSearchFilters(mergedFilters);
+    await runSearch(nextQuery, mergedFilters);
+  };
+
   const updateSearchFilter = <Key extends keyof DriveSearchFilters>(key: Key, value: DriveSearchFilters[Key]) => {
     const nextFilters = { ...searchFilters, [key]: value };
     setSearchFilters(nextFilters);
     if (mode === "search") void runSearch(searchQuery, nextFilters);
+  };
+
+  const selectBrowseCollection = () => {
+    setMode("browse");
+    setResourceLoading(false);
+    setErrorMessage(null);
+    setSearchFilters(defaultDriveSearchFilters);
+    setSearchQuery("");
+    setSelectedNodeId((current) => {
+      if (!bootstrap) return null;
+      if (current && hasNode(bootstrap.root, childrenByFolderId, current)) return current;
+      return bootstrap.root.id;
+    });
+  };
+
+  const selectRecentCollection = () => {
+    setMode("recent");
+    setResourceLoading(false);
+    setErrorMessage(null);
+    setSearchFilters(defaultDriveSearchFilters);
+    setSearchQuery("");
+    setSelectedNodeId(bootstrap?.recentNodes?.[0]?.id ?? null);
   };
 
   const loadTrash = async () => {
@@ -584,6 +638,111 @@ export function DriveBrowser({
         ? trashNodes
         : [];
 
+  const activeCollectionKey = useMemo<DriveCollectionKey>(() => {
+    if (mode === "browse") return "folders";
+    if (mode === "recent") return "recent";
+    if (mode === "trash") return "trash";
+    if (mode !== "search") return "folders";
+    if (searchQuery.trim()) return "search";
+    if (searchFilters.source === "chat") return "chat";
+    if (searchFilters.source === "objective") return "objective";
+    if (searchFilters.source === "result") return "result";
+    if (searchFilters.source === "task") return "task";
+    if (searchFilters.source === "feedback") return "feedback";
+    if (searchFilters.source === "workLog") return "workLog";
+    if (currentUserId && searchFilters.uploaderId === currentUserId) return "mine";
+    return "all";
+  }, [currentUserId, mode, searchFilters.source, searchFilters.uploaderId, searchQuery]);
+
+  const listTitle = collectionTitle(activeCollectionKey, mode);
+  const listDescription = collectionDescription(activeCollectionKey, mode, activeScopeLabel);
+  const collectionItems: DriveCollectionItem[] = [
+    {
+      description: "按名称、来源和上下文聚合",
+      icon: Inbox,
+      key: "all",
+      label: "全部资源",
+      onSelect: () => void runCollectionSearch({ status: "active" }),
+    },
+    {
+      count: rootItemCount,
+      description: "保留文件夹层级和上传落点",
+      icon: Folder,
+      key: "folders",
+      label: "文件夹树",
+      onSelect: selectBrowseCollection,
+    },
+    {
+      count: recentItemCount,
+      description: "最近修改和上传",
+      icon: Clock3,
+      key: "recent",
+      label: "最近",
+      onSelect: selectRecentCollection,
+    },
+    {
+      description: "当前账号上传的资源",
+      disabled: !currentUserId,
+      icon: UserRound,
+      key: "mine",
+      label: "我上传的",
+      onSelect: () => {
+        if (!currentUserId) return;
+        void runCollectionSearch({ uploaderId: currentUserId });
+      },
+    },
+    {
+      description: "群聊绑定和聊天上传",
+      icon: MessageSquare,
+      key: "chat",
+      label: "聊天资源",
+      onSelect: () => void runCollectionSearch({ source: "chat" }),
+    },
+    {
+      description: "目标说明、证据和附件",
+      icon: Target,
+      key: "objective",
+      label: "目标资源",
+      onSelect: () => void runCollectionSearch({ source: "objective" }),
+    },
+    {
+      description: "指标证明和过程材料",
+      icon: FileText,
+      key: "result",
+      label: "指标资源",
+      onSelect: () => void runCollectionSearch({ source: "result" }),
+    },
+    {
+      description: "任务执行资料",
+      icon: ListChecks,
+      key: "task",
+      label: "任务资源",
+      onSelect: () => void runCollectionSearch({ source: "task" }),
+    },
+    {
+      description: "反馈截图、日志和证据",
+      icon: NotebookPen,
+      key: "feedback",
+      label: "反馈资源",
+      onSelect: () => void runCollectionSearch({ source: "feedback" }),
+    },
+    {
+      description: "工作日志里的附件",
+      icon: Activity,
+      key: "workLog",
+      label: "日志资源",
+      onSelect: () => void runCollectionSearch({ source: "workLog" }),
+    },
+    {
+      count: bootstrap?.trashCount ?? 0,
+      description: "删除后的可恢复资源",
+      icon: Trash2,
+      key: "trash",
+      label: "已删除",
+      onSelect: () => void loadTrash(),
+    },
+  ];
+
   const copyResourceLink = async (node: DriveNode) => {
     const href = resourceHref?.(node.id) ?? `${window.location.origin}/resources/${encodeURIComponent(node.id)}`;
     try {
@@ -593,32 +752,6 @@ export function DriveBrowser({
       notify("复制链接失败，请检查浏览器剪贴板权限");
     }
   };
-
-  const modebar = (
-    <div className="orf-drive-modebar">
-      {(Object.keys(modeLabels) as DriveMode[]).map((item) => (
-        <button
-          key={item}
-          type="button"
-          className={clsx(mode === item && "is-active")}
-          aria-label={item === "trash" && bootstrap?.trashCount ? `${modeLabels[item]} ${bootstrap.trashCount}` : modeLabels[item]}
-          aria-pressed={mode === item}
-          title={modeLabels[item]}
-          onClick={() => {
-            if (item === "trash") void loadTrash();
-            else setMode(item);
-          }}
-        >
-          {item === "browse" && <Folder className="h-4 w-4" />}
-          {item === "recent" && <Clock3 className="h-4 w-4" />}
-          {item === "search" && <Search className="h-4 w-4" />}
-          {item === "trash" && <Trash2 className="h-4 w-4" />}
-          <span>{modeLabels[item]}</span>
-          {item === "trash" && bootstrap?.trashCount ? <small>{bootstrap.trashCount}</small> : null}
-        </button>
-      ))}
-    </div>
-  );
 
   const actions = (
     <div className="orf-drive-actions">
@@ -691,116 +824,138 @@ export function DriveBrowser({
 
   return (
     <div className="orf-drive-panel">
-      <div className="orf-drive-workbench-header">
-        <div className="orf-drive-workbench-title">
-          <span>团队云盘</span>
-          <strong>{activeScopeLabel}</strong>
-          <small>{activeModeSummary}</small>
-        </div>
-        <div className="orf-drive-workbench-meta" aria-label="云盘状态摘要">
-          <span><Folder className="h-3.5 w-3.5" />{rootItemCount}</span>
-          <span><Clock3 className="h-3.5 w-3.5" />{recentItemCount}</span>
-          <span><Trash2 className="h-3.5 w-3.5" />{bootstrap?.trashCount ?? 0}</span>
-        </div>
-      </div>
-
-      {modebar}
-
-      <form
-        className="orf-drive-searchbar"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void runSearch();
-        }}
-      >
-        <Search className="h-4 w-4" />
-        <input value={searchQuery} placeholder="搜索文件名、类型、内容线索" onChange={(event) => setSearchQuery(event.target.value)} />
-        <select
-          aria-label="资源节点类型"
-          value={searchFilters.type}
-          onChange={(event) => {
-            const nextType = event.target.value as DriveSearchType;
-            updateSearchFilter("type", nextType);
-          }}
-        >
-          <option value="all">全部</option>
-          <option value="file">文件</option>
-          <option value="folder">文件夹</option>
-        </select>
-        <Button size="sm" variant="secondary">搜索</Button>
-      </form>
-      <DriveSearchFacets
-        activeFilters={searchFilters}
-        currentUserId={currentUserId}
-        onChangePreviewKind={(nextPreviewKind) => {
-          updateSearchFilter("previewKind", nextPreviewKind);
-        }}
-        onChangeFilter={updateSearchFilter}
-        uploaderOptions={uploaderOptions}
-      />
-
-      {actions}
-      <input ref={fileInputRef} hidden multiple type="file" onChange={(event) => void uploadFiles(event.currentTarget.files)} />
-      <input ref={versionInputRef} hidden type="file" onChange={(event) => void uploadVersion(event.currentTarget.files)} />
-
-      {newFolderName && (
-        <form className="orf-drive-create" onSubmit={(event) => {
-          event.preventDefault();
-          void createFolder();
-        }}>
-          <input aria-label="文件夹名称" value={newFolderName} onChange={(event) => setNewFolderName(event.target.value)} />
-          <Button disabled={creatingFolder || !newFolderName.trim()} size="sm" variant="secondary">
-            {creatingFolder ? "创建中" : "创建"}
-          </Button>
-        </form>
-      )}
-
-      {uploadTask && (
-        <div className="orf-drive-uploading">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span>{uploadTask.fileName}</span>
-          <strong>{uploadTask.percent === null ? "上传中" : `${Math.round(uploadTask.percent)}%`}</strong>
-        </div>
-      )}
-      {errorMessage && <div className="orf-drive-error">{errorMessage}</div>}
-
       {loading && !bootstrap ? (
         <div className="orf-drive-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载云盘</div>
       ) : bootstrap ? (
-        <div className="orf-drive-layout">
-          <div className="orf-drive-tree" role="tree">
-            {resourceLoading ? (
-              <div className="orf-drive-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载资源</div>
-            ) : mode === "browse" ? (
-              <DriveTreeRow
-                childrenByFolderId={childrenByFolderId}
-                expandedFolderIds={expandedFolderIds}
-                level={0}
-                loadingFolderIds={loadingFolderIds}
-                node={bootstrap.root}
-                onSelectFile={(node) => setSelectedNodeId(node.id)}
-                selectedNodeId={selectedNodeId}
-                toggleFolder={toggleFolder}
+        <div className="orf-drive-workbench-grid">
+          <aside className="orf-drive-sidebar" aria-label="资源集合">
+            <div className="orf-drive-workbench-header">
+              <div className="orf-drive-workbench-title">
+                <span>资源工作台</span>
+                <strong>{activeScopeLabel}</strong>
+                <small>{activeModeSummary}</small>
+              </div>
+              <div className="orf-drive-workbench-meta" aria-label="云盘状态摘要">
+                <span><Folder className="h-3.5 w-3.5" />{rootItemCount}</span>
+                <span><Clock3 className="h-3.5 w-3.5" />{recentItemCount}</span>
+                <span><Trash2 className="h-3.5 w-3.5" />{bootstrap.trashCount ?? 0}</span>
+              </div>
+            </div>
+
+            <DriveCollectionNav activeKey={activeCollectionKey} items={collectionItems} />
+
+            <div className="orf-drive-sidebar-actions">
+              <span>操作</span>
+              {actions}
+              <input ref={fileInputRef} hidden multiple type="file" onChange={(event) => void uploadFiles(event.currentTarget.files)} />
+              <input ref={versionInputRef} hidden type="file" onChange={(event) => void uploadVersion(event.currentTarget.files)} />
+              {newFolderName && (
+                <form className="orf-drive-create" onSubmit={(event) => {
+                  event.preventDefault();
+                  void createFolder();
+                }}>
+                  <input aria-label="文件夹名称" value={newFolderName} onChange={(event) => setNewFolderName(event.target.value)} />
+                  <Button disabled={creatingFolder || !newFolderName.trim()} size="sm" variant="secondary">
+                    {creatingFolder ? "创建中" : "创建"}
+                  </Button>
+                </form>
+              )}
+              {uploadTask && (
+                <div className="orf-drive-uploading">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>{uploadTask.fileName}</span>
+                  <strong>{uploadTask.percent === null ? "上传中" : `${Math.round(uploadTask.percent)}%`}</strong>
+                </div>
+              )}
+              {errorMessage && <div className="orf-drive-error">{errorMessage}</div>}
+            </div>
+          </aside>
+
+          <main className="orf-drive-main" aria-label="资源列表">
+            <div className="orf-drive-main-heading">
+              <div>
+                <span>当前集合</span>
+                <strong>{listTitle}</strong>
+                <em>{listDescription}</em>
+              </div>
+              <small>{mode === "browse" ? `${rootItemCount} 项根资源` : `${resourceList.length} 项`}</small>
+            </div>
+
+            <form
+              className="orf-drive-searchbar"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void runSearch();
+              }}
+            >
+              <Search className="h-4 w-4" />
+              <input
+                ref={searchInputRef}
+                value={searchQuery}
+                placeholder="搜索文件、来源、关联对象"
+                onChange={(event) => setSearchQuery(event.target.value)}
               />
-            ) : (
-              <DriveResourceList nodes={resourceList} selectedNodeId={selectedNodeId} onSelect={(node) => setSelectedNodeId(node.id)} />
-            )}
-          </div>
-          <DrivePreview
-            canWrite={canMutateDrive}
-            contextOptions={contextOptions}
-            details={details}
-            detailsLoading={detailsLoading}
-            node={effectiveNode}
-            onAddContext={onAddContextLink ? addContext : undefined}
-            onCopyResourceLink={resourceHref ? copyResourceLink : undefined}
-            onRemoveContext={onRemoveContextLink ? removeContext : undefined}
-            onRestoreNode={onRestoreNode ? () => void restoreSelectedNode() : undefined}
-            onRestoreVersion={onRestoreVersion ? restoreVersion : undefined}
-            textPreview={textPreview}
-            textPreviewLoading={textPreviewLoading}
-            uploadTarget={uploadTarget}
-          />
+              <select
+                aria-label="资源节点类型"
+                value={searchFilters.type}
+                onChange={(event) => {
+                  const nextType = event.target.value as DriveSearchType;
+                  updateSearchFilter("type", nextType);
+                }}
+              >
+                <option value="all">全部</option>
+                <option value="file">文件</option>
+                <option value="folder">文件夹</option>
+              </select>
+              <Button size="sm" variant="secondary">搜索</Button>
+            </form>
+            <DriveSearchFacets
+              activeFilters={searchFilters}
+              currentUserId={currentUserId}
+              onChangePreviewKind={(nextPreviewKind) => {
+                updateSearchFilter("previewKind", nextPreviewKind);
+              }}
+              onChangeFilter={updateSearchFilter}
+              uploaderOptions={uploaderOptions}
+            />
+
+            <div className="orf-drive-tree" role={mode === "browse" ? "tree" : "list"}>
+              {resourceLoading ? (
+                <div className="orf-drive-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载资源</div>
+              ) : mode === "browse" ? (
+                <DriveTreeRow
+                  childrenByFolderId={childrenByFolderId}
+                  expandedFolderIds={expandedFolderIds}
+                  level={0}
+                  loadingFolderIds={loadingFolderIds}
+                  node={bootstrap.root}
+                  onSelectFile={(node) => setSelectedNodeId(node.id)}
+                  selectedNodeId={selectedNodeId}
+                  toggleFolder={toggleFolder}
+                />
+              ) : (
+                <DriveResourceList nodes={resourceList} selectedNodeId={selectedNodeId} onSelect={(node) => setSelectedNodeId(node.id)} />
+              )}
+            </div>
+          </main>
+
+          <section className="orf-drive-preview-column" aria-label="资源预览和详情">
+            <DrivePreview
+              canWrite={canMutateDrive}
+              contextOptions={contextOptions}
+              details={details}
+              detailsLoading={detailsLoading}
+              node={effectiveNode}
+              onAddContext={onAddContextLink ? addContext : undefined}
+              onCopyResourceLink={resourceHref ? copyResourceLink : undefined}
+              onRemoveContext={onRemoveContextLink ? removeContext : undefined}
+              onRestoreNode={onRestoreNode ? () => void restoreSelectedNode() : undefined}
+              onRestoreVersion={onRestoreVersion ? restoreVersion : undefined}
+              textPreview={textPreview}
+              textPreviewLoading={textPreviewLoading}
+              uploadTarget={uploadTarget}
+            />
+          </section>
         </div>
       ) : (
         <div className="orf-drive-empty">
@@ -869,6 +1024,54 @@ function DriveResourceList({
         );
       })}
     </div>
+  );
+}
+
+function DriveCollectionNav({
+  activeKey,
+  items,
+}: {
+  activeKey: DriveCollectionKey;
+  items: DriveCollectionItem[];
+}) {
+  const primaryItems = items.filter((item) => item.key === "all" || item.key === "folders" || item.key === "recent" || item.key === "mine");
+  const contextItems = items.filter((item) => item.key === "chat" || item.key === "objective" || item.key === "result" || item.key === "task" || item.key === "feedback" || item.key === "workLog");
+  const recoveryItems = items.filter((item) => item.key === "trash");
+  return (
+    <nav className="orf-drive-collection-nav" aria-label="资源集合">
+      <div className="orf-drive-collection-section">
+        <span>资源</span>
+        {primaryItems.map((item) => <DriveCollectionButton key={item.key} active={activeKey === item.key} item={item} />)}
+      </div>
+      <div className="orf-drive-collection-section">
+        <span>工作上下文</span>
+        {contextItems.map((item) => <DriveCollectionButton key={item.key} active={activeKey === item.key} item={item} />)}
+      </div>
+      <div className="orf-drive-collection-section">
+        <span>恢复</span>
+        {recoveryItems.map((item) => <DriveCollectionButton key={item.key} active={activeKey === item.key} item={item} />)}
+      </div>
+    </nav>
+  );
+}
+
+function DriveCollectionButton({ active, item }: { active: boolean; item: DriveCollectionItem }) {
+  const Icon = item.icon;
+  return (
+    <button
+      type="button"
+      className={clsx("orf-drive-collection-item", active && "is-active")}
+      disabled={item.disabled}
+      aria-current={active ? "page" : undefined}
+      onClick={item.onSelect}
+    >
+      <Icon className="h-4 w-4" />
+      <span>
+        <strong>{item.label}</strong>
+        <small>{item.description}</small>
+      </span>
+      {typeof item.count === "number" ? <em>{item.count}</em> : null}
+    </button>
   );
 }
 
@@ -1432,6 +1635,36 @@ function contextTypeLabel(type: DriveContextType) {
   if (type === "chatMessage") return "聊天消息";
   if (type === "chatThread") return "聊天话题";
   return "群聊";
+}
+
+function collectionTitle(key: DriveCollectionKey, mode: DriveMode) {
+  if (key === "all") return "全部资源";
+  if (key === "folders") return "文件夹树";
+  if (key === "recent") return "最近更新";
+  if (key === "mine") return "我上传的";
+  if (key === "chat") return "聊天资源";
+  if (key === "objective") return "目标资源";
+  if (key === "result") return "指标资源";
+  if (key === "task") return "任务资源";
+  if (key === "feedback") return "反馈资源";
+  if (key === "workLog") return "日志资源";
+  if (key === "trash") return "已删除资源";
+  return mode === "search" ? "搜索结果" : "资源";
+}
+
+function collectionDescription(key: DriveCollectionKey, mode: DriveMode, scopeLabel: string) {
+  if (key === "all") return `${scopeLabel} 内的文件、文件夹和工作资料。`;
+  if (key === "folders") return "按文件夹层级浏览，选中文件夹后上传会落到该位置。";
+  if (key === "recent") return "按更新时间查看最近触达的团队资料。";
+  if (key === "mine") return "只显示当前账号上传或创建的资源。";
+  if (key === "chat") return "来自群聊绑定、频道上传和聊天资源流。";
+  if (key === "objective") return "关联到目标的说明、证据和过程资料。";
+  if (key === "result") return "关联到指标的证明、截图和交付资料。";
+  if (key === "task") return "关联到任务和行动项的执行资料。";
+  if (key === "feedback") return "关联到反馈的问题截图、日志和复现材料。";
+  if (key === "workLog") return "关联到工作日志的当天过程资料。";
+  if (key === "trash") return "已删除但仍可恢复的资源。";
+  return mode === "search" ? "当前搜索和筛选条件命中的资源。" : "团队资源。";
 }
 
 function eventActionLabel(action: string) {
