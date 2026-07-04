@@ -210,6 +210,7 @@ export function DriveBrowser({
   const initialSelectedNodeIdRef = useRef<string | null>(initialSelectedNodeId);
   const loadDetailsRef = useRef(onLoadDetails);
   const notifyRef = useRef(notify);
+  const previewColumnRef = useRef<HTMLElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const versionInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -753,6 +754,14 @@ export function DriveBrowser({
     }
   };
 
+  const selectResourceNode = (nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    if (typeof window === "undefined" || !window.matchMedia("(max-width: 768px)").matches) return;
+    window.requestAnimationFrame(() => {
+      previewColumnRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+    });
+  };
+
   const actions = (
     <div className="orf-drive-actions">
       <IconButton disabled={!canMutateDrive || !uploadTarget || mode === "trash"} icon={Upload} label={uploadTarget ? `上传到 ${uploadTarget.name}` : "上传文件"} onClick={() => fileInputRef.current?.click()} />
@@ -929,17 +938,17 @@ export function DriveBrowser({
                   level={0}
                   loadingFolderIds={loadingFolderIds}
                   node={bootstrap.root}
-                  onSelectFile={(node) => setSelectedNodeId(node.id)}
+                  onSelectFile={(node) => selectResourceNode(node.id)}
                   selectedNodeId={selectedNodeId}
                   toggleFolder={toggleFolder}
                 />
               ) : (
-                <DriveResourceList nodes={resourceList} selectedNodeId={selectedNodeId} onSelect={(node) => setSelectedNodeId(node.id)} />
+                <DriveResourceList nodes={resourceList} selectedNodeId={selectedNodeId} onSelect={(node) => selectResourceNode(node.id)} />
               )}
             </div>
           </main>
 
-          <section className="orf-drive-preview-column" aria-label="资源预览和详情">
+          <section ref={previewColumnRef} className="orf-drive-preview-column" aria-label="资源预览和详情">
             <DrivePreview
               canWrite={canMutateDrive}
               contextOptions={contextOptions}
