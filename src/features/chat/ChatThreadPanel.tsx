@@ -4,6 +4,7 @@ import type { ChatMessage, ChatThread, ChatUser, Feedback } from "../../types/or
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessageItem } from "./ChatMessageItem";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
+import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { scrollChatFeedToMessage } from "./chatFeedScroll";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import { chatMessageDeliveryStatus, type ChatSendHandler } from "./chatModels";
@@ -23,6 +24,7 @@ type ChatThreadPanelProps = {
   onCopyLink: (message: ChatMessage) => void;
   onCopyMessage: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
+  onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
   onDraftStateChange: (channelId: string, hasDraft: boolean) => void;
   onEdit: (message: ChatMessage) => void;
   onMarkUnread: (message: ChatMessage) => void;
@@ -54,6 +56,7 @@ export function ChatThreadPanel({
   onCopyLink,
   onCopyMessage,
   onDelete,
+  onDriveResourceLink,
   onDraftStateChange,
   onEdit,
   onMarkUnread,
@@ -172,6 +175,7 @@ export function ChatThreadPanel({
           onCopyLink={onCopyLink}
           onCopyMessage={onCopyMessage}
           onDelete={onDelete}
+          onDriveResourceLink={onDriveResourceLink}
           onEdit={onEdit}
           onMarkUnread={onMarkUnread}
           onPin={onPin}
@@ -207,6 +211,7 @@ export function ChatThreadPanel({
                 onCopyLink={onCopyLink}
                 onCopyMessage={onCopyMessage}
                 onDelete={onDelete}
+                onDriveResourceLink={onDriveResourceLink}
                 onEdit={onEdit}
                 onMarkUnread={onMarkUnread}
                 onPin={onPin}

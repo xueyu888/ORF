@@ -55,6 +55,10 @@ export function useChatPanelState({
     setActivePanel("info");
   }, []);
 
+  const openFilesPanel = useCallback(() => {
+    setActivePanel("files");
+  }, []);
+
   const updateSearchQuery = useCallback((value: string) => {
     searchRequestIdRef.current += 1;
     setSearchQuery(value);
@@ -257,6 +261,7 @@ export function useChatPanelState({
     loadSavedMessages,
     loadThreadSummaries,
     markThreadSummaryViewed,
+    openFilesPanel,
     openInfoPanel,
     openSearchPanel,
     reconcilePinnedCollection,

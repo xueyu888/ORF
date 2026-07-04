@@ -11,6 +11,7 @@ import { ChatSearchPanel } from "./ChatSearchPanel";
 import { ChatThreadInboxPanel } from "./ChatThreadInboxPanel";
 import { ChatThreadPanel } from "./ChatThreadPanel";
 import { ChatDrivePanel } from "./ChatDrivePanel";
+import type { ChatDriveResourceLinkTarget, ChatDriveResourceSelectionRequest } from "./chatDriveResourceLinks";
 
 type ChatRightPanelProps = {
   activePanel: ActivePanel;
@@ -23,6 +24,7 @@ type ChatRightPanelProps = {
   collectionLoading: boolean;
   collectionResults: ChatSearchResult[];
   currentUserId?: string;
+  driveSelectionRequest?: ChatDriveResourceSelectionRequest | null;
   editingMessageId?: string | null;
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   memberSearchFocusSignal?: number;
@@ -36,6 +38,7 @@ type ChatRightPanelProps = {
   onCopyMessage: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onDraftStateChange: (channelId: string, hasDraft: boolean) => void;
+  onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
   onEdit: (message: ChatMessage) => void;
   onMarkUnread: (message: ChatMessage) => void;
   onOpenResult: (result: ChatSearchResult) => void;
@@ -45,6 +48,7 @@ type ChatRightPanelProps = {
   onRemovePending: (message: ChatMessage) => void;
   onRetryPending: (message: ChatMessage) => void;
   onRemoveMember: (userId: string) => Promise<void>;
+  onDriveSelectionRequestHandled?: (requestId: number) => void;
   onSave: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onSearch: (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => Promise<void>;
@@ -106,6 +110,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
             onCopyLink={props.onCopyLink}
             onCopyMessage={props.onCopyMessage}
             onDelete={props.onDelete}
+            onDriveResourceLink={props.onDriveResourceLink}
             onDraftStateChange={props.onDraftStateChange}
             onEdit={props.onEdit}
             onMarkUnread={props.onMarkUnread}
@@ -175,6 +180,8 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
           canManage={props.canManage}
           canWrite={props.canWrite}
           channel={props.channel}
+          onSelectionRequestHandled={props.onDriveSelectionRequestHandled}
+          selectionRequest={props.driveSelectionRequest}
           notify={props.notify}
           onAnnouncementMessage={props.onAnnouncementMessage}
         />

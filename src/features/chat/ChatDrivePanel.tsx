@@ -16,6 +16,7 @@ import type { ChatChannel, ChatDriveLink, ChatMessage, Drive, DriveBootstrap, Dr
 import { canOpenDriveFilePreview, DriveDocxPreview, DriveFilePreviewDialog, openDriveFilePreviewPopoutWindow } from "../drive/DriveFilePreview";
 import { driveNodeMetaLabel, drivePreviewUrl } from "../drive/drivePresentation";
 import { OrfRichTextMarkdownViewer } from "../rich-text/OrfRichTextMarkdownViewer";
+import { driveNodeMatchesChatResourceTarget, type ChatDriveResourceSelectionRequest } from "./chatDriveResourceLinks";
 
 type ChatDrivePanelProps = {
   canManage: boolean;
@@ -23,6 +24,8 @@ type ChatDrivePanelProps = {
   channel: ChatChannel;
   notify: (message: string) => void;
   onAnnouncementMessage?: (message: ChatMessage) => void;
+  onSelectionRequestHandled?: (requestId: number) => void;
+  selectionRequest?: ChatDriveResourceSelectionRequest | null;
 };
 
 type ChatResourceSource = "folderChild" | "linked" | "search" | "uploaded";
@@ -46,6 +49,8 @@ export function ChatDrivePanel({
   channel,
   notify,
   onAnnouncementMessage,
+  onSelectionRequestHandled,
+  selectionRequest,
 }: ChatDrivePanelProps) {
   const [bootstrap, setBootstrap] = useState<DriveBootstrap | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -67,6 +72,7 @@ export function ChatDrivePanel({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const folderRequestIdRef = useRef(0);
+  const notifiedMissingSelectionRequestIdRef = useRef<number | null>(null);
   const requestIdRef = useRef(0);
 
   const contextLabel = channel.displayName || channel.name || "当前群聊";
@@ -206,11 +212,39 @@ export function ChatDrivePanel({
 
   const searchActive = bindingMode || query.trim().length > 0;
   const visibleItems = searchActive ? searchItems : channelItems;
+  const requestedChannelItem = useMemo(() => {
+    if (!selectionRequest) return null;
+    return channelItems.find((item) => driveNodeMatchesChatResourceTarget(item.node, selectionRequest)) ?? null;
+  }, [channelItems, selectionRequest]);
 
   useEffect(() => {
+    if (!selectionRequest) return;
+    if (requestedChannelItem) {
+      notifiedMissingSelectionRequestIdRef.current = null;
+      setBindingMode(false);
+      setQuery("");
+      setSelectedNodeId(requestedChannelItem.node.id);
+      return;
+    }
+    if (!bootstrap) return;
+    if (loading || folderChildrenLoading) return;
+    if (notifiedMissingSelectionRequestIdRef.current === selectionRequest.requestId) return;
+    notifiedMissingSelectionRequestIdRef.current = selectionRequest.requestId;
+    notify("这个文件不在当前频道资源里");
+    onSelectionRequestHandled?.(selectionRequest.requestId);
+  }, [bootstrap, folderChildrenLoading, loading, notify, onSelectionRequestHandled, requestedChannelItem, selectionRequest]);
+
+  useEffect(() => {
+    if (!selectionRequest || !requestedChannelItem) return;
+    if (selectedNodeId !== requestedChannelItem.node.id) return;
+    onSelectionRequestHandled?.(selectionRequest.requestId);
+  }, [onSelectionRequestHandled, requestedChannelItem, selectedNodeId, selectionRequest]);
+
+  useEffect(() => {
+    if (requestedChannelItem) return;
     if (selectedNodeId && visibleItems.some((item) => item.node.id === selectedNodeId)) return;
     setSelectedNodeId(visibleItems[0]?.node.id ?? null);
-  }, [selectedNodeId, visibleItems]);
+  }, [requestedChannelItem, selectedNodeId, visibleItems]);
 
   const selectedItem = visibleItems.find((item) => item.node.id === selectedNodeId)
     ?? channelItems.find((item) => item.node.id === selectedNodeId)

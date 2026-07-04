@@ -2,6 +2,7 @@ import { CheckCheck, ChevronDown, Loader2, Reply } from "lucide-react";
 import type { RefObject } from "react";
 import type { ChatMessage, ChatUser, Feedback } from "../../types/orf";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
+import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { formatDay } from "./chatFormat";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import { resolveUnreadJumpTarget, type ChatUnreadJumpTarget, type UnreadAnchor } from "./chatModels";
@@ -27,6 +28,7 @@ type ChatMessageFeedProps = {
   onCopyLink: (message: ChatMessage) => void;
   onCopyMessage: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
+  onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
   onEdit: (message: ChatMessage) => void;
   onJumpUnread: (target: ChatUnreadJumpTarget) => void;
   onLoadLatest: () => void;
@@ -73,6 +75,7 @@ export function ChatMessageFeed({
   onCopyLink,
   onCopyMessage,
   onDelete,
+  onDriveResourceLink,
   onEdit,
   onJumpUnread,
   onLoadLatest,
@@ -122,6 +125,7 @@ export function ChatMessageFeed({
           onCopyLink={onCopyLink}
           onCopyMessage={onCopyMessage}
           onDelete={onDelete}
+          onDriveResourceLink={onDriveResourceLink}
           onEdit={onEdit}
           onJumpUnread={onJumpUnread}
           onLoadOlder={onLoadOlder}
@@ -173,6 +177,7 @@ function MessageList({
   onCancelEdit,
   onClearUnread,
   onDelete,
+  onDriveResourceLink,
   onEdit,
   onJumpUnread,
   onLoadOlder,
@@ -260,6 +265,7 @@ function MessageList({
               onCopyLink={onCopyLink}
               onCopyMessage={onCopyMessage}
               onDelete={onDelete}
+              onDriveResourceLink={onDriveResourceLink}
               onEdit={onEdit}
               onMarkUnread={onMarkUnread}
               onPin={onPin}

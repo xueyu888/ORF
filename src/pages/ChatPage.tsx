@@ -17,6 +17,7 @@ import { ChatMessageFeed } from "../features/chat/ChatMessageFeed";
 import { ChatRightPanel } from "../features/chat/ChatRightPanel";
 import { ChatSidebar, type ChatSidebarCreateCommand } from "../features/chat/ChatSidebar";
 import { ChatTypingLine } from "../features/chat/ChatTypingLine";
+import type { ChatDriveResourceLinkTarget, ChatDriveResourceSelectionRequest } from "../features/chat/chatDriveResourceLinks";
 import { chatPresenceProtocolUpgradeMessage, hasChatPresenceProtocolMismatch } from "../features/chat/chatPresence";
 import { resetChatNativeNotificationViewState, setChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
 import { requestClientUpdateCenterOpen } from "../features/client-updates/clientUpdateCenterEvents";
@@ -159,8 +160,10 @@ export function ChatPage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [markingUnreadChannelsRead, setMarkingUnreadChannelsRead] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachmentFilePreviewState | null>(null);
+  const [driveSelectionRequest, setDriveSelectionRequest] = useState<ChatDriveResourceSelectionRequest | null>(null);
   const [locatedMessageId, setLocatedMessageId] = useState<string | null>(null);
   const [memberSearchFocusSignal, setMemberSearchFocusSignal] = useState(0);
+  const driveSelectionRequestIdRef = useRef(0);
   const handledBootstrapInvalidationKeyRef = useRef("");
   const locatedMessageTimerRef = useRef<number | null>(null);
   const openChannelRequestIdRef = useRef(0);
@@ -234,6 +237,7 @@ export function ChatPage() {
     loadSavedMessages,
     loadThreadSummaries,
     markThreadSummaryViewed,
+    openFilesPanel,
     openInfoPanel,
     openSearchPanel,
     reconcilePinnedCollection,
@@ -259,6 +263,24 @@ export function ChatPage() {
     notify,
   });
   const chatMobileView = activePanel ? "panel" : activeChannel ? "channel" : "list";
+
+  const handleOpenDriveResourceLink = useCallback((target: ChatDriveResourceLinkTarget) => {
+    if (!activeChannel || activeChannel.systemKind) return;
+    driveSelectionRequestIdRef.current += 1;
+    setDriveSelectionRequest({
+      ...target,
+      requestId: driveSelectionRequestIdRef.current,
+    });
+    openFilesPanel();
+  }, [activeChannel, openFilesPanel]);
+
+  const handleDriveSelectionRequestHandled = useCallback((requestId: number) => {
+    setDriveSelectionRequest((current) => (current?.requestId === requestId ? null : current));
+  }, []);
+
+  useEffect(() => {
+    setDriveSelectionRequest(null);
+  }, [activeChannel?.id]);
 
   const {
     appendThreadReply,
@@ -1098,6 +1120,7 @@ export function ChatPage() {
               onCopyLink={handleCopyMessageLink}
               onCopyMessage={handleCopyMessage}
               onDelete={setDeletingMessage}
+              onDriveResourceLink={handleOpenDriveResourceLink}
               onEdit={setEditingMessage}
               onJumpUnread={jumpToUnread}
               onLoadLatest={loadLatestOrScroll}
@@ -1148,6 +1171,7 @@ export function ChatPage() {
           canWrite={bootstrap.permissions.canWrite && !Boolean((rightPanelChannel ?? activeChannel).systemKind)}
           channel={rightPanelChannel ?? activeChannel}
           currentUserId={currentUser?.id}
+          driveSelectionRequest={driveSelectionRequest}
           editingMessageId={editingMessage?.id ?? null}
           feedbackItems={feedbackLinkItems}
           memberSearchFocusSignal={memberSearchFocusSignal}
@@ -1165,6 +1189,8 @@ export function ChatPage() {
           onChannelUpdated={applyChannel}
           onClose={closePanel}
           onCancelEdit={() => setEditingMessage(null)}
+          onDriveResourceLink={handleOpenDriveResourceLink}
+          onDriveSelectionRequestHandled={handleDriveSelectionRequestHandled}
           collectionLoading={collectionLoading}
           collectionResults={collectionResults}
           threadSummaries={threadSummaries}

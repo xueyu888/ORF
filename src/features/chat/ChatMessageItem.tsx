@@ -6,6 +6,7 @@ import { Button, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser, Feedback } from "../../types/orf";
 import { formatPastedFeedbackLinks } from "../feedback/model/feedbackIssue";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
+import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
@@ -32,6 +33,7 @@ type ChatMessageItemProps = {
   onCopyLink: (message: ChatMessage) => void;
   onCopyMessage: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
+  onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
   onEdit: (message: ChatMessage) => void;
   onMarkUnread?: (message: ChatMessage) => void;
   onPin?: (message: ChatMessage) => void;
@@ -130,10 +132,12 @@ function MessageAuthorAvatar({
 function CollapsibleMessageText({
   body,
   feedbackItems,
+  onDriveResourceLink,
   usersById,
 }: {
   body: string;
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
   usersById: Map<string, ChatUser>;
 }) {
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -184,7 +188,7 @@ function CollapsibleMessageText({
         ref={contentRef}
         style={overflowing && !expanded ? { maxHeight: chatMessageCollapsedTextMaxHeightPx } : undefined}
       >
-        <ChatMarkdown body={body} feedbackItems={feedbackItems} usersById={usersById} />
+        <ChatMarkdown body={body} feedbackItems={feedbackItems} onDriveResourceLink={onDriveResourceLink} usersById={usersById} />
       </div>
       {overflowing && (
         <button
@@ -422,6 +426,7 @@ export function ChatMessageItem({
   onCopyLink,
   onCopyMessage,
   onDelete,
+  onDriveResourceLink,
   onEdit,
   onMarkUnread,
   onPin,
@@ -673,7 +678,12 @@ export function ChatMessageItem({
           </div>
         ) : (
           <>
-            <CollapsibleMessageText body={message.body} feedbackItems={feedbackItems} usersById={usersById} />
+            <CollapsibleMessageText
+              body={message.body}
+              feedbackItems={feedbackItems}
+              onDriveResourceLink={onDriveResourceLink}
+              usersById={usersById}
+            />
             <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
             {deliveryStatus === "failed" && (
               <div className="orf-chat-delivery-status" role="alert">

@@ -1279,12 +1279,16 @@ async function announceDriveFileUpload(channelId: string, node: DriveNode, actor
   const linkText = escapeMarkdownLinkText(node.file.fileName);
   const outcome = await sendChatMessage({
     attachmentIds: [],
-    body: `上传了云盘文件：[${linkText}](${node.file.previewUrl ?? node.file.downloadUrl})`,
+    body: `上传了云盘文件：[${linkText}](${driveResourcePreviewHref(node.id)})`,
     channelId,
     parentMessageId: null,
     rootMessageId: null,
   }, actor);
   return outcome.status === "ok" ? outcome.message : null;
+}
+
+function driveResourcePreviewHref(nodeId: string) {
+  return `/resources/${encodeURIComponent(nodeId)}/preview`;
 }
 
 export async function deleteDriveNode(
