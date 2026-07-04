@@ -38,7 +38,7 @@ export const commentStatusEnum = pgEnum("comment_status", ["open", "resolved"]);
 export const chatChannelTypeEnum = pgEnum("chat_channel_type", ["public", "private", "direct"]);
 export const chatMemberRoleEnum = pgEnum("chat_member_role", ["owner", "admin", "member"]);
 export const driveNodeTypeEnum = pgEnum("drive_node_type", ["folder", "file"]);
-export const drivePreviewKindEnum = pgEnum("drive_file_preview_kind", ["download", "image", "markdown", "pdf", "text"]);
+export const drivePreviewKindEnum = pgEnum("drive_file_preview_kind", ["download", "docx", "image", "markdown", "pdf", "text"]);
 export const driveNodeEventActionEnum = pgEnum("drive_node_event_action", [
   "folder_created",
   "file_uploaded",

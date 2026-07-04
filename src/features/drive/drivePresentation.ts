@@ -9,6 +9,7 @@ export function driveNodeMetaLabel(node: DriveNode) {
 
 export function drivePreviewKindLabel(kind: Drive["previewKind"]) {
   if (kind === "image") return "图片";
+  if (kind === "docx") return "DOCX";
   if (kind === "pdf") return "PDF";
   if (kind === "markdown") return "Markdown";
   if (kind === "text") return "文本";

@@ -7,6 +7,7 @@ import { Button } from "./components/ui";
 import { canShowFrontend, canShowFrontendPath, type FrontendVisibilityKey } from "./config/frontendVisibility";
 import { systemManagementPages } from "./config/navigation";
 import { ChatImagePopoutPage } from "./features/chat/ChatFloatingImagePreview";
+import { DriveFilePreviewPopoutPage } from "./features/drive/DriveFilePreview";
 import { useOrf } from "./state/OrfProvider";
 
 const AIEvaluationPage = lazyNamed(() => import("./pages/AIEvaluationPage"), "AIEvaluationPage");
@@ -38,6 +39,7 @@ export function App() {
     <Routes>
       <Route path="auth" element={<AuthRoute />} />
       <Route path="chat/image-popout/:popoutId" element={<ChatImagePopoutPage />} />
+      <Route path="drive/file-preview-popout/:popoutId" element={<DriveFilePreviewPopoutPage />} />
       <Route path="preview/genshin-ui-kit" element={<LazyRoute><GenshinUIKitPreviewPage /></LazyRoute>} />
       <Route element={<RequireAuth />}>
         <Route path="dashboard" element={<LazyRoute><DashboardPage /></LazyRoute>} />

@@ -97,6 +97,8 @@ export function ChatHeader({
         {memberNames && <span className="orf-chat-header-member-names truncate">{memberNames}</span>}
       </div>
       <div className="orf-chat-header-actions">
+        {canUseChatDrive && <IconButton className="orf-chat-header-resource-action" icon={Folder} label="群聊资源" onClick={onFiles} />}
+        <IconButton icon={Search} label="搜索消息" onClick={onSearch} />
         <IconButton className="orf-chat-header-action-secondary" icon={Info} label={infoLabel} onClick={onInfo} />
         <IconButton
           className={membership?.favorite ? "orf-chat-header-action-secondary orf-chat-starred" : "orf-chat-header-action-secondary"}
@@ -112,7 +114,6 @@ export function ChatHeader({
           onClick={onToggleMuted}
         />
         {canManageMembership && <IconButton className="orf-chat-header-action-secondary" icon={UserPlus} label="添加成员" onClick={onMemberSearch} />}
-        {canUseChatDrive && <IconButton icon={Folder} label="群聊资源" onClick={onFiles} />}
         {showThreadShortcut && (
           <button
             type="button"
@@ -125,7 +126,6 @@ export function ChatHeader({
             <span>{channel.threadUnreadCount}</span>
           </button>
         )}
-        <IconButton icon={Search} label="搜索消息" onClick={onSearch} />
         <div className="orf-chat-header-more" ref={moreMenuRef}>
           <IconButton
             icon={MoreHorizontal}
@@ -156,6 +156,12 @@ export function ChatHeader({
                 <button type="button" className="orf-chat-header-mobile-menu-item" role="menuitem" onClick={() => runMenuAction(onMemberSearch)}>
                   <UserPlus className="h-4 w-4" />
                   添加成员
+                </button>
+              )}
+              {canUseChatDrive && (
+                <button type="button" role="menuitem" onClick={() => runMenuAction(onFiles)}>
+                  <Folder className="h-4 w-4" />
+                  群聊资源
                 </button>
               )}
               <button type="button" role="menuitem" onClick={() => runMenuAction(onPins)}>

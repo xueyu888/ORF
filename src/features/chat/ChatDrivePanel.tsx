@@ -1,8 +1,8 @@
 import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
-import { Download, ExternalLink, File as FileIcon, FileText, Folder, Image, Link2, Loader2, MoreHorizontal, Plus, Search, Unlink, Upload } from "lucide-react";
+import { Download, ExternalLink, File as FileIcon, FileText, Folder, Image, Link2, Loader2, Maximize2, MoreHorizontal, Plus, Search, Unlink, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
-import { IconButton } from "../../components/ui";
+import { Button, IconButton } from "../../components/ui";
 import {
   addChatDriveLinkRequest,
   deleteChatDriveLinkRequest,
@@ -12,7 +12,8 @@ import {
   uploadChatDriveFileRequest,
   type ApiUploadProgress,
 } from "../../state/apiClient";
-import type { ChatChannel, ChatDriveLink, ChatMessage, DriveBootstrap, DriveNode } from "../../types/orf";
+import type { ChatChannel, ChatDriveLink, ChatMessage, Drive, DriveBootstrap, DriveNode } from "../../types/orf";
+import { canOpenDriveFilePreview, DriveDocxPreview, DriveFilePreviewDialog, openDriveFilePreviewPopoutWindow } from "../drive/DriveFilePreview";
 import { driveNodeMetaLabel, drivePreviewUrl } from "../drive/drivePresentation";
 import { OrfRichTextMarkdownViewer } from "../rich-text/OrfRichTextMarkdownViewer";
 
@@ -53,7 +54,9 @@ export function ChatDrivePanel({
   const [links, setLinks] = useState<ChatDriveLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
+  const [bindingMode, setBindingMode] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [largePreviewFile, setLargePreviewFile] = useState<Drive | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<DriveNode[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -62,6 +65,7 @@ export function ChatDrivePanel({
   const [textPreviewLoadingIds, setTextPreviewLoadingIds] = useState<Set<string>>(new Set());
   const [uploadTask, setUploadTask] = useState<UploadTaskState | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const folderRequestIdRef = useRef(0);
   const requestIdRef = useRef(0);
 
@@ -122,11 +126,13 @@ export function ChatDrivePanel({
 
   useEffect(() => {
     setQuery("");
+    setBindingMode(false);
+    setLargePreviewFile(null);
   }, [channel.id]);
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (!trimmed) {
+    if (!bindingMode && !trimmed) {
       setSearchLoading(false);
       setSearchResults([]);
       return undefined;
@@ -134,7 +140,7 @@ export function ChatDrivePanel({
     let disposed = false;
     const timer = window.setTimeout(() => {
       setSearchLoading(true);
-      searchDriveRequest({ limit: 30, query: trimmed, status: "active", type: "all" })
+      searchDriveRequest({ limit: 30, query: trimmed || undefined, status: "active", type: "all" })
         .then((response) => {
           if (!disposed) setSearchResults(response.nodes);
         })
@@ -153,7 +159,7 @@ export function ChatDrivePanel({
       disposed = true;
       window.clearTimeout(timer);
     };
-  }, [notify, query]);
+  }, [bindingMode, notify, query]);
 
   const linkedNodeIds = useMemo(() => new Set(links.map((link) => link.node.id)), [links]);
   const defaultUploadFolder = useMemo(
@@ -198,7 +204,7 @@ export function ChatDrivePanel({
     sourceLabel: linkedNodeIds.has(node.id) ? "已在频道" : "团队文件",
   })), [linkedNodeIds, searchResults]);
 
-  const searchActive = query.trim().length > 0;
+  const searchActive = bindingMode || query.trim().length > 0;
   const visibleItems = searchActive ? searchItems : channelItems;
 
   useEffect(() => {
@@ -268,6 +274,7 @@ export function ChatDrivePanel({
         setSessionNodes((items) => dedupeDriveNodes([response.node, ...items]));
         setSelectedNodeId(response.node.id);
         setQuery("");
+        setBindingMode(false);
         if (response.announcementMessage) onAnnouncementMessage?.(response.announcementMessage);
         void loadLinkedFolderChildren(links);
       } catch (error) {
@@ -316,6 +323,7 @@ export function ChatDrivePanel({
       setBootstrap(response.drive);
       setLinks(response.links);
       setQuery("");
+      setBindingMode(false);
       setSelectedNodeId(node.id);
       void loadLinkedFolderChildren(response.links);
       notify("已加入频道资源");
@@ -340,6 +348,21 @@ export function ChatDrivePanel({
       const message = error instanceof Error ? error.message : "移出频道资源失败";
       setErrorMessage(message);
       notify(message);
+    }
+  };
+
+  const openExistingResourceBinder = () => {
+    if (!canManage) return;
+    setBindingMode(true);
+    setQuery("");
+    setSelectedNodeId(null);
+    window.setTimeout(() => searchInputRef.current?.focus(), 0);
+  };
+
+  const openLargePreview = (file: Drive) => {
+    if (!canOpenDriveFilePreview(file)) return;
+    if (!openDriveFilePreviewPopoutWindow(file)) {
+      setLargePreviewFile(file);
     }
   };
 
@@ -370,20 +393,34 @@ export function ChatDrivePanel({
         >
           <Search className="h-4 w-4" />
           <input
+            ref={searchInputRef}
             value={query}
-            placeholder={canManage ? "搜索频道资源或团队文件" : "搜索频道资源"}
+            placeholder={bindingMode ? "搜索要绑定的团队文件或文件夹" : canManage ? "搜索频道资源或团队文件" : "搜索频道资源"}
             aria-label="搜索群聊资源"
             onChange={(event) => setQuery(event.target.value)}
           />
         </form>
         <ChatResourceCommandMenu
+          bindingMode={bindingMode}
+          canManage={canManage}
           canWrite={canWrite}
           uploadDisabled={uploadDisabled}
           uploadTask={uploadTask}
           uploadTitle={uploadTitle}
+          onBindExisting={openExistingResourceBinder}
           onUpload={() => fileInputRef.current?.click()}
         />
       </div>
+      {bindingMode && (
+        <div className="orf-chat-resource-binding-banner">
+          <Link2 className="h-4 w-4" />
+          <span>
+            <strong>绑定现有资源</strong>
+            <small>从团队云盘选择文件夹或文件固定到频道，不需要重新上传。</small>
+          </span>
+          <button type="button" onClick={() => setBindingMode(false)}>完成</button>
+        </div>
+      )}
       <input ref={fileInputRef} hidden multiple type="file" onChange={(event) => void uploadFiles(event.currentTarget.files)} />
       {(uploadTask || dragActive) && (
         <div className="orf-chat-resource-upload-status">
@@ -405,10 +442,12 @@ export function ChatDrivePanel({
         {selectedItem ? (
           <ChatResourceSpotlight
             canManage={canManage}
+            bindingMode={bindingMode}
             item={selectedItem}
             link={selectedItem.link ?? links.find((link) => link.node.id === selectedItem.node.id) ?? null}
             linked={linkedNodeIds.has(selectedItem.node.id)}
             onAddToChannel={() => void addNodeToChannel(selectedItem.node)}
+            onOpenLargePreview={openLargePreview}
             onRemoveFromChannel={(link) => void removeLinkFromChannel(link)}
             textPreview={textPreview}
             textPreviewLoading={textPreviewLoading}
@@ -416,14 +455,14 @@ export function ChatDrivePanel({
         ) : (
           <div className="orf-chat-resource-stage-empty">
             {loading || searchLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Folder className="h-5 w-5" />}
-            <span>{searchActive ? "没有匹配资源" : "暂无频道资源"}</span>
+            <span>{searchActive ? bindingMode ? "没有可绑定资源" : "没有匹配资源" : "暂无频道资源"}</span>
           </div>
         )}
       </div>
 
       <div className="orf-chat-resource-body">
         <div className="orf-chat-resource-section-heading">
-          <span>{searchActive ? "搜索结果" : "资源流"}</span>
+          <span>{bindingMode ? "可绑定资源" : searchActive ? "搜索结果" : "资源流"}</span>
           <small>{searchActive ? `${searchResults.length} 项结果` : folderChildrenLoading ? `${resourceCount} 项，同步中` : `${resourceCount} 项资源`}</small>
         </div>
         <div className="orf-chat-resource-list" role="list" aria-label={searchActive ? "资源搜索结果" : "群聊资源"}>
@@ -443,26 +482,33 @@ export function ChatDrivePanel({
             ))
           ) : (
             <div className="orf-chat-resource-empty">
-              {searchActive ? "没有匹配资源" : "暂无频道资源"}
+              {searchActive ? bindingMode ? "没有可绑定资源" : "没有匹配资源" : "暂无频道资源"}
             </div>
           )}
         </div>
       </div>
+      {largePreviewFile ? <DriveFilePreviewDialog file={largePreviewFile} onClose={() => setLargePreviewFile(null)} /> : null}
     </div>
   );
 }
 
 function ChatResourceCommandMenu({
+  bindingMode,
+  canManage,
   canWrite,
   uploadDisabled,
   uploadTask,
   uploadTitle,
+  onBindExisting,
   onUpload,
 }: {
+  bindingMode: boolean;
+  canManage: boolean;
   canWrite: boolean;
   uploadDisabled: boolean;
   uploadTask: UploadTaskState | null;
   uploadTitle: string;
+  onBindExisting: () => void;
   onUpload: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -494,6 +540,21 @@ function ChatResourceCommandMenu({
       </button>
       {menuOpen && (
         <div className="orf-chat-resource-more-menu orf-chat-resource-command-popover" role="menu">
+          {canManage && (
+            <button
+              type="button"
+              disabled={bindingMode}
+              role="menuitem"
+              onClick={() => {
+                if (bindingMode) return;
+                setMenuOpen(false);
+                onBindExisting();
+              }}
+            >
+              <Link2 className="h-4 w-4" />
+              绑定现有资源
+            </button>
+          )}
           {canWrite && (
             <button
               type="button"
@@ -521,25 +582,30 @@ function ChatResourceCommandMenu({
 }
 
 function ChatResourceSpotlight({
+  bindingMode,
   canManage,
   item,
   link,
   linked,
   onAddToChannel,
+  onOpenLargePreview,
   onRemoveFromChannel,
   textPreview,
   textPreviewLoading,
 }: {
+  bindingMode: boolean;
   canManage: boolean;
   item: ChatResourceItem;
   link: ChatDriveLink | null;
   linked: boolean;
   onAddToChannel: () => void;
+  onOpenLargePreview: (file: Drive) => void;
   onRemoveFromChannel: (link: ChatDriveLink) => void;
   textPreview?: string;
   textPreviewLoading: boolean;
 }) {
   const Icon = iconForNode(item.node);
+  const file = item.node.file ?? null;
   return (
     <article className="orf-chat-resource-spotlight">
       <div className="orf-chat-resource-spotlight-head">
@@ -548,15 +614,36 @@ function ChatResourceSpotlight({
           <strong title={item.node.name}>{item.node.name}</strong>
           <small>{item.sourceLabel} · {driveNodeMetaLabel(item.node)}</small>
         </span>
-        <ChatResourceItemMenu
-          canManage={canManage}
-          linked={linked}
-          link={link}
-          node={item.node}
-          onAddToChannel={onAddToChannel}
-          onRemoveFromChannel={onRemoveFromChannel}
-        />
+        <div className="orf-chat-resource-spotlight-actions">
+          {file && canOpenDriveFilePreview(file) ? (
+            <IconButton
+              icon={Maximize2}
+              label="大窗口预览"
+              size="sm"
+              variant="ghost"
+              onClick={() => onOpenLargePreview(file)}
+            />
+          ) : null}
+          <ChatResourceItemMenu
+            canManage={canManage}
+            linked={linked}
+            link={link}
+            node={item.node}
+            onAddToChannel={onAddToChannel}
+            onOpenLargePreview={onOpenLargePreview}
+            onRemoveFromChannel={onRemoveFromChannel}
+          />
+        </div>
       </div>
+      {bindingMode && canManage && !linked && !item.node.deletedAt ? (
+        <div className="orf-chat-resource-bind-strip">
+          <span>把这个资源固定到当前频道，所有成员都能从聊天侧栏打开。</span>
+          <Button size="sm" type="button" variant="secondary" onClick={onAddToChannel}>
+            <Link2 className="h-3.5 w-3.5" />
+            固定到频道
+          </Button>
+        </div>
+      ) : null}
       <ChatResourceInlinePreview
         node={item.node}
         textPreview={textPreview}
@@ -604,6 +691,7 @@ function ChatResourceItemMenu({
   link,
   node,
   onAddToChannel,
+  onOpenLargePreview,
   onRemoveFromChannel,
 }: {
   canManage: boolean;
@@ -611,6 +699,7 @@ function ChatResourceItemMenu({
   link: ChatDriveLink | null;
   node: DriveNode;
   onAddToChannel: () => void;
+  onOpenLargePreview: (file: Drive) => void;
   onRemoveFromChannel: (link: ChatDriveLink) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -650,6 +739,15 @@ function ChatResourceItemMenu({
             <ExternalLink className="h-4 w-4" />
             打开详情
           </Link>
+          {file && canOpenDriveFilePreview(file) && (
+            <button type="button" role="menuitem" onClick={() => {
+              setMenuOpen(false);
+              onOpenLargePreview(file);
+            }}>
+              <Maximize2 className="h-4 w-4" />
+              大窗口预览
+            </button>
+          )}
           {canManage && !linked && !node.deletedAt && (
             <button type="button" role="menuitem" onClick={() => {
               setMenuOpen(false);
@@ -721,6 +819,8 @@ function ChatResourceInlinePreview({
         </div>
       ) : file && file.previewKind === "pdf" && previewUrl ? (
         <iframe className="orf-chat-resource-inline-preview" src={previewUrl} title={file.fileName} />
+      ) : file && file.previewKind === "docx" && previewUrl ? (
+        <DriveDocxPreview compact file={file} className="orf-chat-resource-docx-preview" />
       ) : (
         <div className="orf-chat-resource-preview-empty">
           <FileIcon className="h-8 w-8" />
@@ -734,7 +834,7 @@ function ChatResourceInlinePreview({
 function iconForNode(node: DriveNode) {
   if (node.type === "folder") return Folder;
   if (node.file?.previewKind === "image") return Image;
-  if (node.file?.previewKind === "pdf" || node.file?.previewKind === "markdown" || node.file?.previewKind === "text") return FileText;
+  if (node.file?.previewKind === "docx" || node.file?.previewKind === "pdf" || node.file?.previewKind === "markdown" || node.file?.previewKind === "text") return FileText;
   return FileIcon;
 }
 

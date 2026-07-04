@@ -40,7 +40,7 @@ const driveSearchQuerySchema = z.object({
   contextId: z.string().trim().min(1).max(120).optional(),
   contextType: z.enum(["all", "project", "objective", "result", "task", "feedback", "workLog", "chatChannel", "chatMessage", "chatThread"]).optional(),
   limit: z.coerce.number().int().positive().max(100).optional(),
-  previewKind: z.enum(["all", "download", "image", "markdown", "pdf", "text"]).optional(),
+  previewKind: z.enum(["all", "download", "docx", "image", "markdown", "pdf", "text"]).optional(),
   q: z.string().trim().max(200).optional(),
   scope: z.enum(["active", "trash"]).optional(),
   source: z.enum(["all", "manual", "chat", "project", "objective", "result", "task", "feedback", "workLog"]).optional(),

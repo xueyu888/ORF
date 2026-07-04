@@ -30,7 +30,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button, IconButton } from "../../components/ui";
-import { OrfRichTextMarkdownViewer } from "../rich-text/OrfRichTextMarkdownViewer";
+import { DriveFilePreviewSurface } from "./DriveFilePreview";
 import {
   compareDriveNodes,
   driveNodeMetaLabel,
@@ -1089,6 +1089,7 @@ const drivePreviewKindFilters: Array<{ label: string; value: DrivePreviewKind | 
   { label: "Markdown", value: "markdown" },
   { label: "图片", value: "image" },
   { label: "PDF", value: "pdf" },
+  { label: "DOCX", value: "docx" },
   { label: "文本", value: "text" },
   { label: "其他", value: "download" },
 ];
@@ -1287,17 +1288,11 @@ function DrivePreview({
   textPreviewLoading?: boolean;
   uploadTarget: DriveNode | null;
 }) {
-  const [markdownViewMode, setMarkdownViewMode] = useState<"rendered" | "source">("rendered");
   const file = node?.file ?? null;
-
-  useEffect(() => {
-    setMarkdownViewMode("rendered");
-  }, [file?.id]);
 
   if (!node) {
     return <div className="orf-drive-preview-empty">选择文件</div>;
   }
-  const previewUrl = file?.previewUrl ? drivePreviewUrl(file) : undefined;
   const PreviewIcon = node.type === "folder" ? Folder : iconForFile(node);
 
   return (
@@ -1338,44 +1333,7 @@ function DrivePreview({
               下载
             </a>
           </div>
-          {file.previewKind === "image" && previewUrl ? (
-            <div className="orf-drive-image-preview">
-              <img alt={file.fileName} src={previewUrl} />
-            </div>
-          ) : file.previewKind === "markdown" && previewUrl ? (
-            <div className="orf-drive-markdown-preview">
-              <div className="orf-drive-markdown-toolbar" aria-label="Markdown 预览模式">
-                <button type="button" className={clsx(markdownViewMode === "rendered" && "is-active")} onClick={() => setMarkdownViewMode("rendered")}>渲染</button>
-                <button type="button" className={clsx(markdownViewMode === "source" && "is-active")} onClick={() => setMarkdownViewMode("source")}>原文</button>
-              </div>
-              {textPreviewLoading && textPreview === undefined ? (
-                <div className="orf-drive-preview-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载预览</div>
-              ) : markdownViewMode === "rendered" && textPreview ? (
-                <div className="orf-drive-markdown-rendered">
-                  <OrfRichTextMarkdownViewer body={textPreview} classNamePrefix="orf-drive-markdown" />
-                </div>
-              ) : (
-                <div className="orf-drive-text-preview is-markdown-source">
-                  <pre>{textPreview ?? ""}</pre>
-                </div>
-              )}
-            </div>
-          ) : file.previewKind === "text" && previewUrl ? (
-            <div className="orf-drive-text-preview">
-              {textPreviewLoading && textPreview === undefined ? (
-                <div className="orf-drive-preview-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载预览</div>
-              ) : (
-                <pre>{textPreview ?? ""}</pre>
-              )}
-            </div>
-          ) : file.previewKind === "pdf" && previewUrl ? (
-            <iframe className="orf-drive-inline-preview" src={previewUrl} title={file.fileName} />
-          ) : (
-            <div className="orf-drive-preview-empty">
-              <File className="h-8 w-8" />
-              <span>无法预览</span>
-            </div>
-          )}
+          <DriveFilePreviewSurface file={file} textPreview={textPreview} textPreviewLoading={textPreviewLoading} />
         </div>
       ) : (
         <div className="orf-drive-preview-empty">文件不可用</div>
@@ -1598,7 +1556,7 @@ function DriveDetailsContent({
 
 function iconForFile(node: DriveNode) {
   if (node.file?.previewKind === "image") return Image;
-  if (node.file?.previewKind === "pdf" || node.file?.previewKind === "markdown" || node.file?.previewKind === "text") return FileText;
+  if (node.file?.previewKind === "docx" || node.file?.previewKind === "pdf" || node.file?.previewKind === "markdown" || node.file?.previewKind === "text") return FileText;
   return File;
 }
 

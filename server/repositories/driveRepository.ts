@@ -339,6 +339,26 @@ function isPdf(buffer: Buffer) {
   return buffer.length >= 5 && buffer.subarray(0, 5).toString("ascii") === "%PDF-";
 }
 
+const docxMimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+function isZipContainer(buffer: Buffer) {
+  if (buffer.length < 4) return false;
+  const signature = buffer.subarray(0, 4).toString("binary");
+  return signature === "PK\u0003\u0004" || signature === "PK\u0005\u0006" || signature === "PK\u0007\b";
+}
+
+function isDocx(input: { fileName: string; mimeType: string; peeked: Buffer }) {
+  const extension = extensionFromFileName(input.fileName);
+  if (extension !== "docx" || !isZipContainer(input.peeked)) return false;
+  const normalizedMimeType = normalizeMimeType(input.mimeType);
+  return (
+    !normalizedMimeType
+    || normalizedMimeType === docxMimeType
+    || normalizedMimeType === "application/zip"
+    || normalizedMimeType === "application/octet-stream"
+  );
+}
+
 function storedDriveMetadata(input: { fileName: string; mimeType: string; peeked: Buffer }) {
   const imageMetadata = readImageMetadata(input.peeked);
   if (imageMetadata) {
@@ -352,9 +372,12 @@ function storedDriveMetadata(input: { fileName: string; mimeType: string; peeked
 
   const normalizedMimeType = normalizeMimeType(input.mimeType);
   const verifiedPdf = isPdf(input.peeked);
+  const verifiedDocx = isDocx(input);
   let mimeType = normalizedMimeType || "application/octet-stream";
   if (verifiedPdf) {
     mimeType = "application/pdf";
+  } else if (verifiedDocx) {
+    mimeType = docxMimeType;
   } else if (input.fileName.toLowerCase().endsWith(".md") || input.fileName.toLowerCase().endsWith(".markdown")) {
     mimeType = "text/markdown; charset=utf-8";
   } else if (["csv", "json", "log", "txt"].includes(extensionFromFileName(input.fileName))) {
@@ -367,7 +390,7 @@ function storedDriveMetadata(input: { fileName: string; mimeType: string; peeked
   return {
     height: null,
     mimeType,
-    previewKind: commentAttachmentPreviewKind({ fileName: input.fileName, mimeType }),
+    previewKind: verifiedDocx ? "docx" : commentAttachmentPreviewKind({ fileName: input.fileName, mimeType }),
     width: null,
   };
 }
@@ -1199,6 +1222,32 @@ export async function uploadDriveFile(
           teamId,
           timestamp: now,
         });
+      }
+      if (input.channelId) {
+        const { rows: chatLinkRows } = await client.query<{ id: string }>(
+          `
+            INSERT INTO chat_channel_drive_links (id, team_id, channel_id, node_id, label, is_default_upload_target, created_by, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, NULL, false, $5, $6, $6)
+            ON CONFLICT (channel_id, node_id) DO NOTHING
+            RETURNING id
+          `,
+          [makeId("chat-drive-link"), teamId, input.channelId, nodeId, actor.id, now],
+        );
+        if (chatLinkRows.length > 0) {
+          await recordDriveEvent(client, {
+            action: "chat_linked",
+            actorUserId: actor.id,
+            metadata: {
+              channelId: input.channelId,
+              isDefaultUploadTarget: false,
+              label: null,
+              via: "chatUpload",
+            },
+            nodeId,
+            teamId,
+            timestamp: now,
+          });
+        }
       }
       await client.query("commit");
       persisted = true;

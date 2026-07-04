@@ -161,6 +161,17 @@ export function validateDriveContextTypeEnum(snapshot: RuntimeEnumSnapshot) {
   return errors;
 }
 
+export function validateDrivePreviewKindEnum(snapshot: RuntimeEnumSnapshot) {
+  const labels = new Set(snapshot.labels);
+  const errors: string[] = [];
+  for (const label of ["download", "docx", "image", "markdown", "pdf", "text"]) {
+    if (!labels.has(label)) {
+      errors.push(`drive_file_preview_kind enum value ${label} is missing.`);
+    }
+  }
+  return errors;
+}
+
 export function validateNotificationConversationSchema(snapshot: { columns: RuntimeTableColumn[] }) {
   const errors: string[] = [];
   const columnsByTable = snapshot.columns.reduce((map, column) => {
@@ -498,6 +509,7 @@ export async function assertRuntimeDatabaseSchema() {
     feedbackStatusResult,
     notificationStreamResult,
     driveContextTypeResult,
+    drivePreviewKindResult,
     notificationConversationColumnsResult,
     systemChatNotificationColumnsResult,
     driveManagementColumnsResult,
@@ -603,6 +615,17 @@ export async function assertRuntimeDatabaseSchema() {
         join pg_namespace nsp on nsp.oid = t.typnamespace
         where nsp.nspname = current_schema()
           and t.typname = 'drive_context_type'
+        order by e.enumsortorder
+      `,
+    ),
+    pool.query<{ label: string }>(
+      `
+        select e.enumlabel as "label"
+        from pg_enum e
+        join pg_type t on t.oid = e.enumtypid
+        join pg_namespace nsp on nsp.oid = t.typnamespace
+        where nsp.nspname = current_schema()
+          and t.typname = 'drive_file_preview_kind'
         order by e.enumsortorder
       `,
     ),
@@ -713,6 +736,9 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateDriveContextTypeEnum({
       labels: driveContextTypeResult.rows.map((row) => row.label),
+    }),
+    ...validateDrivePreviewKindEnum({
+      labels: drivePreviewKindResult.rows.map((row) => row.label),
     }),
     ...validateNotificationConversationSchema({
       columns: notificationConversationColumnsResult.rows,

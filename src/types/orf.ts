@@ -54,7 +54,7 @@ export type ChatPresenceState = "active" | "idle" | "recent" | "offline";
 export type ClientPresenceSource = "android" | "browser" | "desktop" | "unknown";
 export type ClientSystemIdleState = "active" | "idle" | "locked" | "unknown";
 export type DriveNodeType = "folder" | "file";
-export type DrivePreviewKind = "download" | "image" | "markdown" | "pdf" | "text";
+export type DrivePreviewKind = "download" | "docx" | "image" | "markdown" | "pdf" | "text";
 export type DriveNodeEventAction =
   | "folder_created"
   | "file_uploaded"

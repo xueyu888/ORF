@@ -368,6 +368,6 @@ function ResourceIcon({ node }: { node: DriveNode }) {
 function iconForNode(node: DriveNode) {
   if (node.type === "folder") return Folder;
   if (node.file?.previewKind === "image") return Image;
-  if (node.file?.previewKind === "pdf" || node.file?.previewKind === "markdown" || node.file?.previewKind === "text") return FileText;
+  if (node.file?.previewKind === "docx" || node.file?.previewKind === "pdf" || node.file?.previewKind === "markdown" || node.file?.previewKind === "text") return FileText;
   return File;
 }
