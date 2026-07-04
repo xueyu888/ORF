@@ -757,9 +757,9 @@ export function DriveBrowser({
   const selectResourceNode = (nodeId: string) => {
     setSelectedNodeId(nodeId);
     if (typeof window === "undefined" || !window.matchMedia("(max-width: 768px)").matches) return;
-    window.requestAnimationFrame(() => {
+    window.setTimeout(() => {
       previewColumnRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
-    });
+    }, 120);
   };
 
   const actions = (
