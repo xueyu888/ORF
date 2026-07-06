@@ -19,6 +19,7 @@ import {
   serializeCommentDraft,
 } from "../features/challenge/comments/CommentPanel";
 import { commentTimeDisplay } from "../features/challenge/comments/commentTime";
+import { RelatedResourcesPanel } from "../features/drive/RelatedResourcesPanel";
 import type { OrfRichTextAttachmentUploadResult } from "../features/rich-text/OrfRichTextEditor";
 import { canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
 import {
@@ -312,6 +313,7 @@ export function FeedbackIssuePage() {
         </section>
 
         <aside className="feedback-issue-sidebar" aria-label="反馈属性">
+          <RelatedResourcesPanel canEdit={Boolean(currentUser)} contextId={feedback.id} contextType="feedback" notify={notify} />
           <IssueSidebar comments={threads} feedback={feedback} feedbackItems={state.feedback} users={state.users} />
         </aside>
       </main>

@@ -7,6 +7,7 @@ import { Button } from "./components/ui";
 import { canShowFrontend, canShowFrontendPath, type FrontendVisibilityKey } from "./config/frontendVisibility";
 import { systemManagementPages } from "./config/navigation";
 import { ChatImagePopoutPage } from "./features/chat/ChatFloatingImagePreview";
+import { DriveFilePreviewPopoutPage } from "./features/drive/DriveFilePreview";
 import { useOrf } from "./state/OrfProvider";
 
 const AIEvaluationPage = lazyNamed(() => import("./pages/AIEvaluationPage"), "AIEvaluationPage");
@@ -15,6 +16,7 @@ const BountyHallPage = lazyNamed(() => import("./pages/BountyHallPage"), "Bounty
 const ChallengePlanPage = lazyNamed(() => import("./pages/TasksPage"), "ChallengePlanPage");
 const ChatPage = lazyNamed(() => import("./pages/ChatPage"), "ChatPage");
 const DashboardPage = lazyNamed(() => import("./pages/DashboardPage"), "DashboardPage");
+const DrivePage = lazyNamed(() => import("./pages/DrivePage"), "DrivePage");
 const FantasyUiPreviewPage = lazyNamed(() => import("./features/fantasy-ui"), "FantasyUiPreviewPage");
 const FeedbackInboxPage = lazyNamed(() => import("./pages/FeedbackInboxPage"), "FeedbackInboxPage");
 const FeedbackCreatePage = lazyNamed(() => import("./pages/FeedbackCreatePage"), "FeedbackCreatePage");
@@ -37,12 +39,17 @@ export function App() {
     <Routes>
       <Route path="auth" element={<AuthRoute />} />
       <Route path="chat/image-popout/:popoutId" element={<ChatImagePopoutPage />} />
+      <Route path="drive/file-preview-popout/:popoutId" element={<DriveFilePreviewPopoutPage />} />
       <Route path="preview/genshin-ui-kit" element={<LazyRoute><GenshinUIKitPreviewPage /></LazyRoute>} />
       <Route element={<RequireAuth />}>
         <Route path="dashboard" element={<LazyRoute><DashboardPage /></LazyRoute>} />
         <Route path="bounties" element={<LazyRoute><BountyHallPage /></LazyRoute>} />
         <Route path="tasks" element={<LazyRoute><ChallengePlanPage /></LazyRoute>} />
         <Route path="work-logs" element={<LazyRoute><WorkLogsPage /></LazyRoute>} />
+        <Route path="drive" element={<Navigate to="/resources" replace />} />
+        <Route path="resources" element={<LazyRoute><DrivePage /></LazyRoute>} />
+        <Route path="resources/:nodeId" element={<LazyRoute><DrivePage /></LazyRoute>} />
+        <Route path="resources/:nodeId/preview" element={<LazyRoute><DrivePage /></LazyRoute>} />
         <Route path="tasks/objectives/:objectiveId/loot" element={<LazyRoute><LootSubmitPage /></LazyRoute>} />
         <Route path="chat" element={<LazyRoute><ChatPage /></LazyRoute>} />
         <Route path="chat/system/:systemConversationId" element={<LazyRoute><ChatPage /></LazyRoute>} />

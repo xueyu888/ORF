@@ -1,7 +1,9 @@
-import type { ReactNode } from "react";
+import { useCallback, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { ChatUser, Feedback } from "../../types/orf";
 import { feedbackIssueHref, feedbackIssueIdFromHref, feedbackIssueMarkdownLabel } from "../feedback/model/feedbackIssue";
+import { workspaceSelectionFromHref } from "../workspace/workspaceLinks";
+import type { WorkspaceSelection } from "../workspace/workspaceTypes";
 import {
   OrfRichTextMarkdownViewer,
   type OrfRichTextResolvedLink,
@@ -11,12 +13,15 @@ import {
   type OrfMentionReference,
 } from "../rich-text/orfRichTextMarkdown";
 import { ChatReactionEmoji } from "./ChatReactionEmoji";
+import { parseChatDriveResourceHref, type ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { tokenizeChatReactionEmojiText } from "./chatReactions";
 
 type ChatMarkdownProps = {
   body: string;
   compact?: boolean;
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
+  onWorkspaceTargetLink?: (selection: WorkspaceSelection) => void;
   usersById: Map<string, ChatUser>;
 };
 
@@ -34,7 +39,55 @@ function feedbackLinkForHref(href: string, feedbackById: Map<string, Pick<Feedba
   };
 }
 
-function renderMarkdownLink(href: string, children: ReactNode, key: string) {
+function renderMarkdownLink(
+  href: string,
+  children: ReactNode,
+  key: string,
+  onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void,
+  onWorkspaceTargetLink?: (selection: WorkspaceSelection) => void,
+) {
+  const workspaceSelection = workspaceSelectionFromHref(href);
+  if (workspaceSelection && onWorkspaceTargetLink) {
+    return (
+      <a
+        href={href}
+        key={key}
+        onClick={(event) => {
+          if (shouldLetBrowserOpenLink(event)) return;
+          event.preventDefault();
+          onWorkspaceTargetLink(workspaceSelection);
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
+
+  const driveResourceTarget = parseChatDriveResourceHref(href);
+  if (driveResourceTarget && onDriveResourceLink) {
+    return (
+      <a
+        href={href}
+        key={key}
+        onClick={(event) => {
+          if (shouldLetBrowserOpenLink(event)) return;
+          event.preventDefault();
+          onDriveResourceLink(driveResourceTarget);
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
+
+  if (driveResourceTarget?.fileId) {
+    return (
+      <a href={href} key={key} target="_blank" rel="noreferrer noopener">
+        {children}
+      </a>
+    );
+  }
+
   if (isInternalHref(href)) {
     return <Link key={key} to={href}>{children}</Link>;
   }
@@ -44,6 +97,10 @@ function renderMarkdownLink(href: string, children: ReactNode, key: string) {
       {children}
     </a>
   );
+}
+
+function shouldLetBrowserOpenLink(event: MouseEvent<HTMLAnchorElement>) {
+  return event.defaultPrevented || event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
 }
 
 function renderEmojiTextFragments(text: string, keyPrefix: string) {
@@ -87,8 +144,12 @@ function renderChatMention(reference: OrfMentionReference, usersById: Map<string
   );
 }
 
-export function ChatMarkdown({ body, compact = false, feedbackItems = [], usersById }: ChatMarkdownProps) {
+export function ChatMarkdown({ body, compact = false, feedbackItems = [], onDriveResourceLink, onWorkspaceTargetLink, usersById }: ChatMarkdownProps) {
   const feedbackById = new Map(feedbackItems.map((feedback) => [feedback.id, feedback]));
+  const renderLink = useCallback(
+    (href: string, children: ReactNode, key: string) => renderMarkdownLink(href, children, key, onDriveResourceLink, onWorkspaceTargetLink),
+    [onDriveResourceLink, onWorkspaceTargetLink],
+  );
   const resolveLink = (href: string, label: ReactNode): OrfRichTextResolvedLink => {
     const feedbackLink = feedbackLinkForHref(href, feedbackById);
     return {
@@ -102,7 +163,7 @@ export function ChatMarkdown({ body, compact = false, feedbackItems = [], usersB
       body={body}
       classNamePrefix="orf-chat-markdown"
       compact={compact}
-      renderLink={renderMarkdownLink}
+      renderLink={renderLink}
       renderMention={(reference, key) => renderChatMention(reference, usersById, key)}
       renderPlainText={renderSystemMentionFragments}
       resolveLink={resolveLink}

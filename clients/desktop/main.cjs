@@ -120,6 +120,12 @@ function createMainWindow(clientUrl, options = {}) {
           overrideBrowserWindowOptions: chatImagePopoutBrowserWindowOptions(),
         };
       }
+      if (isDriveFilePreviewPopoutUrl(targetUrl)) {
+        return {
+          action: "allow",
+          overrideBrowserWindowOptions: driveFilePreviewPopoutBrowserWindowOptions(),
+        };
+      }
       return { action: "allow" };
     }
     void shell.openExternal(url);
@@ -183,6 +189,10 @@ function isChatImagePopoutUrl(url) {
   return url.pathname.startsWith("/chat/image-popout/");
 }
 
+function isDriveFilePreviewPopoutUrl(url) {
+  return url.pathname.startsWith("/drive/file-preview-popout/");
+}
+
 function chatImagePopoutBrowserWindowOptions() {
   return {
     autoHideMenuBar: true,
@@ -193,6 +203,22 @@ function chatImagePopoutBrowserWindowOptions() {
     resizable: true,
     show: true,
     title: "ORF 图片窗口",
+    webPreferences: desktopBrowserWindowWebPreferences(),
+  };
+}
+
+function driveFilePreviewPopoutBrowserWindowOptions() {
+  return {
+    autoHideMenuBar: true,
+    backgroundColor: "#f7f8fb",
+    frame: false,
+    height: 820,
+    minHeight: 640,
+    minWidth: 900,
+    resizable: true,
+    show: true,
+    title: "ORF 文件预览",
+    width: 1180,
     webPreferences: desktopBrowserWindowWebPreferences(),
   };
 }

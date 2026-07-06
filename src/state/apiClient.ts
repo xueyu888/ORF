@@ -11,10 +11,23 @@ import type {
   ChatThreadSummary,
   ChatUnreadSummary,
   ChatUser,
+  ChatDriveLink,
+  DriveContextType,
+  DriveFileVersion,
+  DriveNodeDetails,
+  DrivePreviewKind,
+  DriveSearchContextFilter,
+  DriveSearchScope,
+  DriveSearchSource,
+  DriveSearchStatus,
+  DriveSearchType,
+  DriveSearchUpdatedRange,
   CommentThread,
   CommentAttachmentUploadResult,
   CommentTargetType,
   OrfState,
+  DriveBootstrap,
+  DriveNode,
   OrfUser,
   SystemConversationId,
   SystemConversationMessage,
@@ -29,7 +42,7 @@ import type {
   WorkLogReportScope,
 } from "../types/orf";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
-import type { ChatTheme, UserDisplayPreferences } from "../domain/settings/personalPreferences";
+import type { ChatTheme, UserDisplayPreferences, WorkspaceLayoutPreferences } from "../domain/settings/personalPreferences";
 import type {
   VisualBackgroundConfig,
   VisualBackgroundCrop,
@@ -120,6 +133,7 @@ export type CommentAttachmentUploadResponse = CommentAttachmentUploadResult & {
   ok: true;
 };
 export type ChatBootstrapResponse = ChatBootstrap;
+export type ChatUsersResponse = { status?: "ok"; users: ChatUser[] };
 export type ChatUnreadSummaryResponse = ChatUnreadSummary;
 export type ChatMessagesResponse = { status?: "ok"; messages: ChatMessage[] };
 export type ChatMessageContextResponse = { status?: "ok" } & ChatMessageContext;
@@ -131,6 +145,47 @@ export type ChatThreadsResponse = { status?: "ok"; threads: ChatThreadSummary[] 
 export type ChatAttachmentUploadResponse = { status?: "ok"; attachment: ChatAttachment };
 export type ChatMentionableUsersResponse = { status?: "ok"; users: ChatUser[] };
 export type ChatSearchResponse = { status?: "ok"; results: ChatSearchResult[] };
+export type DriveBootstrapResponse = {
+  status?: "ok";
+  drive: DriveBootstrap;
+};
+export type ChatDriveBootstrapResponse = {
+  status?: "ok";
+  drive: DriveBootstrap;
+  links: ChatDriveLink[];
+};
+export type DriveChildrenResponse = {
+  status?: "ok";
+  children: DriveNode[];
+  parentNodeId: string;
+};
+export type DriveSearchResponse = {
+  status?: "ok";
+  nodes: DriveNode[];
+};
+export type DriveNodeResponse = {
+  status?: "ok";
+  announcementMessage?: ChatMessage | null;
+  node: DriveNode;
+};
+export type DriveNodeDetailsResponse = {
+  status?: "ok";
+  details: DriveNodeDetails;
+};
+export type DriveNodeRestoreResponse = {
+  status?: "ok";
+  node: DriveNode;
+  restoredNodeIds: string[];
+};
+export type DriveFileVersionsResponse = {
+  status?: "ok";
+  versions: DriveFileVersion[];
+};
+export type DriveVersionMutationResponse = {
+  status?: "ok";
+  node: DriveNode;
+  versions: DriveFileVersion[];
+};
 export type ApiUploadProgress = {
   lengthComputable: boolean;
   loadedBytes: number;
@@ -231,6 +286,7 @@ export type UserPreferences = {
   sidebarCollapsed: boolean | null;
   chatTheme: ChatTheme;
   display: UserDisplayPreferences;
+  workspaceLayout: WorkspaceLayoutPreferences;
   /** Compatibility projection for legacy clients. New writes must use backgrounds[scene]. */
   appBackground: VisualBackgroundConfig | null;
   backgrounds: Partial<Record<VisualBackgroundScene, VisualBackgroundConfig | null>>;
@@ -238,8 +294,16 @@ export type UserPreferences = {
     toastEnabled: boolean;
   };
 };
-export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "backgrounds">> & {
+export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "workspaceLayout" | "backgrounds">> & {
   notificationDisplay?: Partial<UserPreferences["notificationDisplay"]>;
+};
+export type UserPreferencesRequestOptions = {
+  force?: boolean;
+  userId?: string | null;
+};
+type UserPreferencesCacheEntry = {
+  preferences: UserPreferences;
+  userId: string;
 };
 export type PersonalBackgroundsData = VisualBackgroundsData & {
   preferences: UserPreferences;
@@ -251,6 +315,11 @@ type ApiEnvelope<T> = {
 };
 
 export const API_AUTHENTICATION_EXPIRED_EVENT = "orf:api-authentication-expired";
+
+let userPreferencesCache: UserPreferencesCacheEntry | null = null;
+let userPreferencesRequest: Promise<UserPreferences> | null = null;
+let chatBootstrapRequest: Promise<ChatBootstrapResponse> | null = null;
+let chatUsersRequest: Promise<ChatUsersResponse> | null = null;
 
 export class ApiError extends Error {
   status: number;
@@ -530,7 +599,31 @@ export async function getFeedbackReferences(feedbackIds: string[]) {
 }
 
 export async function getChatBootstrap() {
-  return apiJson<ChatBootstrapResponse>("/api/chat/bootstrap");
+  if (chatBootstrapRequest) {
+    return chatBootstrapRequest;
+  }
+  const request = apiJson<ChatBootstrapResponse>("/api/chat/bootstrap")
+    .finally(() => {
+      if (chatBootstrapRequest === request) {
+        chatBootstrapRequest = null;
+      }
+    });
+  chatBootstrapRequest = request;
+  return request;
+}
+
+export async function getChatUsers() {
+  if (chatUsersRequest) {
+    return chatUsersRequest;
+  }
+  const request = apiJson<ChatUsersResponse>("/api/chat/users")
+    .finally(() => {
+      if (chatUsersRequest === request) {
+        chatUsersRequest = null;
+      }
+    });
+  chatUsersRequest = request;
+  return request;
 }
 
 export async function getChatMessages(input: { before?: string; channelId: string; limit?: number }) {
@@ -592,6 +685,7 @@ export async function updateChatChannelRequest(
     favorite?: boolean;
     muted?: boolean;
     name?: string;
+    projectId?: string | null;
   },
 ) {
   return apiJson<ChatChannelResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}`, {
@@ -727,6 +821,214 @@ export async function uploadChatAttachment(input: { channelId: string; file: Fil
     `/api/chat/channels/${encodeURIComponent(input.channelId)}/attachments`,
     formData,
     { onProgress: input.onProgress },
+  );
+}
+
+export async function getDriveBootstrap() {
+  return apiJson<DriveBootstrapResponse>("/api/drive");
+}
+
+export async function getChatDriveBootstrap(channelId: string) {
+  return apiJson<ChatDriveBootstrapResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}/drive`);
+}
+
+export async function getDriveChildren(input: { parentNodeId: string }) {
+  return apiJson<DriveChildrenResponse>(
+    `/api/drive/nodes/${encodeURIComponent(input.parentNodeId)}/children`,
+  );
+}
+
+export async function searchDriveRequest(input: {
+  contextId?: string;
+  contextType?: DriveSearchContextFilter;
+  limit?: number;
+  previewKind?: DrivePreviewKind | "all";
+  query?: string;
+  scope?: DriveSearchScope;
+  source?: DriveSearchSource;
+  status?: DriveSearchStatus;
+  type?: DriveSearchType;
+  updated?: DriveSearchUpdatedRange;
+  uploaderId?: string;
+}) {
+  const query = new URLSearchParams();
+  if (input.query?.trim()) query.set("q", input.query.trim());
+  if (input.type) query.set("type", input.type);
+  if (input.scope) query.set("scope", input.scope);
+  if (input.status) query.set("status", input.status);
+  if (input.previewKind) query.set("previewKind", input.previewKind);
+  if (input.source) query.set("source", input.source);
+  if (input.uploaderId) query.set("uploaderId", input.uploaderId);
+  if (input.updated) query.set("updated", input.updated);
+  if (input.contextId) query.set("contextId", input.contextId);
+  if (input.contextType) query.set("contextType", input.contextType);
+  if (input.limit) query.set("limit", String(input.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiJson<DriveSearchResponse>(`/api/drive/search${suffix}`);
+}
+
+export async function getDriveTrashRequest() {
+  return apiJson<DriveSearchResponse>("/api/drive/trash");
+}
+
+export async function getDriveNodeDetailsRequest(input: { nodeId: string }) {
+  return apiJson<DriveNodeDetailsResponse>(
+    `/api/drive/nodes/${encodeURIComponent(input.nodeId)}/details`,
+  );
+}
+
+export async function createDriveFolderRequest(input: { name: string; parentNodeId: string }) {
+  return apiJson<DriveNodeResponse>("/api/drive/folders", {
+    method: "POST",
+    body: JSON.stringify({
+      name: input.name,
+      parentNodeId: input.parentNodeId,
+    }),
+  });
+}
+
+export async function uploadDriveRequest(input: {
+  contextLink?: { contextId: string; contextType: DriveContextType; label?: string | null };
+  file: File;
+  onProgress?: (progress: ApiUploadProgress) => void;
+  parentNodeId: string;
+}) {
+  const formData = new FormData();
+  formData.set("parentNodeId", input.parentNodeId);
+  if (input.contextLink) {
+    formData.set("contextId", input.contextLink.contextId);
+    formData.set("contextType", input.contextLink.contextType);
+    if (input.contextLink.label) formData.set("contextLabel", input.contextLink.label);
+  }
+  formData.set("file", input.file);
+  return uploadFormDataJson<DriveNodeResponse>(
+    "/api/drive/upload",
+    formData,
+    { onProgress: input.onProgress },
+  );
+}
+
+export async function uploadChatDriveFileRequest(input: {
+  channelId: string;
+  file: File;
+  onProgress?: (progress: ApiUploadProgress) => void;
+  parentNodeId: string;
+}) {
+  const formData = new FormData();
+  formData.set("parentNodeId", input.parentNodeId);
+  formData.set("file", input.file);
+  return uploadFormDataJson<DriveNodeResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/drive/upload`,
+    formData,
+    { onProgress: input.onProgress },
+  );
+}
+
+export async function deleteDriveNodeRequest(input: { nodeId: string }) {
+  return apiJson<{ status?: "ok"; deletedNodeIds: string[] }>(
+    `/api/drive/nodes/${encodeURIComponent(input.nodeId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function restoreDriveNodeRequest(input: { nodeId: string }) {
+  return apiJson<DriveNodeRestoreResponse>(
+    `/api/drive/nodes/${encodeURIComponent(input.nodeId)}/restore`,
+    { method: "POST" },
+  );
+}
+
+export async function getDriveFileVersionsRequest(input: { fileId: string }) {
+  return apiJson<DriveFileVersionsResponse>(
+    `/api/drive/files/${encodeURIComponent(input.fileId)}/versions`,
+  );
+}
+
+export async function uploadDriveFileVersionRequest(input: {
+  file: File;
+  fileId: string;
+  onProgress?: (progress: ApiUploadProgress) => void;
+}) {
+  const formData = new FormData();
+  formData.set("file", input.file);
+  return uploadFormDataJson<DriveVersionMutationResponse>(
+    `/api/drive/files/${encodeURIComponent(input.fileId)}/versions`,
+    formData,
+    { onProgress: input.onProgress },
+  );
+}
+
+export async function restoreDriveFileVersionRequest(input: { fileId: string; versionId: string }) {
+  return apiJson<DriveVersionMutationResponse>(
+    `/api/drive/files/${encodeURIComponent(input.fileId)}/versions/${encodeURIComponent(input.versionId)}/restore`,
+    { method: "POST" },
+  );
+}
+
+export async function addDriveContextLinkRequest(input: {
+  contextId: string;
+  contextType: DriveContextType;
+  label?: string | null;
+  nodeId: string;
+}) {
+  return apiJson<DriveNodeDetailsResponse>(
+    `/api/drive/nodes/${encodeURIComponent(input.nodeId)}/context-links`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        contextId: input.contextId,
+        contextType: input.contextType,
+        label: input.label ?? null,
+      }),
+    },
+  );
+}
+
+export async function deleteDriveContextLinkRequest(input: { linkId: string; nodeId: string }) {
+  return apiJson<DriveNodeDetailsResponse>(
+    `/api/drive/nodes/${encodeURIComponent(input.nodeId)}/context-links/${encodeURIComponent(input.linkId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function addChatDriveLinkRequest(input: {
+  channelId: string;
+  isDefaultUploadTarget?: boolean;
+  label?: string | null;
+  nodeId: string;
+}) {
+  return apiJson<ChatDriveBootstrapResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/drive/links`, {
+    method: "POST",
+    body: JSON.stringify({
+      isDefaultUploadTarget: input.isDefaultUploadTarget,
+      label: input.label,
+      nodeId: input.nodeId,
+    }),
+  });
+}
+
+export async function updateChatDriveLinkRequest(input: {
+  channelId: string;
+  isDefaultUploadTarget?: boolean;
+  label?: string | null;
+  linkId: string;
+}) {
+  return apiJson<ChatDriveBootstrapResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/drive/links/${encodeURIComponent(input.linkId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        isDefaultUploadTarget: input.isDefaultUploadTarget,
+        label: input.label,
+      }),
+    },
+  );
+}
+
+export async function deleteChatDriveLinkRequest(input: { channelId: string; linkId: string }) {
+  return apiJson<ChatDriveBootstrapResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/drive/links/${encodeURIComponent(input.linkId)}`,
+    { method: "DELETE" },
   );
 }
 
@@ -954,9 +1256,48 @@ export async function saveVisualBackgroundConfig(scene: VisualBackgroundScene, c
   return response.data;
 }
 
-export async function getUserPreferences() {
-  const response = await apiJson<ApiEnvelope<UserPreferences>>("/api/settings/personal/preferences");
-  return response.data;
+function cacheUserPreferences(preferences: UserPreferences) {
+  userPreferencesCache = {
+    preferences,
+    userId: preferences.userId,
+  };
+  return preferences;
+}
+
+export function invalidateUserPreferencesCache(userId?: string | null) {
+  if (!userId || userPreferencesCache?.userId === userId) {
+    userPreferencesCache = null;
+  }
+  userPreferencesRequest = null;
+}
+
+export async function getUserPreferences(options: UserPreferencesRequestOptions = {}) {
+  const expectedUserId = options.userId ?? null;
+  if (!options.force && expectedUserId && userPreferencesCache?.userId === expectedUserId) {
+    return userPreferencesCache.preferences;
+  }
+
+  if (!options.force && userPreferencesRequest) {
+    const preferences = await userPreferencesRequest;
+    if (!expectedUserId || preferences.userId === expectedUserId) {
+      return preferences;
+    }
+  }
+
+  const request = apiJson<ApiEnvelope<UserPreferences>>("/api/settings/personal/preferences")
+    .then((response) => cacheUserPreferences(response.data))
+    .finally(() => {
+      if (userPreferencesRequest === request) {
+        userPreferencesRequest = null;
+      }
+    });
+  userPreferencesRequest = request;
+  const preferences = await request;
+  if (expectedUserId && preferences.userId !== expectedUserId) {
+    invalidateUserPreferencesCache(preferences.userId);
+    throw new ApiError(409, "/api/settings/personal/preferences", "个人设置用户不一致，请刷新后重试");
+  }
+  return preferences;
 }
 
 export async function saveUserPreferences(input: UserPreferencesPatch) {
@@ -964,7 +1305,8 @@ export async function saveUserPreferences(input: UserPreferencesPatch) {
     method: "PUT",
     body: JSON.stringify(input),
   });
-  return response.data;
+  userPreferencesRequest = null;
+  return cacheUserPreferences(response.data);
 }
 
 export async function getPersonalBackgrounds(scene: VisualBackgroundScene = "sidebar_background") {

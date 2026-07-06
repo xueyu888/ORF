@@ -30,8 +30,9 @@ export type NotificationKind =
   | "comment.reply.created"
   | "comment.thread.status.changed"
   | "comment.mention.created"
+  | "data.sync.conflict"
   | "worklog.reminder";
-export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog";
+export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog" | "dataSync";
 export type NotificationStream = "personalNotification" | "teamAnnouncement";
 export type ChatSystemKind = NotificationStream;
 export type ChatMessageSource = "user" | "system";
@@ -53,6 +54,36 @@ export type ChatMemberRole = "owner" | "admin" | "member";
 export type ChatPresenceState = "active" | "idle" | "recent" | "offline";
 export type ClientPresenceSource = "android" | "browser" | "desktop" | "unknown";
 export type ClientSystemIdleState = "active" | "idle" | "locked" | "unknown";
+export type DriveNodeType = "folder" | "file";
+export type DrivePreviewKind = "download" | "docx" | "image" | "markdown" | "pdf" | "text";
+export type DrivePreviewStatus = "failed" | "ready" | "unavailable";
+export type DriveNodeEventAction =
+  | "folder_created"
+  | "file_uploaded"
+  | "file_version_uploaded"
+  | "file_version_restored"
+  | "node_deleted"
+  | "node_restored"
+  | "context_linked"
+  | "context_unlinked"
+  | "chat_linked"
+  | "chat_unlinked";
+export type DriveContextType =
+  | "project"
+  | "objective"
+  | "result"
+  | "task"
+  | "feedback"
+  | "workLog"
+  | "chatChannel"
+  | "chatMessage"
+  | "chatThread";
+export type DriveSearchScope = "active" | "trash";
+export type DriveSearchContextFilter = "all" | DriveContextType;
+export type DriveSearchSource = "all" | "manual" | "chat" | "project" | "objective" | "result" | "task" | "feedback" | "workLog";
+export type DriveSearchStatus = "active" | "all" | "trash";
+export type DriveSearchUpdatedRange = "all" | "7d" | "30d";
+export type DriveSearchType = "all" | "file" | "folder";
 
 export interface OrfUser {
   id: string;
@@ -198,6 +229,124 @@ export interface OrfProject {
   name: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Drive {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  contentUrl: string;
+  downloadUrl: string;
+  previewKind: DrivePreviewKind;
+  previewStatus?: DrivePreviewStatus;
+  previewError?: string | null;
+  previewUrl?: string;
+  previewGeneratedAt?: string | null;
+  width?: number | null;
+  height?: number | null;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  createdAt: string;
+  latestVersionNumber?: number;
+  versionCount?: number;
+}
+
+export interface DriveNode {
+  id: string;
+  parentId?: string | null;
+  type: DriveNodeType;
+  name: string;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  createdAt: string;
+  deletedAt?: string | null;
+  updatedAt: string;
+  file?: Drive;
+  searchMeta?: DriveSearchMeta;
+}
+
+export interface DriveSearchContextSummary {
+  contextId: string;
+  contextTitle: string;
+  contextType: DriveContextType;
+  label?: string | null;
+}
+
+export interface DriveSearchMeta {
+  contexts: DriveSearchContextSummary[];
+  snippet?: string | null;
+  sourceLabels: string[];
+  status: "active" | "trash";
+  uploadedById?: string | null;
+  uploadedByName?: string | null;
+  updatedAt: string;
+}
+
+export interface DriveFileVersion {
+  id: string;
+  fileId: string;
+  versionNumber: number;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  previewKind: DrivePreviewKind;
+  previewStatus?: DrivePreviewStatus;
+  previewError?: string | null;
+  previewGeneratedAt?: string | null;
+  width?: number | null;
+  height?: number | null;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  createdAt: string;
+}
+
+export interface DriveNodeEvent {
+  id: string;
+  nodeId: string;
+  actorUserId?: string | null;
+  actorName?: string | null;
+  action: DriveNodeEventAction;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface DriveContextLink {
+  id: string;
+  nodeId: string;
+  contextType: DriveContextType;
+  contextId: string;
+  contextTitle: string;
+  label?: string | null;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  createdAt: string;
+}
+
+export interface DriveNodeDetails {
+  activity: DriveNodeEvent[];
+  contextLinks: DriveContextLink[];
+  node: DriveNode;
+  path: DriveNode[];
+  versions: DriveFileVersion[];
+}
+
+export interface ChatDriveLink {
+  id: string;
+  channelId: string;
+  node: DriveNode;
+  label?: string | null;
+  isDefaultUploadTarget: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DriveBootstrap {
+  children: DriveNode[];
+  recentNodes?: DriveNode[];
+  root: DriveNode;
+  trashCount?: number;
+  uploadMaxBytes: number;
 }
 
 export interface ObjectiveParticipantProfile {
@@ -748,6 +897,8 @@ export interface ChatChannel {
   name?: string | null;
   systemKind?: ChatSystemKind | null;
   systemRecipientUserId?: string | null;
+  projectId?: string | null;
+  projectName?: string | null;
   displayName: string;
   purpose: string;
   header: string;

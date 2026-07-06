@@ -83,6 +83,10 @@ export function canUseWorkLogCategories(user: WorkLogPermissionUser | null | und
   return user?.role === "admin";
 }
 
+export function canUseAllWorkLogObjectiveOptions(user: WorkLogPermissionUser | null | undefined) {
+  return user?.role === "admin";
+}
+
 export function listBuiltInWorkLogCategoryOptions(user: WorkLogPermissionUser | null | undefined): WorkLogCategoryOption[] {
   return workLogBuiltInCategoryPolicies
     .filter((policy) => canUseBuiltInWorkLogCategoryPolicy(user, policy))

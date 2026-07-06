@@ -23,7 +23,3 @@ export function normalizeResultDetails(result: Pick<Result, "detail">): ResultDe
 export function resultDetailText(result: Pick<Result, "detail">) {
   return normalizeResultDetail(result.detail);
 }
-
-export function resultDetailPreviewText(result: Pick<Result, "detail">) {
-  return resultDetailText(result);
-}

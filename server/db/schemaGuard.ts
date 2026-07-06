@@ -150,6 +150,28 @@ export function validateNotificationStreamEnum(snapshot: RuntimeEnumSnapshot) {
     : [`notification_stream enum must be exactly personalNotification,teamAnnouncement; got ${labels}.`];
 }
 
+export function validateDriveContextTypeEnum(snapshot: RuntimeEnumSnapshot) {
+  const labels = new Set(snapshot.labels);
+  const errors: string[] = [];
+  for (const label of ["project", "objective", "result", "task", "feedback", "workLog", "chatChannel", "chatMessage", "chatThread"]) {
+    if (!labels.has(label)) {
+      errors.push(`drive_context_type enum value ${label} is missing.`);
+    }
+  }
+  return errors;
+}
+
+export function validateDrivePreviewKindEnum(snapshot: RuntimeEnumSnapshot) {
+  const labels = new Set(snapshot.labels);
+  const errors: string[] = [];
+  for (const label of ["download", "docx", "image", "markdown", "pdf", "text"]) {
+    if (!labels.has(label)) {
+      errors.push(`drive_file_preview_kind enum value ${label} is missing.`);
+    }
+  }
+  return errors;
+}
+
 export function validateNotificationConversationSchema(snapshot: { columns: RuntimeTableColumn[] }) {
   const errors: string[] = [];
   const columnsByTable = snapshot.columns.reduce((map, column) => {
@@ -229,6 +251,128 @@ export function validateSystemChatNotificationSchema(snapshot: { columns: Runtim
   for (const columnName of ["source", "system_metadata"]) {
     if (!messageColumns.has(columnName)) {
       errors.push(`chat_messages.${columnName} is missing.`);
+    }
+  }
+
+  return errors;
+}
+
+export function validateDriveManagementSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const errors: string[] = [];
+  const columnsByTable = snapshot.columns.reduce((map, column) => {
+    const columns = map.get(column.tableName) ?? new Map<string, RuntimeTableColumn>();
+    columns.set(column.columnName, column);
+    map.set(column.tableName, columns);
+    return map;
+  }, new Map<string, Map<string, RuntimeTableColumn>>());
+
+  const nodeColumns = columnsByTable.get("drive_nodes") ?? new Map();
+  for (const columnName of ["id", "team_id", "node_type", "name", "created_at", "updated_at"]) {
+    const column = nodeColumns.get(columnName);
+    if (!column) {
+      errors.push(`drive_nodes.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`drive_nodes.${columnName} must be NOT NULL.`);
+    }
+  }
+  for (const columnName of ["parent_id", "created_by", "updated_by", "deleted_by", "deleted_at"]) {
+    if (!nodeColumns.has(columnName)) {
+      errors.push(`drive_nodes.${columnName} is missing.`);
+    }
+  }
+
+  const fileColumns = columnsByTable.get("drive_files") ?? new Map();
+  for (const columnName of [
+    "id",
+    "node_id",
+    "team_id",
+    "object_key",
+    "file_name",
+    "mime_type",
+    "file_size",
+    "preview_kind",
+    "created_at",
+  ]) {
+    const column = fileColumns.get(columnName);
+    if (!column) {
+      errors.push(`drive_files.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`drive_files.${columnName} must be NOT NULL.`);
+    }
+  }
+  for (const columnName of ["preview_object_key", "preview_mime_type", "preview_file_size", "preview_generated_at", "preview_error", "width", "height", "created_by"]) {
+    if (!fileColumns.has(columnName)) {
+      errors.push(`drive_files.${columnName} is missing.`);
+    }
+  }
+
+  const linkColumns = columnsByTable.get("chat_channel_drive_links") ?? new Map();
+  for (const columnName of ["id", "team_id", "channel_id", "node_id", "is_default_upload_target", "created_at", "updated_at"]) {
+    const column = linkColumns.get(columnName);
+    if (!column) {
+      errors.push(`chat_channel_drive_links.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`chat_channel_drive_links.${columnName} must be NOT NULL.`);
+    }
+  }
+  for (const columnName of ["label", "created_by"]) {
+    if (!linkColumns.has(columnName)) {
+      errors.push(`chat_channel_drive_links.${columnName} is missing.`);
+    }
+  }
+
+  const versionColumns = columnsByTable.get("drive_file_versions") ?? new Map();
+  for (const columnName of [
+    "id",
+    "team_id",
+    "file_id",
+    "node_id",
+    "version_number",
+    "object_key",
+    "file_name",
+    "mime_type",
+    "file_size",
+    "preview_kind",
+    "created_at",
+  ]) {
+    const column = versionColumns.get(columnName);
+    if (!column) {
+      errors.push(`drive_file_versions.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`drive_file_versions.${columnName} must be NOT NULL.`);
+    }
+  }
+  for (const columnName of ["preview_object_key", "preview_mime_type", "preview_file_size", "preview_generated_at", "preview_error", "width", "height", "created_by"]) {
+    if (!versionColumns.has(columnName)) {
+      errors.push(`drive_file_versions.${columnName} is missing.`);
+    }
+  }
+
+  const eventColumns = columnsByTable.get("drive_node_events") ?? new Map();
+  for (const columnName of ["id", "team_id", "node_id", "action", "metadata", "created_at"]) {
+    const column = eventColumns.get(columnName);
+    if (!column) {
+      errors.push(`drive_node_events.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`drive_node_events.${columnName} must be NOT NULL.`);
+    }
+  }
+  if (!eventColumns.has("actor_user_id")) {
+    errors.push("drive_node_events.actor_user_id is missing.");
+  }
+
+  const contextColumns = columnsByTable.get("drive_node_context_links") ?? new Map();
+  for (const columnName of ["id", "team_id", "node_id", "context_type", "context_id", "created_at"]) {
+    const column = contextColumns.get(columnName);
+    if (!column) {
+      errors.push(`drive_node_context_links.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`drive_node_context_links.${columnName} must be NOT NULL.`);
+    }
+  }
+  for (const columnName of ["label", "created_by"]) {
+    if (!contextColumns.has(columnName)) {
+      errors.push(`drive_node_context_links.${columnName} is missing.`);
     }
   }
 
@@ -364,8 +508,11 @@ export async function assertRuntimeDatabaseSchema() {
     evidenceColumnsResult,
     feedbackStatusResult,
     notificationStreamResult,
+    driveContextTypeResult,
+    drivePreviewKindResult,
     notificationConversationColumnsResult,
     systemChatNotificationColumnsResult,
+    driveManagementColumnsResult,
     gitLabOrfChatColumnsResult,
     gitHubOrfChatColumnsResult,
     workLogReminderStateColumnsResult,
@@ -460,6 +607,28 @@ export async function assertRuntimeDatabaseSchema() {
         order by e.enumsortorder
       `,
     ),
+    pool.query<{ label: string }>(
+      `
+        select e.enumlabel as "label"
+        from pg_enum e
+        join pg_type t on t.oid = e.enumtypid
+        join pg_namespace nsp on nsp.oid = t.typnamespace
+        where nsp.nspname = current_schema()
+          and t.typname = 'drive_context_type'
+        order by e.enumsortorder
+      `,
+    ),
+    pool.query<{ label: string }>(
+      `
+        select e.enumlabel as "label"
+        from pg_enum e
+        join pg_type t on t.oid = e.enumtypid
+        join pg_namespace nsp on nsp.oid = t.typnamespace
+        where nsp.nspname = current_schema()
+          and t.typname = 'drive_file_preview_kind'
+        order by e.enumsortorder
+      `,
+    ),
     pool.query<RuntimeTableColumn>(
       `
         select
@@ -481,6 +650,17 @@ export async function assertRuntimeDatabaseSchema() {
         where table_schema = current_schema()
           and table_name in ('chat_channels', 'chat_messages')
           and column_name in ('system_kind', 'system_recipient_user_id', 'source', 'system_metadata')
+      `,
+    ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name in ('drive_nodes', 'drive_files', 'drive_file_versions', 'drive_node_events', 'drive_node_context_links', 'chat_channel_drive_links')
       `,
     ),
     pool.query<RuntimeTableColumn>(
@@ -554,11 +734,20 @@ export async function assertRuntimeDatabaseSchema() {
     ...validateNotificationStreamEnum({
       labels: notificationStreamResult.rows.map((row) => row.label),
     }),
+    ...validateDriveContextTypeEnum({
+      labels: driveContextTypeResult.rows.map((row) => row.label),
+    }),
+    ...validateDrivePreviewKindEnum({
+      labels: drivePreviewKindResult.rows.map((row) => row.label),
+    }),
     ...validateNotificationConversationSchema({
       columns: notificationConversationColumnsResult.rows,
     }),
     ...validateSystemChatNotificationSchema({
       columns: systemChatNotificationColumnsResult.rows,
+    }),
+    ...validateDriveManagementSchema({
+      columns: driveManagementColumnsResult.rows,
     }),
     ...validateGitLabOrfChatIntegrationSchema({
       columns: gitLabOrfChatColumnsResult.rows,

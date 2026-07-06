@@ -17,6 +17,7 @@ import {
   getChatUnreadSummary,
   getChatThread,
   listChatMentionableUsers,
+  listChatUsers,
   listChatMessages,
   listChatThreads,
   listPinnedChatMessages,
@@ -76,6 +77,7 @@ const createDirectBodySchema = z.object({
 const updateChannelBodySchema = z.object({
   displayName: z.string().trim().min(1).max(80).optional(),
   name: z.string().trim().min(1).max(80).optional(),
+  projectId: z.string().trim().min(1).nullable().optional(),
   purpose: z.string().trim().max(240).optional(),
   header: z.string().trim().max(500).optional(),
   favorite: z.boolean().optional(),
@@ -181,6 +183,12 @@ export function registerChatRoutes(app: FastifyInstance) {
     const actor = await chatActorFromRequest(request, reply);
     if (!actor) return reply;
     return getChatBootstrap(actor);
+  });
+
+  app.get("/api/chat/users", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    return { users: await listChatUsers(actor) };
   });
 
   app.get("/api/chat/unread-summary", async (request, reply) => {

@@ -1,9 +1,11 @@
 import { Bell, BellOff } from "lucide-react";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { ChatMessage, ChatThread, ChatUser, Feedback } from "../../types/orf";
+import type { WorkspaceSelection } from "../workspace/workspaceTypes";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessageItem } from "./ChatMessageItem";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
+import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { scrollChatFeedToMessage } from "./chatFeedScroll";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import { chatMessageDeliveryStatus, type ChatSendHandler } from "./chatModels";
@@ -23,6 +25,7 @@ type ChatThreadPanelProps = {
   onCopyLink: (message: ChatMessage) => void;
   onCopyMessage: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
+  onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
   onDraftStateChange: (channelId: string, hasDraft: boolean) => void;
   onEdit: (message: ChatMessage) => void;
   onMarkUnread: (message: ChatMessage) => void;
@@ -35,6 +38,7 @@ type ChatThreadPanelProps = {
   onSend: ChatSendHandler;
   onToggleFollow: (following: boolean) => void;
   onTyping: (channelId: string) => void;
+  onWorkspaceTargetLink?: (selection: WorkspaceSelection) => void;
   thread: ChatThread;
   users: ChatUser[];
   usersById: Map<string, ChatUser>;
@@ -54,6 +58,7 @@ export function ChatThreadPanel({
   onCopyLink,
   onCopyMessage,
   onDelete,
+  onDriveResourceLink,
   onDraftStateChange,
   onEdit,
   onMarkUnread,
@@ -66,6 +71,7 @@ export function ChatThreadPanel({
   onSend,
   onToggleFollow,
   onTyping,
+  onWorkspaceTargetLink,
   thread,
   users,
   usersById,
@@ -172,6 +178,7 @@ export function ChatThreadPanel({
           onCopyLink={onCopyLink}
           onCopyMessage={onCopyMessage}
           onDelete={onDelete}
+          onDriveResourceLink={onDriveResourceLink}
           onEdit={onEdit}
           onMarkUnread={onMarkUnread}
           onPin={onPin}
@@ -180,6 +187,7 @@ export function ChatThreadPanel({
           onRetryPending={onRetryPending}
           onSave={onSave}
           onSaveEdit={onSaveEdit}
+          onWorkspaceTargetLink={onWorkspaceTargetLink}
           reactionPickerSignal={reactionPickerRequest.messageId === thread.rootMessage.id ? reactionPickerRequest.signal : undefined}
           usersById={usersById}
         />
@@ -207,6 +215,7 @@ export function ChatThreadPanel({
                 onCopyLink={onCopyLink}
                 onCopyMessage={onCopyMessage}
                 onDelete={onDelete}
+                onDriveResourceLink={onDriveResourceLink}
                 onEdit={onEdit}
                 onMarkUnread={onMarkUnread}
                 onPin={onPin}
@@ -215,6 +224,7 @@ export function ChatThreadPanel({
                 onRetryPending={onRetryPending}
                 onSave={onSave}
                 onSaveEdit={onSaveEdit}
+                onWorkspaceTargetLink={onWorkspaceTargetLink}
                 reactionPickerSignal={reactionPickerRequest.messageId === reply.id ? reactionPickerRequest.signal : undefined}
                 usersById={usersById}
               />

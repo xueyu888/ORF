@@ -59,7 +59,7 @@ type ClientUpdateInstallPayload = {
   url: string;
 };
 
-type NativeInstallUpdate = NonNullable<NativeRuntimeBridge["installUpdate"]>;
+type ClientUpdateInstaller = (payload: ClientUpdateInstallPayload) => Promise<ClientUpdateInstallResult | undefined>;
 type ClientUpdateProgressEmitter = (
   progress: Partial<ClientUpdateInstallProgress> & { stage: ClientUpdateInstallProgressStage },
 ) => void;
@@ -137,7 +137,7 @@ export async function installClientUpdateAsset(
     const removeProgressListener = subscribeDesktopInstallProgress(installId, asset, options.onProgress);
     try {
       emitProgress({ downloadedBytes: 0, stage: "preparing" });
-      const result = await installDesktopClientUpdateWithMirrorFallback(window.orfNativeRuntime.installUpdate, asset, payload, emitProgress);
+      const result = await installClientUpdateWithMirrorFallback(window.orfNativeRuntime.installUpdate, asset, payload, emitProgress);
       emitTerminalInstallProgress(result, emitProgress);
       return result;
     } finally {
@@ -148,7 +148,7 @@ export async function installClientUpdateAsset(
     const removeProgressListener = await subscribeAndroidInstallProgress(installId, asset, options.onProgress);
     try {
       emitProgress({ downloadedBytes: 0, stage: "preparing" });
-      const result = normalizeClientUpdateInstallResult(await AndroidClientUpdate.install(payload));
+      const result = await installClientUpdateWithMirrorFallback(AndroidClientUpdate.install, asset, payload, emitProgress);
       emitTerminalInstallProgress(result, emitProgress);
       return result;
     } catch (error) {
@@ -184,13 +184,13 @@ function normalizeClientUpdateInstallResult(result: ClientUpdateInstallResult | 
   return result?.status ? result : { status: "success" };
 }
 
-async function installDesktopClientUpdateWithMirrorFallback(
-  installUpdate: NativeInstallUpdate,
+async function installClientUpdateWithMirrorFallback(
+  installUpdate: ClientUpdateInstaller,
   asset: ClientReleaseAsset,
   payload: ClientUpdateInstallPayload,
   emitProgress: ClientUpdateProgressEmitter,
 ) {
-  const primaryResult = await installDesktopClientUpdatePayload(installUpdate, payload);
+  const primaryResult = await installClientUpdatePayload(installUpdate, payload);
   const fallbackUrl = selectClientUpdateMirrorFallbackUrl(asset, {
     attemptedUrl: payload.url,
     reason: primaryResult.reason,
@@ -198,10 +198,10 @@ async function installDesktopClientUpdateWithMirrorFallback(
   if (!fallbackUrl) return primaryResult;
 
   emitProgress({ downloadedBytes: 0, stage: "preparing" });
-  return installDesktopClientUpdatePayload(installUpdate, { ...payload, url: fallbackUrl });
+  return installClientUpdatePayload(installUpdate, { ...payload, url: fallbackUrl });
 }
 
-async function installDesktopClientUpdatePayload(installUpdate: NativeInstallUpdate, payload: ClientUpdateInstallPayload) {
+async function installClientUpdatePayload(installUpdate: ClientUpdateInstaller, payload: ClientUpdateInstallPayload) {
   return normalizeClientUpdateInstallResult(await installUpdate(payload));
 }
 

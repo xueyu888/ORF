@@ -10,11 +10,16 @@ import {
   OrfUserScopeBindingError,
   OryAuthFlowError,
   checkPasswordLoginFlowHealth,
-  getAuthenticatedOrfUser,
   loginWithPassword,
   registerWithPassword,
   revokeApiSession,
 } from "./ory";
+import {
+  authResolutionLogContext,
+  authResolutionShouldLog,
+  resolveAuthenticatedOrfUser,
+  sendAuthResolutionFailure,
+} from "./sessionResolution";
 
 const emailBodySchema = z.string().trim().email().transform((value) => value.toLowerCase());
 
@@ -81,28 +86,15 @@ export async function requireAuthenticatedApi(request: FastifyRequest, reply: Fa
     return;
   }
 
-  const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
-    request.log.warn(error, "Ory session check failed");
-    if (error instanceof OrfUserScopeBindingError) {
-      reply.code(403).send({ error: "账号未加入当前默认团队，请联系管理员。" });
-      return undefined;
+  const resolution = await resolveAuthenticatedOrfUser(request.headers.cookie);
+  if (resolution.status !== "authenticated") {
+    if (authResolutionShouldLog(resolution)) {
+      request.log.warn(authResolutionLogContext(resolution), "Ory API session check failed");
     }
-    const unavailablePayload = authDependencyUnavailablePayload(error);
-    if (unavailablePayload) {
-      reply.code(503).send(unavailablePayload);
-      return undefined;
-    }
-    return null;
-  });
-
-  if (user === undefined) {
-    return;
+    return sendAuthResolutionFailure(reply, resolution);
   }
 
-  if (!user) {
-    return reply.code(401).send({ error: "Unauthorized" });
-  }
-
+  const user = resolution.user;
   (request as FastifyRequest & { orfUser?: typeof user }).orfUser = user;
 
   if (user.status !== "active") {
@@ -183,25 +175,19 @@ export function registerAuthRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/auth/session", async (request, reply) => {
-    const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
-      request.log.warn(error, "Ory session check failed");
-      if (error instanceof OrfUserScopeBindingError) {
-        reply.code(403).send({ error: "账号未加入当前默认团队，请联系管理员。" });
-        return undefined;
-      }
-      const unavailablePayload = authDependencyUnavailablePayload(error);
-      if (unavailablePayload) {
-        reply.code(503).send(unavailablePayload);
-        return undefined;
-      }
-      return null;
-    });
-
-    if (user === undefined) {
-      return reply;
+    const resolution = await resolveAuthenticatedOrfUser(request.headers.cookie);
+    if (resolution.status === "anonymous") {
+      return { authenticated: false, user: null };
     }
 
-    return user ? { authenticated: true, user } : { authenticated: false, user: null };
+    if (resolution.status !== "authenticated") {
+      if (authResolutionShouldLog(resolution)) {
+        request.log.warn(authResolutionLogContext(resolution), "Ory session check failed");
+      }
+      return sendAuthResolutionFailure(reply, resolution);
+    }
+
+    return { authenticated: true, user: resolution.user };
   });
 
   app.post("/api/auth/login", async (request, reply) => {

@@ -1,6 +1,6 @@
 import { Loader2, MessageSquare, X } from "lucide-react";
 import { IconButton } from "../../components/ui";
-import type { ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback } from "../../types/orf";
+import type { ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback, OrfProject } from "../../types/orf";
 import { ChatChannelInfoPanel } from "./ChatChannelInfoPanel";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import { chatChannelInfoLabel } from "./chatChannelPresentation";
@@ -10,28 +10,36 @@ import type { ActivePanel, ChatSearchScope, ChatSearchTypeFilter } from "./chatP
 import { ChatSearchPanel } from "./ChatSearchPanel";
 import { ChatThreadInboxPanel } from "./ChatThreadInboxPanel";
 import { ChatThreadPanel } from "./ChatThreadPanel";
+import { ChatDrivePanel } from "./ChatDrivePanel";
+import type { ChatDriveResourceLinkTarget, ChatDriveResourceSelectionRequest } from "./chatDriveResourceLinks";
+import type { WorkspaceSelection } from "../workspace/workspaceTypes";
 
 type ChatRightPanelProps = {
   activePanel: ActivePanel;
   allUsers: ChatUser[];
   attachmentMaxBytes: number;
   canManage: boolean;
+  canWrite: boolean;
   canDeleteAnyMessage: boolean;
   channel: ChatChannel;
   collectionLoading: boolean;
   collectionResults: ChatSearchResult[];
   currentUserId?: string;
+  driveSelectionRequest?: ChatDriveResourceSelectionRequest | null;
   editingMessageId?: string | null;
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   memberSearchFocusSignal?: number;
   onAddMembers: (userIds: string[]) => Promise<void>;
+  onAnnouncementMessage: (message: ChatMessage) => void;
   onAttachmentPreview: ChatAttachmentPreviewHandler;
   onCancelEdit: () => void;
   onClose: () => void;
+  onChannelUpdated: (channel: ChatChannel) => void;
   onCopyLink: (message: ChatMessage) => void;
   onCopyMessage: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onDraftStateChange: (channelId: string, hasDraft: boolean) => void;
+  onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
   onEdit: (message: ChatMessage) => void;
   onMarkUnread: (message: ChatMessage) => void;
   onOpenResult: (result: ChatSearchResult) => void;
@@ -41,13 +49,17 @@ type ChatRightPanelProps = {
   onRemovePending: (message: ChatMessage) => void;
   onRetryPending: (message: ChatMessage) => void;
   onRemoveMember: (userId: string) => Promise<void>;
+  onDriveSelectionRequestHandled?: (requestId: number) => void;
   onSave: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onSearch: (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => Promise<void>;
   onSendThreadReply: ChatSendHandler;
   onToggleFollow: (following: boolean) => void;
   onTyping: (channelId: string) => void;
-  onUpdateChannel: (input: Partial<Pick<ChatChannel, "displayName" | "header" | "purpose">>) => Promise<void>;
+  onWorkspaceTargetLink?: (selection: WorkspaceSelection) => void;
+  onUpdateChannel: (input: Partial<Pick<ChatChannel, "displayName" | "header" | "projectId" | "purpose">>) => Promise<void>;
+  notify: (message: string) => void;
+  projects: OrfProject[];
   searchPerformed: boolean;
   searchFocusSignal: number;
   searchLoading: boolean;
@@ -74,11 +86,12 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
     props.activePanel === "thread" ? "话题"
       : props.activePanel === "threads" ? "话题收件箱"
         : props.activePanel === "search" ? "搜索"
-          : props.activePanel === "pins" ? "固定消息"
-            : props.activePanel === "saved" ? "已保存"
+            : props.activePanel === "pins" ? "固定消息"
+              : props.activePanel === "saved" ? "已保存"
+                : props.activePanel === "files" ? "群聊资源"
               : infoTitle;
   return (
-    <aside className="orf-chat-right-panel">
+    <aside className="orf-chat-right-panel" data-active-panel={props.activePanel}>
       <div className="orf-chat-right-header">
         <strong>{title}</strong>
         <IconButton icon={X} label="关闭" onClick={props.onClose} />
@@ -99,6 +112,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
             onCopyLink={props.onCopyLink}
             onCopyMessage={props.onCopyMessage}
             onDelete={props.onDelete}
+            onDriveResourceLink={props.onDriveResourceLink}
             onDraftStateChange={props.onDraftStateChange}
             onEdit={props.onEdit}
             onMarkUnread={props.onMarkUnread}
@@ -111,6 +125,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
             onSend={props.onSendThreadReply}
             onToggleFollow={props.onToggleFollow}
             onTyping={props.onTyping}
+            onWorkspaceTargetLink={props.onWorkspaceTargetLink}
             thread={props.thread}
             users={props.users}
             usersById={props.usersById}
@@ -163,6 +178,17 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
           usersById={props.usersById}
         />
       )}
+      {props.activePanel === "files" && (
+        <ChatDrivePanel
+          canManage={props.canManage}
+          canWrite={props.canWrite}
+          channel={props.channel}
+          onSelectionRequestHandled={props.onDriveSelectionRequestHandled}
+          selectionRequest={props.driveSelectionRequest}
+          notify={props.notify}
+          onAnnouncementMessage={props.onAnnouncementMessage}
+        />
+      )}
       {props.activePanel === "info" && (
         <ChatChannelInfoPanel
           canManage={props.canManage}
@@ -172,6 +198,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
           onAddMembers={props.onAddMembers}
           onRemoveMember={props.onRemoveMember}
           onUpdateChannel={props.onUpdateChannel}
+          projects={props.projects}
           users={props.allUsers}
           usersById={props.usersById}
         />

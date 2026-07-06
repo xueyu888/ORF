@@ -11,6 +11,10 @@
     "label": "侧边栏工作日志入口",
     "audience": "all"
   },
+  "nav.drive": {
+    "label": "侧边栏资源入口",
+    "audience": "all"
+  },
   "nav.chat": {
     "label": "侧边栏聊天入口",
     "audience": "all"

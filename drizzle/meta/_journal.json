@@ -484,6 +484,62 @@
       "when": 1782941000000,
       "tag": "0068_repair_point_ledger_settlement_period",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1783030000000,
+      "tag": "0069_project_chat_file_management",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1783110000000,
+      "tag": "0070_team_drive_chat_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1783190000000,
+      "tag": "0071_drive_product_grade_resources",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1783191000000,
+      "tag": "0072_drive_work_context_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1783192000000,
+      "tag": "0073_drive_docx_preview",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1783193000000,
+      "tag": "0074_backfill_chat_uploaded_drive_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1783194000000,
+      "tag": "0075_backfill_docx_preview_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1783195000000,
+      "tag": "0076_drive_derived_previews",
+      "breakpoints": true
     }
   ]
 }

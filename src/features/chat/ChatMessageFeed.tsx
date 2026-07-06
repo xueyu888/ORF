@@ -1,7 +1,9 @@
 import { CheckCheck, ChevronDown, Loader2, Reply } from "lucide-react";
 import type { RefObject } from "react";
 import type { ChatMessage, ChatUser, Feedback } from "../../types/orf";
+import type { WorkspaceSelection } from "../workspace/workspaceTypes";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
+import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { formatDay } from "./chatFormat";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import { resolveUnreadJumpTarget, type ChatUnreadJumpTarget, type UnreadAnchor } from "./chatModels";
@@ -27,6 +29,7 @@ type ChatMessageFeedProps = {
   onCopyLink: (message: ChatMessage) => void;
   onCopyMessage: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
+  onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
   onEdit: (message: ChatMessage) => void;
   onJumpUnread: (target: ChatUnreadJumpTarget) => void;
   onLoadLatest: () => void;
@@ -41,6 +44,7 @@ type ChatMessageFeedProps = {
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onScroll: () => void;
   onThread: (rootMessageId: string, options?: ChatOpenThreadOptions) => void;
+  onWorkspaceTargetLink?: (selection: WorkspaceSelection) => void;
   pendingNewMessageCount: number;
   reactionPickerMessageId: string | null;
   reactionPickerSignal: number;
@@ -73,6 +77,7 @@ export function ChatMessageFeed({
   onCopyLink,
   onCopyMessage,
   onDelete,
+  onDriveResourceLink,
   onEdit,
   onJumpUnread,
   onLoadLatest,
@@ -87,6 +92,7 @@ export function ChatMessageFeed({
   onSaveEdit,
   onScroll,
   onThread,
+  onWorkspaceTargetLink,
   pendingNewMessageCount,
   reactionPickerMessageId,
   reactionPickerSignal,
@@ -122,6 +128,7 @@ export function ChatMessageFeed({
           onCopyLink={onCopyLink}
           onCopyMessage={onCopyMessage}
           onDelete={onDelete}
+          onDriveResourceLink={onDriveResourceLink}
           onEdit={onEdit}
           onJumpUnread={onJumpUnread}
           onLoadOlder={onLoadOlder}
@@ -134,6 +141,7 @@ export function ChatMessageFeed({
           onSave={onSave}
           onSaveEdit={onSaveEdit}
           onThread={onThread}
+          onWorkspaceTargetLink={onWorkspaceTargetLink}
           reactionPickerMessageId={reactionPickerMessageId}
           reactionPickerSignal={reactionPickerSignal}
           unreadAnchor={unreadAnchor}
@@ -173,6 +181,7 @@ function MessageList({
   onCancelEdit,
   onClearUnread,
   onDelete,
+  onDriveResourceLink,
   onEdit,
   onJumpUnread,
   onLoadOlder,
@@ -185,6 +194,7 @@ function MessageList({
   onSave,
   onSaveEdit,
   onThread,
+  onWorkspaceTargetLink,
   reactionPickerMessageId,
   reactionPickerSignal,
   usersById,
@@ -260,6 +270,7 @@ function MessageList({
               onCopyLink={onCopyLink}
               onCopyMessage={onCopyMessage}
               onDelete={onDelete}
+              onDriveResourceLink={onDriveResourceLink}
               onEdit={onEdit}
               onMarkUnread={onMarkUnread}
               onPin={onPin}
@@ -269,6 +280,7 @@ function MessageList({
               onSave={onSave}
               onSaveEdit={onSaveEdit}
               onThread={onThread}
+              onWorkspaceTargetLink={onWorkspaceTargetLink}
               reactionPickerSignal={reactionPickerMessageId === message.id ? reactionPickerSignal : undefined}
               usersById={usersById}
             />

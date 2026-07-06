@@ -5,7 +5,9 @@ import { createPortal } from "react-dom";
 import { Button, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser, Feedback } from "../../types/orf";
 import { formatPastedFeedbackLinks } from "../feedback/model/feedbackIssue";
+import type { WorkspaceSelection } from "../workspace/workspaceTypes";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
+import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
@@ -32,6 +34,7 @@ type ChatMessageItemProps = {
   onCopyLink: (message: ChatMessage) => void;
   onCopyMessage: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
+  onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
   onEdit: (message: ChatMessage) => void;
   onMarkUnread?: (message: ChatMessage) => void;
   onPin?: (message: ChatMessage) => void;
@@ -41,6 +44,7 @@ type ChatMessageItemProps = {
   onSave?: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onThread?: (rootMessageId: string, options?: ChatOpenThreadOptions) => void;
+  onWorkspaceTargetLink?: (selection: WorkspaceSelection) => void;
   reactionPickerSignal?: number;
   usersById: Map<string, ChatUser>;
 };
@@ -130,10 +134,14 @@ function MessageAuthorAvatar({
 function CollapsibleMessageText({
   body,
   feedbackItems,
+  onDriveResourceLink,
+  onWorkspaceTargetLink,
   usersById,
 }: {
   body: string;
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
+  onWorkspaceTargetLink?: (selection: WorkspaceSelection) => void;
   usersById: Map<string, ChatUser>;
 }) {
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -184,7 +192,13 @@ function CollapsibleMessageText({
         ref={contentRef}
         style={overflowing && !expanded ? { maxHeight: chatMessageCollapsedTextMaxHeightPx } : undefined}
       >
-        <ChatMarkdown body={body} feedbackItems={feedbackItems} usersById={usersById} />
+        <ChatMarkdown
+          body={body}
+          feedbackItems={feedbackItems}
+          onDriveResourceLink={onDriveResourceLink}
+          onWorkspaceTargetLink={onWorkspaceTargetLink}
+          usersById={usersById}
+        />
       </div>
       {overflowing && (
         <button
@@ -422,6 +436,7 @@ export function ChatMessageItem({
   onCopyLink,
   onCopyMessage,
   onDelete,
+  onDriveResourceLink,
   onEdit,
   onMarkUnread,
   onPin,
@@ -431,6 +446,7 @@ export function ChatMessageItem({
   onSave,
   onSaveEdit,
   onThread,
+  onWorkspaceTargetLink,
   reactionPickerSignal,
   usersById,
 }: ChatMessageItemProps) {
@@ -673,7 +689,13 @@ export function ChatMessageItem({
           </div>
         ) : (
           <>
-            <CollapsibleMessageText body={message.body} feedbackItems={feedbackItems} usersById={usersById} />
+            <CollapsibleMessageText
+              body={message.body}
+              feedbackItems={feedbackItems}
+              onDriveResourceLink={onDriveResourceLink}
+              onWorkspaceTargetLink={onWorkspaceTargetLink}
+              usersById={usersById}
+            />
             <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
             {deliveryStatus === "failed" && (
               <div className="orf-chat-delivery-status" role="alert">

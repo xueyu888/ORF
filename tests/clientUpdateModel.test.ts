@@ -91,7 +91,7 @@ test("client update external URLs are restricted to ORF assets and GitHub mirror
   assert.equal(isTrustedClientUpdateUrl("https://example.com/xueyu888/ORF/releases/tag/v0.0.2"), false);
 });
 
-test("client update desktop install falls back to GitHub mirror only after native payload rejection", () => {
+test("client update install falls back to trusted mirror only after native URL rejection", () => {
   const asset = {
     downloadUrl: "https://orf-xueyu.duckdns.org:8443/api/client-updates/assets/0.0.2/ORF-0.0.2-win11-x64-setup.exe",
     mirrorDownloadUrl: "https://github.com/xueyu888/ORF/releases/download/v0.0.2/ORF-0.0.2-win11-x64-setup.exe",
@@ -102,6 +102,13 @@ test("client update desktop install falls back to GitHub mirror only after nativ
     selectClientUpdateMirrorFallbackUrl(asset, {
       attemptedUrl: asset.downloadUrl,
       reason: "invalid_payload",
+    }),
+    asset.mirrorDownloadUrl,
+  );
+  assert.equal(
+    selectClientUpdateMirrorFallbackUrl(asset, {
+      attemptedUrl: asset.downloadUrl,
+      reason: "untrusted_url",
     }),
     asset.mirrorDownloadUrl,
   );

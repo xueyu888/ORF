@@ -7,9 +7,12 @@ import {
   chatThemeSchema,
   defaultChatTheme,
   normalizeUserDisplayPreferences,
+  normalizeWorkspaceLayoutPreferences,
   type ChatTheme,
   type UserDisplayPreferences,
+  type WorkspaceLayoutPreferences,
   userDisplayPreferencesPatchSchema,
+  workspaceLayoutPreferencesPatchSchema,
 } from "../../src/domain/settings/personalPreferences";
 import {
   acceptsLegacyAppBackgroundScene,
@@ -42,6 +45,7 @@ export type UserPreferences = {
   sidebarCollapsed: boolean | null;
   chatTheme: ChatTheme;
   display: UserDisplayPreferences;
+  workspaceLayout: WorkspaceLayoutPreferences;
   appBackground: BackgroundSceneConfig | null;
   backgrounds: Partial<Record<CanonicalBackgroundScene, BackgroundSceneConfig | null>>;
   notificationDisplay: {
@@ -60,6 +64,7 @@ export const userPreferencesPatchSchema = z.object({
   sidebarCollapsed: z.boolean().nullable().optional(),
   chatTheme: chatThemeSchema.optional(),
   display: userDisplayPreferencesPatchSchema.optional(),
+  workspaceLayout: workspaceLayoutPreferencesPatchSchema.optional(),
   appBackground: backgroundSceneConfigSchema.nullable().optional(),
   backgrounds: z.record(z.string(), backgroundSceneConfigSchema.nullable()).optional(),
   notificationDisplay: z.object({ toastEnabled: z.boolean().optional() }).optional(),
@@ -96,6 +101,7 @@ function defaultUserPreferences(userId: string): UserPreferences {
     sidebarCollapsed: null,
     chatTheme: defaultChatTheme,
     display: normalizeUserDisplayPreferences(null),
+    workspaceLayout: normalizeWorkspaceLayoutPreferences(null),
     appBackground: null,
     backgrounds: {},
     notificationDisplay: {
@@ -153,6 +159,7 @@ function normalizeUserPreferences(userId: string, input: Partial<UserPreferences
     sidebarCollapsed: typeof input?.sidebarCollapsed === "boolean" ? input.sidebarCollapsed : input?.sidebarCollapsed === null ? null : fallback.sidebarCollapsed,
     chatTheme: normalizeChatTheme(input?.chatTheme),
     display: normalizeUserDisplayPreferences(input?.display),
+    workspaceLayout: normalizeWorkspaceLayoutPreferences(input?.workspaceLayout),
     appBackground: backgrounds.sidebar_background ?? null,
     backgrounds,
     notificationDisplay: {
@@ -421,6 +428,9 @@ export async function saveUserPreferences(userId: string, patch: z.infer<typeof 
     }
     if (input.display !== undefined) {
       preferences.display = normalizeUserDisplayPreferences(input.display);
+    }
+    if (input.workspaceLayout !== undefined) {
+      preferences.workspaceLayout = normalizeWorkspaceLayoutPreferences(input.workspaceLayout);
     }
     if (input.notificationDisplay) {
       preferences.notificationDisplay = {

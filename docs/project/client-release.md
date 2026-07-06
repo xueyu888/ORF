@@ -65,14 +65,21 @@ npm run client:android:assemble:release
 推送 `v*` 标签会触发客户端发布流程：
 
 ```bash
-npm run release:clients -- --tag v0.0.1
+npm run release:clients -- --tag v0.0.1 --notes "说明本版本面向用户更新了什么"
 ```
 
 需要等待 GitHub Actions 完成、核对 ORF 主更新源和 GitHub 镜像资产时运行：
 
 ```bash
-npm run release:clients -- --tag v0.0.1 --watch
+npm run release:clients -- --tag v0.0.1 --notes-file release-notes/v0.0.1.md --watch
 ```
+
+客户端发布有两个必须分开的事实源：
+
+- 版本号事实源：根 `package.json`，由 `scripts/sync-client-versions.mjs` 同步到 Win11 和 Android 客户端工程。
+- 发布说明事实源：本次发布输入的 `--notes` 或 `--notes-file`。`scripts/release-clients.mjs` 会把说明写入 annotated tag 的 `更新说明：` 段落；`.github/workflows/release-clients.yml` 只从该段落或手动触发输入读取用户可见更新说明。没有更新说明的 tag 不能继续生成客户端 Release。
+
+GitHub Release 标题必须包含 `ORF vX.Y.Z`，正文必须包含 `主要更新：`。正文会继续附带提交记录、客户端包、安装后提示、数据和权限来源、已知边界；其中“主要更新”说明本版本面向用户更新了什么，提交记录只作为代码证据，不能替代用户可读版本说明。
 
 ORF 客户端运行时默认使用 ORF 主更新源：
 
@@ -80,8 +87,8 @@ ORF 客户端运行时默认使用 ORF 主更新源：
 - 安装包存储在 `ORF_CLIENT_UPDATE_ASSET_DIR/<version>/<assetName>`。
 - 客户端收到的默认下载地址是 `https://orf-xueyu.duckdns.org:8443/api/client-updates/assets/<version>/<assetName>`。
 - GitHub Release 只作为外部镜像页面和 ORF 资产缺失时的兜底下载来源。
-- 已安装旧版 Win11 原生壳如果尚未信任 ORF 主更新源，会在拒绝安装参数后由 Web 运行时自动改用 GitHub 镜像地址重试；这只用于旧壳兼容，不改变新客户端默认走 ORF 主更新源的规则。
-- 如果旧客户端已经打开且仍运行旧 Web 代码，当前版本的 Win11 清单可以临时把可信 GitHub 镜像设为主下载地址、把 ORF 资产地址保留为镜像；发布脚本后续默认仍写 ORF 主源。
+- 已安装旧版 Win11 或 Android 原生壳如果尚未信任 ORF 主更新源，会在拒绝安装参数后由 Web 运行时自动改用 GitHub 镜像地址重试；这只用于旧壳兼容，不改变新客户端默认走 ORF 主更新源的规则。
+- 如果旧客户端已经打开且仍运行旧 Web 代码，当前版本的客户端清单可以临时把可信 GitHub 镜像设为主下载地址、把 ORF 资产地址保留为镜像；发布脚本后续默认仍写 ORF 主源。
 
 GitHub Actions 在两个平台产物都生成后，只上传 GitHub Release 镜像。发布脚本的 `--watch` 会等待工作流完成、核对镜像资产，再由本机把安装包同步到 ORF 主更新源，并把 ORF 发布清单作为最后一步写入，让客户端只在主源资产和镜像地址都准备好后看到新版本。自动化不会把管理员登录态写进发布流程；服务端和发布环境必须配置同一个 `ORF_CLIENT_UPDATE_PUBLISH_SECRET` 才能同步主更新源，必须配置同一个 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 才会广播在线客户端。
 

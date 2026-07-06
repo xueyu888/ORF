@@ -17,11 +17,14 @@ const options = parseArgs(process.argv.slice(2));
 const packageJson = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const releaseTag = options.tag ?? `v${packageJson.version}`;
 const repository = options.repository ?? defaultRepository;
+const releaseNotesMarker = "更新说明：";
 
 if (options.help) {
   printHelp();
   process.exit(0);
 }
+
+const releaseNotes = resolveReleaseNotesOption(options);
 
 assertReleaseTag(releaseTag);
 const branch = options.branch ?? git(["branch", "--show-current"], { capture: true }).trim();
@@ -40,7 +43,7 @@ if (pendingCommits) {
   console.log(pendingCommits);
 }
 
-ensureLocalTagAtHead(releaseTag);
+ensureLocalTagAtHead(releaseTag, releaseNotes);
 
 logSection(`推送分支 ${branch}`);
 git(["push", "--no-verify", "origin", branch]);
@@ -76,6 +79,7 @@ console.log(`${release.name} ${release.url}`);
 for (const asset of release.assets ?? []) {
   console.log(`- ${asset.name} (${formatBytes(asset.size)})`);
 }
+assertReleaseBodyHasNotes(release, releaseTag);
 
 await publishClientUpdateReleaseToOrf(release);
 await broadcastClientUpdateRelease(release);
@@ -86,6 +90,8 @@ function parseArgs(args) {
     broadcast: true,
     broadcastUrl: null,
     help: false,
+    notes: null,
+    notesFile: null,
     publishAssets: true,
     publishUrl: null,
     repository: null,
@@ -99,6 +105,8 @@ function parseArgs(args) {
     else if (arg === "--no-watch") parsed.watch = false;
     else if (arg === "--no-broadcast") parsed.broadcast = false;
     else if (arg === "--no-publish-assets") parsed.publishAssets = false;
+    else if (arg === "--notes") parsed.notes = readValue(args, ++index, arg);
+    else if (arg === "--notes-file") parsed.notesFile = readValue(args, ++index, arg);
     else if (arg === "--broadcast-url") parsed.broadcastUrl = readValue(args, ++index, arg);
     else if (arg === "--publish-url") parsed.publishUrl = readValue(args, ++index, arg);
     else if (arg === "--branch") parsed.branch = readValue(args, ++index, arg);
@@ -119,12 +127,14 @@ function printHelp() {
   console.log(`ORF 客户端 Release 发布脚本
 
 用法:
-  npm run release:clients -- --tag v0.0.3
-  npm run release:clients -- --tag v0.0.3 --watch
+  npm run release:clients -- --tag v0.0.3 --notes "修复工作日志入口，并优化客户端更新提示"
+  npm run release:clients -- --tag v0.0.3 --notes-file release-notes/v0.0.3.md --watch
 
 行为:
   - 要求工作区干净。
   - 使用 package.json 版本作为默认 tag，也可用 --tag 指定。
+  - 新发布 tag 必须提供 --notes 或 --notes-file，说明本版本面向用户更新了什么。
+  - 发布说明会写入 annotated tag，GitHub Release 和 ORF 主更新源共用这份说明。
   - 使用 git push --no-verify 推送分支和 tag，避免发布时触发本地 testd pre-push 门禁。
   - 默认只触发 .github/workflows/release-clients.yml，不等待 GitHub Actions。
   - 加 --watch 时才等待工作流完成并核对 GitHub Release 镜像资产。
@@ -141,7 +151,34 @@ function assertReleaseTag(tag) {
   }
 }
 
-function ensureLocalTagAtHead(tag) {
+function resolveReleaseNotesOption(input) {
+  if (input.notes && input.notesFile) {
+    fail("只能指定 --notes 或 --notes-file 其中一个。");
+  }
+  if (input.notesFile) {
+    try {
+      return normalizeReleaseNotesText(fs.readFileSync(input.notesFile, "utf8"));
+    } catch (error) {
+      fail(`读取发布说明文件失败: ${input.notesFile}\n${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  if (input.notes) {
+    return normalizeReleaseNotesText(input.notes);
+  }
+  return null;
+}
+
+function normalizeReleaseNotesText(value) {
+  const normalized = String(value ?? "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .trim();
+  return normalized || null;
+}
+
+function ensureLocalTagAtHead(tag, notes) {
   const head = git(["rev-parse", "HEAD"], { capture: true }).trim();
   const existingTag = spawnSync("git", ["rev-parse", "-q", "--verify", `refs/tags/${tag}^{}`], { encoding: "utf8" });
   if (existingTag.status === 0) {
@@ -149,10 +186,48 @@ function ensureLocalTagAtHead(tag) {
     if (tagCommit !== head) {
       fail(`${tag} 已存在但不指向当前 HEAD: ${tagCommit}`);
     }
+    assertExistingTagHasReleaseNotes(tag, notes);
     console.log(`${tag} 已存在并指向当前 HEAD。`);
     return;
   }
-  git(["tag", "-a", tag, "-m", `发布 ORF ${tag}`]);
+  if (!notes) {
+    fail(`发布客户端必须说明本版本更新了什么。请使用 --notes "..." 或 --notes-file <path> 后再发布 ${tag}。`);
+  }
+  git(["tag", "-a", tag, "-m", buildReleaseTagMessage(tag, notes)]);
+}
+
+function assertExistingTagHasReleaseNotes(tag, expectedNotes) {
+  const tagType = git(["cat-file", "-t", `refs/tags/${tag}`], { capture: true }).trim();
+  if (tagType !== "tag") {
+    fail(`${tag} 已存在但不是 annotated tag，无法作为发布说明事实源。请确认删除并重建 tag，或改用带 release_notes 的 workflow_dispatch。`);
+  }
+
+  const actualNotes = extractReleaseNotesFromTag(tag);
+  if (!actualNotes) {
+    fail(`${tag} 已存在但没有 ${releaseNotesMarker}，无法保证发布说明包含“更新了什么”。请确认删除并重建 tag，或改用带 release_notes 的 workflow_dispatch。`);
+  }
+  if (expectedNotes && actualNotes !== expectedNotes) {
+    fail(`${tag} 已存在，但 tag 内发布说明与当前 --notes/--notes-file 不一致。为避免重写发布历史，请先确认使用哪份说明。`);
+  }
+}
+
+function buildReleaseTagMessage(tag, notes) {
+  return `发布 ORF ${tag}\n\n${releaseNotesMarker}\n${notes}\n`;
+}
+
+function extractReleaseNotesFromTag(tag) {
+  const message = git(["tag", "-l", tag, "--format=%(contents)"], { capture: true });
+  const lines = message.replace(/\r\n/g, "\n").split("\n");
+  const markerIndex = lines.findIndex((line) => line.trim() === releaseNotesMarker);
+  if (markerIndex < 0) return null;
+  return normalizeReleaseNotesText(lines.slice(markerIndex + 1).join("\n"));
+}
+
+function assertReleaseBodyHasNotes(release, tag) {
+  const body = String(release.body ?? "");
+  if (!body.includes(`ORF ${tag}`) || !body.includes("主要更新：")) {
+    fail(`${tag} 的 GitHub Release 未包含完整版本信息和主要更新说明，已停止同步 ORF 主更新源。`);
+  }
 }
 
 function waitForReleaseRun(input) {

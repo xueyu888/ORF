@@ -8,6 +8,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  File,
+  FileText,
+  Folder,
+  Image,
   Loader2,
   NotebookPen,
   PencilLine,
@@ -28,12 +32,14 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FantasyDatePicker } from "../components/FantasyDatePicker";
 import { FantasySelectMenu } from "../components/FantasySelectMenu";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, IconButton } from "../components/ui";
 import { UserAvatar } from "../components/UserAvatar";
+import { RelatedResourcesPanel } from "../features/drive/RelatedResourcesPanel";
+import { driveNodeMetaLabel, formatDriveDateTime } from "../features/drive/drivePresentation";
 import {
   OrfRichTextEditor,
   orfRichTextHasMeaningfulContent,
@@ -76,6 +82,7 @@ import {
   getWorkLogActivity,
   getWorkLogObjectives,
   getWorkLogReport,
+  searchDriveRequest,
   suggestWorkLogClassification,
   updateMyWorkLogEntry,
 } from "../state/apiClient";
@@ -84,6 +91,7 @@ import type {
   WorkLogActivityItem,
   WorkLogCategoryOption,
   WorkLogClassificationSuggestion,
+  DriveNode,
   WorkLogEntry,
   WorkLogObjectiveOption,
   WorkLogReport,
@@ -209,6 +217,7 @@ export function WorkLogsPage() {
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [reportError, setReportError] = useState("");
+  const [workLogResourceRevision, setWorkLogResourceRevision] = useState(0);
   const [reportMonth, setReportMonth] = useState(() =>
     monthFromDate(dateFromSearch(location.search)),
   );
@@ -576,6 +585,9 @@ export function WorkLogsPage() {
   );
   const activityHasMore =
     !activityExpanded && activityEntries.length > workLogActivityCollapsedLimit;
+  const refreshWorkLogResources = useCallback(() => {
+    setWorkLogResourceRevision((value) => value + 1);
+  }, []);
   const activityGroups = useMemo(
     () => groupActivityByDate(visibleActivityEntries),
     [visibleActivityEntries],
@@ -773,13 +785,23 @@ export function WorkLogsPage() {
                   加载中
                 </div>
               ) : (
-                <WorkLogHistoryList
-                  currentEditingEntryId={editorDraft.editingEntryId}
-                  deletingEntryId={deletingEntryId}
-                  entries={myEntries}
-                  onDelete={deleteEntry}
-                  onEdit={editExistingEntry}
-                />
+                <>
+                  <WorkLogDayResourcesSummary
+                    entries={myEntries}
+                    notify={notify}
+                    revision={workLogResourceRevision}
+                  />
+                  <WorkLogHistoryList
+                    canEditResources={Boolean(currentUser)}
+                    currentEditingEntryId={editorDraft.editingEntryId}
+                    deletingEntryId={deletingEntryId}
+                    entries={myEntries}
+                    notify={notify}
+                    onDelete={deleteEntry}
+                    onEdit={editExistingEntry}
+                    onResourceChanged={refreshWorkLogResources}
+                  />
+                </>
               )}
             </Card>
           </div>
@@ -1152,18 +1174,159 @@ function WorkLogClassificationSuggestionSlot({
   );
 }
 
+type WorkLogDayResourceItem = {
+  entry: WorkLogEntry;
+  node: DriveNode;
+};
+
+function WorkLogDayResourcesSummary({
+  entries,
+  notify,
+  revision,
+}: {
+  entries: WorkLogEntry[];
+  notify: (message: string) => void;
+  revision: number;
+}) {
+  const [items, setItems] = useState<WorkLogDayResourceItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const entrySignature = useMemo(() => entries.map((entry) => entry.id).join("|"), [entries]);
+
+  useEffect(() => {
+    let disposed = false;
+    if (entries.length === 0) {
+      setItems([]);
+      setErrorMessage("");
+      setLoading(false);
+      return undefined;
+    }
+    setLoading(true);
+    setErrorMessage("");
+    Promise.allSettled(
+      entries.map(async (entry) => {
+        const response = await searchDriveRequest({
+          contextId: entry.id,
+          contextType: "workLog",
+          limit: 8,
+          status: "active",
+          type: "all",
+        });
+        return response.nodes.map((node): WorkLogDayResourceItem => ({ entry, node }));
+      }),
+    )
+      .then((results) => {
+        if (disposed) return;
+        const nextItems: WorkLogDayResourceItem[] = [];
+        let failed = false;
+        for (const result of results) {
+          if (result.status === "fulfilled") nextItems.push(...result.value);
+          else failed = true;
+        }
+        setItems(dedupeWorkLogDayResources(nextItems));
+        if (failed) {
+          const message = "部分日志资源加载失败";
+          setErrorMessage(message);
+          notify(message);
+        }
+      })
+      .catch((error) => {
+        if (disposed) return;
+        const message = error instanceof Error ? error.message : "当天资源加载失败";
+        setErrorMessage(message);
+        notify(message);
+        setItems([]);
+      })
+      .finally(() => {
+        if (!disposed) setLoading(false);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [entrySignature, entries, notify, revision]);
+
+  return (
+    <section className="work-logs-day-resources" aria-label="当天相关资源">
+      <div className="work-logs-day-resources-heading">
+        <span>
+          <strong>当天资源</strong>
+          <small>{loading ? "同步中" : `${items.length} 项`}</small>
+        </span>
+      </div>
+      {errorMessage ? (
+        <div className="work-logs-day-resources-empty is-error">{errorMessage}</div>
+      ) : loading && items.length === 0 ? (
+        <div className="work-logs-day-resources-empty">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>正在同步资源</span>
+        </div>
+      ) : items.length > 0 ? (
+        <div className="work-logs-day-resources-list">
+          {items.map((item) => (
+            <WorkLogDayResourceRow item={item} key={`${item.entry.id}:${item.node.id}`} />
+          ))}
+        </div>
+      ) : (
+        <div className="work-logs-day-resources-empty">当天日志还没有关联资源</div>
+      )}
+    </section>
+  );
+}
+
+function WorkLogDayResourceRow({ item }: { item: WorkLogDayResourceItem }) {
+  const Icon = iconForDriveNode(item.node);
+  const meta = [workLogEntryTargetLabel(item.entry), driveNodeMetaLabel(item.node), formatDriveDateTime(item.node.updatedAt)]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <Link className="work-logs-day-resource-row" to={`/resources/${encodeURIComponent(item.node.id)}/preview`} title={item.node.name}>
+      <Icon className="h-4 w-4" aria-hidden="true" />
+      <span>
+        <strong>{item.node.name}</strong>
+        <small>{meta}</small>
+      </span>
+    </Link>
+  );
+}
+
+function dedupeWorkLogDayResources(items: WorkLogDayResourceItem[]) {
+  const byNodeId = new Map<string, WorkLogDayResourceItem>();
+  for (const item of items) {
+    if (!byNodeId.has(item.node.id)) byNodeId.set(item.node.id, item);
+  }
+  return [...byNodeId.values()].sort((left, right) => {
+    const leftTime = new Date(left.node.updatedAt).getTime();
+    const rightTime = new Date(right.node.updatedAt).getTime();
+    if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) return rightTime - leftTime;
+    return left.node.name.localeCompare(right.node.name, "zh-CN");
+  });
+}
+
+function iconForDriveNode(node: DriveNode) {
+  if (node.type === "folder") return Folder;
+  if (node.file?.previewKind === "image") return Image;
+  if (node.file?.previewKind === "docx" || node.file?.previewKind === "pdf" || node.file?.previewKind === "markdown" || node.file?.previewKind === "text") return FileText;
+  return File;
+}
+
 function WorkLogHistoryList({
+  canEditResources,
   currentEditingEntryId,
   deletingEntryId,
   entries,
+  notify,
   onDelete,
   onEdit,
+  onResourceChanged,
 }: {
+  canEditResources: boolean;
   currentEditingEntryId: string | null;
   deletingEntryId: string | null;
   entries: WorkLogEntry[];
+  notify: (message: string) => void;
   onDelete: (entry: WorkLogEntry) => void;
   onEdit: (entry: WorkLogEntry) => void;
+  onResourceChanged: () => void;
 }) {
   return (
     <section className="work-logs-history">
@@ -1227,6 +1390,20 @@ function WorkLogHistoryList({
                 </div>
               </div>
               <WorkLogMarkdown body={entry.bodyMarkdown} />
+              {entry.id === currentEditingEntryId && (
+                <RelatedResourcesPanel
+                  canEdit={canEditResources}
+                  className="work-logs-entry-related-resources"
+                  compact
+                  contextId={entry.id}
+                  contextType="workLog"
+                  emptyLabel="这条日志还没有资源"
+                  limit={4}
+                  notify={notify}
+                  onChanged={onResourceChanged}
+                  title="日志资源"
+                />
+              )}
             </article>
           ))}
         </div>

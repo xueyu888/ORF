@@ -1422,6 +1422,7 @@ export function ChallengePlanPage() {
               alignmentRequests: challengeState.objectiveAlignmentRequests,
               trialReviews: challengeState.objectiveTrialReviews,
               currentUser,
+              notify,
               draftObjectiveId,
               canCreateObjective,
               canManageProjects: currentUser?.role === "admin",

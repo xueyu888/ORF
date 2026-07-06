@@ -53,6 +53,8 @@ export type ChannelRow = {
   header: string;
   id: string;
   name: string | null;
+  project_id: string | null;
+  project_name: string | null;
   purpose: string;
   system_kind: ChatSystemKind | null;
   system_recipient_user_id: string | null;

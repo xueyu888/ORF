@@ -37,6 +37,31 @@ export const commentTargetTypeEnum = pgEnum("comment_target_type", ["objective",
 export const commentStatusEnum = pgEnum("comment_status", ["open", "resolved"]);
 export const chatChannelTypeEnum = pgEnum("chat_channel_type", ["public", "private", "direct"]);
 export const chatMemberRoleEnum = pgEnum("chat_member_role", ["owner", "admin", "member"]);
+export const driveNodeTypeEnum = pgEnum("drive_node_type", ["folder", "file"]);
+export const drivePreviewKindEnum = pgEnum("drive_file_preview_kind", ["download", "docx", "image", "markdown", "pdf", "text"]);
+export const driveNodeEventActionEnum = pgEnum("drive_node_event_action", [
+  "folder_created",
+  "file_uploaded",
+  "file_version_uploaded",
+  "file_version_restored",
+  "node_deleted",
+  "node_restored",
+  "context_linked",
+  "context_unlinked",
+  "chat_linked",
+  "chat_unlinked",
+]);
+export const driveContextTypeEnum = pgEnum("drive_context_type", [
+  "project",
+  "objective",
+  "result",
+  "task",
+  "feedback",
+  "workLog",
+  "chatChannel",
+  "chatMessage",
+  "chatThread",
+]);
 export const notificationStreamEnum = pgEnum("notification_stream", ["personalNotification", "teamAnnouncement"]);
 export const teams = pgTable("teams", {
   id: text("id").primaryKey(),
@@ -108,6 +133,137 @@ export const projects = pgTable(
   },
   (table) => ({
     teamNameUnique: uniqueIndex("projects_team_name_unique").on(table.teamId, table.name),
+  }),
+);
+
+export const driveNodes = pgTable(
+  "drive_nodes",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    parentId: text("parent_id"),
+    nodeType: driveNodeTypeEnum("node_type").notNull(),
+    name: text("name").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+    deletedAt: timestamp("deleted_at", { mode: "string", withTimezone: true }),
+  },
+  (table) => ({
+    teamParent: index("drive_nodes_team_parent_idx").on(table.teamId, table.parentId),
+  }),
+);
+
+export const driveFiles = pgTable(
+  "drive_files",
+  {
+    id: text("id").primaryKey(),
+    nodeId: text("node_id")
+      .notNull()
+      .references(() => driveNodes.id, { onDelete: "cascade" }),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    objectKey: text("object_key").notNull(),
+    fileName: text("file_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    fileSize: bigint("file_size", { mode: "number" }).notNull(),
+    previewKind: drivePreviewKindEnum("preview_kind").notNull().default("download"),
+    previewObjectKey: text("preview_object_key"),
+    previewMimeType: text("preview_mime_type"),
+    previewFileSize: bigint("preview_file_size", { mode: "number" }),
+    previewGeneratedAt: timestamp("preview_generated_at", { mode: "string", withTimezone: true }),
+    previewError: text("preview_error"),
+    width: integer("width"),
+    height: integer("height"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    nodeUnique: uniqueIndex("drive_files_node_unique").on(table.nodeId),
+    teamCreated: index("drive_files_team_created_idx").on(table.teamId, table.createdAt),
+  }),
+);
+
+export const driveFileVersions = pgTable(
+  "drive_file_versions",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    fileId: text("file_id")
+      .notNull()
+      .references(() => driveFiles.id, { onDelete: "cascade" }),
+    nodeId: text("node_id")
+      .notNull()
+      .references(() => driveNodes.id, { onDelete: "cascade" }),
+    versionNumber: integer("version_number").notNull(),
+    objectKey: text("object_key").notNull(),
+    fileName: text("file_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    fileSize: bigint("file_size", { mode: "number" }).notNull(),
+    previewKind: drivePreviewKindEnum("preview_kind").notNull().default("download"),
+    previewObjectKey: text("preview_object_key"),
+    previewMimeType: text("preview_mime_type"),
+    previewFileSize: bigint("preview_file_size", { mode: "number" }),
+    previewGeneratedAt: timestamp("preview_generated_at", { mode: "string", withTimezone: true }),
+    previewError: text("preview_error"),
+    width: integer("width"),
+    height: integer("height"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    fileVersionUnique: uniqueIndex("drive_file_versions_file_version_unique").on(table.fileId, table.versionNumber),
+    teamFileCreated: index("drive_file_versions_team_file_created_idx").on(table.teamId, table.fileId, table.createdAt),
+  }),
+);
+
+export const driveNodeEvents = pgTable(
+  "drive_node_events",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    nodeId: text("node_id")
+      .notNull()
+      .references(() => driveNodes.id, { onDelete: "cascade" }),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    action: driveNodeEventActionEnum("action").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    teamCreated: index("drive_node_events_team_created_idx").on(table.teamId, table.createdAt),
+    nodeCreated: index("drive_node_events_node_created_idx").on(table.nodeId, table.createdAt),
+  }),
+);
+
+export const driveNodeContextLinks = pgTable(
+  "drive_node_context_links",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    nodeId: text("node_id")
+      .notNull()
+      .references(() => driveNodes.id, { onDelete: "cascade" }),
+    contextType: driveContextTypeEnum("context_type").notNull(),
+    contextId: text("context_id").notNull(),
+    label: text("label"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    nodeContextUnique: uniqueIndex("drive_node_context_links_node_context_unique").on(table.teamId, table.nodeId, table.contextType, table.contextId),
+    contextLookup: index("drive_node_context_links_context_idx").on(table.teamId, table.contextType, table.contextId),
   }),
 );
 
@@ -795,6 +951,7 @@ export const chatChannels = pgTable(
     name: text("name"),
     systemKind: text("system_kind").$type<ChatSystemKind>(),
     systemRecipientUserId: uuid("system_recipient_user_id").references(() => users.id, { onDelete: "cascade" }),
+    projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
     displayName: text("display_name").notNull(),
     purpose: text("purpose").notNull().default(""),
     header: text("header").notNull().default(""),
@@ -814,6 +971,7 @@ export const chatChannels = pgTable(
     teamSystemPersonalUnique: uniqueIndex("chat_channels_team_system_personal_unique")
       .on(table.teamId, table.systemKind, table.systemRecipientUserId)
       .where(sql`system_kind = 'personalNotification'`),
+    project: index("chat_channels_project_idx").on(table.teamId, table.projectId),
   }),
 );
 
@@ -838,6 +996,32 @@ export const chatChannelMembers = pgTable(
   (table) => ({
     pk: primaryKey({ columns: [table.channelId, table.userId] }),
     user: index("chat_channel_members_user_idx").on(table.userId),
+  }),
+);
+
+export const chatChannelDriveLinks = pgTable(
+  "chat_channel_drive_links",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    channelId: text("channel_id")
+      .notNull()
+      .references(() => chatChannels.id, { onDelete: "cascade" }),
+    nodeId: text("node_id")
+      .notNull()
+      .references(() => driveNodes.id, { onDelete: "cascade" }),
+    label: text("label"),
+    isDefaultUploadTarget: boolean("is_default_upload_target").notNull().default(false),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    channelNodeUnique: uniqueIndex("chat_channel_drive_links_channel_node_unique").on(table.channelId, table.nodeId),
+    channelDefaultUpload: index("chat_channel_drive_links_channel_default_idx").on(table.channelId, table.isDefaultUploadTarget),
+    teamChannel: index("chat_channel_drive_links_team_channel_idx").on(table.teamId, table.channelId),
   }),
 );
 

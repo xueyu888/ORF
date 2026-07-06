@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GitBranch, Loader2, Plus, Power, Trash2 } from "lucide-react";
 import { Button } from "../../components/ui";
 import { isChatConversation } from "../../domain/chatConversation";
@@ -11,7 +11,7 @@ import {
   type GitLabOrfChatSettingsData,
   type GitLabOrfChatSubscription,
 } from "../../state/apiClient";
-import type { ChatChannel, ChatUser } from "../../types/orf";
+import type { ChatChannel, ChatUser, OrfProject } from "../../types/orf";
 import { formatPresence } from "./chatPresence";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
 import { ChatUserPicker } from "./ChatUserPicker";
@@ -23,7 +23,8 @@ type ChatChannelInfoPanelProps = {
   memberSearchFocusSignal?: number;
   onAddMembers: (userIds: string[]) => Promise<void>;
   onRemoveMember: (userId: string) => Promise<void>;
-  onUpdateChannel: (input: Partial<Pick<ChatChannel, "displayName" | "header" | "purpose">>) => Promise<void>;
+  onUpdateChannel: (input: Partial<Pick<ChatChannel, "displayName" | "header" | "projectId" | "purpose">>) => Promise<void>;
+  projects: OrfProject[];
   users: ChatUser[];
   usersById: Map<string, ChatUser>;
 };
@@ -36,6 +37,7 @@ export function ChatChannelInfoPanel({
   onAddMembers,
   onRemoveMember,
   onUpdateChannel,
+  projects,
   users,
   usersById,
 }: ChatChannelInfoPanelProps) {
@@ -43,6 +45,7 @@ export function ChatChannelInfoPanel({
   const [displayName, setDisplayName] = useState(channel.displayName);
   const [purpose, setPurpose] = useState(channel.purpose);
   const [header, setHeader] = useState(channel.header);
+  const [projectId, setProjectId] = useState(channel.projectId ?? "");
   const [savingDetails, setSavingDetails] = useState(false);
   const [savingMembers, setSavingMembers] = useState(false);
   const [memberMutationError, setMemberMutationError] = useState<string | null>(null);
@@ -53,7 +56,21 @@ export function ChatChannelInfoPanel({
   const canEditChannelMetadata = canManage && !isConversation;
   const canEditConversationHeader = isConversation;
   const canManageMembership = canManage && channel.type === "private";
-  const detailsChanged = displayName !== channel.displayName || purpose !== channel.purpose || header !== channel.header;
+  const boundProject = useMemo(
+    () =>
+      projects.find((project) => project.id === channel.projectId)
+      ?? (channel.projectId && channel.projectName ? { id: channel.projectId, name: channel.projectName } : null),
+    [channel.projectId, channel.projectName, projects],
+  );
+  const projectOptions = useMemo(() => {
+    if (!boundProject || projects.some((project) => project.id === boundProject.id)) return projects;
+    return [boundProject, ...projects];
+  }, [boundProject, projects]);
+  const detailsChanged =
+    displayName !== channel.displayName
+    || purpose !== channel.purpose
+    || header !== channel.header
+    || projectId !== (channel.projectId ?? "");
   const conversationHeaderChanged = header !== channel.header;
   const conversationLabel = "私聊";
 
@@ -61,18 +78,24 @@ export function ChatChannelInfoPanel({
     setDisplayName(channel.displayName);
     setPurpose(channel.purpose);
     setHeader(channel.header);
+    setProjectId(channel.projectId ?? "");
     setSavingDetails(false);
     setSavingMembers(false);
     setMemberMutationError(null);
     setRemovingUserId(null);
     setSelectedUserIds([]);
-  }, [channel.displayName, channel.header, channel.id, channel.purpose]);
+  }, [channel.displayName, channel.header, channel.id, channel.projectId, channel.purpose]);
 
   const saveDetails = async () => {
     if (!canEditChannelMetadata || !displayName.trim()) return;
     setSavingDetails(true);
     try {
-      await onUpdateChannel({ displayName: displayName.trim(), purpose: purpose.trim(), header: header.trim() });
+      await onUpdateChannel({
+        displayName: displayName.trim(),
+        purpose: purpose.trim(),
+        header: header.trim(),
+        projectId: projectId || null,
+      });
     } finally {
       setSavingDetails(false);
     }
@@ -122,6 +145,12 @@ export function ChatChannelInfoPanel({
           <label>频道设置</label>
           <div className="orf-chat-info-fields">
             <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="频道名" />
+            <select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+              <option value="">不绑定项目</option>
+              {projectOptions.map((project) => (
+                <option key={project.id} value={project.id}>{project.name}</option>
+              ))}
+            </select>
             <textarea value={purpose} onChange={(event) => setPurpose(event.target.value)} placeholder="频道说明" rows={3} />
             <textarea value={header} onChange={(event) => setHeader(event.target.value)} placeholder="频道标题" rows={3} />
           </div>
@@ -145,6 +174,12 @@ export function ChatChannelInfoPanel({
             <div className="orf-chat-info-section">
               <label>频道说明</label>
               <p>{channel.purpose || "暂无说明"}</p>
+            </div>
+          )}
+          {!isConversation && (
+            <div className="orf-chat-info-section">
+              <label>绑定项目</label>
+              <p>{boundProject?.name ?? "未绑定项目"}</p>
             </div>
           )}
           <div className="orf-chat-info-section">

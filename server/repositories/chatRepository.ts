@@ -191,6 +191,8 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
           c.system_kind,
           c.name,
           c.system_recipient_user_id,
+          c.project_id,
+          p.name AS project_name,
           c.display_name,
           c.purpose,
           c.header,
@@ -225,6 +227,7 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
           ) AS latest_message_at
         FROM chat_channels c
         INNER JOIN chat_channel_members m ON m.channel_id = c.id AND m.user_id = $2
+        LEFT JOIN projects p ON p.id = c.project_id AND p.team_id = c.team_id
         WHERE c.team_id = $1
           AND c.archived_at IS NULL
           ${channelFilter}
@@ -242,7 +245,7 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
           ) AS direct_duplicate_rank
         FROM visible_channels
       )
-      SELECT id, team_id, type, name, system_kind, system_recipient_user_id, display_name, purpose, header, created_by, archived_by, created_at, updated_at, archived_at
+      SELECT id, team_id, type, name, system_kind, system_recipient_user_id, project_id, project_name, display_name, purpose, header, created_by, archived_by, created_at, updated_at, archived_at
       FROM ranked_channels
       WHERE NOT (type = 'direct' AND system_kind IS NULL AND member_count <> 2)
         AND NOT (type = 'direct' AND system_kind IS NULL AND direct_duplicate_rank > 1)
@@ -417,6 +420,8 @@ async function buildChannels(rows: ChannelRow[], actor: ChatActor): Promise<Chat
       name: row.name,
       systemKind: row.system_kind,
       systemRecipientUserId: row.system_recipient_user_id,
+      projectId: row.project_id,
+      projectName: row.project_name,
       displayName: displayNameForChannel(row, members, usersById, actor),
       purpose: row.purpose,
       header: row.header,
@@ -480,9 +485,11 @@ async function getChannelRow(actor: ChatActor, channelId: string) {
   const teamId = storageTeamId(actor);
   const { rows } = await pool.query<ChannelRow>(
     `
-      SELECT id, team_id, type, name, system_kind, system_recipient_user_id, display_name, purpose, header, created_by, archived_by, created_at, updated_at, archived_at
-      FROM chat_channels
-      WHERE team_id = $1 AND id = $2
+      SELECT c.id, c.team_id, c.type, c.name, c.system_kind, c.system_recipient_user_id, c.project_id, p.name AS project_name,
+             c.display_name, c.purpose, c.header, c.created_by, c.archived_by, c.created_at, c.updated_at, c.archived_at
+      FROM chat_channels c
+      LEFT JOIN projects p ON p.id = c.project_id AND p.team_id = c.team_id
+      WHERE c.team_id = $1 AND c.id = $2
       LIMIT 1
     `,
     [teamId, channelId],
@@ -980,6 +987,13 @@ export async function getChatBootstrap(actor: ChatActor): Promise<ChatBootstrap>
   };
 }
 
+export async function listChatUsers(actor: ChatActor): Promise<ChatUser[]> {
+  if (!actor.canRead) {
+    return [];
+  }
+  return listActiveTeamUsers(storageTeamId(actor));
+}
+
 export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnreadSummary> {
   if (!actor.canRead) {
     return {
@@ -1355,6 +1369,8 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
     channel_display_name: string;
     channel_header: string;
     channel_name: string | null;
+    channel_project_id: string | null;
+    channel_project_name: string | null;
     channel_purpose: string;
     channel_system_kind: ChatChannel["systemKind"];
     channel_system_recipient_user_id: string | null;
@@ -1372,7 +1388,7 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
              root.source, root.system_metadata, root.created_at, root.updated_at, root.edited_at, root.deleted_at, root.deleted_by,
              c.type AS channel_type, c.name AS channel_name, c.system_kind AS channel_system_kind,
              c.system_recipient_user_id AS channel_system_recipient_user_id, c.display_name AS channel_display_name,
-             c.purpose AS channel_purpose, c.header AS channel_header, c.created_by AS channel_created_by,
+             c.project_id AS channel_project_id, p.name AS channel_project_name, c.purpose AS channel_purpose, c.header AS channel_header, c.created_by AS channel_created_by,
              c.created_at AS channel_created_at, c.updated_at AS channel_updated_at, c.archived_at AS channel_archived_at,
              f.following, f.last_viewed_at AS thread_last_viewed_at,
              COALESCE(unread.count, 0)::int AS thread_unread_count
@@ -1384,6 +1400,7 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
       INNER JOIN chat_channels c ON c.id = root.channel_id
         AND c.team_id = $1
         AND c.archived_at IS NULL
+      LEFT JOIN projects p ON p.id = c.project_id AND p.team_id = c.team_id
       INNER JOIN chat_channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
       INNER JOIN users u ON u.id = root.author_user_id
       LEFT JOIN LATERAL (
@@ -1440,6 +1457,8 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
     id: row.channel_id,
     type: row.channel_type,
     name: row.channel_name,
+    project_id: row.channel_project_id,
+    project_name: row.channel_project_name,
     system_kind: row.channel_system_kind ?? null,
     system_recipient_user_id: row.channel_system_recipient_user_id,
     display_name: row.channel_display_name,
@@ -1603,7 +1622,7 @@ export async function createDirectChannel(input: { userIds: string[] }, actor: C
 
 export async function updateChatChannel(
   channelId: string,
-  input: { displayName?: string; favorite?: boolean; header?: string; muted?: boolean; name?: string; purpose?: string },
+  input: { displayName?: string; favorite?: boolean; header?: string; muted?: boolean; name?: string; projectId?: string | null; purpose?: string },
   actor: ChatActor,
 ): Promise<Outcome<{ channel: ChatChannel }>> {
   if (!actor.canRead) return { status: "forbidden" };
@@ -1622,17 +1641,35 @@ export async function updateChatChannel(
   }
 
   const metadataChanged =
-    input.displayName !== undefined || input.header !== undefined || input.name !== undefined || input.purpose !== undefined;
+    input.displayName !== undefined
+    || input.header !== undefined
+    || input.name !== undefined
+    || input.projectId !== undefined
+    || input.purpose !== undefined;
   if (metadataChanged) {
     if (channel.systemKind) return { status: "forbidden" };
     const isDirect = channel.type === "direct";
-    if (isDirect && (input.displayName !== undefined || input.name !== undefined || input.purpose !== undefined)) {
+    if (isDirect && (
+      input.displayName !== undefined
+      || input.name !== undefined
+      || input.projectId !== undefined
+      || input.purpose !== undefined
+    )) {
       return { status: "forbidden" };
     }
     if (!isDirect && !(await canManageChannel(actor, channelId))) return { status: "forbidden" };
     const displayName = input.displayName?.trim();
     const name = input.name === undefined ? undefined : normalizeChannelName(input.name);
+    const projectIdChanged = input.projectId !== undefined;
+    const projectId = projectIdChanged ? input.projectId?.trim() || null : null;
     if ((input.displayName !== undefined && !displayName) || (input.name !== undefined && !name)) return { status: "invalid" };
+    if (projectId) {
+      const project = await pool.query<{ id: string }>(
+        "SELECT id FROM projects WHERE team_id = $1 AND id = $2 LIMIT 1",
+        [storageTeamId(actor), projectId],
+      );
+      if (!project.rows[0]) return { status: "invalid" };
+    }
 
     try {
       await pool.query(
@@ -1642,10 +1679,20 @@ export async function updateChatChannel(
               name = COALESCE($3, name),
               purpose = COALESCE($4, purpose),
               header = COALESCE($5, header),
-              updated_at = $6
+              project_id = CASE WHEN $6::boolean THEN $7 ELSE project_id END,
+              updated_at = $8
           WHERE id = $1
         `,
-        [channelId, displayName ?? null, name ?? null, input.purpose?.trim() ?? null, input.header?.trim() ?? null, nowIso()],
+        [
+          channelId,
+          displayName ?? null,
+          name ?? null,
+          input.purpose?.trim() ?? null,
+          input.header?.trim() ?? null,
+          projectIdChanged,
+          projectId,
+          nowIso(),
+        ],
       );
     } catch (error) {
       if (error instanceof Error && "code" in error && error.code === "23505") {
@@ -2552,6 +2599,8 @@ export async function searchChatMessages(
     channel_display_name: string;
     channel_header: string;
     channel_name: string | null;
+    channel_project_id: string | null;
+    channel_project_name: string | null;
     channel_purpose: string;
     channel_system_kind: ChatChannel["systemKind"];
     channel_system_recipient_user_id: string | null;
@@ -2565,10 +2614,11 @@ export async function searchChatMessages(
              m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by,
              c.type AS channel_type, c.name AS channel_name, c.system_kind AS channel_system_kind,
              c.system_recipient_user_id AS channel_system_recipient_user_id, c.display_name AS channel_display_name, c.purpose AS channel_purpose,
-             c.header AS channel_header, c.created_by AS channel_created_by, c.created_at AS channel_created_at,
+             c.project_id AS channel_project_id, p.name AS channel_project_name, c.header AS channel_header, c.created_by AS channel_created_by, c.created_at AS channel_created_at,
              c.updated_at AS channel_updated_at, c.archived_at AS channel_archived_at
       FROM chat_messages m
       INNER JOIN chat_channels c ON c.id = m.channel_id
+      LEFT JOIN projects p ON p.id = c.project_id AND p.team_id = c.team_id
       INNER JOIN chat_channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
       INNER JOIN users u ON u.id = m.author_user_id
       WHERE m.team_id = $1
@@ -2605,6 +2655,8 @@ export async function searchChatMessages(
     id: row.channel_id,
     type: row.channel_type,
     name: row.channel_name,
+    project_id: row.channel_project_id,
+    project_name: row.channel_project_name,
     system_kind: row.channel_system_kind ?? null,
     system_recipient_user_id: row.channel_system_recipient_user_id,
     display_name: row.channel_display_name,

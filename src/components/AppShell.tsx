@@ -22,6 +22,8 @@ import { DesktopWindowControls } from "../features/desktop/DesktopWindowControls
 import { ChatFloatingImagePreviewProvider } from "../features/chat/ChatFloatingImagePreview";
 import { isDesktopShellAvailable, setDesktopWorkbenchZoomLevel } from "../features/desktop/desktopShellRuntime";
 import { applyDisplayPreferencesToDocument, nextWorkbenchZoomLevel } from "../features/display/displayPreferences";
+import { WorkspaceRoot } from "../features/workspace/WorkspaceRoot";
+import { defaultWorkspaceLayout, type WorkspaceLayout } from "../features/workspace/workspaceTypes";
 import { useVisualBackground } from "../hooks/useVisualBackground";
 import { defaultChatTheme, defaultUserDisplayPreferences, type ChatTheme, type UserDisplayPreferences } from "../domain/settings/personalPreferences";
 import {
@@ -42,6 +44,7 @@ export function AppShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [chatTheme, setChatTheme] = useState<ChatTheme>(defaultChatTheme);
   const [displayPreferences, setDisplayPreferences] = useState<UserDisplayPreferences>(defaultUserDisplayPreferences);
+  const [workspaceLayout, setWorkspaceLayout] = useState<WorkspaceLayout>(defaultWorkspaceLayout);
   const [clientUpdateCenter, setClientUpdateCenter] = useState<{ notice?: string; open: boolean }>({ open: false });
   const [pendingShellPath, setPendingShellPath] = useState<string | null>(null);
   const shellRoutePending = pendingShellPath !== null && pendingShellPath !== location.pathname;
@@ -67,16 +70,18 @@ export function AppShell() {
       setSidebarCollapsed(false);
       setChatTheme(defaultChatTheme);
       setDisplayPreferences(defaultUserDisplayPreferences);
+      setWorkspaceLayout(defaultWorkspaceLayout);
       return undefined;
     }
 
     const refreshPreferences = () => {
-      void getUserPreferences()
+      void getUserPreferences({ userId: currentUser.id })
         .then((preferences) => {
           if (!cancelled) {
             setSidebarCollapsed(preferences.sidebarCollapsed ?? false);
             setChatTheme(preferences.chatTheme);
             setDisplayPreferences(preferences.display ?? defaultUserDisplayPreferences);
+            setWorkspaceLayout(preferences.workspaceLayout ?? defaultWorkspaceLayout);
           }
         })
         .catch(() => undefined);
@@ -111,6 +116,13 @@ export function AppShell() {
   const saveDisplayPreferences = useCallback((nextPreferences: UserDisplayPreferences) => {
     setDisplayPreferences(nextPreferences);
     void saveUserPreferences({ display: nextPreferences })
+      .then(() => dispatchPersonalPreferencesChanged())
+      .catch(() => undefined);
+  }, []);
+
+  const saveWorkspaceLayout = useCallback((nextLayout: WorkspaceLayout) => {
+    setWorkspaceLayout(nextLayout);
+    void saveUserPreferences({ workspaceLayout: nextLayout })
       .then(() => dispatchPersonalPreferencesChanged())
       .catch(() => undefined);
   }, []);
@@ -219,9 +231,9 @@ export function AppShell() {
               <button
                 onClick={() => setCommandOpen(true)}
                 className="orf-search-trigger h-8 w-full pl-8 pr-3 text-left text-xs transition"
-                aria-label="搜索页面、目标、指标、任务、反馈"
+                aria-label="搜索页面、资源、目标、指标、任务、反馈"
               >
-                <span className="orf-search-trigger-label">搜索页面、目标、指标、任务、反馈</span>
+                <span className="orf-search-trigger-label">搜索页面、资源、目标、指标、任务、反馈</span>
               </button>
             </div>
             {!isBountyHall && canCreateFeedback && (
@@ -254,14 +266,16 @@ export function AppShell() {
               imageUrl={pageSelection?.url ?? null}
               crop={pageSelection?.crop ?? defaultVisualBackgroundCrop}
             />
-            {shellRoutePending && isChatPage ? (
-              <div className="orf-chat-loading" role="status">
-                <Loader2 className="h-6 w-6 animate-spin" />
-                <span>正在打开聊天中心</span>
-              </div>
-            ) : (
-              <Outlet />
-            )}
+            <WorkspaceRoot enabled={isChatPage} layout={workspaceLayout} onLayoutChange={saveWorkspaceLayout}>
+              {shellRoutePending && isChatPage ? (
+                <div className="orf-chat-loading" role="status">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                  <span>正在打开聊天中心</span>
+                </div>
+              ) : (
+                <Outlet />
+              )}
+            </WorkspaceRoot>
           </main>
         </div>
         <CommandMenu open={commandOpen} onClose={() => setCommandOpen(false)} />

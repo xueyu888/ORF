@@ -17,6 +17,7 @@ import { ChatMessageFeed } from "../features/chat/ChatMessageFeed";
 import { ChatRightPanel } from "../features/chat/ChatRightPanel";
 import { ChatSidebar, type ChatSidebarCreateCommand } from "../features/chat/ChatSidebar";
 import { ChatTypingLine } from "../features/chat/ChatTypingLine";
+import type { ChatDriveResourceLinkTarget, ChatDriveResourceSelectionRequest } from "../features/chat/chatDriveResourceLinks";
 import { chatPresenceProtocolUpgradeMessage, hasChatPresenceProtocolMismatch } from "../features/chat/chatPresence";
 import { resetChatNativeNotificationViewState, setChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
 import { requestClientUpdateCenterOpen } from "../features/client-updates/clientUpdateCenterEvents";
@@ -45,6 +46,8 @@ import { useChatPanelState } from "../features/chat/useChatPanelState";
 import { useChatRealtimeEvents } from "../features/chat/useChatRealtimeEvents";
 import { useChatThreadState } from "../features/chat/useChatThreadState";
 import { useChatTypingState } from "../features/chat/useChatTypingState";
+import { useWorkspace } from "../features/workspace/WorkspaceContext";
+import type { WorkspaceSelection } from "../features/workspace/workspaceTypes";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import {
   addChatChannelMembersRequest,
@@ -52,6 +55,7 @@ import {
   createChatChannel,
   deleteChatMessageRequest,
   getChatBootstrap,
+  getChatUsers,
   getFeedbackReferences,
   markChatChannelReadRequest,
   openChatConversation,
@@ -80,6 +84,8 @@ import {
 
 const chatFeedPrefetchDelayMs = 250;
 const chatLocatedMessageHighlightMs = 3_200;
+const chatPresenceRefreshThrottleMs = 15_000;
+const chatConnectionRestoredBootstrapThrottleMs = 15_000;
 
 function isChatGlobalShortcutEditableTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable]"));
@@ -142,6 +148,7 @@ export function ChatPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { appAttentionState, currentUser, notify, readModelInvalidations, refreshChatUnreadSummary, state } = useOrf();
+  const { openChallengePanel, secondaryPanelOpen } = useWorkspace();
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
@@ -159,11 +166,17 @@ export function ChatPage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [markingUnreadChannelsRead, setMarkingUnreadChannelsRead] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachmentFilePreviewState | null>(null);
+  const [driveSelectionRequest, setDriveSelectionRequest] = useState<ChatDriveResourceSelectionRequest | null>(null);
   const [locatedMessageId, setLocatedMessageId] = useState<string | null>(null);
   const [memberSearchFocusSignal, setMemberSearchFocusSignal] = useState(0);
+  const driveSelectionRequestIdRef = useRef(0);
   const handledBootstrapInvalidationKeyRef = useRef("");
+  const handledPresenceInvalidationKeyRef = useRef("");
+  const lastConnectionRestoredBootstrapRefreshAtRef = useRef(0);
+  const lastPresenceRefreshAtRef = useRef(0);
   const locatedMessageTimerRef = useRef<number | null>(null);
   const openChannelRequestIdRef = useRef(0);
+  const presenceRefreshTimerRef = useRef<number | null>(null);
   const { openImagePreview } = useChatFloatingImagePreview();
   const openAttachmentPreview = useCallback<ChatAttachmentPreviewHandler>((attachment, messageAttachments) => {
     const preview = createChatAttachmentPreviewState(messageAttachments, attachment);
@@ -184,7 +197,14 @@ export function ChatPage() {
   const activeMentionableUsers = useMemo(() => {
     return mentionableUsersForChannel(activeChannel, bootstrap?.users);
   }, [activeChannel, bootstrap?.users]);
-  const usersInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "users"), [readModelInvalidations]);
+  const usersInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "users", { excludeReasons: ["user.presence.changed"] }),
+    [readModelInvalidations],
+  );
+  const presenceInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "users", { includeReasons: ["user.presence.changed"] }),
+    [readModelInvalidations],
+  );
   const settingsInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "settings"), [readModelInvalidations]);
   const bootstrapInvalidationKey = `${usersInvalidationKey}|${settingsInvalidationKey}`;
   const myMembership = currentMembership(activeChannel, currentUser?.id);
@@ -234,6 +254,7 @@ export function ChatPage() {
     loadSavedMessages,
     loadThreadSummaries,
     markThreadSummaryViewed,
+    openFilesPanel,
     openInfoPanel,
     openSearchPanel,
     reconcilePinnedCollection,
@@ -259,6 +280,32 @@ export function ChatPage() {
     notify,
   });
   const chatMobileView = activePanel ? "panel" : activeChannel ? "channel" : "list";
+
+  const handleOpenDriveResourceLink = useCallback((target: ChatDriveResourceLinkTarget) => {
+    if (!activeChannel || activeChannel.systemKind) return;
+    driveSelectionRequestIdRef.current += 1;
+    setDriveSelectionRequest({
+      ...target,
+      requestId: driveSelectionRequestIdRef.current,
+    });
+    openFilesPanel();
+  }, [activeChannel, openFilesPanel]);
+
+  const handleDriveSelectionRequestHandled = useCallback((requestId: number) => {
+    setDriveSelectionRequest((current) => (current?.requestId === requestId ? null : current));
+  }, []);
+
+  const handleOpenChallengeWorkspace = useCallback(() => {
+    openChallengePanel(null);
+  }, [openChallengePanel]);
+
+  const handleWorkspaceTargetLink = useCallback((selection: WorkspaceSelection) => {
+    openChallengePanel(selection);
+  }, [openChallengePanel]);
+
+  useEffect(() => {
+    setDriveSelectionRequest(null);
+  }, [activeChannel?.id]);
 
   const {
     appendThreadReply,
@@ -328,6 +375,9 @@ export function ChatPage() {
     return () => {
       if (locatedMessageTimerRef.current !== null) {
         window.clearTimeout(locatedMessageTimerRef.current);
+      }
+      if (presenceRefreshTimerRef.current !== null) {
+        window.clearTimeout(presenceRefreshTimerRef.current);
       }
     };
   }, []);
@@ -456,12 +506,49 @@ export function ChatPage() {
     return data;
   }, [currentUser?.id]);
 
+  const refreshChatUsers = useCallback(async () => {
+    const data = await getChatUsers();
+    if (hasChatPresenceProtocolMismatch(data.users)) {
+      requestClientUpdateCenterOpen({ notice: chatPresenceProtocolUpgradeMessage });
+      throw new Error(chatPresenceProtocolUpgradeMessage);
+    }
+    setBootstrap((current) => (current ? { ...current, users: data.users } : current));
+    return data;
+  }, []);
+
+  const queuePresenceRefresh = useCallback(() => {
+    const run = () => {
+      presenceRefreshTimerRef.current = null;
+      lastPresenceRefreshAtRef.current = Date.now();
+      void refreshChatUsers().catch(() => undefined);
+    };
+    const elapsed = Date.now() - lastPresenceRefreshAtRef.current;
+    if (elapsed >= chatPresenceRefreshThrottleMs) {
+      if (presenceRefreshTimerRef.current !== null) {
+        window.clearTimeout(presenceRefreshTimerRef.current);
+        presenceRefreshTimerRef.current = null;
+      }
+      run();
+      return;
+    }
+    if (presenceRefreshTimerRef.current === null) {
+      presenceRefreshTimerRef.current = window.setTimeout(run, chatPresenceRefreshThrottleMs - elapsed);
+    }
+  }, [refreshChatUsers]);
+
   useEffect(() => {
     if (!bootstrapInvalidationKey || bootstrapInvalidationKey === "|" || loading || bootstrapError) return;
     if (handledBootstrapInvalidationKeyRef.current === bootstrapInvalidationKey) return;
     handledBootstrapInvalidationKeyRef.current = bootstrapInvalidationKey;
     void refreshBootstrap().catch(() => undefined);
   }, [bootstrapError, bootstrapInvalidationKey, loading, refreshBootstrap]);
+
+  useEffect(() => {
+    if (!presenceInvalidationKey || loading || bootstrapError || !bootstrap) return;
+    if (handledPresenceInvalidationKeyRef.current === presenceInvalidationKey) return;
+    handledPresenceInvalidationKeyRef.current = presenceInvalidationKey;
+    queuePresenceRefresh();
+  }, [bootstrap, bootstrapError, loading, presenceInvalidationKey, queuePresenceRefresh]);
 
   const handleDraftStateChange = useCallback((channelId: string, hasDraft: boolean) => {
     setDraftChannelIds((items) => {
@@ -682,7 +769,11 @@ export function ChatPage() {
   }, [channels]);
 
   const handleRealtimeConnectionRestored = useCallback(() => {
-    void refreshBootstrap();
+    const now = Date.now();
+    if (now - lastConnectionRestoredBootstrapRefreshAtRef.current >= chatConnectionRestoredBootstrapThrottleMs) {
+      lastConnectionRestoredBootstrapRefreshAtRef.current = now;
+      void refreshBootstrap();
+    }
     syncLatestMessagesIfFollowing();
   }, [refreshBootstrap, syncLatestMessagesIfFollowing]);
 
@@ -1052,6 +1143,7 @@ export function ChatPage() {
         {activeChannel ? (
           <>
             <ChatHeader
+              activePanel={activePanel}
               canManage={canManageActiveChannel}
               channel={activeChannel}
               currentUserId={currentUser?.id}
@@ -1060,10 +1152,12 @@ export function ChatPage() {
                 setChannels((items) => items.filter((channel) => channel.id !== activeChannel.id));
                 navigate("/chat", { replace: true });
               }}
+              onFiles={() => togglePanel("files")}
               onInfo={() => togglePanel("info")}
               onMarkUnread={() => void markActiveChannelUnread()}
               onMemberSearch={handleOpenMemberSearch}
               onMobileBack={handleBackToChatList}
+              onWorkspaceTargets={handleOpenChallengeWorkspace}
               onPins={() => void loadPinnedMessages()}
               onSaved={() => void loadSavedMessages()}
               onSearch={openSearchPanel}
@@ -1076,6 +1170,7 @@ export function ChatPage() {
                 const response = await updateChatChannelRequest(activeChannel.id, { muted: !myMembership?.muted });
                 applyChannel(response.channel);
               }}
+              workspaceTargetsOpen={secondaryPanelOpen}
               usersById={usersById}
             />
             <ChatMessageFeed
@@ -1097,6 +1192,7 @@ export function ChatPage() {
               onCopyLink={handleCopyMessageLink}
               onCopyMessage={handleCopyMessage}
               onDelete={setDeletingMessage}
+              onDriveResourceLink={handleOpenDriveResourceLink}
               onEdit={setEditingMessage}
               onJumpUnread={jumpToUnread}
               onLoadLatest={loadLatestOrScroll}
@@ -1111,6 +1207,7 @@ export function ChatPage() {
               onSaveEdit={handleEditMessage}
               onScroll={handleMessageScroll}
               onThread={openThread}
+              onWorkspaceTargetLink={handleWorkspaceTargetLink}
               pendingNewMessageCount={pendingNewMessageCount}
               reactionPickerMessageId={reactionPickerRequest.messageId}
               reactionPickerSignal={reactionPickerRequest.signal}
@@ -1144,8 +1241,10 @@ export function ChatPage() {
           attachmentMaxBytes={bootstrap.settings.attachmentMaxBytes}
           canDeleteAnyMessage={canManageRightPanelChannel}
           canManage={canManageRightPanelChannel}
+          canWrite={bootstrap.permissions.canWrite && !Boolean((rightPanelChannel ?? activeChannel).systemKind)}
           channel={rightPanelChannel ?? activeChannel}
           currentUserId={currentUser?.id}
+          driveSelectionRequest={driveSelectionRequest}
           editingMessageId={editingMessage?.id ?? null}
           feedbackItems={feedbackLinkItems}
           memberSearchFocusSignal={memberSearchFocusSignal}
@@ -1159,8 +1258,13 @@ export function ChatPage() {
               throw error;
             }
           }}
+          onAnnouncementMessage={applyMessage}
+          onChannelUpdated={applyChannel}
           onClose={closePanel}
           onCancelEdit={() => setEditingMessage(null)}
+          onDriveResourceLink={handleOpenDriveResourceLink}
+          onDriveSelectionRequestHandled={handleDriveSelectionRequestHandled}
+          onWorkspaceTargetLink={handleWorkspaceTargetLink}
           collectionLoading={collectionLoading}
           collectionResults={collectionResults}
           threadSummaries={threadSummaries}
@@ -1188,6 +1292,8 @@ export function ChatPage() {
             const response = await updateChatChannelRequest((rightPanelChannel ?? activeChannel).id, input);
             applyChannel(response.channel);
           }}
+          notify={notify}
+          projects={state.projects}
           searchLoading={searchLoading}
           searchFocusSignal={searchFocusSignal}
           searchPerformed={searchPerformed}

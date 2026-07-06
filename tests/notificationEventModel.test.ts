@@ -14,6 +14,11 @@ import {
   shouldSuppressE2eActorNotificationForRecipient,
 } from "../server/notifications/notificationIsolationPolicy";
 import { notificationPolicy } from "../server/notifications/policies/registry";
+import {
+  parseDataSyncEventPayload,
+  selectDataSyncRecipientMembership,
+  dataSyncEventMetadata,
+} from "../server/notifications/dataSyncNotificationModel";
 
 test("personal notifications dedupe recipients and exclude the actor", () => {
   const recipients = resolveNotificationRecipients({
@@ -90,6 +95,56 @@ test("settlement notifications are personal reminders without comment reply targ
     kind: "objective.settled",
     replyTarget: "none",
     stream: "personalNotification",
+  });
+});
+
+test("data sync conflict notifications are personal reminders without comment reply target", () => {
+  assert.deepEqual(notificationPolicy("data.sync.conflict"), {
+    kind: "data.sync.conflict",
+    replyTarget: "none",
+    stream: "personalNotification",
+  });
+});
+
+test("data sync ORF recipient must resolve to exactly one Xueyu membership", () => {
+  const memberships = [
+    { email: "other@example.com", name: "其他人", teamId: "team-1", userId: "user-other" },
+    { email: "xueyu@example.com", name: "薛雨", teamId: "team-1", userId: "user-xueyu" },
+  ];
+
+  assert.deepEqual(selectDataSyncRecipientMembership(memberships, {}), {
+    email: "xueyu@example.com",
+    name: "薛雨",
+    teamId: "team-1",
+    userId: "user-xueyu",
+  });
+  assert.throws(
+    () => selectDataSyncRecipientMembership([...memberships, { email: "xueyu-2@example.com", name: "薛雨", teamId: "team-2", userId: "user-xueyu-2" }], {}),
+    /exactly one active team member/,
+  );
+  assert.throws(
+    () => selectDataSyncRecipientMembership(memberships, { userId: "user-other" }),
+    /matched=0/,
+  );
+});
+
+test("data sync event payload keeps raw data outbox facts as metadata", () => {
+  const event = parseDataSyncEventPayload({
+    body: "冲突明细",
+    event_type: "sync.conflict.detected",
+    fingerprint: "fp-1",
+    payload: { db_conflict_count: 1 },
+    severity: "blocking",
+    title: "[data-sync][冲突]",
+  });
+
+  assert.equal(event.eventType, "sync.conflict.detected");
+  assert.deepEqual(dataSyncEventMetadata(event), {
+    dataSyncEventType: "sync.conflict.detected",
+    dataSyncFingerprint: "fp-1",
+    dataSyncPayloadJson: "{\"db_conflict_count\":1}",
+    dataSyncSeverity: "blocking",
+    targetTitle: "[data-sync][冲突]",
   });
 });
 

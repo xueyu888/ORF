@@ -74,6 +74,7 @@ type RowHandlers = {
   editingTarget: ChallengeTarget | null;
   trialReviews: ObjectiveTrialReview[];
   canManageFlow: boolean;
+  notify: (message: string) => void;
   canEditTargetTitle: (target: ChallengeTarget) => boolean;
   peerReviewActionLabel: (objectiveId: string) => string | null;
   settlementEventsForObjective: (objectiveId: string) => readonly ObjectiveSettlementEvent[];
