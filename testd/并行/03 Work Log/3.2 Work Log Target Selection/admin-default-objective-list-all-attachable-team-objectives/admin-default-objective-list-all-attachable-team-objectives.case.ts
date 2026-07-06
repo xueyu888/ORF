@@ -1,0 +1,137 @@
+import { STATE_CASE_MODEL, type StateCaseSpec } from "../../../../_framework/types";
+import type { AdminDefaultObjectiveListAllAttachableTeamObjectivesCaseData } from "./_support/admin-default-objective-list-all-attachable-team-objectives.context";
+
+export const adminDefaultObjectiveListAllAttachableTeamObjectivesCase = {
+  id: "work-log.admin-default-objective-list-all-attachable-team-objectives",
+  title: "管理员默认目标列表可展示当前团队全部可挂载目标",
+  model: STATE_CASE_MODEL,
+  tags: ["work-log", "objective-selection", "admin", "permissions", "default-list"],
+
+  data: {
+    adminEmail: "orf-admin-default-work-log-objective-list-e2e@orf.local",
+    adminPassword: "OrfAdminDefaultWorkLogObjectiveListE2E!2026",
+    adminName: "ORF Admin Default Work Log Objective List E2E",
+    adminRole: "admin",
+    adminStatus: "active",
+    otherMemberEmail: "orf-other-admin-default-work-log-objective-list-e2e@orf.local",
+    otherMemberName: "ORF Other Admin Default Work Log Objective List E2E",
+    otherMemberRole: "member",
+    otherMemberStatus: "active",
+    objectiveTitlePrefix: "E2E-TWL-ADMIN-ALL",
+    otherOpenObjectiveTitle: "E2E-TWL-ADMIN-ALL-OTHER-OPEN",
+    ownFrozenObjectiveTitle: "E2E-TWL-ADMIN-ALL-OWN-FROZEN",
+    acceptedObjectiveTitle: "E2E-TWL-ADMIN-ALL-ACCEPTED",
+    settledObjectiveTitle: "E2E-TWL-ADMIN-ALL-SETTLED",
+    closedObjectiveTitle: "E2E-TWL-ADMIN-ALL-CLOSED",
+    expectedObjectiveTitles: [
+      "E2E-TWL-ADMIN-ALL-OTHER-OPEN",
+      "E2E-TWL-ADMIN-ALL-OWN-FROZEN",
+      "E2E-TWL-ADMIN-ALL-ACCEPTED",
+      "E2E-TWL-ADMIN-ALL-SETTLED",
+      "E2E-TWL-ADMIN-ALL-CLOSED",
+    ],
+    openFlowStatus: "open",
+    frozenFlowStatus: "frozen",
+    acceptedFlowStatus: "accepted",
+    settledFlowStatus: "settled",
+    closedFlowStatus: "closed",
+    resultClaimingStage: "resultClaiming",
+    goalFrozenStage: "goalFrozen",
+    objectiveStatus: "On Track",
+  },
+
+  B: {
+    description: "系统服务可用，浏览器处于未登录基准状态",
+    assertions: [
+      { source: { caseStepId: "B-1", method: "api" }, id: "frontend.ready", title: "前端服务 应可用", object: "frontend.service", operator: "available" },
+      { source: { caseStepId: "B-2", method: "api" }, id: "backend.ready", title: "后端服务 应可用", object: "api.health", operator: "ok" },
+      { source: { caseStepId: "B-3", method: "prisma" }, id: "db.ready", title: "ORF 数据库 应可连接", object: "db", operator: "ready" },
+      { source: { caseStepId: "B-4", method: "api" }, id: "session.unauthenticated", title: "当前会话 应为 未登录", object: "auth.session", operator: "unauthenticated" },
+      { source: { caseStepId: "B-5", method: "playwright" }, id: "storage.empty", title: "当前浏览器 应不保留本地登录态", object: "browser.auth_storage", operator: "empty" },
+    ],
+  },
+
+  Setup: {
+    description: "准备管理员、同团队其他成员和五类可挂载目标并打开工作日志当天视图",
+    steps: [
+      { source: { caseStepId: "Setup-1", method: "prisma" }, id: "db.objectives.delete_residue", title: "删除 本用例残留的目标标题前缀 `E2E-TWL-ADMIN-ALL` 对应的目标及其派生数据", object: "db.objectives_by_prefix", operator: "delete", params: { prefixFrom: "data.objectiveTitlePrefix" } },
+      { source: { caseStepId: "Setup-2", method: "api" }, id: "ory.admin_identity.upsert", title: "准备邮箱为 `orf-admin-default-work-log-objective-list-e2e@orf.local`、使用固定测试密码的管理员登录身份", object: "ory.identity", operator: "upsert_password", params: { emailFrom: "data.adminEmail", nameFrom: "data.adminName", passwordFrom: "data.adminPassword", saveAs: "adminIdentity" } },
+      { source: { caseStepId: "Setup-3", method: "prisma" }, id: "db.admin_user.upsert", title: "准备 角色为 `admin`、状态为 `active`、名称为 `ORF Admin Default Work Log Objective List E2E` 的本用例管理员用户", object: "db.user", operator: "upsert", params: { emailFrom: "data.adminEmail", nameFrom: "data.adminName", roleFrom: "data.adminRole", statusFrom: "data.adminStatus", identityIdFrom: "runtime.adminIdentity.id", saveAs: "adminUser" } },
+      { source: { caseStepId: "Setup-4", method: "prisma" }, id: "db.other_member_user.upsert", title: "准备 角色为 `member`、状态为 `active`、名称为 `ORF Other Admin Default Work Log Objective List E2E`、与本用例管理员属于同一团队的本用例其他成员用户", object: "db.user", operator: "upsert", params: { emailFrom: "data.otherMemberEmail", nameFrom: "data.otherMemberName", roleFrom: "data.otherMemberRole", statusFrom: "data.otherMemberStatus", teamIdFrom: "runtime.adminUser.teamId", saveAs: "otherMemberUser" } },
+      { source: { caseStepId: "Setup-5", method: "prisma" }, id: "db.other_open_objective.prepare", title: "准备 标题为 `E2E-TWL-ADMIN-ALL-OTHER-OPEN`、属于本用例管理员团队、当前挑战者包含本用例其他成员且不包含本用例管理员、流转状态为 `open` 的未完成目标", object: "db.objective", operator: "upsert", params: { titleFrom: "data.otherOpenObjectiveTitle", teamIdFrom: "runtime.adminUser.teamId", challengersFrom: "data.otherMemberName", challengerUserIdsFrom: "runtime.otherMemberUser.userId", flowStatusFrom: "data.openFlowStatus", stageFrom: "data.resultClaimingStage", statusFrom: "data.objectiveStatus", createdByFrom: "runtime.adminUser.userId", updatedByFrom: "runtime.adminUser.userId", saveAs: "otherOpenObjective" } },
+      { source: { caseStepId: "Setup-6", method: "prisma" }, id: "db.own_frozen_objective.prepare", title: "准备 标题为 `E2E-TWL-ADMIN-ALL-OWN-FROZEN`、属于本用例管理员团队、当前挑战者包含本用例管理员、流转状态为 `frozen` 的已冻结目标", object: "db.objective", operator: "upsert", params: { titleFrom: "data.ownFrozenObjectiveTitle", teamIdFrom: "runtime.adminUser.teamId", challengersFrom: "data.adminName", challengerUserIdsFrom: "runtime.adminUser.userId", flowStatusFrom: "data.frozenFlowStatus", stageFrom: "data.goalFrozenStage", statusFrom: "data.objectiveStatus", createdByFrom: "runtime.adminUser.userId", updatedByFrom: "runtime.adminUser.userId", saveAs: "ownFrozenObjective" } },
+      { source: { caseStepId: "Setup-7", method: "prisma" }, id: "db.accepted_objective.prepare", title: "准备 标题为 `E2E-TWL-ADMIN-ALL-ACCEPTED`、属于本用例管理员团队、当前挑战者包含本用例其他成员且不包含本用例管理员、流转状态为 `accepted` 的已验收目标", object: "db.objective", operator: "upsert", params: { titleFrom: "data.acceptedObjectiveTitle", teamIdFrom: "runtime.adminUser.teamId", challengersFrom: "data.otherMemberName", challengerUserIdsFrom: "runtime.otherMemberUser.userId", flowStatusFrom: "data.acceptedFlowStatus", stageFrom: "data.goalFrozenStage", statusFrom: "data.objectiveStatus", createdByFrom: "runtime.adminUser.userId", updatedByFrom: "runtime.adminUser.userId", saveAs: "acceptedObjective" } },
+      { source: { caseStepId: "Setup-8", method: "prisma" }, id: "db.settled_objective.prepare", title: "准备 标题为 `E2E-TWL-ADMIN-ALL-SETTLED`、属于本用例管理员团队、当前挑战者包含本用例管理员、流转状态为 `settled` 的已结算目标", object: "db.objective", operator: "upsert", params: { titleFrom: "data.settledObjectiveTitle", teamIdFrom: "runtime.adminUser.teamId", challengersFrom: "data.adminName", challengerUserIdsFrom: "runtime.adminUser.userId", flowStatusFrom: "data.settledFlowStatus", stageFrom: "data.goalFrozenStage", statusFrom: "data.objectiveStatus", createdByFrom: "runtime.adminUser.userId", updatedByFrom: "runtime.adminUser.userId", saveAs: "settledObjective" } },
+      { source: { caseStepId: "Setup-9", method: "prisma" }, id: "db.closed_objective.prepare", title: "准备 标题为 `E2E-TWL-ADMIN-ALL-CLOSED`、属于本用例管理员团队、当前挑战者包含本用例其他成员且不包含本用例管理员、流转状态为 `closed` 的已关闭目标", object: "db.objective", operator: "upsert", params: { titleFrom: "data.closedObjectiveTitle", teamIdFrom: "runtime.adminUser.teamId", challengersFrom: "data.otherMemberName", challengerUserIdsFrom: "runtime.otherMemberUser.userId", flowStatusFrom: "data.closedFlowStatus", stageFrom: "data.goalFrozenStage", statusFrom: "data.objectiveStatus", createdByFrom: "runtime.adminUser.userId", updatedByFrom: "runtime.adminUser.userId", saveAs: "closedObjective" } },
+      { source: { caseStepId: "Setup-10", method: "playwright" }, id: "auth.login.admin", title: "使用 本用例管理员账号 登录 ORF", object: "page.auth", operator: "login", params: { emailFrom: "data.adminEmail", passwordFrom: "data.adminPassword" } },
+      { source: { caseStepId: "Setup-11", method: "playwright" }, id: "work_logs.open_today", title: "打开 工作日志页面的当天日志视图", object: "page.work_logs", operator: "open_today" },
+    ],
+  },
+
+  S0: {
+    description: "管理员和五类可挂载目标已准备完成，默认目标列表接口包含当前团队全部本用例目标",
+    assertions: [
+      { source: { caseStepId: "S0-1", method: "api" }, id: "session.authenticated", title: "当前会话 应为 已登录", object: "auth.session", operator: "authenticated" },
+      { source: { caseStepId: "S0-2", method: "api" }, id: "session.email", title: "当前会话用户邮箱 应为 `orf-admin-default-work-log-objective-list-e2e@orf.local`", object: "auth.session.user_email", operator: "equals", params: { emailFrom: "data.adminEmail" } },
+      { source: { caseStepId: "S0-3", method: "api" }, id: "session.role", title: "当前会话用户角色 应为 `admin`", object: "auth.session.user_role", operator: "equals", params: { roleFrom: "data.adminRole" } },
+      { source: { caseStepId: "S0-4", method: "api" }, id: "session.name", title: "当前会话用户名称 应为 `ORF Admin Default Work Log Objective List E2E`", object: "auth.session.user_name", operator: "equals", params: { nameFrom: "data.adminName" } },
+      { source: { caseStepId: "S0-5", method: "prisma" }, id: "db.other_open_objective.exists", title: "应存在 标题为 `E2E-TWL-ADMIN-ALL-OTHER-OPEN`、属于本用例管理员团队、当前挑战者包含本用例其他成员、当前挑战者不包含本用例管理员、流转状态为 `open` 的目标", object: "db.work_log_objective_fixture", operator: "exists", params: { titleFrom: "data.otherOpenObjectiveTitle", teamIdFrom: "runtime.adminUser.teamId", flowStatusFrom: "data.openFlowStatus", challengerUserIdFrom: "runtime.otherMemberUser.userId", excludedChallengerUserIdFrom: "runtime.adminUser.userId" } },
+      { source: { caseStepId: "S0-6", method: "prisma" }, id: "db.own_frozen_objective.exists", title: "应存在 标题为 `E2E-TWL-ADMIN-ALL-OWN-FROZEN`、属于本用例管理员团队、当前挑战者包含本用例管理员、流转状态为 `frozen` 的目标", object: "db.work_log_objective_fixture", operator: "exists", params: { titleFrom: "data.ownFrozenObjectiveTitle", teamIdFrom: "runtime.adminUser.teamId", flowStatusFrom: "data.frozenFlowStatus", challengerUserIdFrom: "runtime.adminUser.userId" } },
+      { source: { caseStepId: "S0-7", method: "prisma" }, id: "db.accepted_objective.exists", title: "应存在 标题为 `E2E-TWL-ADMIN-ALL-ACCEPTED`、属于本用例管理员团队、当前挑战者包含本用例其他成员、当前挑战者不包含本用例管理员、流转状态为 `accepted` 的目标", object: "db.work_log_objective_fixture", operator: "exists", params: { titleFrom: "data.acceptedObjectiveTitle", teamIdFrom: "runtime.adminUser.teamId", flowStatusFrom: "data.acceptedFlowStatus", challengerUserIdFrom: "runtime.otherMemberUser.userId", excludedChallengerUserIdFrom: "runtime.adminUser.userId" } },
+      { source: { caseStepId: "S0-8", method: "prisma" }, id: "db.settled_objective.exists", title: "应存在 标题为 `E2E-TWL-ADMIN-ALL-SETTLED`、属于本用例管理员团队、当前挑战者包含本用例管理员、流转状态为 `settled` 的目标", object: "db.work_log_objective_fixture", operator: "exists", params: { titleFrom: "data.settledObjectiveTitle", teamIdFrom: "runtime.adminUser.teamId", flowStatusFrom: "data.settledFlowStatus", challengerUserIdFrom: "runtime.adminUser.userId" } },
+      { source: { caseStepId: "S0-9", method: "prisma" }, id: "db.closed_objective.exists", title: "应存在 标题为 `E2E-TWL-ADMIN-ALL-CLOSED`、属于本用例管理员团队、当前挑战者包含本用例其他成员、当前挑战者不包含本用例管理员、流转状态为 `closed` 的目标", object: "db.work_log_objective_fixture", operator: "exists", params: { titleFrom: "data.closedObjectiveTitle", teamIdFrom: "runtime.adminUser.teamId", flowStatusFrom: "data.closedFlowStatus", challengerUserIdFrom: "runtime.otherMemberUser.userId", excludedChallengerUserIdFrom: "runtime.adminUser.userId" } },
+      { source: { caseStepId: "S0-10", method: "api" }, id: "work_log.default_objectives.contains_other_open", title: "工作日志默认目标列表 应包含目标 `E2E-TWL-ADMIN-ALL-OTHER-OPEN`", object: "api.work_log.default_objectives", operator: "contains_title", params: { titleFrom: "data.otherOpenObjectiveTitle" } },
+      { source: { caseStepId: "S0-11", method: "api" }, id: "work_log.default_objectives.contains_own_frozen", title: "工作日志默认目标列表 应包含目标 `E2E-TWL-ADMIN-ALL-OWN-FROZEN`", object: "api.work_log.default_objectives", operator: "contains_title", params: { titleFrom: "data.ownFrozenObjectiveTitle" } },
+      { source: { caseStepId: "S0-12", method: "api" }, id: "work_log.default_objectives.contains_accepted", title: "工作日志默认目标列表 应包含目标 `E2E-TWL-ADMIN-ALL-ACCEPTED`", object: "api.work_log.default_objectives", operator: "contains_title", params: { titleFrom: "data.acceptedObjectiveTitle" } },
+      { source: { caseStepId: "S0-13", method: "api" }, id: "work_log.default_objectives.contains_settled", title: "工作日志默认目标列表 应包含目标 `E2E-TWL-ADMIN-ALL-SETTLED`", object: "api.work_log.default_objectives", operator: "contains_title", params: { titleFrom: "data.settledObjectiveTitle" } },
+      { source: { caseStepId: "S0-14", method: "api" }, id: "work_log.default_objectives.contains_closed", title: "工作日志默认目标列表 应包含目标 `E2E-TWL-ADMIN-ALL-CLOSED`", object: "api.work_log.default_objectives", operator: "contains_title", params: { titleFrom: "data.closedObjectiveTitle" } },
+      { source: { caseStepId: "S0-15", method: "api" }, id: "work_log.default_objectives.other_open.non_challenger", title: "工作日志默认目标列表中的目标 `E2E-TWL-ADMIN-ALL-OTHER-OPEN` 对当前管理员 应为 非当前挑战者", object: "api.work_log.default_objectives", operator: "not_current_challenger", params: { titleFrom: "data.otherOpenObjectiveTitle" } },
+      { source: { caseStepId: "S0-16", method: "api" }, id: "work_log.default_objectives.accepted.non_challenger", title: "工作日志默认目标列表中的目标 `E2E-TWL-ADMIN-ALL-ACCEPTED` 对当前管理员 应为 非当前挑战者", object: "api.work_log.default_objectives", operator: "not_current_challenger", params: { titleFrom: "data.acceptedObjectiveTitle" } },
+      { source: { caseStepId: "S0-17", method: "api" }, id: "work_log.default_objectives.closed.non_challenger", title: "工作日志默认目标列表中的目标 `E2E-TWL-ADMIN-ALL-CLOSED` 对当前管理员 应为 非当前挑战者", object: "api.work_log.default_objectives", operator: "not_current_challenger", params: { titleFrom: "data.closedObjectiveTitle" } },
+      { source: { caseStepId: "S0-18", method: "api" }, id: "work_log.default_objectives.accepted.flow_status", title: "工作日志默认目标列表中的目标 `E2E-TWL-ADMIN-ALL-ACCEPTED` 流转状态 应为 `accepted`", object: "api.work_log.default_objectives", operator: "flow_status", params: { titleFrom: "data.acceptedObjectiveTitle", flowStatusFrom: "data.acceptedFlowStatus" } },
+      { source: { caseStepId: "S0-19", method: "api" }, id: "work_log.default_objectives.settled.flow_status", title: "工作日志默认目标列表中的目标 `E2E-TWL-ADMIN-ALL-SETTLED` 流转状态 应为 `settled`", object: "api.work_log.default_objectives", operator: "flow_status", params: { titleFrom: "data.settledObjectiveTitle", flowStatusFrom: "data.settledFlowStatus" } },
+      { source: { caseStepId: "S0-20", method: "api" }, id: "work_log.default_objectives.closed.flow_status", title: "工作日志默认目标列表中的目标 `E2E-TWL-ADMIN-ALL-CLOSED` 流转状态 应为 `closed`", object: "api.work_log.default_objectives", operator: "flow_status", params: { titleFrom: "data.closedObjectiveTitle", flowStatusFrom: "data.closedFlowStatus" } },
+      { source: { caseStepId: "S0-21", method: "playwright" }, id: "work_logs.page.visible", title: "页面 应进入 工作日志", object: "page.work_logs", operator: "visible" },
+      { source: { caseStepId: "S0-22", method: "playwright" }, id: "work_logs.today_tab.selected", title: "\"日志\" 视图 应处于选中状态", object: "page.work_logs.view_tab", operator: "selected", params: { label: "日志" } },
+      { source: { caseStepId: "S0-23", method: "playwright" }, id: "work_logs.editor.visible", title: "\"我的日志\" 面板 应可见", object: "page.work_logs.editor_panel", operator: "visible" },
+      { source: { caseStepId: "S0-24", method: "playwright" }, id: "work_logs.classification.visible", title: "\"日志归类\" 控件 应可见", object: "page.work_logs.classification", operator: "visible" },
+    ],
+  },
+
+  Action: {
+    description: "打开日志归类控件的默认目标列表",
+    steps: [
+      { source: { caseStepId: "Action-1", method: "playwright" }, id: "work_logs.classification.open_default_list", title: "打开 \"日志归类\" 控件的目标默认列表", object: "page.work_logs.classification", operator: "open_default_objective_list" },
+    ],
+  },
+
+  S1: {
+    description: "页面默认目标列表展示当前团队全部本用例可挂载目标",
+    assertions: [
+      { source: { caseStepId: "S1-1", method: "playwright" }, id: "default_list.other_open.visible", title: "\"日志归类\" 控件的目标默认列表 应显示目标 `E2E-TWL-ADMIN-ALL-OTHER-OPEN`", object: "page.work_logs.default_objective_list", operator: "contains_title", params: { titleFrom: "data.otherOpenObjectiveTitle" } },
+      { source: { caseStepId: "S1-2", method: "playwright" }, id: "default_list.own_frozen.visible", title: "\"日志归类\" 控件的目标默认列表 应显示目标 `E2E-TWL-ADMIN-ALL-OWN-FROZEN`", object: "page.work_logs.default_objective_list", operator: "contains_title", params: { titleFrom: "data.ownFrozenObjectiveTitle" } },
+      { source: { caseStepId: "S1-3", method: "playwright" }, id: "default_list.accepted.visible", title: "\"日志归类\" 控件的目标默认列表 应显示目标 `E2E-TWL-ADMIN-ALL-ACCEPTED`", object: "page.work_logs.default_objective_list", operator: "contains_title", params: { titleFrom: "data.acceptedObjectiveTitle" } },
+      { source: { caseStepId: "S1-4", method: "playwright" }, id: "default_list.settled.visible", title: "\"日志归类\" 控件的目标默认列表 应显示目标 `E2E-TWL-ADMIN-ALL-SETTLED`", object: "page.work_logs.default_objective_list", operator: "contains_title", params: { titleFrom: "data.settledObjectiveTitle" } },
+      { source: { caseStepId: "S1-5", method: "playwright" }, id: "default_list.closed.visible", title: "\"日志归类\" 控件的目标默认列表 应显示目标 `E2E-TWL-ADMIN-ALL-CLOSED`", object: "page.work_logs.default_objective_list", operator: "contains_title", params: { titleFrom: "data.closedObjectiveTitle" } },
+      { source: { caseStepId: "S1-6", method: "api" }, id: "work_log.default_objectives.prefix_only_all_targets", title: "工作日志默认目标列表 应包含且仅包含标题前缀为 `E2E-TWL-ADMIN-ALL` 的目标 `E2E-TWL-ADMIN-ALL-OTHER-OPEN`、`E2E-TWL-ADMIN-ALL-OWN-FROZEN`、`E2E-TWL-ADMIN-ALL-ACCEPTED`、`E2E-TWL-ADMIN-ALL-SETTLED`、`E2E-TWL-ADMIN-ALL-CLOSED`", object: "api.work_log.default_objectives", operator: "contains_only_titles_for_prefix", params: { prefixFrom: "data.objectiveTitlePrefix", titlesFrom: "data.expectedObjectiveTitles" } },
+      { source: { caseStepId: "S1-7", method: "playwright" }, id: "work_logs.page.error_absent", title: "页面 应不显示 错误提示", object: "page.work_logs", operator: "error_absent" },
+    ],
+  },
+
+  Clean: {
+    description: "删除本用例目标、管理员身份、其他成员并清空登录态",
+    steps: [
+      { source: { caseStepId: "Clean-1", method: "prisma" }, id: "db.objectives.delete_created", title: "删除 本用例创建的目标标题前缀 `E2E-TWL-ADMIN-ALL` 对应的目标及其派生数据", object: "db.objectives_by_prefix", operator: "delete", params: { prefixFrom: "data.objectiveTitlePrefix" } },
+      { source: { caseStepId: "Clean-2", method: "api" }, id: "auth.logout", title: "注销当前管理员登录会话", object: "auth", operator: "logout" },
+      { source: { caseStepId: "Clean-3", method: "playwright" }, id: "browser.clear", title: "移除当前浏览器中的残留登录态", object: "browser", operator: "clear_state" },
+      { source: { caseStepId: "Clean-4", method: "api" }, id: "ory.admin_identity.delete", title: "删除 本用例管理员登录身份", object: "ory.identity", operator: "delete_by_email", params: { emailFrom: "data.adminEmail" } },
+      { source: { caseStepId: "Clean-5", method: "prisma" }, id: "db.admin_user.delete", title: "删除 本用例管理员用户", object: "db.user", operator: "delete", params: { emailFrom: "data.adminEmail" } },
+      { source: { caseStepId: "Clean-6", method: "prisma" }, id: "db.other_member_user.delete", title: "删除 本用例其他成员用户", object: "db.user", operator: "delete", params: { emailFrom: "data.otherMemberEmail" } },
+      { source: { caseStepId: "Clean-7", method: "prisma" }, id: "db.objectives.absent", title: "应不存在 标题前缀为 `E2E-TWL-ADMIN-ALL` 的目标", object: "db.objectives_by_prefix", operator: "absent", params: { prefixFrom: "data.objectiveTitlePrefix" } },
+      { source: { caseStepId: "Clean-8", method: "api" }, id: "ory.admin_identity.absent", title: "邮箱为 `orf-admin-default-work-log-objective-list-e2e@orf.local` 的管理员登录身份 应不存在", object: "ory.identity", operator: "absent", params: { emailFrom: "data.adminEmail" } },
+      { source: { caseStepId: "Clean-9", method: "prisma" }, id: "db.admin_user.absent", title: "邮箱为 `orf-admin-default-work-log-objective-list-e2e@orf.local` 的管理员用户 应不存在", object: "db.user", operator: "absent", params: { emailFrom: "data.adminEmail" } },
+      { source: { caseStepId: "Clean-10", method: "prisma" }, id: "db.other_member_user.absent", title: "名称为 `ORF Other Admin Default Work Log Objective List E2E` 的本用例其他成员用户 应不存在", object: "db.user_by_name", operator: "absent", params: { nameFrom: "data.otherMemberName" } },
+      { source: { caseStepId: "Clean-11", method: "api" }, id: "session.unauthenticated", title: "当前会话 应为 未登录", object: "auth.session", operator: "unauthenticated" },
+    ],
+  },
+} satisfies StateCaseSpec<AdminDefaultObjectiveListAllAttachableTeamObjectivesCaseData>;

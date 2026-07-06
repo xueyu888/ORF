@@ -6,7 +6,7 @@ export type TestContext = {
   page: Page;
 };
 
-export type DefaultObjectiveListCurrentMemberParticipatedIncompleteCaseData = {
+export type MemberSearchTeamObjectiveConfirmSubmitWorkLogCaseData = {
   memberEmail: string;
   memberPassword: string;
   memberName: string;
@@ -17,17 +17,27 @@ export type DefaultObjectiveListCurrentMemberParticipatedIncompleteCaseData = {
   otherMemberRole: Extract<UserRole, "member">;
   otherMemberStatus: Extract<UserStatus, "active">;
   objectiveTitlePrefix: string;
-  participatedOpenObjectiveTitle: string;
   otherOpenObjectiveTitle: string;
   participatedAcceptedObjectiveTitle: string;
   openFlowStatus: Extract<ObjectiveFlowStatus, "open">;
   acceptedFlowStatus: Extract<ObjectiveFlowStatus, "accepted">;
   objectiveStage: Extract<OrfStage, "resultClaiming">;
   objectiveStatus: Extract<WorkStatus, "On Track">;
+  nonParticipantNotice: string;
+  completedObjectiveNotice: string;
+  confirmContinueNotice: string;
+  logBodyMarker: string;
+  logBody: string;
+  durationMinutes: number;
+  progressEstimatePercent: number;
+  remainingEstimatePercent: number;
+  expectedDurationLabel: string;
+  expectedProgressLabel: string;
 };
 
 export type ObjectiveFixtureExpectation = {
   title: string;
+  teamId?: string;
   flowStatus: ObjectiveFlowStatus;
   challengerUserId?: string;
   excludedChallengerUserId?: string;
@@ -38,4 +48,15 @@ export type WorkLogObjectiveOptionFixture = {
   title: string;
   flowStatus: ObjectiveFlowStatus;
   isUserChallenger: boolean;
+};
+
+export type WorkLogEntryFixture = {
+  id: string;
+  authorUserId: string;
+  workDate: string;
+  objectiveIdSnapshot: string | null;
+  objectiveTitleSnapshot: string | null;
+  bodyMarkdown: string;
+  durationMinutes: number | null;
+  remainingEstimatePercent: number | null;
 };

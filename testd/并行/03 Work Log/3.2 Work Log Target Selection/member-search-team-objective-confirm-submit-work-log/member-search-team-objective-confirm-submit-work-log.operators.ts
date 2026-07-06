@@ -2,40 +2,45 @@ import { expect } from "@playwright/test";
 import type { OperatorRegistry } from "../../../../_framework/types";
 import { requiredNumber, requiredString } from "../../../../_operators/params";
 import type {
-  MemberSearchNonParticipantObjectiveSubmitWorkLogCaseData,
+  MemberSearchTeamObjectiveConfirmSubmitWorkLogCaseData,
   ObjectiveFixtureExpectation,
   TestContext,
   WorkLogEntryFixture,
-} from "./_support/member-search-non-participant-objective-submit-work-log.context";
+} from "./_support/member-search-team-objective-confirm-submit-work-log.context";
 import {
   apiMyDayContainsBodyMarker,
   apiMyDayEntryFieldEquals,
   dbWorkLogEntryByBodyMarker,
   dbWorkLogEntryForTodayByMemberAndMarker,
   defaultWorkLogObjectivesContain,
+  deleteObjectivesByTitlePrefix,
   deleteWorkLogsByBodyMarker,
   fillWorkLogObjectiveSearch,
   loginAsMember,
   objectiveFixtureMatches,
-  openWorkLogDefaultObjectiveList,
+  objectivesByTitlePrefixAbsent,
+  openWorkLogClassification,
   openWorkLogTodayView,
   readSessionUserName,
   requiredWorkLogEntry,
+  searchedWorkLogObjectivesContain,
   selectWorkLogObjectiveSearchResult,
-  submitTodayWorkLogWithNonParticipantConfirm,
   submittedConfirmMessage,
+  submitTodayWorkLogWithConfirm,
   submitWorkLogButton,
   userByNameAbsent,
   workLogClassificationControl,
+  workLogClassificationOption,
   workLogEditorPanel,
+  workLogErrorMessage,
   workLogHistoryEntry,
-  workLogNonParticipantNotice,
+  workLogNotice,
   workLogToast,
   workLogViewTab,
-} from "./_support/member-search-non-participant-objective-submit-work-log.helpers";
+} from "./_support/member-search-team-objective-confirm-submit-work-log.helpers";
 
-export const memberSearchNonParticipantObjectiveSubmitWorkLogOperators:
-  OperatorRegistry<TestContext, MemberSearchNonParticipantObjectiveSubmitWorkLogCaseData> = {
+export const memberSearchTeamObjectiveConfirmSubmitWorkLogOperators:
+  OperatorRegistry<TestContext, MemberSearchTeamObjectiveConfirmSubmitWorkLogCaseData> = {
     "page.auth": {
       login: async ({ ctx, params }) => {
         await loginAsMember(ctx.page, {
@@ -52,6 +57,10 @@ export const memberSearchNonParticipantObjectiveSubmitWorkLogOperators:
 
       visible: async ({ ctx }) => {
         await expect(ctx.page).toHaveURL(/\/work-logs(?:[?#].*)?$/);
+      },
+
+      error_absent: async ({ ctx }) => {
+        await expect(workLogErrorMessage(ctx.page)).toHaveCount(0);
       },
     },
 
@@ -72,8 +81,8 @@ export const memberSearchNonParticipantObjectiveSubmitWorkLogOperators:
         await expect(workLogClassificationControl(ctx.page)).toBeVisible();
       },
 
-      open_default_objective_list: async ({ ctx }) => {
-        await openWorkLogDefaultObjectiveList(ctx.page);
+      open: async ({ ctx }) => {
+        await openWorkLogClassification(ctx.page);
       },
 
       search_objective: async ({ ctx, params }) => {
@@ -85,9 +94,15 @@ export const memberSearchNonParticipantObjectiveSubmitWorkLogOperators:
       },
     },
 
-    "page.work_logs.non_participant_notice": {
+    "page.work_logs.classification.search_result": {
       visible: async ({ ctx, params }) => {
-        await expect(workLogNonParticipantNotice(ctx.page, requiredString(params, "notice"))).toBeVisible();
+        await expect(workLogClassificationOption(ctx.page, requiredString(params, "objectiveTitle")).first()).toBeVisible();
+      },
+    },
+
+    "page.work_logs.notice": {
+      visible: async ({ ctx, params }) => {
+        await expect(workLogNotice(ctx.page, requiredString(params, "notice"))).toBeVisible();
       },
     },
 
@@ -96,8 +111,8 @@ export const memberSearchNonParticipantObjectiveSubmitWorkLogOperators:
         await expect(submitWorkLogButton(ctx.page)).toBeDisabled();
       },
 
-      submit_with_non_participant_confirm: async ({ ctx, params }) => {
-        await submitTodayWorkLogWithNonParticipantConfirm(ctx.page, requiredString(params, "confirmMessage"));
+      submit_with_confirm: async ({ ctx, params }) => {
+        await submitTodayWorkLogWithConfirm(ctx.page, requiredString(params, "confirmMessage"));
       },
     },
 
@@ -107,7 +122,7 @@ export const memberSearchNonParticipantObjectiveSubmitWorkLogOperators:
       },
 
       confirm: async () => {
-        // 原生确认弹窗由提交算子内部接受；该算子保留文档步骤到 StepSpec 的一一回链。
+        // 原生确认弹窗已在提交算子中接受；该算子保留文档步骤到 StepSpec 的一一回链。
       },
     },
 
@@ -162,6 +177,12 @@ export const memberSearchNonParticipantObjectiveSubmitWorkLogOperators:
     "api.work_log.default_objectives": {
       not_contains_title: async ({ ctx, params }) => {
         await expect.poll(() => defaultWorkLogObjectivesContain(ctx.page, requiredString(params, "title"))).toBe(false);
+      },
+    },
+
+    "api.work_log.search_objectives": {
+      contains_title: async ({ ctx, params }) => {
+        await expect.poll(() => searchedWorkLogObjectivesContain(ctx.page, requiredString(params, "title"))).toBe(true);
       },
     },
 
@@ -257,6 +278,16 @@ export const memberSearchNonParticipantObjectiveSubmitWorkLogOperators:
       equals: async ({ params }) => {
         const entry = requiredWorkLogEntry(params.entry);
         expect(entry.remainingEstimatePercent).toBe(requiredNumber(params, "value"));
+      },
+    },
+
+    "db.objectives_by_prefix": {
+      delete: async ({ params }) => {
+        await deleteObjectivesByTitlePrefix(requiredString(params, "prefix"));
+      },
+
+      absent: async ({ params }) => {
+        await expect.poll(() => objectivesByTitlePrefixAbsent(requiredString(params, "prefix"))).toBe(true);
       },
     },
 

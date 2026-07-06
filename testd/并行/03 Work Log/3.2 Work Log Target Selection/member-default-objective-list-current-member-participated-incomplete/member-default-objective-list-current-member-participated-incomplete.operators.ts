@@ -2,10 +2,10 @@ import { expect } from "@playwright/test";
 import type { OperatorRegistry } from "../../../../_framework/types";
 import { requiredString } from "../../../../_operators/params";
 import type {
-  DefaultObjectiveListCurrentMemberParticipatedIncompleteCaseData,
+  MemberDefaultObjectiveListCurrentMemberParticipatedIncompleteCaseData,
   ObjectiveFixtureExpectation,
   TestContext,
-} from "./_support/default-objective-list-current-member-participated-incomplete.context";
+} from "./_support/member-default-objective-list-current-member-participated-incomplete.context";
 import {
   defaultWorkLogObjectiveFlowStatusEquals,
   defaultWorkLogObjectiveIsCurrentChallenger,
@@ -22,11 +22,12 @@ import {
   workLogClassificationControl,
   workLogDefaultObjectiveOption,
   workLogEditorPanel,
+  workLogErrorMessage,
   workLogViewTab,
-} from "./_support/default-objective-list-current-member-participated-incomplete.helpers";
+} from "./_support/member-default-objective-list-current-member-participated-incomplete.helpers";
 
-export const defaultObjectiveListCurrentMemberParticipatedIncompleteOperators:
-  OperatorRegistry<TestContext, DefaultObjectiveListCurrentMemberParticipatedIncompleteCaseData> = {
+export const memberDefaultObjectiveListCurrentMemberParticipatedIncompleteOperators:
+  OperatorRegistry<TestContext, MemberDefaultObjectiveListCurrentMemberParticipatedIncompleteCaseData> = {
     "page.auth": {
       login: async ({ ctx, params }) => {
         await loginAsMember(ctx.page, {
@@ -43,6 +44,10 @@ export const defaultObjectiveListCurrentMemberParticipatedIncompleteOperators:
 
       visible: async ({ ctx }) => {
         await expect(ctx.page).toHaveURL(/\/work-logs(?:[?#].*)?$/);
+      },
+
+      error_absent: async ({ ctx }) => {
+        await expect(workLogErrorMessage(ctx.page)).toHaveCount(0);
       },
     },
 

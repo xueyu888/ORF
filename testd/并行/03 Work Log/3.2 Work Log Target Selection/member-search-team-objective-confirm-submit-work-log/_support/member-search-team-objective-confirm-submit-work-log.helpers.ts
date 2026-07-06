@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { and, eq, ilike, sql } from "drizzle-orm";
-import { users, workLogEntries } from "../../../../../../server/db/schema";
+import { objectives, users, workLogEntries } from "../../../../../../server/db/schema";
 import { localDateString } from "../../../../../../src/utils/date";
 import { readResponseBody, readTestObjective } from "../../../../../_operators/common.helpers";
 import { db } from "../../../../../_operators/testd-db-client";
@@ -8,7 +8,7 @@ import type {
   ObjectiveFixtureExpectation,
   WorkLogEntryFixture,
   WorkLogObjectiveOptionFixture,
-} from "./member-search-non-participant-objective-submit-work-log.context";
+} from "./member-search-team-objective-confirm-submit-work-log.context";
 
 const RESPONSE_TIMEOUT_MS = 5_000;
 const submittedConfirmMessages = new WeakMap<Page, string>();
@@ -57,7 +57,7 @@ export function submitWorkLogButton(page: Page) {
   return page.getByRole("button", { name: "提交日志", exact: true });
 }
 
-export async function openWorkLogDefaultObjectiveList(page: Page) {
+export async function openWorkLogClassification(page: Page) {
   await workLogClassificationControl(page).click();
   await expect(workLogClassificationSearchInput(page)).toBeVisible();
 }
@@ -81,11 +81,15 @@ export async function selectWorkLogObjectiveSearchResult(page: Page, objectiveTi
   await expect(workLogClassificationControl(page)).toContainText(objectiveTitle);
 }
 
-export function workLogNonParticipantNotice(page: Page, notice: string) {
+export function workLogNotice(page: Page, notice: string) {
   return page.getByText(notice, { exact: true }).first();
 }
 
-export async function submitTodayWorkLogWithNonParticipantConfirm(page: Page, expectedMessage: string) {
+export function workLogErrorMessage(page: Page) {
+  return page.locator(".work-logs-error");
+}
+
+export async function submitTodayWorkLogWithConfirm(page: Page, expectedMessage: string) {
   const responsePromise = page
     .waitForResponse(
       (response) =>
@@ -145,20 +149,19 @@ export async function readSessionUserName(page: Page) {
 }
 
 export async function defaultWorkLogObjectiveOptions(page: Page): Promise<WorkLogObjectiveOptionFixture[]> {
-  const response = await page.evaluate(async () => {
-    const objectiveResponse = await fetch("/api/work-logs/objectives", { credentials: "include" });
-    return {
-      status: objectiveResponse.status,
-      body: await objectiveResponse.json().catch(() => ({})),
-    };
-  });
-  if (response.status !== 200) return [];
-  const objectivesValue = (response.body as { objectives?: unknown }).objectives;
-  return Array.isArray(objectivesValue) ? objectivesValue.filter(isWorkLogObjectiveOptionFixture) : [];
+  return workLogObjectiveOptions(page, { mode: "default" });
+}
+
+export async function searchedWorkLogObjectiveOptions(page: Page, query: string): Promise<WorkLogObjectiveOptionFixture[]> {
+  return workLogObjectiveOptions(page, { mode: "search", query });
 }
 
 export async function defaultWorkLogObjectivesContain(page: Page, title: string) {
   return (await defaultWorkLogObjectiveOptions(page)).some((objective) => objective.title === title);
+}
+
+export async function searchedWorkLogObjectivesContain(page: Page, title: string) {
+  return (await searchedWorkLogObjectiveOptions(page, title)).some((objective) => objective.title === title);
 }
 
 export async function apiMyDayEntries(page: Page) {
@@ -197,6 +200,19 @@ export async function apiMyDayEntryFieldEquals(
 
 export async function deleteWorkLogsByBodyMarker(bodyMarker: string) {
   await db.delete(workLogEntries).where(ilike(workLogEntries.bodyMarkdown, `%${escapeLike(stableBodyMarker(bodyMarker))}%`));
+}
+
+export async function deleteObjectivesByTitlePrefix(prefix: string) {
+  await db.delete(objectives).where(sql`${objectives.title} LIKE ${`${withoutTestdScopeLabel(prefix)}%`}`);
+}
+
+export async function objectivesByTitlePrefixAbsent(prefix: string) {
+  const rows = await db
+    .select({ id: objectives.id })
+    .from(objectives)
+    .where(sql`${objectives.title} LIKE ${`${withoutTestdScopeLabel(prefix)}%`}`)
+    .limit(1);
+  return rows.length === 0;
 }
 
 export async function dbWorkLogEntryByBodyMarker(bodyMarker: string): Promise<WorkLogEntryFixture | null> {
@@ -274,10 +290,36 @@ export function requiredWorkLogEntry(value: unknown): WorkLogEntryFixture {
   throw new Error("参数必须是本用例工作日志");
 }
 
+async function workLogObjectiveOptions(
+  page: Page,
+  input: {
+    mode: "default" | "search";
+    query?: string;
+  },
+): Promise<WorkLogObjectiveOptionFixture[]> {
+  const response = await page.evaluate(async ({ mode, query }) => {
+    const params = new URLSearchParams();
+    params.set("mode", mode);
+    if (query) params.set("q", query);
+    const objectiveResponse = await fetch(`/api/work-logs/objectives?${params.toString()}`, { credentials: "include" });
+    return {
+      status: objectiveResponse.status,
+      body: await objectiveResponse.json().catch(() => ({})),
+    };
+  }, input);
+  if (response.status !== 200) return [];
+  const objectivesValue = (response.body as { objectives?: unknown }).objectives;
+  return Array.isArray(objectivesValue) ? objectivesValue.filter(isWorkLogObjectiveOptionFixture) : [];
+}
+
 function workLogEntryHasBodyMarker(value: unknown, bodyMarker: string) {
   return typeof value === "object" && value !== null && typeof (value as { bodyMarkdown?: unknown }).bodyMarkdown === "string"
     ? (value as { bodyMarkdown: string }).bodyMarkdown.includes(stableBodyMarker(bodyMarker))
     : false;
+}
+
+function withoutTestdScopeLabel(value: string) {
+  return value.replace(/\s+\[r[0-9a-f]+-c[0-9a-f]+-w\d+]$/i, "");
 }
 
 function escapeLike(value: string) {
@@ -285,7 +327,7 @@ function escapeLike(value: string) {
 }
 
 function stableBodyMarker(value: string) {
-  return value.replace(/\s+\[r[0-9a-f]+-c[0-9a-f]+-w\d+\]$/, "");
+  return value.replace(/\s+\[r[0-9a-f]+-c[0-9a-f]+-w\d+]$/i, "");
 }
 
 function isWorkLogObjectiveOptionFixture(value: unknown): value is WorkLogObjectiveOptionFixture {

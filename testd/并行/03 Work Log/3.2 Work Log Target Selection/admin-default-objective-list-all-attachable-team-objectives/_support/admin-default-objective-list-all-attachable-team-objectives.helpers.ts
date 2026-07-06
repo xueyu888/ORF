@@ -3,9 +3,9 @@ import { eq, sql } from "drizzle-orm";
 import { objectives, users } from "../../../../../../server/db/schema";
 import { readTestObjective } from "../../../../../_operators/common.helpers";
 import { db } from "../../../../../_operators/testd-db-client";
-import type { ObjectiveFixtureExpectation, WorkLogObjectiveOptionFixture } from "./default-objective-list-current-member-participated-incomplete.context";
+import type { ObjectiveFixtureExpectation, WorkLogObjectiveOptionFixture } from "./admin-default-objective-list-all-attachable-team-objectives.context";
 
-export async function loginAsMember(page: Page, input: { email: string; password: string }) {
+export async function loginAsUser(page: Page, input: { email: string; password: string }) {
   await page.goto("/auth");
   await page.getByLabel("Email").fill(input.email);
   await page.getByLabel("Password", { exact: true }).fill(input.password);
@@ -50,6 +50,10 @@ export function workLogDefaultObjectiveOption(page: Page, title: string) {
   return page.locator(".orf-fantasy-select-option").filter({ hasText: title });
 }
 
+export function workLogErrorMessage(page: Page) {
+  return page.locator(".work-logs-error");
+}
+
 export async function readSessionUserName(page: Page) {
   return page.evaluate(async () => {
     const response = await fetch("/api/auth/session", { credentials: "include" });
@@ -80,18 +84,27 @@ export async function defaultWorkLogObjectiveIsCurrentChallenger(page: Page, tit
   return (await defaultWorkLogObjectiveOptions(page)).some((objective) => objective.title === title && objective.isUserChallenger);
 }
 
+export async function defaultWorkLogObjectiveIsNotCurrentChallenger(page: Page, title: string) {
+  return (await defaultWorkLogObjectiveOptions(page)).some((objective) => objective.title === title && !objective.isUserChallenger);
+}
+
 export async function defaultWorkLogObjectiveFlowStatusEquals(page: Page, input: { title: string; flowStatus: string }) {
   return (await defaultWorkLogObjectiveOptions(page)).some(
     (objective) => objective.title === input.title && objective.flowStatus === input.flowStatus,
   );
 }
 
-export async function defaultWorkLogObjectivesContainOnlyTitleForPrefix(page: Page, input: { prefix: string; title: string }) {
+export async function defaultWorkLogObjectivesContainOnlyTitlesForPrefix(page: Page, input: { prefix: string; titles: string[] }) {
   const prefix = withoutTestdScopeLabel(input.prefix);
   const matched = (await defaultWorkLogObjectiveOptions(page)).filter((objective) =>
     withoutTestdScopeLabel(objective.title).startsWith(prefix),
   );
-  return matched.length === 1 && matched[0]?.title === input.title;
+  const actualTitles = matched.map((objective) => objective.title).sort();
+  const expectedTitles = [...input.titles].sort();
+  return (
+    actualTitles.length === expectedTitles.length &&
+    actualTitles.every((title, index) => title === expectedTitles[index])
+  );
 }
 
 export async function deleteObjectivesByTitlePrefix(prefix: string) {
@@ -110,6 +123,7 @@ export async function objectivesByTitlePrefixAbsent(prefix: string) {
 export async function objectiveFixtureMatches(input: ObjectiveFixtureExpectation) {
   const objective = await readTestObjective({ title: input.title });
   if (!objective) return false;
+  if (input.teamId && objective.teamId !== input.teamId) return false;
   if (objective.flowStatus !== input.flowStatus) return false;
   if (input.challengerUserId && !objective.challengerUserIds.includes(input.challengerUserId)) return false;
   if (input.excludedChallengerUserId && objective.challengerUserIds.includes(input.excludedChallengerUserId)) return false;
