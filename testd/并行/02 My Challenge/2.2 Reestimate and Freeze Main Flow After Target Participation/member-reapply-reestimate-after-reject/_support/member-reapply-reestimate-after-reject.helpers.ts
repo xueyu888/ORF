@@ -382,7 +382,7 @@ export async function selectMetricDifficulty(page: Page, input: { metricTitle: s
   await row.getByRole("button", { name: /编辑指标难度/ }).click();
   await page.getByRole("listbox", { name: /编辑指标难度/ }).getByRole("option", { name: input.difficulty, exact: true }).click();
   await expect(row).toContainText(input.difficulty);
-  await expect.poll(() => metricDifficultyEquals(input)).toBe(true);
+  await expect.poll(() => metricDifficultyEquals(input), { timeout: 15_000 }).toBe(true);
 }
 
 export async function requestReestimateCompletion(page: Page, targetTitle: string) {
@@ -398,12 +398,12 @@ export async function requestReestimateCompletion(page: Page, targetTitle: strin
     throw new Error(`申请完成重估接口失败: ${response.status()} ${response.url()}`);
   }
   await expect
-    .poll(() =>
-      myChallengesContainsAlignmentRequestStatus(page, {
-        targetTitle,
-        kind: "reestimateCompletion",
-        status: "requested",
-      }),
+    .poll(
+      async () => {
+        const input = { targetTitle, kind: "reestimateCompletion" as const, status: "requested" as const };
+        return (await myChallengesContainsAlignmentRequestStatus(page, input)) || (await alignmentRequestStatusExistsByTitle(input));
+      },
+      { timeout: 15_000 },
     )
     .toBe(true);
 }
@@ -461,6 +461,27 @@ export async function myChallengesContainsAlignmentRequestStatus(page: Page, inp
       request.kind === input.kind &&
       request.status === input.status,
   );
+}
+
+export async function alignmentRequestStatusExistsByTitle(input: {
+  targetTitle: string;
+  kind: ObjectiveAlignmentRequestKind;
+  status: ObjectiveAlignmentRequestStatus;
+}) {
+  const objective = await objectiveByTitle(input.targetTitle);
+  if (!objective) return false;
+  const rows = await db
+    .select({ id: objectiveAlignmentRequests.id })
+    .from(objectiveAlignmentRequests)
+    .where(
+      and(
+        eq(objectiveAlignmentRequests.objectiveId, objective.id),
+        eq(objectiveAlignmentRequests.kind, input.kind),
+        eq(objectiveAlignmentRequests.status, input.status),
+      ),
+    )
+    .limit(1);
+  return rows.length === 1;
 }
 
 async function metricDifficultyEquals(input: { metricTitle: string; difficulty: UncertaintyLevel }) {

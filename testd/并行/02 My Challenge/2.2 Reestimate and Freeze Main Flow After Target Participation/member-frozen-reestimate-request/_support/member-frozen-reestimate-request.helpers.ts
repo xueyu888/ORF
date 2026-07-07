@@ -2,6 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { and, eq, ilike, inArray } from "drizzle-orm";
 import { objectiveAlignmentRequests, objectives, results } from "../../../../../../server/db/schema";
 import type { ObjectiveAlignmentRequestKind, ObjectiveAlignmentRequestStatus, UncertaintyLevel } from "../../../../../../src/types/orf";
+import { createStableUuid } from "../../../../../_shared/ids";
 import {
   deleteTestObjective,
   upsertTestObjective,
@@ -9,10 +10,7 @@ import {
   type TestUserAccountRecord,
 } from "../../../../../_operators/common.helpers";
 import { db } from "../../../../../_operators/testd-db-client";
-import type {
-  MyChallengesApiData,
-  ReestimateObjectiveTargetData,
-} from "./member-reestimate-complete-request.context";
+import type { FrozenObjectiveTargetData, MetricData, MyChallengesApiData } from "./member-frozen-reestimate-request.context";
 
 export async function loginAsMember(page: Page, input: { email: string; password: string }) {
   await page.goto("/auth");
@@ -127,18 +125,18 @@ export async function metricAbsentByTitle(title: string) {
   return (await metricByTitle(title)) === null;
 }
 
-export async function prepareReestimateObjective(input: {
+export async function prepareFrozenObjective(input: {
   memberUser: TestUserAccountRecord;
-  target: ReestimateObjectiveTargetData;
+  target: FrozenObjectiveTargetData;
 }): Promise<TestObjectiveFixtureRecord> {
-  const finalDueAt = addDaysIsoDate(14);
+  const finalDueAt = addDaysIsoDate(input.target.finalDueOffsetDays);
   const record = await upsertTestObjective({
     teamId: input.memberUser.teamId,
     title: input.target.title,
     stage: input.target.stage,
     flowStatus: input.target.flowStatus,
     status: "On Track",
-    progress: 15,
+    progress: 20,
     finalDueAt,
     challengers: [input.memberUser.name],
     challengerUserIds: [input.memberUser.userId],
@@ -151,8 +149,9 @@ export async function prepareReestimateObjective(input: {
   await db
     .update(objectives)
     .set({
-      acceptedAt: addHoursIso(-2),
-      confirmationDueAt: addHoursIso(24),
+      acceptedAt: addHoursIso(-48),
+      confirmationDueAt: null,
+      confirmedAt: addHoursIso(-1),
       updatedAt: today(),
     })
     .where(eq(objectives.id, record.id));
@@ -160,34 +159,111 @@ export async function prepareReestimateObjective(input: {
   return record;
 }
 
-export async function objectiveHasStageAndFlowStatus(input: ReestimateObjectiveTargetData) {
+export async function prepareCalibratedMetric(input: {
+  target: FrozenObjectiveTargetData;
+  metric: MetricData;
+  memberUser: TestUserAccountRecord;
+}) {
+  const objective = await requiredObjectiveByTitle(input.target.title);
+  const id = createStableUuid("testd-result", `${objective.id}:${input.metric.title}`);
+  const values = {
+    id,
+    teamId: objective.teamId,
+    objectiveId: objective.id,
+    title: input.metric.title,
+    detail: "TestD frozen reestimate metric fixture",
+    uncertaintyLevel: input.metric.difficulty,
+    baseline: 0,
+    current: 0,
+    target: 100,
+    unit: "%",
+    direction: "increase" as const,
+    status: "Draft" as const,
+    confidence: 50,
+    source: "memberProposed" as const,
+    definer: input.memberUser.name,
+    definerUserId: input.memberUser.userId,
+    uncertaintyScore: input.metric.score,
+    acceptedResult: "unreviewed" as const,
+    reviewCadence: "Weekly",
+    sortOrder: 0,
+    createdAt: today(),
+    updatedAt: today(),
+    createdBy: input.memberUser.userId,
+    updatedBy: input.memberUser.userId,
+  };
+
+  await db
+    .insert(results)
+    .values(values)
+    .onConflictDoUpdate({
+      target: results.id,
+      set: {
+        teamId: values.teamId,
+        objectiveId: values.objectiveId,
+        title: values.title,
+        detail: values.detail,
+        uncertaintyLevel: values.uncertaintyLevel,
+        baseline: values.baseline,
+        current: values.current,
+        target: values.target,
+        unit: values.unit,
+        direction: values.direction,
+        status: values.status,
+        confidence: values.confidence,
+        source: values.source,
+        definer: values.definer,
+        definerUserId: values.definerUserId,
+        uncertaintyScore: values.uncertaintyScore,
+        acceptedResult: values.acceptedResult,
+        reviewCadence: values.reviewCadence,
+        sortOrder: values.sortOrder,
+        updatedAt: values.updatedAt,
+        createdBy: values.createdBy,
+        updatedBy: values.updatedBy,
+      },
+    });
+
+  return metricByTitle(input.metric.title);
+}
+
+export async function deleteOpenAlignmentRequests(input: {
+  target: FrozenObjectiveTargetData;
+  kind: ObjectiveAlignmentRequestKind;
+}) {
+  const objective = await objectiveByTitle(input.target.title);
+  if (!objective) return;
+  await db
+    .delete(objectiveAlignmentRequests)
+    .where(
+      and(
+        eq(objectiveAlignmentRequests.objectiveId, objective.id),
+        eq(objectiveAlignmentRequests.kind, input.kind),
+        inArray(objectiveAlignmentRequests.status, ["requested", "scheduled"]),
+      ),
+    );
+}
+
+export async function objectiveHasStageAndFlowStatus(input: FrozenObjectiveTargetData) {
   const row = await objectiveByTitle(input.title);
   return row?.stage === input.stage && row.flowStatus === input.flowStatus;
 }
 
 export async function objectiveChallengerContains(input: {
-  target: ReestimateObjectiveTargetData;
+  target: FrozenObjectiveTargetData;
   memberUser: TestUserAccountRecord;
 }) {
   const row = await objectiveByTitle(input.target.title);
   return Boolean(row?.challengerUserIds.includes(input.memberUser.userId));
 }
 
-export async function objectiveReestimateDueFuture(target: ReestimateObjectiveTargetData) {
+export async function objectiveConfirmedAtExists(target: FrozenObjectiveTargetData) {
   const row = await objectiveByTitle(target.title);
-  if (!row?.confirmationDueAt) return false;
-  return new Date(row.confirmationDueAt).getTime() > Date.now();
-}
-
-export async function openAlignmentRequestAbsent(input: {
-  target: ReestimateObjectiveTargetData;
-  kind: ObjectiveAlignmentRequestKind;
-}) {
-  return (await openAlignmentRequestCount(input)) === 0;
+  return typeof row?.confirmedAt === "string" && row.confirmedAt.length > 0;
 }
 
 export async function openAlignmentRequestCount(input: {
-  target: ReestimateObjectiveTargetData;
+  target: FrozenObjectiveTargetData;
   kind: ObjectiveAlignmentRequestKind;
 }) {
   const objective = await objectiveByTitle(input.target.title);
@@ -205,16 +281,20 @@ export async function openAlignmentRequestCount(input: {
   return rows.length;
 }
 
-export async function alignmentRequestExists(input: {
-  target: ReestimateObjectiveTargetData;
+export async function alignmentRequestExistsWithNote(input: {
+  target: FrozenObjectiveTargetData;
   kind: ObjectiveAlignmentRequestKind;
   status: ObjectiveAlignmentRequestStatus;
   memberUser: TestUserAccountRecord;
+  note: string;
 }) {
   const objective = await objectiveByTitle(input.target.title);
   if (!objective) return false;
   const rows = await db
-    .select({ id: objectiveAlignmentRequests.id })
+    .select({
+      id: objectiveAlignmentRequests.id,
+      note: objectiveAlignmentRequests.note,
+    })
     .from(objectiveAlignmentRequests)
     .where(
       and(
@@ -222,66 +302,50 @@ export async function alignmentRequestExists(input: {
         eq(objectiveAlignmentRequests.kind, input.kind),
         eq(objectiveAlignmentRequests.status, input.status),
         eq(objectiveAlignmentRequests.requestedByUserId, input.memberUser.userId),
+        eq(objectiveAlignmentRequests.note, input.note),
       ),
     )
     .limit(1);
   return rows.length === 1;
 }
 
-export async function clickAddMetricAction(page: Page, targetTitle: string) {
-  const panel = objectivePanel(page, targetTitle);
+export async function fillFrozenReestimateReason(page: Page, input: { targetTitle: string; reason: string }) {
+  const panel = objectivePanel(page, input.targetTitle);
   await expect(panel).toBeVisible();
-  await panel.hover();
-  await panel.getByRole("button", { name: "新增子级", exact: true }).click();
-  await panel.locator(".orf-block-menu").getByRole("button", { name: "提出指标", exact: true }).click();
-  await expect(page.getByLabel("编辑指标标题", { exact: true })).toBeVisible();
+  const reasonInput = panel.getByLabel("重新重估理由", { exact: true });
+  await expect(reasonInput).toBeVisible();
+  await reasonInput.fill(input.reason);
+  await expect(reasonInput).toHaveValue(input.reason);
 }
 
-export async function fillMetricTitle(page: Page, title: string) {
-  await page.getByLabel("编辑指标标题", { exact: true }).fill(title);
-}
-
-export async function submitMetricTitle(page: Page, title: string) {
-  await page.getByLabel("编辑指标标题", { exact: true }).press("Enter");
-  await expect(metricRow(page, title)).toBeVisible();
-  await expect.poll(() => metricByTitle(title)).not.toBeNull();
-  const metric = await metricByTitle(title);
-  if (!metric) {
-    throw new Error(`新增指标未落库: ${title}`);
-  }
-  return metric;
-}
-
-export async function selectMetricDifficulty(page: Page, input: { metricTitle: string; difficulty: UncertaintyLevel }) {
-  const row = metricRow(page, input.metricTitle);
-  await expect(row).toBeVisible();
-  await row.getByRole("button", { name: /编辑指标难度/ }).click();
-  await page.getByRole("listbox", { name: /编辑指标难度/ }).getByRole("option", { name: input.difficulty, exact: true }).click();
-  await expect(row).toContainText(input.difficulty);
-  await expect.poll(() => metricDifficultyEquals(input), { timeout: 15_000 }).toBe(true);
-}
-
-export async function requestReestimateCompletion(page: Page, targetTitle: string) {
-  const panel = objectivePanel(page, targetTitle);
+export async function requestFrozenReestimate(page: Page, input: { targetTitle: string; reason: string }) {
+  const panel = objectivePanel(page, input.targetTitle);
   await expect(panel).toBeVisible();
   await observeToastMessages(page);
   const responsePromise = page.waitForResponse(
     (response) => response.request().method() === "POST" && response.url().includes("/alignment-requests"),
   );
-  await panel.getByRole("button", { name: "申请完成重估", exact: true }).click();
+  const button = panel.getByRole("button", { name: "申请重新重估", exact: true });
+  await expect(button).toBeEnabled();
+  await button.click();
   const response = await responsePromiseOrNull(responsePromise);
   if (response && !response.ok()) {
-    throw new Error(`申请完成重估接口失败: ${response.status()} ${response.url()}`);
+    throw new Error(`申请重新重估接口失败: ${response.status()} ${response.url()}`);
   }
   await expect
-    .poll(
-      async () => {
-        const input = { targetTitle, kind: "reestimateCompletion" as const };
-        return (await myChallengesContainsOpenAlignmentRequest(page, input)) || (await alignmentRequestStatusExistsByTitle({ ...input, status: "requested" }));
-      },
-      { timeout: 15_000 },
+    .poll(() =>
+      myChallengesContainsAlignmentRequestWithNote(page, {
+        targetTitle: input.targetTitle,
+        kind: "frozenReestimate",
+        status: "requested",
+        note: input.reason,
+      }),
     )
     .toBe(true);
+}
+
+export async function frozenReestimateActionHidden(page: Page, targetTitle: string) {
+  await expect(objectivePanel(page, targetTitle).getByRole("button", { name: "申请重新重估", exact: true })).toHaveCount(0);
 }
 
 export async function readMyChallenges(page: Page): Promise<MyChallengesApiData> {
@@ -299,27 +363,17 @@ export async function myChallengesContainsObjective(page: Page, title: string) {
   return data.objectives.some((objective) => objective.title === title);
 }
 
-export async function myChallengesContainsMetricWithDifficulty(page: Page, input: {
-  targetTitle: string;
-  metricTitle: string;
-  difficulty: UncertaintyLevel;
-  score: number;
-}) {
+export async function myChallengesObjectiveHasStageAndFlowStatus(page: Page, target: FrozenObjectiveTargetData) {
   const data = await readMyChallenges(page);
-  const objective = data.objectives.find((item) => item.title === input.targetTitle);
-  if (!objective) return false;
-  return data.results.some(
-    (result) =>
-      result.objectiveId === objective.id &&
-      result.title === input.metricTitle &&
-      result.uncertaintyLevel === input.difficulty &&
-      result.uncertaintyScore === input.score,
-  );
+  const objective = data.objectives.find((item) => item.title === target.title);
+  return objective?.stage === target.stage && objective.flowStatus === target.flowStatus;
 }
 
-export async function myChallengesContainsOpenAlignmentRequest(page: Page, input: {
+export async function myChallengesContainsAlignmentRequestWithNote(page: Page, input: {
   targetTitle: string;
   kind: ObjectiveAlignmentRequestKind;
+  status: ObjectiveAlignmentRequestStatus;
+  note: string;
 }) {
   const data = await readMyChallenges(page);
   const objective = data.objectives.find((item) => item.title === input.targetTitle);
@@ -328,33 +382,13 @@ export async function myChallengesContainsOpenAlignmentRequest(page: Page, input
     (request) =>
       request.objectiveId === objective.id &&
       request.kind === input.kind &&
-      (request.status === "requested" || request.status === "scheduled"),
+      request.status === input.status &&
+      request.note === input.note,
   );
 }
 
-export async function alignmentRequestStatusExistsByTitle(input: {
-  targetTitle: string;
-  kind: ObjectiveAlignmentRequestKind;
-  status: ObjectiveAlignmentRequestStatus;
-}) {
-  const objective = await objectiveByTitle(input.targetTitle);
-  if (!objective) return false;
-  const rows = await db
-    .select({ id: objectiveAlignmentRequests.id })
-    .from(objectiveAlignmentRequests)
-    .where(
-      and(
-        eq(objectiveAlignmentRequests.objectiveId, objective.id),
-        eq(objectiveAlignmentRequests.kind, input.kind),
-        eq(objectiveAlignmentRequests.status, input.status),
-      ),
-    )
-    .limit(1);
-  return rows.length === 1;
-}
-
-export async function metricExistsWithDifficulty(input: {
-  target: ReestimateObjectiveTargetData;
+export async function metricExistsWithScore(input: {
+  target: FrozenObjectiveTargetData;
   title: string;
   difficulty: UncertaintyLevel;
   score: number;
@@ -365,25 +399,29 @@ export async function metricExistsWithDifficulty(input: {
   return row?.objectiveId === objective.id && row.uncertaintyLevel === input.difficulty && row.uncertaintyScore === input.score;
 }
 
-async function metricDifficultyEquals(input: { metricTitle: string; difficulty: UncertaintyLevel }) {
-  const row = await metricByTitle(input.metricTitle);
-  return row?.uncertaintyLevel === input.difficulty;
-}
-
 async function objectiveByTitle(title: string) {
   const [row] = await db
     .select({
       id: objectives.id,
+      teamId: objectives.teamId,
       title: objectives.title,
       stage: objectives.stage,
       flowStatus: objectives.flowStatus,
       challengerUserIds: objectives.challengerUserIds,
-      confirmationDueAt: objectives.confirmationDueAt,
+      confirmedAt: objectives.confirmedAt,
     })
     .from(objectives)
     .where(eq(objectives.title, title))
     .limit(1);
   return row ?? null;
+}
+
+async function requiredObjectiveByTitle(title: string) {
+  const objective = await objectiveByTitle(title);
+  if (!objective) {
+    throw new Error(`目标不存在: ${title}`);
+  }
+  return objective;
 }
 
 async function metricByTitle(title: string) {
