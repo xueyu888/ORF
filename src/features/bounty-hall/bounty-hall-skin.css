@@ -1572,7 +1572,7 @@ button.bounty-result-preview-item:focus-visible {
 
 .feedback-issue-filter-row {
   display: grid;
-  grid-template-columns: repeat(5, minmax(138px, 1fr));
+  grid-template-columns: repeat(6, minmax(128px, 1fr));
   gap: 10px;
   min-width: 0;
 }
@@ -2149,6 +2149,56 @@ button.bounty-result-preview-item:focus-visible {
   font-size: 13px;
   font-weight: 800;
   line-height: 1.45;
+}
+
+.feedback-issue-sidebar-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid rgba(151, 123, 83, 0.32);
+  border-radius: 6px;
+  background: rgba(255, 251, 242, 0.92);
+  color: #2f425d;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  outline: 0;
+  padding: 0 9px;
+}
+
+.feedback-issue-sidebar-input:focus {
+  border-color: rgba(47, 140, 195, 0.72);
+  box-shadow: 0 0 0 3px rgba(47, 140, 195, 0.15);
+}
+
+.feedback-issue-sidebar-choice-list {
+  display: grid;
+  gap: 6px;
+}
+
+.feedback-issue-sidebar-choice-list label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: #334861;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.feedback-issue-sidebar-choice-list input {
+  flex: 0 0 auto;
+}
+
+.feedback-issue-sidebar-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feedback-issue-subscription-state strong {
+  color: #2f425d;
 }
 
 .feedback-issue-sidebar-links {

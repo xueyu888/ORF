@@ -161,6 +161,14 @@ test("revision and peer review notifications point back to the objective", () =>
   });
 });
 
+test("feedback assignment notifications stay replyable on the feedback target", () => {
+  assert.deepEqual(notificationPolicy("feedback.assigned"), {
+    kind: "feedback.assigned",
+    replyTarget: "notification-target",
+    stream: "personalNotification",
+  });
+});
+
 test("E2E actor notification isolation is based on actor name and recipient identity", () => {
   assert.equal(isE2eNotificationActorName("ORF Member Review E2E"), true);
   assert.equal(isE2eNotificationActorName("tangyl"), false);

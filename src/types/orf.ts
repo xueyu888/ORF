@@ -27,6 +27,7 @@ export type NotificationKind =
   | "feedback.created"
   | "feedback.commented"
   | "feedback.status.changed"
+  | "feedback.assigned"
   | "comment.reply.created"
   | "comment.thread.status.changed"
   | "comment.mention.created"
@@ -34,6 +35,7 @@ export type NotificationKind =
   | "worklog.reminder";
 export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog" | "dataSync";
 export type NotificationStream = "personalNotification" | "teamAnnouncement";
+export type FeedbackSubscriptionMode = "none" | "participating" | "subscribed" | "muted";
 export type ChatSystemKind = NotificationStream;
 export type ChatMessageSource = "user" | "system";
 export type WorkLogReminderStatus = "active" | "resolved";
@@ -693,6 +695,7 @@ export interface Result {
 
 export interface Feedback {
   id: string;
+  projectId?: string | null;
   phenomenon: string;
   causeCategories: string[];
   impact: Impact;

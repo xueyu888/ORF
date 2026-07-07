@@ -16,7 +16,7 @@
 | `GET`    | `/api/events`                                                                | 已登录 active 用户的 SSE 实时事件流；`notification.created` 投递个人通知，`system.broadcast` 投递作用域横幅广播                                    |
 | `GET`    | `/api/my-challenges`                                                         | 返回当前用户已参与的挑战目标                                                                                                                       |
 | `POST`   | `/api/projects`                                                              | 指挥官创建轻量项目并返回 `{ project }`；项目只用于目标聚合展示，不是权限或生命周期边界                                                            |
-| `DELETE` | `/api/projects/:projectId`                                                   | 指挥官删除轻量项目；项目下目标不删除，统一移入未归属目标                                                                                           |
+| `DELETE` | `/api/projects/:projectId`                                                   | 指挥官删除轻量项目；若项目下有关联反馈则返回 409，若只有目标则目标统一移入未归属目标                                                               |
 | `POST`   | `/api/objectives`                                                            | 挑战页按 Enter 或标题输入框失焦快速创建候选目标，默认 `flowStatus=candidate`                                                                       |
 | `PATCH`  | `/api/objectives/:objectiveId`                                               | 指挥官更新目标标题或截止日期                                                                                                                       |
 | `PATCH`  | `/api/objectives/:objectiveId/project`                                       | 指挥官更新目标项目归属；`projectId` 可为空，表示移出项目                                                                                           |
@@ -42,8 +42,11 @@
 | `PATCH`  | `/api/results/:resultId/uncertainty`                                         | 更新指标等级和积分映射；仅未锁定目标可写，`submitted` 后不得修改。`uncertainty` 是当前实现保留的 API 名 |
 | `PATCH`  | `/api/results/:resultId/confidence`                                          | 更新指标信心 |
 | `PATCH`  | `/api/results/:resultId/order`                                               | 更新指标在同目标内的排序 |
-| `POST`   | `/api/feedback`                                                              | 创建团队级内部反馈 issue，记录 `createdBy` 和文本处理人 `owner`，并同步创建首条评论正文和可选附件；新反馈不接收目标或指标绑定                      |
+| `POST`   | `/api/feedback`                                                              | 创建团队级内部反馈 issue，记录 `createdBy`、处理人、可空 `projectId`，并同步创建首条评论正文和可选附件；新反馈不接收目标或指标绑定                 |
+| `PATCH`  | `/api/feedback/:feedbackId/metadata`                                         | 更新反馈标题、分类、影响、处理人和可空项目；Open 反馈允许管理员、创建人、处理人编辑，Closed 反馈只有管理员可编辑                                  |
 | `PATCH`  | `/api/feedback/:feedbackId/status`                                           | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行                                                                                               |
+| `GET`    | `/api/feedback/:feedbackId/subscription`                                     | 返回当前用户对该反馈的订阅状态：`none`、`participating`、`subscribed` 或 `muted`                                                                   |
+| `PUT`    | `/api/feedback/:feedbackId/subscription`                                     | 设置当前用户对该反馈的显式订阅状态：`subscribed`、`muted` 或清除显式状态 `none`                                                                    |
 | `POST`   | `/api/tasks`                                                                 | 在目标下创建任务并返回 `{ task }`；候选、重估和冻结目标可维护任务                                                                                  |
 | `PATCH`  | `/api/tasks/:taskId`                                                         | 更新任务标题                                                                                                                                       |
 | `PATCH`  | `/api/tasks/:taskId/status`                                                  | 更新任务状态                                                                                                                                       |
@@ -65,7 +68,7 @@
 
 所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。行动项执行人必须是当前默认作用域内的 `active` 成员；前端不提供自由文本输入，空执行人由后端回落为当前用户。重新重估申请的 `note` 必须是 trim 后非空理由。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。`Objective.finalDueAt` 是目标截止日期唯一事实源，只有指挥官可通过 `PATCH /api/objectives/:objectiveId` 修改；`candidate/open/applying/recruiting/reestimating` 可正常修改，`frozen` 只允许延后，`submitted/revisionRequired/accepted/settled/closed` 返回 409。目标处于 `reestimating` 且 `finalDueAt` 实际变更时，后端必须用同一套重估完成期限规则按 `acceptedAt + nextFinalDueAt` 重算并写入 `Objective.confirmationDueAt`；默认完成期限取剩余验收周期的 50%，按半天取整并保留至少半天。如果无法得到合法重估完成期限，返回 400。
 
-项目归属 API 只改变目标聚合展示。`Project.name` 是项目名称事实源，`Objective.projectId` 是目标项目归属事实源且可为空；无项目目标是合法状态。创建目标时可以传入 `projectId`，也可以省略或传空；传入不存在或不属于当前默认作用域的项目必须返回 400。`PATCH /api/objectives/:objectiveId/project` 只允许指挥官调用，可以把目标放入项目、移动到其他项目或移出项目，不能改变目标生命周期、挑战者、指标、任务或积分。`DELETE /api/projects/:projectId` 只删除项目注册表记录，项目下目标统一置为未归属，不删除目标、指标、行动项或结算事实。
+项目归属 API 只改变聚合展示。`Project.name` 是项目名称事实源，`Objective.projectId` 是目标项目归属事实源且可为空，`Feedback.projectId` 是反馈项目归属事实源且可为空；无项目目标和无项目反馈都是合法状态。创建目标或反馈时可以传入 `projectId`，也可以省略或传空；传入不存在或不属于当前默认作用域的项目必须返回 400/409。`PATCH /api/objectives/:objectiveId/project` 只允许指挥官调用，可以把目标放入项目、移动到其他项目或移出项目，不能改变目标生命周期、挑战者、指标、任务或积分。`PATCH /api/feedback/:feedbackId/metadata` 可以把反馈放入项目、移动到其他项目或移出项目，项目变化只写反馈活动，不扩大通知收件人范围。`DELETE /api/projects/:projectId` 只删除项目注册表记录；如果项目下存在反馈，必须返回 409 并保留项目和反馈；如果没有反馈，项目下目标统一置为未归属，不删除目标、指标、行动项或结算事实。
 
 `POST /api/objectives` 对应挑战页 temporary 目标标题输入框的 Enter 或失焦快速创建动作。创建请求发起后，前端先让本地 temporary 目标退出标题编辑态并留在原位；`POST` 成功返回的真实目标必须足以立即替换本地 temporary 目标，任务管理数据刷新只负责后续同步和撤掉覆盖层，不能成为创建成功 UI 的前置条件。创建成功后的真实目标继续保持同一套目标面板结构，但缺失指标和行动项时前端不渲染伪子行；前端从目标行 `+` 选择新增指标或新增行动项后，才通过 `POST /api/results` / `POST /api/tasks` 创建对应实体，返回的真实实体用于替换本次创建的 temporary 行。`POST /api/tasks/:taskId/checklist` 必须返回创建出来的 `TaskChecklistItem`，前端用真实子任务 id 替换 temporary 子任务，不能靠标题匹配。指标、任务和子任务创建成功后都使用一次性创建覆盖层桥接到 `/api/my-challenges` 刷新 materialize，不能在页面级刷新延迟时短暂回到旧列表。任务管理接口按 `createdAt desc, id desc` 返回目标源数据；挑战页在业务排序键相同时保留该源顺序，并且不能把目标标题作为列表排序键。由于 API 源顺序可能和本地 temporary 目标插入顺序不同，前端在提交目标时保留一次性的邻居锚点；`POST` 成功返回的真实目标可以作为页面级临时覆盖层连续替换 temporary 目标，任务管理数据刷新包含同一目标后撤掉覆盖层，但排序锚点继续保留到用户切换筛选或目标业务排序键变化。创建失败时，前端回到目标标题编辑态并保留用户输入。
 
@@ -87,12 +90,12 @@
 
 | 集合                    | 用途                                                                                      |
 | ----------------------- | ----------------------------------------------------------------------------------------- |
-| `projects`              | 轻量项目注册表；管理员读模型返回当前作用域项目，成员读模型只返回与可见目标相关的项目      |
+| `projects`              | 轻量项目注册表；管理员读模型返回当前作用域项目，成员读模型只返回与可见目标或反馈相关的项目 |
 | `objectives`            | 页面根节点，也是挑战对象；可携带可空 `projectId` 作为前端项目分组字段                     |
 | `results`               | 目标下的指标                                                                              |
 | `tasks`                 | 目标下的任务和子任务                                                                      |
 | `evidence`              | 证据                                                                                      |
-| `feedback`              | 系统或管理反馈，不驱动悬赏状态机                                                          |
+| `feedback`              | 团队级内部反馈 issue，可携带可空 `projectId`，不驱动悬赏状态机                            |
 | `comments`              | 目标、指标、任务、子任务和反馈 issue 评论                                                 |
 | `objectiveLoot`         | 结构化战利品提交记录                                                                      |
 | `objectiveTrialReviews` | 目标试验收请求和指挥官反馈                                                                |

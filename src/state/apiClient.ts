@@ -22,6 +22,7 @@ import type {
   DriveSearchStatus,
   DriveSearchType,
   DriveSearchUpdatedRange,
+  FeedbackSubscriptionMode,
   CommentThread,
   CommentAttachmentUploadResult,
   CommentTargetType,
@@ -128,6 +129,11 @@ export type PushDeviceRegistrationResponse = {
 export type CommentMentionableUsersResponse = Pick<OrfState, "users">;
 export type FeedbackReferencesResponse = {
   feedback: Array<Pick<OrfState["feedback"][number], "id" | "phenomenon">>;
+};
+export type FeedbackSubscriptionResponse = {
+  subscription: {
+    mode: FeedbackSubscriptionMode;
+  };
 };
 export type CommentAttachmentUploadResponse = CommentAttachmentUploadResult & {
   ok: true;
@@ -596,6 +602,17 @@ export async function getFeedbackReferences(feedbackIds: string[]) {
   }
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return apiJson<FeedbackReferencesResponse>(`/api/feedback/references${suffix}`);
+}
+
+export async function getFeedbackSubscription(feedbackId: string) {
+  return apiJson<FeedbackSubscriptionResponse>(`/api/feedback/${encodeURIComponent(feedbackId)}/subscription`);
+}
+
+export async function updateFeedbackSubscription(feedbackId: string, mode: "none" | "subscribed" | "muted") {
+  return apiJson<FeedbackSubscriptionResponse>(`/api/feedback/${encodeURIComponent(feedbackId)}/subscription`, {
+    method: "PUT",
+    body: JSON.stringify({ mode }),
+  });
 }
 
 export async function getChatBootstrap() {

@@ -313,6 +313,9 @@ export function registerOrfObjectiveRoutes(app: FastifyInstance) {
     if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Project not found" });
     }
+    if (outcome.status === "hasFeedback") {
+      return reply.code(409).send({ error: "Project has linked feedback", project: outcome.project });
+    }
 
     return { project: outcome.project };
   });

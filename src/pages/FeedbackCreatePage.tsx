@@ -1,7 +1,7 @@
 import { ArrowLeft, Check, Paperclip } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui";
 import { UserAvatar } from "../components/UserAvatar";
 import { BountyEmptyState } from "../features/bounty-hall/BountyHallSkin";
@@ -29,6 +29,7 @@ type PendingFeedbackAttachment = {
 
 export function FeedbackCreatePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { createFeedback, currentUser, notify, state } = useOrf();
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
   const defaultOwnerUserId = currentUser?.id ?? state.currentUserId ?? state.users[0]?.id ?? "";
@@ -36,11 +37,14 @@ export function FeedbackCreatePage() {
   const activeOwnerOptions = state.users.filter((user) => user.status === "active");
   const ownerOptions = activeOwnerOptions.length > 0 ? activeOwnerOptions : state.users;
   const initialOwnerUserId = ownerOptions.some((user) => user.id === defaultOwnerUserId) ? defaultOwnerUserId : ownerOptions[0]?.id ?? defaultOwnerUserId;
+  const projectParam = searchParams.get("project") ?? "";
+  const initialProjectId = state.projects.some((project) => project.id === projectParam) ? projectParam : "";
   const [title, setTitle] = useState("");
   const [draft, setDraft] = useState<CommentDraft>(() => emptyCommentDraft());
   const [cause, setCause] = useState<string>(causeOptions[0] ?? "技术问题");
   const [impact, setImpact] = useState<Impact>("Medium");
   const [ownerUserId, setOwnerUserId] = useState(initialOwnerUserId);
+  const [projectId, setProjectId] = useState(initialProjectId);
   const [pendingAttachments, setPendingAttachments] = useState<PendingFeedbackAttachment[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const attachmentCounterRef = useRef(0);
@@ -60,6 +64,12 @@ export function FeedbackCreatePage() {
     }
     pendingPreviewUrlsRef.current.clear();
   }, []);
+
+  useEffect(() => {
+    if (projectId && !state.projects.some((project) => project.id === projectId)) {
+      setProjectId("");
+    }
+  }, [projectId, state.projects]);
 
   if (!canCreateFeedback) {
     return (
@@ -99,6 +109,7 @@ export function FeedbackCreatePage() {
         impact,
         initialBody: body,
         ownerUserId: ownerUserId.trim(),
+        projectId: projectId || null,
         attachments: referencedAttachments,
       });
       if (feedback) {
@@ -171,6 +182,13 @@ export function FeedbackCreatePage() {
             <span>处理人</span>
             <select required value={ownerUserId} onChange={(event) => setOwnerUserId(event.target.value)}>
               {ownerOptions.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+            </select>
+          </label>
+          <label className="feedback-create-sidebar-field">
+            <span>项目</span>
+            <select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+              <option value="">不归属项目</option>
+              {state.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
           </label>
           <label className="feedback-create-sidebar-field">

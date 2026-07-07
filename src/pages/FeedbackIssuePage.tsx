@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, CircleDot, Link as LinkIcon, MessageSquare, Pencil, Reply, RotateCcw, XCircle } from "lucide-react";
+import { ArrowLeft, Bell, BellOff, CheckCircle2, CircleDot, Link as LinkIcon, MessageSquare, Pencil, Reply, RotateCcw, Save, XCircle } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -21,7 +21,8 @@ import {
 import { commentTimeDisplay } from "../features/challenge/comments/commentTime";
 import { RelatedResourcesPanel } from "../features/drive/RelatedResourcesPanel";
 import type { OrfRichTextAttachmentUploadResult } from "../features/rich-text/OrfRichTextEditor";
-import { canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
+import { canEditFeedbackMetadata, canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
+import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
 import {
   feedbackIssueDisplayId,
   feedbackIssueHref,
@@ -39,7 +40,9 @@ import {
   feedbackIssueParticipants,
 } from "../features/feedback/model/feedbackIssueMetadata";
 import { useOrf } from "../state/OrfProvider";
-import type { ActivityItem, CommentMessage, CommentThread, Feedback, OrfUser } from "../types/orf";
+import { getFeedbackSubscription, updateFeedbackSubscription } from "../state/apiClient";
+import type { ActivityItem, CommentMessage, CommentThread, Feedback, FeedbackSubscriptionMode, Impact, OrfProject, OrfUser } from "../types/orf";
+import { impactLabel } from "../utils/labels";
 
 type FeedbackCommentEntry = {
   message: CommentMessage;
@@ -55,6 +58,7 @@ export function FeedbackIssuePage() {
     notify,
     state,
     updateCommentMessage,
+    updateFeedbackMetadata,
     updateFeedbackStatus,
     uploadCommentAttachment,
   } = useOrf();
@@ -64,6 +68,8 @@ export function FeedbackIssuePage() {
   const [editState, setEditState] = useState<{ draft: CommentDraft; messageId: string; threadId: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<ImagePreview | null>(null);
   const [mentionableUsers, setMentionableUsers] = useState<CommentMentionUser[]>([]);
+  const [subscriptionMode, setSubscriptionMode] = useState<FeedbackSubscriptionMode>("none");
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const threads = useMemo(() => feedback ? feedbackIssueThreads(state.comments, feedback.id) : [], [feedback, state.comments]);
   const entries = useMemo(() => feedbackCommentEntries(threads), [threads]);
   const originalEntry = entries[0] ?? null;
@@ -71,6 +77,7 @@ export function FeedbackIssuePage() {
   const activityEntries = useMemo(() => feedback ? feedbackIssueActivityEntries(feedback.activity) : [], [feedback]);
   const mentionUsersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
   const canChangeState = feedback ? canManageFeedbackStatus(feedback, currentUser) : false;
+  const canEditMetadata = feedback ? canEditFeedbackMetadata(feedback, currentUser) : false;
   const canManageAllComments = hasPermission(currentUser, state.permissionRules, "comment.manage");
   const uploadFeedbackCommentAttachment = async (file: File) => {
     if (!feedback) return null;
@@ -110,6 +117,30 @@ export function FeedbackIssuePage() {
       cancelled = true;
     };
   }, [feedback, loadCommentMentionableUsers]);
+
+  useEffect(() => {
+    if (!feedback || !currentUser) {
+      setSubscriptionMode("none");
+      return;
+    }
+
+    let cancelled = false;
+    setSubscriptionLoading(true);
+    getFeedbackSubscription(feedback.id)
+      .then((response) => {
+        if (!cancelled) setSubscriptionMode(response.subscription.mode);
+      })
+      .catch(() => {
+        if (!cancelled) setSubscriptionMode("none");
+      })
+      .finally(() => {
+        if (!cancelled) setSubscriptionLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, feedback]);
 
   if (!feedback) {
     return (
@@ -187,6 +218,20 @@ export function FeedbackIssuePage() {
     }
 
     void write.then(() => notify("反馈链接已复制")).catch(() => notify("复制链接失败"));
+  };
+
+  const changeSubscription = async (mode: "none" | "subscribed" | "muted") => {
+    if (!feedback || subscriptionLoading) return;
+    setSubscriptionLoading(true);
+    try {
+      const response = await updateFeedbackSubscription(feedback.id, mode);
+      setSubscriptionMode(response.subscription.mode);
+      notify(subscriptionToast(response.subscription.mode));
+    } catch {
+      notify("反馈订阅更新失败");
+    } finally {
+      setSubscriptionLoading(false);
+    }
   };
 
   const issueOpen = isFeedbackIssueOpen(feedback);
@@ -314,7 +359,20 @@ export function FeedbackIssuePage() {
 
         <aside className="feedback-issue-sidebar" aria-label="反馈属性">
           <RelatedResourcesPanel canEdit={Boolean(currentUser)} contextId={feedback.id} contextType="feedback" notify={notify} />
-          <IssueSidebar comments={threads} feedback={feedback} feedbackItems={state.feedback} users={state.users} />
+          <FeedbackSubscriptionControls
+            disabled={subscriptionLoading}
+            mode={subscriptionMode}
+            onChange={changeSubscription}
+          />
+          <IssueSidebar
+            canEdit={canEditMetadata}
+            comments={threads}
+            feedback={feedback}
+            feedbackItems={state.feedback}
+            onSaveMetadata={(input) => updateFeedbackMetadata(feedback.id, input)}
+            projects={state.projects}
+            users={state.users}
+          />
         </aside>
       </main>
 
@@ -403,21 +461,144 @@ function OriginalFeedbackCard({
   );
 }
 
+function FeedbackSubscriptionControls({
+  disabled,
+  mode,
+  onChange,
+}: {
+  disabled: boolean;
+  mode: FeedbackSubscriptionMode;
+  onChange: (mode: "none" | "subscribed" | "muted") => void;
+}) {
+  const subscribed = mode === "subscribed";
+  const muted = mode === "muted";
+
+  return (
+    <div className="feedback-issue-sidebar-block">
+      <span>Notifications</span>
+      <div className="feedback-issue-subscription-state">
+        <strong>{feedbackSubscriptionLabel(mode)}</strong>
+      </div>
+      <div className="feedback-issue-sidebar-actions">
+        <Button disabled={disabled} size="sm" type="button" variant={subscribed ? "ghost" : "secondary"} onClick={() => onChange(subscribed ? "none" : "subscribed")}>
+          <Bell aria-hidden="true" />
+          {subscribed ? "取消关注" : "关注"}
+        </Button>
+        <Button disabled={disabled} size="sm" type="button" variant={muted ? "secondary" : "ghost"} onClick={() => onChange(muted ? "none" : "muted")}>
+          <BellOff aria-hidden="true" />
+          {muted ? "取消静音" : "静音"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+type FeedbackMetadataDraft = {
+  causeCategories: string[];
+  impact: Impact;
+  ownerUserId: string;
+  phenomenon: string;
+  projectId: string;
+};
+
+function feedbackMetadataDraftFromFeedback(feedback: Feedback): FeedbackMetadataDraft {
+  return {
+    causeCategories: feedback.causeCategories,
+    impact: feedback.impact,
+    ownerUserId: feedback.ownerUserId,
+    phenomenon: feedback.phenomenon,
+    projectId: feedback.projectId ?? "",
+  };
+}
+
+function sameFeedbackMetadataDraft(left: FeedbackMetadataDraft, right: FeedbackMetadataDraft) {
+  return (
+    left.phenomenon === right.phenomenon &&
+    left.ownerUserId === right.ownerUserId &&
+    left.impact === right.impact &&
+    left.projectId === right.projectId &&
+    left.causeCategories.length === right.causeCategories.length &&
+    left.causeCategories.every((category, index) => category === right.causeCategories[index])
+  );
+}
+
+function feedbackSubscriptionLabel(mode: FeedbackSubscriptionMode) {
+  if (mode === "subscribed") return "已关注";
+  if (mode === "muted") return "已静音";
+  if (mode === "participating") return "参与中";
+  return "未关注";
+}
+
+function subscriptionToast(mode: FeedbackSubscriptionMode) {
+  if (mode === "subscribed") return "已关注反馈";
+  if (mode === "muted") return "已静音反馈";
+  if (mode === "participating") return "已恢复参与通知";
+  return "已取消反馈关注";
+}
+
 function IssueSidebar({
+  canEdit,
   comments,
   feedback,
   feedbackItems,
+  onSaveMetadata,
+  projects,
   users,
 }: {
+  canEdit: boolean;
   comments: readonly CommentThread[];
   feedback: Feedback;
   feedbackItems: readonly Feedback[];
+  onSaveMetadata: (input: {
+    causeCategories: string[];
+    impact: Impact;
+    ownerUserId: string;
+    phenomenon: string;
+    projectId: string | null;
+  }) => Promise<boolean>;
+  projects: readonly OrfProject[];
   users: readonly OrfUser[];
 }) {
+  const [draft, setDraft] = useState(() => feedbackMetadataDraftFromFeedback(feedback));
   const assignee = feedbackIssueAssignee(feedback, users);
   const labels = feedbackIssueLabels(feedback);
   const participants = feedbackIssueParticipants({ feedback, threads: comments, users });
   const linkedFeedback = feedbackIssueLinkedFeedback({ feedback, feedbackItems, threads: comments });
+  const activeOwnerOptions = users.filter((user) => user.status === "active");
+  const ownerOptions = activeOwnerOptions.length > 0 ? activeOwnerOptions : users;
+  const projectById = new Map(projects.map((project) => [project.id, project]));
+  const project = feedback.projectId ? projectById.get(feedback.projectId) ?? null : null;
+  const causeOptions = useMemo(
+    () => Array.from(new Set([...teamFeedbackCauseOptions(), ...feedback.causeCategories])).filter(Boolean),
+    [feedback.causeCategories],
+  );
+  const metadataDirty = !sameFeedbackMetadataDraft(draft, feedbackMetadataDraftFromFeedback(feedback));
+  const canSaveMetadata = Boolean(metadataDirty && draft.phenomenon.trim() && draft.ownerUserId.trim() && draft.causeCategories.length > 0);
+
+  useEffect(() => {
+    setDraft(feedbackMetadataDraftFromFeedback(feedback));
+  }, [feedback.causeCategories, feedback.id, feedback.impact, feedback.ownerUserId, feedback.phenomenon, feedback.projectId]);
+
+  const toggleCause = (cause: string) => {
+    setDraft((current) => {
+      const exists = current.causeCategories.includes(cause);
+      const nextCategories = exists
+        ? current.causeCategories.filter((item) => item !== cause)
+        : [...current.causeCategories, cause];
+      return nextCategories.length > 0 ? { ...current, causeCategories: nextCategories } : current;
+    });
+  };
+
+  const saveMetadata = async () => {
+    if (!canSaveMetadata) return;
+    await onSaveMetadata({
+      causeCategories: draft.causeCategories,
+      impact: draft.impact,
+      ownerUserId: draft.ownerUserId,
+      phenomenon: draft.phenomenon.trim(),
+      projectId: draft.projectId || null,
+    });
+  };
 
   return (
     <>
@@ -426,22 +607,88 @@ function IssueSidebar({
         <IssueStateBadge feedback={feedback} />
       </div>
       <div className="feedback-issue-sidebar-block">
+        <span>Title</span>
+        {canEdit ? (
+          <input
+            className="feedback-issue-sidebar-input"
+            value={draft.phenomenon}
+            onChange={(event) => setDraft((current) => ({ ...current, phenomenon: event.target.value }))}
+          />
+        ) : (
+          <strong>{feedback.phenomenon}</strong>
+        )}
+      </div>
+      <div className="feedback-issue-sidebar-block">
         <span>Assignees</span>
-        <div className="feedback-issue-sidebar-person">
-          <UserAvatar avatarUrl={assignee.avatarUrl} className="h-7 w-7 text-[10px]" frame={false} name={assignee.name} />
-          <strong>{assignee.name}</strong>
-        </div>
+        {canEdit ? (
+          <select className="feedback-issue-sidebar-input" value={draft.ownerUserId} onChange={(event) => setDraft((current) => ({ ...current, ownerUserId: event.target.value }))}>
+            {ownerOptions.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+          </select>
+        ) : (
+          <div className="feedback-issue-sidebar-person">
+            <UserAvatar avatarUrl={assignee.avatarUrl} className="h-7 w-7 text-[10px]" frame={false} name={assignee.name} />
+            <strong>{assignee.name}</strong>
+          </div>
+        )}
       </div>
       <div className="feedback-issue-sidebar-block">
         <span>Labels</span>
-        <div className="feedback-issue-sidebar-labels">
-          {labels.map((item) => <BountyBadge key={item.key} tone={item.tone}>{item.name}</BountyBadge>)}
-        </div>
+        {canEdit ? (
+          <div className="feedback-issue-sidebar-choice-list">
+            {causeOptions.map((cause) => (
+              <label key={cause}>
+                <input checked={draft.causeCategories.includes(cause)} type="checkbox" onChange={() => toggleCause(cause)} />
+                <span>{cause}</span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <div className="feedback-issue-sidebar-labels">
+            {labels.map((item) => <BountyBadge key={item.key} tone={item.tone}>{item.name}</BountyBadge>)}
+          </div>
+        )}
+      </div>
+      <div className="feedback-issue-sidebar-block">
+        <span>Impact</span>
+        {canEdit ? (
+          <select className="feedback-issue-sidebar-input" value={draft.impact} onChange={(event) => setDraft((current) => ({ ...current, impact: event.target.value as Impact }))}>
+            <option value="Critical">{impactLabel.Critical}</option>
+            <option value="High">{impactLabel.High}</option>
+            <option value="Medium">{impactLabel.Medium}</option>
+            <option value="Low">{impactLabel.Low}</option>
+          </select>
+        ) : (
+          <strong>{impactLabel[feedback.impact]}</strong>
+        )}
       </div>
       <div className="feedback-issue-sidebar-block">
         <span>Projects</span>
-        <p className="feedback-issue-sidebar-empty">未加入项目</p>
+        {canEdit ? (
+          <select className="feedback-issue-sidebar-input" value={draft.projectId} onChange={(event) => setDraft((current) => ({ ...current, projectId: event.target.value }))}>
+            <option value="">不归属项目</option>
+            {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        ) : project ? (
+          <strong>{project.name}</strong>
+        ) : (
+          <p className="feedback-issue-sidebar-empty">未加入项目</p>
+        )}
       </div>
+      {canEdit && (
+        <div className="feedback-issue-sidebar-block">
+          <span>Metadata</span>
+          <div className="feedback-issue-sidebar-actions">
+            <Button disabled={!canSaveMetadata} size="sm" type="button" onClick={saveMetadata}>
+              <Save aria-hidden="true" />
+              保存属性
+            </Button>
+            <Button disabled={!metadataDirty} size="sm" type="button" variant="ghost" onClick={() => setDraft(feedbackMetadataDraftFromFeedback(feedback))}>
+              <RotateCcw aria-hidden="true" />
+              重置
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="feedback-issue-sidebar-block">
         <span>Milestone</span>
         <p className="feedback-issue-sidebar-empty">无里程碑</p>
