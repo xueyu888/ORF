@@ -2,41 +2,42 @@ import { expect } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../../../_framework/types";
 import { requiredNumber, requiredString } from "../../../../_operators/params";
 import type {
-  MemberReestimateCompleteRequestCaseData,
+  MemberReapplyReestimateAfterRejectCaseData,
   ReestimateObjectiveTargetData,
   TestContext,
   TestUserAccountRecord,
-} from "./_support/member-reestimate-complete-request.context";
+  UncalibratedMetricData,
+} from "./_support/member-reapply-reestimate-after-reject.context";
 import {
   alignmentRequestExists,
   challengeScopeTab,
-  clickAddMetricAction,
   deleteObjectivesByTitlePrefix,
-  fillMetricTitle,
   loginAsMember,
   metricAbsentByTitle,
+  metricExistsUncalibrated,
   metricExistsWithDifficulty,
   metricRow,
+  myChallengesContainsAlignmentRequestStatus,
   myChallengesContainsMetricWithDifficulty,
   myChallengesContainsObjective,
-  myChallengesContainsOpenAlignmentRequest,
+  myChallengesObjectiveHasStageAndFlowStatus,
   objectiveChallengerContains,
   objectiveHasStageAndFlowStatus,
   objectivePanel,
   objectivePrefixAbsent,
   objectiveReestimateDueFuture,
-  openAlignmentRequestAbsent,
   openAlignmentRequestCount,
   openMyChallenges,
+  prepareHistoricalNeedsWorkAlignmentRequest,
   prepareReestimateObjective,
+  prepareUncalibratedMetric,
   readSessionUserName,
   requestReestimateCompletion,
   selectMetricDifficulty,
-  submitMetricTitle,
   toastMessageAppeared,
-} from "./_support/member-reestimate-complete-request.helpers";
+} from "./_support/member-reapply-reestimate-after-reject.helpers";
 
-export const memberReestimateCompleteRequestOperators: OperatorRegistry<TestContext, MemberReestimateCompleteRequestCaseData> = {
+export const memberReapplyReestimateAfterRejectOperators: OperatorRegistry<TestContext, MemberReapplyReestimateAfterRejectCaseData> = {
   "auth.session.user_name": {
     equals: async ({ ctx, params }) => {
       await expect.poll(() => readSessionUserName(ctx.page)).toBe(requiredString(params, "name"));
@@ -87,24 +88,10 @@ export const memberReestimateCompleteRequestOperators: OperatorRegistry<TestCont
   },
 
   "page.challenge_metric": {
-    click_add: async ({ ctx, params }) => {
-      await clickAddMetricAction(ctx.page, requiredString(params, "targetTitle"));
-    },
-
     visible_under_objective: async ({ ctx, params }) => {
       const panel = objectivePanel(ctx.page, requiredString(params, "targetTitle"));
       await expect(panel).toBeVisible();
       await expect(panel.locator(".orf-result-row").filter({ hasText: requiredString(params, "metricTitle") })).toBeVisible();
-    },
-  },
-
-  "page.metric_title_editor": {
-    fill: async ({ ctx, params }) => {
-      await fillMetricTitle(ctx.page, requiredString(params, "title"));
-    },
-
-    submit: async ({ ctx, params }) => {
-      return submitMetricTitle(ctx.page, requiredString(params, "title"));
     },
   },
 
@@ -136,6 +123,10 @@ export const memberReestimateCompleteRequestOperators: OperatorRegistry<TestCont
       await expect.poll(() => myChallengesContainsObjective(ctx.page, requiredString(params, "title"))).toBe(true);
     },
 
+    objective_stage_flow: async ({ ctx, params }) => {
+      await expect.poll(() => myChallengesObjectiveHasStageAndFlowStatus(ctx.page, requiredTarget(params, "target"))).toBe(true);
+    },
+
     contains_metric_with_difficulty: async ({ ctx, params }) => {
       await expect
         .poll(() =>
@@ -149,12 +140,13 @@ export const memberReestimateCompleteRequestOperators: OperatorRegistry<TestCont
         .toBe(true);
     },
 
-    contains_open_alignment_request: async ({ ctx, params }) => {
+    contains_alignment_request_status: async ({ ctx, params }) => {
       await expect
         .poll(() =>
-          myChallengesContainsOpenAlignmentRequest(ctx.page, {
+          myChallengesContainsAlignmentRequestStatus(ctx.page, {
             targetTitle: requiredString(params, "targetTitle"),
             kind: requiredAlignmentKind(params, "kind"),
+            status: requiredAlignmentStatus(params, "status"),
           }),
         )
         .toBe(true);
@@ -174,7 +166,8 @@ export const memberReestimateCompleteRequestOperators: OperatorRegistry<TestCont
   "db.reestimate_objective_fixture": {
     prepare: async ({ params }) =>
       prepareReestimateObjective({
-        memberUser: requiredMemberUser(params, "memberUser"),
+        adminUser: requiredUser(params, "adminUser"),
+        memberUser: requiredUser(params, "memberUser"),
         target: requiredTarget(params, "target"),
       }),
 
@@ -191,7 +184,7 @@ export const memberReestimateCompleteRequestOperators: OperatorRegistry<TestCont
         .poll(() =>
           objectiveChallengerContains({
             target: requiredTarget(params, "target"),
-            memberUser: requiredMemberUser(params, "memberUser"),
+            memberUser: requiredUser(params, "memberUser"),
           }),
         )
         .toBe(true);
@@ -203,8 +196,26 @@ export const memberReestimateCompleteRequestOperators: OperatorRegistry<TestCont
   },
 
   "db.metric": {
+    prepare_uncalibrated: async ({ params }) =>
+      prepareUncalibratedMetric({
+        target: requiredTarget(params, "target"),
+        metric: requiredMetric(params, "metric"),
+        memberUser: requiredUser(params, "memberUser"),
+      }),
+
     absent: async ({ params }) => {
       await expect.poll(() => metricAbsentByTitle(requiredString(params, "title"))).toBe(true);
+    },
+
+    exists_uncalibrated: async ({ params }) => {
+      await expect
+        .poll(() =>
+          metricExistsUncalibrated({
+            target: requiredTarget(params, "target"),
+            title: requiredString(params, "title"),
+          }),
+        )
+        .toBe(true);
     },
 
     exists_with_difficulty: async ({ params }) => {
@@ -222,16 +233,14 @@ export const memberReestimateCompleteRequestOperators: OperatorRegistry<TestCont
   },
 
   "db.objective_alignment_request": {
-    open_absent: async ({ params }) => {
-      await expect
-        .poll(() =>
-          openAlignmentRequestAbsent({
-            target: requiredTarget(params, "target"),
-            kind: requiredAlignmentKind(params, "kind"),
-          }),
-        )
-        .toBe(true);
-    },
+    prepare_needs_work: async ({ params }) =>
+      prepareHistoricalNeedsWorkAlignmentRequest({
+        target: requiredTarget(params, "target"),
+        kind: requiredAlignmentKind(params, "kind"),
+        status: requiredNeedsWorkStatus(params, "status"),
+        memberUser: requiredUser(params, "memberUser"),
+        adminUser: requiredUser(params, "adminUser"),
+      }),
 
     exists: async ({ params }) => {
       await expect
@@ -240,7 +249,8 @@ export const memberReestimateCompleteRequestOperators: OperatorRegistry<TestCont
             target: requiredTarget(params, "target"),
             kind: requiredAlignmentKind(params, "kind"),
             status: requiredAlignmentStatus(params, "status"),
-            memberUser: requiredMemberUser(params, "memberUser"),
+            memberUser: requiredUser(params, "memberUser"),
+            adminUser: optionalUser(params, "adminUser"),
           }),
         )
         .toBe(true);
@@ -275,7 +285,19 @@ function requiredTarget(params: StepParams, key: string): ReestimateObjectiveTar
   return target as ReestimateObjectiveTargetData;
 }
 
-function requiredMemberUser(params: StepParams, key: string): TestUserAccountRecord {
+function requiredMetric(params: StepParams, key: string): UncalibratedMetricData {
+  const value = params[key];
+  if (typeof value !== "object" || value === null) {
+    throw new Error(`参数 ${key} 必须是 UncalibratedMetricData`);
+  }
+  const metric = value as Partial<UncalibratedMetricData>;
+  if (typeof metric.title !== "string") {
+    throw new Error(`参数 ${key} 缺少 title`);
+  }
+  return metric as UncalibratedMetricData;
+}
+
+function requiredUser(params: StepParams, key: string): TestUserAccountRecord {
   const value = params[key];
   if (typeof value !== "object" || value === null) {
     throw new Error(`参数 ${key} 必须是 TestUserAccountRecord`);
@@ -292,7 +314,11 @@ function requiredMemberUser(params: StepParams, key: string): TestUserAccountRec
   return account as TestUserAccountRecord;
 }
 
-function requiredDifficulty(params: StepParams, key: string): MemberReestimateCompleteRequestCaseData["metricDifficulty"] {
+function optionalUser(params: StepParams, key: string): TestUserAccountRecord | undefined {
+  return params[key] === undefined ? undefined : requiredUser(params, key);
+}
+
+function requiredDifficulty(params: StepParams, key: string): MemberReapplyReestimateAfterRejectCaseData["metricDifficulty"] {
   const value = requiredString(params, key);
   if (value !== "进阶") {
     throw new Error(`参数 ${key} 必须是 进阶`);
@@ -300,7 +326,7 @@ function requiredDifficulty(params: StepParams, key: string): MemberReestimateCo
   return value;
 }
 
-function requiredAlignmentKind(params: StepParams, key: string): MemberReestimateCompleteRequestCaseData["alignmentKind"] {
+function requiredAlignmentKind(params: StepParams, key: string): MemberReapplyReestimateAfterRejectCaseData["alignmentKind"] {
   const value = requiredString(params, key);
   if (value !== "reestimateCompletion") {
     throw new Error(`参数 ${key} 必须是 reestimateCompletion`);
@@ -308,10 +334,21 @@ function requiredAlignmentKind(params: StepParams, key: string): MemberReestimat
   return value;
 }
 
-function requiredAlignmentStatus(params: StepParams, key: string): MemberReestimateCompleteRequestCaseData["alignmentStatus"] {
+function requiredAlignmentStatus(
+  params: StepParams,
+  key: string,
+): MemberReapplyReestimateAfterRejectCaseData["requestedStatus"] | MemberReapplyReestimateAfterRejectCaseData["needsWorkStatus"] {
   const value = requiredString(params, key);
-  if (value !== "requested") {
-    throw new Error(`参数 ${key} 必须是 requested`);
+  if (value !== "requested" && value !== "needsWork") {
+    throw new Error(`参数 ${key} 必须是 requested 或 needsWork`);
+  }
+  return value;
+}
+
+function requiredNeedsWorkStatus(params: StepParams, key: string): MemberReapplyReestimateAfterRejectCaseData["needsWorkStatus"] {
+  const value = requiredString(params, key);
+  if (value !== "needsWork") {
+    throw new Error(`参数 ${key} 必须是 needsWork`);
   }
   return value;
 }
