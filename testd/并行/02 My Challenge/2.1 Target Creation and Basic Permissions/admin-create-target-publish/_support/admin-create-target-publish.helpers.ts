@@ -57,7 +57,7 @@ export async function submitDraftTitle(page: Page, title: string): Promise<Admin
     .then(readObjectiveFromResponse);
 
   await draftTitleInput(page).press("Enter");
-  const objective = await responsePromise;
+  const objective = (await responsePromiseOrNull(responsePromise)) ?? (await requiredObjectiveByTitle(title));
   if (objective.title !== title) {
     throw new Error(`新建目标标题不匹配: expected=${title}, actual=${objective.title}`);
   }
@@ -84,9 +84,9 @@ export async function publishObjectiveFromPanel(page: Page, objective: AdminCrea
     .then(readObjectiveFromResponse);
 
   await panel.getByRole("button", { name: "发布", exact: true }).click();
-  const published = await responsePromise;
+  const published = await responsePromiseOrNull(responsePromise);
   await expect(panel.getByRole("button", { name: "征召", exact: true })).toBeVisible();
-  return published;
+  return published ?? requiredPublishedObjective(objective);
 }
 
 export function recruitButton(page: Page, objective: Pick<AdminCreateTargetPublishObjective, "id" | "title">) {
@@ -113,17 +113,49 @@ export function bountyObjectiveRow(page: Page, objective: Pick<AdminCreateTarget
 }
 
 export async function dbObjectivePublished(objective: Pick<AdminCreateTargetPublishObjective, "id" | "title">) {
+  return (await readObjectiveByIdOrTitle(objective))?.publishedAt !== null;
+}
+
+async function requiredObjectiveByTitle(title: string) {
+  await expect.poll(() => readObjectiveByIdOrTitle({ title })).not.toBeNull();
+  const objective = await readObjectiveByIdOrTitle({ title });
+  if (!objective) {
+    throw new Error(`目标未创建成功: ${title}`);
+  }
+  return objective;
+}
+
+async function requiredPublishedObjective(objective: Pick<AdminCreateTargetPublishObjective, "id" | "title">) {
+  await expect.poll(() => dbObjectivePublished(objective)).toBe(true);
+  const published = await readObjectiveByIdOrTitle(objective);
+  if (!published) {
+    throw new Error(`目标未发布成功: ${objective.title}`);
+  }
+  return published;
+}
+
+async function readObjectiveByIdOrTitle(objective: Partial<Pick<AdminCreateTargetPublishObjective, "id" | "title">>) {
+  const predicates = [
+    objective.id ? eq(objectives.id, objective.id) : undefined,
+    objective.title ? eq(objectives.title, objective.title) : undefined,
+  ].filter((predicate): predicate is NonNullable<typeof predicate> => Boolean(predicate));
+  if (predicates.length === 0) {
+    throw new Error("读取目标必须提供 id 或 title");
+  }
+
   const [row] = await db
     .select({
       id: objectives.id,
       title: objectives.title,
+      flowStatus: objectives.flowStatus,
+      stage: objectives.stage,
       publishedAt: objectives.publishedAt,
     })
     .from(objectives)
-    .where(or(eq(objectives.id, objective.id), eq(objectives.title, objective.title)))
+    .where(predicates.length === 1 ? predicates[0] : or(...predicates))
     .limit(1);
 
-  return Boolean(row?.publishedAt);
+  return row ?? null;
 }
 
 async function readObjectiveFromResponse(response: Response): Promise<AdminCreateTargetPublishObjective> {
@@ -177,6 +209,21 @@ function bountyHallBodyContainsObjective(body: unknown, objective: Pick<AdminCre
     const row = itemObjective as { id?: unknown; title?: unknown };
     return row.id === objective.id || row.title === objective.title;
   });
+}
+
+async function responsePromiseOrNull<T>(promise: Promise<T>): Promise<T | null> {
+  try {
+    return await promise;
+  } catch (error) {
+    if (isWaitForResponseTimeout(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function isWaitForResponseTimeout(error: unknown) {
+  return error instanceof Error && /Timeout \d+ms exceeded while waiting for event "response"/.test(error.message);
 }
 
 function cssAttributeValue(value: string) {

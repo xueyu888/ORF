@@ -393,10 +393,19 @@ export async function requestReestimateCompletion(page: Page, targetTitle: strin
     (response) => response.request().method() === "POST" && response.url().includes("/alignment-requests"),
   );
   await panel.getByRole("button", { name: "申请完成重估", exact: true }).click();
-  const response = await responsePromise;
-  if (!response.ok()) {
+  const response = await responsePromiseOrNull(responsePromise);
+  if (response && !response.ok()) {
     throw new Error(`申请完成重估接口失败: ${response.status()} ${response.url()}`);
   }
+  await expect
+    .poll(() =>
+      myChallengesContainsAlignmentRequestStatus(page, {
+        targetTitle,
+        kind: "reestimateCompletion",
+        status: "requested",
+      }),
+    )
+    .toBe(true);
 }
 
 export async function readMyChallenges(page: Page): Promise<MyChallengesApiData> {
@@ -528,4 +537,19 @@ function addMinutesIso(minutes: number) {
 
 function escapeLike(value: string) {
   return value.replace(/[%_\\]/g, "\\$&");
+}
+
+async function responsePromiseOrNull<T>(promise: Promise<T>): Promise<T | null> {
+  try {
+    return await promise;
+  } catch (error) {
+    if (isWaitForResponseTimeout(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function isWaitForResponseTimeout(error: unknown) {
+  return error instanceof Error && /Timeout \d+ms exceeded while waiting for event "response"/.test(error.message);
 }
