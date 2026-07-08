@@ -18,6 +18,7 @@
     "server:start": "node scripts/with-public-ca.mjs tsx server/index.ts",
     "test": "node scripts/with-public-ca.mjs tsx --test tests/*.test.ts",
     "testd": "node testd/_tools/with-global-lock.mjs -- node scripts/run-testd.mjs",
+    "testd:viewer": "node scripts/serve-testd-reports.mjs",
     "testd:parallel": "TESTD_SUITE=parallel node testd/_tools/with-global-lock.mjs -- node scripts/run-testd.mjs",
     "testd:serial": "TESTD_SUITE=serial node testd/_tools/with-global-lock.mjs -- node scripts/run-testd.mjs --workers=1",
     "test:e2e": "npm run testd",
