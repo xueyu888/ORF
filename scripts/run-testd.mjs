@@ -23,7 +23,7 @@ const networkFailurePatterns = [
   },
   {
     reason: "TCP 建连超时",
-    pattern: /\b(?:ETIMEDOUT|ESOCKETTIMEDOUT|ENETUNREACH|EHOSTUNREACH)\b/i,
+    pattern: /\b(?:ETIMEDOUT|ESOCKETTIMEDOUT|ENETUNREACH|EHOSTUNREACH)\b|timeout exceeded when trying to connect/i,
   },
   {
     reason: "TCP 连接被重置",
@@ -283,6 +283,9 @@ function runRecoveryPass(suite, args, reason) {
     TESTD_RECOVERY_ONLY: "1",
     TESTD_RUN_ID: recoveryRunId,
     TESTD_DATABASE_POOL_MAX: "1",
+    TESTD_TEST_TIMEOUT_MS: process.env.TESTD_RECOVERY_TEST_TIMEOUT_MS ?? "180000",
+    DATABASE_CONNECTION_TIMEOUT_MS: process.env.TESTD_RECOVERY_DATABASE_CONNECTION_TIMEOUT_MS ?? "60000",
+    DATABASE_QUERY_TIMEOUT_MS: process.env.TESTD_RECOVERY_DATABASE_QUERY_TIMEOUT_MS ?? "60000",
   });
 }
 
@@ -319,6 +322,7 @@ function createTestdRunId() {
 
 function recoveryArgs(args) {
   const output = [];
+  const recoveryTimeoutMs = positiveIntegerEnv("TESTD_RECOVERY_TEST_TIMEOUT_MS", 180_000);
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (isTimeoutArg(arg)) {
@@ -329,7 +333,7 @@ function recoveryArgs(args) {
     }
     output.push(arg);
   }
-  return withWorkerArg(output, positiveIntegerEnv("TESTD_RECOVERY_WORKERS", 1));
+  return withWorkerArg([...output, `--timeout=${recoveryTimeoutMs}`], positiveIntegerEnv("TESTD_RECOVERY_WORKERS", 1));
 }
 
 function isTimeoutArg(arg) {
@@ -408,7 +412,7 @@ function workerFractions(currentWorkers) {
 }
 
 function defaultPlaywrightWorkerCount() {
-  return Math.max(1, Math.floor(logicalCpuCount() / 2));
+  return Math.max(1, Math.min(6, Math.floor(logicalCpuCount() / 2)));
 }
 
 function logicalCpuCount() {

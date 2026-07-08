@@ -89,14 +89,21 @@ export async function clearBrowserState(page: Page) {
 }
 
 export async function dismissWorkLogReminderModalIfVisible(page: Page) {
+  const backdrop = page.locator(".work-log-reminder-modal-backdrop").first();
   const dialog = page.getByRole("dialog", { name: "工作日志欠账强提醒" }).first();
-  const visible = await dialog.isVisible({ timeout: 250 }).catch(() => false);
+  const [backdropVisible, dialogVisible] = await Promise.all([
+    backdrop.isVisible({ timeout: 100 }).catch(() => false),
+    dialog.isVisible({ timeout: 100 }).catch(() => false),
+  ]);
+  const visible = backdropVisible || dialogVisible;
   if (!visible) {
     return false;
   }
 
-  await dialog.getByRole("button", { name: "10 分钟后提醒", exact: true }).first().click({ timeout: 5_000 });
-  await dialog.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
+  const snoozeButton = dialog.getByRole("button", { name: "10 分钟后提醒", exact: true }).first();
+  await snoozeButton.click({ timeout: 10_000 });
+  await backdrop.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => undefined);
+  await dialog.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => undefined);
   return true;
 }
 

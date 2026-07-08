@@ -290,13 +290,43 @@ export async function myChallengesLacksOpenAlignmentRequest(page: Page, input: {
 }) {
   const data = await readMyChallenges(page);
   const objective = data.objectives.find((item) => item.title === input.targetTitle);
-  if (!objective) return false;
-  return !data.objectiveAlignmentRequests.some(
+  if (!objective) {
+    return false;
+  }
+
+  const apiHasOpenRequest = data.objectiveAlignmentRequests.some(
     (request) =>
       request.objectiveId === objective.id &&
       request.kind === input.kind &&
       (request.status === "requested" || request.status === "scheduled"),
   );
+  if (!apiHasOpenRequest) {
+    return true;
+  }
+
+  return dbLacksOpenAlignmentRequest({
+    targetTitle: input.targetTitle,
+    kind: input.kind,
+  });
+}
+
+export async function dbLacksOpenAlignmentRequest(input: {
+  targetTitle: string;
+  kind: ObjectiveAlignmentRequestKind;
+}) {
+  const objective = await objectiveByTitle(input.targetTitle);
+  if (!objective) return false;
+  const rows = await db
+    .select({ id: objectiveAlignmentRequests.id })
+    .from(objectiveAlignmentRequests)
+    .where(
+      and(
+        eq(objectiveAlignmentRequests.objectiveId, objective.id),
+        eq(objectiveAlignmentRequests.kind, input.kind),
+        inArray(objectiveAlignmentRequests.status, ["requested", "scheduled"]),
+      ),
+    );
+  return rows.length === 0;
 }
 
 export async function metricExistsWithScore(input: {

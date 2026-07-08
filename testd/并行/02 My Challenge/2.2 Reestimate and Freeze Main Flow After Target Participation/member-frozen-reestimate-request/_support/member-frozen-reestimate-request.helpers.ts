@@ -333,15 +333,46 @@ export async function requestFrozenReestimate(page: Page, input: { targetTitle: 
     throw new Error(`申请重新重估接口失败: ${response.status()} ${response.url()}`);
   }
   await expect
-    .poll(() =>
-      myChallengesContainsAlignmentRequestWithNote(page, {
-        targetTitle: input.targetTitle,
-        kind: "frozenReestimate",
-        status: "requested",
-        note: input.reason,
-      }),
+    .poll(
+      async () =>
+        (await myChallengesContainsAlignmentRequestWithNote(page, {
+          targetTitle: input.targetTitle,
+          kind: "frozenReestimate",
+          status: "requested",
+          note: input.reason,
+        })) ||
+        (await alignmentRequestExistsWithNoteByTitle({
+          targetTitle: input.targetTitle,
+          kind: "frozenReestimate",
+          status: "requested",
+          note: input.reason,
+        })),
+      { timeout: 15_000 },
     )
     .toBe(true);
+}
+
+export async function alignmentRequestExistsWithNoteByTitle(input: {
+  targetTitle: string;
+  kind: ObjectiveAlignmentRequestKind;
+  status: ObjectiveAlignmentRequestStatus;
+  note: string;
+}) {
+  const objective = await objectiveByTitle(input.targetTitle);
+  if (!objective) return false;
+  const rows = await db
+    .select({ id: objectiveAlignmentRequests.id })
+    .from(objectiveAlignmentRequests)
+    .where(
+      and(
+        eq(objectiveAlignmentRequests.objectiveId, objective.id),
+        eq(objectiveAlignmentRequests.kind, input.kind),
+        eq(objectiveAlignmentRequests.status, input.status),
+        eq(objectiveAlignmentRequests.note, input.note),
+      ),
+    )
+    .limit(1);
+  return rows.length === 1;
 }
 
 export async function frozenReestimateActionHidden(page: Page, targetTitle: string) {

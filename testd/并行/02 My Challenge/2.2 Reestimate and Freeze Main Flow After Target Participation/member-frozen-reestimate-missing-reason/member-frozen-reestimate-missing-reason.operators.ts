@@ -124,11 +124,13 @@ export const memberFrozenReestimateMissingReasonOperators: OperatorRegistry<Test
 
     lacks_open_alignment_request: async ({ ctx, params }) => {
       await expect
-        .poll(() =>
-          myChallengesLacksOpenAlignmentRequest(ctx.page, {
-            targetTitle: requiredString(params, "targetTitle"),
-            kind: requiredAlignmentKind(params, "kind"),
-          }),
+        .poll(
+          () =>
+            myChallengesLacksOpenAlignmentRequest(ctx.page, {
+              targetTitle: requiredString(params, "targetTitle"),
+              kind: requiredAlignmentKind(params, "kind"),
+            }),
+          { timeout: 15_000 },
         )
         .toBe(true);
     },

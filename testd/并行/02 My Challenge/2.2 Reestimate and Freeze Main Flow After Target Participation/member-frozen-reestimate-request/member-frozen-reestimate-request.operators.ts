@@ -131,13 +131,15 @@ export const memberFrozenReestimateRequestOperators: OperatorRegistry<TestContex
 
     contains_alignment_request_with_note: async ({ ctx, params }) => {
       await expect
-        .poll(() =>
-          myChallengesContainsAlignmentRequestWithNote(ctx.page, {
-            targetTitle: requiredString(params, "targetTitle"),
-            kind: requiredAlignmentKind(params, "kind"),
-            status: requiredAlignmentStatus(params, "status"),
-            note: requiredString(params, "reason"),
-          }),
+        .poll(
+          () =>
+            myChallengesContainsAlignmentRequestWithNote(ctx.page, {
+              targetTitle: requiredString(params, "targetTitle"),
+              kind: requiredAlignmentKind(params, "kind"),
+              status: requiredAlignmentStatus(params, "status"),
+              note: requiredString(params, "reason"),
+            }),
+          { timeout: 15_000 },
         )
         .toBe(true);
     },

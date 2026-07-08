@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from "@playwright/test";
 import { eq, or } from "drizzle-orm";
 import { objectives, projects } from "../../../../../../server/db/schema";
 import type { ChallengeApplication, UserRole } from "../../../../../../src/types/orf";
-import { clearBrowserState } from "../../../../../_operators/common.helpers";
+import { clearBrowserState, dismissWorkLogReminderModalIfVisible } from "../../../../../_operators/common.helpers";
 import { db } from "../../../../../_operators/testd-db-client";
 import type {
   EnterParticipatedObjective,
@@ -208,14 +208,32 @@ export async function openBountyHallRelatedAs(page: Page, input: { email: string
     return response.status === 200 && response.body?.authenticated === true;
   }).toBe(true);
 
+  await dismissWorkLogReminderModalIfVisible(page);
   await selectBountyHallTab(page, "我的相关");
 }
 
 export async function selectBountyHallTab(page: Page, name: "我的相关") {
   const tab = page.getByRole("tab", { name: new RegExp(name) });
   await expect(page.getByRole("tablist", { name: "悬赏目标分组" })).toBeVisible();
-  await tab.click({ timeout: RESPONSE_TIMEOUT_MS });
+  await dismissWorkLogReminderModalIfVisible(page);
+  await clickAfterReminderDismissal(page, tab);
   await expect(tab).toHaveAttribute("aria-selected", "true");
+}
+
+async function clickAfterReminderDismissal(page: Page, locator: Locator) {
+  try {
+    await locator.click({ timeout: RESPONSE_TIMEOUT_MS });
+  } catch (error) {
+    if (!isWorkLogReminderInterception(error)) {
+      throw error;
+    }
+    await dismissWorkLogReminderModalIfVisible(page);
+    await locator.click({ timeout: RESPONSE_TIMEOUT_MS });
+  }
+}
+
+function isWorkLogReminderInterception(error: unknown) {
+  return error instanceof Error && error.message.includes("work-log-reminder-modal-backdrop");
 }
 
 export function bountyObjectiveRow(page: Page, objective: Pick<EnterParticipatedObjective, "id" | "title">): Locator {
