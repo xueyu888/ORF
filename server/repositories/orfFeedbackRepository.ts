@@ -4,7 +4,7 @@ import { replaceOrfAttachmentMarkdownTokens } from "../../src/features/rich-text
 import type { Feedback, FeedbackStatus, Impact } from "../../src/types/orf";
 import { localDateString } from "../../src/utils/date";
 import { db } from "../db/client";
-import { commentAttachments, commentMessages, commentThreads, feedback, feedbackCauseCategories } from "../db/schema";
+import { commentAttachments, commentMessages, commentThreads, feedback, feedbackActivityEvents, feedbackCauseCategories, projects } from "../db/schema";
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { getOrfStateSnapshot } from "../readModels/orfTaskManagementReadModel";
 import {
@@ -13,9 +13,9 @@ import {
   type PreparedCommentAttachment,
 } from "./commentAttachmentRepository";
 import {
-  getActiveAdminNotificationRecipients,
-  getActiveMemberNotificationRecipientsByIds,
-} from "./notificationRepository";
+  getFeedbackAssignmentNotificationRecipients,
+  getFeedbackOrdinaryNotificationRecipients,
+} from "./feedbackSubscriptionRepository";
 import { publishNotificationEvent } from "../notifications/publisher";
 import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
@@ -28,6 +28,7 @@ export type CreateFeedbackInput = Pick<
   impact: Impact;
   initialBody: string;
   ownerUserId: string;
+  projectId?: string | null;
 };
 export type CreateFeedbackAttachmentInput = {
   body: Buffer;
@@ -41,9 +42,19 @@ export type CreateFeedbackOutcome =
   | { status: "notFound" }
   | { status: "invalid" }
   | { status: "invalidOwner" }
+  | { status: "invalidProject" }
   | { status: "tooLarge" };
 export type FeedbackStatusActor = { id: string; name: string; role: "admin" | "member"; scope?: RuntimeScope | null };
 export type FeedbackStatusUpdateResult = { status: "ok" } | { status: "notFound" } | { status: "forbidden" };
+export type UpdateFeedbackMetadataInput = Partial<Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "ownerUserId" | "projectId">>;
+export type FeedbackMetadataUpdateResult =
+  | { status: "ok" }
+  | { status: "notFound" }
+  | { status: "forbidden" }
+  | { status: "invalid" }
+  | { status: "invalidOwner" }
+  | { status: "invalidProject" };
+type FeedbackMetadataUpdateError = Exclude<FeedbackMetadataUpdateResult, { status: "ok" }>;
 export type FeedbackReference = Pick<Feedback, "id" | "phenomenon">;
 
 const today = () => localDateString(new Date());
@@ -75,6 +86,10 @@ function makeCommentId(prefix: "cmsg" | "cthread") {
   return `${prefix}-${Date.now()}-${nextCommentIdCounter()}-${randomUUID()}`;
 }
 
+function makeActivityId() {
+  return `fact-${Date.now()}-${nextCommentIdCounter()}-${randomUUID()}`;
+}
+
 async function resolveActiveMemberById(storageScopeId: string, userId: string) {
   const normalizedUserId = userId.trim();
   if (!normalizedUserId) {
@@ -86,11 +101,31 @@ async function resolveActiveMemberById(storageScopeId: string, userId: string) {
   return member ? { id: member.id, name: member.name } : null;
 }
 
+async function resolveProjectById(storageScopeId: string, projectId: string | null | undefined) {
+  const normalizedProjectId = projectId?.trim();
+  if (!normalizedProjectId) return null;
+  const [project] = await db
+    .select({ id: projects.id, name: projects.name })
+    .from(projects)
+    .where(and(eq(projects.id, normalizedProjectId), eq(projects.teamId, storageScopeId)))
+    .limit(1);
+  return project ?? null;
+}
+
 function canManageFeedbackStatus(
   item: { ownerUserId: string | null; createdBy: string | null },
   actor: FeedbackStatusActor,
 ) {
   return actor.role === "admin" || item.createdBy === actor.id || item.ownerUserId === actor.id;
+}
+
+function canManageFeedbackMetadata(
+  item: { ownerUserId: string | null; createdBy: string | null; status: FeedbackStatus },
+  actor: FeedbackStatusActor,
+) {
+  if (actor.role === "admin") return true;
+  if (item.status === "Closed") return false;
+  return item.createdBy === actor.id || item.ownerUserId === actor.id;
 }
 
 function uniqueUserIds(userIds: Array<string | null | undefined>) {
@@ -100,6 +135,28 @@ function uniqueUserIds(userIds: Array<string | null | undefined>) {
 
 function uniqueFeedbackIds(feedbackIds: readonly string[]) {
   return Array.from(new Set(feedbackIds.map((feedbackId) => feedbackId.trim()).filter(Boolean))).slice(0, 100);
+}
+
+function normalizeCauseCategories(categories: readonly string[] | undefined) {
+  if (!categories) return undefined;
+  return Array.from(new Set(categories.map((category) => category.trim()).filter(Boolean)));
+}
+
+function sameStringList(left: readonly string[], right: readonly string[]) {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
+function metadataActivityAction(changedFields: readonly string[]) {
+  const labels: Record<string, string> = {
+    causeCategories: "标签",
+    impact: "影响",
+    ownerUserId: "处理人",
+    phenomenon: "标题",
+    projectId: "项目",
+  };
+  const changedLabels = changedFields.map((field) => labels[field]).filter(Boolean);
+  return changedLabels.length > 0 ? `更新了反馈${changedLabels.join("、")}` : "更新了反馈属性";
 }
 
 function feedbackTargetHref(feedbackId: string) {
@@ -136,39 +193,6 @@ function buildInitialCommentBody(input: { body: string; uploads: Array<{ clientI
   return body ? { status: "ok" as const, body } : { status: "invalid" as const };
 }
 
-async function getFeedbackCommentParticipantUserIds(teamId: string, feedbackId: string) {
-  const rows = await db
-    .select({ authorUserId: commentMessages.authorUserId })
-    .from(commentThreads)
-    .innerJoin(commentMessages, eq(commentMessages.threadId, commentThreads.id))
-    .where(
-      and(
-        eq(commentThreads.teamId, teamId),
-        eq(commentThreads.targetType, "feedback"),
-        eq(commentThreads.targetId, feedbackId),
-      ),
-    );
-  return uniqueUserIds(rows.map((row) => row.authorUserId));
-}
-
-async function getFeedbackNotificationRecipients(input: {
-  createdBy?: string | null;
-  feedbackId: string;
-  includeCommentParticipants: boolean;
-  ownerUserId?: string | null;
-  teamId: string;
-}) {
-  const commentParticipantUserIds = input.includeCommentParticipants
-    ? await getFeedbackCommentParticipantUserIds(input.teamId, input.feedbackId)
-    : [];
-  const relevantMemberUserIds = uniqueUserIds([input.createdBy, input.ownerUserId, ...commentParticipantUserIds]);
-  const [adminUserIds, activeRelevantUserIds] = await Promise.all([
-    getActiveAdminNotificationRecipients(input.teamId),
-    getActiveMemberNotificationRecipientsByIds(input.teamId, relevantMemberUserIds),
-  ]);
-  return uniqueUserIds([...adminUserIds, ...activeRelevantUserIds]);
-}
-
 async function notifyFeedbackCreated(input: {
   actorName: string;
   actorUserId: string;
@@ -184,7 +208,7 @@ async function notifyFeedbackCreated(input: {
     body: `${input.actorName} 创建了反馈「${input.title}」，处理人：${input.ownerName}。`,
     kind: "feedback.created",
     metadata: { feedbackTitle: input.title, owner: input.ownerName },
-    recipientUserIds: await getFeedbackNotificationRecipients({
+    recipientUserIds: await getFeedbackOrdinaryNotificationRecipients({
       createdBy: input.actorUserId,
       feedbackId: input.feedbackId,
       includeCommentParticipants: false,
@@ -216,7 +240,7 @@ async function notifyFeedbackStatusChanged(input: {
     body: `${input.actorName} ${action}了反馈「${input.title}」。`,
     kind: "feedback.status.changed",
     metadata: { feedbackStatus: input.status, feedbackTitle: input.title },
-    recipientUserIds: await getFeedbackNotificationRecipients({
+    recipientUserIds: await getFeedbackOrdinaryNotificationRecipients({
       createdBy: input.createdBy,
       feedbackId: input.feedbackId,
       includeCommentParticipants: true,
@@ -228,6 +252,40 @@ async function notifyFeedbackStatusChanged(input: {
     targetType: "feedback",
     teamId: input.teamId,
     title: feedbackStatusNotificationTitle(input.status),
+  });
+}
+
+async function notifyFeedbackAssigned(input: {
+  actorName: string;
+  actorUserId: string;
+  feedbackId: string;
+  nextOwnerName: string;
+  nextOwnerUserId: string;
+  previousOwnerName: string;
+  previousOwnerUserId: string;
+  teamId: string;
+  title: string;
+}) {
+  await publishNotificationEvent({
+    actorName: input.actorName,
+    actorUserId: input.actorUserId,
+    body: `${input.actorName} 将反馈「${input.title}」的处理人从 ${input.previousOwnerName} 调整为 ${input.nextOwnerName}。`,
+    kind: "feedback.assigned",
+    metadata: {
+      feedbackTitle: input.title,
+      nextOwner: input.nextOwnerName,
+      previousOwner: input.previousOwnerName,
+    },
+    recipientUserIds: await getFeedbackAssignmentNotificationRecipients({
+      nextOwnerUserId: input.nextOwnerUserId,
+      previousOwnerUserId: input.previousOwnerUserId,
+      teamId: input.teamId,
+    }),
+    targetHref: feedbackTargetHref(input.feedbackId),
+    targetId: input.feedbackId,
+    targetType: "feedback",
+    teamId: input.teamId,
+    title: "反馈处理人已更新",
   });
 }
 
@@ -244,6 +302,10 @@ export async function createFeedback(input: CreateFeedbackInput, actor: CreateFe
   const ownerUser = await resolveActiveMemberById(teamId, input.ownerUserId);
   if (!ownerUser) {
     return { status: "invalidOwner" };
+  }
+  const projectId = input.projectId?.trim() || null;
+  if (projectId && !(await resolveProjectById(teamId, projectId))) {
+    return { status: "invalidProject" };
   }
 
   const id = makeFeedbackId();
@@ -282,6 +344,7 @@ export async function createFeedback(input: CreateFeedbackInput, actor: CreateFe
       await tx.insert(feedback).values({
         id,
         teamId,
+        projectId,
         phenomenon: input.phenomenon,
         impact: input.impact,
         suggestedAdjustment: "",
@@ -292,6 +355,17 @@ export async function createFeedback(input: CreateFeedbackInput, actor: CreateFe
         updatedAt: date,
         createdBy: actor.id,
         updatedBy: actor.id,
+      });
+
+      await tx.insert(feedbackActivityEvents).values({
+        id: makeActivityId(),
+        teamId,
+        feedbackId: id,
+        actorUserId: actor.id,
+        actorName: actor.name,
+        action: "创建了反馈",
+        metadata: {},
+        createdAt,
       });
 
       const categories = input.causeCategories.map((category, index) => ({ feedbackId: id, category, sortOrder: index }));
@@ -356,6 +430,206 @@ export async function createFeedback(input: CreateFeedbackInput, actor: CreateFe
   return item ? { status: "ok", feedback: item } : { status: "notFound" };
 }
 
+export async function updateFeedbackMetadata(
+  feedbackId: string,
+  input: UpdateFeedbackMetadataInput,
+  actor: FeedbackStatusActor,
+): Promise<FeedbackMetadataUpdateResult> {
+  const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
+  if (!storageScopeId) {
+    return { status: "notFound" };
+  }
+
+  const nextPhenomenon = input.phenomenon === undefined ? undefined : input.phenomenon.trim();
+  if (nextPhenomenon !== undefined && !nextPhenomenon) {
+    return { status: "invalid" };
+  }
+
+  const nextCauseCategories = normalizeCauseCategories(input.causeCategories);
+  if (nextCauseCategories && nextCauseCategories.length === 0) {
+    return { status: "invalid" };
+  }
+
+  const nextOwnerUser = input.ownerUserId === undefined
+    ? undefined
+    : await resolveActiveMemberById(storageScopeId, input.ownerUserId);
+  if (input.ownerUserId !== undefined && !nextOwnerUser) {
+    return { status: "invalidOwner" };
+  }
+
+  const nextProjectId = input.projectId === undefined ? undefined : input.projectId?.trim() || null;
+  if (nextProjectId && !(await resolveProjectById(storageScopeId, nextProjectId))) {
+    return { status: "invalidProject" };
+  }
+
+  const updateResult = await db.transaction(async (tx): Promise<
+    | FeedbackMetadataUpdateError
+    | {
+        status: "ok";
+        assigned: null | {
+          nextOwnerName: string;
+          nextOwnerUserId: string;
+          previousOwnerName: string;
+          previousOwnerUserId: string;
+          title: string;
+        };
+        changed: boolean;
+        teamId: string;
+      }
+  > => {
+    const [target] = await tx
+      .select({
+        createdBy: feedback.createdBy,
+        id: feedback.id,
+        impact: feedback.impact,
+        owner: feedback.owner,
+        ownerUserId: feedback.ownerUserId,
+        phenomenon: feedback.phenomenon,
+        projectId: feedback.projectId,
+        status: feedback.status,
+        teamId: feedback.teamId,
+      })
+      .from(feedback)
+      .where(eq(feedback.id, feedbackId))
+      .limit(1)
+      .for("update");
+
+    if (!target || target.teamId !== storageScopeId) {
+      return { status: "notFound" };
+    }
+    if (!canManageFeedbackMetadata(target, actor)) {
+      return { status: "forbidden" };
+    }
+
+    const causeRows = await tx
+      .select({
+        category: feedbackCauseCategories.category,
+        sortOrder: feedbackCauseCategories.sortOrder,
+      })
+      .from(feedbackCauseCategories)
+      .where(eq(feedbackCauseCategories.feedbackId, feedbackId));
+    const currentCauseCategories = causeRows
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map((row) => row.category);
+    const changedFields: string[] = [];
+    const feedbackPatch: Partial<typeof feedback.$inferInsert> = {};
+    const metadata: Record<string, unknown> = {};
+
+    if (nextPhenomenon !== undefined && nextPhenomenon !== target.phenomenon) {
+      feedbackPatch.phenomenon = nextPhenomenon;
+      changedFields.push("phenomenon");
+      metadata.previousPhenomenon = target.phenomenon;
+      metadata.nextPhenomenon = nextPhenomenon;
+    }
+    if (input.impact !== undefined && input.impact !== target.impact) {
+      feedbackPatch.impact = input.impact;
+      changedFields.push("impact");
+      metadata.previousImpact = target.impact;
+      metadata.nextImpact = input.impact;
+    }
+    if (nextOwnerUser && nextOwnerUser.id !== target.ownerUserId) {
+      feedbackPatch.owner = nextOwnerUser.name;
+      feedbackPatch.ownerUserId = nextOwnerUser.id;
+      changedFields.push("ownerUserId");
+      metadata.previousOwnerUserId = target.ownerUserId;
+      metadata.previousOwner = target.owner;
+      metadata.nextOwnerUserId = nextOwnerUser.id;
+      metadata.nextOwner = nextOwnerUser.name;
+    }
+    if (nextProjectId !== undefined && nextProjectId !== (target.projectId ?? null)) {
+      feedbackPatch.projectId = nextProjectId;
+      changedFields.push("projectId");
+      metadata.previousProjectId = target.projectId ?? null;
+      metadata.nextProjectId = nextProjectId;
+    }
+
+    const causeCategoriesChanged = Boolean(nextCauseCategories && !sameStringList(currentCauseCategories, nextCauseCategories));
+    if (causeCategoriesChanged && nextCauseCategories) {
+      changedFields.push("causeCategories");
+      metadata.previousCauseCategories = currentCauseCategories;
+      metadata.nextCauseCategories = nextCauseCategories;
+      await tx.delete(feedbackCauseCategories).where(eq(feedbackCauseCategories.feedbackId, feedbackId));
+      await tx.insert(feedbackCauseCategories).values(
+        nextCauseCategories.map((category, index) => ({ feedbackId, category, sortOrder: index })),
+      );
+    }
+
+    if (changedFields.length === 0) {
+      return { status: "ok", assigned: null, changed: false, teamId: target.teamId };
+    }
+
+    const titleAfterUpdate = nextPhenomenon ?? target.phenomenon;
+    await tx
+      .update(feedback)
+      .set({
+        ...feedbackPatch,
+        updatedAt: today(),
+        updatedBy: actor.id,
+      })
+      .where(and(eq(feedback.id, feedbackId), eq(feedback.teamId, storageScopeId)));
+    if (nextPhenomenon !== undefined) {
+      await tx
+        .update(commentThreads)
+        .set({ targetTitle: nextPhenomenon, updatedAt: nowIso() })
+        .where(and(eq(commentThreads.teamId, storageScopeId), eq(commentThreads.targetType, "feedback"), eq(commentThreads.targetId, feedbackId)));
+    }
+    await tx.insert(feedbackActivityEvents).values({
+      id: makeActivityId(),
+      teamId: target.teamId,
+      feedbackId,
+      actorUserId: actor.id,
+      actorName: actor.name,
+      action: metadataActivityAction(changedFields),
+      metadata,
+      createdAt: nowIso(),
+    });
+
+    return {
+      status: "ok",
+      assigned: nextOwnerUser && nextOwnerUser.id !== target.ownerUserId
+        ? {
+            nextOwnerName: nextOwnerUser.name,
+            nextOwnerUserId: nextOwnerUser.id,
+            previousOwnerName: target.owner,
+            previousOwnerUserId: target.ownerUserId,
+            title: titleAfterUpdate,
+          }
+        : null,
+      changed: true,
+      teamId: target.teamId,
+    };
+  });
+
+  if (updateResult.status !== "ok") {
+    return updateResult;
+  }
+
+  if (updateResult.assigned) {
+    await notifyFeedbackAssigned({
+      actorName: actor.name,
+      actorUserId: actor.id,
+      feedbackId,
+      nextOwnerName: updateResult.assigned.nextOwnerName,
+      nextOwnerUserId: updateResult.assigned.nextOwnerUserId,
+      previousOwnerName: updateResult.assigned.previousOwnerName,
+      previousOwnerUserId: updateResult.assigned.previousOwnerUserId,
+      teamId: updateResult.teamId,
+      title: updateResult.assigned.title,
+    });
+  }
+
+  if (updateResult.changed) {
+    publishOrfDataInvalidation({
+      actorUserId: actor.id,
+      models: ["taskManagement"],
+      reason: "feedback.changed",
+      target: { id: feedbackId, type: "feedback" },
+      teamId: updateResult.teamId,
+    });
+  }
+  return { status: "ok" };
+}
+
 export async function getFeedbackReferences(feedbackIds: readonly string[], scope: RuntimeScope): Promise<FeedbackReference[]> {
   const teamId = runtimeScopeStorageId(scope);
   const ids = uniqueFeedbackIds(feedbackIds);
@@ -404,11 +678,26 @@ export async function updateFeedbackStatus(
     return { status: "forbidden" };
   }
 
-  const updated = await db
-    .update(feedback)
-    .set({ status, updatedAt: today(), updatedBy: actor.id })
-    .where(eq(feedback.id, feedbackId))
-    .returning({ id: feedback.id });
+  const updated = await db.transaction(async (tx) => {
+    const rows = await tx
+      .update(feedback)
+      .set({ status, updatedAt: today(), updatedBy: actor.id })
+      .where(eq(feedback.id, feedbackId))
+      .returning({ id: feedback.id });
+    if (rows.length > 0 && target.status !== status) {
+      await tx.insert(feedbackActivityEvents).values({
+        id: makeActivityId(),
+        teamId: target.teamId,
+        feedbackId,
+        actorUserId: actor.id,
+        actorName: actor.name,
+        action: status === "Closed" ? "关闭了反馈" : "重新打开了反馈",
+        metadata: { status },
+        createdAt: nowIso(),
+      });
+    }
+    return rows;
+  });
   if (updated.length === 0) {
     return { status: "notFound" };
   }

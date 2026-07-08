@@ -12,7 +12,7 @@ import { loadEmptyOrfStateSnapshot } from "./orfStateSnapshot";
 import { useOrfDataState } from "./orfProviderData";
 import { type AuthResult, useAuthSessionState } from "./orfProviderAuth";
 import { useOrfProviderCommentActions } from "./orfProviderCommentActions";
-import { type CreateFeedbackInput, useOrfProviderFeedbackActions } from "./orfProviderFeedbackActions";
+import { type CreateFeedbackInput, type UpdateFeedbackMetadataInput, useOrfProviderFeedbackActions } from "./orfProviderFeedbackActions";
 import { useNotificationState } from "./orfProviderNotifications";
 import { businessMutationFailureMessage } from "./orfProviderMutationMessages";
 import {
@@ -149,6 +149,7 @@ interface OrfContextValue {
   settleObjectiveLoot: (objectiveId: string, input: SettleObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, input: SubmitContributionReviewInput) => Promise<boolean>;
   createFeedback: (input: CreateFeedbackInput) => Promise<Feedback | null>;
+  updateFeedbackMetadata: (feedbackId: string, input: UpdateFeedbackMetadataInput) => Promise<boolean>;
   createTask: (input: Pick<Task, "title" | "description" | "assigneeUserId" | "priority" | "linkedObjectiveId"> & Partial<Pick<Task, "dueDate" | "tags" | "checklist">>) => Promise<Task | null>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   setTaskCompletion: (taskId: string, done: boolean) => Promise<boolean>;

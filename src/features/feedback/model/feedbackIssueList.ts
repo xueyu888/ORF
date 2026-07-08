@@ -1,4 +1,4 @@
-import type { CommentThread, Feedback, Impact, OrfUser } from "../../../types/orf";
+import type { CommentThread, Feedback, Impact, OrfProject, OrfUser } from "../../../types/orf";
 import { impactLabel } from "../../../utils/labels";
 import { feedbackIssueBodyPreview, feedbackIssueCommentCount, feedbackIssueDisplayId, feedbackIssueStateLabel, isFeedbackIssueOpen } from "./feedbackIssue";
 import { feedbackIssueAssignee, feedbackIssueAuthor, feedbackIssueLabels, type FeedbackIssueLabel } from "./feedbackIssueMetadata";
@@ -12,6 +12,7 @@ export type FeedbackIssueListFilters = {
   cause: string;
   impact: "All" | Impact;
   listState: FeedbackIssueListState;
+  projectId: string;
   query: string;
   sort: FeedbackIssueSortKey;
 };
@@ -29,6 +30,7 @@ export type FeedbackIssueListItem = {
   labels: FeedbackIssueListLabel[];
   lastActivityAt: string;
   preview: string;
+  projectName: string | null;
 };
 
 type ParsedFeedbackIssueQuery = {
@@ -36,17 +38,19 @@ type ParsedFeedbackIssueQuery = {
   authorTerms: string[];
   impactTerms: string[];
   labelTerms: string[];
+  projectTerms: string[];
   sort: FeedbackIssueSortKey | null;
   stateTerms: FeedbackIssueListState[];
   text: string;
 };
 
-const queryQualifierPattern = /(?:^|\s)(is|status|assignee|owner|author|label|impact|sort):("[^"]+"|\S+)/gi;
+const queryQualifierPattern = /(?:^|\s)(is|status|assignee|owner|author|label|impact|project|sort):("[^"]+"|\S+)/gi;
 const impactValues = new Set<Impact>(["Low", "Medium", "High", "Critical"]);
 
 export function buildFeedbackIssueListItems(input: {
   comments: readonly CommentThread[];
   feedback: readonly Feedback[];
+  projects?: readonly OrfProject[];
   users: readonly OrfUser[];
 }): FeedbackIssueListItem[] {
   const threadsByFeedbackId = new Map<string, CommentThread[]>();
@@ -56,6 +60,8 @@ export function buildFeedbackIssueListItems(input: {
     threads.push(thread);
     threadsByFeedbackId.set(thread.targetId, threads);
   }
+
+  const projectById = new Map((input.projects ?? []).map((project) => [project.id, project]));
 
   return input.feedback.map((feedback) => {
     const assignee = feedbackIssueAssignee(feedback, input.users);
@@ -74,6 +80,7 @@ export function buildFeedbackIssueListItems(input: {
       labels: feedbackIssueLabels(feedback),
       lastActivityAt: latestText([feedback.updatedAt, threadActivityAt]) || feedback.updatedAt,
       preview: feedbackIssueBodyPreview(feedback.suggestedAdjustment),
+      projectName: feedback.projectId ? projectById.get(feedback.projectId)?.name ?? null : null,
     };
   });
 }
@@ -86,6 +93,7 @@ export function filterFeedbackIssueListItems(items: readonly FeedbackIssueListIt
     .filter((item) => itemMatchesListState(item, filters.listState))
     .filter((item) => filters.cause === "All" || labelMatches(item, filters.cause))
     .filter((item) => filters.impact === "All" || item.feedback.impact === filters.impact)
+    .filter((item) => projectFilterMatches(item, filters.projectId))
     .filter((item) => filters.assigneeUserId === "All" || item.feedback.ownerUserId === filters.assigneeUserId)
     .filter((item) => filters.authorUserId === "All" || item.feedback.createdBy === filters.authorUserId)
     .filter((item) => parsedQuery.stateTerms.length === 0 || parsedQuery.stateTerms.some((state) => itemMatchesListState(item, state)))
@@ -93,6 +101,7 @@ export function filterFeedbackIssueListItems(items: readonly FeedbackIssueListIt
     .filter((item) => parsedQuery.authorTerms.every((term) => personMatches(item.feedback.createdBy ?? "", item.authorName, term)))
     .filter((item) => parsedQuery.labelTerms.every((term) => labelMatches(item, term)))
     .filter((item) => parsedQuery.impactTerms.every((term) => impactMatches(item.feedback.impact, term)))
+    .filter((item) => parsedQuery.projectTerms.every((term) => projectMatches(item, term)))
     .filter((item) => textMatches(item, parsedQuery.text))
     .sort((left, right) => compareFeedbackIssueListItems(left, right, nextSort));
 }
@@ -132,6 +141,7 @@ function parseFeedbackIssueQuery(query: string): ParsedFeedbackIssueQuery {
     authorTerms: [],
     impactTerms: [],
     labelTerms: [],
+    projectTerms: [],
     sort: null,
     stateTerms: [],
     text: "",
@@ -168,6 +178,10 @@ function parseFeedbackIssueQuery(query: string): ParsedFeedbackIssueQuery {
     }
     if (qualifier === "impact") {
       parsed.impactTerms.push(value);
+      continue;
+    }
+    if (qualifier === "project") {
+      parsed.projectTerms.push(value);
       continue;
     }
     if (qualifier === "sort") {
@@ -207,11 +221,28 @@ function textMatches(item: FeedbackIssueListItem, text: string) {
     item.feedback.suggestedAdjustment,
     item.assigneeName,
     item.authorName,
+    item.projectName ?? (item.feedback.projectId ? item.feedback.projectId : "未归属"),
     feedbackIssueStateLabel(item.feedback),
     impactLabel[item.feedback.impact],
     ...item.labels.map((label) => label.name),
   ].join(" "));
   return normalizedText.split(" ").every((token) => searchable.includes(token));
+}
+
+function projectFilterMatches(item: FeedbackIssueListItem, projectId: string) {
+  if (projectId === "All") return true;
+  const currentProjectId = item.feedback.projectId?.trim() || null;
+  if (projectId === "unassigned") return currentProjectId === null;
+  return currentProjectId === projectId;
+}
+
+function projectMatches(item: FeedbackIssueListItem, term: string) {
+  const normalizedTerm = normalizeSearchText(term);
+  const projectId = item.feedback.projectId?.trim() || "";
+  if (!projectId) {
+    return ["unassigned", "none", "未归属", "无项目"].some((value) => normalizeSearchText(value).includes(normalizedTerm));
+  }
+  return normalizeSearchText(projectId).includes(normalizedTerm) || normalizeSearchText(item.projectName ?? "").includes(normalizedTerm);
 }
 
 function labelMatches(item: FeedbackIssueListItem, term: string) {

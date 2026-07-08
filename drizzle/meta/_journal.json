@@ -540,6 +540,13 @@
       "when": 1783195000000,
       "tag": "0076_drive_derived_previews",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1783196000000,
+      "tag": "0077_feedback_project_metadata_subscriptions",
+      "breakpoints": true
     }
   ]
 }

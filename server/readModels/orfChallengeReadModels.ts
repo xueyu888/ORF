@@ -250,9 +250,13 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
   const taskIds = new Set(tasksForMember.map((task) => task.id));
   const checklistItemIds = new Set(tasksForMember.flatMap((task) => task.checklist.map((item) => item.id)));
   const feedbackIssueIds = new Set(data.feedback.map((item) => item.id));
+  const projectIdsForMember = new Set([
+    ...objectivesForMember.flatMap((objective) => objective.projectId ? [objective.projectId] : []),
+    ...data.feedback.flatMap((item) => item.projectId ? [item.projectId] : []),
+  ]);
 
   const scopedData: TaskManagementData = {
-    projects: data.projects.filter((project) => objectivesForMember.some((objective) => objective.projectId === project.id)),
+    projects: data.projects.filter((project) => projectIdsForMember.has(project.id)),
     userProfiles: [],
     objectives: objectivesForMember,
     results: resultsForMember,

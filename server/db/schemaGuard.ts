@@ -116,9 +116,51 @@ export function validateTeamFeedbackSchema(snapshot: RuntimeSchemaSnapshot) {
   const errors: string[] = [];
   const columnByName = new Map(snapshot.columns.map((column) => [column.columnName, column]));
 
+  const projectId = columnByName.get("project_id");
+  if (!projectId) {
+    errors.push("feedback.project_id is missing.");
+  } else if (projectId.isNullable !== "YES") {
+    errors.push("feedback.project_id must be nullable.");
+  }
+
   for (const columnName of ["linked_objective_id", "linked_result_id", "source"]) {
     if (columnByName.has(columnName)) {
       errors.push(`feedback.${columnName} must be dropped; feedback is a team issue, not a metric-bound signal.`);
+    }
+  }
+
+  return errors;
+}
+
+export function validateFeedbackMetadataSubscriptionSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const errors: string[] = [];
+  const columnsByTable = snapshot.columns.reduce((map, column) => {
+    const columns = map.get(column.tableName) ?? new Map<string, RuntimeTableColumn>();
+    columns.set(column.columnName, column);
+    map.set(column.tableName, columns);
+    return map;
+  }, new Map<string, Map<string, RuntimeTableColumn>>());
+
+  const activityColumns = columnsByTable.get("feedback_activity_events") ?? new Map();
+  for (const columnName of ["id", "team_id", "feedback_id", "actor_name", "action", "metadata", "created_at"]) {
+    const column = activityColumns.get(columnName);
+    if (!column) {
+      errors.push(`feedback_activity_events.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`feedback_activity_events.${columnName} must be NOT NULL.`);
+    }
+  }
+  if (!activityColumns.has("actor_user_id")) {
+    errors.push("feedback_activity_events.actor_user_id is missing.");
+  }
+
+  const subscriptionColumns = columnsByTable.get("feedback_subscriptions") ?? new Map();
+  for (const columnName of ["team_id", "feedback_id", "user_id", "mode", "created_at", "updated_at"]) {
+    const column = subscriptionColumns.get(columnName);
+    if (!column) {
+      errors.push(`feedback_subscriptions.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`feedback_subscriptions.${columnName} must be NOT NULL.`);
     }
   }
 
@@ -505,6 +547,7 @@ export async function assertRuntimeDatabaseSchema() {
     objectiveColumnsResult,
     projectColumnsResult,
     feedbackColumnsResult,
+    feedbackMetadataSubscriptionColumnsResult,
     evidenceColumnsResult,
     feedbackStatusResult,
     notificationStreamResult,
@@ -571,7 +614,18 @@ export async function assertRuntimeDatabaseSchema() {
         from information_schema.columns
         where table_schema = current_schema()
           and table_name = 'feedback'
-          and column_name in ('linked_objective_id', 'linked_result_id', 'source')
+          and column_name in ('project_id', 'linked_objective_id', 'linked_result_id', 'source')
+      `,
+    ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name in ('feedback_activity_events', 'feedback_subscriptions')
       `,
     ),
     pool.query<RuntimeSchemaColumn>(
@@ -720,6 +774,9 @@ export async function assertRuntimeDatabaseSchema() {
     ...validateTeamFeedbackSchema({
       columns: feedbackColumnsResult.rows,
       constraints: [],
+    }),
+    ...validateFeedbackMetadataSubscriptionSchema({
+      columns: feedbackMetadataSubscriptionColumnsResult.rows,
     }),
     ...validateTeamFeedbackEvidenceSchema({
       columns: evidenceColumnsResult.rows,
