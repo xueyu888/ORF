@@ -45,6 +45,7 @@ import type {
 } from "../types/orf";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
 import type { ChatTheme, UserDisplayPreferences, WorkspaceLayoutPreferences } from "../domain/settings/personalPreferences";
+import type { FilterPreferenceRecord, UserFilterPreferences } from "../domain/settings/filterPreferences";
 import type {
   VisualBackgroundConfig,
   VisualBackgroundCrop,
@@ -302,6 +303,7 @@ export type UserPreferences = {
   sidebarCollapsed: boolean | null;
   chatTheme: ChatTheme;
   display: UserDisplayPreferences;
+  filterPreferences: UserFilterPreferences;
   workspaceLayout: WorkspaceLayoutPreferences;
   /** Compatibility projection for legacy clients. New writes must use backgrounds[scene]. */
   appBackground: VisualBackgroundConfig | null;
@@ -311,6 +313,7 @@ export type UserPreferences = {
   };
 };
 export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "workspaceLayout" | "backgrounds">> & {
+  filterPreferences?: Record<string, FilterPreferenceRecord | null>;
   notificationDisplay?: Partial<UserPreferences["notificationDisplay"]>;
 };
 export type UserPreferencesRequestOptions = {

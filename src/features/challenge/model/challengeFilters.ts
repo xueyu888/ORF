@@ -16,12 +16,14 @@ export type ChallengeCycleFilter = "all" | string;
 export type ChallengeMemberFilter = "all" | string;
 export type ChallengeProjectFilter = "all" | "unassigned" | string;
 export type ChallengeStatusFilter = "all" | "unassigned" | "pendingReestimate" | "active" | "review" | "revisionRequired" | "accepted" | "settled";
+export type ChallengeStatusFilterValue = Exclude<ChallengeStatusFilter, "all">;
+export type ChallengeStatusFilterSelection = readonly ChallengeStatusFilterValue[];
 
 export interface ChallengeFilters {
   cycle: ChallengeCycleFilter;
   member: ChallengeMemberFilter;
   project: ChallengeProjectFilter;
-  status: ChallengeStatusFilter;
+  status: ChallengeStatusFilterSelection;
 }
 
 export type ChallengeMemberOption = {
@@ -39,6 +41,11 @@ export const challengeStatusFilterOptions: Array<{ label: string; value: Challen
   { label: "已验收", value: "accepted" },
   { label: "已结算", value: "settled" },
 ];
+export const challengeStatusFilterValues = challengeStatusFilterOptions
+  .map((option) => option.value)
+  .filter((value): value is ChallengeStatusFilterValue => value !== "all");
+const challengeStatusFilterValueSet = new Set<string>(challengeStatusFilterValues);
+const challengeStatusFilterLabelByValue = new Map(challengeStatusFilterOptions.map((option) => [option.value, option.label]));
 
 export function challengeCycleOptions(groups: readonly ObjectiveNode[]) {
   return Array.from(new Set(groups.map((group) => group.objective.cycle.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right));
@@ -65,7 +72,7 @@ export function filterChallengeGroups(groups: readonly ObjectiveNode[], filters:
     .filter((group) => filters.cycle === "all" || group.objective.cycle === filters.cycle)
     .filter((group) => filters.member === "all" || isObjectiveChallenger(group.objective, filters.member))
     .filter((group) => challengeGroupMatchesProject(group, filters.project))
-    .filter((group) => challengeGroupMatchesStatus(group, filters.status));
+    .filter((group) => challengeGroupMatchesStatusSelection(group, filters.status));
 }
 
 function challengeGroupMatchesProject(group: ObjectiveNode, project: ChallengeProjectFilter): boolean {
@@ -74,8 +81,36 @@ function challengeGroupMatchesProject(group: ObjectiveNode, project: ChallengePr
   return project === "unassigned" ? projectId === null : projectId === project;
 }
 
-function challengeGroupMatchesStatus(group: ObjectiveNode, status: ChallengeStatusFilter): boolean {
-  if (status === "all") return true;
+export function normalizeChallengeStatusFilterSelection(input: unknown): ChallengeStatusFilterSelection {
+  const rawValues = Array.isArray(input) ? input : [input];
+  const selected: ChallengeStatusFilterValue[] = [];
+  const seen = new Set<string>();
+
+  for (const value of rawValues) {
+    if (typeof value !== "string" || value === "all" || !challengeStatusFilterValueSet.has(value) || seen.has(value)) continue;
+    seen.add(value);
+    selected.push(value as ChallengeStatusFilterValue);
+  }
+  return selected;
+}
+
+export function challengeStatusFilterSelectionLabel(selection: ChallengeStatusFilterSelection) {
+  if (selection.length === 0) return "全部状态";
+  const labels = selection.map((value) => challengeStatusFilterLabelByValue.get(value) ?? value);
+  if (labels.length <= 2) return labels.join("、");
+  return `${labels[0]}等 ${labels.length} 项`;
+}
+
+export function challengeStatusFilterMenuValues(selection: ChallengeStatusFilterSelection): ChallengeStatusFilter[] {
+  return selection.length > 0 ? [...selection] : ["all"];
+}
+
+function challengeGroupMatchesStatusSelection(group: ObjectiveNode, selection: ChallengeStatusFilterSelection): boolean {
+  if (selection.length === 0) return true;
+  return selection.some((status) => challengeGroupMatchesStatus(group, status));
+}
+
+function challengeGroupMatchesStatus(group: ObjectiveNode, status: ChallengeStatusFilterValue): boolean {
   if (status === "unassigned") return !objectiveHasChallengers(group.objective);
   if (status === "pendingReestimate") return isObjectiveReestimatingByFlow(group.objective);
   if (status === "active") return group.objective.flowStatus === "frozen";

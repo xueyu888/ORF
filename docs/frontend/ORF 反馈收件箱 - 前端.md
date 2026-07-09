@@ -12,7 +12,7 @@
 ## 项目筛选和绑定群
 
 - `Feedback.projectId = null` 表示未归属项目，`Feedback.projectId = Project.id` 表示项目反馈；项目名称来自 `projects` 注册表，前端只展示项目名投影。
-- 反馈列表的项目筛选使用 `/feedback?project=All|unassigned|{projectId}` 表达当前视图；URL 查询仍是可分享的当前视图状态，浏览器本地筛选偏好只在无查询参数进入 `/feedback` 时恢复上次筛选，不回写反馈事实源。
+- 反馈列表的项目筛选使用 `/feedback?project=All|unassigned|{projectId}` 表达当前视图；URL 查询仍是可分享的当前视图状态，当前用户个人偏好只在无查询参数进入 `/feedback` 时恢复上次主动选择的筛选，不回写反馈事实源。
 - 创建反馈时才把当前具体项目筛选写入 `Feedback.projectId`；`All` 和 `unassigned` 不会作为项目 ID 提交。
 - 聊天频道绑定项目后，聊天页右上角展示 `项目反馈` 入口，进入该项目的反馈列表。
 - 当列表筛选到某个具体项目时，页面展示当前用户可见的绑定群摘要；绑定群唯一事实源是 `chat_channels.project_id`，反馈页不维护第二套绑定关系。
@@ -32,9 +32,9 @@
 - 顶部展示当前 Open/Closed 数量、标签数量和里程碑数量；里程碑当前没有 ORF 事实源，因此计数固定为 0。
 - 顶部标签数量进入 `/feedback/labels`，里程碑数量进入 `/feedback/milestones`；二者是 issue 索引入口，不承载反馈详情动作。
 - 搜索输入支持 GitHub-like qualifier：`is:` / `status:`、`assignee:` / `owner:`、`author:`、`label:`、`impact:`、`project:`、`sort:`，未带 qualifier 的文本只作为展示查询。
-- 紧凑筛选栏按项目、搜索、处理人、作者、标签、影响和排序组织；这些筛选只维护 URL 查询展示状态，不回写反馈事实源。
+- 紧凑筛选栏按项目、搜索、处理人、作者、标签、影响和排序组织；这些筛选的当前视图由 URL 查询表示，长期默认视图由当前用户 `personalPreferences.filterPreferences["feedback.issueList"]` 保存，不回写反馈事实源。
 - 标签由反馈原因分类和影响等级统一派生；同一套派生规则同时用于列表行、标签筛选和详情侧栏。
-- 从标签页点击标签会回到 `/feedback?label=...`，列表页只把该参数当作展示筛选。列表页还支持 `q`、`state`、`assignee`、`author`、`project`、`impact`、`sort` 查询参数，用于分享和恢复当前视图；用户通过无参数 `/feedback` 返回时，前端用本地保存的筛选偏好补回这些查询参数。
+- 从标签页点击标签会回到 `/feedback?label=...`，列表页只把该参数当作展示筛选。列表页还支持 `q`、`state`、`assignee`、`author`、`project`、`impact`、`sort` 查询参数，用于分享和恢复当前视图；用户通过无参数 `/feedback` 返回时，前端用当前用户筛选偏好补回这些查询参数。直接打开带查询参数的分享链接不会覆盖用户默认筛选；只有用户在筛选栏主动修改条件时才写入个人偏好。
 - 列表头展示 `Open`、`Closed`、`All` 三个列表状态及匹配数量。
 - 每条反馈以 issue 行展示：状态图标、标题、标签、反馈 ID、作者、项目、创建时间、最近活动时间、Open/Closed 状态、处理人和评论数量。
 - 默认按最近活动时间倒序展示；最近活动时间取反馈 `updatedAt` 和该反馈评论线程 `updatedAt` 的较大值。排序还支持最近创建、评论最多和最早更新。

@@ -7,6 +7,7 @@ import { MetricInspectorPanel } from "./components/MetricInspectorPanel";
 import { TeamDashboard } from "./components/TeamDashboard";
 import { canShowFrontend } from "../../config/frontendVisibility";
 import { hasPermission } from "../../config/permissions";
+import { getUserPreferences, saveUserPreferences } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
 import { resolveObjectiveDeadlineEditState, type ObjectiveDeadlineEditState } from "../../domain/orfDeadline";
 import { isObjectiveChallenger } from "../../domain/orfObjectiveParticipants";
@@ -25,12 +26,20 @@ import {
   challengeCycleOptions,
   challengeMemberOptions,
   filterChallengeGroups,
+  normalizeChallengeStatusFilterSelection,
   sortChallengeGroups,
   type ChallengeCycleFilter,
   type ChallengeMemberFilter,
   type ChallengeProjectFilter,
-  type ChallengeStatusFilter,
+  type ChallengeStatusFilterSelection,
 } from "./model/challengeFilters";
+import {
+  challengePlanFilterPreferenceFromRecord,
+  challengePlanFilterPreferenceKey,
+  challengePlanFilterPreferenceToRecord,
+  defaultChallengePlanFilterPreference,
+  type ChallengePlanFilterPreference,
+} from "./model/challengeFilterPreferences";
 import { buildChallengeTree } from "./model/challengeTreeModel";
 import { deleteConfirmMessage } from "./model/deleteConfirm";
 import { unassignedObjectiveProjectName } from "./model/projectGroups";
@@ -268,7 +277,7 @@ export function ChallengePlanPage() {
   const [cycleFilter, setCycleFilter] = useState<ChallengeCycleFilter>("all");
   const [memberFilter, setMemberFilter] = useState<ChallengeMemberFilter>("all");
   const [projectFilter, setProjectFilter] = useState<ChallengeProjectFilter>("all");
-  const [statusFilter, setStatusFilter] = useState<ChallengeStatusFilter>("all");
+  const [statusFilters, setStatusFilters] = useState<ChallengeStatusFilterSelection>([]);
   const [collapsedBountyIds, setCollapsedBountyIds] = useState<Set<string>>(() => new Set());
   const [collapsedActionIds, setCollapsedActionIds] = useState<Set<string>>(() => new Set());
   const [commentTarget, setCommentTarget] = useState<ChallengeCommentTarget | null>(null);
@@ -293,29 +302,63 @@ export function ChallengePlanPage() {
   const titleEditOverlaySequenceRef = useRef(0);
   const handledObjectiveCreationEntryRef = useRef(false);
   const appliedLinkedTargetRef = useRef<string | null>(null);
-  const scopeDefaultedForAllAccessRef = useRef(false);
+  const filterPreferenceTouchedRef = useRef(false);
   const now = useMinuteNow();
   const today = localDateString(now);
 
   useEffect(() => {
     if (!canShowAllChallenges) {
-      scopeDefaultedForAllAccessRef.current = false;
       if (scope === "all") {
         setScope("mine");
       }
-      return;
-    }
-
-    if (scope === "all") {
-      scopeDefaultedForAllAccessRef.current = true;
-      return;
-    }
-
-    if (!scopeDefaultedForAllAccessRef.current) {
-      scopeDefaultedForAllAccessRef.current = true;
-      setScope("all");
     }
   }, [canShowAllChallenges, scope]);
+
+  const applyChallengePlanFilterPreference = useCallback((preference: ChallengePlanFilterPreference) => {
+    setScope(canShowAllChallenges ? preference.scope : "mine");
+    setCycleFilter(preference.cycle);
+    setMemberFilter(preference.member);
+    setProjectFilter(preference.project);
+    setStatusFilters(normalizeChallengeStatusFilterSelection(preference.status));
+  }, [canShowAllChallenges]);
+
+  const persistChallengePlanFilterPreference = useCallback((preference: ChallengePlanFilterPreference) => {
+    if (!currentUser) return;
+    void saveUserPreferences({
+      filterPreferences: {
+        [challengePlanFilterPreferenceKey]: challengePlanFilterPreferenceToRecord({
+          ...preference,
+          scope: canShowAllChallenges ? preference.scope : "mine",
+          status: normalizeChallengeStatusFilterSelection(preference.status),
+        }),
+      },
+    }).catch(() => undefined);
+  }, [canShowAllChallenges, currentUser?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const currentUserId = currentUser?.id ?? null;
+    if (!currentUserId) return () => {
+      cancelled = true;
+    };
+    filterPreferenceTouchedRef.current = false;
+
+    void getUserPreferences({ userId: currentUserId })
+      .then((preferences) => {
+        if (cancelled || filterPreferenceTouchedRef.current || linkedChallengeTarget || hasObjectiveCreationEntry) return;
+        applyChallengePlanFilterPreference(
+          challengePlanFilterPreferenceFromRecord(
+            preferences.filterPreferences[challengePlanFilterPreferenceKey],
+            { defaultScope: canShowAllChallenges ? "all" : "mine" },
+          ),
+        );
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyChallengePlanFilterPreference, canShowAllChallenges, currentUser?.id, hasObjectiveCreationEntry, linkedChallengeTarget]);
 
   useEffect(() => {
     if (!openActionId) return undefined;
@@ -446,8 +489,8 @@ export function ChallengePlanPage() {
     [challengeState.projects],
   );
   const filteredGroups = useMemo(
-    () => sortChallengeGroups(filterChallengeGroups(displaySourceGroups, { cycle: cycleFilter, member: effectiveMemberFilter, project: projectFilter, status: statusFilter })),
-    [cycleFilter, displaySourceGroups, effectiveMemberFilter, projectFilter, statusFilter],
+    () => sortChallengeGroups(filterChallengeGroups(displaySourceGroups, { cycle: cycleFilter, member: effectiveMemberFilter, project: projectFilter, status: statusFilters })),
+    [cycleFilter, displaySourceGroups, effectiveMemberFilter, projectFilter, statusFilters],
   );
   const sortedDisplayedGroups = useMemo(() => sortChallengeGroups(draftGroup ? [draftGroup, ...filteredGroups] : filteredGroups), [draftGroup, filteredGroups]);
   const creationAnchoredGroups = useMemo(
@@ -459,7 +502,7 @@ export function ChallengePlanPage() {
     [creationAnchoredGroups, objectiveInteractionAnchor],
   );
   const commentCounts = useMemo(() => commentCountsByTarget(challengeState.comments), [challengeState.comments]);
-  const hasContentFilters = cycleFilter !== "all" || effectiveMemberFilter !== "all" || statusFilter !== "all";
+  const hasContentFilters = cycleFilter !== "all" || effectiveMemberFilter !== "all" || statusFilters.length > 0;
   const hasActiveFilters = hasContentFilters || projectFilter !== "all";
   const visibleProjects = useMemo(
     () => projectsForChallengeTree(challengeState.projects, displayedGroups, hasContentFilters, projectFilter),
@@ -676,7 +719,7 @@ export function ChallengePlanPage() {
       setObjectiveCreationSession((current) =>
         beginObjectiveCreationSession(
           current,
-          { cycle: cycleFilter, member: memberFilter, project: projectFilter, scope, status: statusFilter },
+          { cycle: cycleFilter, member: memberFilter, project: projectFilter, scope, status: statusFilters },
           normalizedProject,
         ),
       );
@@ -686,7 +729,7 @@ export function ChallengePlanPage() {
       setCycleFilter("all");
       setMemberFilter("all");
       setProjectFilter(normalizedProject.projectId ?? "unassigned");
-      setStatusFilter("unassigned");
+      setStatusFilters(["unassigned"]);
     },
     [
       canCreateObjective,
@@ -698,7 +741,7 @@ export function ChallengePlanPage() {
       objectiveCreationSession.status,
       projectFilter,
       scope,
-      statusFilter,
+      statusFilters,
     ],
   );
 
@@ -718,14 +761,14 @@ export function ChallengePlanPage() {
     if (canShowAllChallenges && scope !== "all") setScope("all");
     if (cycleFilter !== "all") setCycleFilter("all");
     if (memberFilter !== "all") setMemberFilter("all");
-    if (statusFilter !== "all") setStatusFilter("all");
+    if (statusFilters.length > 0) setStatusFilters([]);
     if (projectFilter !== "all") setProjectFilter("all");
 
     const parentActionId = parentActionIdForLinkedSubAction(linkedChallengeTarget, challengeState) ?? parentActionIdForLinkedSubAction(linkedChallengeTarget, state);
     if (parentActionId) {
       setCollapsedActionIds((items) => (items.has(parentActionId) ? withoutItem(items, parentActionId) : items));
     }
-  }, [canShowAllChallenges, challengeState, cycleFilter, linkedChallengeTarget, memberFilter, projectFilter, scope, state, statusFilter]);
+  }, [canShowAllChallenges, challengeState, cycleFilter, linkedChallengeTarget, memberFilter, projectFilter, scope, state, statusFilters]);
 
   useEffect(() => {
     if (!linkedChallengeTarget) return undefined;
@@ -982,7 +1025,7 @@ export function ChallengePlanPage() {
     setCycleFilter(returnContext.cycle);
     setMemberFilter(returnContext.member);
     setProjectFilter(returnContext.project);
-    setStatusFilter(returnContext.status);
+    setStatusFilters(normalizeChallengeStatusFilterSelection(returnContext.status));
   }, []);
 
   const cancelEdit = () => {
@@ -1002,48 +1045,60 @@ export function ChallengePlanPage() {
   };
 
   const updateScope = (next: ChallengeScope) => {
+    filterPreferenceTouchedRef.current = true;
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     setChildCreationSession(clearChildCreationSession);
     setTitleEditOverlays([]);
     setObjectiveInteractionAnchor(null);
     setScope(next);
+    persistChallengePlanFilterPreference({ cycle: cycleFilter, member: memberFilter, project: projectFilter, scope: next, status: statusFilters });
   };
 
   const updateCycleFilter = (next: ChallengeCycleFilter) => {
+    filterPreferenceTouchedRef.current = true;
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     setChildCreationSession(clearChildCreationSession);
     setTitleEditOverlays([]);
     setObjectiveInteractionAnchor(null);
     setCycleFilter(next);
+    persistChallengePlanFilterPreference({ cycle: next, member: memberFilter, project: projectFilter, scope, status: statusFilters });
   };
 
   const updateMemberFilter = (next: ChallengeMemberFilter) => {
+    filterPreferenceTouchedRef.current = true;
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     setChildCreationSession(clearChildCreationSession);
     setTitleEditOverlays([]);
     setObjectiveInteractionAnchor(null);
     setMemberFilter(next);
+    persistChallengePlanFilterPreference({ cycle: cycleFilter, member: next, project: projectFilter, scope, status: statusFilters });
   };
 
-  const updateStatusFilter = (next: ChallengeStatusFilter) => {
+  const updateStatusFilters = (next: ChallengeStatusFilterSelection) => {
+    filterPreferenceTouchedRef.current = true;
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     setChildCreationSession(clearChildCreationSession);
     setTitleEditOverlays([]);
     setObjectiveInteractionAnchor(null);
-    setStatusFilter(next);
+    const status = normalizeChallengeStatusFilterSelection(next);
+    setStatusFilters(status);
+    persistChallengePlanFilterPreference({ cycle: cycleFilter, member: memberFilter, project: projectFilter, scope, status });
   };
 
   const updateProjectFilter = (next: ChallengeProjectFilter) => {
+    filterPreferenceTouchedRef.current = true;
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     setChildCreationSession(clearChildCreationSession);
     setTitleEditOverlays([]);
     setObjectiveInteractionAnchor(null);
     setProjectFilter(next);
+    persistChallengePlanFilterPreference({ cycle: cycleFilter, member: memberFilter, project: next, scope, status: statusFilters });
   };
 
   const createProjectAndSelect = async (name: string) => {
     const project = await createProject({ name });
     if (!project) return null;
+    filterPreferenceTouchedRef.current = true;
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     setChildCreationSession(clearChildCreationSession);
     setTitleEditOverlays([]);
@@ -1051,7 +1106,8 @@ export function ChallengePlanPage() {
     setCycleFilter("all");
     setMemberFilter("all");
     setProjectFilter(project.id);
-    setStatusFilter("all");
+    setStatusFilters([]);
+    persistChallengePlanFilterPreference({ cycle: "all", member: "all", project: project.id, scope, status: [] });
     return project;
   };
 
@@ -1401,12 +1457,12 @@ export function ChallengePlanPage() {
             onMemberChange={updateMemberFilter}
             onProjectChange={updateProjectFilter}
             onScopeChange={updateScope}
-            onStatusChange={updateStatusFilter}
+            onStatusChange={updateStatusFilters}
             project={projectFilter}
             projectOptions={projectOptions}
             showMemberFilter={canFilterByMember}
             scope={scope}
-            status={statusFilter}
+            status={statusFilters}
           />
           <ChallengeTree
             emptyText={emptyText}

@@ -6,6 +6,8 @@ import {
   type FeedbackIssueListFilters,
 } from "../src/features/feedback/model/feedbackIssueList";
 import {
+  feedbackIssueListFilterParamsFromPreferenceRecord,
+  feedbackIssueListFilterPreferenceRecordFromSearchParams,
   feedbackIssueListFilterQueryFromSearchParams,
   parseStoredFeedbackIssueListFilterParams,
 } from "../src/features/feedback/model/feedbackIssueListViewState";
@@ -83,6 +85,42 @@ test("feedback list filter preference restores sanitized query params", () => {
     query: "project=project-client&state=closed&impact=Broken&sort=created-desc&unknown=1",
     version: 1,
   }));
+
+  assert.equal(restored?.toString(), "project=project-client&state=closed&sort=created-desc");
+});
+
+test("feedback list user preference stores active filter slots without default values", () => {
+  const record = feedbackIssueListFilterPreferenceRecordFromSearchParams(
+    new URLSearchParams({
+      impact: "High",
+      project: "project-client",
+      q: "  crash  ",
+      sort: "updated-desc",
+      state: "open",
+    }),
+  );
+
+  assert.deepEqual(record, {
+    values: {
+      impact: "High",
+      project: "project-client",
+      q: "crash",
+    },
+    version: 1,
+  });
+});
+
+test("feedback list user preference restores through canonical URL params", () => {
+  const restored = feedbackIssueListFilterParamsFromPreferenceRecord({
+    values: {
+      impact: "Broken",
+      project: "project-client",
+      sort: "created-desc",
+      state: "closed",
+      unknown: "ignored",
+    },
+    version: 1,
+  });
 
   assert.equal(restored?.toString(), "project=project-client&state=closed&sort=created-desc");
 });

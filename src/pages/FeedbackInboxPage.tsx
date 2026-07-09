@@ -1,6 +1,6 @@
 import { CheckCircle2, CircleDot, Clock3, Flag, MessageSquare, Plus, RotateCcw, Tag } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { UserAvatar } from "../components/UserAvatar";
 import { BountyBadge, BountyButton, BountyEmptyState, BountySelect, BountyTextInput } from "../features/bounty-hall/BountyHallSkin";
@@ -17,12 +17,13 @@ import {
 } from "../features/feedback/model/feedbackIssueList";
 import {
   clearStoredFeedbackIssueListFilterParams,
+  feedbackIssueListFilterParamsFromPreferenceRecord,
+  feedbackIssueListFilterPreferenceKey,
+  feedbackIssueListFilterPreferenceRecordFromSearchParams,
   feedbackIssueListUrlStateFromSearchParams,
-  hasFeedbackIssueListFilterParams,
   readStoredFeedbackIssueListFilterParams,
-  writeStoredFeedbackIssueListFilterParams,
 } from "../features/feedback/model/feedbackIssueListViewState";
-import { getProjectChatChannels } from "../state/apiClient";
+import { getProjectChatChannels, getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import type { ProjectChatChannel } from "../types/orf";
 import { impactLabel } from "../utils/labels";
@@ -31,6 +32,8 @@ export function FeedbackInboxPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentUser, state } = useOrf();
+  const currentUserId = currentUser?.id ?? null;
+  const suppressNextPreferenceRestoreRef = useRef(false);
   const searchParamSignature = searchParams.toString();
   const {
     assigneeUserId,
@@ -63,21 +66,73 @@ export function FeedbackInboxPage() {
     [state.projects],
   );
 
+  const persistFilterPreference = useCallback((nextSearchParams: URLSearchParams) => {
+    const record = feedbackIssueListFilterPreferenceRecordFromSearchParams(nextSearchParams);
+    clearStoredFeedbackIssueListFilterParams();
+    if (!record) suppressNextPreferenceRestoreRef.current = true;
+    if (!currentUserId) return;
+    void saveUserPreferences({
+      filterPreferences: {
+        [feedbackIssueListFilterPreferenceKey]: record,
+      },
+    }).catch(() => {
+      // Filter persistence is an optional personal preference; the URL remains the current view state.
+    });
+  }, [currentUserId]);
+
   useEffect(() => {
-    if (!searchParamSignature) {
+    let cancelled = false;
+    if (searchParamSignature) return () => {
+      cancelled = true;
+    };
+    if (suppressNextPreferenceRestoreRef.current) {
+      suppressNextPreferenceRestoreRef.current = false;
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    async function restoreFilterPreference() {
+      if (currentUserId) {
+        try {
+          const preferences = await getUserPreferences({ userId: currentUserId });
+          if (cancelled) return;
+          const preferenceParams = feedbackIssueListFilterParamsFromPreferenceRecord(
+            preferences.filterPreferences[feedbackIssueListFilterPreferenceKey],
+          );
+          if (preferenceParams) {
+            setSearchParams(preferenceParams, { replace: true });
+            return;
+          }
+        } catch {
+          // Fall through to the legacy local preference migration path.
+        }
+      }
+
       const storedParams = readStoredFeedbackIssueListFilterParams();
       if (storedParams) {
         setSearchParams(storedParams, { replace: true });
+        const record = feedbackIssueListFilterPreferenceRecordFromSearchParams(storedParams);
+        if (currentUserId && record) {
+          void saveUserPreferences({
+            filterPreferences: {
+              [feedbackIssueListFilterPreferenceKey]: record,
+            },
+          }).catch(() => {
+            // Legacy migration failure does not affect the current URL-restored view.
+          });
+        }
+        clearStoredFeedbackIssueListFilterParams();
         return;
       }
       clearStoredFeedbackIssueListFilterParams();
-      return;
     }
 
-    if (hasFeedbackIssueListFilterParams(searchParams)) {
-      writeStoredFeedbackIssueListFilterParams(searchParams);
-    }
-  }, [searchParamSignature, searchParams, setSearchParams]);
+    void restoreFilterPreference();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, searchParamSignature, setSearchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,20 +178,20 @@ export function FeedbackInboxPage() {
     sort !== "updated-desc";
 
   const setFilter = (key: string, value: string, defaultValue: string) => {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      if (value === defaultValue || !value.trim()) {
-        next.delete(key);
-      } else {
-        next.set(key, value);
-      }
-      return next;
-    }, { replace: true });
+    const next = new URLSearchParams(searchParams);
+    if (value === defaultValue || !value.trim()) {
+      next.delete(key);
+    } else {
+      next.set(key, value);
+    }
+    persistFilterPreference(next);
+    setSearchParams(next, { replace: true });
   };
 
   const resetFilters = () => {
-    clearStoredFeedbackIssueListFilterParams();
-    setSearchParams(new URLSearchParams(), { replace: true });
+    const next = new URLSearchParams();
+    persistFilterPreference(next);
+    setSearchParams(next, { replace: true });
   };
 
   return (

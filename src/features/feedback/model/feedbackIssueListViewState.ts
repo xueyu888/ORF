@@ -1,3 +1,5 @@
+import type { FilterPreferenceRecord } from "../../../domain/settings/filterPreferences";
+import { filterPreferenceStringValue } from "../../../domain/settings/filterPreferences";
 import type { Impact } from "../../../types/orf";
 import type { FeedbackIssueListState, FeedbackIssueSortKey } from "./feedbackIssueList";
 
@@ -16,6 +18,8 @@ type StoredFeedbackIssueListFilterPreference = {
   query: string;
   version: 1;
 };
+
+export const feedbackIssueListFilterPreferenceKey = "feedback.issueList";
 
 const feedbackIssueListFilterStorageKey = "orf:feedback-issue-list-filters:v1";
 const feedbackIssueListFilterParamKeys = ["project", "q", "state", "assignee", "author", "label", "impact", "sort"] as const;
@@ -52,6 +56,53 @@ export function feedbackIssueListFilterQueryFromSearchParams(searchParams: URLSe
   if (state.sort !== "updated-desc") next.set("sort", state.sort);
 
   return next.toString();
+}
+
+export function feedbackIssueListFilterPreferenceRecordFromSearchParams(
+  searchParams: URLSearchParams,
+): FilterPreferenceRecord | null {
+  const state = feedbackIssueListUrlStateFromSearchParams(searchParams);
+  const query = state.query.trim();
+  const values: FilterPreferenceRecord["values"] = {};
+
+  if (state.projectId !== "All") values.project = state.projectId;
+  if (query) values.q = query;
+  if (state.listState !== "open") values.state = state.listState;
+  if (state.assigneeUserId !== "All") values.assignee = state.assigneeUserId;
+  if (state.authorUserId !== "All") values.author = state.authorUserId;
+  if (state.cause !== "All") values.label = state.cause;
+  if (state.impact !== "All") values.impact = state.impact;
+  if (state.sort !== "updated-desc") values.sort = state.sort;
+
+  return Object.keys(values).length > 0 ? { values, version: 1 } : null;
+}
+
+export function feedbackIssueListFilterParamsFromPreferenceRecord(
+  record: FilterPreferenceRecord | null | undefined,
+) {
+  if (!record) return null;
+
+  const searchParams = new URLSearchParams();
+  const projectId = filterPreferenceStringValue(record, "project");
+  const query = filterPreferenceStringValue(record, "q");
+  const listState = filterPreferenceStringValue(record, "state");
+  const assigneeUserId = filterPreferenceStringValue(record, "assignee");
+  const authorUserId = filterPreferenceStringValue(record, "author");
+  const cause = filterPreferenceStringValue(record, "label");
+  const impact = filterPreferenceStringValue(record, "impact");
+  const sort = filterPreferenceStringValue(record, "sort");
+
+  if (projectId) searchParams.set("project", projectId);
+  if (query) searchParams.set("q", query);
+  if (listState) searchParams.set("state", listState);
+  if (assigneeUserId) searchParams.set("assignee", assigneeUserId);
+  if (authorUserId) searchParams.set("author", authorUserId);
+  if (cause) searchParams.set("label", cause);
+  if (impact) searchParams.set("impact", impact);
+  if (sort) searchParams.set("sort", sort);
+
+  const queryString = feedbackIssueListFilterQueryFromSearchParams(searchParams);
+  return queryString ? new URLSearchParams(queryString) : null;
 }
 
 export function readStoredFeedbackIssueListFilterParams() {
