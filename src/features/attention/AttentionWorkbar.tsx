@@ -4,6 +4,7 @@ import {
   BellRing,
   ChevronDown,
   Clock3,
+  CheckCheck,
   Inbox,
   type LucideIcon,
   MessageCircle,
@@ -22,12 +23,15 @@ export function AttentionWorkbar({
   collapsed: boolean;
   onNavigateIntent?: (path: string) => void;
 }) {
-  const { attentionState } = useOrf();
+  const { attentionState, markAllNotificationsRead, markNotificationRead, notify } = useOrf();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [markingAllRead, setMarkingAllRead] = useState(false);
+  const [openingItemId, setOpeningItemId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const countLabel = attentionState.count > 99 ? "99+" : String(attentionState.count);
   const hasItems = attentionState.items.length > 0;
+  const hasNotificationItems = attentionState.items.some((item) => item.source === "notification");
   const primaryTargetPath = attentionState.latestTargetPath ?? fallbackAttentionTargetPath;
 
   useEffect(() => {
@@ -52,10 +56,41 @@ export function AttentionWorkbar({
     if (!hasItems) setOpen(false);
   }, [hasItems]);
 
+  if (attentionState.count <= 0) {
+    return null;
+  }
+
   const openTarget = (targetPath: string) => {
     onNavigateIntent?.(targetPath);
     navigate(targetPath);
     setOpen(false);
+  };
+
+  const openItem = async (item: AttentionItem) => {
+    setOpeningItemId(item.eventId);
+    try {
+      if (item.source === "notification") {
+        await markNotificationRead(item.eventId);
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "标记通知已读失败");
+    } finally {
+      openTarget(item.targetPath);
+      setOpeningItemId(null);
+    }
+  };
+
+  const markNotificationsRead = async () => {
+    if (markingAllRead) return;
+    setMarkingAllRead(true);
+    try {
+      const updated = await markAllNotificationsRead();
+      notify(updated > 0 ? `已将 ${updated} 条通知标为已读` : "没有新的未读通知");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "通知全部已读失败");
+    } finally {
+      setMarkingAllRead(false);
+    }
   };
 
   const handleTriggerClick = () => {
@@ -93,12 +128,31 @@ export function AttentionWorkbar({
       </button>
 
       {open && hasItems && (
-        <div className="orf-attention-panel" role="menu" aria-label="待我处理">
+        <div className="orf-attention-panel" role="dialog" aria-label="待我处理">
+          <div className="orf-attention-panel-header">
+            <span>待处理提醒</span>
+            {hasNotificationItems && (
+              <button
+                type="button"
+                className="orf-attention-panel-mark-all"
+                disabled={markingAllRead}
+                title="通知全部已读"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void markNotificationsRead();
+                }}
+              >
+                <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>全部已读</span>
+              </button>
+            )}
+          </div>
           {attentionState.items.map((item) => (
             <AttentionPanelItem
               key={item.eventId}
+              disabled={openingItemId === item.eventId}
               item={item}
-              onOpen={openTarget}
+              onOpen={(nextItem) => void openItem(nextItem)}
             />
           ))}
         </div>
@@ -107,15 +161,23 @@ export function AttentionWorkbar({
   );
 }
 
-function AttentionPanelItem({ item, onOpen }: { item: AttentionItem; onOpen: (targetPath: string) => void }) {
+function AttentionPanelItem({
+  disabled,
+  item,
+  onOpen,
+}: {
+  disabled: boolean;
+  item: AttentionItem;
+  onOpen: (item: AttentionItem) => void;
+}) {
   const Icon = iconForAttentionItem(item);
   return (
     <button
       type="button"
       className="orf-attention-panel-item"
       data-level={item.level}
-      role="menuitem"
-      onClick={() => onOpen(item.targetPath)}
+      disabled={disabled}
+      onClick={() => onOpen(item)}
     >
       <span className="orf-attention-panel-item-icon" aria-hidden="true">
         <Icon className="h-4 w-4" />

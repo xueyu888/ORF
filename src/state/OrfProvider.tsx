@@ -134,6 +134,8 @@ interface OrfContextValue {
   chatUnreadSummary: ChatUnreadSummary;
   notifications: AppNotification[];
   unreadNotificationCount: number;
+  markAllNotificationsRead: () => Promise<number>;
+  markNotificationRead: (notificationId: string) => Promise<AppNotification>;
   openModal: (modal: ModalState) => void;
   closeModal: () => void;
   notify: (message: string) => void;
@@ -266,6 +268,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const isAdmin = currentUser?.role === "admin";
   const loadTaskManagementData = shouldLoadInitialTaskManagementReadModel(location.pathname);
   const {
+    markAllNotificationsRead,
+    markNotificationRead,
     notifications,
     receiveNotification,
     refreshNotifications,
@@ -639,6 +643,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       chatUnreadSummary,
       notifications,
       unreadNotificationCount,
+      markAllNotificationsRead,
+      markNotificationRead,
       openModal: setModal,
       closeModal: () => setModal({ type: null }),
       notify,
@@ -672,6 +678,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       isAdmin,
       isApproved,
       isAuthenticated,
+      markAllNotificationsRead,
+      markNotificationRead,
       modal,
       notifications,
       notify,

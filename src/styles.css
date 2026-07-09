@@ -7134,6 +7134,49 @@ button:disabled {
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+.orf-attention-panel-header {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px 6px;
+  color: rgba(248, 252, 255, 0.82);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 16px;
+}
+
+.orf-attention-panel-mark-all {
+  display: inline-flex;
+  min-width: 0;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  border-radius: 6px;
+  background: rgba(125, 211, 252, 0.1);
+  color: #f8fcff;
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.orf-attention-panel-mark-all:hover:not(:disabled),
+.orf-attention-panel-mark-all:focus-visible {
+  border-color: rgba(125, 211, 252, 0.38);
+  background: rgba(125, 211, 252, 0.18);
+  outline: none;
+}
+
+.orf-attention-panel-mark-all:disabled,
+.orf-attention-panel-item:disabled {
+  cursor: default;
+  opacity: 0.56;
+}
+
 .orf-attention-panel-item {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) auto;

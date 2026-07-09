@@ -33,6 +33,7 @@ const MAX_SEEN_ATTENTION_TOAST_IDS = 128;
 const CHAT_NOTIFICATION_ACTIVATION_PREFIX = "orf-chat-notification";
 const ATTENTION_NOTIFICATION_ACTIVATION_PREFIX = "orf-attention-notification";
 const DESKTOP_ATTENTION_FLASH_COOLDOWN_MS = 12000;
+const DESKTOP_TRAY_ATTENTION_FLASH_INTERVAL_MS = 700;
 const DESKTOP_RECOVERY_ROOT_CHECK_DELAY_MS = 4000;
 const DESKTOP_RECOVERY_RELOAD_COOLDOWN_MS = 8000;
 const DESKTOP_RECOVERY_STABLE_RESET_DELAY_MS = 30000;
@@ -74,6 +75,8 @@ const desktopShellState = {
   seenAttentionToastIds: [],
   storagePaths: null,
   tray: null,
+  trayFlashTimer: null,
+  trayFlashVisible: true,
   unreadCount: 0,
 };
 
@@ -867,10 +870,67 @@ function updateTrayUnreadState() {
   tray.setImage(createTrayIconImage(attentionCount));
   tray.setToolTip(attentionCount > 0 ? `${ORF_APP_NAME} - ${desktopAttentionDescription(attentionState)}` : ORF_APP_NAME);
   tray.setContextMenu(Menu.buildFromTemplate(menuTemplate));
+  updateTrayAttentionFlashState();
 }
 
 function createTrayIconImage(unreadCount) {
   const image = createDesktopIconNativeImage(DESKTOP_ICON_BITMAP_SIZE, unreadCount);
+  image.setTemplateImage(false);
+  return image;
+}
+
+function updateTrayAttentionFlashState() {
+  if (!shouldFlashTrayAttention()) {
+    stopTrayAttentionFlash();
+    return;
+  }
+  if (desktopShellState.trayFlashTimer) return;
+  desktopShellState.trayFlashVisible = true;
+  applyTrayAttentionFlashFrame();
+  desktopShellState.trayFlashTimer = setInterval(() => {
+    desktopShellState.trayFlashVisible = !desktopShellState.trayFlashVisible;
+    applyTrayAttentionFlashFrame();
+  }, DESKTOP_TRAY_ATTENTION_FLASH_INTERVAL_MS);
+  if (typeof desktopShellState.trayFlashTimer.unref === "function") {
+    desktopShellState.trayFlashTimer.unref();
+  }
+}
+
+function stopTrayAttentionFlash() {
+  if (desktopShellState.trayFlashTimer) {
+    clearInterval(desktopShellState.trayFlashTimer);
+    desktopShellState.trayFlashTimer = null;
+  }
+  desktopShellState.trayFlashVisible = true;
+  const tray = desktopShellState.tray;
+  if (!tray || tray.isDestroyed()) return;
+  tray.setImage(createTrayIconImage(desktopAttentionBadgeCount()));
+}
+
+function shouldFlashTrayAttention() {
+  return process.platform === "win32"
+    && desktopAttentionBadgeCount() > 0
+    && attentionLevelRank(desktopShellState.attentionState.level) >= attentionLevelRank("flash");
+}
+
+function applyTrayAttentionFlashFrame() {
+  const tray = desktopShellState.tray;
+  if (!tray || tray.isDestroyed()) return;
+  if (!shouldFlashTrayAttention()) {
+    stopTrayAttentionFlash();
+    return;
+  }
+  tray.setImage(desktopShellState.trayFlashVisible
+    ? createTrayIconImage(desktopAttentionBadgeCount())
+    : createTransparentTrayIconImage());
+}
+
+function createTransparentTrayIconImage() {
+  const physicalSize = DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE;
+  const image = createNativeImageFromRgba(
+    DESKTOP_ICON_BITMAP_SIZE,
+    Buffer.alloc(physicalSize * physicalSize * 4),
+  );
   image.setTemplateImage(false);
   return image;
 }
@@ -1681,6 +1741,7 @@ if (!hasSingleInstanceLock) {
 
   app.on("before-quit", () => {
     desktopShellState.isQuitting = true;
+    stopTrayAttentionFlash();
     if (desktopShellState.tray && !desktopShellState.tray.isDestroyed()) {
       desktopShellState.tray.destroy();
     }

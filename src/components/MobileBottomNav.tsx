@@ -12,7 +12,7 @@ const mobileBottomNavItems = mobileBottomNavLabels
   .filter((item) => item !== undefined);
 
 export function MobileBottomNav({ onNavigateIntent }: { onNavigateIntent?: (path: string) => void }) {
-  const { attentionState, chatUnreadSummary, currentUser } = useOrf();
+  const { attentionState, chatUnreadSummary, currentUser, markNotificationRead, notify } = useOrf();
   const navigate = useNavigate();
   const visibleItems = mobileBottomNavItems.filter((item) => canShowFrontendPath(currentUser, item.path));
 
@@ -23,7 +23,16 @@ export function MobileBottomNav({ onNavigateIntent }: { onNavigateIntent?: (path
   const attentionTargetPath = attentionState.latestTargetPath ?? "/chat/system/personalNotifications";
   const attentionBadgeText = attentionState.count > 99 ? "99+" : String(attentionState.count);
   const attentionAriaLabel = attentionState.count > 0 ? `待办，${attentionState.count} 条提醒` : "待办";
-  const openAttentionTarget = () => {
+  const showAttentionItem = attentionState.count > 0;
+  const openAttentionTarget = async () => {
+    const latestItem = attentionState.items[0] ?? null;
+    if (latestItem?.source === "notification") {
+      try {
+        await markNotificationRead(latestItem.eventId);
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "标记通知已读失败");
+      }
+    }
     onNavigateIntent?.(attentionTargetPath);
     navigate(attentionTargetPath);
   };
@@ -60,22 +69,20 @@ export function MobileBottomNav({ onNavigateIntent }: { onNavigateIntent?: (path
           </NavLink>
         );
       })}
-      <button
-        type="button"
-        className={[
-          "orf-mobile-bottom-nav-item",
-          "orf-mobile-bottom-nav-attention",
-          attentionState.count > 0 ? "has-attention" : "",
-        ].join(" ")}
-        aria-label={attentionAriaLabel}
-        onClick={openAttentionTarget}
-      >
-        <span className="orf-mobile-bottom-nav-icon">
-          <BellRing className="h-5 w-5" />
-          {attentionState.count > 0 && <span className="orf-mobile-bottom-nav-badge">{attentionBadgeText}</span>}
-        </span>
-        <span className="orf-mobile-bottom-nav-label">待办</span>
-      </button>
+      {showAttentionItem && (
+        <button
+          type="button"
+          className="orf-mobile-bottom-nav-item orf-mobile-bottom-nav-attention has-attention"
+          aria-label={attentionAriaLabel}
+          onClick={() => void openAttentionTarget()}
+        >
+          <span className="orf-mobile-bottom-nav-icon">
+            <BellRing className="h-5 w-5" />
+            <span className="orf-mobile-bottom-nav-badge">{attentionBadgeText}</span>
+          </span>
+          <span className="orf-mobile-bottom-nav-label">待办</span>
+        </button>
+      )}
     </nav>
   );
 }

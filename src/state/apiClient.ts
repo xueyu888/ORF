@@ -74,6 +74,14 @@ export type NotificationsResponse = {
   notifications: AppNotification[];
   unreadCount: number;
 };
+export type NotificationReadResponse = {
+  notification: AppNotification;
+  unreadCount: number;
+};
+export type NotificationsReadAllResponse = {
+  updated: number;
+  unreadCount: number;
+};
 export type SystemConversationsResponse = {
   conversations: SystemConversationSummary[];
 };
@@ -484,6 +492,17 @@ export async function getMyChallengesData(scope: MyChallengesScope) {
 
 export async function getNotifications() {
   return apiJson<NotificationsResponse>("/api/notifications");
+}
+
+export async function markNotificationReadRequest(notificationId: string) {
+  return apiJson<NotificationReadResponse>(
+    `/api/notifications/${encodeURIComponent(notificationId)}/read`,
+    { method: "PATCH" },
+  );
+}
+
+export async function markAllNotificationsReadRequest() {
+  return apiJson<NotificationsReadAllResponse>("/api/notifications/read-all", { method: "PATCH" });
 }
 
 export async function getSystemConversations() {
