@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TestD 控制台</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <h1>TestD 控制台</h1>
+      <p id="subtitle">读取 TestD spec、配置覆盖和测试报告。</p>
+    </div>
+    <div class="actions">
+      <button class="button" id="refresh-button" type="button">刷新</button>
+      <span class="sync-state" id="sync-state">加载中</span>
+    </div>
+  </header>
+
+  <main class="shell">
+    <nav class="nav-tabs" aria-label="TestD 控制台视图">
+      <button class="tab active" data-view="overview" type="button">概览</button>
+      <button class="tab" data-view="cases" type="button">用例目录</button>
+      <button class="tab" data-view="history" type="button">历史报告</button>
+    </nav>
+
+    <section class="view active" id="view-overview"></section>
+
+    <section class="view" id="view-cases">
+      <div class="tool-panel">
+        <input id="case-search" type="search" placeholder="搜索用例、模块、路径" />
+        <select id="state-filter" aria-label="运行状态筛选"></select>
+        <select id="suite-filter" aria-label="批次筛选"></select>
+        <select id="module-filter" aria-label="模块筛选"></select>
+        <select id="config-filter" aria-label="配置状态筛选"></select>
+      </div>
+      <div class="case-layout">
+        <section id="case-directory"></section>
+        <aside class="case-detail" id="case-detail"></aside>
+      </div>
+    </section>
+
+    <section class="view" id="view-history">
+      <div class="history-layout">
+        <section class="history-list" id="history-list"></section>
+        <section class="history-detail" id="history-detail"></section>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
