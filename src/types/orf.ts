@@ -1011,6 +1011,8 @@ export interface ChatBootstrap {
 }
 
 export interface ChatUnreadSummary {
+  actionableMessageUnreadCount: number;
+  directMessageUnreadCount: number;
   mentionCount: number;
   messageUnreadCount: number;
   threadUnreadCount: number;

@@ -145,7 +145,7 @@ export function ChatPage() {
   const routeChannelId = routeSystemConversationId ? undefined : routeParams.channelId;
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { appAttentionState, currentUser, notify, readModelInvalidations, refreshChatUnreadSummary, state } = useOrf();
+  const { appAttentionState, currentUser, notify, readModelInvalidations, refreshChatUnreadSummary, refreshNotifications, state } = useOrf();
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
@@ -331,6 +331,13 @@ export function ChatPage() {
     setDriveSelectionRequest(null);
   }, [activeChannel?.id]);
 
+  const refreshChatAttentionReadState = useCallback(async () => {
+    await Promise.all([
+      refreshChatUnreadSummary(),
+      refreshNotifications(),
+    ]);
+  }, [refreshChatUnreadSummary, refreshNotifications]);
+
   const {
     appendThreadReply,
     applyThreadMessage,
@@ -350,7 +357,7 @@ export function ChatPage() {
     notify,
     onActivateThreadPanel: activateThreadPanel,
     onChannelUpdate: applyChannel,
-    onUnreadSummaryRefresh: refreshChatUnreadSummary,
+    onUnreadSummaryRefresh: refreshChatAttentionReadState,
   });
 
   const threadChannel = useMemo(() => {
@@ -443,7 +450,7 @@ export function ChatPage() {
     onRequestedMessageLocated: holdLocatedMessageHighlight,
     onRequestedMessageRedirect: redirectRequestedMessage,
     onThreadTarget: requestThreadTarget,
-    onUnreadSummaryRefresh: refreshChatUnreadSummary,
+    onUnreadSummaryRefresh: refreshChatAttentionReadState,
     requestedMessageId: focusMessageId,
   });
   const feedPrefetchChannelIds = useMemo(
@@ -601,14 +608,14 @@ export function ChatPage() {
           .map((channelId) => markChatChannelReadRequest(channelId, { includeThreads: true })),
       );
       applyChannels(responses.map((response) => response.channel));
-      await refreshChatUnreadSummary();
+      await refreshChatAttentionReadState();
       notify(`${uniqueChannelIds.length} 个频道已标记已读`);
     } catch (error) {
       notify(error instanceof Error ? error.message : "批量标记已读失败");
     } finally {
       setMarkingUnreadChannelsRead(false);
     }
-  }, [activeChannel?.id, applyChannels, clearActiveChannelUnread, markingUnreadChannelsRead, notify, refreshChatUnreadSummary]);
+  }, [activeChannel?.id, applyChannels, clearActiveChannelUnread, markingUnreadChannelsRead, notify, refreshChatAttentionReadState]);
 
   const handleOpenMemberSearch = useCallback(() => {
     openInfoPanel();

@@ -9,6 +9,7 @@ import {
   appAttentionStateFromBrowserDocument,
   appAttentionStateFromDesktopWindow,
 } from "../src/features/interaction/appAttentionState";
+import { buildAttentionState } from "../src/features/attention/attentionModel";
 import { chatPresenceBadgeState, chatPresenceState, formatPresence, isChatUserOnline } from "../src/features/chat/chatPresence";
 import {
   connectRealtimePresence,
@@ -17,7 +18,7 @@ import {
   recordRealtimePresenceActivity,
   resolveRealtimeUserPresence,
 } from "../server/realtime/presenceRegistry";
-import type { ChatChannel, ChatMessage, ChatUser } from "../src/types/orf";
+import type { AppNotification, ChatChannel, ChatMessage, ChatUnreadSummary, ChatUser } from "../src/types/orf";
 import type { ChatRealtimeEvent } from "../src/types/realtime";
 
 const currentUserId = "user-current";
@@ -115,6 +116,54 @@ function chatUser(overrides: Partial<ChatUser> = {}): ChatUser {
   };
 }
 
+function chatUnreadSummary(overrides: Partial<ChatUnreadSummary> = {}): ChatUnreadSummary {
+  return {
+    actionableMessageUnreadCount: 0,
+    directMessageUnreadCount: 0,
+    mentionCount: 0,
+    messageUnreadCount: 0,
+    threadUnreadCount: 0,
+    totalUnreadCount: 0,
+    unreadChannelCount: 0,
+    ...overrides,
+  };
+}
+
+function attentionNotification(overrides: Partial<AppNotification> = {}): AppNotification {
+  return {
+    actorName: "系统",
+    actorUserId: authorUserId,
+    body: "请处理这条反馈",
+    createdAt: "2026-06-07T09:30:00.000Z",
+    id: "notification-1",
+    kind: "feedback.assigned",
+    metadata: {},
+    readAt: null,
+    recipientUserId: currentUserId,
+    replyTargetId: "feedback-1",
+    replyTargetType: "feedback",
+    stream: "personalNotification",
+    targetHref: "/feedback/feedback-1",
+    targetId: "feedback-1",
+    targetType: "feedback",
+    title: "反馈指派给你",
+    ...overrides,
+  };
+}
+
+function attentionInput(overrides: Partial<Parameters<typeof buildAttentionState>[0]> = {}): Parameters<typeof buildAttentionState>[0] {
+  return {
+    appAttentionState: { activelyViewed: false, source: "browser-document" },
+    authenticated: true,
+    chatUnreadSummary: chatUnreadSummary(),
+    currentPath: "/tasks",
+    currentUserId,
+    notifications: [],
+    workLogReminderState: null,
+    ...overrides,
+  };
+}
+
 function realtimeEvent(overrides: Partial<ChatRealtimeEvent> = {}): ChatRealtimeEvent {
   const eventMessage = message(overrides.message);
   return {
@@ -199,6 +248,97 @@ test("app attention state treats only focused visible desktop windows as activel
     appAttentionStateFromDesktopWindow({ isFocused: true, isMaximized: false, isMinimized: false, isVisible: false }),
     { activelyViewed: false, source: "desktop-window" },
   );
+});
+
+test("attention state keeps ordinary chat unread out of workbar while retaining badge count", () => {
+  const state = buildAttentionState(attentionInput({
+    chatUnreadSummary: chatUnreadSummary({
+      messageUnreadCount: 43,
+      totalUnreadCount: 43,
+      unreadChannelCount: 1,
+    }),
+  }));
+
+  assert.equal(state.count, 0);
+  assert.equal(state.badgeCount, 43);
+  assert.equal(state.level, "badge");
+  assert.equal(state.items.length, 0);
+  assert.equal(state.latestTargetPath, "/chat");
+  assert.equal(state.reason, "chat.unread");
+});
+
+test("attention state promotes only actionable chat unread into workbar count", () => {
+  const state = buildAttentionState(attentionInput({
+    chatUnreadSummary: chatUnreadSummary({
+      actionableMessageUnreadCount: 2,
+      mentionCount: 2,
+      messageUnreadCount: 5,
+      totalUnreadCount: 5,
+      unreadChannelCount: 1,
+    }),
+  }));
+
+  assert.equal(state.count, 2);
+  assert.equal(state.badgeCount, 5);
+  assert.equal(state.level, "flash");
+  assert.equal(state.items.length, 1);
+  assert.equal(state.items[0]?.kind, "chat.mention");
+});
+
+test("attention state keeps direct messages as actionable chat unread", () => {
+  const state = buildAttentionState(attentionInput({
+    chatUnreadSummary: chatUnreadSummary({
+      actionableMessageUnreadCount: 3,
+      directMessageUnreadCount: 3,
+      messageUnreadCount: 4,
+      totalUnreadCount: 4,
+      unreadChannelCount: 2,
+    }),
+  }));
+
+  assert.equal(state.count, 3);
+  assert.equal(state.badgeCount, 4);
+  assert.equal(state.level, "toast");
+  assert.equal(state.items.length, 1);
+  assert.equal(state.items[0]?.kind, "chat.direct");
+});
+
+test("attention state separates notification work items from ordinary chat badge", () => {
+  const state = buildAttentionState(attentionInput({
+    chatUnreadSummary: chatUnreadSummary({
+      messageUnreadCount: 43,
+      totalUnreadCount: 43,
+      unreadChannelCount: 1,
+    }),
+    notifications: [attentionNotification()],
+  }));
+
+  assert.equal(state.count, 1);
+  assert.equal(state.badgeCount, 43);
+  assert.equal(state.level, "urgent");
+  assert.equal(state.items.length, 1);
+  assert.equal(state.items[0]?.kind, "feedback.assigned");
+});
+
+test("attention state keeps badge-only system notifications out of workbar", () => {
+  const state = buildAttentionState(attentionInput({
+    notifications: [attentionNotification({
+      id: "notification-badge-1",
+      kind: "objective.published",
+      stream: "teamAnnouncement",
+      targetHref: "/tasks#objective:objective-1",
+      targetId: "objective-1",
+      targetType: "objective",
+      title: "新目标已发布",
+    })],
+  }));
+
+  assert.equal(state.count, 0);
+  assert.equal(state.badgeCount, 1);
+  assert.equal(state.level, "badge");
+  assert.equal(state.items.length, 0);
+  assert.equal(state.latestTargetPath, "/chat/system/personalNotifications");
+  assert.equal(state.reason, "notification.unread");
 });
 
 test("chat presence display treats only active presence as green online", () => {

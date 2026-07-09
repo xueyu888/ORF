@@ -1,4 +1,5 @@
 import type { Readable } from "node:stream";
+import type { PoolClient } from "pg";
 import type {
   ChatAttachment,
   ChatBootstrap,
@@ -28,7 +29,7 @@ import {
   visibleSystemNotificationMessageSql,
 } from "../notifications/notificationIsolationPolicy";
 import { chatPushChannelId, sendPushToUsers } from "../push/pushService";
-import { publishRealtimeChatEvent } from "../realtime/realtimeEventBus";
+import { publishRealtimeChatEvent, publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
 import { resolveRealtimeUserPresence } from "../realtime/presenceRegistry";
 import { readChatSettings } from "../settings/chatSettings";
 import { readImageMetadata } from "../storage/images";
@@ -1056,6 +1057,8 @@ export async function listProjectChatChannels(
 export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnreadSummary> {
   if (!actor.canRead) {
     return {
+      actionableMessageUnreadCount: 0,
+      directMessageUnreadCount: 0,
       mentionCount: 0,
       messageUnreadCount: 0,
       threadUnreadCount: 0,
@@ -1067,6 +1070,8 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
   const teamId = storageTeamId(actor);
   await preparePublicChannels(teamId);
   const { rows } = await pool.query<{
+    actionable_message_unread_count: number | string | null;
+    direct_message_unread_count: number | string | null;
     mention_count: number | string | null;
     message_unread_count: number | string | null;
     thread_unread_count: number | string | null;
@@ -1123,7 +1128,7 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
         FROM visible_channels
       ),
       displayable_channels AS (
-        SELECT id, manually_unread
+        SELECT id, manually_unread, system_kind, type
         FROM ranked_channels
         WHERE NOT (type = 'direct' AND system_kind IS NULL AND member_count <> 2)
           AND NOT (type = 'direct' AND system_kind IS NULL AND direct_duplicate_rank > 1)
@@ -1154,6 +1159,37 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
           AND ${visibleChatMessageSql("m", "$2", "$5", "$6")}
         GROUP BY m.channel_id
       ),
+      direct_message_unread AS (
+        SELECT m.channel_id, count(*)::int AS count
+        FROM chat_messages m
+        INNER JOIN chat_channel_members cm ON cm.channel_id = m.channel_id AND cm.user_id = $2
+        INNER JOIN displayable_channels dc ON dc.id = m.channel_id
+        WHERE dc.type = 'direct'
+          AND dc.system_kind IS NULL
+          AND m.author_user_id <> $2
+          AND m.deleted_at IS NULL
+          AND m.root_message_id IS NULL
+          AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+          AND ${visibleChatMessageSql("m", "$2", "$5", "$6")}
+        GROUP BY m.channel_id
+      ),
+      actionable_message_unread AS (
+        SELECT m.channel_id, count(DISTINCT m.id)::int AS count
+        FROM chat_messages m
+        INNER JOIN chat_channel_members cm ON cm.channel_id = m.channel_id AND cm.user_id = $2
+        INNER JOIN displayable_channels dc ON dc.id = m.channel_id
+        WHERE m.author_user_id <> $2
+          AND m.deleted_at IS NULL
+          AND m.root_message_id IS NULL
+          AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+          AND (
+            (dc.type = 'direct' AND dc.system_kind IS NULL)
+            OR m.body LIKE $3
+            OR m.body ~* $4
+          )
+          AND ${visibleChatMessageSql("m", "$2", "$5", "$6")}
+        GROUP BY m.channel_id
+      ),
       thread_unread AS (
         SELECT m.channel_id, count(DISTINCT m.root_message_id)::int AS count
         FROM chat_messages m
@@ -1174,18 +1210,32 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
       channel_unread AS (
         SELECT
           dc.id,
+          dc.system_kind,
+          dc.type,
           CASE
             WHEN dc.manually_unread AND COALESCE(message_unread.count, 0) = 0 THEN 1
             ELSE COALESCE(message_unread.count, 0)
           END AS message_count,
+          CASE
+            WHEN dc.type = 'direct' AND dc.system_kind IS NULL AND dc.manually_unread AND COALESCE(direct_message_unread.count, 0) = 0 THEN 1
+            ELSE COALESCE(direct_message_unread.count, 0)
+          END AS direct_message_count,
+          CASE
+            WHEN dc.type = 'direct' AND dc.system_kind IS NULL AND dc.manually_unread AND COALESCE(actionable_message_unread.count, 0) = 0 THEN 1
+            ELSE COALESCE(actionable_message_unread.count, 0)
+          END AS actionable_message_count,
           COALESCE(mention_unread.count, 0) AS mention_count,
           COALESCE(thread_unread.count, 0) AS thread_count
         FROM displayable_channels dc
         LEFT JOIN message_unread ON message_unread.channel_id = dc.id
         LEFT JOIN mention_unread ON mention_unread.channel_id = dc.id
+        LEFT JOIN direct_message_unread ON direct_message_unread.channel_id = dc.id
+        LEFT JOIN actionable_message_unread ON actionable_message_unread.channel_id = dc.id
         LEFT JOIN thread_unread ON thread_unread.channel_id = dc.id
       )
       SELECT
+        COALESCE(sum(actionable_message_count), 0)::int AS actionable_message_unread_count,
+        COALESCE(sum(direct_message_count), 0)::int AS direct_message_unread_count,
         COALESCE(sum(message_count), 0)::int AS message_unread_count,
         COALESCE(sum(mention_count), 0)::int AS mention_count,
         COALESCE(sum(thread_count), 0)::int AS thread_unread_count,
@@ -1205,6 +1255,8 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
   const messageUnreadCount = Number(row?.message_unread_count ?? 0);
   const threadUnreadCount = Number(row?.thread_unread_count ?? 0);
   return {
+    actionableMessageUnreadCount: Number(row?.actionable_message_unread_count ?? 0),
+    directMessageUnreadCount: Number(row?.direct_message_unread_count ?? 0),
     mentionCount: Number(row?.mention_count ?? 0),
     messageUnreadCount,
     threadUnreadCount,
@@ -2254,6 +2306,7 @@ export async function markChatChannelRead(
   if (!(await hasReadableChannel(actor, channelId))) return { status: "notFound" };
   const readAt = nowIso();
   const client = await pool.connect();
+  let notificationReadCount = 0;
   try {
     await client.query("BEGIN");
     const targetMessageResult = options.messageId
@@ -2311,6 +2364,13 @@ export async function markChatChannelRead(
       `,
       [channelId, actor.id, readAt, lastReadAt, lastReadMessageId],
     );
+    notificationReadCount = await markProjectedNotificationReceiptsRead(client, {
+      channelId,
+      readAt,
+      readThroughAt: lastReadAt,
+      teamId: storageTeamId(actor),
+      userId: actor.id,
+    });
     if (options.includeThreads && !options.messageId) {
       await client.query(
         `
@@ -2342,7 +2402,49 @@ export async function markChatChannelRead(
     actorUserId: actor.id,
     channel: updated,
   });
+  if (notificationReadCount > 0) {
+    publishRealtimeReadModelInvalidation(storageTeamId(actor), {
+      actorUserId: actor.id,
+      models: ["notifications"],
+      reason: "notification.changed",
+    });
+  }
   return ok({ channel: updated });
+}
+
+async function markProjectedNotificationReceiptsRead(
+  client: PoolClient,
+  input: { channelId: string; readAt: string; readThroughAt: Date | string; teamId: string; userId: string },
+) {
+  const { rows } = await client.query<{ count: number }>(
+    `
+      WITH read_notification_messages AS (
+        SELECT DISTINCT NULLIF(m.system_metadata->>'notificationEventId', '') AS event_id
+        FROM chat_messages m
+        WHERE m.team_id = $1
+          AND m.channel_id = $2
+          AND m.source = 'system'
+          AND m.root_message_id IS NULL
+          AND m.deleted_at IS NULL
+          AND m.created_at <= $4::timestamptz
+          AND NULLIF(m.system_metadata->>'notificationEventId', '') IS NOT NULL
+      ),
+      updated AS (
+        UPDATE notification_receipts r
+        SET read_at = $5
+        FROM read_notification_messages read_message
+        INNER JOIN notification_events e ON e.id = read_message.event_id AND e.team_id = $1
+        WHERE r.event_id = read_message.event_id
+          AND r.recipient_user_id = $3
+          AND r.read_at IS NULL
+        RETURNING r.event_id
+      )
+      SELECT count(*)::int AS count
+      FROM updated
+    `,
+    [input.teamId, input.channelId, input.userId, input.readThroughAt, input.readAt],
+  );
+  return Number(rows[0]?.count ?? 0);
 }
 
 export async function setChatChannelUnread(

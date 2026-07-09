@@ -8,7 +8,7 @@ export type AttentionItem = {
   body: string;
   createdAt: string;
   eventId: string;
-  kind?: NotificationKind | "chat.mention" | "chat.thread" | "chat.unread" | "worklog.reminder";
+  kind?: NotificationKind | "chat.direct" | "chat.mention" | "chat.thread" | "worklog.reminder";
   level: Exclude<AttentionLevel, "none">;
   source: AttentionSource;
   targetPath: string;
@@ -16,6 +16,7 @@ export type AttentionItem = {
 };
 
 export type AttentionState = {
+  badgeCount: number;
   body: string;
   count: number;
   flashCount: number;
@@ -30,6 +31,7 @@ export type AttentionState = {
 };
 
 export const emptyAttentionState: AttentionState = {
+  badgeCount: 0,
   body: "当前没有待处理提醒",
   count: 0,
   flashCount: 0,

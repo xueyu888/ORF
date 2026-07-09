@@ -97,6 +97,8 @@ interface ToastMessage {
 }
 
 const emptyChatUnreadSummary: ChatUnreadSummary = {
+  actionableMessageUnreadCount: 0,
+  directMessageUnreadCount: 0,
   mentionCount: 0,
   messageUnreadCount: 0,
   threadUnreadCount: 0,
@@ -472,16 +474,19 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const payload = isAuthenticated && isApproved
       ? {
+        badgeCount: attentionState.badgeCount,
         body: attentionState.body,
-        count: attentionState.count,
+        count: attentionState.badgeCount,
         latestEventId: attentionState.latestEventId,
         latestTargetPath: attentionState.latestTargetPath,
         level: attentionState.level,
         reason: attentionState.reason,
         title: attentionState.title,
         toast: desktopAttentionToast,
+        workItemCount: attentionState.count,
       }
       : {
+        badgeCount: 0,
         body: "",
         count: 0,
         latestEventId: null,
@@ -490,6 +495,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         reason: null,
         title: "ORF",
         toast: null,
+        workItemCount: 0,
       };
     void syncDesktopAttentionState(payload)
       .then(() => {

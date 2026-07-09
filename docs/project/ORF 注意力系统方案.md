@@ -1,6 +1,6 @@
 # ORF 注意力系统方案
 
-本文档定义 ORF 注意力系统的产品和技术契约。当前 `xy` 分支已有 Win11 托盘、任务栏角标、任务栏闪烁和系统 Toast 的桌面底座；注意力系统把这些能力从“只由聊天未读总数驱动”升级为由聊天未读、系统通知、工作日志提醒、窗口状态和当前路由共同派生。
+本文档定义 ORF 注意力系统的产品和技术契约。当前 `xy` 分支已有 Win11 托盘、任务栏角标、任务栏闪烁和系统 Toast 的桌面底座；注意力系统把这些能力从“只由聊天未读总数驱动”升级为由可处理聊天提醒、系统通知、工作日志提醒、普通聊天未读、窗口状态和当前路由共同派生。
 
 注意力系统不是独立通知中心，也不得绕过现有聊天和系统消息事实源。
 
@@ -10,7 +10,7 @@
 2. 注意力系统只回答“此刻如何打扰用户”：红点、系统 Toast、任务栏闪烁、托盘入口、侧边栏待处理入口。
 3. 注意力状态是前端和桌面壳的派生展示状态，不写数据库、不创建通知、不改变业务状态。
 4. 业务模块不得直接调用 `flashFrame`、系统 `Notification`、托盘菜单或任务栏 overlay。
-5. 侧边栏只展示“待我处理”入口和强提醒摘要；完整历史仍回到聊天里的 `我的系统通知`，实际处理仍回到业务 `targetHref`。
+5. 侧边栏只展示“待我处理”入口和需要当前用户响应的摘要；普通聊天未读和 GitHub/GitLab 工程动态只留在聊天入口和桌面红点，不进入“待我处理”。
 6. “已读”和“已处理”必须分离。注意力系统只能通过现有通知/聊天已读接口改变注意力状态，或通过已有业务提醒接口改变本地稍后提醒状态；不得直接把反馈、目标、工作日志等业务对象标记为已处理。
 
 ## 状态链和事实源
@@ -19,7 +19,7 @@
 业务 mutation 成功
   -> 通知事件写入 notification_events / notification_receipts / notification_deliveries
   -> 系统消息投影到 chat_messages
-  -> 前端读取聊天未读、系统通知、工作日志提醒、窗口状态、当前路由和用户偏好
+  -> 前端读取可处理聊天提醒、普通聊天未读、系统通知、工作日志提醒、窗口状态、当前路由和用户偏好
   -> buildAttentionState 派生注意力状态
   -> AppShell 展示侧边栏待我处理入口
   -> Win11 桌面壳展示任务栏角标、系统 Toast、任务栏闪烁、托盘图标闪烁和托盘菜单
@@ -35,7 +35,7 @@
 | 系统消息阅读入口 | `chat_messages`、`chat_channels.system_kind` |
 | 聊天未读 | `chat_channel_members`、`chat_thread_follows` 派生的聊天未读读模型 |
 | 工作日志欠账是否继续提醒 | `work_log_reminder_states` |
-| 注意力等级、最新强提醒、是否需要闪烁 | `buildAttentionState` 的前端派生结果 |
+| 待处理数量、桌面红点数量、注意力等级、最新强提醒、是否需要闪烁 | `buildAttentionState` 的前端派生结果 |
 | Toast/flash 冷却和同事件去重 | 前端或桌面壳本地运行态；当前桌面 flash 冷却为 12 秒 |
 
 ## 注意力等级
@@ -44,9 +44,9 @@
 
 | 等级 | 展示效果 | 适合事件 |
 | --- | --- | --- |
-| `badge` | 只显示侧边栏/移动底部导航/任务栏/托盘红点或数字 | 普通群聊未读、普通系统公告、`objective.published`、`worklog.submitted`、`objective.settled` |
+| `badge` | 只显示聊天入口、任务栏和托盘红点或数字；不单独生成“待我处理”入口 | 普通群聊未读、GitHub/GitLab 工程动态、普通系统公告、`objective.published`、`worklog.submitted`、`objective.settled` |
 | `toast` | Windows 右下角系统 Toast；点击进入聊天或业务目标 | 私聊、普通回复、`feedback.commented`、`feedback.status.changed`、`comment.reply.created` |
-| `flash` | `toast` + Win11 任务栏图标闪烁 + 右下角托盘图标闪烁；任务栏闪烁仅在窗口不在前台时触发 | `comment.mention.created`、聊天 `@我`、私聊、我关注的话题有回复 |
+| `flash` | `toast` + Win11 任务栏图标闪烁 + 右下角托盘图标闪烁；任务栏闪烁仅在窗口不在前台时触发 | `comment.mention.created`、聊天 `@我`、我关注的话题有回复 |
 | `urgent` | `toast` + 任务栏闪烁 + 右下角托盘图标闪烁 + 托盘置顶入口 + 侧边栏“待我处理”置顶 | `feedback.assigned`、`objective.recruitment.created`、`objective.reinforcement.added`、`objective.alignment.requested`、`objective.loot.submitted`、`objective.peerReview.requested`、`objective.revision.required`、active `WorkLogReminderState`、`data.sync.conflict` |
 
 默认等级只是初始策略；运行时必须结合当前上下文降级或抑制。
@@ -56,10 +56,11 @@
 1. 当前用户自己触发的事件不提醒。
 2. 当前用户正在查看对应聊天频道、话题或业务页面时，不弹系统 Toast，不闪烁任务栏；必要时只保留红点或侧边栏入口。
 3. 静音频道不触发聊天类 Toast、flash 或 urgent；反馈指派、工作日志欠账、数据同步冲突等强业务事件不应被聊天静音误伤。
-4. Win11 窗口聚焦并可见时通常不 flash；窗口失焦、最小化或隐藏到托盘时才允许 flash。
-5. 同一事件只弹一次 Toast；重复实时事件只能刷新未读和待处理入口。
-6. 同类高频提醒需要合并或冷却，不能连续刷屏。
-7. `urgent` 在对应事实仍未解除前保留在“待我处理”，但不持续弹 Toast 或持续闪烁。
+4. 普通聊天总未读只进入聊天入口角标和 `AttentionState.badgeCount`；只有后端 `actionableMessageUnreadCount` 覆盖的 @我/私聊、我关注的话题回复或业务系统通知才进入 `AttentionState.count` 和“待我处理”。
+5. Win11 窗口聚焦并可见时通常不 flash；窗口失焦、最小化或隐藏到托盘时才允许 flash。
+6. 同一事件只弹一次 Toast；重复实时事件只能刷新未读和待处理入口。
+7. 同类高频提醒需要合并或冷却，不能连续刷屏。
+8. `urgent` 在对应事实仍未解除前保留在“待我处理”，但不持续弹 Toast 或持续闪烁。
 
 建议冷却口径：
 
@@ -91,6 +92,8 @@
 ```
 
 `AttentionState.count = 0` 时不渲染侧边栏“待我处理”和移动端底部 `待办` 入口；空状态不占导航位置，也不显示一个可点但无内容的图标。
+
+普通聊天未读不等于待处理。GitHub commit、GitLab push、普通项目频道消息等只让聊天入口和桌面 `badgeCount` 增加；除非消息进入后端 `actionableMessageUnreadCount`，例如明确 @ 当前用户、属于私聊、进入当前用户关注的话题回复，或被业务模块建模成系统通知，否则不得出现在“待我处理”。
 
 点开后的面板只展示轻量摘要：
 
@@ -132,6 +135,7 @@ setChatUnreadCount({ count })
 
 ```ts
 setAttentionState({
+  badgeCount,
   body,
   count,
   latestEventId,
@@ -139,7 +143,8 @@ setAttentionState({
   level,
   reason,
   title,
-  toast
+  toast,
+  workItemCount
 })
 ```
 
@@ -147,18 +152,22 @@ setAttentionState({
 
 ```ts
 setChatUnreadCount({ count }) => setAttentionState({
+  badgeCount: count,
   count,
   level: count > 0 ? "badge" : "none",
-  reason: "chat.unread"
+  reason: "chat.unread",
+  workItemCount: 0
 })
 ```
+
+`count` 在桌面 IPC 中保留为旧壳兼容红点数量；新桌面壳使用 `badgeCount` 画任务栏/托盘红点，使用 `workItemCount` 判断是否展示“打开待处理提醒”。前端 `AttentionState.count` 仍表示 AppShell 侧边栏和移动端 `待办` 的待处理数量。
 
 桌面表现：
 
 | 等级 | 任务栏 overlay | Windows 系统 Toast | 任务栏 flash | 托盘图标 flash | 托盘菜单 |
 | --- | --- | --- | --- | --- | --- |
 | `none` | 清空 | 不展示 | 停止 | 停止 | 普通菜单 |
-| `badge` | 显示数字/红点 | 不展示 | 不触发 | 不触发 | 打开待处理提醒、打开聊天、打开我的系统通知 |
+| `badge` | 显示数字/红点 | 不展示 | 不触发 | 不触发 | 仅有普通聊天未读时显示“打开聊天（n）”；有待处理项时显示“打开待处理提醒（n）” |
 | `toast` | 显示数字/红点 | 展示一次 | 不触发 | 不触发 | 打开聊天/系统通知 |
 | `flash` | 显示数字/红点 | 展示一次 | 窗口不在前台时触发 | 持续闪烁 | 打开最新提醒 |
 | `urgent` | 显示数字/红点 | 展示一次 | 窗口不在前台时触发 | 持续闪烁 | 置顶“打开待处理提醒” |
@@ -191,7 +200,7 @@ type AttentionItem = {
   body: string;
   createdAt: string;
   eventId: string;
-  kind?: NotificationKind | "chat.mention" | "chat.thread" | "chat.unread" | "worklog.reminder";
+  kind?: NotificationKind | "chat.direct" | "chat.mention" | "chat.thread" | "worklog.reminder";
   level: Exclude<AttentionLevel, "none">;
   source: AttentionSource;
   targetPath: string;
@@ -199,6 +208,7 @@ type AttentionItem = {
 };
 
 type AttentionState = {
+  badgeCount: number;
   body: string;
   count: number;
   flashCount: number;
@@ -217,7 +227,7 @@ type AttentionState = {
 
 | 输入 | 用途 |
 | --- | --- |
-| `chatUnreadSummary` | 普通未读、@我、线程未读聚合 |
+| `chatUnreadSummary` | 普通未读、`actionableMessageUnreadCount`、私聊未读、@我、线程未读聚合；普通未读只生成 `badgeCount` |
 | `AppNotification[]` / `unreadNotificationCount` | 系统通知 kind、targetHref、readAt |
 | `WorkLogReminderState` | 工作日志欠账是否仍需提醒 |
 | `AppAttentionState` | 当前窗口是否被用户主动查看 |
@@ -228,16 +238,16 @@ type AttentionState = {
 
 | 输出 | 消费方 |
 | --- | --- |
-| `AttentionState.level/count/latestTargetPath` | 桌面壳 |
-| `AttentionState.items` | 侧边栏待我处理面板 |
+| `AttentionState.badgeCount/level/latestTargetPath` | 桌面壳角标、托盘红点和普通聊天未读入口 |
+| `AttentionState.count/items` | 侧边栏和移动端“待我处理” |
 | `AttentionState.title/body` | 系统 Toast |
 
 ## 当前实现范围
 
 当前实现完成最小闭环：
 
-1. `chatUnreadSummary.totalUnreadCount > 0` 派生 `badge`。
-2. 聊天 `@我` 派生 `flash`；聊天线程回复派生 `toast`；普通聊天未读只派生 `badge`。聊天实时 Toast 继续由原聊天原生通知模型负责，避免重复分发。
+1. `chatUnreadSummary.totalUnreadCount > 0` 只派生 `badgeCount` 和 `badge`，不增加 `AttentionState.count`，不生成“待我处理”项。
+2. 聊天 `@我` 派生 `flash` 并进入“待我处理”；私聊未读派生 `toast` 并进入“待我处理”；聊天线程回复派生 `toast` 并进入“待我处理”；普通聊天未读只派生聊天入口和桌面红点。聊天实时 Toast 继续由原聊天原生通知模型负责，避免重复分发。
 3. `worklog.reminder.required` 或 active `WorkLogReminderState` 派生 `urgent`，并通过 `shouldRemindNow` 尊重工作日志自身提醒节奏。
 4. 业务系统通知按 `NotificationKind` 映射为 `badge`、`toast`、`flash` 或 `urgent`；正在查看对应目标时降级为 `badge`。
 5. Win11 托盘菜单新增“打开待处理提醒”，点击后跳转到 `latestTargetPath`；`flash/urgent` 且 `count > 0` 时右下角托盘图标同步闪烁，清空或降级后恢复常态图标。
@@ -268,6 +278,8 @@ type AttentionState = {
 | 同一事件重复实时推送 | 不重复 Toast |
 | 自己触发的通知事件 | 不进入强提醒 |
 | 静音聊天频道收到普通消息 | 不触发 Toast、flash 或 urgent |
+| GitHub commit 同步到普通 GitHub 频道 | 聊天入口和桌面红点可增加；侧边栏“待我处理”和移动端 `待办` 不显示 |
+| 聊天系统通知消息被读到 | 对应 `notification_receipts.read_at` 同步更新，“待我处理”减少 |
 
 ## 文档归属
 

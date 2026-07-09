@@ -81,45 +81,53 @@ const badgeNotificationKinds = new Set<NotificationKind>([
 export function buildAttentionState(input: BuildAttentionStateInput): AttentionState {
   if (!input.authenticated) return emptyAttentionState;
 
-  const notificationItems = input.notifications
+  const notificationCandidates = input.notifications
     .filter((notification) => !notification.readAt)
     .filter((notification) => notification.kind !== "worklog.reminder")
     .filter((notification) => notification.actorUserId !== input.currentUserId)
     .map((notification) => attentionItemFromNotification(notification, input))
     .filter((item) => item !== null);
+  const notificationItems = notificationCandidates.filter((item) => item.level !== "badge");
+  const notificationBadgeOnlyCount = notificationCandidates.length - notificationItems.length;
   const workLogItem = attentionItemFromWorkLogReminder(input.workLogReminderState, input);
-  const chatItems = attentionItemsFromChatUnread(input.chatUnreadSummary);
+  const chatItems = attentionItemsFromActionableChatUnread(input.chatUnreadSummary);
   const allItems = [...notificationItems, ...chatItems, ...(workLogItem ? [workLogItem] : [])]
     .sort(compareAttentionItems);
   const items = allItems.slice(0, MAX_ATTENTION_ITEMS);
   const latestItem = items[0] ?? null;
   const count = attentionCount(allItems, input.chatUnreadSummary);
+  const badgeCount = attentionBadgeCount(count + notificationBadgeOnlyCount, input.chatUnreadSummary);
   const level = allItems.reduce<AttentionLevel>(
     (current, item) => maxAttentionLevel(current, item.level),
-    count > 0 ? "badge" : "none",
+    badgeCount > 0 ? "badge" : "none",
   );
   const urgentCount = allItems.filter((item) => item.level === "urgent").length;
   const flashCount = allItems.filter((item) => item.level === "flash" || item.level === "urgent").length;
-  const title = latestItem?.title ?? emptyAttentionState.title;
-  const body = latestItem?.body ?? (count > 0 ? `${count} 条未读提醒` : emptyAttentionState.body);
-  const reason = latestItem ? attentionReason(latestItem) : null;
+  const fallbackChatUnread = chatUnreadSummaryText(input.chatUnreadSummary);
+  const fallbackBadgeNotification = notificationBadgeOnlyText(notificationBadgeOnlyCount);
+  const fallbackBadgeText = fallbackChatUnread ?? fallbackBadgeNotification;
+  const title = latestItem?.title ?? (fallbackChatUnread ? "聊天消息未读" : fallbackBadgeNotification ? "系统通知未读" : emptyAttentionState.title);
+  const body = latestItem?.body ?? fallbackBadgeText ?? emptyAttentionState.body;
+  const reason = latestItem ? attentionReason(latestItem) : fallbackChatUnread ? "chat.unread" : fallbackBadgeNotification ? "notification.unread" : null;
 
   return {
+    badgeCount,
     body,
     count,
     flashCount,
     items,
-    latestEventId: latestItem?.eventId ?? null,
-    latestTargetPath: latestItem?.targetPath ?? null,
+    latestEventId: latestItem?.eventId ?? (fallbackChatUnread ? "chat-unread" : fallbackBadgeNotification ? "notification-unread" : null),
+    latestTargetPath: latestItem?.targetPath ?? (fallbackChatUnread ? "/chat" : fallbackBadgeNotification ? SYSTEM_NOTIFICATION_TARGET_PATH : null),
     level,
     reason,
     signature: [
       level,
       count,
+      badgeCount,
       urgentCount,
       flashCount,
-      latestItem?.eventId ?? "none",
-      latestItem?.targetPath ?? "none",
+      latestItem?.eventId ?? (fallbackChatUnread ? "chat-unread" : fallbackBadgeNotification ? "notification-unread" : "none"),
+      latestItem?.targetPath ?? (fallbackChatUnread ? "/chat" : fallbackBadgeNotification ? SYSTEM_NOTIFICATION_TARGET_PATH : "none"),
     ].join(":"),
     title,
     urgentCount,
@@ -193,11 +201,12 @@ function attentionItemFromNotification(notification: AppNotification, input: Bui
   };
 }
 
-function attentionItemsFromChatUnread(summary: ChatUnreadSummary): AttentionItem[] {
-  if (summary.totalUnreadCount <= 0) return [];
+function attentionItemsFromActionableChatUnread(summary: ChatUnreadSummary): AttentionItem[] {
+  if (chatActionableUnreadCount(summary) <= 0) return [];
   const createdAt = new Date(0).toISOString();
+  const items: AttentionItem[] = [];
   if (summary.mentionCount > 0) {
-    return [{
+    items.push({
       body: `${summary.mentionCount} 条 @ 你的聊天消息`,
       createdAt,
       eventId: "chat-mention-unread",
@@ -206,10 +215,22 @@ function attentionItemsFromChatUnread(summary: ChatUnreadSummary): AttentionItem
       source: "chat",
       targetPath: "/chat",
       title: "聊天中有人提到你",
-    }];
+    });
+  }
+  if (summary.mentionCount <= 0 && summary.directMessageUnreadCount > 0) {
+    items.push({
+      body: `${summary.directMessageUnreadCount} 条私聊消息未读`,
+      createdAt,
+      eventId: "chat-direct-unread",
+      kind: "chat.direct",
+      level: "toast",
+      source: "chat",
+      targetPath: "/chat",
+      title: "私聊消息未读",
+    });
   }
   if (summary.threadUnreadCount > 0) {
-    return [{
+    items.push({
       body: `${summary.threadUnreadCount} 条线程回复未读`,
       createdAt,
       eventId: "chat-thread-unread",
@@ -218,18 +239,9 @@ function attentionItemsFromChatUnread(summary: ChatUnreadSummary): AttentionItem
       source: "chat",
       targetPath: "/chat",
       title: "聊天线程有新回复",
-    }];
+    });
   }
-  return [{
-    body: `${summary.totalUnreadCount} 条聊天消息未读`,
-    createdAt,
-    eventId: "chat-message-unread",
-    kind: "chat.unread",
-    level: "badge",
-    source: "chat",
-    targetPath: "/chat",
-    title: "聊天消息未读",
-  }];
+  return items;
 }
 
 function attentionItemFromWorkLogReminder(
@@ -292,7 +304,37 @@ function normalizeComparablePath(path: string) {
 
 function attentionCount(items: AttentionItem[], summary: ChatUnreadSummary) {
   const nonChatItemCount = items.filter((item) => item.source !== "chat").length;
-  return Math.max(summary.totalUnreadCount, nonChatItemCount);
+  return chatActionableUnreadCount(summary) + nonChatItemCount;
+}
+
+function attentionBadgeCount(unreadAttentionCount: number, summary: ChatUnreadSummary) {
+  return Math.max(summary.totalUnreadCount, unreadAttentionCount);
+}
+
+function chatActionableUnreadCount(summary: ChatUnreadSummary) {
+  return chatActionableMessageUnreadCount(summary) + nonNegativeCount(summary.threadUnreadCount);
+}
+
+function chatActionableMessageUnreadCount(summary: ChatUnreadSummary) {
+  return Math.max(
+    0,
+    nonNegativeCount(summary.actionableMessageUnreadCount),
+    nonNegativeCount(summary.directMessageUnreadCount),
+    nonNegativeCount(summary.mentionCount),
+  );
+}
+
+function chatUnreadSummaryText(summary: ChatUnreadSummary) {
+  return summary.totalUnreadCount > 0 ? `${summary.totalUnreadCount} 条聊天消息未读` : null;
+}
+
+function notificationBadgeOnlyText(count: number) {
+  return count > 0 ? `${count} 条系统通知未读` : null;
+}
+
+function nonNegativeCount(value: number | null | undefined) {
+  const count = Number(value);
+  return Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
 }
 
 function compareAttentionItems(left: AttentionItem, right: AttentionItem) {

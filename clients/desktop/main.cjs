@@ -82,6 +82,7 @@ const desktopShellState = {
 
 function createEmptyDesktopAttentionState() {
   return {
+    badgeCount: 0,
     body: "",
     count: 0,
     latestEventId: null,
@@ -775,6 +776,7 @@ function requestDesktopAttentionForState(options = {}) {
 
 function setDesktopUnreadCount(unreadCount) {
   setDesktopAttentionState({
+    badgeCount: unreadCount,
     body: unreadCount > 0 ? unreadDescription(unreadCount) : "",
     count: unreadCount,
     latestEventId: unreadCount > 0 ? "chat-unread" : null,
@@ -782,6 +784,7 @@ function setDesktopUnreadCount(unreadCount) {
     level: unreadCount > 0 ? "badge" : "none",
     reason: unreadCount > 0 ? "chat.unread" : null,
     title: unreadCount > 0 ? "聊天消息未读" : "ORF",
+    workItemCount: 0,
   });
 }
 
@@ -789,7 +792,7 @@ function setDesktopAttentionState(input) {
   const previousState = desktopShellState.attentionState;
   const nextState = normalizeDesktopAttentionInput(input);
   desktopShellState.attentionState = nextState;
-  desktopShellState.unreadCount = nextState.count;
+  desktopShellState.unreadCount = nextState.badgeCount;
   showDesktopAttentionToast(nextState.toast);
   updateDesktopUnreadState({
     attentionIncreased: nextState.count > previousState.count,
@@ -818,15 +821,16 @@ function updateTrayUnreadState() {
   const tray = desktopShellState.tray;
   if (!tray || tray.isDestroyed()) return;
   const attentionState = desktopShellState.attentionState;
-  const attentionCount = desktopAttentionBadgeCount();
+  const badgeCount = desktopAttentionBadgeCount();
+  const workItemCount = desktopAttentionWorkItemCount();
   const launchAtLoginState = desktopLaunchAtLoginState();
   const menuTemplate = [
-    ...(attentionCount > 0 ? [{
-      label: `打开待处理提醒（${desktopUnreadBadgeLabel(attentionCount)}）`,
+    ...(workItemCount > 0 ? [{
+      label: `打开待处理提醒（${desktopUnreadBadgeLabel(workItemCount)}）`,
       click: () => showMainWindow(attentionState.latestTargetPath ?? "/chat/system/personalNotifications"),
     }] : []),
     {
-      label: "打开聊天",
+      label: workItemCount <= 0 && badgeCount > 0 ? `打开聊天（${desktopUnreadBadgeLabel(badgeCount)}）` : "打开聊天",
       click: () => showMainWindow("/chat"),
     },
     {
@@ -867,8 +871,8 @@ function updateTrayUnreadState() {
       },
     },
   );
-  tray.setImage(createTrayIconImage(attentionCount));
-  tray.setToolTip(attentionCount > 0 ? `${ORF_APP_NAME} - ${desktopAttentionDescription(attentionState)}` : ORF_APP_NAME);
+  tray.setImage(createTrayIconImage(badgeCount));
+  tray.setToolTip(badgeCount > 0 ? `${ORF_APP_NAME} - ${desktopAttentionDescription(attentionState)}` : ORF_APP_NAME);
   tray.setContextMenu(Menu.buildFromTemplate(menuTemplate));
   updateTrayAttentionFlashState();
 }
@@ -976,17 +980,20 @@ function unreadDescription(unreadCount) {
 }
 
 function desktopAttentionBadgeCount() {
-  return normalizeDesktopUnreadInput(desktopShellState.attentionState?.count ?? desktopShellState.unreadCount);
+  return normalizeDesktopUnreadInput(desktopShellState.attentionState?.badgeCount ?? desktopShellState.unreadCount);
+}
+
+function desktopAttentionWorkItemCount() {
+  return normalizeDesktopUnreadInput(desktopShellState.attentionState?.count);
 }
 
 function desktopAttentionDescription(attentionState) {
-  const count = normalizeDesktopUnreadInput(attentionState?.count);
-  if (count <= 0) return "";
-  const label = desktopUnreadBadgeLabel(count);
+  const badgeCount = normalizeDesktopUnreadInput(attentionState?.badgeCount ?? attentionState?.count);
+  const workItemCount = normalizeDesktopUnreadInput(attentionState?.count);
+  if (badgeCount <= 0) return "";
+  if (workItemCount <= 0) return unreadDescription(badgeCount);
+  const label = desktopUnreadBadgeLabel(workItemCount);
   if (attentionState?.level === "urgent") return `${label} 条强提醒待处理`;
-  if (typeof attentionState?.reason === "string" && attentionState.reason.startsWith("chat.")) {
-    return unreadDescription(count);
-  }
   return `${label} 条待处理提醒`;
 }
 
@@ -1007,10 +1014,13 @@ function attentionLevelRank(level) {
 
 function normalizeDesktopAttentionInput(input) {
   if (!input || typeof input !== "object") return createEmptyDesktopAttentionState();
-  const count = normalizeDesktopUnreadInput(input);
-  const level = normalizeDesktopAttentionLevel(input.level, count);
+  const legacyCount = normalizeDesktopUnreadInput(input);
+  const badgeCount = normalizeDesktopUnreadInput(input.badgeCount ?? legacyCount);
+  const count = normalizeDesktopUnreadInput(input.workItemCount ?? legacyCount);
+  const level = normalizeDesktopAttentionLevel(input.level, badgeCount);
   return {
-    body: notificationText(input.body, 500) || (count > 0 ? desktopAttentionDescription({ count, level }) : ""),
+    badgeCount,
+    body: notificationText(input.body, 500) || (badgeCount > 0 ? desktopAttentionDescription({ badgeCount, count, level }) : ""),
     count,
     latestEventId: notificationText(input.latestEventId, 160) || null,
     latestTargetPath: isSafeDesktopTargetPath(input.latestTargetPath) ? input.latestTargetPath : null,

@@ -15,6 +15,7 @@ export type DesktopAttentionToast = {
 };
 
 export type DesktopAttentionPayload = {
+  badgeCount?: number;
   body: string;
   count: number;
   latestEventId?: string | null;
@@ -23,6 +24,7 @@ export type DesktopAttentionPayload = {
   reason?: string | null;
   title: string;
   toast?: DesktopAttentionToast | null;
+  workItemCount?: number;
 };
 
 export type DesktopAttentionResult = {
@@ -260,11 +262,14 @@ function normalizeUnreadCount(count: number) {
 
 function normalizeDesktopAttentionPayload(payload: DesktopAttentionPayload): DesktopAttentionPayload {
   const count = normalizeUnreadCount(payload.count);
-  const level = normalizeAttentionLevel(payload.level, count);
+  const badgeCount = normalizeUnreadCount(payload.badgeCount ?? count);
+  const workItemCount = normalizeUnreadCount(payload.workItemCount ?? count);
+  const level = normalizeAttentionLevel(payload.level, badgeCount);
   const latestTargetPath = isSafeDesktopAttentionTargetPath(payload.latestTargetPath) ? payload.latestTargetPath : null;
   const toast = normalizeDesktopAttentionToast(payload.toast);
   return {
-    body: normalizeDesktopAttentionText(payload.body, count > 0 ? `${count} 条待处理提醒` : ""),
+    badgeCount,
+    body: normalizeDesktopAttentionText(payload.body, workItemCount > 0 ? `${workItemCount} 条待处理提醒` : badgeCount > 0 ? `${badgeCount} 条未读消息` : ""),
     count,
     latestEventId: normalizeDesktopAttentionText(payload.latestEventId, "") || null,
     latestTargetPath,
@@ -272,6 +277,7 @@ function normalizeDesktopAttentionPayload(payload: DesktopAttentionPayload): Des
     reason: normalizeDesktopAttentionText(payload.reason, "") || null,
     title: normalizeDesktopAttentionText(payload.title, "ORF"),
     toast,
+    workItemCount,
   };
 }
 
