@@ -5,6 +5,10 @@ import {
   filterFeedbackIssueListItems,
   type FeedbackIssueListFilters,
 } from "../src/features/feedback/model/feedbackIssueList";
+import {
+  feedbackIssueListFilterQueryFromSearchParams,
+  parseStoredFeedbackIssueListFilterParams,
+} from "../src/features/feedback/model/feedbackIssueListViewState";
 import type { Feedback, OrfProject, OrfUser } from "../src/types/orf";
 
 const users: OrfUser[] = [
@@ -58,6 +62,29 @@ test("feedback query supports project qualifier by project name and unassigned a
     filterFeedbackIssueListItems(items, filters({ query: "project:unassigned" })).map((item) => item.feedback.id),
     ["fb-unassigned"],
   );
+});
+
+test("feedback list filter preference stores project first and skips default filters", () => {
+  const query = feedbackIssueListFilterQueryFromSearchParams(
+    new URLSearchParams({
+      impact: "High",
+      project: "project-client",
+      q: "  crash  ",
+      sort: "updated-desc",
+      state: "open",
+    }),
+  );
+
+  assert.equal(query, "project=project-client&q=crash&impact=High");
+});
+
+test("feedback list filter preference restores sanitized query params", () => {
+  const restored = parseStoredFeedbackIssueListFilterParams(JSON.stringify({
+    query: "project=project-client&state=closed&impact=Broken&sort=created-desc&unknown=1",
+    version: 1,
+  }));
+
+  assert.equal(restored?.toString(), "project=project-client&state=closed&sort=created-desc");
 });
 
 function filters(input: Partial<FeedbackIssueListFilters>): FeedbackIssueListFilters {

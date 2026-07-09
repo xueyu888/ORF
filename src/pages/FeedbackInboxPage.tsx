@@ -14,26 +14,34 @@ import {
   feedbackIssueListCounts,
   filterFeedbackIssueListItems,
   type FeedbackIssueListItem,
-  type FeedbackIssueListState,
-  type FeedbackIssueSortKey,
 } from "../features/feedback/model/feedbackIssueList";
+import {
+  clearStoredFeedbackIssueListFilterParams,
+  feedbackIssueListUrlStateFromSearchParams,
+  hasFeedbackIssueListFilterParams,
+  readStoredFeedbackIssueListFilterParams,
+  writeStoredFeedbackIssueListFilterParams,
+} from "../features/feedback/model/feedbackIssueListViewState";
 import { getProjectChatChannels } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-import type { Impact, ProjectChatChannel } from "../types/orf";
+import type { ProjectChatChannel } from "../types/orf";
 import { impactLabel } from "../utils/labels";
 
 export function FeedbackInboxPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentUser, state } = useOrf();
-  const query = searchParams.get("q") ?? "";
-  const listState = feedbackListStateParam(searchParams.get("state"));
-  const cause = searchParams.get("label") || "All";
-  const impact = feedbackImpactParam(searchParams.get("impact"));
-  const assigneeUserId = searchParams.get("assignee") || "All";
-  const authorUserId = searchParams.get("author") || "All";
-  const projectId = searchParams.get("project") || "All";
-  const sort = feedbackSortParam(searchParams.get("sort"));
+  const searchParamSignature = searchParams.toString();
+  const {
+    assigneeUserId,
+    authorUserId,
+    cause,
+    impact,
+    listState,
+    projectId,
+    query,
+    sort,
+  } = useMemo(() => feedbackIssueListUrlStateFromSearchParams(searchParams), [searchParamSignature, searchParams]);
   const [projectChannels, setProjectChannels] = useState<ProjectChatChannel[]>([]);
   const [projectChannelsLoading, setProjectChannelsLoading] = useState(false);
   const selectedProject = useMemo(
@@ -54,6 +62,22 @@ export function FeedbackInboxPage() {
     () => [...state.projects].sort((left, right) => left.name.localeCompare(right.name, "zh-Hans-CN")),
     [state.projects],
   );
+
+  useEffect(() => {
+    if (!searchParamSignature) {
+      const storedParams = readStoredFeedbackIssueListFilterParams();
+      if (storedParams) {
+        setSearchParams(storedParams, { replace: true });
+        return;
+      }
+      clearStoredFeedbackIssueListFilterParams();
+      return;
+    }
+
+    if (hasFeedbackIssueListFilterParams(searchParams)) {
+      writeStoredFeedbackIssueListFilterParams(searchParams);
+    }
+  }, [searchParamSignature, searchParams, setSearchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,6 +135,7 @@ export function FeedbackInboxPage() {
   };
 
   const resetFilters = () => {
+    clearStoredFeedbackIssueListFilterParams();
     setSearchParams(new URLSearchParams(), { replace: true });
   };
 
@@ -165,46 +190,42 @@ export function FeedbackInboxPage() {
         </section>
       )}
 
-      <div className="feedback-issue-query-panel">
-        <div className="feedback-issue-query-row">
-          <BountyTextInput ariaLabel="搜索反馈" value={query} onValueChange={(value) => setFilter("q", value, "")} placeholder="is:open label:技术问题 assignee:薛雨 project:客户端" />
-          <BountyButton className="feedback-reset-button" disabled={!hasActiveFilters} onClick={resetFilters} variant="secondary">
-            <RotateCcw aria-hidden="true" />
-            重置
-          </BountyButton>
-        </div>
-        <div className="feedback-issue-filter-row">
-          <BountySelect label="处理人" value={assigneeUserId} onChange={(value) => setFilter("assignee", value, "All")}>
-            <option value="All">全部处理人</option>
-            {assigneeOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-          </BountySelect>
-          <BountySelect label="作者" value={authorUserId} onChange={(value) => setFilter("author", value, "All")}>
-            <option value="All">全部作者</option>
-            {authorOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-          </BountySelect>
-          <BountySelect label="项目" value={projectId} onChange={(value) => setFilter("project", value, "All")}>
-            <option value="All">全部项目</option>
-            <option value="unassigned">未归属项目</option>
-            {projectOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </BountySelect>
-          <BountySelect label="标签" value={cause} onChange={(value) => setFilter("label", value, "All")}>
-            <option value="All">全部标签</option>
-            {labelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-          </BountySelect>
-          <BountySelect label="影响" value={impact} onChange={(value) => setFilter("impact", value, "All")}>
-            <option value="All">全部影响</option>
-            <option value="Critical">{impactLabel.Critical}</option>
-            <option value="High">{impactLabel.High}</option>
-            <option value="Medium">{impactLabel.Medium}</option>
-            <option value="Low">{impactLabel.Low}</option>
-          </BountySelect>
-          <BountySelect label="排序" value={sort} onChange={(value) => setFilter("sort", value, "updated-desc")}>
-            <option value="updated-desc">最近更新</option>
-            <option value="created-desc">最近创建</option>
-            <option value="comments-desc">评论最多</option>
-            <option value="updated-asc">最早更新</option>
-          </BountySelect>
-        </div>
+      <div className="feedback-issue-query-panel" aria-label="反馈筛选">
+        <BountySelect label="项目" value={projectId} onChange={(value) => setFilter("project", value, "All")}>
+          <option value="All">全部项目</option>
+          <option value="unassigned">未归属项目</option>
+          {projectOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </BountySelect>
+        <BountyTextInput ariaLabel="搜索反馈" value={query} onValueChange={(value) => setFilter("q", value, "")} placeholder="is:open label:技术问题 assignee:薛雨 project:客户端" />
+        <BountySelect label="处理人" value={assigneeUserId} onChange={(value) => setFilter("assignee", value, "All")}>
+          <option value="All">全部处理人</option>
+          {assigneeOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </BountySelect>
+        <BountySelect label="作者" value={authorUserId} onChange={(value) => setFilter("author", value, "All")}>
+          <option value="All">全部作者</option>
+          {authorOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </BountySelect>
+        <BountySelect label="标签" value={cause} onChange={(value) => setFilter("label", value, "All")}>
+          <option value="All">全部标签</option>
+          {labelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </BountySelect>
+        <BountySelect label="影响" value={impact} onChange={(value) => setFilter("impact", value, "All")}>
+          <option value="All">全部影响</option>
+          <option value="Critical">{impactLabel.Critical}</option>
+          <option value="High">{impactLabel.High}</option>
+          <option value="Medium">{impactLabel.Medium}</option>
+          <option value="Low">{impactLabel.Low}</option>
+        </BountySelect>
+        <BountySelect label="排序" value={sort} onChange={(value) => setFilter("sort", value, "updated-desc")}>
+          <option value="updated-desc">最近更新</option>
+          <option value="created-desc">最近创建</option>
+          <option value="comments-desc">评论最多</option>
+          <option value="updated-asc">最早更新</option>
+        </BountySelect>
+        <BountyButton className="feedback-reset-button" disabled={!hasActiveFilters} onClick={resetFilters} variant="secondary">
+          <RotateCcw aria-hidden="true" />
+          重置
+        </BountyButton>
       </div>
 
       <section className="feedback-issue-list bounty-list-table">
@@ -307,29 +328,6 @@ function formatFeedbackDate(value: string) {
   }
 
   return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(date);
-}
-
-function feedbackListStateParam(value: string | null): FeedbackIssueListState {
-  if (value === "closed" || value === "all") return value;
-  return "open";
-}
-
-function feedbackImpactParam(value: string | null): "All" | Impact {
-  if (value === "Critical" || value === "High" || value === "Medium" || value === "Low") return value;
-  return "All";
-}
-
-function feedbackSortParam(value: string | null): FeedbackIssueSortKey {
-  if (
-    value === "updated-asc" ||
-    value === "created-desc" ||
-    value === "created-asc" ||
-    value === "comments-desc" ||
-    value === "comments-asc"
-  ) {
-    return value;
-  }
-  return "updated-desc";
 }
 
 function newFeedbackHref(projectId: string) {
