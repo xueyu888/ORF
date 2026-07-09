@@ -16,6 +16,7 @@ import {
   getFeedbackAssignmentNotificationRecipients,
   getFeedbackOrdinaryNotificationRecipients,
 } from "./feedbackSubscriptionRepository";
+import { getProjectChatNotificationChannelIds } from "./notificationRepository";
 import { publishNotificationEvent } from "../notifications/publisher";
 import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
@@ -167,6 +168,10 @@ function feedbackStatusNotificationTitle(status: FeedbackStatus) {
   return status === "Closed" ? "反馈已关闭" : "反馈已重新打开";
 }
 
+function feedbackProjectMetadata(project: { id: string; name: string } | null | undefined): Record<string, string> {
+  return project ? { projectId: project.id, projectName: project.name } : {};
+}
+
 function buildInitialCommentBody(input: { body: string; uploads: Array<{ clientId: string; prepared: PreparedCommentAttachment }> }) {
   const uploadsByClientId = new Map(input.uploads.map((upload) => [upload.clientId, upload.prepared]));
   const usedClientIds = new Set<string>();
@@ -199,6 +204,7 @@ async function notifyFeedbackCreated(input: {
   feedbackId: string;
   ownerName: string;
   ownerUserId: string;
+  project?: { id: string; name: string } | null;
   teamId: string;
   title: string;
 }) {
@@ -206,8 +212,9 @@ async function notifyFeedbackCreated(input: {
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: `${input.actorName} 创建了反馈「${input.title}」，处理人：${input.ownerName}。`,
+    destinationChannelIds: await getProjectChatNotificationChannelIds(input.teamId, input.project?.id),
     kind: "feedback.created",
-    metadata: { feedbackTitle: input.title, owner: input.ownerName },
+    metadata: { feedbackTitle: input.title, owner: input.ownerName, ...feedbackProjectMetadata(input.project) },
     recipientUserIds: await getFeedbackOrdinaryNotificationRecipients({
       createdBy: input.actorUserId,
       feedbackId: input.feedbackId,
@@ -229,6 +236,7 @@ async function notifyFeedbackStatusChanged(input: {
   createdBy?: string | null;
   feedbackId: string;
   ownerUserId?: string | null;
+  project?: { id: string; name: string } | null;
   status: FeedbackStatus;
   teamId: string;
   title: string;
@@ -238,8 +246,9 @@ async function notifyFeedbackStatusChanged(input: {
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: `${input.actorName} ${action}了反馈「${input.title}」。`,
+    destinationChannelIds: await getProjectChatNotificationChannelIds(input.teamId, input.project?.id),
     kind: "feedback.status.changed",
-    metadata: { feedbackStatus: input.status, feedbackTitle: input.title },
+    metadata: { feedbackStatus: input.status, feedbackTitle: input.title, ...feedbackProjectMetadata(input.project) },
     recipientUserIds: await getFeedbackOrdinaryNotificationRecipients({
       createdBy: input.createdBy,
       feedbackId: input.feedbackId,
@@ -304,7 +313,8 @@ export async function createFeedback(input: CreateFeedbackInput, actor: CreateFe
     return { status: "invalidOwner" };
   }
   const projectId = input.projectId?.trim() || null;
-  if (projectId && !(await resolveProjectById(teamId, projectId))) {
+  const project = projectId ? await resolveProjectById(teamId, projectId) : null;
+  if (projectId && !project) {
     return { status: "invalidProject" };
   }
 
@@ -413,6 +423,7 @@ export async function createFeedback(input: CreateFeedbackInput, actor: CreateFe
     feedbackId: id,
     ownerName: ownerUser.name,
     ownerUserId: ownerUser.id,
+    project,
     teamId,
     title: input.phenomenon,
   });
@@ -658,11 +669,14 @@ export async function updateFeedbackStatus(
       createdBy: feedback.createdBy,
       id: feedback.id,
       ownerUserId: feedback.ownerUserId,
+      projectId: feedback.projectId,
+      projectName: projects.name,
       status: feedback.status,
       teamId: feedback.teamId,
       title: feedback.phenomenon,
     })
     .from(feedback)
+    .leftJoin(projects, eq(projects.id, feedback.projectId))
     .where(eq(feedback.id, feedbackId))
     .limit(1);
 
@@ -709,6 +723,7 @@ export async function updateFeedbackStatus(
       createdBy: target.createdBy,
       feedbackId,
       ownerUserId: target.ownerUserId,
+      project: target.projectId && target.projectName ? { id: target.projectId, name: target.projectName } : null,
       status,
       teamId: target.teamId,
       title: target.title,

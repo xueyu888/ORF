@@ -107,6 +107,7 @@ import {
   getActiveAdminNotificationRecipients,
   getActiveMemberNotificationRecipientsByIds,
   getActiveTeamNotificationRecipients,
+  getProjectChatNotificationChannelIds,
   getUserNameById,
 } from "./notificationRepository";
 import { getFeedbackOrdinaryNotificationRecipients } from "./feedbackSubscriptionRepository";
@@ -779,7 +780,11 @@ async function notifyCommentReplyRecipient(input: {
   });
 }
 
-async function getFeedbackCommentNotificationRecipients(input: {
+function feedbackProjectNotificationMetadata(project: { id: string; name: string } | null): Record<string, string> {
+  return project ? { projectId: project.id, projectName: project.name } : {};
+}
+
+async function getFeedbackCommentNotificationContext(input: {
   actorUserId: string;
   excludedUserIds: string[];
   feedbackId: string;
@@ -789,13 +794,16 @@ async function getFeedbackCommentNotificationRecipients(input: {
     .select({
       createdBy: feedback.createdBy,
       ownerUserId: feedback.ownerUserId,
+      projectId: feedback.projectId,
+      projectName: projects.name,
       teamId: feedback.teamId,
     })
     .from(feedback)
+    .leftJoin(projects, eq(projects.id, feedback.projectId))
     .where(eq(feedback.id, input.feedbackId))
     .limit(1);
   if (!target || target.teamId !== input.teamId) {
-    return [];
+    return null;
   }
 
   const excludedUserIds = new Set(uniqueNotificationUserIds([input.actorUserId, ...input.excludedUserIds]));
@@ -806,9 +814,10 @@ async function getFeedbackCommentNotificationRecipients(input: {
     ownerUserId: target.ownerUserId,
     teamId: input.teamId,
   });
-  return recipientUserIds.filter(
-    (userId) => !excludedUserIds.has(userId),
-  );
+  return {
+    project: target.projectId && target.projectName ? { id: target.projectId, name: target.projectName } : null,
+    recipientUserIds: recipientUserIds.filter((userId) => !excludedUserIds.has(userId)),
+  };
 }
 
 async function notifyFeedbackParticipantsOfComment(input: {
@@ -821,29 +830,33 @@ async function notifyFeedbackParticipantsOfComment(input: {
   targetTitle: string;
   teamId: string;
 }) {
-  const recipientUserIds = await getFeedbackCommentNotificationRecipients({
+  const context = await getFeedbackCommentNotificationContext({
     actorUserId: input.actorUserId,
     excludedUserIds: input.excludedUserIds,
     feedbackId: input.targetId,
     teamId: input.teamId,
   });
-  if (recipientUserIds.length === 0) {
+  if (!context) {
     return;
   }
+  const destinationChannelIds = await getProjectChatNotificationChannelIds(input.teamId, context.project?.id);
+  if (context.recipientUserIds.length === 0 && destinationChannelIds.length === 0) return;
 
   await publishNotificationEvent({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: `${input.actorName} 回复了反馈「${input.targetTitle}」。`,
+    destinationChannelIds,
     kind: "feedback.commented",
     metadata: {
       commentMessageId: input.commentMessageId,
       commentThreadId: input.commentThreadId,
+      ...feedbackProjectNotificationMetadata(context.project),
       targetId: input.targetId,
       targetTitle: input.targetTitle,
       targetType: "feedback",
     },
-    recipientUserIds,
+    recipientUserIds: context.recipientUserIds,
     targetHref: commentTargetHref("feedback", input.targetId),
     targetId: input.targetId,
     targetType: "feedback",

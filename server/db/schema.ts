@@ -1126,7 +1126,11 @@ export const notificationDeliveries = pgTable(
     retry: index("notification_deliveries_retry_idx").on(table.channel, table.status, table.nextAttemptAt),
     teamChatOnce: uniqueIndex("notification_deliveries_team_chat_unique")
       .on(table.eventId, table.channel)
-      .where(sql`recipient_user_id IS NULL`),
+      .where(sql`recipient_user_id IS NULL AND destination_id IS NULL`),
+    destinationChatOnce: uniqueIndex("notification_deliveries_destination_chat_unique")
+      .on(table.eventId, table.channel, table.destinationId)
+      .where(sql`recipient_user_id IS NULL AND destination_id IS NOT NULL`),
+    destinationRetry: index("notification_deliveries_destination_retry_idx").on(table.channel, table.destinationId, table.status, table.nextAttemptAt),
     userChatOnce: uniqueIndex("notification_deliveries_user_chat_unique")
       .on(table.eventId, table.recipientUserId, table.channel)
       .where(sql`recipient_user_id IS NOT NULL`),
