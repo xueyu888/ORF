@@ -282,7 +282,7 @@ function runRecoveryPass(suite, args, reason) {
   return runPlaywright(suite, recoveryArgs(args), {
     TESTD_RECOVERY_ONLY: "1",
     TESTD_RUN_ID: recoveryRunId,
-    TESTD_DATABASE_POOL_MAX: "1",
+    TESTD_DATABASE_POOL_MAX: process.env.TESTD_RECOVERY_DATABASE_POOL_MAX ?? "2",
     TESTD_TEST_TIMEOUT_MS: process.env.TESTD_RECOVERY_TEST_TIMEOUT_MS ?? "180000",
     DATABASE_CONNECTION_TIMEOUT_MS: process.env.TESTD_RECOVERY_DATABASE_CONNECTION_TIMEOUT_MS ?? "60000",
     DATABASE_QUERY_TIMEOUT_MS: process.env.TESTD_RECOVERY_DATABASE_QUERY_TIMEOUT_MS ?? "60000",
@@ -381,7 +381,7 @@ function buildNetworkRetryAttempts(suite, args) {
       args: withWorkerArg(args, workers),
       env: {
         TESTD_RUN_ID: runId,
-        TESTD_DATABASE_POOL_MAX: "1",
+        TESTD_DATABASE_POOL_MAX: process.env.TESTD_RETRY_DATABASE_POOL_MAX ?? "2",
       },
       workers,
       runId,
@@ -456,7 +456,7 @@ function withWorkerArg(args, workers) {
 
 function describeAttempt(attempt) {
   const workers = attempt.workers === undefined ? "默认 workers" : `--workers=${attempt.workers}`;
-  const pool = attempt.retryIndex > 0 ? "TESTD_DATABASE_POOL_MAX=1" : "当前 pool 设置";
+  const pool = attempt.retryIndex > 0 ? `TESTD_DATABASE_POOL_MAX=${process.env.TESTD_RETRY_DATABASE_POOL_MAX ?? "2"}` : "当前 pool 设置";
   return `${workers}, ${pool}, TESTD_RUN_ID=${attempt.runId}`;
 }
 

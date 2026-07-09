@@ -120,12 +120,18 @@ export async function readSessionUserName(page: Page) {
   return typeof name === "string" ? name : null;
 }
 
-export async function localSettlementServiceAvailable(page: Page) {
+export async function localSettlementServiceAvailable(_page: Page) {
+  const serviceBaseUrl = (process.env.ORF_LOCAL_SETTLEMENT_SERVICE_URL ?? "http://127.0.0.1:8799").replace(/\/+$/, "");
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3_000);
+
   try {
-    const response = await page.request.get("/api/local-settlement/health");
-    return response.ok();
+    const response = await fetch(`${serviceBaseUrl}/health`, { signal: controller.signal });
+    return response.ok;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
