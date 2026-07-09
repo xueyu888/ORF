@@ -9,6 +9,15 @@
 - 反馈可以选择归属一个项目，也可以保持未归属；项目只作为反馈元数据和筛选上下文，不改变权限、处理人或通知收件人边界。
 - 反馈创建的最终权限仍以后端 `/api/feedback` 校验为准，前端只负责避免向非 active 用户展示不可完成入口。
 
+## 项目筛选和绑定群
+
+- `Feedback.projectId = null` 表示未归属项目，`Feedback.projectId = Project.id` 表示项目反馈；项目名称来自 `projects` 注册表，前端只展示项目名投影。
+- 反馈列表的项目筛选使用 `/feedback?project=All|unassigned|{projectId}` 表达当前视图；筛选只维护 URL 展示状态，不回写反馈事实源。
+- 创建反馈时才把当前具体项目筛选写入 `Feedback.projectId`；`All` 和 `unassigned` 不会作为项目 ID 提交。
+- 聊天频道绑定项目后，聊天页右上角展示 `项目反馈` 入口，进入该项目的反馈列表。
+- 当列表筛选到某个具体项目时，页面展示当前用户可见的绑定群摘要；绑定群唯一事实源是 `chat_channels.project_id`，反馈页不维护第二套绑定关系。
+- `新建项目群` 进入 `/chat?create=channel&projectId={projectId}`，聊天页打开新建频道弹窗并预选该项目；新建频道提交后直接写入 `chat_channels.project_id`。
+
 ## 新建反馈
 
 - 反馈收件箱只处理内部反馈；新建反馈进入 `/feedback/new`，不再由全局弹窗承载正文编辑。

@@ -11,6 +11,7 @@ import type {
   ChatThreadSummary,
   ChatUnreadSummary,
   ChatUser,
+  ProjectChatChannel,
   ChatDriveLink,
   DriveContextType,
   DriveFileVersion,
@@ -144,6 +145,7 @@ export type ChatUnreadSummaryResponse = ChatUnreadSummary;
 export type ChatMessagesResponse = { status?: "ok"; messages: ChatMessage[] };
 export type ChatMessageContextResponse = { status?: "ok" } & ChatMessageContext;
 export type ChatChannelResponse = { status?: "ok"; channel: ChatChannel };
+export type ProjectChatChannelsResponse = { status?: "ok"; channels: ProjectChatChannel[] };
 export type ChatNullableChannelResponse = { status?: "ok"; channel: ChatChannel | null };
 export type ChatMessageResponse = { status?: "ok"; channel?: ChatChannel; message: ChatMessage };
 export type ChatThreadResponse = { status?: "ok"; channel?: ChatChannel; thread: ChatThread };
@@ -680,6 +682,7 @@ export async function createChatChannel(input: {
   header?: string;
   memberUserIds?: string[];
   name?: string;
+  projectId?: string | null;
   purpose?: string;
   type: "public" | "private";
 }) {
@@ -687,6 +690,11 @@ export async function createChatChannel(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export async function getProjectChatChannels(projectId: string) {
+  const query = new URLSearchParams({ projectId });
+  return apiJson<ProjectChatChannelsResponse>(`/api/chat/project-channels?${query.toString()}`);
 }
 
 export async function openChatConversation(userIds: string[]) {

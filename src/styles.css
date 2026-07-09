@@ -21810,7 +21810,8 @@ button.orf-chat-image-attachment {
   padding: 0;
 }
 
-.orf-chat-modal input {
+.orf-chat-modal input,
+.orf-chat-modal select {
   height: 36px;
   border: 1px solid var(--orf-border);
   border-radius: var(--orf-radius-control);

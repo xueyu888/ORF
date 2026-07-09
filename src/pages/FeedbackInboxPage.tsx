@@ -1,6 +1,6 @@
 import { CheckCircle2, CircleDot, Clock3, Flag, MessageSquare, Plus, RotateCcw, Tag } from "lucide-react";
 import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { UserAvatar } from "../components/UserAvatar";
 import { BountyBadge, BountyButton, BountyEmptyState, BountySelect, BountyTextInput } from "../features/bounty-hall/BountyHallSkin";
@@ -17,8 +17,9 @@ import {
   type FeedbackIssueListState,
   type FeedbackIssueSortKey,
 } from "../features/feedback/model/feedbackIssueList";
+import { getProjectChatChannels } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-import type { Impact } from "../types/orf";
+import type { Impact, ProjectChatChannel } from "../types/orf";
 import { impactLabel } from "../utils/labels";
 
 export function FeedbackInboxPage() {
@@ -33,6 +34,12 @@ export function FeedbackInboxPage() {
   const authorUserId = searchParams.get("author") || "All";
   const projectId = searchParams.get("project") || "All";
   const sort = feedbackSortParam(searchParams.get("sort"));
+  const [projectChannels, setProjectChannels] = useState<ProjectChatChannel[]>([]);
+  const [projectChannelsLoading, setProjectChannelsLoading] = useState(false);
+  const selectedProject = useMemo(
+    () => state.projects.find((project) => project.id === projectId) ?? null,
+    [projectId, state.projects],
+  );
   const visibleFeedback = useMemo(() => currentUser?.status === "active" || currentUser?.role === "admin" ? state.feedback : [], [currentUser, state.feedback]);
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
   const issueItems = useMemo(
@@ -47,6 +54,34 @@ export function FeedbackInboxPage() {
     () => [...state.projects].sort((left, right) => left.name.localeCompare(right.name, "zh-Hans-CN")),
     [state.projects],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedProject) {
+      setProjectChannels([]);
+      setProjectChannelsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setProjectChannelsLoading(true);
+    getProjectChatChannels(selectedProject.id)
+      .then((response) => {
+        if (cancelled) return;
+        setProjectChannels(response.channels);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setProjectChannels([]);
+      })
+      .finally(() => {
+        if (!cancelled) setProjectChannelsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProject]);
 
   const filteredFeedback = useMemo(
     () => filterFeedbackIssueListItems(issueItems, { assigneeUserId, authorUserId, cause, impact, listState, projectId, query, sort }),
@@ -102,6 +137,33 @@ export function FeedbackInboxPage() {
           )}
         </div>
       </header>
+
+      {selectedProject && (
+        <section className="feedback-project-chat-panel" aria-label="项目绑定群">
+          <div className="feedback-project-chat-summary">
+            <span>绑定群</span>
+            <strong>{projectChannelsLoading ? "..." : projectChannels.length}</strong>
+          </div>
+          <div className="feedback-project-chat-list">
+            {projectChannelsLoading ? (
+              <span>加载中</span>
+            ) : projectChannels.length > 0 ? (
+              projectChannels.slice(0, 4).map((channel) => (
+                <Link key={channel.id} className="feedback-project-chat-link" to={`/chat/${encodeURIComponent(channel.id)}`}>
+                  <MessageSquare aria-hidden="true" />
+                  {channel.displayName}
+                </Link>
+              ))
+            ) : (
+              <span>未绑定</span>
+            )}
+          </div>
+          <div className="feedback-project-chat-actions">
+            <Link to={`/chat?create=channel&projectId=${encodeURIComponent(selectedProject.id)}`}>新建项目群</Link>
+            <Link to="/chat">去聊天</Link>
+          </div>
+        </section>
+      )}
 
       <div className="feedback-issue-query-panel">
         <div className="feedback-issue-query-row">

@@ -15,6 +15,7 @@ import type {
   ChatThreadSummary,
   ChatUnreadSummary,
   ChatUser,
+  ProjectChatChannel,
 } from "../../src/types/orf";
 import type { ChatRealtimeEventType } from "../../src/types/realtime";
 import type { PermissionKey } from "../../src/config/permissions";
@@ -994,6 +995,64 @@ export async function listChatUsers(actor: ChatActor): Promise<ChatUser[]> {
   return listActiveTeamUsers(storageTeamId(actor));
 }
 
+export async function listProjectChatChannels(
+  projectId: string,
+  actor: ChatActor,
+): Promise<Outcome<{ channels: ProjectChatChannel[] }>> {
+  if (!actor.canRead) return { status: "forbidden" };
+  const normalizedProjectId = projectId.trim();
+  if (!normalizedProjectId) return { status: "invalid" };
+
+  const teamId = storageTeamId(actor);
+  await preparePublicChannels(teamId);
+  const { rows } = await pool.query<{
+    display_name: string;
+    id: string;
+    member_count: number | string;
+    project_id: string;
+    project_name: string | null;
+    type: "public" | "private";
+    updated_at: Date | string;
+  }>(
+    `
+      SELECT
+        c.id,
+        c.type,
+        c.display_name,
+        c.project_id,
+        p.name AS project_name,
+        c.updated_at,
+        (
+          SELECT count(*)::int
+          FROM chat_channel_members cm
+          WHERE cm.channel_id = c.id
+        ) AS member_count
+      FROM chat_channels c
+      INNER JOIN chat_channel_members m ON m.channel_id = c.id AND m.user_id = $3
+      LEFT JOIN projects p ON p.id = c.project_id AND p.team_id = c.team_id
+      WHERE c.team_id = $1
+        AND c.project_id = $2
+        AND c.system_kind IS NULL
+        AND c.type IN ('public', 'private')
+        AND c.archived_at IS NULL
+      ORDER BY c.updated_at DESC, c.created_at ASC, c.id
+    `,
+    [teamId, normalizedProjectId, actor.id],
+  );
+
+  return ok({
+    channels: rows.map((row) => ({
+      displayName: row.display_name,
+      id: row.id,
+      memberCount: Number(row.member_count ?? 0),
+      projectId: row.project_id,
+      projectName: row.project_name,
+      type: row.type,
+      updatedAt: iso(row.updated_at) ?? nowIso(),
+    })),
+  });
+}
+
 export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnreadSummary> {
   if (!actor.canRead) {
     return {
@@ -1493,7 +1552,7 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
 }
 
 export async function createChatChannel(
-  input: { displayName: string; header?: string; memberUserIds?: string[]; name?: string; purpose?: string; type: "public" | "private" },
+  input: { displayName: string; header?: string; memberUserIds?: string[]; name?: string; projectId?: string | null; purpose?: string; type: "public" | "private" },
   actor: ChatActor,
 ): Promise<Outcome<{ channel: ChatChannel }>> {
   if (!actor.canRead) return { status: "forbidden" };
@@ -1507,14 +1566,22 @@ export async function createChatChannel(
   const now = nowIso();
   const id = makeId("chat-channel");
   const teamId = storageTeamId(actor);
+  const projectId = input.projectId?.trim() || null;
+  if (projectId) {
+    const project = await pool.query<{ id: string }>(
+      "SELECT id FROM projects WHERE team_id = $1 AND id = $2 LIMIT 1",
+      [teamId, projectId],
+    );
+    if (!project.rows[0]) return { status: "invalid" };
+  }
 
   try {
     await pool.query(
       `
-        INSERT INTO chat_channels (id, team_id, type, name, display_name, purpose, header, created_by, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+        INSERT INTO chat_channels (id, team_id, type, name, display_name, purpose, header, project_id, created_by, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
       `,
-      [id, teamId, input.type, name, displayName, input.purpose?.trim() ?? "", input.header?.trim() ?? "", actor.id, now],
+      [id, teamId, input.type, name, displayName, input.purpose?.trim() ?? "", input.header?.trim() ?? "", projectId, actor.id, now],
     );
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "23505") {

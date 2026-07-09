@@ -919,6 +919,11 @@ export interface ChatChannel {
   lastMessagePreview?: string | null;
 }
 
+export type ProjectChatChannel = Pick<
+  ChatChannel,
+  "displayName" | "id" | "memberCount" | "projectId" | "projectName" | "type" | "updatedAt"
+>;
+
 export interface ChatReaction {
   emojiName: string;
   count: number;

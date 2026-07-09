@@ -156,6 +156,7 @@ export function ChatPage() {
   const [loading, setLoading] = useState(true);
   const [channelQuery, setChannelQuery] = useState("");
   const [modal, setModal] = useState<"channel" | "conversation" | null>(null);
+  const [channelModalProjectId, setChannelModalProjectId] = useState<string | null>(null);
   const [draftChannelIds, setDraftChannelIds] = useState<Set<string>>(new Set());
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [deletingMessage, setDeletingMessage] = useState<ChatMessage | null>(null);
@@ -225,7 +226,13 @@ export function ChatPage() {
     if (!bootstrap?.permissions.canRead) return [];
     const commands: ChatSidebarCreateCommand[] = [];
     if (bootstrap.permissions.canCreatePrivateChannel || bootstrap.permissions.canCreatePublicChannel) {
-      commands.push({ kind: "channel", onSelect: () => setModal("channel") });
+      commands.push({
+        kind: "channel",
+        onSelect: () => {
+          setChannelModalProjectId(null);
+          setModal("channel");
+        },
+      });
     }
     commands.push({ kind: "conversation", onSelect: () => setModal("conversation") });
     return commands;
@@ -294,6 +301,34 @@ export function ChatPage() {
   const handleDriveSelectionRequestHandled = useCallback((requestId: number) => {
     setDriveSelectionRequest((current) => (current?.requestId === requestId ? null : current));
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("create") !== "channel") return;
+    if (modal === "channel") return;
+    if (!bootstrap?.permissions.canRead) return;
+    if (!bootstrap.permissions.canCreatePrivateChannel && !bootstrap.permissions.canCreatePublicChannel) return;
+    const requestedProjectId = searchParams.get("projectId");
+    setChannelModalProjectId(
+      requestedProjectId && state.projects.some((project) => project.id === requestedProjectId)
+        ? requestedProjectId
+        : null,
+    );
+    setModal("channel");
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("create");
+      next.delete("projectId");
+      return next;
+    }, { replace: true });
+  }, [
+    bootstrap?.permissions.canCreatePrivateChannel,
+    bootstrap?.permissions.canCreatePublicChannel,
+    bootstrap?.permissions.canRead,
+    modal,
+    searchParams,
+    setSearchParams,
+    state.projects,
+  ]);
 
   const handleOpenChallengeWorkspace = useCallback(() => {
     openChallengePanel(null);
@@ -1336,13 +1371,19 @@ export function ChatPage() {
           canCreatePrivate={bootstrap.permissions.canCreatePrivateChannel}
           canCreatePublic={bootstrap.permissions.canCreatePublicChannel}
           currentUserId={currentUser?.id}
-          onClose={() => setModal(null)}
+          defaultProjectId={channelModalProjectId}
+          onClose={() => {
+            setChannelModalProjectId(null);
+            setModal(null);
+          }}
           onCreate={async (input) => {
             const response = await createChatChannel(input);
             applyChannel(response.channel);
             navigate(`/chat/${encodeURIComponent(response.channel.id)}`);
+            setChannelModalProjectId(null);
             setModal(null);
           }}
+          projects={state.projects}
           users={bootstrap.users}
         />
       )}
