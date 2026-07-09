@@ -28,7 +28,11 @@ const ORF_APP_NAME = "ORF";
 const DESKTOP_ICON_BITMAP_SIZE = 32;
 const DESKTOP_ICON_BITMAP_SCALE = 4;
 const MAX_PENDING_CHAT_NOTIFICATION_TARGETS = 16;
+const MAX_PENDING_DESKTOP_TARGETS = 16;
+const MAX_SEEN_ATTENTION_TOAST_IDS = 128;
 const CHAT_NOTIFICATION_ACTIVATION_PREFIX = "orf-chat-notification";
+const ATTENTION_NOTIFICATION_ACTIVATION_PREFIX = "orf-attention-notification";
+const DESKTOP_ATTENTION_FLASH_COOLDOWN_MS = 12000;
 const DESKTOP_RECOVERY_ROOT_CHECK_DELAY_MS = 4000;
 const DESKTOP_RECOVERY_RELOAD_COOLDOWN_MS = 8000;
 const DESKTOP_RECOVERY_STABLE_RESET_DELAY_MS = 30000;
@@ -59,15 +63,32 @@ const DESKTOP_RECOVERY_CHECK_SCRIPT = `
 `;
 
 const desktopShellState = {
+  attentionState: createEmptyDesktopAttentionState(),
   clientUrl: null,
   isQuitting: false,
+  lastAttentionFlashAt: 0,
   mainWindow: null,
   pendingChatNotificationTargetsByWebContents: new Map(),
+  pendingDesktopTargetsByWebContents: new Map(),
   recoveryStateByWebContents: new Map(),
+  seenAttentionToastIds: [],
   storagePaths: null,
   tray: null,
   unreadCount: 0,
 };
+
+function createEmptyDesktopAttentionState() {
+  return {
+    body: "",
+    count: 0,
+    latestEventId: null,
+    latestTargetPath: null,
+    level: "none",
+    reason: null,
+    title: "ORF",
+    toast: null,
+  };
+}
 
 function configureStableDesktopStoragePaths() {
   const defaultUserDataPath = app.getPath("userData");
@@ -164,6 +185,7 @@ function createMainWindow(clientUrl, options = {}) {
   mainWindow.on("leave-full-screen", () => sendDesktopWindowState(mainWindow));
   mainWindow.on("closed", () => {
     desktopShellState.pendingChatNotificationTargetsByWebContents.delete(webContentsId);
+    desktopShellState.pendingDesktopTargetsByWebContents.delete(webContentsId);
     clearDesktopRecoveryTimersByWebContentsId(webContentsId);
     desktopShellState.recoveryStateByWebContents.delete(webContentsId);
     if (desktopShellState.mainWindow === mainWindow) {
@@ -613,7 +635,7 @@ function shouldKeepWindowInTray() {
 function createDesktopTray(clientUrl) {
   if (process.platform !== "win32" || desktopShellState.tray) return;
   desktopShellState.clientUrl = clientUrl;
-  const tray = new Tray(createTrayIconImage(desktopShellState.unreadCount));
+  const tray = new Tray(createTrayIconImage(desktopAttentionBadgeCount()));
   desktopShellState.tray = tray;
   tray.on("click", () => showMainWindow());
   tray.on("double-click", () => showMainWindow("/chat"));
@@ -628,8 +650,8 @@ function showMainWindow(targetPath) {
   if (targetWindow.isMinimized()) targetWindow.restore();
   targetWindow.show();
   targetWindow.focus();
-  if (isSafeChatTargetPath(targetPath)) {
-    openChatTargetInWindow(targetWindow, targetPath);
+  if (isSafeDesktopTargetPath(targetPath)) {
+    openDesktopTargetInWindow(targetWindow, targetPath);
   }
   return targetWindow;
 }
@@ -648,7 +670,8 @@ function showMainWindowFromLaunchArguments(commandLine) {
 function desktopTargetPathFromLaunchArguments(commandLine) {
   if (!Array.isArray(commandLine)) return null;
   for (const value of commandLine) {
-    const targetPath = chatNotificationTargetPathFromActivationArguments(value);
+    const targetPath = attentionNotificationTargetPathFromActivationArguments(value)
+      ?? chatNotificationTargetPathFromActivationArguments(value);
     if (targetPath) return targetPath;
   }
   return null;
@@ -659,10 +682,20 @@ function isHiddenDesktopLaunch(commandLine) {
 }
 
 function openChatTargetInWindow(targetWindow, targetPath) {
-  enqueueChatNotificationTarget(targetWindow, targetPath);
+  openDesktopTargetInWindow(targetWindow, targetPath);
+}
+
+function openDesktopTargetInWindow(targetWindow, targetPath) {
+  enqueueDesktopTarget(targetWindow, targetPath);
+  if (isSafeChatTargetPath(targetPath)) {
+    enqueueChatNotificationTarget(targetWindow, targetPath);
+  }
   const sendOpenTarget = () => {
     if (!targetWindow.isDestroyed()) {
-      targetWindow.webContents.send("orf:chat-notification:open-pending");
+      targetWindow.webContents.send("orf:desktop-shell:open-pending");
+      if (isSafeChatTargetPath(targetPath)) {
+        targetWindow.webContents.send("orf:chat-notification:open-pending");
+      }
     }
   };
   if (targetWindow.webContents.isLoading()) {
@@ -670,6 +703,17 @@ function openChatTargetInWindow(targetWindow, targetPath) {
     return;
   }
   sendOpenTarget();
+}
+
+function enqueueDesktopTarget(targetWindow, targetPath) {
+  if (!isSafeDesktopTargetPath(targetPath) || targetWindow.isDestroyed()) return;
+  const webContentsId = targetWindow.webContents.id;
+  const pendingTargets = desktopShellState.pendingDesktopTargetsByWebContents.get(webContentsId) ?? [];
+  pendingTargets.push(targetPath);
+  desktopShellState.pendingDesktopTargetsByWebContents.set(
+    webContentsId,
+    pendingTargets.slice(-MAX_PENDING_DESKTOP_TARGETS),
+  );
 }
 
 function enqueueChatNotificationTarget(targetWindow, targetPath) {
@@ -696,6 +740,19 @@ function consumePendingChatNotificationTarget(webContents) {
   return isSafeChatTargetPath(targetPath) ? targetPath : null;
 }
 
+function consumePendingDesktopTarget(webContents) {
+  if (!webContents || webContents.isDestroyed()) return null;
+  const webContentsId = webContents.id;
+  const pendingTargets = desktopShellState.pendingDesktopTargetsByWebContents.get(webContentsId) ?? [];
+  const targetPath = pendingTargets.shift() ?? null;
+  if (pendingTargets.length > 0) {
+    desktopShellState.pendingDesktopTargetsByWebContents.set(webContentsId, pendingTargets);
+  } else {
+    desktopShellState.pendingDesktopTargetsByWebContents.delete(webContentsId);
+  }
+  return isSafeDesktopTargetPath(targetPath) ? targetPath : null;
+}
+
 function requestDesktopAttention(targetWindow) {
   if (process.platform !== "win32") return;
   const windowToFlash = targetWindow && !targetWindow.isDestroyed() ? targetWindow : desktopShellState.mainWindow;
@@ -703,10 +760,38 @@ function requestDesktopAttention(targetWindow) {
   windowToFlash.flashFrame(true);
 }
 
+function requestDesktopAttentionForState(options = {}) {
+  if (attentionLevelRank(desktopShellState.attentionState.level) < attentionLevelRank("flash")) return;
+  const shouldFlash = options.forceFlash === true || options.attentionIncreased === true || options.levelIncreased === true;
+  if (!shouldFlash) return;
+  const now = Date.now();
+  if (now - desktopShellState.lastAttentionFlashAt < DESKTOP_ATTENTION_FLASH_COOLDOWN_MS) return;
+  desktopShellState.lastAttentionFlashAt = now;
+  requestDesktopAttention();
+}
+
 function setDesktopUnreadCount(unreadCount) {
-  const previousUnreadCount = desktopShellState.unreadCount;
-  desktopShellState.unreadCount = unreadCount;
-  updateDesktopUnreadState({ unreadIncreased: unreadCount > previousUnreadCount });
+  setDesktopAttentionState({
+    body: unreadCount > 0 ? unreadDescription(unreadCount) : "",
+    count: unreadCount,
+    latestEventId: unreadCount > 0 ? "chat-unread" : null,
+    latestTargetPath: unreadCount > 0 ? "/chat" : null,
+    level: unreadCount > 0 ? "badge" : "none",
+    reason: unreadCount > 0 ? "chat.unread" : null,
+    title: unreadCount > 0 ? "聊天消息未读" : "ORF",
+  });
+}
+
+function setDesktopAttentionState(input) {
+  const previousState = desktopShellState.attentionState;
+  const nextState = normalizeDesktopAttentionInput(input);
+  desktopShellState.attentionState = nextState;
+  desktopShellState.unreadCount = nextState.count;
+  showDesktopAttentionToast(nextState.toast);
+  updateDesktopUnreadState({
+    attentionIncreased: nextState.count > previousState.count,
+    levelIncreased: attentionLevelRank(nextState.level) > attentionLevelRank(previousState.level),
+  });
 }
 
 function updateDesktopUnreadState(options = {}) {
@@ -714,12 +799,11 @@ function updateDesktopUnreadState(options = {}) {
   const targetWindow = desktopShellState.mainWindow;
   if (process.platform !== "win32" || !targetWindow || targetWindow.isDestroyed()) return;
 
-  const unreadCount = desktopShellState.unreadCount;
-  if (unreadCount > 0) {
-    targetWindow.setOverlayIcon(createTaskbarUnreadOverlayImage(unreadCount), unreadDescription(unreadCount));
-    if (options.unreadIncreased && !targetWindow.isFocused()) {
-      targetWindow.flashFrame(true);
-    }
+  const attentionState = desktopShellState.attentionState;
+  const attentionCount = desktopAttentionBadgeCount();
+  if (attentionCount > 0) {
+    targetWindow.setOverlayIcon(createTaskbarUnreadOverlayImage(attentionCount), desktopAttentionDescription(attentionState));
+    requestDesktopAttentionForState(options);
     return;
   }
 
@@ -730,12 +814,21 @@ function updateDesktopUnreadState(options = {}) {
 function updateTrayUnreadState() {
   const tray = desktopShellState.tray;
   if (!tray || tray.isDestroyed()) return;
-  const unreadCount = desktopShellState.unreadCount;
+  const attentionState = desktopShellState.attentionState;
+  const attentionCount = desktopAttentionBadgeCount();
   const launchAtLoginState = desktopLaunchAtLoginState();
   const menuTemplate = [
+    ...(attentionCount > 0 ? [{
+      label: `打开待处理提醒（${desktopUnreadBadgeLabel(attentionCount)}）`,
+      click: () => showMainWindow(attentionState.latestTargetPath ?? "/chat/system/personalNotifications"),
+    }] : []),
     {
-      label: unreadCount > 0 ? `打开聊天（${desktopUnreadBadgeLabel(unreadCount)} 未读）` : "打开聊天",
+      label: "打开聊天",
       click: () => showMainWindow("/chat"),
+    },
+    {
+      label: "打开我的系统通知",
+      click: () => showMainWindow("/chat/system/personalNotifications"),
     },
     {
       label: "打开 ORF",
@@ -771,8 +864,8 @@ function updateTrayUnreadState() {
       },
     },
   );
-  tray.setImage(createTrayIconImage(unreadCount));
-  tray.setToolTip(unreadCount > 0 ? `${ORF_APP_NAME} - ${unreadDescription(unreadCount)}` : ORF_APP_NAME);
+  tray.setImage(createTrayIconImage(attentionCount));
+  tray.setToolTip(attentionCount > 0 ? `${ORF_APP_NAME} - ${desktopAttentionDescription(attentionState)}` : ORF_APP_NAME);
   tray.setContextMenu(Menu.buildFromTemplate(menuTemplate));
 }
 
@@ -820,6 +913,175 @@ function desktopUnreadBadgeLabel(unreadCount) {
 
 function unreadDescription(unreadCount) {
   return `${desktopUnreadBadgeLabel(unreadCount)} 条未读聊天消息`;
+}
+
+function desktopAttentionBadgeCount() {
+  return normalizeDesktopUnreadInput(desktopShellState.attentionState?.count ?? desktopShellState.unreadCount);
+}
+
+function desktopAttentionDescription(attentionState) {
+  const count = normalizeDesktopUnreadInput(attentionState?.count);
+  if (count <= 0) return "";
+  const label = desktopUnreadBadgeLabel(count);
+  if (attentionState?.level === "urgent") return `${label} 条强提醒待处理`;
+  if (typeof attentionState?.reason === "string" && attentionState.reason.startsWith("chat.")) {
+    return unreadDescription(count);
+  }
+  return `${label} 条待处理提醒`;
+}
+
+function attentionLevelRank(level) {
+  switch (level) {
+    case "urgent":
+      return 4;
+    case "flash":
+      return 3;
+    case "toast":
+      return 2;
+    case "badge":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function normalizeDesktopAttentionInput(input) {
+  if (!input || typeof input !== "object") return createEmptyDesktopAttentionState();
+  const count = normalizeDesktopUnreadInput(input);
+  const level = normalizeDesktopAttentionLevel(input.level, count);
+  return {
+    body: notificationText(input.body, 500) || (count > 0 ? desktopAttentionDescription({ count, level }) : ""),
+    count,
+    latestEventId: notificationText(input.latestEventId, 160) || null,
+    latestTargetPath: isSafeDesktopTargetPath(input.latestTargetPath) ? input.latestTargetPath : null,
+    level,
+    reason: notificationText(input.reason, 160) || null,
+    title: notificationText(input.title, 120) || "ORF",
+    toast: normalizeDesktopAttentionToast(input.toast),
+  };
+}
+
+function normalizeDesktopAttentionToast(input) {
+  if (!input || typeof input !== "object" || !isSafeDesktopTargetPath(input.targetPath)) return null;
+  const id = notificationText(input.id, 160);
+  if (!id) return null;
+  return {
+    body: notificationText(input.body, 500) || "你有一条新的提醒",
+    id,
+    level: normalizeDesktopAttentionLevel(input.level, 1),
+    targetPath: input.targetPath,
+    title: notificationText(input.title, 120) || "ORF 提醒",
+  };
+}
+
+function normalizeDesktopAttentionLevel(level, count) {
+  const validLevel = level === "urgent" || level === "flash" || level === "toast" || level === "badge" || level === "none"
+    ? level
+    : null;
+  if (count <= 0) return "none";
+  return validLevel && validLevel !== "none" ? validLevel : "badge";
+}
+
+function showDesktopAttentionToast(toast) {
+  if (!toast || hasSeenAttentionToast(toast.id)) return;
+  const clientUrl = desktopShellState.clientUrl ?? resolveClientUrl();
+  const payload = attentionNotificationPayload(toast, clientUrl);
+  if (!payload || !Notification.isSupported()) return;
+  rememberAttentionToastId(payload.id);
+
+  const notification = new Notification(attentionNotificationOptions(payload));
+  if (process.platform !== "win32" || typeof Notification.handleActivation !== "function") {
+    notification.on("click", () => {
+      showMainWindow(payload.targetPath);
+    });
+  }
+  notification.show();
+  if (attentionLevelRank(payload.level) >= attentionLevelRank("flash")) {
+    requestDesktopAttentionForState({ forceFlash: true });
+  }
+}
+
+function hasSeenAttentionToast(id) {
+  return desktopShellState.seenAttentionToastIds.includes(id);
+}
+
+function rememberAttentionToastId(id) {
+  desktopShellState.seenAttentionToastIds.push(id);
+  if (desktopShellState.seenAttentionToastIds.length > MAX_SEEN_ATTENTION_TOAST_IDS) {
+    desktopShellState.seenAttentionToastIds.splice(
+      0,
+      desktopShellState.seenAttentionToastIds.length - MAX_SEEN_ATTENTION_TOAST_IDS,
+    );
+  }
+}
+
+function attentionNotificationPayload(input, clientUrl) {
+  if (!input || typeof input !== "object") return null;
+  const id = notificationText(input.id, 160);
+  const title = notificationText(input.title, 120);
+  const body = notificationText(input.body, 500);
+  const targetPath = notificationText(input.targetPath, 500);
+  if (!id || !title || !body || !isSafeDesktopTargetPath(targetPath)) return null;
+
+  const targetUrl = new URL(targetPath, clientUrl);
+  if (targetUrl.origin !== clientUrl.origin) return null;
+
+  return {
+    body,
+    id,
+    level: normalizeDesktopAttentionLevel(input.level, 1),
+    targetPath: `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`,
+    title,
+  };
+}
+
+function attentionNotificationActivationArguments(targetPath) {
+  const params = new URLSearchParams();
+  params.set("targetPath", targetPath);
+  return `${ATTENTION_NOTIFICATION_ACTIVATION_PREFIX}?${params.toString()}`;
+}
+
+function attentionNotificationTargetPathFromActivationArguments(value) {
+  if (typeof value !== "string") return null;
+  const queryStart = value.indexOf("?");
+  if (queryStart < 0 || value.slice(0, queryStart) !== ATTENTION_NOTIFICATION_ACTIVATION_PREFIX) return null;
+  const params = new URLSearchParams(value.slice(queryStart + 1));
+  const targetPath = params.get("targetPath");
+  return isSafeDesktopTargetPath(targetPath) ? targetPath : null;
+}
+
+function attentionNotificationOptions(payload) {
+  if (process.platform === "win32") {
+    return {
+      toastXml: windowsAttentionNotificationToastXml(payload),
+    };
+  }
+  return {
+    title: payload.title,
+    body: payload.body,
+    icon: resolveDesktopIconPath(),
+    silent: false,
+  };
+}
+
+function windowsAttentionNotificationToastXml(payload) {
+  return [
+    `<toast launch="${escapeXmlAttribute(attentionNotificationActivationArguments(payload.targetPath))}">`,
+    "<visual>",
+    '<binding template="ToastGeneric">',
+    `<text>${escapeXmlText(payload.title)}</text>`,
+    `<text>${escapeXmlText(payload.body)}</text>`,
+    "</binding>",
+    "</visual>",
+    "</toast>",
+  ].join("");
+}
+
+function isSafeDesktopTargetPath(targetPath) {
+  return typeof targetPath === "string"
+    && /^\/(?!\/)[\w\-./~%]*(?:\?[^#\s]*)?(?:#[^\s]*)?$/.test(targetPath)
+    && !targetPath.startsWith("/api/")
+    && !targetPath.startsWith("/auth");
 }
 
 function isSafeChatTargetPath(targetPath) {
@@ -1071,10 +1333,16 @@ function escapeXmlText(value) {
 function registerNativeNotificationBridge(clientUrl) {
   if (process.platform === "win32" && typeof Notification.handleActivation === "function") {
     Notification.handleActivation((details) => {
-      const targetPath = chatNotificationTargetPathFromActivationArguments(details?.arguments);
+      const targetPath = attentionNotificationTargetPathFromActivationArguments(details?.arguments)
+        ?? chatNotificationTargetPathFromActivationArguments(details?.arguments);
       if (targetPath) showMainWindow(targetPath);
     });
   }
+
+  ipcMain.handle("orf:desktop-shell:consume-open-target", (event) => ({
+    status: "success",
+    targetPath: consumePendingDesktopTarget(event.sender),
+  }));
 
   ipcMain.handle("orf:chat-notification:consume-open-target", (event) => ({
     status: "success",
@@ -1099,6 +1367,10 @@ function registerNativeNotificationBridge(clientUrl) {
 }
 
 function registerDesktopShellBridge() {
+  ipcMain.handle("orf:desktop-shell:set-attention-state", (_event, input) => {
+    setDesktopAttentionState(input);
+    return { status: "success", data: desktopShellState.attentionState };
+  });
   ipcMain.handle("orf:desktop-shell:set-chat-unread-count", (_event, input) => {
     const unreadCount = normalizeDesktopUnreadInput(input);
     setDesktopUnreadCount(unreadCount);

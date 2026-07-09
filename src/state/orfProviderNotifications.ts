@@ -33,6 +33,7 @@ export function useNotificationState() {
   }, []);
 
   return {
+    notifications,
     receiveNotification,
     refreshNotifications,
     resetNotificationState,

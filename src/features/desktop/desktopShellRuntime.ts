@@ -1,5 +1,32 @@
+import type { AttentionLevel } from "../attention/attentionTypes";
+
 export type DesktopShellUnreadResult = {
   data?: number;
+  reason?: string;
+  status: "error" | "success" | "unsupported";
+};
+
+export type DesktopAttentionToast = {
+  body: string;
+  id: string;
+  level?: AttentionLevel;
+  targetPath: string;
+  title: string;
+};
+
+export type DesktopAttentionPayload = {
+  body: string;
+  count: number;
+  latestEventId?: string | null;
+  latestTargetPath?: string | null;
+  level: AttentionLevel;
+  reason?: string | null;
+  title: string;
+  toast?: DesktopAttentionToast | null;
+};
+
+export type DesktopAttentionResult = {
+  data?: DesktopAttentionPayload;
   reason?: string;
   status: "error" | "success" | "unsupported";
 };
@@ -54,7 +81,9 @@ type DesktopShellBridge = {
   getSystemIdleSnapshot?: () => Promise<DesktopSystemIdleResult>;
   getWindowState?: () => Promise<DesktopShellWindowResult>;
   minimizeWindow?: () => Promise<DesktopShellWindowResult>;
+  onOpenTarget?: (handler: (targetPath: string) => void) => (() => void);
   onWindowStateChange?: (handler: (state: DesktopWindowState) => void) => (() => void);
+  setAttentionState?: (payload: DesktopAttentionPayload) => Promise<DesktopAttentionResult>;
   setChatUnreadCount?: (payload: { count: number }) => Promise<DesktopShellUnreadResult>;
   setLaunchAtLoginEnabled?: (payload: { enabled: boolean }) => Promise<DesktopShellLaunchAtLoginResult>;
   setWorkbenchZoomLevel?: (payload: { level: number }) => Promise<DesktopWorkbenchZoomResult>;
@@ -78,6 +107,28 @@ export async function syncDesktopChatUnreadCount(count: number): Promise<Desktop
   } catch {
     return { status: "error", reason: "desktop_shell_bridge_failed" };
   }
+}
+
+export async function syncDesktopAttentionState(payload: DesktopAttentionPayload): Promise<DesktopAttentionResult> {
+  const normalizedPayload = normalizeDesktopAttentionPayload(payload);
+  if (typeof window === "undefined" || !window.orfDesktopShell) {
+    return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
+  }
+  if (window.orfDesktopShell.setAttentionState) {
+    try {
+      const result = await window.orfDesktopShell.setAttentionState(normalizedPayload);
+      return result?.status ? result : { data: normalizedPayload, status: "success" };
+    } catch {
+      return { status: "error", reason: "desktop_shell_bridge_failed" };
+    }
+  }
+  if (window.orfDesktopShell.setChatUnreadCount) {
+    const result = await syncDesktopChatUnreadCount(normalizedPayload.count);
+    return result.status === "success"
+      ? { data: normalizedPayload, status: "success" }
+      : { reason: result.reason, status: result.status };
+  }
+  return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
 }
 
 export function isDesktopShellAvailable() {
@@ -185,8 +236,66 @@ export function subscribeDesktopWindowState(handler: (state: DesktopWindowState)
   });
 }
 
+export function subscribeDesktopAttentionTargetOpen(handler: (targetPath: string) => void) {
+  if (typeof window === "undefined" || !window.orfDesktopShell?.onOpenTarget) {
+    return undefined;
+  }
+  return window.orfDesktopShell.onOpenTarget((targetPath) => {
+    if (isSafeDesktopAttentionTargetPath(targetPath)) {
+      handler(targetPath);
+    }
+  });
+}
+
+export function isSafeDesktopAttentionTargetPath(targetPath: string | null | undefined) {
+  return typeof targetPath === "string"
+    && /^\/(?!\/)[\w\-./~%]*(?:\?[^#\s]*)?(?:#[^\s]*)?$/.test(targetPath)
+    && !targetPath.startsWith("/api/")
+    && !targetPath.startsWith("/auth");
+}
+
 function normalizeUnreadCount(count: number) {
   return Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+}
+
+function normalizeDesktopAttentionPayload(payload: DesktopAttentionPayload): DesktopAttentionPayload {
+  const count = normalizeUnreadCount(payload.count);
+  const level = normalizeAttentionLevel(payload.level, count);
+  const latestTargetPath = isSafeDesktopAttentionTargetPath(payload.latestTargetPath) ? payload.latestTargetPath : null;
+  const toast = normalizeDesktopAttentionToast(payload.toast);
+  return {
+    body: normalizeDesktopAttentionText(payload.body, count > 0 ? `${count} 条待处理提醒` : ""),
+    count,
+    latestEventId: normalizeDesktopAttentionText(payload.latestEventId, "") || null,
+    latestTargetPath,
+    level,
+    reason: normalizeDesktopAttentionText(payload.reason, "") || null,
+    title: normalizeDesktopAttentionText(payload.title, "ORF"),
+    toast,
+  };
+}
+
+function normalizeDesktopAttentionToast(toast: DesktopAttentionPayload["toast"]): DesktopAttentionToast | null {
+  if (!toast || !isSafeDesktopAttentionTargetPath(toast.targetPath)) return null;
+  return {
+    body: normalizeDesktopAttentionText(toast.body, "你有一条新的提醒"),
+    id: normalizeDesktopAttentionText(toast.id, ""),
+    level: normalizeAttentionLevel(toast.level ?? "toast", 1),
+    targetPath: toast.targetPath,
+    title: normalizeDesktopAttentionText(toast.title, "ORF 提醒"),
+  };
+}
+
+function normalizeAttentionLevel(level: AttentionLevel | undefined, count: number): AttentionLevel {
+  if (level === "urgent" || level === "flash" || level === "toast" || level === "badge") {
+    return count > 0 ? level : "none";
+  }
+  return count > 0 ? "badge" : "none";
+}
+
+function normalizeDesktopAttentionText(value: string | null | undefined, fallback: string) {
+  const text = typeof value === "string" ? value.trim() : "";
+  return (text || fallback).slice(0, 500);
 }
 
 function normalizeDesktopWindowResult(result: DesktopShellWindowResult | undefined): DesktopShellWindowResult {

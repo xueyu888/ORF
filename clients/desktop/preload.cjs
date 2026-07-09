@@ -1,10 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-contextBridge.exposeInMainWorld("orfNativeNotifications", {
-  showChatMessage(payload) {
-    return ipcRenderer.invoke("orf:chat-notification:show", payload);
-  },
-  onOpenChatTarget(handler) {
+function createPendingTargetSubscriber(pendingChannel, consumeChannel) {
+  return (handler) => {
     if (typeof handler !== "function") return undefined;
     let disposed = false;
     let drainRequested = false;
@@ -22,7 +19,7 @@ contextBridge.exposeInMainWorld("orfNativeNotifications", {
           do {
             drainRequested = false;
             for (;;) {
-              const result = await ipcRenderer.invoke("orf:chat-notification:consume-open-target").catch(() => null);
+              const result = await ipcRenderer.invoke(consumeChannel).catch(() => null);
               const targetPath = result && typeof result === "object" ? result.targetPath : null;
               if (disposed || typeof targetPath !== "string" || !targetPath) break;
               handler(targetPath);
@@ -38,13 +35,20 @@ contextBridge.exposeInMainWorld("orfNativeNotifications", {
     const listener = () => {
       drainOpenTargets();
     };
-    ipcRenderer.on("orf:chat-notification:open-pending", listener);
+    ipcRenderer.on(pendingChannel, listener);
     drainOpenTargets();
     return () => {
       disposed = true;
-      ipcRenderer.removeListener("orf:chat-notification:open-pending", listener);
+      ipcRenderer.removeListener(pendingChannel, listener);
     };
+  };
+}
+
+contextBridge.exposeInMainWorld("orfNativeNotifications", {
+  showChatMessage(payload) {
+    return ipcRenderer.invoke("orf:chat-notification:show", payload);
   },
+  onOpenChatTarget: createPendingTargetSubscriber("orf:chat-notification:open-pending", "orf:chat-notification:consume-open-target"),
 });
 
 contextBridge.exposeInMainWorld("orfNativeRuntime", {
@@ -68,6 +72,9 @@ contextBridge.exposeInMainWorld("orfNativeRuntime", {
 });
 
 contextBridge.exposeInMainWorld("orfDesktopShell", {
+  setAttentionState(payload) {
+    return ipcRenderer.invoke("orf:desktop-shell:set-attention-state", payload);
+  },
   setChatUnreadCount(payload) {
     return ipcRenderer.invoke("orf:desktop-shell:set-chat-unread-count", payload);
   },
@@ -95,6 +102,7 @@ contextBridge.exposeInMainWorld("orfDesktopShell", {
   closeWindow() {
     return ipcRenderer.invoke("orf:desktop-shell:close-window");
   },
+  onOpenTarget: createPendingTargetSubscriber("orf:desktop-shell:open-pending", "orf:desktop-shell:consume-open-target"),
   onWindowStateChange(handler) {
     if (typeof handler !== "function") return undefined;
     const listener = (_event, state) => {

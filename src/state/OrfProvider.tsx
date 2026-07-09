@@ -34,10 +34,20 @@ import { publishChatRealtimeConnectionRestored, publishChatRealtimeEvent } from 
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
 import { requestClientUpdateCheck } from "../features/client-updates/clientUpdateCenterEvents";
+import {
+  attentionToastIntentFromNotification,
+  attentionToastIntentFromWorkLogReminder,
+  buildAttentionState,
+} from "../features/attention/attentionModel";
+import type { AttentionState } from "../features/attention/attentionTypes";
 import { buildChatNativeNotificationDecision } from "../features/chat/chatNativeNotificationModel";
 import type { AppAttentionState } from "../features/interaction/appAttentionState";
 import { useAppAttentionState } from "../features/interaction/useAppAttentionState";
-import { syncDesktopChatUnreadCount } from "../features/desktop/desktopShellRuntime";
+import {
+  syncDesktopAttentionState,
+  subscribeDesktopAttentionTargetOpen,
+  type DesktopAttentionToast,
+} from "../features/desktop/desktopShellRuntime";
 import { registerOrfPushNotifications, revokeOrfPushNotifications } from "../features/push/orfPushRegistration";
 import { GlobalWorkLogReminderModal } from "../features/work-logs/GlobalWorkLogReminderModal";
 import {
@@ -114,6 +124,7 @@ interface OrfContextValue {
   isAuthenticated: boolean;
   isApproved: boolean;
   isAdmin: boolean;
+  attentionState: AttentionState;
   appAttentionState: AppAttentionState;
   modal: ModalState;
   toasts: ToastMessage[];
@@ -121,6 +132,7 @@ interface OrfContextValue {
   systemBroadcasts: SystemBroadcast[];
   workLogReminderState: WorkLogReminderState | null;
   chatUnreadSummary: ChatUnreadSummary;
+  notifications: AppNotification[];
   unreadNotificationCount: number;
   openModal: (modal: ModalState) => void;
   closeModal: () => void;
@@ -236,6 +248,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [systemBroadcasts, setSystemBroadcasts] = useState<SystemBroadcast[]>([]);
   const [workLogReminderState, setWorkLogReminderState] = useState<WorkLogReminderState | null>(null);
   const [chatUnreadSummary, setChatUnreadSummary] = useState<ChatUnreadSummary>(emptyChatUnreadSummary);
+  const [desktopAttentionToast, setDesktopAttentionToast] = useState<DesktopAttentionToast | null>(null);
   const authenticationExpiryConfirmationRef = useRef<Promise<void> | null>(null);
   const notifiedChatMessageIdsRef = useRef<string[]>([]);
   const notify = useCallback((message: string) => {
@@ -253,11 +266,28 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const isAdmin = currentUser?.role === "admin";
   const loadTaskManagementData = shouldLoadInitialTaskManagementReadModel(location.pathname);
   const {
+    notifications,
     receiveNotification,
     refreshNotifications,
     resetNotificationState,
     unreadNotificationCount,
   } = useNotificationState();
+  const currentPath = useMemo(
+    () => `${location.pathname}${location.search}${location.hash}`,
+    [location.hash, location.pathname, location.search],
+  );
+  const attentionState = useMemo(
+    () => buildAttentionState({
+      appAttentionState,
+      authenticated: isAuthenticated && isApproved,
+      chatUnreadSummary,
+      currentPath,
+      currentUserId: currentUser?.id,
+      notifications,
+      workLogReminderState,
+    }),
+    [appAttentionState, chatUnreadSummary, currentPath, currentUser?.id, isApproved, isAuthenticated, notifications, workLogReminderState],
+  );
   const {
     applyCommentThread,
     applyRemovedCommentThread,
@@ -312,8 +342,17 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const receiveRealtimeNotification = useCallback(
     (notification: AppNotification) => {
       receiveNotification(notification);
+      const toastIntent = attentionToastIntentFromNotification({
+        appAttentionState,
+        currentPath,
+        currentUserId: currentUser?.id,
+        notification,
+      });
+      if (toastIntent) {
+        setDesktopAttentionToast(toastIntent);
+      }
     },
-    [receiveNotification],
+    [appAttentionState, currentPath, currentUser?.id, receiveNotification],
   );
   const receiveRealtimeBroadcast = useCallback((broadcast: SystemBroadcast) => {
     if (isClientUpdateSystemBroadcast(broadcast)) {
@@ -367,10 +406,29 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     void refreshChatUnreadSummary().catch(() => undefined);
   }, [appAttentionState.activelyViewed, currentUser?.id, location.pathname, refreshChatUnreadSummary, reserveChatNotification]);
 
+  const receiveWorkLogReminderRequired = useCallback((event: { reminder: WorkLogReminderState }) => {
+    setWorkLogReminderState(event.reminder);
+    const toastIntent = attentionToastIntentFromWorkLogReminder(event.reminder, {
+      appAttentionState,
+      currentPath,
+    });
+    if (toastIntent) {
+      setDesktopAttentionToast(toastIntent);
+    }
+  }, [appAttentionState, currentPath]);
+
+  const receiveWorkLogReminderResolved = useCallback((event: { reminder: WorkLogReminderState }) => {
+    setWorkLogReminderState(event.reminder);
+  }, []);
+
   useEffect(() => subscribeNativeChatNotificationOpen((targetPath) => {
     if (isSafeChatNotificationTargetPath(targetPath)) {
       navigate(targetPath);
     }
+  }), [navigate]);
+
+  useEffect(() => subscribeDesktopAttentionTargetOpen((targetPath) => {
+    navigate(targetPath);
   }), [navigate]);
 
   useEffect(() => {
@@ -393,13 +451,14 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     onConnectionRestored: publishChatRealtimeConnectionRestored,
     onNotification: receiveRealtimeNotification,
     onReadModelInvalidation: receiveReadModelInvalidation,
-    onWorkLogReminderRequired: (event) => setWorkLogReminderState(event.reminder),
-    onWorkLogReminderResolved: (event) => setWorkLogReminderState(event.reminder),
+    onWorkLogReminderRequired: receiveWorkLogReminderRequired,
+    onWorkLogReminderResolved: receiveWorkLogReminderResolved,
   });
 
   useEffect(() => {
     if (!isAuthenticated || !isApproved) {
       setChatUnreadSummary(emptyChatUnreadSummary);
+      setDesktopAttentionToast(null);
       setReadModelInvalidations([]);
       setSystemBroadcasts([]);
       setWorkLogReminderState(null);
@@ -407,9 +466,35 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   }, [isApproved, isAuthenticated]);
 
   useEffect(() => {
-    const unreadCount = isAuthenticated && isApproved ? chatUnreadSummary.totalUnreadCount : 0;
-    void syncDesktopChatUnreadCount(unreadCount).catch(() => undefined);
-  }, [chatUnreadSummary.totalUnreadCount, isApproved, isAuthenticated]);
+    const payload = isAuthenticated && isApproved
+      ? {
+        body: attentionState.body,
+        count: attentionState.count,
+        latestEventId: attentionState.latestEventId,
+        latestTargetPath: attentionState.latestTargetPath,
+        level: attentionState.level,
+        reason: attentionState.reason,
+        title: attentionState.title,
+        toast: desktopAttentionToast,
+      }
+      : {
+        body: "",
+        count: 0,
+        latestEventId: null,
+        latestTargetPath: null,
+        level: "none" as const,
+        reason: null,
+        title: "ORF",
+        toast: null,
+      };
+    void syncDesktopAttentionState(payload)
+      .then(() => {
+        if (desktopAttentionToast) {
+          setDesktopAttentionToast((current) => current?.id === desktopAttentionToast.id ? null : current);
+        }
+      })
+      .catch(() => undefined);
+  }, [attentionState, desktopAttentionToast, isApproved, isAuthenticated]);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) return;
@@ -544,6 +629,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       isApproved,
       isAdmin,
+      attentionState,
       appAttentionState,
       modal,
       toasts,
@@ -551,6 +637,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       systemBroadcasts,
       workLogReminderState,
       chatUnreadSummary,
+      notifications,
       unreadNotificationCount,
       openModal: setModal,
       closeModal: () => setModal({ type: null }),
@@ -576,6 +663,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     [
       authConnectionError,
       authReady,
+      attentionState,
       appAttentionState,
       chatUnreadSummary,
       commentActions,
@@ -585,6 +673,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       isApproved,
       isAuthenticated,
       modal,
+      notifications,
       notify,
       objectiveActions,
       readModelInvalidations,
