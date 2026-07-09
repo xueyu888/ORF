@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Archive, ArrowLeft, Bell, BellOff, Bookmark, EyeOff, Folder, Info, ListTodo, MoreHorizontal, Pin, Reply, Search, Star, UserPlus, Users } from "lucide-react";
+import { Archive, ArrowLeft, Bell, BellOff, Bookmark, EyeOff, Folder, Inbox, Info, MoreHorizontal, Pin, Reply, Search, Star, UserPlus, Users } from "lucide-react";
+import { Link } from "react-router-dom";
 import { IconButton, actionButtonClassName } from "../../components/ui";
 import { isChatConversation } from "../../domain/chatConversation";
 import type { ChatChannel, ChatUser } from "../../types/orf";
@@ -20,13 +21,12 @@ type ChatHeaderProps = {
   onMemberSearch: () => void;
   onMobileBack?: () => void;
   onPins: () => void;
+  projectFeedbackHref?: string;
   onSaved: () => void;
   onSearch: () => void;
   onThreads: () => void;
   onToggleFavorite: () => void;
   onToggleMuted: () => void;
-  onWorkspaceTargets?: () => void;
-  workspaceTargetsOpen?: boolean;
   usersById: Map<string, ChatUser>;
 };
 
@@ -42,13 +42,12 @@ export function ChatHeader({
   onMemberSearch,
   onMobileBack,
   onPins,
+  projectFeedbackHref,
   onSaved,
   onSearch,
   onThreads,
   onToggleFavorite,
   onToggleMuted,
-  onWorkspaceTargets,
-  workspaceTargetsOpen,
   usersById,
 }: ChatHeaderProps) {
   const Icon = channelIcon(channel);
@@ -114,15 +113,15 @@ export function ChatHeader({
             onClick={onFiles}
           />
         )}
-        {onWorkspaceTargets && (
-          <IconButton
-            aria-pressed={workspaceTargetsOpen === true}
-            className="orf-chat-header-workspace-action"
-            data-active={workspaceTargetsOpen ? "true" : undefined}
-            icon={ListTodo}
-            label="目标/行动项"
-            onClick={onWorkspaceTargets}
-          />
+        {channel.projectId && projectFeedbackHref && (
+          <Link
+            aria-label="项目反馈"
+            className={actionButtonClassName({ className: "orf-chat-header-action-secondary", iconOnly: true, variant: "ghost" })}
+            title="项目反馈"
+            to={projectFeedbackHref}
+          >
+            <Inbox className="h-4 w-4" />
+          </Link>
         )}
         <IconButton
           aria-pressed={activePanel === "search"}

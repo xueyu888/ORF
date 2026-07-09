@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import { Button, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser, Feedback } from "../../types/orf";
 import { formatPastedFeedbackLinks } from "../feedback/model/feedbackIssue";
-import type { WorkspaceSelection } from "../workspace/workspaceTypes";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";
@@ -44,7 +43,6 @@ type ChatMessageItemProps = {
   onSave?: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onThread?: (rootMessageId: string, options?: ChatOpenThreadOptions) => void;
-  onWorkspaceTargetLink?: (selection: WorkspaceSelection) => void;
   reactionPickerSignal?: number;
   usersById: Map<string, ChatUser>;
 };
@@ -135,13 +133,11 @@ function CollapsibleMessageText({
   body,
   feedbackItems,
   onDriveResourceLink,
-  onWorkspaceTargetLink,
   usersById,
 }: {
   body: string;
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
-  onWorkspaceTargetLink?: (selection: WorkspaceSelection) => void;
   usersById: Map<string, ChatUser>;
 }) {
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -196,7 +192,6 @@ function CollapsibleMessageText({
           body={body}
           feedbackItems={feedbackItems}
           onDriveResourceLink={onDriveResourceLink}
-          onWorkspaceTargetLink={onWorkspaceTargetLink}
           usersById={usersById}
         />
       </div>
@@ -446,7 +441,6 @@ export function ChatMessageItem({
   onSave,
   onSaveEdit,
   onThread,
-  onWorkspaceTargetLink,
   reactionPickerSignal,
   usersById,
 }: ChatMessageItemProps) {
@@ -693,7 +687,6 @@ export function ChatMessageItem({
               body={message.body}
               feedbackItems={feedbackItems}
               onDriveResourceLink={onDriveResourceLink}
-              onWorkspaceTargetLink={onWorkspaceTargetLink}
               usersById={usersById}
             />
             <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
