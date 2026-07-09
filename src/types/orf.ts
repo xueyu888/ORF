@@ -32,6 +32,7 @@ export type NotificationKind =
   | "comment.thread.status.changed"
   | "comment.mention.created"
   | "data.sync.conflict"
+  | "worklog.submitted"
   | "worklog.reminder";
 export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog" | "dataSync";
 export type NotificationStream = "personalNotification" | "teamAnnouncement";

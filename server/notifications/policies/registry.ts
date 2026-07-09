@@ -112,6 +112,11 @@ export const notificationPolicyRegistry: Record<NotificationKind, NotificationPo
     replyTarget: "notification-target",
     stream: "personalNotification",
   },
+  "worklog.submitted": {
+    kind: "worklog.submitted",
+    replyTarget: "none",
+    stream: "teamAnnouncement",
+  },
   "worklog.reminder": {
     kind: "worklog.reminder",
     replyTarget: "none",

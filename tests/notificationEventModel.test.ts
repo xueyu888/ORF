@@ -106,6 +106,14 @@ test("data sync conflict notifications are personal reminders without comment re
   });
 });
 
+test("work log submission notifications are team announcements", () => {
+  assert.deepEqual(notificationPolicy("worklog.submitted"), {
+    kind: "worklog.submitted",
+    replyTarget: "none",
+    stream: "teamAnnouncement",
+  });
+});
+
 test("data sync ORF recipient must resolve to exactly one Xueyu membership", () => {
   const memberships = [
     { email: "other@example.com", name: "其他人", teamId: "team-1", userId: "user-other" },

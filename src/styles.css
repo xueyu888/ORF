@@ -8327,7 +8327,8 @@ button:disabled {
 }
 
 .work-logs-editor .orf-rich-text-editor-content {
-  min-height: 96px;
+  max-height: min(44vh, 480px);
+  min-height: 132px;
 }
 
 .work-logs-editor-actions {
@@ -9905,8 +9906,8 @@ button.work-logs-team-cell:focus-visible {
   }
 
   .work-logs-editor .orf-rich-text-editor-content {
-    max-height: 112px;
-    min-height: 56px;
+    max-height: min(46vh, 360px);
+    min-height: 120px;
   }
 
   .work-logs-editor .orf-rich-text-footer {
