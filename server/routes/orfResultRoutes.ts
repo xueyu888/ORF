@@ -1,10 +1,10 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
+  requireResultDeleteContext,
   requireResultEditContext,
   requireTargetInScope,
   requireUserScopeContext,
-  requireWriteContext,
 } from "../auth/accessPolicy";
 import {
   getPermissionRulesForScope,
@@ -258,11 +258,8 @@ export function registerOrfResultRoutes(app: FastifyInstance) {
 
   app.delete("/api/results/:resultId", async (request, reply) => {
     const params = resultParamsSchema.parse(request.params);
-    const context = await requireWriteContext(request, reply, "result.delete");
+    const context = await requireResultDeleteContext(request, reply, params.resultId);
     if (!context) {
-      return reply;
-    }
-    if (!(await requireTargetInScope(reply, { type: "result", id: params.resultId }, context.scope, "Result not found"))) {
       return reply;
     }
     if (!(await requireResultUnlocked(reply, params.resultId))) {

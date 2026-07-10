@@ -114,9 +114,10 @@ import {
   canReinforceObjectiveChallengers,
   canSubmitObjectivePeerReview,
   metricCreationActionForObjective,
+  metricDeleteAccessForObjective,
+  metricDeleteUnavailableMessage,
   metricEditAccessForObjective,
   metricEditUnavailableMessage,
-  metricLifecycleMutationAccessForObjective,
   objectiveContentEditUnavailableMessage,
   workItemMutationAccessForObjective,
   workItemMutationUnavailableMessage,
@@ -612,18 +613,18 @@ export function ChallengePlanPage() {
       permissionRules: challengeState.permissionRules,
       now,
     });
+  const metricDeleteAccessForObjectiveId = (objectiveId: string) =>
+    metricDeleteAccessForObjective({
+      objective: objectiveById(objectiveId),
+      currentUser,
+      permissionRules: challengeState.permissionRules,
+      now,
+    });
   const canMutateMetricForObjective = (objectiveId: string) => metricEditAccessForObjectiveId(objectiveId).status === "allowed";
   const notifyUnavailableMetricEdit = (objectiveId: string) => {
     const access = metricEditAccessForObjectiveId(objectiveId);
     if (access.status === "allowed") return;
     notify(metricEditUnavailableMessage(access));
-  };
-  const metricLifecycleMutationAccessForObjectiveId = (objectiveId: string) =>
-    metricLifecycleMutationAccessForObjective(objectiveById(objectiveId));
-  const notifyUnavailableMetricDeletion = (objectiveId: string) => {
-    const access = metricLifecycleMutationAccessForObjectiveId(objectiveId);
-    if (access.status === "allowed") return;
-    notify(access.reason === "lifecycleLocked" ? "指标已冻结，不能删除" : "指标所属目标不可用");
   };
   const workItemMutationAccessForObjectiveId = (objectiveId: string) =>
     workItemMutationAccessForObjective({
@@ -836,11 +837,10 @@ export function ChallengePlanPage() {
     }
 
     if (target.type === "bounty" && action === "delete") {
-      const access = metricLifecycleMutationAccessForObjectiveId(target.objectiveId);
-      if (access.status !== "allowed") {
-        notifyUnavailableMetricDeletion(target.objectiveId);
-        return false;
-      }
+      const access = metricDeleteAccessForObjectiveId(target.objectiveId);
+      if (access.status === "allowed") return true;
+      notify(metricDeleteUnavailableMessage(access));
+      return false;
     }
 
     if ((target.type === "action" || target.type === "subAction") && (action === "edit" || action === "delete")) {
