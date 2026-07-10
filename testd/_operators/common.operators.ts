@@ -49,6 +49,8 @@ import {
 } from "./params";
 
 const CAPTURED_RESPONSE_TIMEOUT_MS = 5_000;
+const FRONTEND_READY_TIMEOUT_MS = 30_000;
+const FRONTEND_READY_INTERVALS_MS = [250, 500, 1_000, 2_000];
 
 export function createCommonOperators<
   TContext extends BrowserTestContext,
@@ -57,13 +59,23 @@ export function createCommonOperators<
   return {
     "frontend.service": {
       available: async ({ ctx }) => {
-        await expect.poll(() => isFrontendReady(ctx.page)).toBe(true);
+        await expect
+          .poll(() => isFrontendReady(ctx.page), {
+            intervals: FRONTEND_READY_INTERVALS_MS,
+            timeout: FRONTEND_READY_TIMEOUT_MS,
+          })
+          .toBe(true);
       },
     },
 
     "frontend.login_entry": {
       accessible: async ({ ctx }) => {
-        await expect.poll(() => isFrontendAuthEntryReady(ctx.page)).toBe(true);
+        await expect
+          .poll(() => isFrontendAuthEntryReady(ctx.page), {
+            intervals: FRONTEND_READY_INTERVALS_MS,
+            timeout: FRONTEND_READY_TIMEOUT_MS,
+          })
+          .toBe(true);
       },
     },
 
@@ -722,6 +734,7 @@ function optionalObjectiveFlowStatus(params: StepParams, key: string) {
     status === "reestimating" ||
     status === "frozen" ||
     status === "submitted" ||
+    status === "accepted" ||
     status === "settled" ||
     status === "closed"
   ) {

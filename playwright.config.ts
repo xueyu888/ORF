@@ -4,10 +4,9 @@ import { ensureTestdRunId } from "./testd/_framework/run-scope";
 
 const realSystemEnabled = process.env.ORF_REAL_E2E === "1";
 const includeDisabledTestdSpecs = process.env.TESTD_INCLUDE_DISABLED_SPECS === "1";
-const testdSuite = process.env.TESTD_SUITE ?? "isolated";
-const serialSuite = testdSuite === "permissions" || testdSuite === "settings";
-const settingsSpecGlobs = ["**/settings/**/*.spec.ts"];
-const permissionSpecGlobs = ["**/permissions/**/*.spec.ts"];
+const testdSuite = process.env.TESTD_SUITE ?? "parallel";
+const serialSuite = testdSuite === "serial";
+const serialSpecGlobs = ["**/串行/**/*.spec.ts"];
 
 process.env.DATABASE_POOL_MAX ??= "15";
 process.env.TESTD_DATABASE_POOL_MAX ??= "2";
@@ -21,13 +20,9 @@ const testdTimeoutMs = positiveIntegerEnv(
   serialSuite ? 180_000 : 60_000,
 );
 
-const suiteTestMatch = testdSuite === "permissions"
-  ? permissionSpecGlobs
-  : testdSuite === "settings"
-    ? settingsSpecGlobs
-    : undefined;
-const suiteTestIgnore = testdSuite === "isolated"
-  ? [...permissionSpecGlobs, ...settingsSpecGlobs]
+const suiteTestMatch = serialSuite ? serialSpecGlobs : undefined;
+const suiteTestIgnore = testdSuite === "parallel"
+  ? serialSpecGlobs
   : [];
 
 const defaultPort = realSystemEnabled ? 5174 : 5173;

@@ -60,6 +60,7 @@ const dependencyServices = {
     displayUrl: storageBaseUrl,
   },
   settlement: {
+    optional: true,
     start: isLocalServiceUrl(localSettlementBaseUrl) ? startLocalSettlementService : undefined,
     startLabel: `systemctl --user start ${localSettlementSystemdUnit}`,
     url: `${trimSlash(localSettlementBaseUrl)}/health`,
@@ -348,11 +349,16 @@ async function prepareRuntimeDependencies() {
     }
 
     if (!service.script && !service.start) {
-      console.error(`${name} is not healthy: ${health.message}`);
+      const log = service.optional ? console.warn : console.error;
+      log(`${name} is not healthy: ${health.message}`);
       if (name === 'database') {
         console.error('Set DATABASE_URL or REMOTE_DATABASE_URL in .env, then run node scripts/verify-db.mjs.');
       } else {
-        console.error(`${name} is configured as a shared/remote dependency at ${service.displayUrl}; not starting a local replacement.`);
+        log(`${name} is configured as a shared/remote dependency at ${service.displayUrl}; not starting a local replacement.`);
+      }
+      if (service.optional) {
+        console.warn(`${name} is optional for startup; continuing without it.`);
+        continue;
       }
       process.exitCode = 1;
       return false;
@@ -362,15 +368,25 @@ async function prepareRuntimeDependencies() {
     console.log(`${name} is not healthy (${health.message}); running ${startLabel}`);
     const code = service.start ? await service.start() : await runNpmScriptCommand(service.script, []);
     if (code !== 0) {
-      console.error(`${name} failed to start via ${startLabel}`);
+      const log = service.optional ? console.warn : console.error;
+      log(`${name} failed to start via ${startLabel}`);
+      if (service.optional) {
+        console.warn(`${name} is optional for startup; continuing without it.`);
+        continue;
+      }
       process.exitCode = code;
       return false;
     }
 
     const ready = await waitForServiceHealth(service, 30000);
     if (!ready.ok) {
-      console.error(`${name} did not become healthy: ${ready.message}`);
-      console.error(`Check npm run ${service.script} and ${service.displayUrl}`);
+      const log = service.optional ? console.warn : console.error;
+      log(`${name} did not become healthy: ${ready.message}`);
+      log(`Check ${startLabel} and ${service.displayUrl}`);
+      if (service.optional) {
+        console.warn(`${name} is optional for startup; continuing without it.`);
+        continue;
+      }
       process.exitCode = 1;
       return false;
     }

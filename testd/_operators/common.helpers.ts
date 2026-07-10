@@ -88,6 +88,25 @@ export async function clearBrowserState(page: Page) {
     .catch(() => undefined);
 }
 
+export async function dismissWorkLogReminderModalIfVisible(page: Page) {
+  const backdrop = page.locator(".work-log-reminder-modal-backdrop").first();
+  const dialog = page.getByRole("dialog", { name: "工作日志欠账强提醒" }).first();
+  const [backdropVisible, dialogVisible] = await Promise.all([
+    backdrop.isVisible({ timeout: 100 }).catch(() => false),
+    dialog.isVisible({ timeout: 100 }).catch(() => false),
+  ]);
+  const visible = backdropVisible || dialogVisible;
+  if (!visible) {
+    return false;
+  }
+
+  const snoozeButton = dialog.getByRole("button", { name: "10 分钟后提醒", exact: true }).first();
+  await snoozeButton.click({ timeout: 10_000 });
+  await backdrop.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => undefined);
+  await dialog.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => undefined);
+  return true;
+}
+
 export async function readBrowserSession(page: Page): Promise<BrowserSession> {
   if (!page.url().startsWith("about:")) {
     try {
@@ -435,6 +454,45 @@ export async function requiredTestUserIdByNameInTeam(input: { teamId: string; na
     throw new Error(`测试用户不属于目标团队或不存在: ${input.name}`);
   }
   return userId;
+}
+
+export async function requiredTestUserIdForTeam(input: {
+  teamId: string;
+  preferredName?: string | null;
+  preferredUserId?: string | null;
+  purpose?: string;
+}) {
+  if (input.preferredUserId) {
+    const [row] = await db
+      .select({ userId: users.id })
+      .from(users)
+      .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
+      .where(and(eq(teamMembers.teamId, input.teamId), eq(users.id, input.preferredUserId)))
+      .limit(1);
+    if (row?.userId) {
+      return row.userId;
+    }
+  }
+
+  if (input.preferredName) {
+    const userId = await readTestUserIdByNameInTeam({ teamId: input.teamId, name: input.preferredName });
+    if (userId) {
+      return userId;
+    }
+  }
+
+  const [row] = await db
+    .select({ userId: users.id })
+    .from(users)
+    .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, input.teamId), eq(users.status, "active")))
+    .orderBy(asc(users.name), asc(users.id))
+    .limit(1);
+  if (row?.userId) {
+    return row.userId;
+  }
+
+  throw new Error(`${input.purpose ?? "测试业务记录"}需要默认团队内已存在的用户 ID`);
 }
 
 export async function readTestUserIdsByNamesInTeam(input: { teamId: string; names: readonly string[] }) {

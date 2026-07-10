@@ -8,10 +8,12 @@ import pg from "pg";
 import { createPgPoolConfig } from "./db-connection.mjs";
 
 const testdRunId = process.env.TESTD_RUN_ID ?? createTestdRunId();
+const testdReportRunId = process.env.TESTD_REPORT_RUN_ID ?? testdRunId;
 const extraArgs = process.argv.slice(2);
 const requestedSuite = process.env.TESTD_SUITE;
 const inferredSuite = requestedSuite ?? inferSuiteFromArgs(extraArgs);
-const suites = inferredSuite ? suitesFor(inferredSuite) : ["isolated", "permissions", "settings"];
+const suites = inferredSuite ? suitesFor(inferredSuite) : ["parallel", "serial"];
+const runnableSuites = suites.filter((suite) => hasRunnableSpecsForSuite(suite, extraArgs));
 const outputTailLimit = 1024 * 1024;
 const defaultNetworkRetryDivisors = [2, 4, 8];
 const networkFailurePatterns = [
@@ -21,7 +23,7 @@ const networkFailurePatterns = [
   },
   {
     reason: "TCP 建连超时",
-    pattern: /\b(?:ETIMEDOUT|ESOCKETTIMEDOUT|ENETUNREACH|EHOSTUNREACH)\b/i,
+    pattern: /\b(?:ETIMEDOUT|ESOCKETTIMEDOUT|ENETUNREACH|EHOSTUNREACH)\b|timeout exceeded when trying to connect/i,
   },
   {
     reason: "TCP 连接被重置",
@@ -50,7 +52,7 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
 ensureTestdConfigFileExists();
 
 if (await shouldRunRecoveryPass(extraArgs)) {
-  for (const suite of suites) {
+  for (const suite of runnableSuites) {
     if (terminating) {
       break;
     }
@@ -68,7 +70,7 @@ if (await shouldRunRecoveryPass(extraArgs)) {
 }
 
 if (!process.exitCode) {
-  for (const suite of suites) {
+  for (const suite of runnableSuites) {
     if (terminating) {
       break;
     }
@@ -85,13 +87,18 @@ if (!process.exitCode) {
   }
 }
 
+if (shouldPrintAggregateTestdSummary(extraArgs)) {
+  await printAggregateTestdSummary();
+}
+
 async function runSuiteWithNetworkRetry(suite, args) {
+  console.error(`TestD 启动${suiteLabel(suite)}组：模块 ${suiteModuleNames(suite).join("、") || "无"}`);
   const attempts = buildNetworkRetryAttempts(suite, args);
 
   for (const [attemptIndex, attempt] of attempts.entries()) {
     if (attempt.retryIndex > 0) {
       console.error(
-        `TestD 网络降级重试 ${attempt.retryIndex}/${attempts.length - 1}: suite=${suite} ${describeAttempt(attempt)}`,
+        `TestD ${suiteLabel(suite)}组网络降级重试 ${attempt.retryIndex}/${attempts.length - 1}: ${describeAttempt(attempt)}`,
       );
     }
 
@@ -106,7 +113,7 @@ async function runSuiteWithNetworkRetry(suite, args) {
     const networkFailure = detectNetworkEntryFailure(result.outputTail);
     const nextAttempt = attempts[attemptIndex + 1];
     if (networkFailure && nextAttempt && isRecoveryPassAllowed(attempt.args)) {
-      console.error(`TestD 检测到 ${suite} suite 可能遇到数据库公网入口建连抖动: ${networkFailure.reason}`);
+      console.error(`TestD ${suiteLabel(suite)}组可能遇到数据库公网入口建连抖动: ${networkFailure.reason}`);
       const recoveryResult = await runPostFailureRecoveryPass(suite, attempt.args, result.exitCode, {
         preserveOriginalExitCode: false,
       });
@@ -119,7 +126,7 @@ async function runSuiteWithNetworkRetry(suite, args) {
 
       const delayMs = networkRetryDelayMs();
       console.error(
-        `TestD 已完成本轮清理，将在 ${delayMs}ms 后用更低并发重跑整个 ${suite} suite: ${describeAttempt(nextAttempt)}`,
+        `TestD 已完成本轮清理，将在 ${delayMs}ms 后用更低并发重跑整个${suiteLabel(suite)}组: ${describeAttempt(nextAttempt)}`,
       );
       await sleep(delayMs);
       continue;
@@ -154,7 +161,10 @@ function runPlaywrightAttempt(suite, args, extraEnv = {}) {
           ...process.env,
           TESTD_RUN_ID: testdRunId,
           TESTD_SUITE: suite,
+          TESTD_REPORT_AGGREGATE: "1",
+          TESTD_REPORT_RUN_ID: testdReportRunId,
           ...extraEnv,
+          TESTD_REPORT_RUN_ID: testdReportRunId,
         },
         stdio: ["inherit", "pipe", "pipe"],
       },
@@ -175,7 +185,7 @@ function runPlaywrightAttempt(suite, args, extraEnv = {}) {
       currentChildExited = true;
       currentChild = undefined;
       if (signal) {
-        console.error(`testd ${suite} suite exited by signal ${signal}`);
+        console.error(`TestD ${suiteLabel(suite)}组被信号 ${signal} 终止`);
         resolve({ exitCode: signalExitCode(signal), outputTail });
         return;
       }
@@ -207,16 +217,75 @@ function ensureTestdConfigFileExists() {
   }
 }
 
+function hasRunnableSpecsForSuite(suite, args) {
+  if (hasExplicitTestPathArgs(args)) {
+    return true;
+  }
+
+  const specPaths = listSpecPaths(path.join(process.cwd(), "testd"));
+  const hasSpecs = specPaths.some((specPath) => specBelongsToSuite(suite, specPath));
+  if (!hasSpecs) {
+    console.error(`TestD 跳过${suiteLabel(suite)}组：当前没有匹配的测试文件。`);
+  }
+  return hasSpecs;
+}
+
+function hasExplicitTestPathArgs(args) {
+  return args.some((arg) => arg.length > 0 && !arg.startsWith("-"));
+}
+
+function listSpecPaths(rootDir) {
+  if (!fs.existsSync(rootDir)) {
+    return [];
+  }
+
+  const output = [];
+  const entries = fs.readdirSync(rootDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      output.push(...listSpecPaths(entryPath));
+      continue;
+    }
+    if (entry.isFile() && entry.name.endsWith(".spec.ts")) {
+      output.push(entryPath);
+    }
+  }
+  return output;
+}
+
+function specBelongsToSuite(suite, specPath) {
+  const normalized = specPath.split(path.sep).join("/");
+  const inSerialDirectory = normalized.includes("/串行/");
+  if (suite === "serial") {
+    return inSerialDirectory;
+  }
+  return !inSerialDirectory;
+}
+
+function suiteModuleNames(suite) {
+  const testdRoot = path.join(process.cwd(), "testd");
+  return [...new Set(
+    listSpecPaths(testdRoot)
+      .filter((specPath) => specBelongsToSuite(suite, specPath))
+      .map((specPath) => path.relative(testdRoot, specPath).split(path.sep)[1])
+      .filter(Boolean),
+  )].sort();
+}
+
 function runRecoveryPass(suite, args, reason) {
   const recoveryRunId = createTestdRunId();
   const recoveryWorkers = positiveIntegerEnv("TESTD_RECOVERY_WORKERS", 1);
   console.error(
-    `TestD recovery ${reason} pass 启动: suite=${suite} TESTD_RUN_ID=${recoveryRunId} workers=${recoveryWorkers}`,
+    `TestD ${suiteLabel(suite)}组 recovery ${reason} pass 启动: TESTD_RUN_ID=${recoveryRunId} workers=${recoveryWorkers}`,
   );
   return runPlaywright(suite, recoveryArgs(args), {
     TESTD_RECOVERY_ONLY: "1",
     TESTD_RUN_ID: recoveryRunId,
-    TESTD_DATABASE_POOL_MAX: "1",
+    TESTD_DATABASE_POOL_MAX: process.env.TESTD_RECOVERY_DATABASE_POOL_MAX ?? "2",
+    TESTD_TEST_TIMEOUT_MS: process.env.TESTD_RECOVERY_TEST_TIMEOUT_MS ?? "180000",
+    DATABASE_CONNECTION_TIMEOUT_MS: process.env.TESTD_RECOVERY_DATABASE_CONNECTION_TIMEOUT_MS ?? "60000",
+    DATABASE_QUERY_TIMEOUT_MS: process.env.TESTD_RECOVERY_DATABASE_QUERY_TIMEOUT_MS ?? "60000",
   });
 }
 
@@ -225,7 +294,7 @@ async function runPostFailureRecoveryPass(suite, args, originalExitCode, options
     return { completed: false, skipped: true, exitCode: originalExitCode };
   }
 
-  console.error(`TestD 检测到 ${suite} suite 失败，开始补清理本轮异常退出留下的 recovery case...`);
+  console.error(`TestD ${suiteLabel(suite)}组失败，开始补清理本轮异常退出留下的 recovery case...`);
   const recoveryExitCode = await runRecoveryPass(suite, args, "post-failure");
   if (terminating) {
     process.exitCode = signalExitCode(terminationSignal ?? "SIGINT");
@@ -253,6 +322,7 @@ function createTestdRunId() {
 
 function recoveryArgs(args) {
   const output = [];
+  const recoveryTimeoutMs = positiveIntegerEnv("TESTD_RECOVERY_TEST_TIMEOUT_MS", 180_000);
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (isTimeoutArg(arg)) {
@@ -263,7 +333,7 @@ function recoveryArgs(args) {
     }
     output.push(arg);
   }
-  return withWorkerArg(output, positiveIntegerEnv("TESTD_RECOVERY_WORKERS", 1));
+  return withWorkerArg([...output, `--timeout=${recoveryTimeoutMs}`], positiveIntegerEnv("TESTD_RECOVERY_WORKERS", 1));
 }
 
 function isTimeoutArg(arg) {
@@ -280,7 +350,7 @@ function buildNetworkRetryAttempts(suite, args) {
   const attempts = [
     {
       retryIndex: 0,
-      args,
+      args: withWorkerArg(args, currentWorkers),
       env: {},
       workers: currentWorkers,
       runId: testdRunId,
@@ -311,7 +381,7 @@ function buildNetworkRetryAttempts(suite, args) {
       args: withWorkerArg(args, workers),
       env: {
         TESTD_RUN_ID: runId,
-        TESTD_DATABASE_POOL_MAX: "1",
+        TESTD_DATABASE_POOL_MAX: process.env.TESTD_RETRY_DATABASE_POOL_MAX ?? "2",
       },
       workers,
       runId,
@@ -322,7 +392,7 @@ function buildNetworkRetryAttempts(suite, args) {
 }
 
 function isSerialSuite(suite) {
-  return suite === "permissions" || suite === "settings";
+  return suite === "serial";
 }
 
 function networkRetryWorkers(currentWorkers) {
@@ -342,7 +412,7 @@ function workerFractions(currentWorkers) {
 }
 
 function defaultPlaywrightWorkerCount() {
-  return Math.max(1, Math.floor(logicalCpuCount() / 2));
+  return Math.max(1, Math.min(6, Math.floor(logicalCpuCount() / 2)));
 }
 
 function logicalCpuCount() {
@@ -386,7 +456,7 @@ function withWorkerArg(args, workers) {
 
 function describeAttempt(attempt) {
   const workers = attempt.workers === undefined ? "默认 workers" : `--workers=${attempt.workers}`;
-  const pool = attempt.retryIndex > 0 ? "TESTD_DATABASE_POOL_MAX=1" : "当前 pool 设置";
+  const pool = attempt.retryIndex > 0 ? `TESTD_DATABASE_POOL_MAX=${process.env.TESTD_RETRY_DATABASE_POOL_MAX ?? "2"}` : "当前 pool 设置";
   return `${workers}, ${pool}, TESTD_RUN_ID=${attempt.runId}`;
 }
 
@@ -454,6 +524,78 @@ function signalExitCode(signal) {
     return 129;
   }
   return 1;
+}
+
+async function printAggregateTestdSummary() {
+  const manifestPath = path.join(
+    process.cwd(),
+    ".artifacts",
+    "testd-report-runs",
+    sanitizePathSegment(testdReportRunId),
+    "manifest.json",
+  );
+
+  let manifest;
+  try {
+    manifest = JSON.parse(await fs.promises.readFile(manifestPath, "utf8"));
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      console.error(`TestD 汇总读取失败: ${error?.message ?? String(error)}`);
+    }
+    return;
+  }
+
+  const resultPath = path.resolve(process.cwd(), manifest.resultPath ?? "");
+  let report;
+  try {
+    report = JSON.parse(await fs.promises.readFile(resultPath, "utf8"));
+  } catch (error) {
+    console.error(`TestD 汇总结果读取失败: ${error?.message ?? String(error)}`);
+    return;
+  }
+
+  const run = report.run ?? {};
+  console.error(
+    `TestD 汇总：总用例 ${numberOrZero(run.total)}，通过 ${numberOrZero(run.passed)}，未通过 ${numberOrZero(run.failed)}，跳过 ${numberOrZero(run.skipped)}。`,
+  );
+
+  if (Array.isArray(report.suites) && report.suites.length > 0) {
+    console.error(`TestD 批次：${report.suites.map(formatSuiteSummary).join("；")}。`);
+  }
+
+  const failedCases = Array.isArray(report.cases)
+    ? report.cases.filter((testCase) => testCase?.status !== "passed" && testCase?.status !== "skipped")
+    : [];
+  if (failedCases.length > 0) {
+    const visibleFailedCases = failedCases.slice(0, 10).map((testCase) => testCase.id).join(", ");
+    const overflow = failedCases.length > 10 ? ` 等 ${failedCases.length} 个` : "";
+    console.error(`TestD 未通过用例：${visibleFailedCases}${overflow}`);
+  }
+
+  if (typeof manifest.summaryPath === "string" && manifest.summaryPath) {
+    console.error(`TestD 报告：${manifest.summaryPath}`);
+  }
+}
+
+function formatSuiteSummary(suite) {
+  const skipped = numberOrZero(suite.skipped);
+  const skippedText = skipped > 0 ? `，跳过 ${skipped}` : "";
+  return `${suite.name} ${numberOrZero(suite.passed)}/${numberOrZero(suite.total)} 通过，未通过 ${numberOrZero(suite.failed)}${skippedText}`;
+}
+
+function numberOrZero(value) {
+  return Number.isFinite(value) ? value : 0;
+}
+
+function shouldPrintAggregateTestdSummary(args) {
+  if (process.env.TESTD_RECOVERY_ONLY === "1") {
+    return false;
+  }
+  return !args.some((arg) => arg === "--list" || arg === "--help" || arg === "-h");
+}
+
+function sanitizePathSegment(value) {
+  return String(value).replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || "run";
 }
 
 function compactDate() {
@@ -544,26 +686,32 @@ function inferSuiteFromArgs(args) {
     return undefined;
   }
 
-  if (pathArgs.some((arg) => arg.includes("/permissions/") || arg.includes("\\permissions\\"))) {
-    return "permissions";
+  if (pathArgs.some((arg) => arg.includes("/串行/") || arg.includes("\\串行\\"))) {
+    return "serial";
   }
 
-  if (pathArgs.some((arg) => arg.includes("/settings/") || arg.includes("\\settings\\"))) {
-    return "settings";
-  }
-
-  return "isolated";
+  return "parallel";
 }
 
 function suitesFor(suite) {
   if (suite === "all") {
-    return ["isolated", "permissions", "settings"];
+    return ["parallel", "serial"];
   }
 
-  if (suite === "isolated" || suite === "permissions" || suite === "settings") {
+  if (suite === "parallel" || suite === "serial") {
     return [suite];
   }
 
   console.error(`Unsupported TESTD_SUITE: ${suite}`);
   process.exit(1);
+}
+
+function suiteLabel(suite) {
+  if (suite === "parallel") {
+    return "并行";
+  }
+  if (suite === "serial") {
+    return "串行";
+  }
+  return suite;
 }

@@ -1,4 +1,4 @@
-# 评论与背景反向用例续跑 prompt
+# 评论反向用例续跑 prompt
 
 把下面这段提示词复制给下一台电脑上的 Codex 继续执行：
 
@@ -9,20 +9,18 @@
 - testd-doc/规范/数据化测试方法论.md
 - testd-doc/规范/数据化测试步骤语言规范.md
 - testd-doc/规范/数据化测试代码生成约束.md
-- 本次涉及的 8 个反向用例文档
+- 本次涉及的 6 个评论反向用例文档
 
 当前已实现内容：
-- 新增并挂入 8 个反向用例文档和 testd 配置：
+- 新增并挂入 6 个评论反向用例文档和 testd 配置：
   - 管理员新增评论-普通成员不可评论未参与目标和任务
   - 成员新增评论-非参与成员不可新增评论
   - 评论回复-非参与成员不可回复
   - 评论编辑-非作者不可编辑
   - 评论删除-非作者不可删除
   - 评论上传图片-非图片文件不可上传
-  - 设置页面修改背景-未登录用户不可修改个人背景
-  - 设置页面修改背景-普通成员不可修改系统背景
-- 新增 comment reverse case factory、6 组 comments 反向 spec、2 组 settings 反向 spec。
-- 新增/扩展 comments 和 background settings 领域 operators/helpers。
+- 新增 comment reverse case factory、6 组 comments 反向 spec。
+- 新增/扩展 comments 领域 operators/helpers。
 - `testd/testd.config.ts` 和 `testd/testd.config.ts.example` 已加入这些用例，均保持 `enabled: false`，但有 `spec`、`fixtureLifecycle: "isolated"`、`traceability: "verified"`。
 - 注意用户确认过的业务规则：非参与成员不可回复，但管理员可以回复；当前反向回复用例只验证非参与普通成员不可回复。
 
@@ -33,18 +31,14 @@
   - `npm run server:start`
   - 后端监听 `http://127.0.0.1:8787`
   - `curl http://127.0.0.1:8787/health` 返回 200。
-- 单跑未登录个人背景反向用例通过：
-  - `ORF_REAL_E2E=1 TESTD_INCLUDE_DISABLED_SPECS=1 npm run testd -- testd/settings/background-personal-unauthenticated/_entry/background-personal-unauthenticated.spec.ts --workers=1`
 - 整组新增 spec 串行跑过一次：
-  - `ORF_REAL_E2E=1 TESTD_INCLUDE_DISABLED_SPECS=1 npm run testd -- testd/comments/admin-create-forbidden/_entry/admin-create-comment-forbidden.spec.ts testd/comments/member-create-forbidden/_entry/member-create-comment-forbidden.spec.ts testd/comments/reply-forbidden/_entry/comment-reply-forbidden.spec.ts testd/comments/edit-forbidden/_entry/comment-edit-forbidden.spec.ts testd/comments/delete-forbidden/_entry/comment-delete-forbidden.spec.ts testd/comments/image-upload-invalid/_entry/comment-image-upload-invalid.spec.ts testd/settings/background-personal-unauthenticated/_entry/background-personal-unauthenticated.spec.ts testd/settings/background-admin-member-forbidden/_entry/background-admin-member-forbidden.spec.ts --workers=1`
-  - 结果：14 个测试中 8 个通过、6 个失败。
+  - `ORF_REAL_E2E=1 TESTD_INCLUDE_DISABLED_SPECS=1 npm run testd -- testd/comments/admin-create-forbidden/_entry/admin-create-comment-forbidden.spec.ts testd/comments/member-create-forbidden/_entry/member-create-comment-forbidden.spec.ts testd/comments/reply-forbidden/_entry/comment-reply-forbidden.spec.ts testd/comments/edit-forbidden/_entry/comment-edit-forbidden.spec.ts testd/comments/delete-forbidden/_entry/comment-delete-forbidden.spec.ts testd/comments/image-upload-invalid/_entry/comment-image-upload-invalid.spec.ts --workers=1`
+  - 结果：12 个测试中 6 个通过、6 个失败。
 
 通过范围：
 - 评论编辑-非作者不可编辑：目标、任务均通过。
 - 评论删除-非作者不可删除：目标、任务均通过。
 - 评论上传图片-非图片文件不可上传：目标、任务均通过。
-- 设置页面修改背景-未登录用户不可修改个人背景：通过。
-- 设置页面修改背景-普通成员不可修改系统背景：通过。
 
 失败范围和现象：
 - 管理员新增评论-普通成员不可评论未参与目标和任务：目标、任务均失败。
