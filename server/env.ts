@@ -47,6 +47,7 @@ const envSchema = z.object({
   ORF_CLIENT_UPDATE_PUSH_ENABLED: booleanString("true"),
   ORF_CLIENT_UPDATE_PUSH_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(10 * 60 * 1000),
   ORF_CLIENT_UPDATE_ASSET_DIR: z.string().trim().min(1).default(".orf/client-updates"),
+  ORF_SETTINGS_DATA_DIR: z.string().trim().min(1).default(".orf/settings"),
   ORF_CLIENT_UPDATE_DOWNLOAD_BASE_URL: optionalUrl,
   ORF_CLIENT_UPDATE_PUBLISH_SECRET: optionalSecret,
   ORF_NOTIFICATION_DELIVERY_RETRY_INTERVAL_MS: z.coerce.number().int().positive().default(60 * 1000),

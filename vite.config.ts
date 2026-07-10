@@ -48,19 +48,52 @@ function publicFrontendHost(env: Record<string, string>) {
   }
 }
 
+function isPrivateSettingsRequest(requestUrl: string | undefined) {
+  if (!requestUrl) return false;
+  try {
+    const pathname = decodeURIComponent(new URL(requestUrl, "http://orf.local").pathname);
+    return /^\/settings\/(?:users|system|user)(?:\/|$)/.test(pathname);
+  } catch {
+    return true;
+  }
+}
+
+function privateSettingsStaticGuard() {
+  const middleware = (request: { url?: string }, response: { statusCode: number; end: (body?: string) => void }, next: () => void) => {
+    if (!isPrivateSettingsRequest(request.url)) {
+      next();
+      return;
+    }
+    response.statusCode = 404;
+    response.end("Not Found");
+  };
+
+  return {
+    name: "orf-private-settings-static-guard",
+    configureServer(server: { middlewares: { use: (handler: typeof middleware) => void } }) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server: { middlewares: { use: (handler: typeof middleware) => void } }) {
+      server.middlewares.use(middleware);
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const allowedHost = publicFrontendHost(env);
   return {
+    publicDir: false,
     build: {
-      emptyOutDir: false,
+      emptyOutDir: true,
+      manifest: ".vite/manifest.json",
       rollupOptions: {
         output: {
           manualChunks: manualChunkForOrfModule,
         },
       },
     },
-    plugins: [tailwindcss()],
+    plugins: [privateSettingsStaticGuard(), tailwindcss()],
     define: {
       __ORF_CLIENT_VERSION__: JSON.stringify(packageJson.version),
     },

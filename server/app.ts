@@ -32,6 +32,7 @@ import { registerWorkLogRoutes } from "./routes/workLogRoutes";
 import { registerLocalSettlementRoutes } from "./routes/localSettlementRoutes";
 import { startReestimateAutoFreezeScheduler } from "./orf/reestimateAutoFreezeScheduler";
 import { startWorkLogReminderScheduler } from "./workLogs/workLogReminderScheduler";
+import { ensurePrivateSettingsStorage } from "./settings/settingsStorage";
 function corsOrigin() {
   if (env.CORS_ORIGIN === "*") {
     return true;
@@ -86,6 +87,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   });
 
   await assertRuntimeDatabaseSchema();
+  await ensurePrivateSettingsStorage();
 
   app.addHook("preHandler", requireAuthenticatedApi);
 

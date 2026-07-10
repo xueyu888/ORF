@@ -53,6 +53,10 @@
 
 维护脚本也不能内置真实密码。`scripts/rebuild-wechatvm.ps1` 需要通过 `-LocalPassword` 参数或 `WECHATVM_PASSWORD` 环境变量传入本地 VM 密码；其他 WeChat VM 维护脚本需要通过 `-Password` 参数或同一个环境变量传入密码。
 
+## Runtime Settings Storage
+
+用户偏好、个人背景、系统设置和管理员上传背景统一写入 `ORF_SETTINGS_DATA_DIR`，默认 `.orf/settings`。该目录是后端运行时事实源，根目录权限会收敛为 `700`，不得位于 `public/`、`dist/`、`.artifacts/` 或 Android assets 下；服务检测到这些不安全配置时会拒绝启动。旧 `public/settings` 运行时文件只在启动期无损迁移一次，Vite 禁用 `publicDir`，Web 和 Android 构建都不能把后端设置数据或内置资源作为静态输入。
+
 ## Local Object Storage
 
 ORF 用户上传文件使用 S3-compatible 对象存储。本地开发和本地服务器迁移目标先使用 MinIO，应用代码只依赖通用 S3 配置。

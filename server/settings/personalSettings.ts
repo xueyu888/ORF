@@ -38,10 +38,10 @@ import {
   type BackgroundSceneConfig,
   type VisualBackgroundImage,
 } from "./visualBackgrounds";
+import { ensurePrivateSettingsStorage, privateUserSettingsDirectory } from "./settingsStorage";
 
 const imageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"]);
 const allowedLandingPaths = new Set(["/bounties", "/tasks", "/chat", "/feedback", "/reports"]);
-const settingsRoot = path.join(process.cwd(), "public", "settings");
 const maxUploadSize = 10 * 1024 * 1024;
 const maxPersonalBackgroundsPerUser = 20;
 let personalSettingsMutationQueue: Promise<void> = Promise.resolve();
@@ -84,7 +84,7 @@ function safeUserSegment(userId: string) {
 }
 
 function userSettingsDir(userId: string) {
-  return path.join(settingsRoot, "users", safeUserSegment(userId));
+  return privateUserSettingsDirectory(safeUserSegment(userId));
 }
 
 function userPreferencesPath(userId: string) {
@@ -185,6 +185,7 @@ async function readPreferencesJson(userId: string) {
 }
 
 export async function readUserPreferences(userId: string) {
+  await ensurePrivateSettingsStorage();
   try {
     return normalizeUserPreferences(userId, await readPreferencesJson(userId));
   } catch {
@@ -193,17 +194,19 @@ export async function readUserPreferences(userId: string) {
 }
 
 export async function deleteUserPersonalSettings(userId: string) {
+  await ensurePrivateSettingsStorage();
   await rm(userSettingsDir(userId), { recursive: true, force: true });
 }
 
 async function writeUserPreferences(preferences: UserPreferences) {
+  await ensurePrivateSettingsStorage();
   const directory = userSettingsDir(preferences.userId);
   await mkdir(directory, { recursive: true });
   const targetPath = userPreferencesPath(preferences.userId);
   const tempPath = `${targetPath}.${process.pid}.${Date.now().toString(36)}.${randomUUID()}.tmp`;
 
   try {
-    await writeFile(tempPath, `${JSON.stringify(storedUserPreferences(preferences), null, 2)}\n`, "utf8");
+    await writeFile(tempPath, `${JSON.stringify(storedUserPreferences(preferences), null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     await rename(tempPath, targetPath);
   } catch (error) {
     await rm(tempPath, { force: true }).catch(() => undefined);

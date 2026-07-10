@@ -24,6 +24,7 @@ import {
   type VisualBackgroundScope as CanonicalBackgroundScope,
 } from "../../src/domain/settings/visualBackgrounds";
 import { ensureSystemSettingsDirectory, readSystemSettingsFile, updateSystemSettingsFile, type RawSystemSettingsFile } from "./systemSettingsStore";
+import { ensurePrivateSettingsStorage, visualBackgroundDirectory } from "./settingsStorage";
 
 const imageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"]);
 const allowedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
@@ -118,9 +119,6 @@ type ParsedBackgroundId = {
   filePath: string;
 };
 
-const settingsRoot = path.join(process.cwd(), "public", "settings");
-const backgroundsRoot = path.join(settingsRoot, "backgrounds");
-
 const emptyVisualSettings = (): VisualSettings => ({
   visual: {
     backgrounds: Object.fromEntries(visualBackgroundScenes.map((scene) => [scene, defaultVisualBackgroundConfig()])) as Record<
@@ -131,7 +129,7 @@ const emptyVisualSettings = (): VisualSettings => ({
 });
 
 function sceneDir(scene: AnyVisualBackgroundStorageScene, scope: AnyVisualBackgroundScope) {
-  return path.join(backgroundsRoot, scene, scope);
+  return visualBackgroundDirectory(scene, scope);
 }
 
 function sceneUrl(scene: AnyVisualBackgroundStorageScene, scope: AnyVisualBackgroundScope, fileName: string) {
@@ -258,6 +256,7 @@ async function writeUniqueUploadFile(directory: string, fileName: string, buffer
 async function ensureBackgroundDirectories() {
   const systemScopes: CanonicalBackgroundScope[] = ["default", "system"];
   await Promise.all([
+    ensurePrivateSettingsStorage(),
     ensureSystemSettingsDirectory(),
     ...visualBackgroundScenes.flatMap((scene) => systemScopes.map((scope) => mkdir(sceneDir(scene, scope), { recursive: true }))),
   ]);
