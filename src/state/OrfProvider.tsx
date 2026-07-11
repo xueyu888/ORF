@@ -2,6 +2,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useL
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   API_AUTHENTICATION_EXPIRED_EVENT,
+  getChatSync,
   getChatUnreadSummary,
   getUserPreferences,
   getWorkLogReminderState,
@@ -30,12 +31,17 @@ import { type MoveResultInput, useOrfProviderResultActions } from "./orfProvider
 import { type MoveSubtaskInput, type MoveTaskInput, useOrfProviderTaskActions } from "./orfProviderTaskActions";
 import { useOrfProviderUserActions } from "./orfProviderUserActions";
 import { enqueueSystemBroadcast } from "../features/notifications/notificationBroadcasts";
-import { publishChatRealtimeConnectionRestored, publishChatRealtimeEvent } from "../features/realtime/chatRealtimeEventBus";
+import { publishChatRealtimeEvent } from "../features/realtime/chatRealtimeEventBus";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { clearReadModelCache } from "./readModelCache";
 import { clearChatFeedSessionCache } from "../features/chat/chatFeedSessionCache";
 import { clearPreparedVisualBackgrounds } from "../utils/visualBackgrounds";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
+import { useRealtimeReconciliation } from "../features/realtime/useRealtimeReconciliation";
+import {
+  buildChatRealtimeRecoveryState,
+  type ChatRealtimeRecoveryState,
+} from "../features/realtime/realtimeRecoveryModel";
 import { requestClientUpdateCheck } from "../features/client-updates/clientUpdateCenterEvents";
 import {
   attentionToastIntentFromNotification,
@@ -60,6 +66,8 @@ import {
   subscribeNativeChatNotificationOpen,
 } from "../features/chat/chatNativeNotificationDelivery";
 import { getChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
+import { readChatSyncCursor, writeChatSyncCursor } from "../features/chat/chatSyncCursor";
+import { resolveChatSyncCheckpoint } from "../features/chat/chatSyncRecovery";
 import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import type { ReportsPageData } from "../domain/reportsLeaderboard";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
@@ -139,6 +147,7 @@ interface OrfContextValue {
   systemBroadcasts: SystemBroadcast[];
   workLogReminderState: WorkLogReminderState | null;
   chatUnreadSummary: ChatUnreadSummary;
+  chatRealtimeRecoveryState: ChatRealtimeRecoveryState;
   notifications: AppNotification[];
   unreadNotificationCount: number;
   markAllNotificationsRead: () => Promise<number>;
@@ -399,14 +408,20 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     const summary = await getChatUnreadSummary();
     setChatUnreadSummary(summary);
   }, []);
-  const lastChatReconciliationAtRef = useRef(0);
-  const reconcileChatDeliveryState = useCallback(() => {
-    const now = Date.now();
-    if (now - lastChatReconciliationAtRef.current < 5_000) return;
-    lastChatReconciliationAtRef.current = now;
-    publishChatRealtimeConnectionRestored();
-    void refreshChatUnreadSummary().catch(() => undefined);
-  }, [refreshChatUnreadSummary]);
+  const reconcileChatAttentionState = useCallback(async () => {
+    let synchronizedCursor: Awaited<ReturnType<typeof resolveChatSyncCheckpoint>> | null = null;
+    if (currentUser?.id) {
+      const storedCursor = readChatSyncCursor(currentUser.id);
+      synchronizedCursor = await resolveChatSyncCheckpoint({ fetchPage: getChatSync, storedCursor });
+    }
+    await Promise.all([
+      refreshChatUnreadSummary(),
+      refreshNotifications(),
+    ]);
+    if (currentUser?.id && synchronizedCursor) {
+      writeChatSyncCursor(currentUser.id, synchronizedCursor);
+    }
+  }, [currentUser?.id, refreshChatUnreadSummary, refreshNotifications]);
   const reserveChatNotification = useCallback((messageId: string) => {
     const messageIds = notifiedChatMessageIdsRef.current;
     if (messageIds.includes(messageId)) return false;
@@ -472,24 +487,33 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     }).catch(() => undefined);
   }, [authReady, isApproved, isAuthenticated, navigate]);
 
-  useRealtimeEvents({
+  const realtimeConnectionState = useRealtimeEvents({
     enabled: authReady && isAuthenticated && isApproved,
     onBroadcast: receiveRealtimeBroadcast,
     onChatEvent: receiveRealtimeChatEvent,
     onClientUpdateAvailable: receiveClientUpdateAvailable,
-    onConnectionRestored: reconcileChatDeliveryState,
     onNotification: receiveRealtimeNotification,
     onReadModelInvalidation: receiveReadModelInvalidation,
     onWorkLogReminderRequired: receiveWorkLogReminderRequired,
     onWorkLogReminderResolved: receiveWorkLogReminderResolved,
   });
+  const chatAttentionReconciliation = useRealtimeReconciliation({
+    connected: realtimeConnectionState.status === "connected",
+    connectionEpoch: realtimeConnectionState.connectionEpoch,
+    enabled: authReady && isAuthenticated && isApproved,
+    reconcile: reconcileChatAttentionState,
+  });
+  const chatRealtimeRecoveryState = useMemo(
+    () => buildChatRealtimeRecoveryState(realtimeConnectionState, chatAttentionReconciliation.state),
+    [chatAttentionReconciliation.state, realtimeConnectionState],
+  );
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) return;
-    const handleOnline = () => reconcileChatDeliveryState();
-    const handleFocus = () => reconcileChatDeliveryState();
+    const handleOnline = () => chatAttentionReconciliation.request("online");
+    const handleFocus = () => chatAttentionReconciliation.request("focus");
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") reconcileChatDeliveryState();
+      if (document.visibilityState === "visible") chatAttentionReconciliation.request("visibility");
     };
     window.addEventListener("online", handleOnline);
     window.addEventListener("focus", handleFocus);
@@ -499,7 +523,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [authReady, isApproved, isAuthenticated, reconcileChatDeliveryState]);
+  }, [authReady, chatAttentionReconciliation.request, isApproved, isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated || !isApproved) {
@@ -688,6 +712,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       systemBroadcasts,
       workLogReminderState,
       chatUnreadSummary,
+      chatRealtimeRecoveryState,
       notifications,
       unreadNotificationCount,
       markAllNotificationsRead,
@@ -719,6 +744,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       attentionState,
       appAttentionState,
       chatUnreadSummary,
+      chatRealtimeRecoveryState,
       commentActions,
       currentUser,
       dismissSystemBroadcast,

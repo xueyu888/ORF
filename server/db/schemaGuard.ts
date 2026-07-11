@@ -579,6 +579,34 @@ export function validateClientUpdateReceiptSchema(snapshot: { columns: RuntimeTa
   return errors;
 }
 
+export function validateChatSyncEventSchema(snapshot: {
+  columns: RuntimeTableColumn[];
+  constraints: RuntimeSchemaConstraint[];
+}) {
+  const columns = new Map(snapshot.columns.map((column) => [column.columnName, column]));
+  const errors: string[] = [];
+  for (const columnName of [
+    "seq",
+    "team_id",
+    "protocol_version",
+    "event_type",
+    "object_type",
+    "object_id",
+    "channel_id",
+    "occurred_at",
+    "metadata_json",
+  ]) {
+    const column = columns.get(columnName);
+    if (!column) errors.push(`chat_sync_events.${columnName} is missing.`);
+    else if (column.isNullable !== "NO") errors.push(`chat_sync_events.${columnName} must be NOT NULL.`);
+  }
+  if (!columns.has("actor_user_id")) errors.push("chat_sync_events.actor_user_id is missing.");
+  if (!snapshot.constraints.some((constraint) => constraint.constraintName === "chat_sync_events_metadata_keys_check")) {
+    errors.push("chat_sync_events metadata key guard is missing.");
+  }
+  return errors;
+}
+
 export async function assertRuntimeDatabaseSchema() {
   const { pool } = await import("./client");
   const [
@@ -601,6 +629,8 @@ export async function assertRuntimeDatabaseSchema() {
     workLogReminderStateColumnsResult,
     chatMessageDeliveryColumnsResult,
     clientUpdateReceiptColumnsResult,
+    chatSyncEventColumnsResult,
+    chatSyncEventConstraintsResult,
   ] = await Promise.all([
     pool.query<RuntimeSchemaColumn>(
       `
@@ -808,6 +838,25 @@ export async function assertRuntimeDatabaseSchema() {
           and table_name = 'client_update_receipts'
       `,
     ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select table_name as "tableName", column_name as "columnName", is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'chat_sync_events'
+      `,
+    ),
+    pool.query<RuntimeSchemaConstraint>(
+      `
+        select con.conname as "constraintName", pg_get_constraintdef(con.oid) as "definition"
+        from pg_constraint con
+        join pg_class rel on rel.oid = con.conrelid
+        join pg_namespace nsp on nsp.oid = rel.relnamespace
+        where nsp.nspname = current_schema()
+          and rel.relname = 'chat_sync_events'
+          and con.contype = 'c'
+      `,
+    ),
   ]);
   const commentTargetTypeResult = await pool.query<{ label: string }>(
     `
@@ -878,6 +927,10 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateClientUpdateReceiptSchema({
       columns: clientUpdateReceiptColumnsResult.rows,
+    }),
+    ...validateChatSyncEventSchema({
+      columns: chatSyncEventColumnsResult.rows,
+      constraints: chatSyncEventConstraintsResult.rows,
     }),
   ];
 

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, bigserial, boolean, check, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type {
   BountySource,
   ChallengeApplication,
@@ -1111,6 +1111,27 @@ export const chatMessages = pgTable(
     channelCreated: index("chat_messages_channel_created_idx").on(table.channelId, table.createdAt),
     rootCreated: index("chat_messages_root_created_idx").on(table.rootMessageId, table.createdAt),
     teamCreated: index("chat_messages_team_created_idx").on(table.teamId, table.createdAt),
+  }),
+);
+
+export const chatSyncEvents = pgTable(
+  "chat_sync_events",
+  {
+    seq: bigserial("seq", { mode: "bigint" }).primaryKey(),
+    teamId: text("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+    protocolVersion: integer("protocol_version").notNull().default(1),
+    eventType: text("event_type").notNull(),
+    objectType: text("object_type").notNull(),
+    objectId: text("object_id").notNull(),
+    channelId: text("channel_id").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    occurredAt: timestamp("occurred_at", { mode: "string", withTimezone: true }).notNull(),
+    metadataJson: jsonb("metadata_json").$type<Record<string, boolean | number | string | null>>().notNull().default({}),
+  },
+  (table) => ({
+    teamSeq: index("chat_sync_events_team_seq_idx").on(table.teamId, table.seq),
+    teamOccurred: index("chat_sync_events_team_occurred_idx").on(table.teamId, table.occurredAt),
+    channelSeq: index("chat_sync_events_channel_seq_idx").on(table.channelId, table.seq),
   }),
 );
 

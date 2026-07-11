@@ -1025,6 +1025,7 @@ async function getRawMessage(actor: ChatActor, messageId: string) {
 
 export async function getChatBootstrap(actor: ChatActor): Promise<ChatBootstrap> {
   const settings = await readChatSettings();
+  const teamId = storageTeamId(actor);
   if (!actor.canRead) {
     return {
       channels: [],
@@ -1041,7 +1042,6 @@ export async function getChatBootstrap(actor: ChatActor): Promise<ChatBootstrap>
     };
   }
 
-  const teamId = storageTeamId(actor);
   const [users, channelRows] = await Promise.all([listActiveTeamUsers(teamId), listVisibleChannelRows(actor)]);
   const channels = await buildChannels(channelRows, actor);
   return {

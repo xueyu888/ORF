@@ -8,6 +8,7 @@ import { assertRuntimeDatabaseSchema, databaseSchemaMismatchPayload, isDatabaseS
 import { env } from "./env";
 import { startClientUpdatePushScheduler } from "./clientUpdates/clientUpdatePushScheduler";
 import { startChatMessageDeliveryScheduler } from "./chat/chatMessageDeliveryScheduler";
+import { startChatSyncEventRetentionScheduler } from "./chat/chatSyncEventRetentionScheduler";
 import { registerOptionalIntegrations } from "./integrations";
 import { startNotificationDeliveryScheduler } from "./notifications/notificationDeliveryScheduler";
 import { registerSettingsRoutes } from "./routes/settingsRoutes";
@@ -126,12 +127,14 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   const stopClientUpdatePushScheduler = startClientUpdatePushScheduler(app.log);
   const stopChatMessageDeliveryScheduler = startChatMessageDeliveryScheduler(app.log);
+  const stopChatSyncEventRetentionScheduler = startChatSyncEventRetentionScheduler(app.log);
   const stopNotificationDeliveryScheduler = startNotificationDeliveryScheduler(app.log);
   const stopReestimateAutoFreezeScheduler = startReestimateAutoFreezeScheduler(app.log);
   const stopWorkLogReminderScheduler = startWorkLogReminderScheduler(app.log);
   app.addHook("onClose", async () => {
     stopClientUpdatePushScheduler();
     stopChatMessageDeliveryScheduler();
+    stopChatSyncEventRetentionScheduler();
     stopNotificationDeliveryScheduler();
     stopReestimateAutoFreezeScheduler();
     stopWorkLogReminderScheduler();

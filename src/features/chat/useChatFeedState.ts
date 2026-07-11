@@ -30,6 +30,8 @@ import {
   hasMainFeedUnread,
   isFreshFeedSnapshot,
   prependOlderFeedMessages,
+  promoteReconciledLatestWindow,
+  reconcileFeedLatestWindow,
   rememberFeedScroll,
   removeMessageById,
   replaceFeedMessages,
@@ -312,6 +314,19 @@ export function useChatFeedState({
   const loadLatestMessages = useCallback(async (behavior: ScrollBehavior = "smooth") => {
     const channelId = activeChannelIdRef.current;
     if (!channelId) return;
+    const reconciledSnapshot = promoteReconciledLatestWindow(feedCacheRef.current.get(channelId));
+    if (reconciledSnapshot) {
+      const previousSnapshot = feedCacheRef.current.get(channelId);
+      if (previousSnapshot?.latestWindowMessages.length) {
+        feedCacheRef.current.set(channelId, reconciledSnapshot);
+        if (applySnapshotToActiveFeed(channelId, reconciledSnapshot)) {
+          setPendingNewMessageCount(0);
+          setFollowingLatest(true);
+          requestScrollToLatest(behavior);
+        }
+        return;
+      }
+    }
     setMessagesLoading(!feedCacheRef.current.has(channelId));
     try {
       const response = await getChatMessages({ channelId, limit: chatMessagePageSize });
@@ -327,7 +342,40 @@ export function useChatFeedState({
     } finally {
       if (activeChannelIdRef.current === channelId) setMessagesLoading(false);
     }
-  }, [applySnapshotToActiveFeed, notify, requestScrollToLatest]);
+  }, [applySnapshotToActiveFeed, notify, requestScrollToLatest, setFollowingLatest]);
+
+  const reconcileLatestMessagesPreservingPosition = useCallback(async () => {
+    const channelId = activeChannelIdRef.current;
+    if (!channelId) return;
+    const previousSnapshot = feedCacheRef.current.get(channelId);
+    const shouldFollowLatest = !previousSnapshot?.hasNewerMessages && (isFollowingLatest() || isMessageScrollNearLatest());
+    const scrollAnchor = shouldFollowLatest ? null : readChatFeedScrollAnchor(messageScrollRef.current);
+    const response = await getChatMessages({ channelId, limit: chatMessagePageSize });
+    if (activeChannelIdRef.current !== channelId) return;
+    const reconciliation = reconcileFeedLatestWindow(feedCacheRef.current.get(channelId), response.messages);
+    feedCacheRef.current.set(channelId, reconciliation.snapshot);
+    applySnapshotToActiveFeed(channelId, reconciliation.snapshot);
+    if (shouldFollowLatest) {
+      setPendingNewMessageCount(0);
+      requestScrollToLatest("auto");
+      return;
+    }
+    setFollowingLatest(false);
+    setPendingNewMessageCount((count) => Math.max(count, reconciliation.newMessageCount));
+    if (reconciliation.visibleMessagesChanged && scrollAnchor) {
+      window.requestAnimationFrame(() => {
+        const element = messageScrollRef.current;
+        if (!restoreChatFeedScrollAnchor(element, scrollAnchor)) return;
+        feedCacheRef.current.set(channelId, rememberFeedScroll(feedCacheRef.current.get(channelId), element?.scrollTop ?? 0));
+      });
+    }
+  }, [
+    applySnapshotToActiveFeed,
+    isFollowingLatest,
+    isMessageScrollNearLatest,
+    requestScrollToLatest,
+    setFollowingLatest,
+  ]);
 
   const prefetchChannelMessages = useCallback((channelId: string) => {
     if (feedCacheRef.current.has(channelId)) return Promise.resolve(true);
@@ -851,14 +899,6 @@ export function useChatFeedState({
     }
   }, [hasNewerMessages, loadLatestMessages, requestScrollToLatest]);
 
-  const syncLatestMessagesIfFollowing = useCallback(() => {
-    const channelId = activeChannelIdRef.current;
-    if (!channelId) return;
-    const snapshot = feedCacheRef.current.get(channelId);
-    if (snapshot?.hasNewerMessages || (!isFollowingLatest() && !isMessageScrollNearLatest())) return;
-    void loadLatestMessages("auto");
-  }, [isFollowingLatest, isMessageScrollNearLatest, loadLatestMessages]);
-
   const activeFeedSnapshot = activeChannelId ? feedCacheRef.current.get(activeChannelId) : undefined;
   const activeFeedIsState = Boolean(activeChannelId) && feedChannelId === activeChannelId;
   const displayedMessages = !activeChannelId
@@ -906,10 +946,10 @@ export function useChatFeedState({
     olderMessagesLoading,
     pendingNewMessageCount,
     prefetchChannelMessages,
+    reconcileLatestMessagesPreservingPosition,
     removePendingMessageFromFeed,
     requestScrollToLatest,
     resolvePendingMessageInFeed,
-    syncLatestMessagesIfFollowing,
     unreadAnchor,
   };
 }

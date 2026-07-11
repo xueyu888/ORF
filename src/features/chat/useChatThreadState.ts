@@ -116,6 +116,17 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
     });
   }, []);
 
+  const reconcileOpenThread = useCallback(async () => {
+    const rootMessageId = threadRef.current?.rootMessage.id;
+    if (!rootMessageId) return;
+    const requestId = threadRequestIdRef.current + 1;
+    threadRequestIdRef.current = requestId;
+    const response = await getChatThread(rootMessageId);
+    if (threadRequestIdRef.current !== requestId || threadRef.current?.rootMessage.id !== rootMessageId) return;
+    if (response.channel) onChannelUpdate(response.channel);
+    setThread(response.thread);
+  }, [onChannelUpdate]);
+
   const appendThreadReply = useCallback((message: ChatMessage) => {
     setThread((item) => {
       if (!item) return item;
@@ -196,6 +207,7 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
     markThreadPendingMessageFailed,
     markThreadPendingMessageSending,
     openThread,
+    reconcileOpenThread,
     removeThreadPendingMessage,
     requestThreadTarget: setPendingThreadTarget,
     resolveThreadPendingMessage,

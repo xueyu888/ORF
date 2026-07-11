@@ -44,6 +44,7 @@ import type {
   WorkLogReport,
   WorkLogReportScope,
 } from "../types/orf";
+import type { ChatSyncResponse } from "../domain/chatSync";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
 import type { ChatTheme, UserDisplayPreferences, WorkspaceLayoutPreferences } from "../domain/settings/personalPreferences";
 import type { FilterPreferenceRecord, UserFilterPreferences } from "../domain/settings/filterPreferences";
@@ -156,6 +157,7 @@ export type CommentAttachmentUploadResponse = CommentAttachmentUploadResult & {
 export type ChatBootstrapResponse = ChatBootstrap;
 export type ChatUsersResponse = { status?: "ok"; users: ChatUser[] };
 export type ChatUnreadSummaryResponse = ChatUnreadSummary;
+export type ChatSyncApiResponse = ChatSyncResponse;
 export type ChatMessagesResponse = { status?: "ok"; messages: ChatMessage[] };
 export type ChatMessageContextResponse = { status?: "ok" } & ChatMessageContext;
 export type ChatUnreadTargetResponse = { status?: "ok"; target: ChatUnreadTarget };
@@ -673,6 +675,19 @@ export async function getChatBootstrap() {
     });
   chatBootstrapRequest = request;
   return request;
+}
+
+export async function getChatSync(input: {
+  cursor?: string;
+  limit?: number;
+  permissionFingerprint?: string;
+  protocolVersion: number;
+}) {
+  const query = new URLSearchParams({ protocolVersion: String(input.protocolVersion) });
+  if (input.cursor !== undefined) query.set("cursor", input.cursor);
+  if (input.limit !== undefined) query.set("limit", String(input.limit));
+  if (input.permissionFingerprint !== undefined) query.set("permissionFingerprint", input.permissionFingerprint);
+  return apiJson<ChatSyncApiResponse>(`/api/chat/sync?${query.toString()}`);
 }
 
 export async function getChatUsers() {

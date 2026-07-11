@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import type { AppNotification } from "../../types/orf";
 import type {
   ChatRealtimeEvent,
@@ -10,13 +10,16 @@ import type {
   WorkLogReminderResolvedRealtimeEvent,
 } from "../../types/realtime";
 import { getRealtimeClientId } from "./realtimeClientId";
+import {
+  initialRealtimeConnectionState,
+  reduceRealtimeConnectionState,
+} from "./realtimeRecoveryModel";
 
 type RealtimeEventOptions = {
   enabled: boolean;
   onBroadcast: (broadcast: SystemBroadcast) => void;
   onChatEvent?: (event: ChatRealtimeEvent) => void;
   onClientUpdateAvailable?: (update: ClientUpdateAvailable) => void;
-  onConnectionRestored?: () => void;
   onWorkLogReminderRequired?: (event: WorkLogReminderRequiredRealtimeEvent) => void;
   onWorkLogReminderResolved?: (event: WorkLogReminderResolvedRealtimeEvent) => void;
   onReadModelInvalidation: (invalidation: OrfReadModelInvalidation) => void;
@@ -28,7 +31,6 @@ export function useRealtimeEvents({
   onBroadcast,
   onChatEvent,
   onClientUpdateAvailable,
-  onConnectionRestored,
   onWorkLogReminderRequired,
   onWorkLogReminderResolved,
   onNotification,
@@ -37,7 +39,10 @@ export function useRealtimeEvents({
   const onBroadcastRef = useRef(onBroadcast);
   const onChatEventRef = useRef(onChatEvent);
   const onClientUpdateAvailableRef = useRef(onClientUpdateAvailable);
-  const onConnectionRestoredRef = useRef(onConnectionRestored);
+  const [connectionState, dispatchConnection] = useReducer(
+    reduceRealtimeConnectionState,
+    initialRealtimeConnectionState,
+  );
   const onWorkLogReminderRequiredRef = useRef(onWorkLogReminderRequired);
   const onWorkLogReminderResolvedRef = useRef(onWorkLogReminderResolved);
   const onNotificationRef = useRef(onNotification);
@@ -60,10 +65,6 @@ export function useRealtimeEvents({
   }, [onClientUpdateAvailable]);
 
   useEffect(() => {
-    onConnectionRestoredRef.current = onConnectionRestored;
-  }, [onConnectionRestored]);
-
-  useEffect(() => {
     onWorkLogReminderRequiredRef.current = onWorkLogReminderRequired;
   }, [onWorkLogReminderRequired]);
 
@@ -77,12 +78,14 @@ export function useRealtimeEvents({
 
   useEffect(() => {
     if (!enabled || typeof EventSource === "undefined") {
+      dispatchConnection({ type: "disabled" });
       return undefined;
     }
 
+    dispatchConnection({ type: "connecting" });
     const query = new URLSearchParams({ clientId: getRealtimeClientId() });
     const source = new EventSource(`/api/events?${query.toString()}`, { withCredentials: true });
-    let connectionHadError = false;
+    let closed = false;
     const handleNotification = (event: MessageEvent<string>) => {
       const payload = parseRealtimeEvent(event.data);
       if (payload?.kind === "notification.created") {
@@ -126,12 +129,12 @@ export function useRealtimeEvents({
       }
     };
     const handleOpen = () => {
-      if (!connectionHadError) return;
-      connectionHadError = false;
-      onConnectionRestoredRef.current?.();
+      if (closed) return;
+      dispatchConnection({ type: "connected" });
     };
     const handleError = () => {
-      connectionHadError = true;
+      if (closed) return;
+      dispatchConnection({ type: "disconnected" });
     };
 
     source.addEventListener("open", handleOpen);
@@ -144,6 +147,7 @@ export function useRealtimeEvents({
     source.addEventListener("worklog.reminder.required", handleWorkLogReminderRequired);
     source.addEventListener("worklog.reminder.resolved", handleWorkLogReminderResolved);
     return () => {
+      closed = true;
       source.removeEventListener("open", handleOpen);
       source.removeEventListener("error", handleError);
       source.removeEventListener("notification.created", handleNotification);
@@ -156,6 +160,8 @@ export function useRealtimeEvents({
       source.close();
     };
   }, [enabled]);
+
+  return connectionState;
 }
 
 function parseRealtimeEvent(raw: string): RealtimeEvent | null {

@@ -68,6 +68,7 @@ export type ChatFeedSnapshot = {
   hasNewerMessages: boolean;
   hasOlderMessages: boolean;
   hasScrollPosition: boolean;
+  latestWindowMessages: ChatMessage[];
   messages: ChatMessage[];
   scrollTop: number;
   syncedAt?: string;
@@ -370,6 +371,7 @@ export function createFeedSnapshot(input?: Partial<ChatFeedSnapshot>): ChatFeedS
     hasNewerMessages: input?.hasNewerMessages ?? false,
     hasOlderMessages: input?.hasOlderMessages ?? false,
     hasScrollPosition: input?.hasScrollPosition ?? false,
+    latestWindowMessages: input?.latestWindowMessages ?? [],
     messages: input?.messages ?? [],
     scrollTop: input?.scrollTop ?? 0,
     syncedAt: input?.syncedAt,
@@ -387,6 +389,7 @@ export function replaceFeedMessages(
     hasNewerMessages: flags?.hasNewerMessages ?? false,
     hasOlderMessages: flags?.hasOlderMessages ?? messages.length >= pageSize,
     hasScrollPosition: snapshot?.hasScrollPosition ?? false,
+    latestWindowMessages: [],
     messages,
     scrollTop: snapshot?.scrollTop ?? 0,
     syncedAt: new Date().toISOString(),
@@ -412,7 +415,13 @@ export function applyFeedMessage(snapshot: ChatFeedSnapshot | undefined, message
     return messages === current.messages ? current : { ...current, messages };
   }
   const messageExists = current.messages.some((item) => item.id === message.id);
-  if (!messageExists && current.hasNewerMessages) return current;
+  if (!messageExists && current.hasNewerMessages) {
+    if (message.rootMessageId) return current;
+    return {
+      ...current,
+      latestWindowMessages: upsertChannelMessage(current.latestWindowMessages, message),
+    };
+  }
   const messages = upsertChannelMessage(current.messages, message);
   if (messages === current.messages) return current;
   const trimmed = trimFeedWindow(messages, "newer");
@@ -421,6 +430,65 @@ export function applyFeedMessage(snapshot: ChatFeedSnapshot | undefined, message
     hasOlderMessages: current.hasOlderMessages || trimmed.droppedOlder,
     messages: trimmed.messages,
   };
+}
+
+export type ChatFeedLatestReconciliation = {
+  newMessageCount: number;
+  snapshot: ChatFeedSnapshot;
+  visibleMessagesChanged: boolean;
+};
+
+export function reconcileFeedLatestWindow(
+  snapshot: ChatFeedSnapshot | undefined,
+  latestMessages: ChatMessage[],
+  pageSize = chatMessagePageSize,
+): ChatFeedLatestReconciliation {
+  const current = snapshot ?? createFeedSnapshot();
+  const currentIds = new Set(current.messages.map((message) => message.id));
+  const latestRootMessages = latestMessages.filter((message) => !message.rootMessageId);
+  const newMessageCount = latestRootMessages.filter((message) => !currentIds.has(message.id)).length;
+  const windowsOverlap = latestRootMessages.some((message) => currentIds.has(message.id));
+  const canMergeVisibleWindow =
+    current.messages.length === 0 ||
+    !current.hasNewerMessages ||
+    current.windowKind === "latest" ||
+    windowsOverlap;
+
+  if (!canMergeVisibleWindow) {
+    return {
+      newMessageCount,
+      snapshot: createFeedSnapshot({
+        ...current,
+        hasNewerMessages: true,
+        latestWindowMessages: latestMessages,
+        syncedAt: new Date().toISOString(),
+      }),
+      visibleMessagesChanged: false,
+    };
+  }
+
+  const byId = new Map<string, ChatMessage>();
+  for (const message of [...current.messages, ...latestMessages]) byId.set(message.id, message);
+  const merged = Array.from(byId.values()).sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  const trimmed = trimFeedWindow(merged, "newer");
+  return {
+    newMessageCount,
+    snapshot: createFeedSnapshot({
+      ...current,
+      hasNewerMessages: false,
+      hasOlderMessages: current.hasOlderMessages || latestMessages.length >= pageSize || trimmed.droppedOlder,
+      latestWindowMessages: [],
+      messages: trimmed.messages,
+      syncedAt: new Date().toISOString(),
+      windowKind: "latest",
+    }),
+    visibleMessagesChanged: true,
+  };
+}
+
+export function promoteReconciledLatestWindow(snapshot: ChatFeedSnapshot | undefined) {
+  if (!snapshot?.latestWindowMessages.length) return snapshot;
+  return replaceFeedMessages(snapshot, snapshot.latestWindowMessages);
 }
 
 export function optimisticToggleChatReaction(message: ChatMessage, emojiName: string, currentUserId?: string): ChatMessage {

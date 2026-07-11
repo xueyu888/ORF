@@ -47,6 +47,7 @@ import { useChatRealtimeEvents } from "../features/chat/useChatRealtimeEvents";
 import { useChatThreadState } from "../features/chat/useChatThreadState";
 import { useChatTypingState } from "../features/chat/useChatTypingState";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
+import { useRealtimeReconciliation } from "../features/realtime/useRealtimeReconciliation";
 import {
   addChatChannelMembersRequest,
   archiveChatChannelRequest,
@@ -82,7 +83,6 @@ import {
 const chatFeedPrefetchDelayMs = 250;
 const chatLocatedMessageHighlightMs = 3_200;
 const chatPresenceRefreshThrottleMs = 15_000;
-const chatConnectionRestoredBootstrapThrottleMs = 15_000;
 
 function isChatGlobalShortcutEditableTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable]"));
@@ -144,7 +144,16 @@ export function ChatPage() {
   const routeChannelId = routeSystemConversationId ? undefined : routeParams.channelId;
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { appAttentionState, currentUser, notify, readModelInvalidations, refreshChatUnreadSummary, refreshNotifications, state } = useOrf();
+  const {
+    appAttentionState,
+    chatRealtimeRecoveryState,
+    currentUser,
+    notify,
+    readModelInvalidations,
+    refreshChatUnreadSummary,
+    refreshNotifications,
+    state,
+  } = useOrf();
   const initialBootstrapRef = useRef<ChatBootstrap | undefined>(chatBootstrapSnapshot());
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(() => initialBootstrapRef.current ?? null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
@@ -170,7 +179,6 @@ export function ChatPage() {
   const driveSelectionRequestIdRef = useRef(0);
   const handledBootstrapInvalidationKeyRef = useRef("");
   const handledPresenceInvalidationKeyRef = useRef("");
-  const lastConnectionRestoredBootstrapRefreshAtRef = useRef(0);
   const lastPresenceRefreshAtRef = useRef(0);
   const locatedMessageTimerRef = useRef<number | null>(null);
   const openChannelRequestIdRef = useRef(0);
@@ -344,6 +352,7 @@ export function ChatPage() {
     markThreadPendingMessageFailed,
     markThreadPendingMessageSending,
     openThread,
+    reconcileOpenThread,
     removeThreadPendingMessage,
     requestThreadTarget,
     resolveThreadPendingMessage,
@@ -435,10 +444,10 @@ export function ChatPage() {
     olderMessagesLoading,
     pendingNewMessageCount,
     prefetchChannelMessages,
+    reconcileLatestMessagesPreservingPosition,
     removePendingMessageFromFeed,
     requestScrollToLatest,
     resolvePendingMessageInFeed,
-    syncLatestMessagesIfFollowing,
     unreadAnchor,
   } = useChatFeedState({
     activeChannel,
@@ -802,14 +811,19 @@ export function ChatPage() {
     setDraftChannelIds(storedDraftChannelIds(channels));
   }, [channels]);
 
-  const handleRealtimeConnectionRestored = useCallback(() => {
-    const now = Date.now();
-    if (now - lastConnectionRestoredBootstrapRefreshAtRef.current >= chatConnectionRestoredBootstrapThrottleMs) {
-      lastConnectionRestoredBootstrapRefreshAtRef.current = now;
-      void refreshBootstrap(true).catch(() => undefined);
-    }
-    syncLatestMessagesIfFollowing();
-  }, [refreshBootstrap, syncLatestMessagesIfFollowing]);
+  const reconcileChatPageProjection = useCallback(async () => {
+    await Promise.all([
+      refreshBootstrap(true),
+      reconcileLatestMessagesPreservingPosition(),
+      reconcileOpenThread(),
+    ]);
+  }, [reconcileLatestMessagesPreservingPosition, reconcileOpenThread, refreshBootstrap]);
+  useRealtimeReconciliation({
+    connected: chatRealtimeRecoveryState.connected,
+    connectionEpoch: chatRealtimeRecoveryState.connectionEpoch,
+    enabled: Boolean(currentUser),
+    reconcile: reconcileChatPageProjection,
+  });
 
   const resolveRealtimePendingMessage = useCallback(
     (message: ChatMessage) => {
@@ -828,8 +842,7 @@ export function ChatPage() {
     [messages, resolvePendingMessageInFeed, resolveThreadPendingMessage, thread],
   );
 
-  useChatRealtimeEvents(
-    (payload) => {
+  useChatRealtimeEvents((payload) => {
       if (payload.channel) applyChannel(payload.channel);
       if (payload.eventType === "channel.archived") {
         setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
@@ -845,9 +858,7 @@ export function ChatPage() {
         }
       }
       if (payload.eventType === "typing") applyTypingEvent(payload.channelId, payload.typing);
-    },
-    { onConnectionRestored: handleRealtimeConnectionRestored },
-  );
+  });
 
   const submitPendingChatMessage = useCallback(
     (pendingMessage: ChatMessage, options: { loadLatestAfterSuccess?: boolean } = {}) => {

@@ -603,6 +603,20 @@
       "when": 1783755000000,
       "tag": "0085_client_update_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1783773347326,
+      "tag": "0086_chat_sync_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1783774300000,
+      "tag": "0087_chat_sync_metadata_guard",
+      "breakpoints": true
     }
   ]
 }
