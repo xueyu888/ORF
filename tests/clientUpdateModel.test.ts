@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import { createRequire } from "node:module";
 import test from "node:test";
 import {
   buildClientUpdateDecision,
@@ -10,6 +12,15 @@ import {
   toClientReleaseTag,
   type ClientReleaseInfo,
 } from "../src/features/client-updates/clientUpdateModel";
+
+const require = createRequire(import.meta.url);
+const {
+  desktopUpdateInstallerArgs,
+  launchDesktopUpdateInstaller,
+} = require("../clients/desktop/update-installer.cjs") as {
+  desktopUpdateInstallerArgs: readonly string[];
+  launchDesktopUpdateInstaller: (installerPath: string, spawnProcess: (...args: unknown[]) => EventEmitter & { unref: () => void }) => Promise<void>;
+};
 
 const release: ClientReleaseInfo = {
   assets: [
@@ -133,4 +144,27 @@ test("client update install falls back to trusted mirror only after native URL r
     }),
     null,
   );
+});
+
+test("Win11 automatic update launches NSIS silently, marks it as an update and restarts ORF", async () => {
+  const child = new EventEmitter() as EventEmitter & { unref: () => void; unrefCalled?: boolean };
+  child.unref = () => {
+    child.unrefCalled = true;
+  };
+  let spawnCall: { args: string[]; file: string; options: Record<string, unknown> } | null = null;
+  const spawnProcess = (file: unknown, args: unknown, options: unknown) => {
+    spawnCall = { args: args as string[], file: String(file), options: options as Record<string, unknown> };
+    queueMicrotask(() => child.emit("spawn"));
+    return child;
+  };
+
+  await launchDesktopUpdateInstaller("C:\\Temp\\ORF-update.exe", spawnProcess);
+
+  assert.deepEqual(desktopUpdateInstallerArgs, ["/S", "--updated", "--force-run", "--keep-shortcuts"]);
+  assert.deepEqual(spawnCall, {
+    args: ["/S", "--updated", "--force-run", "--keep-shortcuts"],
+    file: "C:\\Temp\\ORF-update.exe",
+    options: { detached: true, stdio: "ignore", windowsHide: true },
+  });
+  assert.equal(child.unrefCalled, true);
 });

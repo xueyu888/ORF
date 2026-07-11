@@ -45,18 +45,12 @@ export function AppShell() {
   const [chatTheme, setChatTheme] = useState<ChatTheme>(defaultChatTheme);
   const [displayPreferences, setDisplayPreferences] = useState<UserDisplayPreferences>(defaultUserDisplayPreferences);
   const [clientUpdateCenter, setClientUpdateCenter] = useState<{ notice?: string; open: boolean }>({ open: false });
-  const [pendingShellPath, setPendingShellPath] = useState<string | null>(null);
-  const shellDisplayPath = pendingShellPath ?? location.pathname;
-  const isRouteChatPage = location.pathname.startsWith("/chat");
-  const isChatPage = isRouteChatPage || pendingShellPath?.startsWith("/chat") === true;
+  const shellDisplayPath = location.pathname;
+  const isChatPage = location.pathname.startsWith("/chat");
   const pageBackgroundScene = isChatPage ? null : pageVisualBackgroundSceneForPath(location.pathname);
   const sidebarBackground = useVisualBackground("sidebar_background");
   const topbarBackground = useVisualBackground("topbar_background");
   const pageBackground = useVisualBackground(pageBackgroundScene);
-
-  useEffect(() => {
-    setPendingShellPath(null);
-  }, [location.pathname]);
 
   useEffect(() => {
     setDesktopChromeEnabled(isDesktopShellAvailable());
@@ -117,7 +111,6 @@ export function AppShell() {
   }, []);
 
   const handleShellNavigationIntent = useCallback((path: string) => {
-    setPendingShellPath(path.startsWith("/chat") ? path : null);
     void preloadRouteExperience(path);
   }, []);
 

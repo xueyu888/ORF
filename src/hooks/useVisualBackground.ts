@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { getVisualBackgrounds, type VisualBackgroundScene, type VisualBackgroundsData } from "../state/apiClient";
 import { loadPersonalBackground, personalBackgroundSnapshot } from "../state/readModelQueries";
 import { pickVisualBackground, prepareVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs, type VisualBackgroundSelection } from "../utils/visualBackgrounds";
@@ -8,6 +8,11 @@ type VisualBackgroundLoadState =
   | { status: "ready"; selection: VisualBackgroundSelection; url: string; error: null }
   | { status: "empty"; selection: null; url: null; error: null }
   | { status: "error"; selection: null; url: null; error: Error };
+
+type VisualBackgroundSnapshot = {
+  scene: VisualBackgroundScene | null;
+  state: VisualBackgroundLoadState;
+};
 
 function visualBackgroundError(scene: VisualBackgroundScene, error: unknown) {
   if (error instanceof Error) {
@@ -39,16 +44,18 @@ function preparedVisualBackgroundState(data: VisualBackgroundsData): VisualBackg
     : { status: "empty", selection: null, url: null, error: null };
 }
 
-export function useVisualBackground(scene: VisualBackgroundScene | null) {
-  const [background, setBackground] = useState<VisualBackgroundLoadState>(() => {
+export function useVisualBackground(scene: VisualBackgroundScene | null): VisualBackgroundLoadState {
+  const [snapshot, setSnapshot] = useState<VisualBackgroundSnapshot>(() => {
     const cached = cachedVisualBackgrounds(scene);
-    if (cached) return preparedVisualBackgroundState(cached);
-    return scene
-      ? { status: "loading", selection: null, url: null, error: null }
-      : { status: "empty", selection: null, url: null, error: null };
+    const state: VisualBackgroundLoadState = cached
+      ? preparedVisualBackgroundState(cached)
+      : scene
+        ? { status: "loading", selection: null, url: null, error: null }
+        : { status: "empty", selection: null, url: null, error: null };
+    return { scene, state };
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let cancelled = false;
     let intervalId: number | null = null;
 
@@ -62,24 +69,24 @@ export function useVisualBackground(scene: VisualBackgroundScene | null) {
     const loadBackground = (force = false) => {
       if (!scene) {
         clearRotationTimer();
-        setBackground({ status: "empty", selection: null, url: null, error: null });
+        setSnapshot({ scene, state: { status: "empty", selection: null, url: null, error: null } });
         return;
       }
 
       clearRotationTimer();
       const cached = cachedVisualBackgrounds(scene);
       if (cached && !force) {
-        setBackground(visualBackgroundState(cached));
+        setSnapshot({ scene, state: visualBackgroundState(cached) });
       } else if (force) {
-        setBackground((current) => current.status === "ready"
+        setSnapshot((current) => current.scene === scene && current.state.status === "ready"
           ? current
-          : { status: "loading", selection: null, url: null, error: null });
+          : { scene, state: { status: "loading", selection: null, url: null, error: null } });
       } else {
-        setBackground({ status: "loading", selection: null, url: null, error: null });
+        setSnapshot({ scene, state: { status: "loading", selection: null, url: null, error: null } });
       }
 
       const applyBackground = (data: Awaited<ReturnType<typeof getVisualBackgrounds>>) => {
-        setBackground(visualBackgroundState(data));
+        setSnapshot({ scene, state: visualBackgroundState(data) });
       };
 
       void loadVisualBackgrounds(scene, force)
@@ -99,7 +106,7 @@ export function useVisualBackground(scene: VisualBackgroundScene | null) {
         })
         .catch((error) => {
           if (!cancelled) {
-            setBackground({ status: "error", selection: null, url: null, error: visualBackgroundError(scene, error) });
+            setSnapshot({ scene, state: { status: "error", selection: null, url: null, error: visualBackgroundError(scene, error) } });
           }
         });
     };
@@ -114,5 +121,8 @@ export function useVisualBackground(scene: VisualBackgroundScene | null) {
     };
   }, [scene]);
 
-  return background;
+  if (snapshot.scene === scene) return snapshot.state;
+  return scene
+    ? { status: "loading", selection: null, url: null, error: null }
+    : { status: "empty", selection: null, url: null, error: null };
 }

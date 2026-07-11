@@ -7,6 +7,7 @@ const {
   createTrayIconRgba,
   createUnreadBadgeRgba,
 } = require("./icon-renderer.cjs");
+const { launchDesktopUpdateInstaller } = require("./update-installer.cjs");
 
 const DEFAULT_ORF_CLIENT_URL = "https://orf-xueyu.duckdns.org:8443/";
 const DESKTOP_PACKAGE_PATH = path.join(__dirname, "package.json");
@@ -65,6 +66,7 @@ const DESKTOP_RECOVERY_CHECK_SCRIPT = `
 
 const desktopShellState = {
   attentionState: createEmptyDesktopAttentionState(),
+  clientUpdateInstallInProgress: false,
   clientUrl: null,
   isQuitting: false,
   lastAttentionFlashAt: 0,
@@ -1582,27 +1584,43 @@ function registerNativeRuntimeBridge() {
     if (!payload) {
       return { status: "not_sent", reason: "invalid_payload" };
     }
+    if (desktopShellState.clientUpdateInstallInProgress) {
+      return { status: "not_sent", reason: "installer_already_running" };
+    }
+    desktopShellState.clientUpdateInstallInProgress = true;
     const sendProgress = createClientUpdateProgressEmitter(_event.sender, {
       assetName: payload.fileName,
       installId: payload.installId,
     });
+    let installerPath;
     try {
       sendProgress({ downloadedBytes: 0, stage: "preparing" });
-      const installerPath = await downloadClientUpdateInstaller(payload, sendProgress);
-      sendProgress({ percent: 100, stage: "opening" });
-      const openError = await shell.openPath(installerPath);
-      if (openError) {
-        sendProgress({ error: openError, stage: "failed" });
-        return { status: "error", reason: "installer_open_failed", data: openError };
-      }
-      sendProgress({ percent: 100, stage: "complete" });
-      return { status: "success", data: installerPath };
+      installerPath = await downloadClientUpdateInstaller(payload, sendProgress);
     } catch (error) {
+      desktopShellState.clientUpdateInstallInProgress = false;
       const message = readableErrorMessage(error);
       sendProgress({ error: message, stage: "failed" });
       return { status: "error", reason: "installer_download_failed", data: message };
     }
+    try {
+      sendProgress({ percent: 100, stage: "opening" });
+      await launchDesktopUpdateInstaller(installerPath);
+      sendProgress({ percent: 100, stage: "complete" });
+      scheduleDesktopQuitForUpdate();
+      return { status: "success", data: installerPath };
+    } catch (error) {
+      desktopShellState.clientUpdateInstallInProgress = false;
+      const message = readableErrorMessage(error);
+      sendProgress({ error: message, stage: "failed" });
+      return { status: "error", reason: "installer_open_failed", data: message };
+    }
   });
+}
+
+function scheduleDesktopQuitForUpdate() {
+  desktopShellState.isQuitting = true;
+  const timer = setTimeout(() => app.quit(), 180);
+  if (typeof timer.unref === "function") timer.unref();
 }
 
 function resolveDesktopClientVersion() {

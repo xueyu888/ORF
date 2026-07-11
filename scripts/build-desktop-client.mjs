@@ -15,10 +15,12 @@ const appPackage = JSON.parse(fs.readFileSync(path.resolve(repoRoot, "clients/de
 const iconRendererSource = path.resolve(repoRoot, "clients/desktop/icon-renderer.cjs");
 const mainSource = path.resolve(repoRoot, "clients/desktop/main.cjs");
 const preloadSource = path.resolve(repoRoot, "clients/desktop/preload.cjs");
+const updateInstallerSource = path.resolve(repoRoot, "clients/desktop/update-installer.cjs");
 const desktopAppIconSource = path.resolve(repoRoot, "src/assets/brand/orf-app-icon.png");
 const iconRendererTarget = path.resolve(tempRoot, "icon-renderer.cjs");
 const mainTarget = path.resolve(tempRoot, "main.cjs");
 const preloadTarget = path.resolve(tempRoot, "preload.cjs");
+const updateInstallerTarget = path.resolve(tempRoot, "update-installer.cjs");
 const packageTarget = path.resolve(tempRoot, "package.json");
 const configTarget = path.resolve(tempRoot, "electron-builder.json");
 const appAssetsTargetDir = path.resolve(tempRoot, "assets");
@@ -43,6 +45,7 @@ const builderConfig = {
     "main.cjs",
     "package.json",
     "preload.cjs",
+    "update-installer.cjs",
   ],
   asar: true,
   npmRebuild: false,
@@ -272,6 +275,7 @@ try {
   fs.copyFileSync(iconRendererSource, iconRendererTarget);
   fs.copyFileSync(mainSource, mainTarget);
   fs.copyFileSync(preloadSource, preloadTarget);
+  fs.copyFileSync(updateInstallerSource, updateInstallerTarget);
   fs.writeFileSync(packageTarget, `${JSON.stringify(appPackage, null, 2)}\n`);
   fs.writeFileSync(configTarget, `${JSON.stringify(builderConfig, null, 2)}\n`);
 

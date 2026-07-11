@@ -15,7 +15,6 @@ import { navItems } from "../config/navigation";
 import type { VisualBackgroundCrop } from "../domain/settings/visualBackgrounds";
 import { AttentionWorkbar } from "../features/attention/AttentionWorkbar";
 import { useOrf } from "../state/OrfProvider";
-import { preloadRouteExperience } from "../routing/routePreload";
 import { ImagePreviewDialog } from "./ImagePreviewDialog";
 import { VisualBackgroundSlot } from "./VisualBackgroundSlot";
 import { Avatar } from "./ui";
@@ -254,7 +253,6 @@ function SidebarLink({
   const handleNavigateIntent = (event: ReactMouseEvent<HTMLAnchorElement> | ReactPointerEvent<HTMLAnchorElement>) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     onNavigateIntent?.(item.path);
-    void preloadRouteExperience(item.path);
   };
 
   return (
@@ -264,8 +262,8 @@ function SidebarLink({
       aria-label={ariaLabel}
       onClick={handleNavigateIntent}
       onPointerDown={handleNavigateIntent}
-      onPointerEnter={() => void preloadRouteExperience(item.path)}
-      onFocus={() => void preloadRouteExperience(item.path)}
+      onPointerEnter={() => onNavigateIntent?.(item.path)}
+      onFocus={() => onNavigateIntent?.(item.path)}
       className={({ isActive }) =>
         [
           "orf-sidebar-link flex items-center transition",
