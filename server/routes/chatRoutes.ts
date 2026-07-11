@@ -14,6 +14,7 @@ import {
   getChatBootstrap,
   getChatMessageContext,
   getChatUnreadContext,
+  getChatUnreadTarget,
   getChatUnreadSummary,
   getChatThread,
   listProjectChatChannels,
@@ -60,6 +61,10 @@ const unreadContextQuerySchema = messageContextQuerySchema.extend({
     .refine((value) => value.trim() === "" || !Number.isNaN(Date.parse(value)), "Invalid lastReadAt")
     .optional(),
   manuallyUnread: z.enum(["true", "false"]).optional(),
+});
+
+const unreadTargetQuerySchema = unreadContextQuerySchema.extend({
+  surface: z.enum(["main", "threadMention"]),
 });
 
 const createChannelBodySchema = z.object({
@@ -231,6 +236,23 @@ export function registerChatRoutes(app: FastifyInstance) {
       manuallyUnread: query.manuallyUnread === "true",
     };
     return sendOutcome(reply, await getChatUnreadContext({ anchor, channelId: params.channelId, limit: query.limit }, actor));
+  });
+
+  app.get("/api/chat/channels/:channelId/unread-target", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const params = channelIdParamsSchema.parse(request.params);
+    const query = unreadTargetQuerySchema.parse(request.query);
+    const anchor = query.lastReadAt === undefined && query.manuallyUnread === undefined ? undefined : {
+      lastReadAt: query.lastReadAt?.trim() ? query.lastReadAt : null,
+      manuallyUnread: query.manuallyUnread === "true",
+    };
+    return sendOutcome(reply, await getChatUnreadTarget({
+      anchor,
+      channelId: params.channelId,
+      limit: query.limit,
+      surface: query.surface,
+    }, actor));
   });
 
   app.get("/api/chat/channels/:channelId/mentionable-users", async (request, reply) => {

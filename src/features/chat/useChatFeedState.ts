@@ -3,6 +3,7 @@ import {
   getChatMessageContext,
   getChatMessages,
   getChatUnreadContext,
+  getChatUnreadTarget,
   markChatChannelReadRequest,
   setChatChannelUnreadRequest,
 } from "../../state/apiClient";
@@ -575,17 +576,7 @@ export function useChatFeedState({
   useEffect(() => {
     if (!activeChannel) return;
     const nextAnchor = buildUnreadAnchor(activeChannel, currentUserId);
-    setUnreadAnchor((current) => {
-      if (current && current.channelId !== activeChannel.id) return current;
-      if (hasMainFeedUnread(current) && hasMainFeedUnread(nextAnchor)) {
-        if ((nextAnchor.lastReadAt ?? "") > (current.lastReadAt ?? "")) return nextAnchor;
-        return current;
-      }
-      if (hasMainFeedUnread(current) && !hasMainFeedUnread(nextAnchor)) return nextAnchor;
-      if (current && !hasMainFeedUnread(current) && hasMainFeedUnread(nextAnchor)) return nextAnchor;
-      if (!current && hasMainFeedUnread(nextAnchor)) return nextAnchor;
-      return current ?? nextAnchor;
-    });
+    setUnreadAnchor(nextAnchor);
   }, [activeChannel, currentUserId]);
 
   useEffect(() => {
@@ -751,7 +742,9 @@ export function useChatFeedState({
       lastReadAt: member?.lastReadAt ?? null,
       lastReadMessageId: member?.lastReadMessageId ?? null,
       manuallyUnread: true,
+      mainMentionCount: response.channel.mainMentionCount,
       mentionCount: response.channel.mentionCount,
+      threadMentionCount: response.channel.threadMentionCount,
       threadUnreadCount: response.channel.threadUnreadCount,
       unreadCount: response.channel.unreadCount,
     });
@@ -788,7 +781,9 @@ export function useChatFeedState({
       lastReadAt: member?.lastReadAt ?? null,
       lastReadMessageId: member?.lastReadMessageId ?? null,
       manuallyUnread: true,
+      mainMentionCount: response.channel.mainMentionCount,
       mentionCount: response.channel.mentionCount,
+      threadMentionCount: response.channel.threadMentionCount,
       threadUnreadCount: response.channel.threadUnreadCount,
       unreadCount: response.channel.unreadCount,
     });
@@ -798,7 +793,7 @@ export function useChatFeedState({
     const channelId = activeChannelIdRef.current;
     if (!channelId) return;
     setFollowingLatest(false);
-    if (!target.contextRequired) {
+    if (target.surface === "main" && !target.contextRequired) {
       if (scrollChatFeedToUnread(messageScrollRef.current, { behavior: "auto" })) return;
       if (
         target.messageId &&
@@ -808,17 +803,30 @@ export function useChatFeedState({
       }
     }
 
-    setMessagesLoading(true);
+    if (target.surface === "main") setMessagesLoading(true);
     try {
-      const response = await getChatUnreadContext({ anchor: unreadAnchor, channelId, limit: chatMessagePageSize });
+      const response = await getChatUnreadTarget({
+        anchor: unreadAnchor,
+        channelId,
+        limit: chatMessagePageSize,
+        surface: target.surface,
+      });
       if (activeChannelIdRef.current !== channelId) return;
+      if (response.target.kind === "threadMention") {
+        onThreadTarget({
+          focusMessageId: response.target.targetMessageId,
+          rootMessageId: response.target.rootMessageId,
+        });
+        return;
+      }
+      const context = response.target.context;
       const snapshot = replaceFeedMessages(
         feedCacheRef.current.get(channelId),
-        response.messages,
+        context.messages,
         chatMessagePageSize,
         {
-          hasNewerMessages: response.hasNewerMessages,
-          hasOlderMessages: response.hasOlderMessages,
+          hasNewerMessages: context.hasNewerMessages,
+          hasOlderMessages: context.hasOlderMessages,
           windowKind: "unread",
         },
       );
@@ -831,9 +839,9 @@ export function useChatFeedState({
         notify(error instanceof Error ? error.message : "加载未读消息失败");
       }
     } finally {
-      if (activeChannelIdRef.current === channelId) setMessagesLoading(false);
+      if (target.surface === "main" && activeChannelIdRef.current === channelId) setMessagesLoading(false);
     }
-  }, [applySnapshotToActiveFeed, notify, setFollowingLatest, unreadAnchor]);
+  }, [applySnapshotToActiveFeed, notify, onThreadTarget, setFollowingLatest, unreadAnchor]);
 
   const loadLatestOrScroll = useCallback(() => {
     if (hasNewerMessages) {

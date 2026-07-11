@@ -900,7 +900,10 @@ export interface ChatChannel {
   memberCount: number;
   members: ChatChannelMember[];
   unreadCount: number;
+  mainMentionCount: number;
   mentionCount: number;
+  threadMentionCount: number;
+  threadReadAt?: string | null;
   threadUnreadCount: number;
   lastMessageAt?: string | null;
   lastMessagePreview?: string | null;
@@ -980,6 +983,17 @@ export interface ChatMessageContext {
   targetMessageId: string;
 }
 
+export type ChatUnreadTarget =
+  | {
+      kind: "main";
+      context: ChatMessageContext;
+    }
+  | {
+      kind: "threadMention";
+      rootMessageId: string;
+      targetMessageId: string;
+    };
+
 export interface ChatBootstrap {
   channels: ChatChannel[];
   settings: {
@@ -1000,8 +1014,10 @@ export interface ChatBootstrap {
 export interface ChatUnreadSummary {
   actionableMessageUnreadCount: number;
   directMessageUnreadCount: number;
+  mainMentionCount: number;
   mentionCount: number;
   messageUnreadCount: number;
+  threadMentionCount: number;
   threadUnreadCount: number;
   totalUnreadCount: number;
   unreadChannelCount: number;

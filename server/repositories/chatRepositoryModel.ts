@@ -288,6 +288,25 @@ export function hasChatBroadcastMention(body: string) {
   return CHAT_BROADCAST_MENTION_PATTERN.test(body);
 }
 
+export function resolveThreadMentionRecipientIds(input: {
+  authorUserId: string;
+  body: string;
+  channelMemberUserIds: readonly string[];
+}) {
+  const channelMemberIds = new Set(input.channelMemberUserIds);
+  const mentionedIds = hasChatBroadcastMention(input.body)
+    ? channelMemberIds
+    : new Set(extractMentionUserIds(input.body).filter((userId) => channelMemberIds.has(userId)));
+  mentionedIds.delete(input.authorUserId);
+  return Array.from(mentionedIds);
+}
+
+export function chatThreadReadThroughAt(messages: readonly { createdAt: string }[]) {
+  return messages.reduce<string | null>((latest, message) => (
+    !latest || message.createdAt > latest ? message.createdAt : latest
+  ), null);
+}
+
 export function previewText(body: string) {
   return orfMentionMarkdownTokensToPlainText(body)
     .replace(/\s+/g, " ")

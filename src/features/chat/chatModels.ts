@@ -47,7 +47,9 @@ export type UnreadAnchor = {
   lastReadAt?: string | null;
   lastReadMessageId?: string | null;
   manuallyUnread: boolean;
+  mainMentionCount: number;
   mentionCount: number;
+  threadMentionCount: number;
   threadUnreadCount: number;
   unreadCount: number;
 };
@@ -55,7 +57,10 @@ export type UnreadAnchor = {
 export type ChatUnreadJumpTarget = {
   contextRequired: boolean;
   messageId?: string | null;
+  surface: "main" | "threadMention";
 };
+
+export type ChatUnreadControlKind = "main" | "threadInbox" | "threadMention";
 
 export type ChatFeedWindowKind = "context" | "latest" | "unread";
 
@@ -131,8 +136,31 @@ export function sortChannels(channels: ChatChannel[], currentUserId?: string) {
 }
 
 export function upsertChannel(channels: ChatChannel[], next: ChatChannel, currentUserId?: string) {
-  const found = channels.some((channel) => channel.id === next.id);
-  return sortChannels(found ? channels.map((channel) => (channel.id === next.id ? next : channel)) : [next, ...channels], currentUserId);
+  const current = channels.find((channel) => channel.id === next.id);
+  if (!current) return sortChannels([next, ...channels], currentUserId);
+
+  const currentMember = currentMembership(current, currentUserId);
+  const nextMember = currentMembership(next, currentUserId);
+  const mainReadRegressed = Boolean(
+    currentMember?.lastViewedAt && (!nextMember?.lastViewedAt || nextMember.lastViewedAt < currentMember.lastViewedAt),
+  );
+  const threadReadRegressed = Boolean(
+    current.threadReadAt && (!next.threadReadAt || next.threadReadAt < current.threadReadAt),
+  );
+  const members = mainReadRegressed && currentMember
+    ? next.members.map((member) => member.userId === currentMember.userId ? currentMember : member)
+    : next.members;
+  const merged = {
+    ...next,
+    members,
+    mainMentionCount: mainReadRegressed ? current.mainMentionCount : next.mainMentionCount,
+    threadMentionCount: threadReadRegressed ? current.threadMentionCount : next.threadMentionCount,
+    threadReadAt: threadReadRegressed ? current.threadReadAt : next.threadReadAt,
+    threadUnreadCount: threadReadRegressed ? current.threadUnreadCount : next.threadUnreadCount,
+    unreadCount: mainReadRegressed ? current.unreadCount : next.unreadCount,
+  };
+  merged.mentionCount = merged.mainMentionCount + merged.threadMentionCount;
+  return sortChannels(channels.map((channel) => channel.id === next.id ? merged : channel), currentUserId);
 }
 
 export function isUnreadChannel(channel: ChatChannel, currentUserId?: string) {
@@ -478,7 +506,9 @@ export function buildUnreadAnchor(channel: ChatChannel, currentUserId?: string):
   const member = currentMembership(channel, currentUserId);
   const hasUnreadState =
     channel.unreadCount > 0 ||
+    channel.mainMentionCount > 0 ||
     channel.mentionCount > 0 ||
+    channel.threadMentionCount > 0 ||
     channel.threadUnreadCount > 0 ||
     Boolean(member?.manuallyUnread);
   return hasUnreadState ? {
@@ -486,7 +516,9 @@ export function buildUnreadAnchor(channel: ChatChannel, currentUserId?: string):
     lastReadAt: member?.lastReadAt ?? null,
     lastReadMessageId: member?.lastReadMessageId ?? null,
     manuallyUnread: Boolean(member?.manuallyUnread),
+    mainMentionCount: channel.mainMentionCount,
     mentionCount: channel.mentionCount,
+    threadMentionCount: channel.threadMentionCount,
     threadUnreadCount: channel.threadUnreadCount,
     unreadCount: channel.unreadCount,
   } : null;
@@ -495,8 +527,19 @@ export function buildUnreadAnchor(channel: ChatChannel, currentUserId?: string):
 export function hasMainFeedUnread(unreadAnchor: UnreadAnchor | null): unreadAnchor is UnreadAnchor {
   return Boolean(
     unreadAnchor &&
-    (unreadAnchor.unreadCount > 0 || unreadAnchor.mentionCount > 0 || unreadAnchor.manuallyUnread),
+    (unreadAnchor.unreadCount > 0 || unreadAnchor.mainMentionCount > 0 || unreadAnchor.manuallyUnread),
   );
+}
+
+export function chatUnreadControlKind(input: {
+  hasMainTarget: boolean;
+  threadMentionCount: number;
+  threadUnreadCount: number;
+}): ChatUnreadControlKind | null {
+  if (input.hasMainTarget) return "main";
+  if (input.threadMentionCount > 0) return "threadMention";
+  if (input.threadUnreadCount > 0) return "threadInbox";
+  return null;
 }
 
 export function resolveUnreadJumpTarget(input: {
@@ -515,7 +558,7 @@ export function resolveUnreadJumpTarget(input: {
   });
 
   if (firstUnreadIndex < 0) {
-    return { dividerIndex: -1, jumpTarget: { contextRequired: true }, messageId: null };
+    return { dividerIndex: -1, jumpTarget: { contextRequired: true, surface: "main" }, messageId: null };
   }
 
   const message = messages[firstUnreadIndex];
@@ -525,12 +568,12 @@ export function resolveUnreadJumpTarget(input: {
     (!unreadAnchor.lastReadAt || message.createdAt > unreadAnchor.lastReadAt);
 
   if (boundaryMayBeOlder) {
-    return { dividerIndex: -1, jumpTarget: { contextRequired: true }, messageId: null };
+    return { dividerIndex: -1, jumpTarget: { contextRequired: true, surface: "main" }, messageId: null };
   }
 
   return {
     dividerIndex: firstUnreadIndex,
-    jumpTarget: { contextRequired: false, messageId: message.id },
+    jumpTarget: { contextRequired: false, messageId: message.id, surface: "main" },
     messageId: message.id,
   };
 }

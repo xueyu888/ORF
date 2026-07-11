@@ -22611,6 +22611,8 @@ button.orf-chat-image-attachment {
 
   .orf-chat-unread-controls {
     max-width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 6px;
   }
 

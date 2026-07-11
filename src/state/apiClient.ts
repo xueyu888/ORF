@@ -10,6 +10,7 @@ import type {
   ChatThread,
   ChatThreadSummary,
   ChatUnreadSummary,
+  ChatUnreadTarget,
   ChatUser,
   ProjectChatChannel,
   ChatDriveLink,
@@ -153,6 +154,7 @@ export type ChatUsersResponse = { status?: "ok"; users: ChatUser[] };
 export type ChatUnreadSummaryResponse = ChatUnreadSummary;
 export type ChatMessagesResponse = { status?: "ok"; messages: ChatMessage[] };
 export type ChatMessageContextResponse = { status?: "ok" } & ChatMessageContext;
+export type ChatUnreadTargetResponse = { status?: "ok"; target: ChatUnreadTarget };
 export type ChatChannelResponse = { status?: "ok"; channel: ChatChannel };
 export type ProjectChatChannelsResponse = { status?: "ok"; channels: ProjectChatChannel[] };
 export type ChatNullableChannelResponse = { status?: "ok"; channel: ChatChannel | null };
@@ -697,6 +699,23 @@ export async function getChatUnreadContext(input: {
   }
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return apiJson<ChatMessageContextResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/unread-context${suffix}`);
+}
+
+export async function getChatUnreadTarget(input: {
+  anchor?: { lastReadAt?: string | null; manuallyUnread: boolean } | null;
+  channelId: string;
+  limit?: number;
+  surface: "main" | "threadMention";
+}) {
+  const query = new URLSearchParams({ surface: input.surface });
+  if (input.limit) query.set("limit", String(input.limit));
+  if (input.anchor) {
+    query.set("lastReadAt", input.anchor.lastReadAt ?? "");
+    query.set("manuallyUnread", input.anchor.manuallyUnread ? "true" : "false");
+  }
+  return apiJson<ChatUnreadTargetResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/unread-target?${query.toString()}`,
+  );
 }
 
 export async function createChatChannel(input: {

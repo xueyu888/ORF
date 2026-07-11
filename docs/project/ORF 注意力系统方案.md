@@ -227,7 +227,7 @@ type AttentionState = {
 
 | 输入 | 用途 |
 | --- | --- |
-| `chatUnreadSummary` | 普通未读、`actionableMessageUnreadCount`、私聊未读、@我、线程未读聚合；普通未读只生成 `badgeCount` |
+| `chatUnreadSummary` | 普通未读、`actionableMessageUnreadCount`、私聊未读、主消息提及、话题提及、话题未读聚合；`mentionCount` 只由 `mainMentionCount + threadMentionCount` 派生，普通未读只生成 `badgeCount` |
 | `AppNotification[]` / `unreadNotificationCount` | 系统通知 kind、targetHref、readAt |
 | `WorkLogReminderState` | 工作日志欠账是否仍需提醒 |
 | `AppAttentionState` | 当前窗口是否被用户主动查看 |

@@ -438,17 +438,18 @@ async function ensureProjectNotificationChannel(input: { actor: ChatActor; chann
 async function markActorRead(input: { actorUserId?: string | null; channelId: string; messageId: string; readAt: string }) {
   const actorUserId = input.actorUserId?.trim();
   if (!actorUserId) return;
+  const readStateUpdatedAt = nowIso();
   await pool.query(
     `
       UPDATE chat_channel_members
-      SET last_viewed_at = $3,
+      SET last_viewed_at = CASE WHEN last_viewed_at IS NULL OR last_viewed_at < $5::timestamptz THEN $5 ELSE last_viewed_at END,
           last_read_at = CASE WHEN last_read_at IS NULL OR last_read_at < $3::timestamptz THEN $3 ELSE last_read_at END,
           last_read_message_id = CASE WHEN last_read_at IS NULL OR last_read_at < $3::timestamptz THEN $4 ELSE last_read_message_id END,
           manually_unread = false
       WHERE channel_id = $1
         AND user_id = $2
     `,
-    [input.channelId, actorUserId, input.readAt, input.messageId],
+    [input.channelId, actorUserId, input.readAt, input.messageId, readStateUpdatedAt],
   );
 }
 

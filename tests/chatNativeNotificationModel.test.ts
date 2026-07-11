@@ -62,7 +62,10 @@ function channel(overrides: Partial<ChatChannel> = {}): ChatChannel {
       },
     ],
     unreadCount: 1,
+    mainMentionCount: 0,
     mentionCount: 0,
+    threadMentionCount: 0,
+    threadReadAt: null,
     threadUnreadCount: 0,
     lastMessageAt: "2026-06-07T09:30:00.000Z",
     lastMessagePreview: "hello",
@@ -120,8 +123,10 @@ function chatUnreadSummary(overrides: Partial<ChatUnreadSummary> = {}): ChatUnre
   return {
     actionableMessageUnreadCount: 0,
     directMessageUnreadCount: 0,
+    mainMentionCount: 0,
     mentionCount: 0,
     messageUnreadCount: 0,
+    threadMentionCount: 0,
     threadUnreadCount: 0,
     totalUnreadCount: 0,
     unreadChannelCount: 0,
@@ -271,6 +276,7 @@ test("attention state promotes only actionable chat unread into workbar count", 
   const state = buildAttentionState(attentionInput({
     chatUnreadSummary: chatUnreadSummary({
       actionableMessageUnreadCount: 2,
+      mainMentionCount: 2,
       mentionCount: 2,
       messageUnreadCount: 5,
       totalUnreadCount: 5,
@@ -283,6 +289,38 @@ test("attention state promotes only actionable chat unread into workbar count", 
   assert.equal(state.level, "flash");
   assert.equal(state.items.length, 1);
   assert.equal(state.items[0]?.kind, "chat.mention");
+});
+
+test("attention state does not double count a thread mention as both a mention and a followed thread", () => {
+  const state = buildAttentionState(attentionInput({
+    chatUnreadSummary: chatUnreadSummary({
+      mentionCount: 1,
+      threadMentionCount: 1,
+      threadUnreadCount: 1,
+      totalUnreadCount: 1,
+      unreadChannelCount: 1,
+    }),
+  }));
+
+  assert.equal(state.count, 1);
+  assert.equal(state.badgeCount, 1);
+  assert.equal(state.level, "flash");
+  assert.equal(state.items.length, 1);
+  assert.equal(state.items.some((item) => item.kind === "chat.mention"), true);
+});
+
+test("attention state retains one ordinary thread item when there is no thread mention", () => {
+  const state = buildAttentionState(attentionInput({
+    chatUnreadSummary: chatUnreadSummary({
+      threadUnreadCount: 2,
+      totalUnreadCount: 2,
+      unreadChannelCount: 1,
+    }),
+  }));
+
+  assert.equal(state.count, 2);
+  assert.equal(state.items.length, 1);
+  assert.equal(state.items[0]?.kind, "chat.thread");
 });
 
 test("attention state keeps direct messages as actionable chat unread", () => {

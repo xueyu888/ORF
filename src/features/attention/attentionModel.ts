@@ -229,7 +229,7 @@ function attentionItemsFromActionableChatUnread(summary: ChatUnreadSummary): Att
       title: "私聊消息未读",
     });
   }
-  if (summary.threadUnreadCount > 0) {
+  if (summary.threadUnreadCount > 0 && summary.threadMentionCount <= 0) {
     items.push({
       body: `${summary.threadUnreadCount} 条线程回复未读`,
       createdAt,
@@ -312,7 +312,10 @@ function attentionBadgeCount(unreadAttentionCount: number, summary: ChatUnreadSu
 }
 
 function chatActionableUnreadCount(summary: ChatUnreadSummary) {
-  return chatActionableMessageUnreadCount(summary) + nonNegativeCount(summary.threadUnreadCount);
+  return chatActionableMessageUnreadCount(summary) + Math.max(
+    nonNegativeCount(summary.threadMentionCount),
+    nonNegativeCount(summary.threadUnreadCount),
+  );
 }
 
 function chatActionableMessageUnreadCount(summary: ChatUnreadSummary) {
@@ -320,7 +323,7 @@ function chatActionableMessageUnreadCount(summary: ChatUnreadSummary) {
     0,
     nonNegativeCount(summary.actionableMessageUnreadCount),
     nonNegativeCount(summary.directMessageUnreadCount),
-    nonNegativeCount(summary.mentionCount),
+    nonNegativeCount(summary.mainMentionCount),
   );
 }
 

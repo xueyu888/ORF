@@ -14,6 +14,7 @@ import type {
   ChatSearchResult,
   ChatThread,
   ChatThreadSummary,
+  ChatUnreadTarget,
   ChatUnreadSummary,
   ChatUser,
   ProjectChatChannel,
@@ -58,7 +59,9 @@ import {
   type ReactionRow,
   type UserRow,
   chatAttachmentContentUrl,
+  chatThreadReadThroughAt,
   displayNameForChannel,
+  resolveThreadMentionRecipientIds,
   iso,
   makeChatAttachmentId,
   makeId,
@@ -85,6 +88,27 @@ function visibleChatMessageSql(messageSql: string, recipientUserIdParam: string,
     recipientUserIdParam,
     viewerEmailsParam,
   });
+}
+
+function visibleChatThreadRootSql(
+  messageSql: string,
+  recipientUserIdParam: string,
+  actorNamePatternParam: string,
+  viewerEmailsParam: string,
+) {
+  return `(
+    ${messageSql}.root_message_id IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM chat_messages visible_thread_root
+      WHERE visible_thread_root.id = ${messageSql}.root_message_id
+        AND visible_thread_root.team_id = ${messageSql}.team_id
+        AND visible_thread_root.channel_id = ${messageSql}.channel_id
+        AND visible_thread_root.root_message_id IS NULL
+        AND visible_thread_root.deleted_at IS NULL
+        AND ${visibleChatMessageSql("visible_thread_root", recipientUserIdParam, actorNamePatternParam, viewerEmailsParam)}
+    )
+  )`;
 }
 
 async function ensureDefaultPublicChannel(teamId: string) {
@@ -319,13 +343,16 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
   const empty = {
     lastMessageAt: new Map<string, string | null>(),
     lastMessagePreview: new Map<string, string | null>(),
+    mainMentionCounts: new Map<string, number>(),
     mentionCounts: new Map<string, number>(),
+    threadMentionCounts: new Map<string, number>(),
+    threadReadAt: new Map<string, string | null>(),
     threadUnreadCounts: new Map<string, number>(),
     unreadCounts: new Map<string, number>(),
   };
   if (channelIds.length === 0) return empty;
 
-  const [lastMessages, unreadCounts, mentionCounts, threadUnreadCounts] = await Promise.all([
+  const [lastMessages, unreadCounts, mentionCounts, threadUnreadCounts, threadReadAt] = await Promise.all([
     pool.query<{ body: string; channel_id: string; created_at: Date | string }>(
       `
         SELECT DISTINCT ON (channel_id) channel_id, body, created_at
@@ -352,9 +379,13 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
       `,
       [channelIds, actor.id, E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN, normalizedE2eNotificationViewerEmails()],
     ),
-    pool.query<{ channel_id: string; count: number }>(
+    pool.query<{ channel_id: string; main_count: number; thread_count: number; total_count: number }>(
       `
-        SELECT m.channel_id, count(*)::int AS count
+        SELECT
+          m.channel_id,
+          count(*) FILTER (WHERE m.root_message_id IS NULL)::int AS main_count,
+          count(*) FILTER (WHERE m.root_message_id IS NOT NULL)::int AS thread_count,
+          count(*)::int AS total_count
         FROM chat_messages m
         INNER JOIN chat_channel_members cm ON cm.channel_id = m.channel_id AND cm.user_id = $2
         LEFT JOIN chat_thread_follows f ON f.root_message_id = m.root_message_id AND f.user_id = $2
@@ -368,6 +399,7 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
             (m.root_message_id IS NOT NULL AND (f.last_viewed_at IS NULL OR m.created_at > f.last_viewed_at))
           )
           AND ${visibleChatMessageSql("m", "$2", "$5", "$6")}
+          AND ${visibleChatThreadRootSql("m", "$2", "$5", "$6")}
         GROUP BY m.channel_id
       `,
       [
@@ -388,16 +420,50 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
           AND root.channel_id = m.channel_id
           AND root.root_message_id IS NULL
           AND root.deleted_at IS NULL
-        INNER JOIN chat_thread_follows f ON f.root_message_id = m.root_message_id AND f.user_id = $2 AND f.following = true
+        LEFT JOIN chat_thread_follows f ON f.root_message_id = m.root_message_id AND f.user_id = $2
         WHERE m.channel_id = ANY($1::text[])
           AND m.root_message_id IS NOT NULL
           AND m.author_user_id <> $2
           AND m.deleted_at IS NULL
           AND (f.last_viewed_at IS NULL OR m.created_at > f.last_viewed_at)
-          AND ${visibleChatMessageSql("root", "$2", "$3", "$4")}
+          AND (
+            f.following = true
+            OR (
+              f.user_id IS NULL
+              AND EXISTS (
+                SELECT 1
+                FROM chat_messages mention
+                WHERE mention.root_message_id = m.root_message_id
+                  AND mention.author_user_id <> $2
+                  AND mention.deleted_at IS NULL
+                  AND (mention.body LIKE $3 OR mention.body ~* $4)
+                  AND ${visibleChatMessageSql("mention", "$2", "$5", "$6")}
+              )
+            )
+          )
+          AND ${visibleChatMessageSql("root", "$2", "$5", "$6")}
         GROUP BY m.channel_id
       `,
-      [channelIds, actor.id, E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN, normalizedE2eNotificationViewerEmails()],
+      [
+        channelIds,
+        actor.id,
+        `%orf-user:${actor.id}%`,
+        CHAT_BROADCAST_MENTION_SQL_PATTERN,
+        E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+        normalizedE2eNotificationViewerEmails(),
+      ],
+    ),
+    pool.query<{ channel_id: string; read_at: Date | string | null }>(
+      `
+        SELECT root.channel_id, max(f.updated_at) AS read_at
+        FROM chat_thread_follows f
+        INNER JOIN chat_messages root ON root.id = f.root_message_id
+          AND root.root_message_id IS NULL
+        WHERE f.user_id = $2
+          AND root.channel_id = ANY($1::text[])
+        GROUP BY root.channel_id
+      `,
+      [channelIds, actor.id],
     ),
   ]);
 
@@ -406,8 +472,13 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
     empty.lastMessagePreview.set(row.channel_id, previewText(row.body));
   }
   for (const row of unreadCounts.rows) empty.unreadCounts.set(row.channel_id, Number(row.count));
-  for (const row of mentionCounts.rows) empty.mentionCounts.set(row.channel_id, Number(row.count));
+  for (const row of mentionCounts.rows) {
+    empty.mainMentionCounts.set(row.channel_id, Number(row.main_count));
+    empty.mentionCounts.set(row.channel_id, Number(row.total_count));
+    empty.threadMentionCounts.set(row.channel_id, Number(row.thread_count));
+  }
   for (const row of threadUnreadCounts.rows) empty.threadUnreadCounts.set(row.channel_id, Number(row.count));
+  for (const row of threadReadAt.rows) empty.threadReadAt.set(row.channel_id, iso(row.read_at));
   return empty;
 }
 
@@ -443,7 +514,10 @@ async function buildChannels(rows: ChannelRow[], actor: ChatActor): Promise<Chat
       memberCount: members.length,
       members,
       unreadCount: currentMember?.manuallyUnread && unreadCount === 0 ? 1 : unreadCount,
+      mainMentionCount: readModel.mainMentionCounts.get(row.id) ?? 0,
       mentionCount: readModel.mentionCounts.get(row.id) ?? 0,
+      threadMentionCount: readModel.threadMentionCounts.get(row.id) ?? 0,
+      threadReadAt: readModel.threadReadAt.get(row.id) ?? null,
       threadUnreadCount: readModel.threadUnreadCounts.get(row.id) ?? 0,
       lastMessageAt: readModel.lastMessageAt.get(row.id) ?? null,
       lastMessagePreview: readModel.lastMessagePreview.get(row.id) ?? null,
@@ -1055,8 +1129,10 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
     return {
       actionableMessageUnreadCount: 0,
       directMessageUnreadCount: 0,
+      mainMentionCount: 0,
       mentionCount: 0,
       messageUnreadCount: 0,
+      threadMentionCount: 0,
       threadUnreadCount: 0,
       totalUnreadCount: 0,
       unreadChannelCount: 0,
@@ -1068,8 +1144,10 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
   const { rows } = await pool.query<{
     actionable_message_unread_count: number | string | null;
     direct_message_unread_count: number | string | null;
+    main_mention_count: number | string | null;
     mention_count: number | string | null;
     message_unread_count: number | string | null;
+    thread_mention_count: number | string | null;
     thread_unread_count: number | string | null;
     unread_channel_count: number | string | null;
   }>(
@@ -1143,7 +1221,11 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
         GROUP BY m.channel_id
       ),
       mention_unread AS (
-        SELECT m.channel_id, count(*)::int AS count
+        SELECT
+          m.channel_id,
+          count(*) FILTER (WHERE m.root_message_id IS NULL)::int AS main_count,
+          count(*) FILTER (WHERE m.root_message_id IS NOT NULL)::int AS thread_count,
+          count(*)::int AS total_count
         FROM chat_messages m
         INNER JOIN chat_channel_members cm ON cm.channel_id = m.channel_id AND cm.user_id = $2
         INNER JOIN displayable_channels dc ON dc.id = m.channel_id
@@ -1157,6 +1239,7 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
             (m.root_message_id IS NOT NULL AND (f.last_viewed_at IS NULL OR m.created_at > f.last_viewed_at))
           )
           AND ${visibleChatMessageSql("m", "$2", "$5", "$6")}
+          AND ${visibleChatThreadRootSql("m", "$2", "$5", "$6")}
         GROUP BY m.channel_id
       ),
       direct_message_unread AS (
@@ -1198,12 +1281,27 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
           AND root.channel_id = m.channel_id
           AND root.root_message_id IS NULL
           AND root.deleted_at IS NULL
-        INNER JOIN chat_thread_follows f ON f.root_message_id = m.root_message_id AND f.user_id = $2 AND f.following = true
+        LEFT JOIN chat_thread_follows f ON f.root_message_id = m.root_message_id AND f.user_id = $2
         INNER JOIN displayable_channels dc ON dc.id = m.channel_id
         WHERE m.root_message_id IS NOT NULL
           AND m.author_user_id <> $2
           AND m.deleted_at IS NULL
           AND (f.last_viewed_at IS NULL OR m.created_at > f.last_viewed_at)
+          AND (
+            f.following = true
+            OR (
+              f.user_id IS NULL
+              AND EXISTS (
+                SELECT 1
+                FROM chat_messages mention
+                WHERE mention.root_message_id = m.root_message_id
+                  AND mention.author_user_id <> $2
+                  AND mention.deleted_at IS NULL
+                  AND (mention.body LIKE $3 OR mention.body ~* $4)
+                  AND ${visibleChatMessageSql("mention", "$2", "$5", "$6")}
+              )
+            )
+          )
           AND ${visibleChatMessageSql("root", "$2", "$5", "$6")}
         GROUP BY m.channel_id
       ),
@@ -1224,7 +1322,9 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
             WHEN dc.type = 'direct' AND dc.system_kind IS NULL AND dc.manually_unread AND COALESCE(actionable_message_unread.count, 0) = 0 THEN 1
             ELSE COALESCE(actionable_message_unread.count, 0)
           END AS actionable_message_count,
-          COALESCE(mention_unread.count, 0) AS mention_count,
+          COALESCE(mention_unread.main_count, 0) AS main_mention_count,
+          COALESCE(mention_unread.total_count, 0) AS mention_count,
+          COALESCE(mention_unread.thread_count, 0) AS thread_mention_count,
           COALESCE(thread_unread.count, 0) AS thread_count
         FROM displayable_channels dc
         LEFT JOIN message_unread ON message_unread.channel_id = dc.id
@@ -1237,7 +1337,9 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
         COALESCE(sum(actionable_message_count), 0)::int AS actionable_message_unread_count,
         COALESCE(sum(direct_message_count), 0)::int AS direct_message_unread_count,
         COALESCE(sum(message_count), 0)::int AS message_unread_count,
+        COALESCE(sum(main_mention_count), 0)::int AS main_mention_count,
         COALESCE(sum(mention_count), 0)::int AS mention_count,
+        COALESCE(sum(thread_mention_count), 0)::int AS thread_mention_count,
         COALESCE(sum(thread_count), 0)::int AS thread_unread_count,
         count(*) FILTER (WHERE message_count > 0 OR thread_count > 0)::int AS unread_channel_count
       FROM channel_unread
@@ -1257,8 +1359,10 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
   return {
     actionableMessageUnreadCount: Number(row?.actionable_message_unread_count ?? 0),
     directMessageUnreadCount: Number(row?.direct_message_unread_count ?? 0),
+    mainMentionCount: Number(row?.main_mention_count ?? 0),
     mentionCount: Number(row?.mention_count ?? 0),
     messageUnreadCount,
+    threadMentionCount: Number(row?.thread_mention_count ?? 0),
     threadUnreadCount,
     totalUnreadCount: messageUnreadCount + threadUnreadCount,
     unreadChannelCount: Number(row?.unread_channel_count ?? 0),
@@ -1373,7 +1477,7 @@ export async function getChatMessageContext(
   });
 }
 
-export async function getChatUnreadContext(
+async function getChatMainUnreadContext(
   input: { anchor?: { lastReadAt?: string | null; manuallyUnread: boolean }; channelId: string; limit?: number },
   actor: ChatActor,
 ): Promise<Outcome<ChatMessageContext>> {
@@ -1412,6 +1516,87 @@ export async function getChatUnreadContext(
   return getChatMessageContext({ channelId: input.channelId, limit: input.limit, messageId: targetMessageId }, actor);
 }
 
+async function findFirstUnreadThreadMention(channelId: string, actor: ChatActor) {
+  const { rows } = await pool.query<{ id: string; root_message_id: string }>(
+    `
+      SELECT m.id, m.root_message_id
+      FROM chat_messages m
+      INNER JOIN chat_messages root ON root.id = m.root_message_id
+        AND root.team_id = m.team_id
+        AND root.channel_id = m.channel_id
+        AND root.root_message_id IS NULL
+        AND root.deleted_at IS NULL
+      LEFT JOIN chat_thread_follows f ON f.root_message_id = m.root_message_id AND f.user_id = $3
+      WHERE m.team_id = $1
+        AND m.channel_id = $2
+        AND m.root_message_id IS NOT NULL
+        AND m.author_user_id <> $3
+        AND m.deleted_at IS NULL
+        AND (m.body LIKE $4 OR m.body ~* $5)
+        AND (f.last_viewed_at IS NULL OR m.created_at > f.last_viewed_at)
+        AND ${visibleChatMessageSql("m", "$3", "$6", "$7")}
+        AND ${visibleChatMessageSql("root", "$3", "$6", "$7")}
+      ORDER BY m.created_at ASC, m.id ASC
+      LIMIT 1
+    `,
+    [
+      storageTeamId(actor),
+      channelId,
+      actor.id,
+      `%orf-user:${actor.id}%`,
+      CHAT_BROADCAST_MENTION_SQL_PATTERN,
+      E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+      normalizedE2eNotificationViewerEmails(),
+    ],
+  );
+  return rows[0] ?? null;
+}
+
+export async function getChatUnreadContext(
+  input: { anchor?: { lastReadAt?: string | null; manuallyUnread: boolean }; channelId: string; limit?: number },
+  actor: ChatActor,
+): Promise<Outcome<ChatMessageContext>> {
+  const mainOutcome = await getChatMainUnreadContext(input, actor);
+  if (mainOutcome.status !== "notFound") return mainOutcome;
+  if (!(await hasReadableChannel(actor, input.channelId))) return mainOutcome;
+  const threadTarget = await findFirstUnreadThreadMention(input.channelId, actor);
+  if (!threadTarget) return mainOutcome;
+  return getChatMessageContext({
+    channelId: input.channelId,
+    limit: input.limit,
+    messageId: threadTarget.root_message_id,
+  }, actor);
+}
+
+export async function getChatUnreadTarget(
+  input: {
+    anchor?: { lastReadAt?: string | null; manuallyUnread: boolean };
+    channelId: string;
+    limit?: number;
+    surface: "main" | "threadMention";
+  },
+  actor: ChatActor,
+): Promise<Outcome<{ target: ChatUnreadTarget }>> {
+  if (input.surface === "main") {
+    const outcome = await getChatMainUnreadContext(input, actor);
+    if (outcome.status !== "ok") return outcome;
+    const { status: _status, ...context } = outcome;
+    return ok({ target: { context, kind: "main" } });
+  }
+
+  if (!actor.canRead) return { status: "forbidden" };
+  if (!(await hasReadableChannel(actor, input.channelId))) return { status: "notFound" };
+  const target = await findFirstUnreadThreadMention(input.channelId, actor);
+  if (!target) return { status: "notFound" };
+  return ok({
+    target: {
+      kind: "threadMention",
+      rootMessageId: target.root_message_id,
+      targetMessageId: target.id,
+    },
+  });
+}
+
 export async function getChatThread(rootMessageId: string, actor: ChatActor): Promise<Outcome<{ channel: ChatChannel; thread: ChatThread }>> {
   if (!actor.canRead) return { status: "forbidden" };
   const root = await getRawMessage(actor, rootMessageId);
@@ -1436,19 +1621,24 @@ export async function getChatThread(rootMessageId: string, actor: ChatActor): Pr
   const rootMessage = messages.find((message) => message.id === rootMessageId);
   if (!rootMessage) return { status: "notFound" };
 
-  const { rows: followRows } = await pool.query<{ following: boolean }>(
-    "SELECT following FROM chat_thread_follows WHERE root_message_id = $1 AND user_id = $2 LIMIT 1",
-    [rootMessageId, actor.id],
-  );
   const now = nowIso();
-  await pool.query(
+  const readThroughAt = chatThreadReadThroughAt(messages) ?? rootMessage.createdAt;
+  const { rows: followRows } = await pool.query<{ following: boolean }>(
     `
       INSERT INTO chat_thread_follows (root_message_id, user_id, following, last_viewed_at, updated_at)
-      VALUES ($1, $2, true, $3, $3)
+      VALUES ($1, $2, true, $3, $4)
       ON CONFLICT (root_message_id, user_id)
-      DO UPDATE SET last_viewed_at = EXCLUDED.last_viewed_at, updated_at = EXCLUDED.updated_at
+      DO UPDATE SET
+        last_viewed_at = CASE
+          WHEN chat_thread_follows.last_viewed_at IS NULL
+            OR chat_thread_follows.last_viewed_at < EXCLUDED.last_viewed_at
+          THEN EXCLUDED.last_viewed_at
+          ELSE chat_thread_follows.last_viewed_at
+        END,
+        updated_at = EXCLUDED.updated_at
+      RETURNING following
     `,
-    [rootMessageId, actor.id, now],
+    [rootMessageId, actor.id, readThroughAt, now],
   );
   const updatedChannel = await getVisibleChannel(actor, root.channel_id);
   if (!updatedChannel) return { status: "notFound" };
@@ -1493,6 +1683,36 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
   };
   const { rows } = await pool.query<ThreadSummaryRow>(
     `
+      WITH effective_follows AS (
+        SELECT f.root_message_id, f.user_id, f.following, f.last_viewed_at
+        FROM chat_thread_follows f
+        WHERE f.user_id = $2
+
+        UNION ALL
+
+        SELECT DISTINCT mention.root_message_id, $2::uuid, true, null::timestamptz
+        FROM chat_messages mention
+        INNER JOIN chat_messages mentioned_root ON mentioned_root.id = mention.root_message_id
+          AND mentioned_root.team_id = mention.team_id
+          AND mentioned_root.channel_id = mention.channel_id
+          AND mentioned_root.root_message_id IS NULL
+          AND mentioned_root.deleted_at IS NULL
+        INNER JOIN chat_channels mentioned_channel ON mentioned_channel.id = mention.channel_id
+          AND mentioned_channel.team_id = $1
+          AND mentioned_channel.archived_at IS NULL
+        INNER JOIN chat_channel_members mentioned_membership
+          ON mentioned_membership.channel_id = mentioned_channel.id AND mentioned_membership.user_id = $2
+        LEFT JOIN chat_thread_follows existing_follow
+          ON existing_follow.root_message_id = mention.root_message_id AND existing_follow.user_id = $2
+        WHERE mention.team_id = $1
+          AND mention.root_message_id IS NOT NULL
+          AND mention.author_user_id <> $2
+          AND mention.deleted_at IS NULL
+          AND existing_follow.root_message_id IS NULL
+          AND (mention.body LIKE $3 OR mention.body ~* $4)
+          AND ${visibleChatMessageSql("mention", "$2", "$5", "$6")}
+          AND ${visibleChatMessageSql("mentioned_root", "$2", "$5", "$6")}
+      )
       SELECT root.id, root.channel_id, root.author_user_id, u.name AS author_name,
              u.avatar_object_key AS author_avatar_object_key, u.avatar_updated_at AS author_avatar_updated_at,
              root.body, root.root_message_id, root.parent_message_id,
@@ -1503,7 +1723,7 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
              c.created_at AS channel_created_at, c.updated_at AS channel_updated_at, c.archived_at AS channel_archived_at,
              f.following, f.last_viewed_at AS thread_last_viewed_at,
              COALESCE(unread.count, 0)::int AS thread_unread_count
-      FROM chat_thread_follows f
+      FROM effective_follows f
       INNER JOIN chat_messages root ON root.id = f.root_message_id
         AND root.team_id = $1
         AND root.root_message_id IS NULL
@@ -1543,7 +1763,14 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
                COALESCE(latest_reply.last_reply_at, root.created_at) DESC
       LIMIT 100
     `,
-    [teamId, actor.id],
+    [
+      teamId,
+      actor.id,
+      `%orf-user:${actor.id}%`,
+      CHAT_BROADCAST_MENTION_SQL_PATTERN,
+      E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+      normalizedE2eNotificationViewerEmails(),
+    ],
   );
 
   const messageRows = rows.map((row) => ({
@@ -1914,6 +2141,25 @@ export async function removeChatChannelMember(
   return ok({ channel: updated });
 }
 
+async function followMentionedThreadRecipients(
+  client: Pick<PoolClient, "query">,
+  input: { channelId: string; mentionedUserIds: string[]; rootMessageId: string | null; updatedAt: string },
+) {
+  if (!input.rootMessageId || input.mentionedUserIds.length === 0) return;
+  await client.query(
+    `
+      INSERT INTO chat_thread_follows (root_message_id, user_id, following, last_viewed_at, updated_at)
+      SELECT $1, mentioned.mentioned_user_id, true, null, $3::timestamptz
+      FROM unnest($2::uuid[]) AS mentioned(mentioned_user_id)
+      INNER JOIN chat_channel_members current_membership
+        ON current_membership.channel_id = $4 AND current_membership.user_id = mentioned.mentioned_user_id
+      ON CONFLICT (root_message_id, user_id)
+      DO UPDATE SET following = true, updated_at = EXCLUDED.updated_at
+    `,
+    [input.rootMessageId, input.mentionedUserIds, input.updatedAt, input.channelId],
+  );
+}
+
 export async function sendChatMessage(
   input: {
     attachmentIds?: string[];
@@ -1956,6 +2202,14 @@ export async function sendChatMessage(
   } else {
     parentMessageId = null;
   }
+
+  const threadMentionRecipientIds = rootMessageId
+    ? resolveThreadMentionRecipientIds({
+        authorUserId: actor.id,
+        body,
+        channelMemberUserIds: channel.members.map((member) => member.userId),
+      })
+    : [];
 
   const messageId = makeId("chat-message");
   const now = input.createdAt ?? nowIso();
@@ -2013,6 +2267,12 @@ export async function sendChatMessage(
       `,
       [rootMessageId ?? messageId, actor.id, now],
     );
+    await followMentionedThreadRecipients(client, {
+      channelId: input.channelId,
+      mentionedUserIds: threadMentionRecipientIds,
+      rootMessageId,
+      updatedAt: now,
+    });
     await enqueueChatMessageDeliveries(client, {
       authorUserId: actor.id,
       channelId: input.channelId,
@@ -2066,12 +2326,36 @@ export async function updateChatMessage(
   if (message.source === "system") return { status: "forbidden" };
   if (message.author_user_id !== actor.id) return { status: "forbidden" };
 
-  await pool.query("UPDATE chat_messages SET body = $3, updated_at = $4, edited_at = $4 WHERE id = $1 AND channel_id = $2", [
-    input.messageId,
-    input.channelId,
-    body,
-    nowIso(),
-  ]);
+  const now = nowIso();
+  const threadMentionRecipientIds = message.root_message_id
+    ? resolveThreadMentionRecipientIds({
+        authorUserId: actor.id,
+        body,
+        channelMemberUserIds: channel.members.map((member) => member.userId),
+      })
+    : [];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("UPDATE chat_messages SET body = $3, updated_at = $4, edited_at = $4 WHERE id = $1 AND channel_id = $2", [
+      input.messageId,
+      input.channelId,
+      body,
+      now,
+    ]);
+    await followMentionedThreadRecipients(client, {
+      channelId: input.channelId,
+      mentionedUserIds: threadMentionRecipientIds,
+      rootMessageId: message.root_message_id,
+      updatedAt: now,
+    });
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
   const updated = await getMessageById(actor, input.messageId);
   const updatedChannel = await getVisibleChannel(actor, input.channelId);
   if (!updated || !updatedChannel) return { status: "notFound" };
@@ -2396,6 +2680,38 @@ export async function markChatChannelRead(
         `,
         [channelId, actor.id, readAt, storageTeamId(actor)],
       );
+      await client.query(
+        `
+          INSERT INTO chat_thread_follows (root_message_id, user_id, following, last_viewed_at, updated_at)
+          SELECT DISTINCT m.root_message_id, $2::uuid, true, $3::timestamptz, $3::timestamptz
+          FROM chat_messages m
+          INNER JOIN chat_messages root ON root.id = m.root_message_id
+            AND root.team_id = m.team_id
+            AND root.channel_id = m.channel_id
+            AND root.root_message_id IS NULL
+            AND root.deleted_at IS NULL
+          WHERE m.team_id = $4
+            AND m.channel_id = $1
+            AND m.root_message_id IS NOT NULL
+            AND m.author_user_id <> $2
+            AND m.deleted_at IS NULL
+            AND (m.body LIKE $5 OR m.body ~* $6)
+            AND ${visibleChatMessageSql("m", "$2", "$7", "$8")}
+            AND ${visibleChatMessageSql("root", "$2", "$7", "$8")}
+          ON CONFLICT (root_message_id, user_id)
+          DO UPDATE SET last_viewed_at = EXCLUDED.last_viewed_at, updated_at = EXCLUDED.updated_at
+        `,
+        [
+          channelId,
+          actor.id,
+          readAt,
+          storageTeamId(actor),
+          `%orf-user:${actor.id}%`,
+          CHAT_BROADCAST_MENTION_SQL_PATTERN,
+          E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+          normalizedE2eNotificationViewerEmails(),
+        ],
+      );
     }
     await client.query("COMMIT");
   } catch (error) {
@@ -2464,6 +2780,7 @@ export async function setChatChannelUnread(
   if (!actor.canRead) return { status: "forbidden" };
   const channel = await getVisibleChannel(actor, input.channelId);
   if (!channel) return { status: "notFound" };
+  const readStateUpdatedAt = nowIso();
 
   if (input.messageId) {
     const message = await getRawMessage(actor, input.messageId);
@@ -2487,10 +2804,10 @@ export async function setChatChannelUnread(
     await pool.query(
       `
         UPDATE chat_channel_members
-        SET last_read_at = $3, last_read_message_id = $4, manually_unread = true
+        SET last_read_at = $3, last_read_message_id = $4, manually_unread = true, last_viewed_at = $5
         WHERE channel_id = $1 AND user_id = $2
       `,
-      [input.channelId, actor.id, rows[0]?.created_at ?? null, rows[0]?.id ?? null],
+      [input.channelId, actor.id, rows[0]?.created_at ?? null, rows[0]?.id ?? null, readStateUpdatedAt],
     );
   } else {
     const { rows: latestRows } = await pool.query<{ created_at: Date | string; id: string }>(
@@ -2527,10 +2844,10 @@ export async function setChatChannelUnread(
     await pool.query(
       `
         UPDATE chat_channel_members
-        SET last_read_at = $3, last_read_message_id = $4, manually_unread = true
+        SET last_read_at = $3, last_read_message_id = $4, manually_unread = true, last_viewed_at = $5
         WHERE channel_id = $1 AND user_id = $2
       `,
-      [input.channelId, actor.id, rows[0]?.created_at ?? null, rows[0]?.id ?? null],
+      [input.channelId, actor.id, rows[0]?.created_at ?? null, rows[0]?.id ?? null, readStateUpdatedAt],
     );
   }
 
