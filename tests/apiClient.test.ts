@@ -31,6 +31,7 @@ function userPreferences(userId: string, overrides: Partial<UserPreferences> = {
       interfaceFontSize: 14,
       workbenchZoomLevel: 0,
     },
+    filterPreferences: {},
     notificationDisplay: {
       toastEnabled: true,
     },

@@ -104,7 +104,7 @@ npm run infra:public:up
 
 该命令会先执行 `npm run build`，再生成 public-gateway 的 Nginx 配置并启动容器。`8443` 服务的是构建后的 `dist` 文件，不连接 Vite 开发服务；开发态的 `5173` 只用于本机调试，不能作为已发布客户端或长期手机访问入口。
 
-`dist/assets` 使用 hash 文件名和长期缓存，构建时必须保留旧 hash 资源，避免已打开或已缓存旧 HTML 的桌面客户端请求旧 chunk 时白屏。HTML 入口由 public-gateway 使用 `no-store` 响应头，旧资源清理只能在确认所有客户端都完成刷新后手工做。
+`dist/assets` 使用 hash 文件名和长期缓存。`npm run build` 先在隔离目录生成并校验当前构建，再发布“当前构建 + 上一构建”的 hash 资源，最后自动删除更旧文件；新入口写入前会先准备全部新资源，因此一次发布窗口内仍打开旧页面的客户端可以继续加载，磁盘占用也保持有界。Vite 禁用 `publicDir`，后端设置样板和内置背景不会复制进 Web/APK；`.vite` 构建清单和 `/settings/{users,system,user}` 遗留私有路径由 public-gateway 明确拒绝访问。
 
 ## 3.1 ORF Web 域名入口
 

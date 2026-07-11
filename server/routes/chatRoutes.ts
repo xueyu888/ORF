@@ -16,6 +16,7 @@ import {
   getChatUnreadContext,
   getChatUnreadSummary,
   getChatThread,
+  listProjectChatChannels,
   listChatMentionableUsers,
   listChatUsers,
   listChatMessages,
@@ -65,6 +66,7 @@ const createChannelBodySchema = z.object({
   type: z.enum(["public", "private"]),
   displayName: z.string().trim().min(1).max(80),
   name: z.string().trim().max(80).optional(),
+  projectId: z.string().trim().min(1).nullable().optional(),
   purpose: z.string().trim().max(240).optional(),
   header: z.string().trim().max(500).optional(),
   memberUserIds: z.array(z.string().uuid()).max(200).optional(),
@@ -129,6 +131,7 @@ const searchQuerySchema = z.object({
   channelId: z.string().min(1).optional(),
   type: channelTypeSchema.optional(),
 });
+const projectChannelsQuerySchema = z.object({ projectId: z.string().trim().min(1) });
 
 async function chatActorFromRequest(request: FastifyRequest, reply: FastifyReply): Promise<ChatActor | null> {
   const context = await requireUserScopeContext(request, reply);
@@ -244,6 +247,13 @@ export function registerChatRoutes(app: FastifyInstance) {
     return sendOutcome(reply, await listPinnedChatMessages(params.channelId, actor));
   });
 
+  app.get("/api/chat/project-channels", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const query = projectChannelsQuerySchema.parse(request.query);
+    return sendOutcome(reply, await listProjectChatChannels(query.projectId, actor));
+  });
+
   app.post("/api/chat/channels", async (request, reply) => {
     const actor = await chatActorFromRequest(request, reply);
     if (!actor) return reply;
@@ -320,8 +330,8 @@ export function registerChatRoutes(app: FastifyInstance) {
     const params = channelIdParamsSchema.parse(request.params);
     const body = sendMessageBodySchema.parse(request.body);
     return sendOutcome(reply, await sendChatMessage({ ...body, channelId: params.channelId }, actor, {
-      onSideEffectError: (error, context) => {
-        request.log.warn({ err: error, ...context }, "Chat message side effect failed");
+      onDeliveryError: (error, context) => {
+        request.log.warn({ err: error, ...context }, "Chat message delivery failed and was scheduled for retry");
       },
     }));
   });

@@ -192,7 +192,12 @@ export async function requireFeedbackInScope(reply: FastifyReply, feedbackId: st
   return true;
 }
 
-export async function requireResultEditContext(request: FastifyRequest, reply: FastifyReply, resultId: string) {
+async function requireResultMutationContext(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  resultId: string,
+  permission: Extract<PermissionKey, "result.edit" | "result.delete">,
+) {
   const context = await requireUserScopeContext(request, reply);
   if (!context) {
     return null;
@@ -208,7 +213,7 @@ export async function requireResultEditContext(request: FastifyRequest, reply: F
   }
 
   const permissionRules = await getPermissionRulesForScope(scope);
-  const allowedByRole = hasRolePermission(user.role, permissionRules, "result.edit");
+  const allowedByRole = hasRolePermission(user.role, permissionRules, permission);
   const allowedByReestimate = await canEditResultDuringReestimate(resultId, user.id);
   if (!allowedByRole && !allowedByReestimate) {
     reply.code(403).send({ error: "Forbidden" });
@@ -216,6 +221,14 @@ export async function requireResultEditContext(request: FastifyRequest, reply: F
   }
 
   return { user, scope };
+}
+
+export function requireResultEditContext(request: FastifyRequest, reply: FastifyReply, resultId: string) {
+  return requireResultMutationContext(request, reply, resultId, "result.edit");
+}
+
+export function requireResultDeleteContext(request: FastifyRequest, reply: FastifyReply, resultId: string) {
+  return requireResultMutationContext(request, reply, resultId, "result.delete");
 }
 
 export async function authorizeObjectiveWorkItemMutation(

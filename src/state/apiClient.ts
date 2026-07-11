@@ -11,6 +11,7 @@ import type {
   ChatThreadSummary,
   ChatUnreadSummary,
   ChatUser,
+  ProjectChatChannel,
   ChatDriveLink,
   DriveContextType,
   DriveFileVersion,
@@ -44,6 +45,7 @@ import type {
 } from "../types/orf";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
 import type { ChatTheme, UserDisplayPreferences, WorkspaceLayoutPreferences } from "../domain/settings/personalPreferences";
+import type { FilterPreferenceRecord, UserFilterPreferences } from "../domain/settings/filterPreferences";
 import type {
   VisualBackgroundConfig,
   VisualBackgroundCrop,
@@ -71,6 +73,14 @@ export type CurrentUserResponse = { user: OrfUser };
 export type RegistrationRequestsResponse = { users: OrfUser[] };
 export type NotificationsResponse = {
   notifications: AppNotification[];
+  unreadCount: number;
+};
+export type NotificationReadResponse = {
+  notification: AppNotification;
+  unreadCount: number;
+};
+export type NotificationsReadAllResponse = {
+  updated: number;
   unreadCount: number;
 };
 export type SystemConversationsResponse = {
@@ -144,6 +154,7 @@ export type ChatUnreadSummaryResponse = ChatUnreadSummary;
 export type ChatMessagesResponse = { status?: "ok"; messages: ChatMessage[] };
 export type ChatMessageContextResponse = { status?: "ok" } & ChatMessageContext;
 export type ChatChannelResponse = { status?: "ok"; channel: ChatChannel };
+export type ProjectChatChannelsResponse = { status?: "ok"; channels: ProjectChatChannel[] };
 export type ChatNullableChannelResponse = { status?: "ok"; channel: ChatChannel | null };
 export type ChatMessageResponse = { status?: "ok"; channel?: ChatChannel; message: ChatMessage };
 export type ChatThreadResponse = { status?: "ok"; channel?: ChatChannel; thread: ChatThread };
@@ -292,6 +303,7 @@ export type UserPreferences = {
   sidebarCollapsed: boolean | null;
   chatTheme: ChatTheme;
   display: UserDisplayPreferences;
+  filterPreferences: UserFilterPreferences;
   workspaceLayout: WorkspaceLayoutPreferences;
   /** Compatibility projection for legacy clients. New writes must use backgrounds[scene]. */
   appBackground: VisualBackgroundConfig | null;
@@ -301,6 +313,7 @@ export type UserPreferences = {
   };
 };
 export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "workspaceLayout" | "backgrounds">> & {
+  filterPreferences?: Record<string, FilterPreferenceRecord | null>;
   notificationDisplay?: Partial<UserPreferences["notificationDisplay"]>;
 };
 export type UserPreferencesRequestOptions = {
@@ -482,6 +495,17 @@ export async function getMyChallengesData(scope: MyChallengesScope) {
 
 export async function getNotifications() {
   return apiJson<NotificationsResponse>("/api/notifications");
+}
+
+export async function markNotificationReadRequest(notificationId: string) {
+  return apiJson<NotificationReadResponse>(
+    `/api/notifications/${encodeURIComponent(notificationId)}/read`,
+    { method: "PATCH" },
+  );
+}
+
+export async function markAllNotificationsReadRequest() {
+  return apiJson<NotificationsReadAllResponse>("/api/notifications/read-all", { method: "PATCH" });
 }
 
 export async function getSystemConversations() {
@@ -680,6 +704,7 @@ export async function createChatChannel(input: {
   header?: string;
   memberUserIds?: string[];
   name?: string;
+  projectId?: string | null;
   purpose?: string;
   type: "public" | "private";
 }) {
@@ -687,6 +712,11 @@ export async function createChatChannel(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export async function getProjectChatChannels(projectId: string) {
+  const query = new URLSearchParams({ projectId });
+  return apiJson<ProjectChatChannelsResponse>(`/api/chat/project-channels?${query.toString()}`);
 }
 
 export async function openChatConversation(userIds: string[]) {

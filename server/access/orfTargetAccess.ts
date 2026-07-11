@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { isObjectiveReestimateWindowOpen } from "../../src/domain/orfLifecycle";
+import { isObjectiveChallenger } from "../../src/domain/orfObjectiveParticipants";
 import { objectiveWorkItemMutationAccess } from "../../src/domain/orfWorkItems";
 import { db } from "../db/client";
 import { feedback, objectives, results, taskChecklistItems, tasks } from "../db/schema";
@@ -48,7 +49,7 @@ export async function canEditResultDuringReestimate(resultId: string, userId: st
   return Boolean(
     row &&
       isObjectiveReestimateWindowOpen(row) &&
-      (row.challengerUserIds ?? []).includes(actorUserId),
+      isObjectiveChallenger(row, actorUserId),
   );
 }
 

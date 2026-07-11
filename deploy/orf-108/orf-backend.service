@@ -5,10 +5,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/mnt/data1/orf/app
+WorkingDirectory=/mnt/data1/orf/releases/current
 EnvironmentFile=/mnt/data1/orf/secrets/orf.env
 Environment=PATH=/opt/orf/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/opt/orf/node/bin/npm run server:start
+Environment=NODE_ENV=production
+ExecStart=/opt/orf/node/bin/node server.mjs
 Restart=always
 RestartSec=5
 

@@ -12,7 +12,6 @@ import {
   feedback,
   notifications,
   objectiveAlignmentRequests,
-  objectiveContributionReviews,
   objectiveLoot,
   objectiveTrialReviews,
   objectives,
@@ -145,7 +144,6 @@ async function isUserIdReferencedByOrfRecords(scope: RuntimeScope, userId: strin
     ledgerRef,
     trialReviewRef,
     alignmentRequestRef,
-    contributionReviewRef,
     threadRef,
     messageRef,
     attachmentRef,
@@ -212,23 +210,6 @@ async function isUserIdReferencedByOrfRecords(scope: RuntimeScope, userId: strin
       .where(and(eq(objectiveAlignmentRequests.teamId, storageScopeId), or(eq(objectiveAlignmentRequests.requestedByUserId, userId), eq(objectiveAlignmentRequests.reviewedByUserId, userId))))
       .limit(1),
     db
-      .select({ id: objectiveContributionReviews.id })
-      .from(objectiveContributionReviews)
-      .where(
-        and(
-          eq(objectiveContributionReviews.teamId, storageScopeId),
-          or(
-            eq(objectiveContributionReviews.reviewerUserId, userId),
-            sql`exists (
-              select 1
-              from jsonb_array_elements(${objectiveContributionReviews.allocations}) as allocation(value)
-              where allocation.value->>'memberUserId' = ${userId}
-            )`,
-          ),
-        ),
-      )
-      .limit(1),
-    db
       .select({ id: commentThreads.id })
       .from(commentThreads)
       .where(and(eq(commentThreads.teamId, storageScopeId), eq(commentThreads.createdBy, userId)))
@@ -261,7 +242,6 @@ async function isUserIdReferencedByOrfRecords(scope: RuntimeScope, userId: strin
     ledgerRef,
     trialReviewRef,
     alignmentRequestRef,
-    contributionReviewRef,
     threadRef,
     messageRef,
     attachmentRef,

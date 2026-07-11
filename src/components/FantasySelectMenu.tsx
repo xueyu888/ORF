@@ -61,6 +61,7 @@ export function FantasySelectMenu<Value extends string>({
   const selected = options.find((option) => option.value === value);
   const selectedLabel = selected?.label ?? placeholder;
   const visibleOptions = searchable ? filterFantasySelectOptions(options, searchQuery) : options;
+  const selectedValues = new Set<Value>([value]);
 
   const updateSearchQuery = useCallback((query: string) => {
     setSearchQuery(query);
@@ -205,12 +206,230 @@ export function FantasySelectMenu<Value extends string>({
         searchInputRef={searchInputRef}
         searchPlaceholder={searchPlaceholder}
         searchQuery={searchQuery}
-        value={value}
+        selectedValues={selectedValues}
         visibleOptions={visibleOptions}
         variant={variant}
       />
     </div>
   );
+}
+
+export function FantasyMultiSelectMenu<Value extends string>({
+  allValue,
+  ariaLabel,
+  className,
+  disabled = false,
+  leadingIcon,
+  onChange,
+  options,
+  placeholder = "请选择",
+  searchable = false,
+  searchPlaceholder = "搜索选项",
+  stopPropagation = false,
+  title,
+  values,
+  variant = "filter",
+}: {
+  allValue?: Value;
+  ariaLabel: string;
+  className?: string;
+  disabled?: boolean;
+  leadingIcon?: ReactNode;
+  onChange: (values: Value[]) => void;
+  options: Array<FantasySelectOption<Value>>;
+  placeholder?: string;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  stopPropagation?: boolean;
+  title?: string;
+  values: readonly Value[];
+  variant?: "filter" | "chip";
+}) {
+  const [open, setOpen] = useState(false);
+  const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const menuId = useId();
+  const selectedValues = new Set(values);
+  const visibleOptions = searchable ? filterFantasySelectOptions(options, searchQuery) : options;
+  const selectedLabel = fantasyMultiSelectLabel({ allValue, options, placeholder, values });
+
+  const updateSearchQuery = useCallback((query: string) => {
+    setSearchQuery(query);
+  }, []);
+
+  const updatePopoverPosition = () => {
+    const trigger = rootRef.current;
+    if (!trigger || typeof window === "undefined") return;
+
+    const viewportPadding = 12;
+    const popoverGap = 7;
+    const triggerRect = trigger.getBoundingClientRect();
+    const fallbackWidth = searchable ? Math.max(triggerRect.width, 188) : variant === "filter" ? Math.max(triggerRect.width, 144) : 108;
+    const popoverWidth = popoverRef.current?.offsetWidth ?? fallbackWidth;
+    const searchHeight = searchable ? 46 : 0;
+    const fallbackHeight = Math.min(360, Math.max(132, options.length * 32 + 12 + searchHeight));
+    const popoverHeight = popoverRef.current?.offsetHeight ?? fallbackHeight;
+    const belowTop = triggerRect.bottom + popoverGap;
+    const belowSpace = window.innerHeight - belowTop - viewportPadding;
+    const aboveSpace = triggerRect.top - popoverGap - viewportPadding;
+    const placement = belowSpace < Math.min(popoverHeight, 180) && aboveSpace > belowSpace ? "top" : "bottom";
+    const maxHeight = Math.max(searchable ? 156 : 112, Math.min(searchable ? 360 : 320, placement === "top" ? aboveSpace : belowSpace));
+    const top = placement === "top"
+      ? Math.max(viewportPadding, triggerRect.top - popoverGap - Math.min(popoverHeight, maxHeight))
+      : Math.min(belowTop, window.innerHeight - viewportPadding - Math.min(popoverHeight, maxHeight));
+    const left = Math.min(
+      Math.max(viewportPadding, triggerRect.left),
+      Math.max(viewportPadding, window.innerWidth - viewportPadding - popoverWidth),
+    );
+
+    setPopoverPosition({
+      left,
+      maxHeight,
+      minWidth: fallbackWidth,
+      placement,
+      top,
+    });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    const syncPosition = () => updatePopoverPosition();
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", syncPosition);
+    window.addEventListener("scroll", syncPosition, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", syncPosition);
+      window.removeEventListener("scroll", syncPosition, true);
+    };
+  }, [open, options.length, searchable, variant]);
+
+  useEffect(() => {
+    if (!open && searchQuery) {
+      updateSearchQuery("");
+    }
+  }, [open, searchQuery, updateSearchQuery]);
+
+  useEffect(() => {
+    if (!open || !searchable) return;
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, [open, searchable]);
+
+  useLayoutEffect(() => {
+    if (open) {
+      updatePopoverPosition();
+    } else {
+      setPopoverPosition(null);
+    }
+  }, [open, searchable, searchQuery, selectedLabel, variant, visibleOptions.length]);
+
+  const selectOption = useCallback((option: FantasySelectOption<Value>) => {
+    if (option.disabled || disabled) return;
+    if (allValue && option.value === allValue) {
+      onChange([]);
+      return;
+    }
+
+    const next = new Set(values);
+    if (next.has(option.value)) {
+      next.delete(option.value);
+    } else {
+      next.add(option.value);
+    }
+    if (allValue) next.delete(allValue);
+    onChange(Array.from(next));
+  }, [allValue, disabled, onChange, values]);
+
+  const setPopoverElement = useCallback(
+    (node: HTMLDivElement | null) => {
+      popoverRef.current = node;
+    },
+    [],
+  );
+
+  return (
+    <div
+      ref={rootRef}
+      className={clsx("orf-fantasy-select-menu", "orf-fantasy-select-menu-multi", `orf-fantasy-select-menu-${variant}`, open && "orf-fantasy-select-menu-open", disabled && "orf-fantasy-select-menu-disabled", className)}
+      data-no-row-edit={stopPropagation ? "true" : undefined}
+      onClick={stopPropagation ? (event) => event.stopPropagation() : undefined}
+      onDoubleClick={stopPropagation ? (event) => event.stopPropagation() : undefined}
+    >
+      <button
+        aria-controls={open ? menuId : undefined}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={ariaLabel}
+        className={clsx("orf-fantasy-select-trigger", variant === "filter" && "orf-floating-control")}
+        disabled={disabled}
+        onClick={() => {
+          if (!open) {
+            updatePopoverPosition();
+          }
+          setOpen((current) => !current);
+        }}
+        title={title}
+        type="button"
+      >
+        {leadingIcon && <span className="orf-fantasy-select-icon" aria-hidden="true">{leadingIcon}</span>}
+        <span className="orf-fantasy-select-value">{selectedLabel}</span>
+        <ChevronDown className="orf-fantasy-select-chevron" aria-hidden="true" />
+      </button>
+      <FantasySelectPopover
+        ariaLabel={ariaLabel}
+        menuId={menuId}
+        multiselect
+        onSelect={selectOption}
+        onSearchQueryChange={updateSearchQuery}
+        open={open}
+        options={options}
+        popoverRef={setPopoverElement}
+        position={popoverPosition}
+        searchable={searchable}
+        searchInputRef={searchInputRef}
+        searchPlaceholder={searchPlaceholder}
+        searchQuery={searchQuery}
+        selectedValues={selectedValues.size > 0 ? selectedValues : allValue ? new Set<Value>([allValue]) : selectedValues}
+        visibleOptions={visibleOptions}
+        variant={variant}
+      />
+    </div>
+  );
+}
+
+function fantasyMultiSelectLabel<Value extends string>(input: {
+  allValue?: Value;
+  options: Array<FantasySelectOption<Value>>;
+  placeholder: string;
+  values: readonly Value[];
+}) {
+  const selectedValues = input.values.filter((value) => value !== input.allValue);
+  if (selectedValues.length === 0) {
+    return input.options.find((option) => option.value === input.allValue)?.label ?? input.placeholder;
+  }
+
+  const labels = selectedValues
+    .map((value) => input.options.find((option) => option.value === value)?.label ?? value);
+  if (labels.length <= 2) return labels.join("、");
+  return `${labels[0]}等 ${labels.length} 项`;
 }
 
 export function filterFantasySelectOptions<Value extends string>(options: Array<FantasySelectOption<Value>>, query: string) {
@@ -245,12 +464,14 @@ function FantasySelectPopover<Value extends string>({
   searchInputRef,
   searchPlaceholder,
   searchQuery,
-  value,
+  selectedValues,
   visibleOptions,
   variant,
+  multiselect = false,
 }: {
   ariaLabel: string;
   menuId: string;
+  multiselect?: boolean;
   onSelect: (option: FantasySelectOption<Value>) => void;
   onSearchQueryChange: (query: string) => void;
   open: boolean;
@@ -261,7 +482,7 @@ function FantasySelectPopover<Value extends string>({
   searchInputRef: RefObject<HTMLInputElement | null>;
   searchPlaceholder: string;
   searchQuery: string;
-  value: Value;
+  selectedValues: ReadonlySet<Value>;
   visibleOptions: Array<FantasySelectOption<Value>>;
   variant: "filter" | "chip";
 }) {
@@ -306,9 +527,9 @@ function FantasySelectPopover<Value extends string>({
           />
         </label>
       )}
-      <div className="orf-fantasy-select-options" role="listbox" aria-label={ariaLabel}>
+      <div className="orf-fantasy-select-options" role="listbox" aria-label={ariaLabel} aria-multiselectable={multiselect ? true : undefined}>
         {visibleOptions.map((option) => {
-          const selectedOption = option.value === value;
+          const selectedOption = selectedValues.has(option.value);
           return (
             <button
               key={option.value}

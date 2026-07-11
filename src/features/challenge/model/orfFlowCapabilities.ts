@@ -41,10 +41,6 @@ export type MetricEditAccess =
   | { status: "allowed" }
   | { status: "blocked"; reason: "notFound" | "lifecycleLocked" | "forbidden" };
 
-export type MetricLifecycleMutationAccess =
-  | { status: "allowed" }
-  | { status: "blocked"; reason: "notFound" | "lifecycleLocked" };
-
 export type WorkItemMutationAccess = ObjectiveWorkItemMutationAccess;
 
 type WorkbenchAction = {
@@ -120,30 +116,34 @@ export function objectiveContentEditUnavailableMessage() {
   return "只有指挥官可以编辑目标";
 }
 
-export function metricLifecycleMutationAccessForObjective(
-  objective: Objective | undefined,
-): MetricLifecycleMutationAccess {
-  if (!objective) return { status: "blocked", reason: "notFound" };
-  if (isObjectiveResultLocked(objective)) return { status: "blocked", reason: "lifecycleLocked" };
-  return { status: "allowed" };
-}
-
-export function metricEditAccessForObjective({
+function metricMutationAccessForObjective({
   objective,
   currentUser,
   permissionRules,
+  permission,
   now = new Date(),
 }: {
   objective: Objective | undefined;
   currentUser: OrfUser | null;
   permissionRules: PermissionRule[];
+  permission: "result.edit" | "result.delete";
   now?: Date;
 }): MetricEditAccess {
   if (!objective) return { status: "blocked", reason: "notFound" };
   if (isObjectiveResultLocked(objective)) return { status: "blocked", reason: "lifecycleLocked" };
-  if (hasPermission(currentUser, permissionRules, "result.edit")) return { status: "allowed" };
+  if (hasPermission(currentUser, permissionRules, permission)) return { status: "allowed" };
   if (canProposeObjectiveMetric(objective, currentUser?.id, now)) return { status: "allowed" };
   return { status: "blocked", reason: "forbidden" };
+}
+
+type MetricMutationAccessInput = Omit<Parameters<typeof metricMutationAccessForObjective>[0], "permission">;
+
+export function metricEditAccessForObjective(input: MetricMutationAccessInput): MetricEditAccess {
+  return metricMutationAccessForObjective({ ...input, permission: "result.edit" });
+}
+
+export function metricDeleteAccessForObjective(input: MetricMutationAccessInput): MetricEditAccess {
+  return metricMutationAccessForObjective({ ...input, permission: "result.delete" });
 }
 
 export function metricEditUnavailableMessage(access: MetricEditAccess) {
@@ -151,6 +151,13 @@ export function metricEditUnavailableMessage(access: MetricEditAccess) {
   if (access.reason === "notFound") return "指标所属目标不可用";
   if (access.reason === "lifecycleLocked") return "指标已冻结，不能编辑";
   return "没有编辑指标权限";
+}
+
+export function metricDeleteUnavailableMessage(access: MetricEditAccess) {
+  if (access.status === "allowed") return "";
+  if (access.reason === "notFound") return "指标所属目标不可用";
+  if (access.reason === "lifecycleLocked") return "指标已冻结，不能删除";
+  return "没有删除指标权限";
 }
 
 export function objectiveFreezeUnavailableMessage(readiness: ObjectiveFreezeReadiness) {
@@ -225,7 +232,7 @@ export function canSubmitObjectiveLoot(
       currentUser &&
       currentUser.role === "member" &&
       canSubmitObjectiveLootByFlow(objective) &&
-      (objective.challengerUserIds ?? []).includes(currentUser.id),
+      isObjectiveChallenger(objective, currentUser.id),
   );
 }
 
@@ -252,7 +259,7 @@ export function canSubmitObjectivePeerReview(
         settlementEvents,
         today,
       }).open &&
-      (objective.challengerUserIds ?? []).includes(currentUser.id),
+      isObjectiveChallenger(objective, currentUser.id),
   );
 }
 

@@ -1,7 +1,6 @@
 import { CheckCheck, ChevronDown, Loader2, Reply } from "lucide-react";
 import type { RefObject } from "react";
 import type { ChatMessage, ChatUser, Feedback } from "../../types/orf";
-import type { WorkspaceSelection } from "../workspace/workspaceTypes";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { formatDay } from "./chatFormat";
@@ -44,7 +43,6 @@ type ChatMessageFeedProps = {
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onScroll: () => void;
   onThread: (rootMessageId: string, options?: ChatOpenThreadOptions) => void;
-  onWorkspaceTargetLink?: (selection: WorkspaceSelection) => void;
   pendingNewMessageCount: number;
   reactionPickerMessageId: string | null;
   reactionPickerSignal: number;
@@ -92,7 +90,6 @@ export function ChatMessageFeed({
   onSaveEdit,
   onScroll,
   onThread,
-  onWorkspaceTargetLink,
   pendingNewMessageCount,
   reactionPickerMessageId,
   reactionPickerSignal,
@@ -141,7 +138,6 @@ export function ChatMessageFeed({
           onSave={onSave}
           onSaveEdit={onSaveEdit}
           onThread={onThread}
-          onWorkspaceTargetLink={onWorkspaceTargetLink}
           reactionPickerMessageId={reactionPickerMessageId}
           reactionPickerSignal={reactionPickerSignal}
           unreadAnchor={unreadAnchor}
@@ -194,7 +190,6 @@ function MessageList({
   onSave,
   onSaveEdit,
   onThread,
-  onWorkspaceTargetLink,
   reactionPickerMessageId,
   reactionPickerSignal,
   usersById,
@@ -280,7 +275,6 @@ function MessageList({
               onSave={onSave}
               onSaveEdit={onSaveEdit}
               onThread={onThread}
-              onWorkspaceTargetLink={onWorkspaceTargetLink}
               reactionPickerSignal={reactionPickerMessageId === message.id ? reactionPickerSignal : undefined}
               usersById={usersById}
             />

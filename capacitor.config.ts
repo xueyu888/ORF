@@ -4,6 +4,7 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const DEFAULT_ORF_CLIENT_URL = "https://orf-xueyu.duckdns.org:8443/";
+const DEFAULT_ANDROID_WEB_DIR = ".artifacts/android-web";
 
 function resolveClientUrl() {
   const rawUrl = process.env.ORF_CLIENT_URL || process.env.ORF_APP_URL || DEFAULT_ORF_CLIENT_URL;
@@ -17,7 +18,7 @@ function resolveClientUrl() {
 const config: CapacitorConfig = {
   appId: "org.duckdns.orfxueyu.orf",
   appName: "ORF",
-  webDir: "dist",
+  webDir: process.env.ORF_CAPACITOR_WEB_DIR || DEFAULT_ANDROID_WEB_DIR,
   server: {
     url: resolveClientUrl(),
     cleartext: false,

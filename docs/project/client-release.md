@@ -36,6 +36,8 @@ Web 基础构建：
 npm run build
 ```
 
+Web 发布构建只保留当前与上一构建的 hash 资源。Android 不复用常驻 `dist`：`client:android:*` 会把一次性干净 Web 构建写入 `.artifacts/android-web`，Capacitor 同步前会整体替换原生工程内的 Web assets，防止历史 Web 文件或运行时设置进入 APK。
+
 Win11 安装器：
 
 ```bash

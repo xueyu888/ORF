@@ -61,6 +61,18 @@ test("chat delivery ids are stable per event and recipient boundary", () => {
     notificationChatDeliveryId("nevt-1"),
     notificationChatDeliveryId("nevt-1", "user-a"),
   );
+  assert.equal(
+    notificationChatDeliveryId("nevt-1", null, "channel-a"),
+    notificationChatDeliveryId("nevt-1", null, "channel-a"),
+  );
+  assert.notEqual(
+    notificationChatDeliveryId("nevt-1", "user-a"),
+    notificationChatDeliveryId("nevt-1", null, "channel-a"),
+  );
+  assert.notEqual(
+    notificationChatDeliveryId("nevt-1"),
+    notificationChatDeliveryId("nevt-1", null, "channel-a"),
+  );
 });
 
 test("system chat projection metadata points back to the notification event", () => {
@@ -103,6 +115,14 @@ test("data sync conflict notifications are personal reminders without comment re
     kind: "data.sync.conflict",
     replyTarget: "none",
     stream: "personalNotification",
+  });
+});
+
+test("work log submission notifications are team announcements", () => {
+  assert.deepEqual(notificationPolicy("worklog.submitted"), {
+    kind: "worklog.submitted",
+    replyTarget: "none",
+    stream: "teamAnnouncement",
   });
 });
 

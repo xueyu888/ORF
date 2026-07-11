@@ -1,5 +1,6 @@
+import { BellRing } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
 import { useOrf } from "../state/OrfProvider";
@@ -11,12 +12,30 @@ const mobileBottomNavItems = mobileBottomNavLabels
   .filter((item) => item !== undefined);
 
 export function MobileBottomNav({ onNavigateIntent }: { onNavigateIntent?: (path: string) => void }) {
-  const { chatUnreadSummary, currentUser } = useOrf();
+  const { attentionState, chatUnreadSummary, currentUser, markNotificationRead, notify } = useOrf();
+  const navigate = useNavigate();
   const visibleItems = mobileBottomNavItems.filter((item) => canShowFrontendPath(currentUser, item.path));
 
   if (visibleItems.length === 0) {
     return null;
   }
+
+  const attentionTargetPath = attentionState.latestTargetPath ?? "/chat/system/personalNotifications";
+  const attentionBadgeText = attentionState.count > 99 ? "99+" : String(attentionState.count);
+  const attentionAriaLabel = attentionState.count > 0 ? `待办，${attentionState.count} 条提醒` : "待办";
+  const showAttentionItem = attentionState.count > 0;
+  const openAttentionTarget = async () => {
+    const latestItem = attentionState.items[0] ?? null;
+    if (latestItem?.source === "notification") {
+      try {
+        await markNotificationRead(latestItem.eventId);
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "标记通知已读失败");
+      }
+    }
+    onNavigateIntent?.(attentionTargetPath);
+    navigate(attentionTargetPath);
+  };
 
   return (
     <nav className="orf-mobile-bottom-nav" aria-label="移动端导航">
@@ -50,6 +69,20 @@ export function MobileBottomNav({ onNavigateIntent }: { onNavigateIntent?: (path
           </NavLink>
         );
       })}
+      {showAttentionItem && (
+        <button
+          type="button"
+          className="orf-mobile-bottom-nav-item orf-mobile-bottom-nav-attention has-attention"
+          aria-label={attentionAriaLabel}
+          onClick={() => void openAttentionTarget()}
+        >
+          <span className="orf-mobile-bottom-nav-icon">
+            <BellRing className="h-5 w-5" />
+            <span className="orf-mobile-bottom-nav-badge">{attentionBadgeText}</span>
+          </span>
+          <span className="orf-mobile-bottom-nav-label">待办</span>
+        </button>
+      )}
     </nav>
   );
 }

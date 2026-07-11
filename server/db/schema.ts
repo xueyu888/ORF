@@ -7,7 +7,6 @@ import type {
   ChatMessageSystemMetadata,
   ChatSystemKind,
   CommentTargetType,
-  ContributionAllocation,
   LootResultClaim,
   NotificationKind,
   NotificationStream,
@@ -277,7 +276,7 @@ export const objectives = pgTable("objectives", {
   whyItMatters: text("why_it_matters").notNull(),
   projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
   cycle: text("cycle").notNull(),
-  stage: text("stage").$type<OrfStage>().notNull().default("orfReestimate"),
+  stage: text("stage").$type<OrfStage>().notNull().default("goalSetting"),
   flowStatus: text("flow_status").$type<ObjectiveFlowStatus>().notNull().default("candidate"),
   status: workStatusEnum("status").notNull(),
   confidence: integer("confidence").notNull(),
@@ -428,20 +427,6 @@ export const objectiveSettlementEvents = pgTable(
     teamCreatedAt: index("objective_settlement_events_team_created_at_idx").on(table.teamId, table.createdAt),
   }),
 );
-
-export const objectiveContributionReviews = pgTable("objective_contribution_reviews", {
-  id: text("id").primaryKey(),
-  teamId: text("team_id")
-    .notNull()
-    .references(() => teams.id, { onDelete: "cascade" }),
-  objectiveId: text("objective_id")
-    .notNull()
-    .references(() => objectives.id, { onDelete: "cascade" }),
-  reviewer: text("reviewer").notNull(),
-  reviewerUserId: uuid("reviewer_user_id").notNull().references(() => users.id),
-  allocations: jsonb("allocations").$type<ContributionAllocation[]>().notNull().default([]),
-  submittedAt: timestamp("submitted_at", { mode: "string", withTimezone: true }).notNull(),
-});
 
 export const pointLedger = pgTable("point_ledger", {
   id: text("id").primaryKey(),
@@ -1102,6 +1087,32 @@ export const chatMessages = pgTable(
   }),
 );
 
+export const chatMessageDeliveries = pgTable(
+  "chat_message_deliveries",
+  {
+    id: text("id").primaryKey(),
+    messageId: text("message_id").notNull().references(() => chatMessages.id, { onDelete: "cascade" }),
+    teamId: text("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+    channelId: text("channel_id").notNull().references(() => chatChannels.id, { onDelete: "cascade" }),
+    recipientUserId: uuid("recipient_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    transport: text("transport").notNull(),
+    status: text("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    nextAttemptAt: timestamp("next_attempt_at", { mode: "string", withTimezone: true }),
+    leaseExpiresAt: timestamp("lease_expires_at", { mode: "string", withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { mode: "string", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    messageRecipientTransport: uniqueIndex("chat_message_deliveries_message_recipient_transport_unique")
+      .on(table.messageId, table.recipientUserId, table.transport),
+    retry: index("chat_message_deliveries_retry_idx")
+      .on(table.status, table.nextAttemptAt, table.leaseExpiresAt, table.createdAt),
+  }),
+);
+
 export const notificationDeliveries = pgTable(
   "notification_deliveries",
   {
@@ -1126,7 +1137,11 @@ export const notificationDeliveries = pgTable(
     retry: index("notification_deliveries_retry_idx").on(table.channel, table.status, table.nextAttemptAt),
     teamChatOnce: uniqueIndex("notification_deliveries_team_chat_unique")
       .on(table.eventId, table.channel)
-      .where(sql`recipient_user_id IS NULL`),
+      .where(sql`recipient_user_id IS NULL AND destination_id IS NULL`),
+    destinationChatOnce: uniqueIndex("notification_deliveries_destination_chat_unique")
+      .on(table.eventId, table.channel, table.destinationId)
+      .where(sql`recipient_user_id IS NULL AND destination_id IS NOT NULL`),
+    destinationRetry: index("notification_deliveries_destination_retry_idx").on(table.channel, table.destinationId, table.status, table.nextAttemptAt),
     userChatOnce: uniqueIndex("notification_deliveries_user_chat_unique")
       .on(table.eventId, table.recipientUserId, table.channel)
       .where(sql`recipient_user_id IS NOT NULL`),

@@ -19,6 +19,10 @@ import {
   workLogObjectiveSelectionCandidateFlowStatuses,
   workLogObjectiveSelectionAvailability,
 } from "../src/domain/orfWorkLogs";
+import {
+  parseStoredWorkLogEditorDraft,
+  workLogEditorDraftStorageKey,
+} from "../src/features/work-logs/workLogDraftStorage";
 
 test("work log default target list only includes ongoing objectives", () => {
   assert.equal(canShowObjectiveInDefaultWorkLogList("accepted"), false);
@@ -80,4 +84,39 @@ test("work log built-in category policies keep leave open without granting manag
   assert.equal(canUseWorkLogCategoryInput(admin, { categoryName: "管理事务" }), true);
   assert.equal(canSaveUnscopedWorkLog(faeMember), true);
   assert.equal(canSaveUnscopedWorkLog(member), false);
+});
+
+test("work log local draft storage parses only the editor draft contract", () => {
+  assert.equal(
+    workLogEditorDraftStorageKey({ userId: "user-1", workDate: "2026-07-09" }),
+    "orf.workLogs.editorDraft.v1.user-1.2026-07-09",
+  );
+
+  const stored = parseStoredWorkLogEditorDraft(JSON.stringify({
+    version: 1,
+    savedAt: "2026-07-09T10:00:00.000Z",
+    draft: {
+      bodyMarkdown: "今天完成了工作日志草稿恢复。",
+      classificationKind: "objective",
+      durationMinutes: 33.4,
+      editingEntryId: null,
+      objectiveId: "obj-1",
+      progressEstimatePercent: 88.7,
+    },
+    selectedObjective: {
+      finalDueAt: "2026-07-31",
+      flowStatus: "frozen",
+      id: "obj-1",
+      isUserChallenger: true,
+      latestRemainingEstimatePercent: 12,
+      title: "工作日志体验",
+    },
+  }));
+
+  assert.equal(stored?.draft.bodyMarkdown, "今天完成了工作日志草稿恢复。");
+  assert.equal(stored?.draft.classificationKind, "objective");
+  assert.equal(stored?.draft.durationMinutes, 33);
+  assert.equal(stored?.draft.progressEstimatePercent, 89);
+  assert.equal(stored?.selectedObjective?.title, "工作日志体验");
+  assert.equal(parseStoredWorkLogEditorDraft("{bad json"), null);
 });

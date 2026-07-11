@@ -1304,6 +1304,99 @@ button.bounty-result-preview-item:focus-visible {
   color: #2d7da5;
 }
 
+.feedback-project-chat-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  min-width: 0;
+  align-items: center;
+  border: 1px solid rgba(95, 129, 161, 0.24);
+  border-radius: 12px;
+  background: rgba(249, 252, 255, 0.84);
+  box-shadow: 0 10px 24px rgba(30, 49, 72, 0.07);
+  padding: 10px 12px;
+}
+
+.feedback-project-chat-summary {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: #63748a;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.feedback-project-chat-summary strong {
+  display: inline-grid;
+  min-width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 999px;
+  background: #eaf3fb;
+  color: #1f5575;
+  font-weight: 950;
+}
+
+.feedback-project-chat-list,
+.feedback-project-chat-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.feedback-project-chat-list > span {
+  color: #738295;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.feedback-project-chat-link,
+.feedback-project-chat-actions a {
+  display: inline-flex;
+  min-height: 30px;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  color: #245f81;
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.feedback-project-chat-link {
+  max-width: 180px;
+  overflow: hidden;
+  padding: 0 8px;
+  background: rgba(225, 240, 251, 0.72);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feedback-project-chat-link svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.feedback-project-chat-actions {
+  justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  .feedback-project-chat-panel {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .feedback-project-chat-actions {
+    justify-content: flex-start;
+  }
+}
+
 .feedback-index-page {
   display: grid;
   gap: 14px;
@@ -1552,7 +1645,14 @@ button.bounty-result-preview-item:focus-visible {
 
 .feedback-issue-query-panel {
   display: grid;
-  gap: 10px;
+  grid-template-columns:
+    minmax(154px, 0.86fr)
+    minmax(260px, 1.55fr)
+    repeat(4, minmax(116px, 0.72fr))
+    minmax(112px, 0.68fr)
+    auto;
+  align-items: end;
+  gap: 8px;
   min-width: 0;
   border: 1px solid rgba(151, 123, 83, 0.28);
   border-radius: 12px;
@@ -1560,25 +1660,12 @@ button.bounty-result-preview-item:focus-visible {
     linear-gradient(180deg, rgba(255, 251, 242, 0.88), rgba(242, 230, 205, 0.68)),
     rgba(248, 234, 205, 0.68);
   box-shadow: 0 12px 28px rgba(41, 49, 62, 0.08);
-  padding: 10px;
-}
-
-.feedback-issue-query-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  min-width: 0;
-}
-
-.feedback-issue-filter-row {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(128px, 1fr));
-  gap: 10px;
-  min-width: 0;
+  padding: 8px;
 }
 
 .feedback-reset-button {
-  min-height: 42px;
+  min-height: 38px;
+  align-self: end;
 }
 
 .feedback-issue-list {
@@ -2779,14 +2866,16 @@ button.bounty-result-preview-item:focus-visible {
     padding: 12px 14px;
   }
 
-  .feedback-issue-query-row,
-  .feedback-index-toolbar,
-  .feedback-issue-filter-row {
+  .feedback-index-toolbar {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .feedback-issue-filter-row .bounty-select-label {
-    min-width: 0;
+  .feedback-issue-query-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .feedback-issue-query-panel .bounty-search-box {
+    grid-column: 1 / -1;
   }
 
   .bounty-hall-tabs {
@@ -2882,14 +2971,6 @@ button.bounty-result-preview-item:focus-visible {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     width: 100%;
-  }
-
-  .feedback-issue-filter-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .feedback-issue-filter-row .bounty-select-label:last-child {
-    grid-column: 1 / -1;
   }
 
   .feedback-issue-state-button {
@@ -3495,11 +3576,40 @@ button.bounty-result-preview-item:focus-visible {
 
 .orf-workbench-surface .feedback-issue-query-panel {
   border-radius: 12px;
-  padding: 8px;
+  padding: 6px;
 }
 
-.orf-workbench-surface .feedback-issue-filter-row {
-  grid-template-columns: repeat(5, minmax(132px, 1fr));
+.orf-workbench-surface .feedback-issue-query-panel .bounty-search-box {
+  min-height: 34px;
+  border-radius: 9px;
+  padding: 0 10px;
+}
+
+.orf-workbench-surface .feedback-issue-query-panel .bounty-search-box input {
+  font-size: 12px;
+}
+
+.orf-workbench-surface .feedback-issue-query-panel .bounty-select-label {
+  min-width: 0;
+  gap: 3px;
+  font-size: 10px;
+}
+
+.orf-workbench-surface .feedback-issue-query-panel .bounty-select-label select,
+.orf-workbench-surface .feedback-issue-query-panel .bounty-select-label .orf-fantasy-select-trigger {
+  min-height: 34px;
+  border-radius: 9px;
+  font-size: 12px;
+  padding: 0 10px;
+}
+
+.orf-workbench-surface .feedback-issue-query-panel .bounty-select-label .orf-fantasy-select-trigger {
+  gap: 6px;
+}
+
+.orf-workbench-surface .feedback-reset-button {
+  min-height: 34px;
+  padding: 0 10px;
 }
 
 .orf-workbench-surface .feedback-issue-list-head {
@@ -3572,14 +3682,16 @@ button.bounty-result-preview-item:focus-visible {
     justify-content: flex-start;
   }
 
-  .orf-workbench-surface .feedback-issue-query-row,
-  .orf-workbench-surface .feedback-index-toolbar,
-  .orf-workbench-surface .feedback-issue-filter-row {
+  .orf-workbench-surface .feedback-index-toolbar {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .orf-workbench-surface .feedback-issue-filter-row .bounty-select-label {
-    min-width: 0;
+  .orf-workbench-surface .feedback-issue-query-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .orf-workbench-surface .feedback-issue-query-panel .bounty-search-box {
+    grid-column: 1 / -1;
   }
 
   .orf-workbench-surface .bounty-list-row {
@@ -3630,14 +3742,6 @@ button.bounty-result-preview-item:focus-visible {
   .bounty-hall-page .bounty-hall-tab,
   .orf-workbench-surface .bounty-hall-tab {
     flex: 0 0 auto;
-  }
-
-  .orf-workbench-surface .feedback-issue-filter-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .orf-workbench-surface .feedback-issue-filter-row .bounty-select-label:last-child {
-    grid-column: 1 / -1;
   }
 
   .bounty-hall-page .bounty-hall-tab,

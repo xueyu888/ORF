@@ -1,14 +1,16 @@
 import { CalendarDays, Filter, FolderKanban, Plus, UserRound } from "lucide-react";
 import { useState } from "react";
-import { FantasySelectMenu, type FantasySelectOption } from "../../../components/FantasySelectMenu";
+import { FantasyMultiSelectMenu, FantasySelectMenu, type FantasySelectOption } from "../../../components/FantasySelectMenu";
 import { Button, IconButton } from "../../../components/ui";
 import {
+  challengeStatusFilterMenuValues,
   challengeStatusFilterOptions,
+  normalizeChallengeStatusFilterSelection,
   type ChallengeCycleFilter,
   type ChallengeMemberFilter,
   type ChallengeMemberOption,
   type ChallengeProjectFilter,
-  type ChallengeStatusFilter,
+  type ChallengeStatusFilterSelection,
 } from "../model/challengeFilters";
 import type { ChallengeScope } from "../model/types";
 
@@ -42,12 +44,12 @@ export function ChallengeToolbar({
   onCycleChange: (cycle: ChallengeCycleFilter) => void;
   onMemberChange: (member: ChallengeMemberFilter) => void;
   onProjectChange: (project: ChallengeProjectFilter) => void;
-  onStatusChange: (status: ChallengeStatusFilter) => void;
+  onStatusChange: (status: ChallengeStatusFilterSelection) => void;
   project: ChallengeProjectFilter;
   projectOptions: Array<FantasySelectOption<ChallengeProjectFilter>>;
   showMemberFilter: boolean;
   scope: ChallengeScope;
-  status: ChallengeStatusFilter;
+  status: ChallengeStatusFilterSelection;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -141,13 +143,14 @@ export function ChallengeToolbar({
             value={member}
           />
         )}
-        <FantasySelectMenu
+        <FantasyMultiSelectMenu
           ariaLabel="挑战状态"
           className="orf-filter-chip"
+          allValue="all"
           leadingIcon={<Filter className="h-4 w-4" />}
-          onChange={onStatusChange}
+          onChange={(values) => onStatusChange(normalizeChallengeStatusFilterSelection(values))}
           options={challengeStatusFilterOptions}
-          value={status}
+          values={challengeStatusFilterMenuValues(status)}
         />
       </div>
     </div>

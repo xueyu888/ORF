@@ -94,7 +94,7 @@
 
 `memberUserId` 对应 `users.id`，是贡献分配的身份事实源；`member` 只是展示文本。`percent` 必须是 `0..100` 的整数。每个指标行必须覆盖当前目标的全部普通成员挑战者，不能重复成员，且合计精确为 `100`。匿名互评服务从逐指标 `metricRows` 统一派生目标级 `allocations` 和 `metricScores`；前端和 ORF 主后端都不把目标级 `allocations` 当作原始提交事实。弃权必须带非空 `abstentionReason`，不带 `allocations` 参与均值计算。
 
-匿名互评链路不把原始 `metricRows`、草稿或弃权说明写入 ORF 数据库：前端通过 ORF 同源代理自动保存草稿到 `/api/local-settlement/objectives/:objectiveId/reviews/draft`，提交到 `/api/local-settlement/objectives/:objectiveId/reviews/submit`；ORF 后端只做认证、目标权限、状态校验和服务端事实补齐，然后转发到共享结算服务。共享结算服务维护一个覆盖式草稿、追加式提交历史，并从历史中按同一目标、同一 reviewer 派生最新评价；验收时通过 ORF 代理向指挥官返回最新提交状态、原始评分、弃权说明、均值和偏离提醒。ORF 结算接口只接收 `contributionResolution.ratios` 和公开积分结果。
+匿名互评链路不把原始 `metricRows`、草稿或弃权说明写入 ORF 数据库：前端通过 ORF 同源代理自动保存草稿到 `/api/local-settlement/objectives/:objectiveId/reviews/draft`，提交到 `/api/local-settlement/objectives/:objectiveId/reviews/submit`；ORF 后端只做认证、目标权限、状态校验和服务端事实补齐，然后转发到共享结算服务。共享结算服务维护一个覆盖式草稿、追加式提交历史，并从历史中按同一目标、同一 reviewer 派生最新评价；验收时通过 ORF 代理向指挥官返回最新提交状态、原始评分、弃权说明、均值和偏离提醒。ORF 结算接口只接收 `contributionResolution.ratios` 和公开积分结果。旧主库表 `objective_contribution_reviews`、旧评价记录 DTO 和旧主库汇总算法已经删除；迁移发现旧表仍有记录时会中止并要求先归档，不能静默删除匿名历史。
 
 ## 保存字段
 

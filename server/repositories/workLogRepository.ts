@@ -23,6 +23,7 @@ import {
   workLogObjectiveSelectionCandidateFlowStatuses,
   workLogObjectiveDefaultFlowStatuses,
 } from "../../src/domain/orfWorkLogs";
+import { isObjectiveChallenger } from "../../src/domain/orfObjectiveParticipants";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { db } from "../db/client";
 import { objectives, teamMembers, users, workLogCategories, workLogEntries } from "../db/schema";
@@ -31,6 +32,7 @@ import type { AuthenticatedOrfUser } from "../auth/accessPolicy";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScopeStorageId } from "./runtimeScope";
 import { reconcileWorkLogReminderState } from "../workLogs/workLogReminderState";
+import { notifyTeamOfWorkLogSubmission } from "../workLogs/workLogSubmissionNotification";
 
 export type WorkLogDayEntryInput = {
   bodyMarkdown: string;
@@ -96,7 +98,7 @@ function escapedWorkLogObjectiveSearchPattern(value: string) {
 }
 
 function isWorkLogObjectiveChallenger(row: { challengerUserIds: string[] }, userId: string) {
-  return row.challengerUserIds.includes(userId);
+  return isObjectiveChallenger(row, userId);
 }
 
 function toWorkLogEntry(row: typeof workLogEntries.$inferSelect): WorkLogEntry {
@@ -554,8 +556,9 @@ export async function createMyWorkLogEntry(
   const updatedAt = nowIso();
   const objective = objectiveResult.objective;
   const category = categoryResult.category;
+  const entryId = makeWorkLogId();
   await db.insert(workLogEntries).values({
-    id: makeWorkLogId(),
+    id: entryId,
     teamId: storageScopeId,
     authorUserId: user.id,
     authorNameSnapshot: user.name,
@@ -581,6 +584,22 @@ export async function createMyWorkLogEntry(
     target: { id: `${user.id}:${workDate}`, type: "workLog" },
   });
   reconcileReminderAfterWorkLogChange(storageScopeId, user.id);
+  const classificationKind: WorkLogClassificationKind = objective
+    ? "objective"
+    : category
+      ? "category"
+      : "uncategorized";
+  await notifyTeamOfWorkLogSubmission({
+    authorName: user.name,
+    authorUserId: user.id,
+    classificationKind,
+    classificationTitle: objective?.title ?? category?.name ?? "未归类",
+    entryId,
+    teamId: storageScopeId,
+    workDate,
+  }).catch((error) => {
+    console.warn("[work-log] submission notification failed", { entryId, teamId: storageScopeId }, error);
+  });
 
   return { status: "ok", entries: await listMyWorkLogDay(user.id, scope, workDate) };
 }

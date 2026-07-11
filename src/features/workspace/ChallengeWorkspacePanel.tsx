@@ -17,6 +17,7 @@ import { buildChallengeTree } from "../challenge/model/challengeTreeModel";
 import {
   challengeStatusFilterOptions,
   filterChallengeGroups,
+  normalizeChallengeStatusFilterSelection,
   sortChallengeGroups,
   type ChallengeProjectFilter,
   type ChallengeStatusFilter,
@@ -81,7 +82,7 @@ export function ChallengeWorkspacePanel({ onClose, selection }: ChallengeWorkspa
       cycle: "all",
       member: "all",
       project: projectFilter,
-      status: statusFilter,
+      status: normalizeChallengeStatusFilterSelection(statusFilter),
     }).filter((group) => !mineOnly || isObjectiveChallenger(group.objective, currentUser?.id));
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return filtered;

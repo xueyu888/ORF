@@ -32,6 +32,7 @@ export type NotificationKind =
   | "comment.thread.status.changed"
   | "comment.mention.created"
   | "data.sync.conflict"
+  | "worklog.submitted"
   | "worklog.reminder";
 export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog" | "dataSync";
 export type NotificationStream = "personalNotification" | "teamAnnouncement";
@@ -655,19 +656,6 @@ export interface ContributionReviewMetricScore {
   weightRatio: number;
 }
 
-export interface ObjectiveContributionReview {
-  id: string;
-  objectiveId: string;
-  reviewer: string;
-  reviewerUserId: string;
-  allocations: ContributionAllocation[];
-  abstentionReason?: string | null;
-  kind?: "score" | "abstain";
-  metricRows?: ContributionReviewMetricRow[];
-  metricScores?: ContributionReviewMetricScore[];
-  submittedAt: string;
-}
-
 export interface Result {
   id: string;
   objectiveId: string;
@@ -918,6 +906,11 @@ export interface ChatChannel {
   lastMessagePreview?: string | null;
 }
 
+export type ProjectChatChannel = Pick<
+  ChatChannel,
+  "displayName" | "id" | "memberCount" | "projectId" | "projectName" | "type" | "updatedAt"
+>;
+
 export interface ChatReaction {
   emojiName: string;
   count: number;
@@ -1005,6 +998,8 @@ export interface ChatBootstrap {
 }
 
 export interface ChatUnreadSummary {
+  actionableMessageUnreadCount: number;
+  directMessageUnreadCount: number;
   mentionCount: number;
   messageUnreadCount: number;
   threadUnreadCount: number;

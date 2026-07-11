@@ -1,7 +1,7 @@
 import { Download, FileText, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button, IconButton } from "../../components/ui";
-import type { ChatMessage, ChatUser } from "../../types/orf";
+import type { ChatMessage, ChatUser, OrfProject } from "../../types/orf";
 import type { ChatAttachmentFilePreviewState } from "./chatAttachmentPreview";
 import { formatFileSize } from "./chatFormat";
 import { ChatUserPicker } from "./ChatUserPicker";
@@ -10,19 +10,24 @@ export function ChannelModal({
   canCreatePrivate,
   canCreatePublic,
   currentUserId,
+  defaultProjectId,
   onClose,
   onCreate,
+  projects,
   users,
 }: {
   canCreatePrivate: boolean;
   canCreatePublic: boolean;
   currentUserId?: string;
+  defaultProjectId?: string | null;
   onClose: () => void;
-  onCreate: (input: { displayName: string; header?: string; memberUserIds?: string[]; name?: string; purpose?: string; type: "public" | "private" }) => Promise<void>;
+  onCreate: (input: { displayName: string; header?: string; memberUserIds?: string[]; name?: string; projectId?: string | null; purpose?: string; type: "public" | "private" }) => Promise<void>;
+  projects: OrfProject[];
   users: ChatUser[];
 }) {
   const [type, setType] = useState<"public" | "private">(() => canCreatePrivate ? "private" : "public");
   const [displayName, setDisplayName] = useState("");
+  const [projectId, setProjectId] = useState(() => (defaultProjectId && projects.some((project) => project.id === defaultProjectId) ? defaultProjectId : ""));
   const [purpose, setPurpose] = useState("");
   const [header, setHeader] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -33,6 +38,9 @@ export function ChannelModal({
     if (type === "private" && !canCreatePrivate && canCreatePublic) setType("public");
     if (type === "public" && !canCreatePublic && canCreatePrivate) setType("private");
   }, [canCreatePrivate, canCreatePublic, type]);
+  useEffect(() => {
+    setProjectId(defaultProjectId && projects.some((project) => project.id === defaultProjectId) ? defaultProjectId : "");
+  }, [defaultProjectId, projects]);
   const toggleSelected = (userId: string) => {
     setSelected((items) => items.includes(userId) ? items.filter((id) => id !== userId) : [...items, userId]);
   };
@@ -40,7 +48,7 @@ export function ChannelModal({
     if (!canCreateSelectedType) return;
     setSaving(true);
     try {
-      await onCreate({ type, displayName, purpose, header, memberUserIds: selected });
+      await onCreate({ type, displayName, projectId: projectId || null, purpose, header, memberUserIds: selected });
     } finally {
       setSaving(false);
     }
@@ -55,6 +63,13 @@ export function ChannelModal({
             <button className={type === "public" ? "active" : ""} disabled={!canCreatePublic} type="button" onClick={() => setType("public")}>公开</button>
           </div>
           <label>频道名<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
+          <label>
+            绑定项目
+            <select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+              <option value="">不绑定项目</option>
+              {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+          </label>
           <label>说明<input value={purpose} onChange={(event) => setPurpose(event.target.value)} /></label>
           <label>标题<input value={header} onChange={(event) => setHeader(event.target.value)} /></label>
           {type === "private" && (

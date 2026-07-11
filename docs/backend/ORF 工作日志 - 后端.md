@@ -31,6 +31,8 @@
 
 `remaining_estimate_percent` 和 `duration_minutes` 都只属于日志事实。前者是页面“目标进度估计”的兼容存储值，不反向写入 `Objective.progress`；普通非 FAE 成员选择目标时必须填写，页面可以默认沿用该用户上一次给同一目标记录的估计，数值允许上调、下调或保持不变；后者不参与强制工时核算；二者都不改变目标进度、验收、积分或结算。
 
+新增日志保存成功后会创建 `worklog.submitted` 系统公告，通知当前团队 active 成员有人提交了某天某个目标/分类的工作日志。通知只包含摘要和跳转到当天工作日志页的链接，不保存完整日志正文；编辑和删除历史日志不发送这类公告。通知事实源仍是 `notification_events`、`notification_receipts` 和 `notification_deliveries`，不能反向定义日志正文、报表或欠账状态。
+
 `work_log_reminder_states` 是工作日志欠账提醒状态事实源。它不记录日志是否完成，只记录某个用户当前欠账窗口、缺失日期、提醒状态和下一次可提醒时间：
 
 | 字段 | 含义 |
@@ -54,7 +56,7 @@
 | `GET` | `/api/work-logs/reminder-state` | 当前用户工作日志欠账提醒状态；`ORF_WORK_LOG_REMINDER_ENABLED=false` 时返回不提醒状态 |
 | `POST` | `/api/work-logs/reminder-state/snooze` | 当前用户将强提醒暂缓到 10 分钟后；提醒关闭时不产生提醒 |
 | `GET` | `/api/work-logs/my-day?date=YYYY-MM-DD` | 当前用户某天已提交日志 |
-| `POST` | `/api/work-logs/my-day/:date` | 当前用户给某天追加一条日志 |
+| `POST` | `/api/work-logs/my-day/:date` | 当前用户给某天追加一条日志；成功后派生 `worklog.submitted` 系统公告 |
 | `PATCH` | `/api/work-logs/entries/:entryId` | 当前用户修改自己的一条历史日志 |
 | `DELETE` | `/api/work-logs/entries/:entryId` | 当前用户删除自己的一条历史日志 |
 | `GET` | `/api/work-logs/activity?from=&to=&userId=&objectiveId=&limit=` | 团队日志活动流 |

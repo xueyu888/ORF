@@ -2,7 +2,7 @@
 
 ## 目标
 
-GitHub repository activity 进入 ORF 原生聊天频道，不进入外部聊天系统，也不进入独立通知中心。
+GitHub repository activity 进入 ORF 原生聊天频道，不进入外部聊天系统，也不进入独立通知中心。普通 commit/push/issue 同步消息只形成聊天未读和桌面红点，不进入 AppShell “待我处理”；只有后续被 ORF 业务模块建模成系统通知、@ 当前用户或进入当前用户关注的话题回复时，才会进入注意力待处理链路。
 
 状态链：
 

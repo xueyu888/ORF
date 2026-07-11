@@ -1,10 +1,6 @@
 import type { ObjectiveFlowStatus } from "../../types/orf";
 import type { ObjectiveFlowPolicy, ObjectiveLifecycleTarget } from "./types";
 
-const editableStages = ["goalSetting", "resultClaiming", "orfReestimate"] as const;
-const reestimateStage = ["orfReestimate"] as const;
-const frozenStage = ["goalFrozen"] as const;
-
 export const objectiveFlowStatuses = [
   "candidate",
   "open",
@@ -24,7 +20,6 @@ export const objectiveFlowPolicy = {
     label: "候选中",
     phase: "planning",
     tone: "open",
-    compatibleStages: editableStages,
     challengeSortRank: 0,
     canPublish: true,
     canApplyForChallenge: false,
@@ -56,7 +51,6 @@ export const objectiveFlowPolicy = {
     label: "可申请",
     phase: "discoverable",
     tone: "open",
-    compatibleStages: editableStages,
     challengeSortRank: 1,
     assignedChallengeSortRank: 2,
     canPublish: false,
@@ -89,7 +83,6 @@ export const objectiveFlowPolicy = {
     label: "申请中",
     phase: "forming",
     tone: "active",
-    compatibleStages: editableStages,
     challengeSortRank: 1,
     assignedChallengeSortRank: 2,
     canPublish: false,
@@ -122,7 +115,6 @@ export const objectiveFlowPolicy = {
     label: "征召中",
     phase: "forming",
     tone: "active",
-    compatibleStages: editableStages,
     challengeSortRank: 1,
     assignedChallengeSortRank: 2,
     canPublish: false,
@@ -155,7 +147,6 @@ export const objectiveFlowPolicy = {
     label: "重估中",
     phase: "active",
     tone: "active",
-    compatibleStages: reestimateStage,
     challengeSortRank: 3,
     canPublish: false,
     canApplyForChallenge: true,
@@ -187,7 +178,6 @@ export const objectiveFlowPolicy = {
     label: "已冻结",
     phase: "active",
     tone: "active",
-    compatibleStages: frozenStage,
     challengeSortRank: 3,
     canPublish: false,
     canApplyForChallenge: false,
@@ -219,7 +209,6 @@ export const objectiveFlowPolicy = {
     label: "待验收",
     phase: "review",
     tone: "review",
-    compatibleStages: frozenStage,
     challengeSortRank: 4,
     canPublish: false,
     canApplyForChallenge: false,
@@ -251,7 +240,6 @@ export const objectiveFlowPolicy = {
     label: "待返工",
     phase: "review",
     tone: "review",
-    compatibleStages: frozenStage,
     challengeSortRank: 4,
     canPublish: false,
     canApplyForChallenge: false,
@@ -283,7 +271,6 @@ export const objectiveFlowPolicy = {
     label: "已验收",
     phase: "accepted",
     tone: "review",
-    compatibleStages: frozenStage,
     challengeSortRank: 5,
     canPublish: false,
     canApplyForChallenge: false,
@@ -315,7 +302,6 @@ export const objectiveFlowPolicy = {
     label: "已结算",
     phase: "settled",
     tone: "done",
-    compatibleStages: frozenStage,
     challengeSortRank: 6,
     canPublish: false,
     canApplyForChallenge: false,
@@ -347,7 +333,6 @@ export const objectiveFlowPolicy = {
     label: "已关闭",
     phase: "closed",
     tone: "open",
-    compatibleStages: frozenStage,
     challengeSortRank: 7,
     canPublish: false,
     canApplyForChallenge: false,

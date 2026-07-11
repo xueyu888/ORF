@@ -12,7 +12,6 @@ import { ChatThreadInboxPanel } from "./ChatThreadInboxPanel";
 import { ChatThreadPanel } from "./ChatThreadPanel";
 import { ChatDrivePanel } from "./ChatDrivePanel";
 import type { ChatDriveResourceLinkTarget, ChatDriveResourceSelectionRequest } from "./chatDriveResourceLinks";
-import type { WorkspaceSelection } from "../workspace/workspaceTypes";
 
 type ChatRightPanelProps = {
   activePanel: ActivePanel;
@@ -56,7 +55,6 @@ type ChatRightPanelProps = {
   onSendThreadReply: ChatSendHandler;
   onToggleFollow: (following: boolean) => void;
   onTyping: (channelId: string) => void;
-  onWorkspaceTargetLink?: (selection: WorkspaceSelection) => void;
   onUpdateChannel: (input: Partial<Pick<ChatChannel, "displayName" | "header" | "projectId" | "purpose">>) => Promise<void>;
   notify: (message: string) => void;
   projects: OrfProject[];
@@ -125,7 +123,6 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
             onSend={props.onSendThreadReply}
             onToggleFollow={props.onToggleFollow}
             onTyping={props.onTyping}
-            onWorkspaceTargetLink={props.onWorkspaceTargetLink}
             thread={props.thread}
             users={props.users}
             usersById={props.usersById}

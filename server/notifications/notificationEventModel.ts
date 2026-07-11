@@ -84,8 +84,9 @@ export function buildNotificationSystemMetadata(
   };
 }
 
-export function notificationChatDeliveryId(eventId: string, recipientUserId?: string | null) {
-  const recipientKey = recipientUserId?.trim() || "team";
+export function notificationChatDeliveryId(eventId: string, recipientUserId?: string | null, destinationId?: string | null) {
+  const destinationKey = destinationId?.trim();
+  const recipientKey = destinationKey ? `destination:${destinationKey}` : recipientUserId?.trim() || "team";
   const identity = `${eventId}|${recipientKey}|chat`;
   return `ndel-${createHash("md5").update(identity).digest("hex")}`;
 }

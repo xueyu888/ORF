@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import path from "node:path";
+import {
+  ensurePrivateSettingsStorage,
+  privateLegacySystemSettingsPath,
+  privateSystemSettingsDirectory,
+  privateSystemSettingsPath,
+  publicLegacySystemSettingsExamplePath,
+  publicSystemSettingsExamplePath,
+} from "./settingsStorage";
 
 export type RawSystemSettingsFile = {
   chat?: Record<string, unknown>;
@@ -8,14 +15,6 @@ export type RawSystemSettingsFile = {
     backgrounds?: Record<string, unknown>;
   };
 };
-
-const settingsRoot = path.join(process.cwd(), "public", "settings");
-const systemSettingsDir = path.join(settingsRoot, "system");
-const systemSettingsPath = path.join(systemSettingsDir, "settings.json");
-const systemSettingsExamplePath = path.join(systemSettingsDir, "settings.json.example");
-const legacySystemSettingsDir = path.join(settingsRoot, "user");
-const legacySystemSettingsPath = path.join(legacySystemSettingsDir, "settings.json");
-const legacySystemSettingsExamplePath = path.join(legacySystemSettingsDir, "settings.json.example");
 
 let settingsMutationQueue: Promise<void> = Promise.resolve();
 
@@ -45,23 +44,24 @@ function normalizeRawSettings(input: RawSystemSettingsFile | null | undefined): 
 }
 
 export async function ensureSystemSettingsDirectory() {
-  await mkdir(systemSettingsDir, { recursive: true });
+  await ensurePrivateSettingsStorage();
+  await mkdir(privateSystemSettingsDirectory, { recursive: true, mode: 0o700 });
 }
 
 export async function readSystemSettingsFile(): Promise<RawSystemSettingsFile> {
   await ensureSystemSettingsDirectory();
 
   try {
-    return normalizeRawSettings(await readSettingsJson(systemSettingsPath));
+    return normalizeRawSettings(await readSettingsJson(privateSystemSettingsPath));
   } catch {
     try {
-      return normalizeRawSettings(await readSettingsJson(systemSettingsExamplePath));
+      return normalizeRawSettings(await readSettingsJson(privateLegacySystemSettingsPath));
     } catch {
       try {
-        return normalizeRawSettings(await readSettingsJson(legacySystemSettingsPath));
+        return normalizeRawSettings(await readSettingsJson(publicSystemSettingsExamplePath));
       } catch {
         try {
-          return normalizeRawSettings(await readSettingsJson(legacySystemSettingsExamplePath));
+          return normalizeRawSettings(await readSettingsJson(publicLegacySystemSettingsExamplePath));
         } catch {
           return emptySystemSettings();
         }
@@ -73,11 +73,11 @@ export async function readSystemSettingsFile(): Promise<RawSystemSettingsFile> {
 async function writeSystemSettingsFile(settings: RawSystemSettingsFile) {
   await ensureSystemSettingsDirectory();
   const normalized = normalizeRawSettings(settings);
-  const tempPath = `${systemSettingsPath}.${process.pid}.${Date.now().toString(36)}.${randomUUID()}.tmp`;
+  const tempPath = `${privateSystemSettingsPath}.${process.pid}.${Date.now().toString(36)}.${randomUUID()}.tmp`;
 
   try {
-    await writeFile(tempPath, `${JSON.stringify(normalized, null, 2)}\n`, "utf8");
-    await rename(tempPath, systemSettingsPath);
+    await writeFile(tempPath, `${JSON.stringify(normalized, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    await rename(tempPath, privateSystemSettingsPath);
   } catch (error) {
     await rm(tempPath, { force: true }).catch(() => undefined);
     throw error;

@@ -13,6 +13,7 @@ import { orfAssetLibrary } from "../config/assetLibrary";
 import { canShowFrontend, canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
 import type { VisualBackgroundCrop } from "../domain/settings/visualBackgrounds";
+import { AttentionWorkbar } from "../features/attention/AttentionWorkbar";
 import { useOrf } from "../state/OrfProvider";
 import { ImagePreviewDialog } from "./ImagePreviewDialog";
 import { VisualBackgroundSlot } from "./VisualBackgroundSlot";
@@ -155,6 +156,8 @@ export function Sidebar({
           </div>
         ))}
       </nav>
+
+      <AttentionWorkbar collapsed={collapsed} onNavigateIntent={onNavigateIntent} />
 
       <div className="orf-sidebar-footer border-t p-4">
         <div ref={userMenuRef} className="orf-sidebar-user-wrap relative">

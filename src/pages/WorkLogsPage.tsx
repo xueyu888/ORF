@@ -99,12 +99,22 @@ import type {
   WorkLogReportScope,
 } from "../types/orf";
 import {
+  clearStoredWorkLogEditorDraft,
+  readStoredWorkLogEditorDraft,
+  writeStoredWorkLogEditorDraft,
+} from "../features/work-logs/workLogDraftStorage";
+import {
   addCalendarDays,
   isDateOnlyString,
   localDateString,
 } from "../utils/date";
 
 type WorkLogViewMode = "report" | "today";
+
+type WorkLogEditorDraftScope = {
+  userId: string;
+  workDate: string;
+};
 
 type WorkLogReportCellPopoverState = {
   key: string;
@@ -205,6 +215,8 @@ export function WorkLogsPage() {
   const [editorDraft, setEditorDraft] = useState<WorkLogEditorDraft>(() =>
     blankWorkLogEditorDraft(),
   );
+  const [editorDraftScope, setEditorDraftScope] =
+    useState<WorkLogEditorDraftScope | null>(null);
   const [activityEntries, setActivityEntries] = useState<WorkLogActivityItem[]>(
     [],
   );
@@ -260,23 +272,45 @@ export function WorkLogsPage() {
   }, [location.search]);
 
   const loadMyDay = useCallback(async (date: string) => {
+    const userId = currentUser?.id ?? "";
     setLoading(true);
     setError("");
+    setEditorDraftScope(null);
     try {
       const [objectiveResponse, dayResponse] = await Promise.all([
         getWorkLogObjectives(),
         getMyWorkLogDay(date),
       ]);
+      const storedDraft = userId
+        ? readStoredWorkLogEditorDraft({ userId, workDate: date })
+        : null;
+      const storedDraftAvailable = Boolean(
+        storedDraft &&
+          (!storedDraft.draft.editingEntryId ||
+            dayResponse.entries.some((entry) => entry.id === storedDraft.draft.editingEntryId)),
+      );
+      if (storedDraft && !storedDraftAvailable && userId) {
+        clearStoredWorkLogEditorDraft({ userId, workDate: date });
+      }
       setObjectives(objectiveResponse.objectives);
       setObjectiveSearchQuery("");
       setObjectiveSearchResults([]);
-      setSelectedObjectiveCache([]);
+      setSelectedObjectiveCache(
+        storedDraftAvailable && storedDraft?.selectedObjective
+          ? [storedDraft.selectedObjective]
+          : [],
+      );
       setCategories(objectiveResponse.categories);
       setClassificationSuggestionEnabled(
         objectiveResponse.classificationSuggestionEnabled,
       );
       setMyEntries(dayResponse.entries);
-      setEditorDraft(blankWorkLogEditorDraft());
+      setEditorDraft(
+        storedDraftAvailable && storedDraft
+          ? storedDraft.draft
+          : blankWorkLogEditorDraft(),
+      );
+      setEditorDraftScope(userId ? { userId, workDate: date } : null);
       setClassificationSuggestion(null);
     } catch (loadError) {
       setError(
@@ -285,7 +319,7 @@ export function WorkLogsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     const query = objectiveSearchQuery.trim();
@@ -478,6 +512,12 @@ export function WorkLogsPage() {
         );
       }
       setEditorDraft(blankWorkLogEditorDraft());
+      if (currentUser?.id) {
+        clearStoredWorkLogEditorDraft({
+          userId: currentUser.id,
+          workDate: selectedDate,
+        });
+      }
       setClassificationSuggestion(null);
       void loadActivity(activityExpanded);
       void loadReport(reportMonth, reportScope);
@@ -496,6 +536,40 @@ export function WorkLogsPage() {
       setSaving(false);
     }
   };
+
+  useEffect(() => {
+    const userId = currentUser?.id;
+    if (
+      !userId ||
+      loading ||
+      !editorDraftScope ||
+      editorDraftScope.userId !== userId ||
+      editorDraftScope.workDate !== selectedDate
+    ) {
+      return;
+    }
+
+    const selectedObjective = editorDraft.objectiveId
+      ? objectiveOptionsById.get(editorDraft.objectiveId) ?? null
+      : null;
+    try {
+      writeStoredWorkLogEditorDraft({
+        draft: editorDraft,
+        selectedObjective,
+        userId,
+        workDate: selectedDate,
+      });
+    } catch {
+      // Draft autosave is best-effort local recovery and must not block editing.
+    }
+  }, [
+    currentUser?.id,
+    editorDraft,
+    editorDraftScope,
+    loading,
+    objectiveOptionsById,
+    selectedDate,
+  ]);
 
   const deleteEntry = async (entry: WorkLogEntry) => {
     const confirmed = window.confirm(
@@ -1087,6 +1161,7 @@ function WorkLogEditorCard({
         </div>
       </div>
       <OrfRichTextEditor
+        autoGrow
         className="work-logs-editor"
         currentUserId={currentUserId}
         idleHint="Markdown"
