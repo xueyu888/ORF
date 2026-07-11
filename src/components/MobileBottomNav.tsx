@@ -56,6 +56,7 @@ export function MobileBottomNav({ onNavigateIntent }: { onNavigateIntent?: (path
             aria-label={ariaLabel}
             onClick={handleNavigateIntent}
             onPointerDown={handleNavigateIntent}
+            onFocus={() => onNavigateIntent?.(item.path)}
             className={({ isActive }) => [
               "orf-mobile-bottom-nav-item",
               isActive ? "is-active" : "",

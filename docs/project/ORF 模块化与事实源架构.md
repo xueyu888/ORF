@@ -26,7 +26,9 @@
 - `server/access/orfTargetAccess.ts` 负责 work item、feedback 的 scope 解析和访问边界判断，避免 `accessPolicy` 依赖完整写仓库。
 - `src/domain/orfReadModel/` 是前后端共享 read model DTO 契约。
 - `src/domain/orfChallengeEntry/` 是挑战入口关闭、申请、接受等纯派生判断。
-- `src/state/OrfProvider.tsx` 负责会话、实时事件、全局通知和 Context 组合；业务 API 动作拆到 `orfProviderObjectiveActions`、`orfProviderResultActions`、`orfProviderTaskActions`、`orfProviderFeedbackActions`、`orfProviderUserActions`、`orfProviderCommentActions`。
+- `src/state/OrfProvider.tsx` 负责会话、实时事件、全局通知和 Context 组合；用户 access、通知、任务管理和统计读模型拥有彼此独立的生命周期，pathname 不参与全局初始化。业务 API 动作拆到 `orfProviderObjectiveActions`、`orfProviderResultActions`、`orfProviderTaskActions`、`orfProviderFeedbackActions`、`orfProviderUserActions`、`orfProviderCommentActions`。
+- `src/state/readModelCache.ts` 只负责当前登录会话的读模型请求去重、短期缓存和失效；`readModelQueries.ts` 负责具名查询键、过期时间和 API 适配。缓存是服务端事实的可丢弃投影，身份变化必须清空，不能写回或反向定义业务事实。
+- `src/routing/routeModules.ts` 是生产路由代码模块的唯一注册表；`routePreload.ts` 组合代码、页面读模型和背景图片本体预取。背景选择由 `visualBackgrounds.ts` 准备并由页面一次性消费，保证预热图片和实际展示图片一致；导航组件只声明目标路径，不重复维护模块或数据依赖。
 - `src/state/orfStateSnapshot.ts` 负责前端空快照和纯标准化入口；旧 `OrfFlowStore` 及其本地业务 mutation 已删除。
 - `src/testing/fixtures/initialOrfState.ts` 只保存测试演示 fixture；`src/data/initialOrfState.ts` 仅为现有数据化测试保留兼容转发，生产代码禁止依赖。
 - `src/features/challenge/hooks/useChallengeReadModelData.ts` 负责挑战页 read model 加载与快照合并，页面本体负责交互编排和渲染。

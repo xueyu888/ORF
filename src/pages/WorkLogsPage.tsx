@@ -29,6 +29,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
@@ -78,14 +79,25 @@ import {
 import {
   createMyWorkLogEntry,
   deleteMyWorkLogEntry,
-  getMyWorkLogDay,
-  getWorkLogActivity,
   getWorkLogObjectives,
-  getWorkLogReport,
   searchDriveRequest,
   suggestWorkLogClassification,
   updateMyWorkLogEntry,
 } from "../state/apiClient";
+import {
+  invalidateWorkLogActivity,
+  invalidateWorkLogObjectives,
+  invalidateWorkLogReports,
+  loadWorkLogActivity,
+  loadWorkLogDay,
+  loadWorkLogObjectives,
+  loadWorkLogReport,
+  setWorkLogDaySnapshot,
+  workLogActivitySnapshot,
+  workLogDaySnapshot,
+  workLogObjectivesSnapshot,
+  workLogReportSnapshot,
+} from "../state/readModelQueries";
 import { useOrf } from "../state/OrfProvider";
 import type {
   WorkLogActivityItem,
@@ -103,6 +115,7 @@ import {
   readStoredWorkLogEditorDraft,
   writeStoredWorkLogEditorDraft,
 } from "../features/work-logs/workLogDraftStorage";
+import { workLogActivityCollapsedLimit, workLogActivityExpandedLimit } from "../features/work-logs/workLogReadModelConfig";
 import {
   addCalendarDays,
   isDateOnlyString,
@@ -141,8 +154,6 @@ const workLogViewOptions = [
   },
 ];
 
-const workLogActivityCollapsedLimit = 20;
-const workLogActivityExpandedLimit = 80;
 
 const todayValue = () => localDateString(new Date());
 
@@ -200,40 +211,50 @@ export function WorkLogsPage() {
   const [selectedDate, setSelectedDate] = useState(() =>
     dateFromSearch(location.search),
   );
-  const [objectives, setObjectives] = useState<WorkLogObjectiveOption[]>([]);
+  const [objectives, setObjectives] = useState<WorkLogObjectiveOption[]>(() => workLogObjectivesSnapshot()?.objectives ?? []);
   const [objectiveSearchQuery, setObjectiveSearchQuery] = useState("");
   const [objectiveSearchResults, setObjectiveSearchResults] = useState<WorkLogObjectiveOption[]>([]);
   const [selectedObjectiveCache, setSelectedObjectiveCache] = useState<WorkLogObjectiveOption[]>([]);
-  const [categories, setCategories] = useState<WorkLogCategoryOption[]>([]);
+  const [categories, setCategories] = useState<WorkLogCategoryOption[]>(() => workLogObjectivesSnapshot()?.categories ?? []);
   const [classificationSuggestionEnabled, setClassificationSuggestionEnabled] =
     useState(false);
   const [classificationSuggestion, setClassificationSuggestion] =
     useState<WorkLogClassificationSuggestion | null>(null);
   const [classificationSuggestionLoading, setClassificationSuggestionLoading] =
     useState(false);
-  const [myEntries, setMyEntries] = useState<WorkLogEntry[]>([]);
+  const [myEntries, setMyEntries] = useState<WorkLogEntry[]>(() => workLogDaySnapshot(dateFromSearch(location.search))?.entries ?? []);
   const [editorDraft, setEditorDraft] = useState<WorkLogEditorDraft>(() =>
     blankWorkLogEditorDraft(),
   );
   const [editorDraftScope, setEditorDraftScope] =
     useState<WorkLogEditorDraftScope | null>(null);
-  const [activityEntries, setActivityEntries] = useState<WorkLogActivityItem[]>(
-    [],
+  const [activityEntries, setActivityEntries] = useState<WorkLogActivityItem[]>(() =>
+    workLogActivitySnapshot(workLogActivityCollapsedLimit + 1)?.entries ?? [],
   );
   const [activityExpanded, setActivityExpanded] = useState(false);
-  const [report, setReport] = useState<WorkLogReport | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [activityLoading, setActivityLoading] = useState(true);
-  const [reportLoading, setReportLoading] = useState(true);
+  const [reportMonth, setReportMonth] = useState(() =>
+    monthFromDate(dateFromSearch(location.search)),
+  );
+  const [reportScope, setReportScope] = useState<WorkLogReportScope>("mine");
+  const initialReportRange = monthRange(reportMonth);
+  const [report, setReport] = useState<WorkLogReport | null>(() =>
+    workLogReportSnapshot(initialReportRange.from, initialReportRange.to, reportScope)?.report ?? null,
+  );
+  const [loading, setLoading] = useState(() =>
+    workLogObjectivesSnapshot() === undefined || workLogDaySnapshot(dateFromSearch(location.search)) === undefined,
+  );
+  const [activityLoading, setActivityLoading] = useState(() =>
+    workLogActivitySnapshot(workLogActivityCollapsedLimit + 1) === undefined,
+  );
+  const [reportLoading, setReportLoading] = useState(() =>
+    workLogReportSnapshot(initialReportRange.from, initialReportRange.to, reportScope) === undefined,
+  );
   const [saving, setSaving] = useState(false);
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [reportError, setReportError] = useState("");
   const [workLogResourceRevision, setWorkLogResourceRevision] = useState(0);
-  const [reportMonth, setReportMonth] = useState(() =>
-    monthFromDate(dateFromSearch(location.search)),
-  );
-  const [reportScope, setReportScope] = useState<WorkLogReportScope>("mine");
+  const handledWorkLogsInvalidationKeyRef = useRef("");
   const [viewMode, setViewMode] = useState<WorkLogViewMode>(() =>
     viewFromSearch(location.search),
   );
@@ -271,15 +292,23 @@ export function WorkLogsPage() {
     setViewMode(viewFromSearch(location.search));
   }, [location.search]);
 
-  const loadMyDay = useCallback(async (date: string) => {
+  const loadMyDay = useCallback(async (date: string, force = false) => {
     const userId = currentUser?.id ?? "";
-    setLoading(true);
+    const cachedObjectives = workLogObjectivesSnapshot();
+    const cachedDay = workLogDaySnapshot(date);
+    if (cachedObjectives) {
+      setObjectives(cachedObjectives.objectives);
+      setCategories(cachedObjectives.categories);
+      setClassificationSuggestionEnabled(cachedObjectives.classificationSuggestionEnabled);
+    }
+    setMyEntries(cachedDay?.entries ?? []);
+    setLoading(!cachedObjectives || !cachedDay);
     setError("");
     setEditorDraftScope(null);
     try {
       const [objectiveResponse, dayResponse] = await Promise.all([
-        getWorkLogObjectives(),
-        getMyWorkLogDay(date),
+        loadWorkLogObjectives({ force }),
+        loadWorkLogDay(date, { force }),
       ]);
       const storedDraft = userId
         ? readStoredWorkLogEditorDraft({ userId, workDate: date })
@@ -349,36 +378,34 @@ export function WorkLogsPage() {
     };
   }, [objectiveSearchQuery]);
 
-  const loadActivity = useCallback(async (expanded: boolean) => {
-    setActivityLoading(true);
+  const loadActivity = useCallback(async (expanded: boolean, force = false) => {
+    const limit = expanded ? workLogActivityExpandedLimit : workLogActivityCollapsedLimit + 1;
+    const cached = workLogActivitySnapshot(limit);
+    setActivityEntries(cached?.entries ?? []);
+    setActivityLoading(!cached);
     try {
-      const response = await getWorkLogActivity({
-        limit: expanded
-          ? workLogActivityExpandedLimit
-          : workLogActivityCollapsedLimit + 1,
-      });
+      const response = await loadWorkLogActivity(limit, { force });
       setActivityEntries(response.entries);
     } catch {
-      setActivityEntries([]);
+      if (!cached) setActivityEntries([]);
     } finally {
       setActivityLoading(false);
     }
   }, []);
 
   const loadReport = useCallback(
-    async (month: string, scope: WorkLogReportScope) => {
-      setReportLoading(true);
+    async (month: string, scope: WorkLogReportScope, force = false) => {
       setReportError("");
       try {
         const range = monthRange(month);
-        const response = await getWorkLogReport({
-          from: range.from,
-          to: range.to,
-          scope,
-        });
+        const cached = workLogReportSnapshot(range.from, range.to, scope);
+        setReport(cached?.report ?? null);
+        setReportLoading(!cached);
+        const response = await loadWorkLogReport(range.from, range.to, scope, { force });
         setReport(response.report);
       } catch (loadError) {
-        setReport(null);
+        const range = monthRange(month);
+        if (!workLogReportSnapshot(range.from, range.to, scope)) setReport(null);
         setReportError(
           loadError instanceof Error
             ? loadError.message
@@ -392,16 +419,27 @@ export function WorkLogsPage() {
   );
 
   useEffect(() => {
-    void loadMyDay(selectedDate);
+    void loadMyDay(selectedDate, false);
   }, [loadMyDay, selectedDate]);
 
   useEffect(() => {
-    void loadActivity(activityExpanded);
-  }, [activityExpanded, loadActivity, workLogsInvalidationKey]);
+    void loadActivity(activityExpanded, false);
+  }, [activityExpanded, loadActivity]);
 
   useEffect(() => {
-    void loadReport(reportMonth, reportScope);
-  }, [loadReport, reportMonth, reportScope, workLogsInvalidationKey]);
+    void loadReport(reportMonth, reportScope, false);
+  }, [loadReport, reportMonth, reportScope]);
+
+  useEffect(() => {
+    if (!workLogsInvalidationKey || handledWorkLogsInvalidationKeyRef.current === workLogsInvalidationKey) return;
+    handledWorkLogsInvalidationKeyRef.current = workLogsInvalidationKey;
+    invalidateWorkLogObjectives();
+    invalidateWorkLogActivity();
+    invalidateWorkLogReports();
+    void loadMyDay(selectedDate, true);
+    void loadActivity(activityExpanded, true);
+    void loadReport(reportMonth, reportScope, true);
+  }, [activityExpanded, loadActivity, loadMyDay, loadReport, reportMonth, reportScope, selectedDate, workLogsInvalidationKey]);
 
   const changeDate = (date: string) => {
     const query = new URLSearchParams(location.search);
@@ -503,8 +541,10 @@ export function WorkLogsPage() {
         ? await updateMyWorkLogEntry(editorDraft.editingEntryId, draftInput)
         : await createMyWorkLogEntry(selectedDate, draftInput);
       setMyEntries(response.entries);
+      setWorkLogDaySnapshot(selectedDate, response);
       if (draftInput.categoryName) {
-        const objectiveResponse = await getWorkLogObjectives();
+        invalidateWorkLogObjectives();
+        const objectiveResponse = await loadWorkLogObjectives({ force: true });
         setObjectives(objectiveResponse.objectives);
         setCategories(objectiveResponse.categories);
         setClassificationSuggestionEnabled(
@@ -519,8 +559,10 @@ export function WorkLogsPage() {
         });
       }
       setClassificationSuggestion(null);
-      void loadActivity(activityExpanded);
-      void loadReport(reportMonth, reportScope);
+      invalidateWorkLogActivity();
+      invalidateWorkLogReports();
+      void loadActivity(activityExpanded, true);
+      void loadReport(reportMonth, reportScope, true);
       void refreshWorkLogReminderState().catch(() => undefined);
       systemBroadcasts
         .filter(
@@ -581,11 +623,14 @@ export function WorkLogsPage() {
     try {
       const response = await deleteMyWorkLogEntry(entry.id);
       setMyEntries(response.entries);
+      setWorkLogDaySnapshot(selectedDate, response);
       if (editorDraft.editingEntryId === entry.id) {
         setEditorDraft(blankWorkLogEditorDraft());
       }
-      void loadActivity(activityExpanded);
-      void loadReport(reportMonth, reportScope);
+      invalidateWorkLogActivity();
+      invalidateWorkLogReports();
+      void loadActivity(activityExpanded, true);
+      void loadReport(reportMonth, reportScope, true);
       void refreshWorkLogReminderState().catch(() => undefined);
       notify("工作日志已删除");
     } catch (deleteError) {
@@ -690,7 +735,7 @@ export function WorkLogsPage() {
               <IconButton
                 icon={RefreshCw}
                 label="刷新动态"
-                onClick={() => void loadActivity(activityExpanded)}
+                onClick={() => void loadActivity(activityExpanded, true)}
               />
             </div>
             {activityLoading ? (
@@ -886,7 +931,7 @@ export function WorkLogsPage() {
         <WorkLogReportPanel
           currentUserId={currentUser?.id ?? null}
           loading={reportLoading}
-          onRefresh={() => void loadReport(reportMonth, reportScope)}
+          onRefresh={() => void loadReport(reportMonth, reportScope, true)}
           onScopeChange={setReportScope}
           onSelectMonth={setReportMonth}
           rangeLabel={`${reportRange.from} - ${reportRange.to}`}

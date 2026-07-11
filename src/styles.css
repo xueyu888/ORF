@@ -15518,6 +15518,26 @@ a.orf-sidebar-link,
   min-height: 100%;
 }
 
+.orf-chat-loading-skeleton {
+  display: grid;
+  width: min(320px, 72vw);
+  gap: 9px;
+}
+
+.orf-chat-loading-skeleton > span {
+  height: 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orf-text-secondary) 14%, transparent);
+}
+
+.orf-chat-loading-skeleton > span:nth-child(2) {
+  width: 76%;
+}
+
+.orf-chat-loading-skeleton > span:nth-child(3) {
+  width: 54%;
+}
+
 .orf-workspace-root {
   position: relative;
   display: grid;

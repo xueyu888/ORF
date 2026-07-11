@@ -7,6 +7,7 @@ import type { VisualBackgroundImage, VisualBackgroundScene, VisualBackgroundsDat
 
 const rotationStoragePrefix = "orf.visualBackgroundRotation";
 const visualBackgroundChangedEvent = "orf:visual-background-changed";
+const preparedSelections = new Map<VisualBackgroundScene, { contract: string; imageId: string }>();
 
 export type VisualBackgroundSelection = {
   crop: VisualBackgroundCrop;
@@ -45,35 +46,76 @@ function nextSwitchableIndex(data: VisualBackgroundsData) {
   return (readStoredIndex(data.scene) + 1) % data.list.length;
 }
 
-export function cropForVisualBackground(data: VisualBackgroundsData, imageId: string | null | undefined) {
-  return imageId ? normalizeVisualBackgroundCrop(data.config.crops[imageId]) : defaultVisualBackgroundCrop;
+function selectionContract(data: VisualBackgroundsData) {
+  return JSON.stringify({
+    fixedBackgroundId: data.config.fixedBackgroundId,
+    list: data.list.map((image) => [image.id, image.url]),
+    mode: data.config.mode,
+    switchOrder: data.config.switchOrder,
+  });
 }
 
-export function pickVisualBackground(data: VisualBackgroundsData): VisualBackgroundSelection | null {
-  let image: VisualBackgroundImage | null = null;
-  if (data.config.mode === "fixed") {
-    image = fixedBackground(data);
-  } else {
-    const nextIndex = nextSwitchableIndex(data);
-    if (nextIndex >= 0) {
-      image = data.list[nextIndex] ?? null;
-    }
-  }
-
-  if (!image) {
-    return null;
-  }
-
-  if (data.config.mode !== "fixed") {
-    writeStoredIndex(data.scene, data.list.findIndex((background) => background.id === image?.id));
-  }
-
+function selectionForImage(data: VisualBackgroundsData, image: VisualBackgroundImage): VisualBackgroundSelection {
   return {
     crop: cropForVisualBackground(data, image.id),
     image,
     overlayOpacity: data.config.overlayOpacity,
     url: image.url,
   };
+}
+
+function selectVisualBackgroundImage(data: VisualBackgroundsData) {
+  if (data.config.mode === "fixed") return fixedBackground(data);
+  const nextIndex = nextSwitchableIndex(data);
+  return nextIndex >= 0 ? data.list[nextIndex] ?? null : null;
+}
+
+function commitSwitchableSelection(data: VisualBackgroundsData, image: VisualBackgroundImage) {
+  if (data.config.mode !== "fixed") {
+    writeStoredIndex(data.scene, data.list.findIndex((background) => background.id === image.id));
+  }
+}
+
+export function cropForVisualBackground(data: VisualBackgroundsData, imageId: string | null | undefined) {
+  return imageId ? normalizeVisualBackgroundCrop(data.config.crops[imageId]) : defaultVisualBackgroundCrop;
+}
+
+export function pickVisualBackground(data: VisualBackgroundsData): VisualBackgroundSelection | null {
+  const prepared = preparedSelections.get(data.scene);
+  if (prepared?.contract === selectionContract(data)) {
+    const preparedImage = data.list.find((image) => image.id === prepared.imageId) ?? null;
+    preparedSelections.delete(data.scene);
+    if (preparedImage) {
+      commitSwitchableSelection(data, preparedImage);
+      return selectionForImage(data, preparedImage);
+    }
+  }
+  preparedSelections.delete(data.scene);
+
+  const image = selectVisualBackgroundImage(data);
+  if (!image) {
+    return null;
+  }
+  commitSwitchableSelection(data, image);
+  return selectionForImage(data, image);
+}
+
+export function prepareVisualBackground(data: VisualBackgroundsData): VisualBackgroundSelection | null {
+  const contract = selectionContract(data);
+  const prepared = preparedSelections.get(data.scene);
+  const image = prepared?.contract === contract
+    ? data.list.find((item) => item.id === prepared.imageId) ?? null
+    : selectVisualBackgroundImage(data);
+  if (!image) {
+    preparedSelections.delete(data.scene);
+    return null;
+  }
+  preparedSelections.set(data.scene, { contract, imageId: image.id });
+  return selectionForImage(data, image);
+}
+
+export function clearPreparedVisualBackgrounds() {
+  preparedSelections.clear();
 }
 
 export function visualBackgroundIntervalMs(data: VisualBackgroundsData) {
@@ -85,6 +127,7 @@ export function visualBackgroundIntervalMs(data: VisualBackgroundsData) {
 }
 
 export function dispatchVisualBackgroundChanged(scene: VisualBackgroundScene) {
+  preparedSelections.delete(scene);
   window.dispatchEvent(new CustomEvent(visualBackgroundChangedEvent, { detail: { scene } }));
 }
 

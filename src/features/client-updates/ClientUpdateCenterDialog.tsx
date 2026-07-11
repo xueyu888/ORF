@@ -69,7 +69,7 @@ export function ClientUpdateCenterDialog({ notice, onClose, open }: { notice?: s
     setInstallProgress(null);
     try {
       const installResult = await installClientUpdateAsset(result.decision.asset, { onProgress: setInstallProgress });
-      setInstallMessage(clientUpdateInstallMessage(installResult));
+      setInstallMessage(clientUpdateInstallMessage(installResult, result.runtime.platform));
       if (shouldOpenDownloadUrlAfterInstallResult(installResult)) {
         await openReleasePage(result.decision.asset.downloadUrl);
       }
@@ -125,7 +125,7 @@ export function ClientUpdateCenterDialog({ notice, onClose, open }: { notice?: s
             <>
               <div className="orf-client-update-center-summary" data-status={decision.status}>
                 <strong>{clientUpdateDecisionTitle(decision.status, release.version)}</strong>
-                <span>{clientUpdateDecisionDescription(decision.status)}</span>
+                <span>{clientUpdateDecisionDescription(decision.status, runtime.platform)}</span>
               </div>
               <dl className="orf-client-update-center-facts">
                 <div>
@@ -178,7 +178,7 @@ export function ClientUpdateCenterDialog({ notice, onClose, open }: { notice?: s
               onClick={() => readyResult && void installUpdate(readyResult)}
             >
               <Download className="h-3.5 w-3.5" />
-              {installing ? "正在下载" : canInstall ? "下载并安装" : "无需安装"}
+              {installing ? "正在更新" : canInstall ? "立即更新" : "无需安装"}
             </Button>
           )}
         </footer>
@@ -194,7 +194,9 @@ function clientUpdateDecisionTitle(status: ClientUpdateCheckResult["decision"]["
   return "当前环境不需要客户端安装包";
 }
 
-function clientUpdateDecisionDescription(status: ClientUpdateCheckResult["decision"]["status"]) {
+function clientUpdateDecisionDescription(status: ClientUpdateCheckResult["decision"]["status"], platform: ClientUpdateCheckResult["runtime"]["platform"]) {
+  if (status === "available" && platform === "desktop-windows") return "点击后将自动完成安装并重新打开 ORF。";
+  if (status === "available" && platform === "android") return "点击后下载更新，并进入 Android 系统安装流程。";
   if (status === "available") return "可以在应用内下载并启动安装。";
   if (status === "not_newer") return "后续也可以从这里手动检查新版本。";
   if (status === "no_compatible_asset") return "可以查看发布说明，等待对应平台安装包。";

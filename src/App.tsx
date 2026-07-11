@@ -10,36 +10,37 @@ import developmentRoutes from "./config/developmentRoutes.json";
 import { ChatImagePopoutPage } from "./features/chat/ChatFloatingImagePreview";
 import { DriveFilePreviewPopoutPage } from "./features/drive/DriveFilePreview";
 import { useOrf } from "./state/OrfProvider";
-
-const AuthPage = lazyNamed(() => import("./pages/AuthPage"), "AuthPage");
-const BountyHallPage = lazyNamed(() => import("./pages/BountyHallPage"), "BountyHallPage");
-const ChallengePlanPage = lazyNamed(() => import("./pages/TasksPage"), "ChallengePlanPage");
-const ChatPage = lazyNamed(() => import("./pages/ChatPage"), "ChatPage");
-const DrivePage = lazyNamed(() => import("./pages/DrivePage"), "DrivePage");
-const FeedbackInboxPage = lazyNamed(() => import("./pages/FeedbackInboxPage"), "FeedbackInboxPage");
-const FeedbackCreatePage = lazyNamed(() => import("./pages/FeedbackCreatePage"), "FeedbackCreatePage");
-const FeedbackIssuePage = lazyNamed(() => import("./pages/FeedbackIssuePage"), "FeedbackIssuePage");
-const FeedbackLabelsPage = lazyNamed(() => import("./pages/FeedbackLabelsPage"), "FeedbackLabelsPage");
-const FeedbackMilestonesPage = lazyNamed(() => import("./pages/FeedbackMilestonesPage"), "FeedbackMilestonesPage");
-const LootSubmitPage = lazyNamed(() => import("./pages/LootSubmitPage"), "LootSubmitPage");
-const MembersPage = lazyNamed(() => import("./pages/MembersPage"), "MembersPage");
-const PermissionsPage = lazyNamed(() => import("./pages/PermissionsPage"), "PermissionsPage");
-const PersonalSettingsPage = lazyNamed(() => import("./pages/PersonalSettingsPage"), "PersonalSettingsPage");
-const ReportsPage = lazyNamed(() => import("./pages/ReportsPage"), "ReportsPage");
-const SystemManagementPage = lazyNamed(() => import("./pages/SystemManagementPage"), "SystemManagementPage");
-const SystemSettingsPage = lazyNamed(() => import("./pages/SettingsPage"), "SystemSettingsPage");
-const WorkLogsPage = lazyNamed(() => import("./pages/WorkLogsPage"), "WorkLogsPage");
+import {
+  AuthPage,
+  BountyHallPage,
+  ChallengePlanPage,
+  ChatPage,
+  DrivePage,
+  FeedbackCreatePage,
+  FeedbackInboxPage,
+  FeedbackIssuePage,
+  FeedbackLabelsPage,
+  FeedbackMilestonesPage,
+  LootSubmitPage,
+  MembersPage,
+  PermissionsPage,
+  PersonalSettingsPage,
+  ReportsPage,
+  SystemManagementPage,
+  SystemSettingsPage,
+  WorkLogsPage,
+} from "./routing/routeModules";
 
 // These pages are implementation/design references, not committed production products.
 // Keeping the imports behind Vite's compile-time DEV flag prevents production bundles
 // from publishing either the routes or their page chunks.
 const developmentOnlyPages = import.meta.env.DEV
   ? {
-      AIEvaluationPage: lazyNamed(() => import("./pages/AIEvaluationPage"), "AIEvaluationPage"),
-      DashboardPage: lazyNamed(() => import("./pages/DashboardPage"), "DashboardPage"),
-      FantasyUiPreviewPage: lazyNamed(() => import("./features/fantasy-ui"), "FantasyUiPreviewPage"),
-      GenshinUIKitPreviewPage: lazyNamed(() => import("./features/genshin-ui-kit"), "GenshinUIKitPreviewPage"),
-      StrategyMapPage: lazyNamed(() => import("./pages/StrategyMapPage"), "StrategyMapPage"),
+      AIEvaluationPage: lazyDevelopmentPage(() => import("./pages/AIEvaluationPage"), "AIEvaluationPage"),
+      DashboardPage: lazyDevelopmentPage(() => import("./pages/DashboardPage"), "DashboardPage"),
+      FantasyUiPreviewPage: lazyDevelopmentPage(() => import("./features/fantasy-ui"), "FantasyUiPreviewPage"),
+      GenshinUIKitPreviewPage: lazyDevelopmentPage(() => import("./features/genshin-ui-kit"), "GenshinUIKitPreviewPage"),
+      StrategyMapPage: lazyDevelopmentPage(() => import("./pages/StrategyMapPage"), "StrategyMapPage"),
     }
   : null;
 
@@ -183,21 +184,28 @@ function AuthLoadingScreen() {
   );
 }
 
-function RouteLoadingScreen() {
+function RoutePendingFallback() {
   return (
-    <div className="grid min-h-[40vh] place-items-center" role="status" aria-live="polite">
-      <Loader2 className="h-6 w-6 animate-spin" />
+    <div className="mx-auto grid min-h-[40vh] w-full max-w-6xl content-start gap-4 px-6 py-8" role="status" aria-live="polite">
+      <span className="sr-only">正在准备页面</span>
+      <div className="h-8 w-48 animate-pulse rounded-xl bg-white/10" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="h-28 animate-pulse rounded-2xl bg-white/8" />
+        <div className="h-28 animate-pulse rounded-2xl bg-white/8" />
+        <div className="h-28 animate-pulse rounded-2xl bg-white/8" />
+      </div>
+      <div className="h-64 animate-pulse rounded-2xl bg-white/8" />
     </div>
   );
 }
 
 function LazyRoute({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<RouteLoadingScreen />}>{children}</Suspense>;
+  return <Suspense fallback={<RoutePendingFallback />}>{children}</Suspense>;
 }
 
-function lazyNamed<TComponent extends ComponentType, TKey extends string>(
-  loader: () => Promise<Record<TKey, TComponent>>,
-  exportName: TKey,
+function lazyDevelopmentPage<TExport extends string, TComponent extends ComponentType>(
+  loader: () => Promise<Record<TExport, TComponent>>,
+  exportName: TExport,
 ) {
   return lazy(async () => ({ default: (await loader())[exportName] }));
 }

@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   API_AUTHENTICATION_EXPIRED_EVENT,
@@ -7,7 +7,7 @@ import {
   getWorkLogReminderState,
   snoozeWorkLogReminder as snoozeWorkLogReminderRequest,
 } from "./apiClient";
-import { shouldLoadInitialTaskManagementReadModel } from "./orfDataLoading";
+import { isReportsReadModelPath } from "./orfDataLoading";
 import { loadEmptyOrfStateSnapshot } from "./orfStateSnapshot";
 import { useOrfDataState } from "./orfProviderData";
 import { type AuthResult, useAuthSessionState } from "./orfProviderAuth";
@@ -32,6 +32,9 @@ import { useOrfProviderUserActions } from "./orfProviderUserActions";
 import { enqueueSystemBroadcast } from "../features/notifications/notificationBroadcasts";
 import { publishChatRealtimeConnectionRestored, publishChatRealtimeEvent } from "../features/realtime/chatRealtimeEventBus";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
+import { clearReadModelCache } from "./readModelCache";
+import { clearChatFeedSessionCache } from "../features/chat/chatFeedSessionCache";
+import { clearPreparedVisualBackgrounds } from "../utils/visualBackgrounds";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
 import { requestClientUpdateCheck } from "../features/client-updates/clientUpdateCenterEvents";
 import {
@@ -255,6 +258,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [desktopAttentionToast, setDesktopAttentionToast] = useState<DesktopAttentionToast | null>(null);
   const authenticationExpiryConfirmationRef = useRef<Promise<void> | null>(null);
   const notifiedChatMessageIdsRef = useRef<string[]>([]);
+  const [readModelSessionUserId, setReadModelSessionUserId] = useState<string | null>(null);
   const notify = useCallback((message: string) => {
     if (!toastEnabled) {
       return;
@@ -268,7 +272,16 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const isAuthenticated = currentUser !== null;
   const isApproved = currentUser?.status === "active";
   const isAdmin = currentUser?.role === "admin";
-  const loadTaskManagementData = shouldLoadInitialTaskManagementReadModel(location.pathname);
+
+  useLayoutEffect(() => {
+    if (readModelSessionUserId === authUserId) return;
+    clearReadModelCache();
+    clearChatFeedSessionCache();
+    clearPreparedVisualBackgrounds();
+    setReadModelSessionUserId(authUserId);
+  }, [authUserId, readModelSessionUserId]);
+  const readModelSessionReady = readModelSessionUserId === authUserId;
+  const loadReportsData = isReportsReadModelPath(location.pathname);
   const {
     markAllNotificationsRead,
     markNotificationRead,
@@ -300,6 +313,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     dataReady,
     refreshCurrentUserAccess,
     refreshPermissionRules,
+    refreshReportsData,
     refreshTaskManagementData,
     refreshUsers,
   } = useOrfDataState({
@@ -308,8 +322,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     currentUserRole,
     isApproved,
     isAuthenticated,
-    loadTaskManagementData,
-    pathname: location.pathname,
+    loadReportsData,
     refreshNotifications,
     resetNotificationState,
     setReportsData,
@@ -586,9 +599,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    if (!taskManagementInvalidationKey || !authReady || !isAuthenticated || !isApproved || !loadTaskManagementData) return;
+    if (!taskManagementInvalidationKey || !authReady || !isAuthenticated || !isApproved) return;
     void refreshTaskManagementData().catch(() => undefined);
-  }, [authReady, isApproved, isAuthenticated, loadTaskManagementData, refreshTaskManagementData, taskManagementInvalidationKey]);
+    if (loadReportsData) void refreshReportsData().catch(() => undefined);
+  }, [authReady, isApproved, isAuthenticated, loadReportsData, refreshReportsData, refreshTaskManagementData, taskManagementInvalidationKey]);
 
   useEffect(() => {
     if (!usersInvalidationKey || !authReady || !isAuthenticated || !isApproved || !isAdmin) return;
@@ -735,7 +749,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
 
   return (
     <OrfContext.Provider value={value}>
-      {children}
+      {readModelSessionReady ? children : null}
       <GlobalWorkLogReminderModal
         reminder={workLogReminderState}
         onSnooze={snoozeWorkLogReminder}

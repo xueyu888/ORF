@@ -55,9 +55,11 @@ export function clientUpdatePlatformLabel(platform: ClientUpdatePlatform) {
   return "Web 端";
 }
 
-export function clientUpdateInstallMessage(result: ClientUpdateInstallResult) {
+export function clientUpdateInstallMessage(result: ClientUpdateInstallResult, platform?: ClientUpdatePlatform) {
   if (result.status === "success") {
-    return "安装程序已打开，按系统提示完成覆盖安装。";
+    if (platform === "desktop-windows") return "更新已开始，安装完成后 ORF 会自动重新打开。";
+    if (platform === "android") return "系统安装界面已打开，请继续完成 Android 覆盖安装。";
+    return "更新安装流程已启动。";
   }
   if (result.reason === "install_permission_required") {
     return "已打开安装权限页，允许 ORF 安装未知应用后再点一次更新。";
@@ -83,6 +85,9 @@ export function clientUpdateInstallMessage(result: ClientUpdateInstallResult) {
   if (result.reason === "installer_open_failed") {
     return withClientUpdateErrorDetail("安装包已下载，但启动安装程序失败。", result.data);
   }
+  if (result.reason === "installer_already_running") {
+    return "更新已在进行中。";
+  }
   if (result.reason === "installer_download_failed" || result.reason === "apk_download_failed") {
     return withClientUpdateErrorDetail("安装包下载失败，请稍后重试。", result.data);
   }
@@ -101,8 +106,8 @@ export function clientUpdateInstallProgressMessage(progress: ClientUpdateInstall
   if (progress.stage === "downloading") return "正在下载更新安装包";
   if (progress.stage === "downloaded") return "安装包已下载，正在处理";
   if (progress.stage === "validating") return "正在校验安装包";
-  if (progress.stage === "opening") return "正在打开安装程序";
-  if (progress.stage === "complete") return "安装程序已打开";
+  if (progress.stage === "opening") return "正在启动自动安装";
+  if (progress.stage === "complete") return "正在完成更新";
   return progress.error ? `下载或安装失败：${cleanClientUpdateErrorDetail(progress.error)}` : "下载或安装失败";
 }
 

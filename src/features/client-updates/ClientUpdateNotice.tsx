@@ -99,7 +99,7 @@ export function ClientUpdateNotice() {
     setInstallProgress(null);
     try {
       const result = await installClientUpdateAsset(asset, { onProgress: setInstallProgress });
-      setInstallMessage(clientUpdateInstallMessage(result));
+      setInstallMessage(clientUpdateInstallMessage(result, runtime.platform));
       if (shouldOpenDownloadUrlAfterInstallResult(result)) {
         await openUrl(asset.downloadUrl);
       }
@@ -140,7 +140,7 @@ export function ClientUpdateNotice() {
             </header>
             <div className="orf-client-update-dialog-body">
               <p className="orf-client-update-dialog-summary">
-                当前正在使用 {formatCurrentVersionLabel(decision, runtime)}，新版本已经发布。建议尽快覆盖安装，保持聊天通知、自动更新和客户端体验最新。
+                {clientUpdatePromptSummary(decision, runtime)}
               </p>
               <p className="orf-client-update-dialog-meta">
                 {dateLabel}
@@ -157,7 +157,7 @@ export function ClientUpdateNotice() {
                 onClick={() => void installUpdate()}
               >
                 <Download className="h-3.5 w-3.5" />
-                {installing ? "正在下载" : asset ? "下载并安装" : "打开发布页"}
+                {installing ? "正在更新" : asset ? "立即更新" : "打开发布页"}
               </Button>
               <Button
                 type="button"
@@ -205,7 +205,7 @@ export function ClientUpdateNotice() {
             onClick={() => void installUpdate()}
           >
             <Download className="h-3.5 w-3.5" />
-            {installing ? "正在下载" : asset ? "下载并安装" : "打开发布页"}
+            {installing ? "正在更新" : asset ? "立即更新" : "打开发布页"}
           </Button>
           <Button
             type="button"
@@ -231,6 +231,17 @@ export function ClientUpdateNotice() {
       </section>
     </>
   );
+}
+
+function clientUpdatePromptSummary(decision: ClientUpdateDecision, runtime: ClientUpdateRuntimeInfo) {
+  const currentVersion = formatCurrentVersionLabel(decision, runtime);
+  if (runtime.platform === "desktop-windows") {
+    return `${currentVersion}，新版本已经发布。点击更新后会自动完成安装并重新打开 ORF。`;
+  }
+  if (runtime.platform === "android") {
+    return `${currentVersion}，新版本已经发布。下载完成后将进入 Android 系统安装流程。`;
+  }
+  return `${currentVersion}，新版本已经发布。建议尽快更新，保持客户端体验最新。`;
 }
 
 function readDismissedVersions() {

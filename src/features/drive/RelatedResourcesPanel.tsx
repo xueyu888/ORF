@@ -5,12 +5,18 @@ import { Link } from "react-router-dom";
 import {
   addDriveContextLinkRequest,
   deleteDriveContextLinkRequest,
-  getDriveBootstrap,
   getDriveNodeDetailsRequest,
   searchDriveRequest,
   uploadDriveRequest,
   type ApiUploadProgress,
 } from "../../state/apiClient";
+import {
+  driveContextResourcesSnapshot,
+  invalidateDriveBootstrap,
+  invalidateDriveContextResources,
+  loadDriveBootstrap,
+  loadDriveContextResources,
+} from "../../state/readModelQueries";
 import type { DriveContextType, DriveNode } from "../../types/orf";
 import { driveNodeMetaLabel, formatDriveDateTime } from "./drivePresentation";
 
@@ -43,8 +49,8 @@ export function RelatedResourcesPanel({
 }: RelatedResourcesPanelProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [linkingNodeId, setLinkingNodeId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [nodes, setNodes] = useState<DriveNode[]>([]);
+  const [loading, setLoading] = useState(() => driveContextResourcesSnapshot(contextType, contextId, limit) === undefined);
+  const [nodes, setNodes] = useState<DriveNode[]>(() => driveContextResourcesSnapshot(contextType, contextId, limit)?.nodes ?? []);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<DriveNode[]>([]);
@@ -59,17 +65,19 @@ export function RelatedResourcesPanel({
     notify?.(message);
   }, [notify]);
 
-  const loadResources = useCallback(() => {
+  const loadResources = useCallback((force = false) => {
     let disposed = false;
-    setLoading(true);
+    const cached = driveContextResourcesSnapshot(contextType, contextId, limit);
+    setNodes(cached?.nodes ?? []);
+    setLoading(!cached);
     setErrorMessage(null);
-    searchDriveRequest({ contextId, contextType, limit, status: "active", type: "all" })
+    loadDriveContextResources(contextType, contextId, limit, { force })
       .then((response) => {
         if (!disposed) setNodes(response.nodes);
       })
       .catch((error) => {
         if (disposed) return;
-        setNodes([]);
+        if (!cached) setNodes([]);
         setErrorMessage(error instanceof Error ? error.message : "相关资源加载失败");
       })
       .finally(() => {
@@ -81,7 +89,7 @@ export function RelatedResourcesPanel({
     };
   }, [contextId, contextType, limit]);
 
-  useEffect(() => loadResources(), [loadResources]);
+  useEffect(() => loadResources(false), [loadResources]);
 
   const linkedNodeIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes]);
   const visibleSearchResults = useMemo(
@@ -119,7 +127,7 @@ export function RelatedResourcesPanel({
 
   const resolveUploadParentNodeId = async () => {
     if (rootNodeIdRef.current) return rootNodeIdRef.current;
-    const response = await getDriveBootstrap();
+    const response = await loadDriveBootstrap();
     rootNodeIdRef.current = response.drive.root.id;
     return response.drive.root.id;
   };
@@ -139,9 +147,11 @@ export function RelatedResourcesPanel({
             setUploadTask({ fileName: file.name, percent: progress.percent });
           },
         });
+        invalidateDriveBootstrap();
+        invalidateDriveContextResources(contextType, contextId);
         report("资源已上传并关联");
         setToolsOpen(false);
-        loadResources();
+        loadResources(true);
         onChanged?.();
       } catch (error) {
         const message = error instanceof Error ? error.message : "资源上传失败";
@@ -161,11 +171,12 @@ export function RelatedResourcesPanel({
     setErrorMessage(null);
     try {
       await addDriveContextLinkRequest({ contextId, contextType, nodeId: node.id });
+      invalidateDriveContextResources(contextType, contextId);
       setSearchResults((items) => items.filter((item) => item.id !== node.id));
       setSearchQuery("");
       setToolsOpen(false);
       report("资源已关联");
-      loadResources();
+      loadResources(true);
       onChanged?.();
     } catch (error) {
       const message = error instanceof Error ? error.message : "资源关联失败";
@@ -186,13 +197,15 @@ export function RelatedResourcesPanel({
         (item) => item.contextType === contextType && item.contextId === contextId,
       );
       if (!link) {
-        loadResources();
+        invalidateDriveContextResources(contextType, contextId);
+        loadResources(true);
         report("资源关联已刷新");
         return;
       }
       await deleteDriveContextLinkRequest({ linkId: link.id, nodeId: node.id });
+      invalidateDriveContextResources(contextType, contextId);
       report("资源已取消关联");
-      loadResources();
+      loadResources(true);
       onChanged?.();
     } catch (error) {
       const message = error instanceof Error ? error.message : "取消资源关联失败";

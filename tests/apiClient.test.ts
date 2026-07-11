@@ -17,6 +17,17 @@ import { loadEmptyOrfStateSnapshot } from "../src/state/orfStateSnapshot";
 import type { AuthSession } from "../src/state/apiClient";
 import type { OrfReadModelInvalidation } from "../src/types/realtime";
 import type { OrfState, OrfUser } from "../src/types/orf";
+import {
+  clearReadModelCache,
+  invalidateReadModel,
+  loadReadModel,
+  readModelSnapshot,
+  setReadModelSnapshot,
+} from "../src/state/readModelCache";
+import {
+  chatFeedSessionSnapshots,
+  clearChatFeedSessionCache,
+} from "../src/features/chat/chatFeedSessionCache";
 
 function userPreferences(userId: string, overrides: Partial<UserPreferences> = {}): UserPreferences {
   return {
@@ -209,6 +220,98 @@ test("chat bootstrap and chat users reuse in-flight requests without caching set
 
   await Promise.all([getChatUsers(), getChatUsers()]);
   assert.equal(requests.filter((url) => url === "/api/chat/users").length, 1);
+});
+
+test("read model cache keeps settled projections, deduplicates refreshes and preserves stale data during invalidation", async () => {
+  clearReadModelCache();
+  let calls = 0;
+  const loader = async () => ({ revision: ++calls });
+
+  const [first, second] = await Promise.all([
+    loadReadModel("example", loader),
+    loadReadModel("example", loader),
+  ]);
+  assert.equal(first.revision, 1);
+  assert.equal(second.revision, 1);
+  assert.equal(calls, 1);
+  assert.equal((await loadReadModel("example", loader)).revision, 1);
+
+  invalidateReadModel("example");
+  assert.equal(readModelSnapshot<{ revision: number }>("example")?.revision, 1);
+  assert.equal((await loadReadModel("example", loader)).revision, 2);
+  assert.equal(calls, 2);
+  clearReadModelCache();
+});
+
+test("clearing read model cache prevents an older user request from repopulating the next session", async () => {
+  clearReadModelCache();
+  let resolveRequest!: (value: { owner: string }) => void;
+  const pending = loadReadModel("session-scoped", () => new Promise((resolve) => {
+    resolveRequest = resolve;
+  }));
+
+  clearReadModelCache();
+  resolveRequest({ owner: "previous-user" });
+
+  assert.deepEqual(await pending, { owner: "previous-user" });
+  assert.equal(readModelSnapshot("session-scoped"), undefined);
+});
+
+test("a mutation snapshot cannot be overwritten by an older in-flight read", async () => {
+  clearReadModelCache();
+  let resolveRequest!: (value: { revision: number }) => void;
+  const pending = loadReadModel("mutation-race", () => new Promise((resolve) => {
+    resolveRequest = resolve;
+  }));
+
+  setReadModelSnapshot("mutation-race", { revision: 2 });
+  resolveRequest({ revision: 1 });
+
+  assert.deepEqual(await pending, { revision: 1 });
+  assert.deepEqual(readModelSnapshot("mutation-race"), { revision: 2 });
+  clearReadModelCache();
+});
+
+test("a forced refresh during an in-flight read queues one fresh request", async () => {
+  clearReadModelCache();
+  const resolvers: Array<(value: { revision: number }) => void> = [];
+  let calls = 0;
+  const loader = () => {
+    calls += 1;
+    return new Promise<{ revision: number }>((resolve) => resolvers.push(resolve));
+  };
+
+  const initial = loadReadModel("invalidation-race", loader);
+  const forced = loadReadModel("invalidation-race", loader, { force: true });
+  const duplicateForced = loadReadModel("invalidation-race", loader, { force: true });
+  assert.equal(forced, duplicateForced);
+  assert.equal(calls, 1);
+
+  resolvers[0]({ revision: 1 });
+  await initial;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls, 2);
+  resolvers[1]({ revision: 2 });
+
+  assert.deepEqual(await forced, { revision: 2 });
+  assert.deepEqual(readModelSnapshot("invalidation-race"), { revision: 2 });
+  clearReadModelCache();
+});
+
+test("clearing chat feed cache replaces its maps so late writes cannot cross user sessions", () => {
+  clearChatFeedSessionCache();
+  const previousSession = chatFeedSessionSnapshots();
+  clearChatFeedSessionCache();
+
+  previousSession.set("channel-a", {
+    exhaustedBefore: false,
+    hasLoadedLatest: true,
+    loadingBefore: false,
+    messages: [],
+    window: null,
+  });
+
+  assert.equal(chatFeedSessionSnapshots().size, 0);
 });
 
 test("readModelInvalidationKey can separate presence updates from structural user changes", () => {

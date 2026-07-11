@@ -262,6 +262,8 @@ function SidebarLink({
       aria-label={ariaLabel}
       onClick={handleNavigateIntent}
       onPointerDown={handleNavigateIntent}
+      onPointerEnter={() => onNavigateIntent?.(item.path)}
+      onFocus={() => onNavigateIntent?.(item.path)}
       className={({ isActive }) =>
         [
           "orf-sidebar-link flex items-center transition",

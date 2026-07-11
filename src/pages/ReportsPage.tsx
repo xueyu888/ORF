@@ -5,6 +5,7 @@ import { UserAvatar } from "../components/UserAvatar";
 import { Card, ProgressBar } from "../components/ui";
 import { buildLeaderboardRows, type LeaderboardRankChange, type LeaderboardRow, type ReportsPageData, type TimeRange } from "../domain/reportsLeaderboard";
 import { useOrf } from "../state/OrfProvider";
+import { reportsPageSnapshot } from "../state/readModelQueries";
 
 const timeRangeOptions: { label: string; value: TimeRange }[] = [
   { label: "月度", value: "month" },
@@ -24,7 +25,8 @@ export function ReportsPage() {
   const { reportsData } = useOrf();
   const [timeRange, setTimeRange] = useState<TimeRange>("quarter");
 
-  const rows = useMemo<LeaderboardRow[]>(() => buildLeaderboardRows(reportsData ?? emptyReportsData, timeRange), [reportsData, timeRange]);
+  const reportsProjection = reportsData ?? reportsPageSnapshot() ?? emptyReportsData;
+  const rows = useMemo<LeaderboardRow[]>(() => buildLeaderboardRows(reportsProjection, timeRange), [reportsProjection, timeRange]);
   const summary = useMemo(() => buildReportSummary(rows), [rows]);
   const maxPoints = Math.max(1, ...rows.map((row) => row.points));
 
