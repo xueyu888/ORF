@@ -1,4 +1,5 @@
 import { canApplyForObjectiveChallenge } from "../../../domain/orfLifecycle";
+import { isObjectiveAssignedChallenger, isObjectiveChallenger } from "../../../domain/orfObjectiveParticipants";
 import { resultDetailText } from "../../../domain/orfResultDetails";
 import { hasUncalibratedResultPoints } from "../../../domain/orfSettlement";
 import type { ChallengeApplication, ObjectiveFlowStatus, UncertaintyLevel } from "../../../types/orf";
@@ -99,8 +100,8 @@ export function isCurrentUserRelatedBounty(item: BountyItem, currentUserId: stri
   if (!currentUserId) return false;
   return (
     currentUserApplication(item, currentUserId, { includeDeclined: true }) !== null ||
-    (item.objective.assignedChallengerUserIds ?? []).includes(currentUserId) ||
-    (item.objective.challengerUserIds ?? []).includes(currentUserId)
+    isObjectiveAssignedChallenger(item.objective, currentUserId) ||
+    isObjectiveChallenger(item.objective, currentUserId)
   );
 }
 

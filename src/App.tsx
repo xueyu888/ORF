@@ -6,33 +6,42 @@ import { AppFallbackPage } from "./components/AppFallback";
 import { Button } from "./components/ui";
 import { canShowFrontend, canShowFrontendPath, type FrontendVisibilityKey } from "./config/frontendVisibility";
 import { systemManagementPages } from "./config/navigation";
+import developmentRoutes from "./config/developmentRoutes.json";
 import { ChatImagePopoutPage } from "./features/chat/ChatFloatingImagePreview";
 import { DriveFilePreviewPopoutPage } from "./features/drive/DriveFilePreview";
 import { useOrf } from "./state/OrfProvider";
 
-const AIEvaluationPage = lazyNamed(() => import("./pages/AIEvaluationPage"), "AIEvaluationPage");
 const AuthPage = lazyNamed(() => import("./pages/AuthPage"), "AuthPage");
 const BountyHallPage = lazyNamed(() => import("./pages/BountyHallPage"), "BountyHallPage");
 const ChallengePlanPage = lazyNamed(() => import("./pages/TasksPage"), "ChallengePlanPage");
 const ChatPage = lazyNamed(() => import("./pages/ChatPage"), "ChatPage");
-const DashboardPage = lazyNamed(() => import("./pages/DashboardPage"), "DashboardPage");
 const DrivePage = lazyNamed(() => import("./pages/DrivePage"), "DrivePage");
-const FantasyUiPreviewPage = lazyNamed(() => import("./features/fantasy-ui"), "FantasyUiPreviewPage");
 const FeedbackInboxPage = lazyNamed(() => import("./pages/FeedbackInboxPage"), "FeedbackInboxPage");
 const FeedbackCreatePage = lazyNamed(() => import("./pages/FeedbackCreatePage"), "FeedbackCreatePage");
 const FeedbackIssuePage = lazyNamed(() => import("./pages/FeedbackIssuePage"), "FeedbackIssuePage");
 const FeedbackLabelsPage = lazyNamed(() => import("./pages/FeedbackLabelsPage"), "FeedbackLabelsPage");
 const FeedbackMilestonesPage = lazyNamed(() => import("./pages/FeedbackMilestonesPage"), "FeedbackMilestonesPage");
-const GenshinUIKitPreviewPage = lazyNamed(() => import("./features/genshin-ui-kit"), "GenshinUIKitPreviewPage");
 const LootSubmitPage = lazyNamed(() => import("./pages/LootSubmitPage"), "LootSubmitPage");
 const MembersPage = lazyNamed(() => import("./pages/MembersPage"), "MembersPage");
 const PermissionsPage = lazyNamed(() => import("./pages/PermissionsPage"), "PermissionsPage");
 const PersonalSettingsPage = lazyNamed(() => import("./pages/PersonalSettingsPage"), "PersonalSettingsPage");
 const ReportsPage = lazyNamed(() => import("./pages/ReportsPage"), "ReportsPage");
-const StrategyMapPage = lazyNamed(() => import("./pages/StrategyMapPage"), "StrategyMapPage");
 const SystemManagementPage = lazyNamed(() => import("./pages/SystemManagementPage"), "SystemManagementPage");
 const SystemSettingsPage = lazyNamed(() => import("./pages/SettingsPage"), "SystemSettingsPage");
 const WorkLogsPage = lazyNamed(() => import("./pages/WorkLogsPage"), "WorkLogsPage");
+
+// These pages are implementation/design references, not committed production products.
+// Keeping the imports behind Vite's compile-time DEV flag prevents production bundles
+// from publishing either the routes or their page chunks.
+const developmentOnlyPages = import.meta.env.DEV
+  ? {
+      AIEvaluationPage: lazyNamed(() => import("./pages/AIEvaluationPage"), "AIEvaluationPage"),
+      DashboardPage: lazyNamed(() => import("./pages/DashboardPage"), "DashboardPage"),
+      FantasyUiPreviewPage: lazyNamed(() => import("./features/fantasy-ui"), "FantasyUiPreviewPage"),
+      GenshinUIKitPreviewPage: lazyNamed(() => import("./features/genshin-ui-kit"), "GenshinUIKitPreviewPage"),
+      StrategyMapPage: lazyNamed(() => import("./pages/StrategyMapPage"), "StrategyMapPage"),
+    }
+  : null;
 
 export function App() {
   return (
@@ -40,9 +49,19 @@ export function App() {
       <Route path="auth" element={<AuthRoute />} />
       <Route path="chat/image-popout/:popoutId" element={<ChatImagePopoutPage />} />
       <Route path="drive/file-preview-popout/:popoutId" element={<DriveFilePreviewPopoutPage />} />
-      <Route path="preview/genshin-ui-kit" element={<LazyRoute><GenshinUIKitPreviewPage /></LazyRoute>} />
+      {developmentOnlyPages && (
+        <Route path={relativeRoutePath(developmentRoutes.genshinUiKitPreview)} element={<LazyRoute><developmentOnlyPages.GenshinUIKitPreviewPage /></LazyRoute>} />
+      )}
       <Route element={<RequireAuth />}>
-        <Route path="dashboard" element={<LazyRoute><DashboardPage /></LazyRoute>} />
+        {developmentOnlyPages && (
+          <>
+            <Route path={relativeRoutePath(developmentRoutes.dashboard)} element={<LazyRoute><developmentOnlyPages.DashboardPage /></LazyRoute>} />
+            <Route path={relativeRoutePath(developmentRoutes.fantasyUi)} element={<LazyRoute><developmentOnlyPages.FantasyUiPreviewPage /></LazyRoute>} />
+            <Route path={relativeRoutePath(developmentRoutes.genshinUiKit)} element={<LazyRoute><developmentOnlyPages.GenshinUIKitPreviewPage /></LazyRoute>} />
+            <Route path={relativeRoutePath(developmentRoutes.strategyMap)} element={<LazyRoute><developmentOnlyPages.StrategyMapPage /></LazyRoute>} />
+            <Route path={relativeRoutePath(developmentRoutes.aiEvaluation)} element={<LazyRoute><developmentOnlyPages.AIEvaluationPage /></LazyRoute>} />
+          </>
+        )}
         <Route path="bounties" element={<LazyRoute><BountyHallPage /></LazyRoute>} />
         <Route path="tasks" element={<LazyRoute><ChallengePlanPage /></LazyRoute>} />
         <Route path="work-logs" element={<LazyRoute><WorkLogsPage /></LazyRoute>} />
@@ -54,16 +73,12 @@ export function App() {
         <Route path="chat" element={<LazyRoute><ChatPage /></LazyRoute>} />
         <Route path="chat/system/:systemConversationId" element={<LazyRoute><ChatPage /></LazyRoute>} />
         <Route path="chat/:channelId" element={<LazyRoute><ChatPage /></LazyRoute>} />
-        <Route path="fantasy-ui" element={<LazyRoute><FantasyUiPreviewPage /></LazyRoute>} />
-        <Route path="genshin-ui-kit" element={<LazyRoute><GenshinUIKitPreviewPage /></LazyRoute>} />
         <Route path="feedback" element={<LazyRoute><FeedbackInboxPage /></LazyRoute>} />
         <Route path="feedback/new" element={<LazyRoute><FeedbackCreatePage /></LazyRoute>} />
         <Route path="feedback/labels" element={<LazyRoute><FeedbackLabelsPage /></LazyRoute>} />
         <Route path="feedback/milestones" element={<LazyRoute><FeedbackMilestonesPage /></LazyRoute>} />
         <Route path="feedback/:feedbackId" element={<LazyRoute><FeedbackIssuePage /></LazyRoute>} />
         <Route path="notifications" element={<Navigate to="/chat/system/personalNotifications" replace />} />
-        <Route path="strategy-map" element={<LazyRoute><StrategyMapPage /></LazyRoute>} />
-        <Route path="ai-evaluation" element={<LazyRoute><AIEvaluationPage /></LazyRoute>} />
         <Route path="reports" element={<LazyRoute><ReportsPage /></LazyRoute>} />
         <Route path="members" element={<Navigate to="/system/members" replace />} />
         <Route path="permissions" element={<Navigate to="/system/permissions" replace />} />
@@ -185,6 +200,10 @@ function lazyNamed<TComponent extends ComponentType, TKey extends string>(
   exportName: TKey,
 ) {
   return lazy(async () => ({ default: (await loader())[exportName] }));
+}
+
+function relativeRoutePath(path: string) {
+  return path.replace(/^\//, "");
 }
 
 function ApprovalPendingScreen({ onLogout, status }: { onLogout: () => void; status: string }) {

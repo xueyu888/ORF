@@ -28,6 +28,7 @@ import {
   objectiveFreezeReadinessAfterReestimate,
   shouldRenderObjectiveAsFrozen,
 } from "../../../domain/orfLifecycle";
+import { objectiveChallengerUserIds } from "../../../domain/orfObjectiveParticipants";
 import { uncertaintyLevelOptions } from "../../../domain/orfSettlement";
 import type {
   ObjectiveAlignmentRequest,
@@ -324,7 +325,7 @@ function ObjectivePanel({
   const canCreateAction = !isDraftObjective && handlers.canMutateWorkItems(group.objective.id);
   const metricTemporaryRow = activeTemporaryChild?.kind === "metric" ? activeTemporaryChild : null;
   const actionTemporaryRow = activeTemporaryChild?.kind === "action" ? activeTemporaryChild : null;
-  const challengerUserIdSet = new Set(group.objective.challengerUserIds);
+  const challengerUserIdSet = new Set(objectiveChallengerUserIds(group.objective));
   const assignedChallengers = avatarStackPeople(group.objective.assignedChallengerProfiles, group.objective.assignedChallengers)
     .filter((person) => !person.userId || !challengerUserIdSet.has(person.userId));
   const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");

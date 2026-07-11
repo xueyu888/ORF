@@ -19,7 +19,7 @@
 
 ## 预览入口
 
-- 本地运行后访问 `/fantasy-ui` 查看组件库效果。
+- 仅在 Vite 开发环境中访问 `/fantasy-ui` 或 `/genshin-ui-kit` 查看组件库效果；生产构建不会注册这些参考路由，也不会发布对应页面 chunk。
 - 模块入口：`src/features/fantasy-ui/index.ts`。
 - 组件入口：`src/features/fantasy-ui/FantasyUI.tsx`。
 - Token 入口：`src/features/fantasy-ui/styles/fantasy-theme.css`。

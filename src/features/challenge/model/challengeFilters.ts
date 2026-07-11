@@ -7,6 +7,7 @@ import {
 } from "../../../domain/orfLifecycle";
 import {
   isObjectiveChallenger,
+  objectiveChallengerTargets,
   objectiveHasChallengers,
 } from "../../../domain/orfObjectiveParticipants";
 import type { OrfUser } from "../../../types/orf";
@@ -56,11 +57,9 @@ export function challengeMemberOptions(groups: readonly ObjectiveNode[], users: 
   const membersById = new Map<string, string>();
 
   for (const group of groups) {
-    group.objective.challengerUserIds.forEach((userId, index) => {
-      const trimmedUserId = userId.trim();
-      if (!trimmedUserId || membersById.has(trimmedUserId)) return;
-      membersById.set(trimmedUserId, userNameById.get(trimmedUserId) ?? group.objective.challengers[index]?.trim() ?? trimmedUserId);
-    });
+    for (const target of objectiveChallengerTargets(group.objective, userNameById)) {
+      if (!membersById.has(target.memberUserId)) membersById.set(target.memberUserId, target.member);
+    }
   }
 
   return Array.from(membersById, ([value, label]) => ({ label, value }))

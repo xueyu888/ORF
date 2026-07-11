@@ -16,7 +16,7 @@ services:
       - "${ORY_PUBLIC_EXTERNAL_PORT:-18443}:18443"
       - "${OBJECT_STORAGE_EXTERNAL_PORT:-19443}:19443"
     volumes:
-      - ./dist:/usr/share/nginx/orf/dist:ro
+      - ${ORF_WEB_RELEASE_DIR:-./dist}:/usr/share/nginx/orf/dist:ro
       - ./infra/public-ip/nginx/conf.d:/etc/nginx/conf.d:ro
       - ./infra/public-ip/nginx/snippets:/etc/nginx/snippets:ro
       - ./infra/public-ip/certbot/www:/var/www/certbot:ro

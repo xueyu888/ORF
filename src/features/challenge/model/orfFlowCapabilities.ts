@@ -232,7 +232,7 @@ export function canSubmitObjectiveLoot(
       currentUser &&
       currentUser.role === "member" &&
       canSubmitObjectiveLootByFlow(objective) &&
-      (objective.challengerUserIds ?? []).includes(currentUser.id),
+      isObjectiveChallenger(objective, currentUser.id),
   );
 }
 
@@ -259,7 +259,7 @@ export function canSubmitObjectivePeerReview(
         settlementEvents,
         today,
       }).open &&
-      (objective.challengerUserIds ?? []).includes(currentUser.id),
+      isObjectiveChallenger(objective, currentUser.id),
   );
 }
 

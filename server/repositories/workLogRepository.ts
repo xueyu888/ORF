@@ -23,6 +23,7 @@ import {
   workLogObjectiveSelectionCandidateFlowStatuses,
   workLogObjectiveDefaultFlowStatuses,
 } from "../../src/domain/orfWorkLogs";
+import { isObjectiveChallenger } from "../../src/domain/orfObjectiveParticipants";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { db } from "../db/client";
 import { objectives, teamMembers, users, workLogCategories, workLogEntries } from "../db/schema";
@@ -97,7 +98,7 @@ function escapedWorkLogObjectiveSearchPattern(value: string) {
 }
 
 function isWorkLogObjectiveChallenger(row: { challengerUserIds: string[] }, userId: string) {
-  return row.challengerUserIds.includes(userId);
+  return isObjectiveChallenger(row, userId);
 }
 
 function toWorkLogEntry(row: typeof workLogEntries.$inferSelect): WorkLogEntry {

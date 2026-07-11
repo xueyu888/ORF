@@ -28,7 +28,6 @@ const storageBaseUrl = process.env.OBJECT_STORAGE_ENDPOINT ?? 'http://127.0.0.1:
 const localSettlementBaseUrl = process.env.ORF_LOCAL_SETTLEMENT_SERVICE_URL ?? 'http://127.0.0.1:8799';
 const localSettlementSystemdUnit = process.env.ORF_LOCAL_SETTLEMENT_SYSTEMD_UNIT ?? 'orf-local-private-service.service';
 let databaseToolsPromise;
-let nodeDependenciesInstalled = false;
 
 const appServices = {
   backend: {
@@ -74,7 +73,7 @@ const statusChecks = {
 };
 
 async function main() {
-  if (shouldInstallNodeDependencies(command) && !(await ensureNodeDependencies())) {
+  if (shouldValidateNodeDependencies(command) && !validateNodeDependencies()) {
     return;
   }
 
@@ -148,7 +147,7 @@ function printHelp() {
   console.log(`ORF command line
 
 Usage:
-  orf up              Run npm install, check PostgreSQL, start Ory, MinIO, settlement service, backend, and frontend
+  orf up              Check locked dependencies and runtime services, then start backend and frontend
   orf down            Stop background backend and frontend
   orf restart         Restart background backend and frontend
   orf status          Check PostgreSQL, Ory, MinIO, settlement service, backend, and frontend health
@@ -396,20 +395,41 @@ async function prepareRuntimeDependencies() {
   return true;
 }
 
-async function ensureNodeDependencies() {
-  if (nodeDependenciesInstalled) {
-    return true;
-  }
-
-  console.log('Synchronizing npm dependencies with package.json and package-lock.json...');
-  const code = await runNpmCommand(['install']);
-  if (code !== 0) {
-    console.error('npm install failed; ORF services were not started.');
-    process.exitCode = code;
+function validateNodeDependencies() {
+  const packagePath = resolve(rootDir, 'package.json');
+  const lockPath = resolve(rootDir, 'package-lock.json');
+  if (!existsSync(resolve(rootDir, 'node_modules')) || !existsSync(lockPath)) {
+    console.error('Node dependencies are not installed. Run `npm ci` explicitly before starting ORF.');
+    process.exitCode = 1;
     return false;
   }
 
-  nodeDependenciesInstalled = true;
+  try {
+    const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
+    const projectLock = JSON.parse(readFileSync(lockPath, 'utf8'));
+    const lockedRoot = projectLock.packages?.[''];
+    for (const dependencyType of ['dependencies', 'devDependencies']) {
+      const declared = packageJson[dependencyType] ?? {};
+      if (JSON.stringify(declared) !== JSON.stringify(lockedRoot?.[dependencyType] ?? {})) {
+        throw new Error(`package-lock.json does not match package.json ${dependencyType}`);
+      }
+      for (const dependencyName of Object.keys(declared)) {
+        const lockedVersion = projectLock.packages?.[`node_modules/${dependencyName}`]?.version;
+        const installedPackagePath = resolve(rootDir, 'node_modules', dependencyName, 'package.json');
+        const installedVersion = existsSync(installedPackagePath)
+          ? JSON.parse(readFileSync(installedPackagePath, 'utf8')).version
+          : undefined;
+        if (!lockedVersion || installedVersion !== lockedVersion) {
+          throw new Error(`${dependencyName} must be ${lockedVersion ?? 'present in package-lock.json'}, found ${installedVersion ?? 'not installed'}`);
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`Node dependency state is invalid (${error?.message ?? String(error)}). Run \`npm ci\` explicitly.`);
+    process.exitCode = 1;
+    return false;
+  }
+
   return true;
 }
 
@@ -428,7 +448,7 @@ function shouldSyncRequiredEnvDefaults(commandName) {
   return new Set(['up', 'start', 'restart', 'dev', 'server', 'backend']).has(commandName);
 }
 
-function shouldInstallNodeDependencies(commandName) {
+function shouldValidateNodeDependencies(commandName) {
   return new Set([
     'up',
     'start',

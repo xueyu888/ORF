@@ -7,7 +7,6 @@ import type {
   ChatMessageSystemMetadata,
   ChatSystemKind,
   CommentTargetType,
-  ContributionAllocation,
   LootResultClaim,
   NotificationKind,
   NotificationStream,
@@ -277,7 +276,7 @@ export const objectives = pgTable("objectives", {
   whyItMatters: text("why_it_matters").notNull(),
   projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
   cycle: text("cycle").notNull(),
-  stage: text("stage").$type<OrfStage>().notNull().default("orfReestimate"),
+  stage: text("stage").$type<OrfStage>().notNull().default("goalSetting"),
   flowStatus: text("flow_status").$type<ObjectiveFlowStatus>().notNull().default("candidate"),
   status: workStatusEnum("status").notNull(),
   confidence: integer("confidence").notNull(),
@@ -428,20 +427,6 @@ export const objectiveSettlementEvents = pgTable(
     teamCreatedAt: index("objective_settlement_events_team_created_at_idx").on(table.teamId, table.createdAt),
   }),
 );
-
-export const objectiveContributionReviews = pgTable("objective_contribution_reviews", {
-  id: text("id").primaryKey(),
-  teamId: text("team_id")
-    .notNull()
-    .references(() => teams.id, { onDelete: "cascade" }),
-  objectiveId: text("objective_id")
-    .notNull()
-    .references(() => objectives.id, { onDelete: "cascade" }),
-  reviewer: text("reviewer").notNull(),
-  reviewerUserId: uuid("reviewer_user_id").notNull().references(() => users.id),
-  allocations: jsonb("allocations").$type<ContributionAllocation[]>().notNull().default([]),
-  submittedAt: timestamp("submitted_at", { mode: "string", withTimezone: true }).notNull(),
-});
 
 export const pointLedger = pgTable("point_ledger", {
   id: text("id").primaryKey(),

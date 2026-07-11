@@ -13,7 +13,7 @@ import type {
 } from "../../types/orf";
 import {
   validateContributionAllocationInput,
-} from "../orfContributionReview";
+} from "../orfContributionAllocation";
 import {
   objectiveChallengerTargets,
   type ContributionMemberTarget,

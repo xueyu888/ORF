@@ -11,7 +11,7 @@ import { getUserPreferences, saveUserPreferences } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
 import { resolveObjectiveDeadlineEditState, type ObjectiveDeadlineEditState } from "../../domain/orfDeadline";
 import { isObjectiveChallenger } from "../../domain/orfObjectiveParticipants";
-import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
+import { objectiveLifecycleInitialState, objectiveStageForFlowStatus } from "../../domain/orfLifecycle";
 import type { ResultDetailsInput } from "../../domain/orfResultDetails";
 import { fetchMyLocalSettlementReview, type LocalSettlementReview } from "../../services/localSettlementClient";
 import type { Objective, ObjectiveSettlementEvent, OrfProject, OrfState, Result, UncertaintyLevel } from "../../types/orf";
@@ -151,7 +151,7 @@ function draftObjective(title: string, project: ObjectiveCreationProject): Objec
     whyItMatters: "",
     projectId: project.projectId,
     cycle: defaultCycleLabel(),
-    stage: "goalSetting",
+    stage: objectiveStageForFlowStatus(objectiveLifecycleInitialState.flowStatus),
     flowStatus: objectiveLifecycleInitialState.flowStatus,
     status: "Draft",
     confidence: 50,

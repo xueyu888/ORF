@@ -1,5 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import { objectiveParticipantSnapshot } from "../../src/domain/orfObjectiveParticipants";
+import { objectiveStageForFlowStatus } from "../../src/domain/orfLifecycle";
 import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../../src/domain/orfSettlement";
 import { userDisplayProfileFromUser } from "../../src/domain/userDisplayProfile";
 import type { Objective, ObjectiveAcceptanceReview, ObjectiveParticipantProfile, ObjectiveSettlementEvent, OrfUserDisplayProfile, PointLedgerEntry, Result, Task } from "../../src/types/orf";
@@ -137,14 +138,12 @@ export function mapObjectiveRows(input: {
     const objectiveResults = input.resultsByObjective.get(objective.id) ?? [];
     const participants = objectiveParticipantSnapshot({
       challengerUserIds: objective.challengerUserIds,
-      challengers: objective.challengers,
       assignedChallengerUserIds: objective.assignedChallengerUserIds,
-      assignedChallengers: objective.assignedChallengers,
       userNameById: input.userNameById,
     });
     const challengeApplications = (objective.challengeApplications ?? []).map((application) => ({
       ...application,
-      applicant: nameForUserId(input.userNameById, application.applicantUserId, application.applicant),
+      applicant: nameForUserId(input.userNameById, application.applicantUserId, "未知成员"),
       applicantUserId: application.applicantUserId,
     }));
     const profileFor = (name: string, userId?: string | null): ObjectiveParticipantProfile => {
@@ -163,7 +162,7 @@ export function mapObjectiveRows(input: {
       whyItMatters: objective.whyItMatters,
       projectId: objective.projectId,
       cycle: objective.cycle,
-      stage: objective.stage,
+      stage: objectiveStageForFlowStatus(objective.flowStatus),
       flowStatus: objective.flowStatus,
       status: objective.status,
       confidence: objective.confidence,

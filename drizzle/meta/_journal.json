@@ -561,6 +561,34 @@
       "when": 1783728776647,
       "tag": "0079_explicit_team_permission_initialization",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1783732310715,
+      "tag": "0080_remove_obsolete_objective_contribution_reviews",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1783732310718,
+      "tag": "0081_objective_lifecycle_participant_invariants",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1783732617778,
+      "tag": "0082_candidate_stage_projection",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1783732731517,
+      "tag": "0083_candidate_stage_default",
+      "breakpoints": true
     }
   ]
 }

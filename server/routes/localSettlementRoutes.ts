@@ -13,7 +13,7 @@ import {
 import { runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 import { canSubmitObjectiveContributionReviewByFlow } from "../../src/domain/orfLifecycle";
 import { calibratedResultPoints, objectiveSettlementReviewWindow } from "../../src/domain/orfSettlement";
-import { isObjectiveChallenger, objectiveParticipantSnapshot } from "../../src/domain/orfObjectiveParticipants";
+import { isObjectiveChallenger, objectiveChallengerTargets, objectiveChallengerUserIds } from "../../src/domain/orfObjectiveParticipants";
 import type { ContributionReviewDraftMetricRow, ContributionReviewMetricRow } from "../../src/types/orf";
 import { localDateString } from "../../src/utils/date";
 import { getUserMapsForStorageScope } from "../readModels/orfReadModelMappers";
@@ -103,29 +103,18 @@ async function settlementObjectiveInScope(objectiveId: string, scope: RuntimeSco
 
 async function contributionChallengerTargets(objective: SettlementObjective, participantUserIds?: string[]) {
   const { userNameById } = await getUserMapsForStorageScope(objective.teamId);
-  const snapshot = objectiveParticipantSnapshot({
-    challengerUserIds: objective.challengerUserIds,
-    userNameById,
-  });
-
-  const targets = snapshot.challengers.map((member, index) => ({
-    member,
-    memberUserId: snapshot.challengerUserIds[index]!,
-  })).filter((target) => target.memberUserId);
+  const targets = objectiveChallengerTargets(objective, userNameById);
 
   if (!participantUserIds) return targets;
 
   const requestedIds = Array.from(new Set(participantUserIds.map((value) => value.trim()).filter(Boolean)));
-  const objectiveUserIdSet = new Set(snapshot.challengerUserIds);
+  const objectiveUserIdSet = new Set(objectiveChallengerUserIds(objective));
   if (requestedIds.length === 0 || requestedIds.some((userId) => !objectiveUserIdSet.has(userId))) {
     return null;
   }
 
-  const requestedTargets = requestedIds.map((userId) => ({
-    member: userNameById.get(userId) ?? snapshot.challengers[snapshot.challengerUserIds.indexOf(userId)] ?? "",
-    memberUserId: userId,
-  }));
-  return requestedTargets.every((target) => target.member.trim()) ? requestedTargets : null;
+  const targetByUserId = new Map(targets.map((target) => [target.memberUserId, target]));
+  return requestedIds.map((userId) => targetByUserId.get(userId)).filter((target): target is ContributionTarget => Boolean(target));
 }
 
 async function objectiveSettlementEventsForObjective(objectiveId: string) {

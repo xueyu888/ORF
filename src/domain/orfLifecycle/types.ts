@@ -1,4 +1,4 @@
-import type { Objective, ObjectiveFlowStatus, OrfStage } from "../../types/orf";
+import type { Objective, ObjectiveFlowStatus } from "../../types/orf";
 
 export type ObjectiveLifecycleTarget = Pick<Objective, "flowStatus"> | ObjectiveFlowStatus | null | undefined;
 
@@ -18,7 +18,6 @@ export type ObjectiveFlowPolicy = {
   readonly label: string;
   readonly phase: ObjectiveLifecyclePhase;
   readonly tone: ObjectiveLifecycleTone;
-  readonly compatibleStages: readonly OrfStage[];
   readonly challengeSortRank: number;
   readonly assignedChallengeSortRank?: number;
   readonly canPublish: boolean;

@@ -656,19 +656,6 @@ export interface ContributionReviewMetricScore {
   weightRatio: number;
 }
 
-export interface ObjectiveContributionReview {
-  id: string;
-  objectiveId: string;
-  reviewer: string;
-  reviewerUserId: string;
-  allocations: ContributionAllocation[];
-  abstentionReason?: string | null;
-  kind?: "score" | "abstain";
-  metricRows?: ContributionReviewMetricRow[];
-  metricScores?: ContributionReviewMetricScore[];
-  submittedAt: string;
-}
-
 export interface Result {
   id: string;
   objectiveId: string;

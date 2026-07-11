@@ -108,7 +108,11 @@ orf status
 | Backend | 请求 `http://127.0.0.1:8787/health`。 |
 | Frontend | 通过 Vite 代理请求 `http://127.0.0.1:5173/health`。 |
 
-`orf up` 会在启动应用前先执行 `npm install` 同步 Node 依赖，再执行同一组依赖检查。PostgreSQL 缺配置或不可连接时直接失败；当 `ORY_PUBLIC_URL` / `OBJECT_STORAGE_ENDPOINT` 指向本地地址时，Ory 和 MinIO 不健康会先运行对应的本地启动脚本；当 `ORF_LOCAL_SETTLEMENT_SERVICE_URL` 指向本地地址时，匿名互评服务不健康会先运行 `systemctl --user start orf-local-private-service.service`；指向共享公共地址时，`orf up` 只会检查，不会尝试拉起这些服务。匿名互评服务是启动期可选依赖，不健康时只影响匿名互评草稿、提交、汇总和结算比例读取，不阻塞 Backend / Frontend 启动。
+`orf up` 只校验 `package.json`、`package-lock.json` 与已安装顶层依赖版本一致，不再隐式执行 `npm install`。依赖缺失或漂移时会明确失败，并要求开发者单独运行 `npm ci`，从而把依赖安装与应用启动拆开。随后才执行运行依赖检查：PostgreSQL 缺配置或不可连接时直接失败；当 `ORY_PUBLIC_URL` / `OBJECT_STORAGE_ENDPOINT` 指向本地地址时，Ory 和 MinIO 不健康会先运行对应的本地启动脚本；当 `ORF_LOCAL_SETTLEMENT_SERVICE_URL` 指向本地地址时，匿名互评服务不健康会先运行 `systemctl --user start orf-local-private-service.service`；指向共享公共地址时，`orf up` 只会检查，不会尝试拉起这些服务。匿名互评服务是启动期可选依赖，不健康时只影响匿名互评草稿、提交、汇总和结算比例读取，不阻塞 Backend / Frontend 启动。
+
+生产部署使用 `npm run build:release` 在构建机生成不可变发布包。发布包包含编译后的 `server.mjs`、`migrate.mjs`、前端静态产物、SQL 迁移和产物清单；运行主机的 systemd 只从 `releases/current` 执行 Node 产物，不读取 TypeScript 源码，不需要 `tsx`，也不在启动时访问 npm registry。具体激活和回滚契约见 `deploy/orf-108/README.md`。
+
+生产页面边界以 `src/config/developmentRoutes.json` 为唯一清单：Vite 生产构建据此排除开发参考页及其页面 chunk，公网 Nginx 也在 SPA 回退之前对同一批路径返回 404。开发环境仍可使用这些页面做实现和视觉核对，不能把它们当成生产产品入口。
 
 以后需要打开本地前端页面时，先识别当前是否在 WSL：
 

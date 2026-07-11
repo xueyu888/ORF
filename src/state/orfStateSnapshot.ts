@@ -1,5 +1,6 @@
 import { objectiveParticipantSnapshot, userNameByIdMap } from "../domain/orfObjectiveParticipants";
 import { createDefaultOrfReadModelRules } from "../domain/orfReadModel";
+import { objectiveStageForFlowStatus } from "../domain/orfLifecycle";
 import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
 import { userDisplayProfilesFromUsers } from "../domain/userDisplayProfile";
 import { sortFeedbackIssuesByUpdatedAtDescending } from "../features/feedback/model/feedbackIssueOrdering";
@@ -47,11 +48,10 @@ function inferFlowStatus(
   if (objective.objectiveSettlementPoints != null) return "settled";
   if (objective.acceptedResult) return "accepted";
   if (objective.lootSubmittedAt) return "submitted";
-  if (objective.confirmedAt || objective.stage === "goalFrozen") return "frozen";
+  if (objective.confirmedAt) return "frozen";
   if (challengerUserIds.length) return "reestimating";
   if (assignedChallengerUserIds.length > 0) return "recruiting";
   if (challengeApplications.some((application) => application.status === "pending")) return "applying";
-  if (objective.stage === "resultClaiming") return "open";
   return "candidate";
 }
 
@@ -97,12 +97,12 @@ function normalizeObjective(objective: Objective, results: Result[], tasks: Task
   const challengeApplications = (objective.challengeApplications ?? [])
     .map((application) => ({ ...application, applicantUserId: application.applicantUserId }))
     .filter((application) => application.applicantUserId);
+  const flowStatus = inferFlowStatus(objective, participants.challengerUserIds, participants.assignedChallengerUserIds, challengeApplications);
 
   return {
     ...objective,
     projectId: objective.projectId?.trim() || null,
-    stage: objective.stage ?? "orfReestimate",
-    flowStatus: inferFlowStatus(objective, participants.challengerUserIds, participants.assignedChallengerUserIds, challengeApplications),
+    flowStatus,
     finalDueAt:
       objective.finalDueAt
       || latestDate(tasks.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.dueDate))
@@ -120,6 +120,7 @@ function normalizeObjective(objective: Objective, results: Result[], tasks: Task
     completionMultiplier: objective.completionMultiplier ?? null,
     objectiveBasePoints: objective.objectiveBasePoints ?? objectiveBasePointsForResults(acceptedResults),
     objectiveSettlementPoints: objective.objectiveSettlementPoints ?? null,
+    stage: objectiveStageForFlowStatus(flowStatus),
   };
 }
 

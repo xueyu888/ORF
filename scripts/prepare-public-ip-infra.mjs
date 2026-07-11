@@ -18,6 +18,7 @@ const bootstrapCertDir = path.join(infraDir, "bootstrap-certs");
 const fullchainFile = path.join(bootstrapCertDir, "fullchain.pem");
 const privateKeyFile = path.join(bootstrapCertDir, "privkey.pem");
 const bootstrapIpFile = path.join(bootstrapCertDir, "ip.txt");
+const developmentRoutes = Object.values(JSON.parse(fs.readFileSync(path.join(rootDir, "src", "config", "developmentRoutes.json"), "utf8")));
 
 const composeCertDir = "/etc/letsencrypt";
 const composeBootstrapDir = "/etc/nginx/bootstrap-certs";
@@ -262,6 +263,10 @@ function writeNginxConfig({ backendUpstream, infraUploadMaxBytes, oryPort, publi
       `  client_max_body_size ${uploadMaxBodySize};`,
       "  root /usr/share/nginx/orf/dist;",
       "",
+      `  location ~ ^/(?:${developmentRoutes.map(nginxRegexPath).join("|")})(?:/|$) {`,
+      "    return 404;",
+      "  }",
+      "",
       "  location ~ ^/settings/(?:users|system|user)(?:/|$) {",
       "    return 404;",
       "  }",
@@ -359,6 +364,10 @@ function writeNginxConfig({ backendUpstream, infraUploadMaxBytes, oryPort, publi
       "",
     ].join("\n"),
   );
+}
+
+function nginxRegexPath(routePath) {
+  return routePath.replace(/^\//, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 try {
