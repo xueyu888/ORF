@@ -1,4 +1,4 @@
-import { Flag, Loader2, MessageSquarePlus, Search, Shield } from "lucide-react";
+import { Flag, MessageSquarePlus, Search, Shield } from "lucide-react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
@@ -32,11 +32,13 @@ import { getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import { dispatchPersonalPreferencesChanged, subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
 import type { VisualBackgroundSelection } from "../utils/visualBackgrounds";
+import { preloadProductionRouteExperience, preloadRouteExperience } from "../routing/routePreload";
 
 export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser, dismissSystemBroadcast, state, systemBroadcasts } = useOrf();
+  const currentUserId = currentUser?.id ?? null;
   const [commandOpen, setCommandOpen] = useState(false);
   const [desktopChromeEnabled, setDesktopChromeEnabled] = useState(() => isDesktopShellAvailable());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -44,7 +46,6 @@ export function AppShell() {
   const [displayPreferences, setDisplayPreferences] = useState<UserDisplayPreferences>(defaultUserDisplayPreferences);
   const [clientUpdateCenter, setClientUpdateCenter] = useState<{ notice?: string; open: boolean }>({ open: false });
   const [pendingShellPath, setPendingShellPath] = useState<string | null>(null);
-  const shellRoutePending = pendingShellPath !== null && pendingShellPath !== location.pathname;
   const shellDisplayPath = pendingShellPath ?? location.pathname;
   const isRouteChatPage = location.pathname.startsWith("/chat");
   const isChatPage = isRouteChatPage || pendingShellPath?.startsWith("/chat") === true;
@@ -60,6 +61,17 @@ export function AppShell() {
   useEffect(() => {
     setDesktopChromeEnabled(isDesktopShellAvailable());
   }, []);
+
+  useEffect(() => {
+    if (!currentUserId) return undefined;
+    const preload = () => void preloadProductionRouteExperience();
+    if (typeof window.requestIdleCallback === "function") {
+      const idleRequest = window.requestIdleCallback(preload, { timeout: 2_500 });
+      return () => window.cancelIdleCallback(idleRequest);
+    }
+    const timer = window.setTimeout(preload, 1_000);
+    return () => window.clearTimeout(timer);
+  }, [currentUserId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +118,7 @@ export function AppShell() {
 
   const handleShellNavigationIntent = useCallback((path: string) => {
     setPendingShellPath(path.startsWith("/chat") ? path : null);
+    void preloadRouteExperience(path);
   }, []);
 
   const saveDisplayPreferences = useCallback((nextPreferences: UserDisplayPreferences) => {
@@ -254,14 +267,7 @@ export function AppShell() {
               imageUrl={pageSelection?.url ?? null}
               crop={pageSelection?.crop ?? defaultVisualBackgroundCrop}
             />
-            {shellRoutePending && isChatPage ? (
-              <div className="orf-chat-loading" role="status">
-                <Loader2 className="h-6 w-6 animate-spin" />
-                <span>正在打开聊天中心</span>
-              </div>
-            ) : (
-              <Outlet />
-            )}
+            <Outlet />
           </main>
         </div>
         <CommandMenu open={commandOpen} onClose={() => setCommandOpen(false)} />

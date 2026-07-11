@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Loader2, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
@@ -52,8 +52,6 @@ import {
   archiveChatChannelRequest,
   createChatChannel,
   deleteChatMessageRequest,
-  getChatBootstrap,
-  getChatUsers,
   getFeedbackReferences,
   markChatChannelReadRequest,
   openChatConversation,
@@ -66,6 +64,7 @@ import {
   updateChatChannelRequest,
   updateChatMessageRequest,
 } from "../state/apiClient";
+import { chatBootstrapSnapshot, loadChatBootstrap, loadChatUsers } from "../state/readModelQueries";
 import { useOrf } from "../state/OrfProvider";
 import {
   SYSTEM_CONVERSATION_DEFINITIONS,
@@ -146,11 +145,12 @@ export function ChatPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { appAttentionState, currentUser, notify, readModelInvalidations, refreshChatUnreadSummary, refreshNotifications, state } = useOrf();
-  const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
+  const initialBootstrapRef = useRef<ChatBootstrap | undefined>(chatBootstrapSnapshot());
+  const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(() => initialBootstrapRef.current ?? null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
-  const [channels, setChannels] = useState<ChatChannel[]>([]);
+  const [channels, setChannels] = useState<ChatChannel[]>(() => sortChannels(initialBootstrapRef.current?.channels ?? [], currentUser?.id));
   const [feedbackReferences, setFeedbackReferences] = useState<FeedbackReference[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => initialBootstrapRef.current === undefined);
   const [channelQuery, setChannelQuery] = useState("");
   const [modal, setModal] = useState<"channel" | "conversation" | null>(null);
   const [channelModalProjectId, setChannelModalProjectId] = useState<string | null>(null);
@@ -522,8 +522,8 @@ export function ChatPage() {
     applyMessageEffects(message);
   }, [applyMessageEffects, applyMessageToFeed]);
 
-  const refreshBootstrap = useCallback(async () => {
-    const data = await getChatBootstrap();
+  const refreshBootstrap = useCallback(async (force = false) => {
+    const data = await loadChatBootstrap({ force });
     if (hasChatPresenceProtocolMismatch(data.users)) {
       setBootstrap(null);
       setBootstrapError(chatPresenceProtocolUpgradeMessage);
@@ -537,8 +537,8 @@ export function ChatPage() {
     return data;
   }, [currentUser?.id]);
 
-  const refreshChatUsers = useCallback(async () => {
-    const data = await getChatUsers();
+  const refreshChatUsers = useCallback(async (force = false) => {
+    const data = await loadChatUsers({ force });
     if (hasChatPresenceProtocolMismatch(data.users)) {
       requestClientUpdateCenterOpen({ notice: chatPresenceProtocolUpgradeMessage });
       throw new Error(chatPresenceProtocolUpgradeMessage);
@@ -551,7 +551,7 @@ export function ChatPage() {
     const run = () => {
       presenceRefreshTimerRef.current = null;
       lastPresenceRefreshAtRef.current = Date.now();
-      void refreshChatUsers().catch(() => undefined);
+      void refreshChatUsers(true).catch(() => undefined);
     };
     const elapsed = Date.now() - lastPresenceRefreshAtRef.current;
     if (elapsed >= chatPresenceRefreshThrottleMs) {
@@ -571,7 +571,7 @@ export function ChatPage() {
     if (!bootstrapInvalidationKey || bootstrapInvalidationKey === "|" || loading || bootstrapError) return;
     if (handledBootstrapInvalidationKeyRef.current === bootstrapInvalidationKey) return;
     handledBootstrapInvalidationKeyRef.current = bootstrapInvalidationKey;
-    void refreshBootstrap().catch(() => undefined);
+    void refreshBootstrap(true).catch(() => undefined);
   }, [bootstrapError, bootstrapInvalidationKey, loading, refreshBootstrap]);
 
   useEffect(() => {
@@ -719,15 +719,18 @@ export function ChatPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    const cached = chatBootstrapSnapshot();
+    setLoading(cached === undefined);
     setBootstrapError(null);
-    void refreshBootstrap()
+    void refreshBootstrap(false)
       .catch((error) => {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : "加载聊天失败";
-          setBootstrap(null);
-          setChannels([]);
-          setBootstrapError(message);
+          if (!cached) {
+            setBootstrap(null);
+            setChannels([]);
+            setBootstrapError(message);
+          }
           notify(message);
         }
       })
@@ -740,9 +743,9 @@ export function ChatPage() {
   }, [notify, refreshBootstrap]);
 
   const handleRetryBootstrap = useCallback(() => {
-    setLoading(true);
+    setLoading(chatBootstrapSnapshot() === undefined);
     setBootstrapError(null);
-    void refreshBootstrap()
+    void refreshBootstrap(true)
       .catch((error) => {
         const message = error instanceof Error ? error.message : "加载聊天失败";
         setBootstrap(null);
@@ -803,7 +806,7 @@ export function ChatPage() {
     const now = Date.now();
     if (now - lastConnectionRestoredBootstrapRefreshAtRef.current >= chatConnectionRestoredBootstrapThrottleMs) {
       lastConnectionRestoredBootstrapRefreshAtRef.current = now;
-      void refreshBootstrap();
+      void refreshBootstrap(true).catch(() => undefined);
     }
     syncLatestMessagesIfFollowing();
   }, [refreshBootstrap, syncLatestMessagesIfFollowing]);
@@ -1128,9 +1131,13 @@ export function ChatPage() {
 
   if (loading) {
     return (
-      <div className="orf-chat-loading" role="status">
-        <Loader2 className="h-6 w-6 animate-spin" />
-        <span>正在打开聊天中心</span>
+      <div className="orf-chat-loading" role="status" aria-label="正在准备聊天数据">
+        <div className="orf-chat-loading-skeleton" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+        <span>正在准备聊天数据</span>
       </div>
     );
   }

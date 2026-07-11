@@ -1,8 +1,9 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, useState } from "react";
 import { apiJson, getCurrentUserAccess, type CurrentUserAccessData, type PermissionRulesResponse, type ReportsPageData, type TaskManagementData, type UsersResponse } from "./apiClient";
 import { normalizeState } from "./orfStateSnapshot";
-import { isReportsReadModelPath, reportsPagePath, shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
+import { shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
 import { mergeUserDisplayProfiles, userDisplayProfilesFromUsers } from "../domain/userDisplayProfile";
+import { loadReportsPage, reportsPageSnapshot } from "./readModelQueries";
 import { getDesktopSystemIdleSnapshot, getDesktopWindowState, isDesktopShellAvailable } from "../features/desktop/desktopShellRuntime";
 import { readBrowserDocumentAttentionSnapshot } from "../features/interaction/appAttentionState";
 import { getRealtimeClientId } from "../features/realtime/realtimeClientId";
@@ -49,8 +50,7 @@ interface OrfDataStateOptions {
   currentUserRole: UserRole | null;
   isApproved: boolean;
   isAuthenticated: boolean;
-  loadTaskManagementData: boolean;
-  pathname: string;
+  loadReportsData: boolean;
   refreshNotifications: () => Promise<void>;
   resetNotificationState: () => void;
   setReportsData: Dispatch<SetStateAction<ReportsPageData | null>>;
@@ -133,8 +133,7 @@ export function useOrfDataState({
   currentUserRole,
   isApproved,
   isAuthenticated,
-  loadTaskManagementData,
-  pathname,
+  loadReportsData,
   refreshNotifications,
   resetNotificationState,
   setReportsData,
@@ -143,6 +142,18 @@ export function useOrfDataState({
   const [dataReady, setDataReady] = useState(false);
   const lastOnlineActivitySentAt = useRef(0);
   const lastUserInteractionAt = useRef<string | null>(new Date().toISOString());
+  const loadedReadModelsRef = useRef(new Set<string>());
+  const loadedAdminUsersForRef = useRef<string | null>(null);
+  const loadedIdentityRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (loadedIdentityRef.current === authUserId) return;
+    loadedReadModelsRef.current.clear();
+    loadedAdminUsersForRef.current = null;
+    loadedIdentityRef.current = authUserId;
+    setReportsData(null);
+    setDataReady(false);
+  }, [authUserId, setReportsData]);
 
   const applyTaskManagementData = useCallback(
     (data: TaskManagementData) => {
@@ -172,15 +183,17 @@ export function useOrfDataState({
   }, [applyCurrentUserAccess]);
 
   const refreshTaskManagementData = useCallback(async () => {
-    if (isReportsReadModelPath(pathname)) {
-      const data = await apiJson<ReportsPageData>(reportsPagePath());
-      applyReportsPageData(data);
-    } else {
-      const data = await apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole));
-      applyTaskManagementData(data);
-    }
+    const data = await apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole));
+    applyTaskManagementData(data);
+    loadedReadModelsRef.current.add(`task-management:${currentUserRole ?? "unknown"}`);
     setDataReady(true);
-  }, [applyReportsPageData, applyTaskManagementData, currentUserRole, pathname]);
+  }, [applyTaskManagementData, currentUserRole]);
+
+  const refreshReportsData = useCallback(async () => {
+    const data = await loadReportsPage({ force: true });
+    applyReportsPageData(data);
+    loadedReadModelsRef.current.add("reports");
+  }, [applyReportsPageData]);
 
   const applyPermissionRules = useCallback(
     (data: PermissionRulesResponse) => {
@@ -222,6 +235,8 @@ export function useOrfDataState({
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
+      loadedReadModelsRef.current.clear();
+      loadedAdminUsersForRef.current = null;
       resetNotificationState();
       setReportsData(null);
       setDataReady(false);
@@ -230,75 +245,98 @@ export function useOrfDataState({
 
     let cancelled = false;
     setDataReady(false);
-
-    const markReady = () => {
-      if (!cancelled) {
-        setDataReady(true);
-      }
-    };
-
-    const accessLoad = getCurrentUserAccess()
+    void getCurrentUserAccess()
       .then((data) => {
         if (!cancelled) {
           applyCurrentUserAccess(data);
         }
       })
       .catch(() => undefined);
-
-    if (loadTaskManagementData && isReportsReadModelPath(pathname)) {
-      setReportsData(null);
-    }
-
-    const taskManagementLoad = loadTaskManagementData
-      ? isReportsReadModelPath(pathname)
-        ? apiJson<ReportsPageData>(reportsPagePath())
-          .then((data) => {
-            if (!cancelled) {
-              applyReportsPageData(data);
-            }
-          })
-          .catch(() => undefined)
-        : apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole))
-          .then((data) => {
-            if (!cancelled) {
-              applyTaskManagementData(data);
-            }
-          })
-          .catch(() => undefined)
-      : Promise.resolve();
-
-    void Promise.allSettled([accessLoad, taskManagementLoad]).finally(markReady);
-
     void refreshNotifications().catch(() => undefined);
-
-    if (loadTaskManagementData && shouldFetchAdminCollections(currentUserRole)) {
-      void apiJson<UsersResponse>("/api/users")
-        .then((data) => {
-          if (!cancelled) {
-            applyUsers(data);
-          }
-        })
-        .catch(() => undefined);
-    }
 
     return () => {
       cancelled = true;
     };
   }, [
     applyCurrentUserAccess,
-    applyReportsPageData,
-    applyTaskManagementData,
-    applyUsers,
     authReady,
-    currentUserRole,
+    authUserId,
     isAuthenticated,
     isApproved,
-    loadTaskManagementData,
-    pathname,
     refreshNotifications,
     resetNotificationState,
     setReportsData,
   ]);
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !isApproved) return;
+    const readModelKey = `task-management:${currentUserRole ?? "unknown"}`;
+    if (loadedReadModelsRef.current.has(readModelKey)) {
+      setDataReady(true);
+      return;
+    }
+    let cancelled = false;
+    setDataReady(false);
+    void apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole))
+      .then((data) => {
+        if (!cancelled) applyTaskManagementData(data);
+      })
+      .then(() => {
+        if (!cancelled) loadedReadModelsRef.current.add(readModelKey);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setDataReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    applyTaskManagementData,
+    authReady,
+    currentUserRole,
+    isApproved,
+    isAuthenticated,
+  ]);
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !isApproved || !loadReportsData) return;
+    if (loadedReadModelsRef.current.has("reports")) return;
+    const cached = reportsPageSnapshot();
+    if (cached) {
+      applyReportsPageData(cached);
+      loadedReadModelsRef.current.add("reports");
+    }
+    let cancelled = false;
+    void loadReportsPage()
+      .then((data) => {
+        if (!cancelled) {
+          applyReportsPageData(data);
+          loadedReadModelsRef.current.add("reports");
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [applyReportsPageData, authReady, isApproved, isAuthenticated, loadReportsData]);
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !isApproved || !shouldFetchAdminCollections(currentUserRole) || !authUserId) return;
+    if (loadedAdminUsersForRef.current === authUserId) return;
+    let cancelled = false;
+    void apiJson<UsersResponse>("/api/users")
+      .then((data) => {
+        if (!cancelled) {
+          applyUsers(data);
+          loadedAdminUsersForRef.current = authUserId;
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [applyUsers, authReady, authUserId, currentUserRole, isApproved, isAuthenticated]);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
@@ -374,6 +412,7 @@ export function useOrfDataState({
     dataReady,
     refreshCurrentUserAccess,
     refreshPermissionRules,
+    refreshReportsData,
     refreshTaskManagementData,
     refreshUsers,
   };

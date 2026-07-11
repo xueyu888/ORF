@@ -24,7 +24,8 @@ import { bountyCycleLabel } from "../features/bounty-hall/model/bountyHallSummar
 import type { BountyItem, ChallengeConfirmTarget, DifficultyFilter, HallTab, SortKey } from "../features/bounty-hall/model/bountyHallTypes";
 import { challengePathForTarget, parseChallengeTargetHash } from "../features/challenge/model/challengeLinks";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
-import { getBountyHallData, type BountyHallData } from "../state/apiClient";
+import type { BountyHallData } from "../state/apiClient";
+import { bountyHallSnapshot, loadBountyHall } from "../state/readModelQueries";
 import { useOrf } from "../state/OrfProvider";
 
 export function BountyHallPage() {
@@ -37,8 +38,8 @@ export function BountyHallPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const bountyDataRequestRef = useRef(0);
-  const [bountyData, setBountyData] = useState<BountyHallData | null>(null);
-  const [loadingBounties, setLoadingBounties] = useState(true);
+  const [bountyData, setBountyData] = useState<BountyHallData | null>(() => bountyHallSnapshot() ?? null);
+  const [loadingBounties, setLoadingBounties] = useState(() => bountyHallSnapshot() === undefined);
   const [query, setQuery] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("deadline");
@@ -53,19 +54,17 @@ export function BountyHallPage() {
     return target?.type === "objective" ? target.id : null;
   }, [location.hash]);
 
-  const loadBountyData = useCallback(async () => {
+  const loadBountyData = useCallback(async (force = false) => {
     const requestId = bountyDataRequestRef.current + 1;
     bountyDataRequestRef.current = requestId;
-    setLoadingBounties(true);
+    setLoadingBounties(bountyHallSnapshot() === undefined);
     try {
-      const nextBountyData = await getBountyHallData();
+      const nextBountyData = await loadBountyHall({ force });
       if (bountyDataRequestRef.current === requestId) {
         setBountyData(nextBountyData);
       }
     } catch {
-      if (bountyDataRequestRef.current === requestId) {
-        setBountyData(null);
-      }
+      // Keep the last usable projection visible when a background refresh fails.
     } finally {
       if (bountyDataRequestRef.current === requestId) {
         setLoadingBounties(false);
@@ -74,7 +73,7 @@ export function BountyHallPage() {
   }, []);
 
   useEffect(() => {
-    void loadBountyData();
+    void loadBountyData(false);
   }, [loadBountyData]);
 
   const bountyInvalidationKey = useMemo(
@@ -84,7 +83,7 @@ export function BountyHallPage() {
 
   useEffect(() => {
     if (!bountyInvalidationKey) return;
-    void loadBountyData();
+    void loadBountyData(true);
   }, [bountyInvalidationKey, loadBountyData]);
 
   const recruitmentItems = useMemo(
@@ -156,12 +155,12 @@ export function BountyHallPage() {
 
   const applyChallenge = async (item: BountyItem, reason: string) => {
     if (item.isRecruitment) {
-      await loadBountyData();
+      await loadBountyData(true);
       setConfirmTarget(null);
       return;
     }
     if (!canApplyForObjectiveChallenge(item.objective)) {
-      await loadBountyData();
+      await loadBountyData(true);
       setConfirmTarget(null);
       return;
     }
@@ -171,7 +170,7 @@ export function BountyHallPage() {
     setProcessingBountyId(null);
     if (ok) {
       setActiveTab("related");
-      await loadBountyData();
+      await loadBountyData(true);
       setConfirmTarget(null);
     }
   };
@@ -181,7 +180,7 @@ export function BountyHallPage() {
     const ok = await acceptBountyChallenge(item.objective.id);
     setProcessingBountyId(null);
     if (ok) {
-      await loadBountyData();
+      await loadBountyData(true);
       setConfirmTarget(null);
       navigate("/tasks");
     }

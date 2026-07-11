@@ -14,7 +14,7 @@ currentUser.id in Objective.challengerUserIds
 
 悬赏大厅对所有已通过用户可见，是发布后到结算的公开生命周期看板，不决定工作台归属。目标来自挑战页内候选目标创建、悬赏大厅申请、征召或接受挑战流程；普通成员只有在申请被通过或接受征召后，目标才进入本页。
 
-数据加载边界：Provider 通过 `/api/me/access` 读取当前用户权限；普通成员进入本页时再请求 `/api/my-challenges?scope=mine` 等成员可访问接口，不主动请求 `/api/permissions` 或 `/api/users` 等管理员集合。成员业务读模型只可携带已引用用户的公开 `userProfiles` 展示投影用于头像和显示名，不能携带完整用户管理字段或成员目录。管理员进入业务页时才额外加载成员列表。后端兼容的 `/api/tasks-page` 对普通成员也只返回 scoped `my-challenges` 数据，不返回全量 state。`pendingChallengeApplications` 只是 `/api/my-challenges` 保留的兼容投影，不写回目标、指标、任务或权限状态；当前工作台 UI 不消费该字段，申请、征召和正式参与追踪由悬赏大厅 `GET /api/bounties` 的 `我的相关` 投影承担。
+数据加载边界：Provider 通过 `/api/me/access` 读取当前用户权限，并在登录身份建立后后台预热一次角色对应的任务管理读模型；普通成员只请求 `/api/my-challenges?scope=mine` 等成员可访问接口，不主动请求 `/api/permissions` 或 `/api/users` 等管理员集合。页面切换不重复请求 access 或任务管理读模型，后续只在 `taskManagement` 失效事件或业务 mutation 后刷新。成员业务读模型只可携带已引用用户的公开 `userProfiles` 展示投影用于头像和显示名，不能携带完整用户管理字段或成员目录。管理员登录后才额外加载一次成员列表，并由 users 失效事件刷新。后端兼容的 `/api/tasks-page` 对普通成员也只返回 scoped `my-challenges` 数据，不返回全量 state。`pendingChallengeApplications` 只是 `/api/my-challenges` 保留的兼容投影，不写回目标、指标、任务或权限状态；当前工作台 UI 不消费该字段，申请、征召和正式参与追踪由悬赏大厅 `GET /api/bounties` 的 `我的相关` 投影承担。
 
 ## 页面内容
 

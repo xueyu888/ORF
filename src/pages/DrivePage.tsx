@@ -8,7 +8,6 @@ import {
   deleteDriveContextLinkRequest,
   deleteDriveNodeRequest,
   getDriveNodeDetailsRequest,
-  getDriveBootstrap,
   getDriveChildren,
   getDriveTrashRequest,
   restoreDriveFileVersionRequest,
@@ -18,6 +17,7 @@ import {
   uploadDriveFileVersionRequest,
   type ApiUploadProgress,
 } from "../state/apiClient";
+import { driveBootstrapSnapshot, invalidateDriveBootstrap, loadDriveBootstrap } from "../state/readModelQueries";
 import { useOrf } from "../state/OrfProvider";
 import type { DriveBootstrap } from "../types/orf";
 
@@ -26,8 +26,8 @@ export function DrivePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { nodeId } = useParams<{ nodeId?: string }>();
-  const [bootstrap, setBootstrap] = useState<DriveBootstrap | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [bootstrap, setBootstrap] = useState<DriveBootstrap | null>(() => driveBootstrapSnapshot()?.drive ?? null);
+  const [loading, setLoading] = useState(() => driveBootstrapSnapshot() === undefined);
   const requestIdRef = useRef(0);
   const previewRoute = /^\/resources\/[^/]+\/preview\/?$/.test(location.pathname);
   const contextOptions = useMemo(() => [
@@ -52,26 +52,26 @@ export function DrivePage() {
     navigate(`/resources/${encodeURIComponent(selectedNodeId)}${previewRoute ? "/preview" : ""}`, { replace: false });
   }, [bootstrap?.root.id, location.pathname, navigate, nodeId, previewRoute]);
 
-  const loadDrive = useCallback(async () => {
+  const loadDrive = useCallback(async (force = false) => {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
-    setLoading(true);
+    setLoading(driveBootstrapSnapshot() === undefined);
     try {
-      const response = await getDriveBootstrap();
+      const response = await loadDriveBootstrap({ force });
       if (requestIdRef.current !== requestId) return;
       setBootstrap(response.drive);
     } catch (error) {
       if (requestIdRef.current !== requestId) return;
       const message = error instanceof Error ? error.message : "云盘加载失败";
       notify(message);
-      setBootstrap(null);
+      // Keep the last usable projection visible when a background refresh fails.
     } finally {
       if (requestIdRef.current === requestId) setLoading(false);
     }
   }, [notify]);
 
   useEffect(() => {
-    void loadDrive();
+    void loadDrive(false);
   }, [loadDrive]);
 
   return (
@@ -90,18 +90,22 @@ export function DrivePage() {
           resourceHref={resourceHref}
           onAddContextLink={async (input) => {
             const response = await addDriveContextLinkRequest(input);
+            invalidateDriveBootstrap();
             return response.details;
           }}
           onCreateFolder={async (input) => {
             const response = await createDriveFolderRequest(input);
+            invalidateDriveBootstrap();
             return response.node;
           }}
           onRemoveContextLink={async (input) => {
             const response = await deleteDriveContextLinkRequest(input);
+            invalidateDriveBootstrap();
             return response.details;
           }}
           onDeleteNode={async (nodeId) => {
             await deleteDriveNodeRequest({ nodeId });
+            invalidateDriveBootstrap();
           }}
           onListTrash={async () => {
             const response = await getDriveTrashRequest();
@@ -115,13 +119,15 @@ export function DrivePage() {
             const response = await getDriveNodeDetailsRequest({ nodeId });
             return response.details;
           }}
-          onRefresh={loadDrive}
+          onRefresh={() => loadDrive(true)}
           onRestoreNode={async (nodeId) => {
             const response = await restoreDriveNodeRequest({ nodeId });
+            invalidateDriveBootstrap();
             return response.node;
           }}
           onRestoreVersion={async (input) => {
             const response = await restoreDriveFileVersionRequest(input);
+            invalidateDriveBootstrap();
             return { node: response.node, versions: response.versions };
           }}
           onSearch={async (input) => {
@@ -134,10 +140,12 @@ export function DrivePage() {
               onProgress,
               parentNodeId,
             });
+            invalidateDriveBootstrap();
             return { node: response.node };
           }}
           onUploadVersion={async ({ file, fileId, onProgress }) => {
             const response = await uploadDriveFileVersionRequest({ file, fileId, onProgress });
+            invalidateDriveBootstrap();
             return { node: response.node, versions: response.versions };
           }}
           uploaderOptions={state.users.filter((user) => user.status === "active").map((user) => ({ id: user.id, name: user.name }))}

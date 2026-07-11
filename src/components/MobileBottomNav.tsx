@@ -4,6 +4,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
 import { useOrf } from "../state/OrfProvider";
+import { preloadRouteExperience } from "../routing/routePreload";
 
 const mobileBottomNavLabels = ["悬赏大厅", "我的挑战", "工作日志", "聊天"];
 
@@ -48,6 +49,7 @@ export function MobileBottomNav({ onNavigateIntent }: { onNavigateIntent?: (path
         const handleNavigateIntent = (event: ReactMouseEvent<HTMLAnchorElement> | ReactPointerEvent<HTMLAnchorElement>) => {
           if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
           onNavigateIntent?.(item.path);
+          void preloadRouteExperience(item.path);
         };
         return (
           <NavLink
@@ -56,6 +58,7 @@ export function MobileBottomNav({ onNavigateIntent }: { onNavigateIntent?: (path
             aria-label={ariaLabel}
             onClick={handleNavigateIntent}
             onPointerDown={handleNavigateIntent}
+            onFocus={() => void preloadRouteExperience(item.path)}
             className={({ isActive }) => [
               "orf-mobile-bottom-nav-item",
               isActive ? "is-active" : "",

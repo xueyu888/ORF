@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { getPersonalBackgrounds, getVisualBackgrounds, type VisualBackgroundScene } from "../state/apiClient";
-import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs, type VisualBackgroundSelection } from "../utils/visualBackgrounds";
+import { getVisualBackgrounds, type VisualBackgroundScene, type VisualBackgroundsData } from "../state/apiClient";
+import { loadPersonalBackground, personalBackgroundSnapshot } from "../state/readModelQueries";
+import { pickVisualBackground, prepareVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs, type VisualBackgroundSelection } from "../utils/visualBackgrounds";
 
 type VisualBackgroundLoadState =
   | { status: "loading"; selection: null; url: null; error: null }
@@ -16,12 +17,36 @@ function visualBackgroundError(scene: VisualBackgroundScene, error: unknown) {
   return new Error(`Failed to load ${scene} visual background`);
 }
 
-function loadVisualBackgrounds(scene: VisualBackgroundScene) {
-  return scene === "login_background" ? getVisualBackgrounds(scene) : getPersonalBackgrounds(scene);
+function loadVisualBackgrounds(scene: VisualBackgroundScene, force = false) {
+  return scene === "login_background" ? getVisualBackgrounds(scene) : loadPersonalBackground(scene, { force });
+}
+
+function cachedVisualBackgrounds(scene: VisualBackgroundScene | null) {
+  return scene && scene !== "login_background" ? personalBackgroundSnapshot(scene) : undefined;
+}
+
+function visualBackgroundState(data: VisualBackgroundsData): VisualBackgroundLoadState {
+  const selection = pickVisualBackground(data);
+  return selection
+    ? { status: "ready", selection, url: selection.url, error: null }
+    : { status: "empty", selection: null, url: null, error: null };
+}
+
+function preparedVisualBackgroundState(data: VisualBackgroundsData): VisualBackgroundLoadState {
+  const selection = prepareVisualBackground(data);
+  return selection
+    ? { status: "ready", selection, url: selection.url, error: null }
+    : { status: "empty", selection: null, url: null, error: null };
 }
 
 export function useVisualBackground(scene: VisualBackgroundScene | null) {
-  const [background, setBackground] = useState<VisualBackgroundLoadState>({ status: "loading", selection: null, url: null, error: null });
+  const [background, setBackground] = useState<VisualBackgroundLoadState>(() => {
+    const cached = cachedVisualBackgrounds(scene);
+    if (cached) return preparedVisualBackgroundState(cached);
+    return scene
+      ? { status: "loading", selection: null, url: null, error: null }
+      : { status: "empty", selection: null, url: null, error: null };
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -34,7 +59,7 @@ export function useVisualBackground(scene: VisualBackgroundScene | null) {
       }
     };
 
-    const loadBackground = () => {
+    const loadBackground = (force = false) => {
       if (!scene) {
         clearRotationTimer();
         setBackground({ status: "empty", selection: null, url: null, error: null });
@@ -42,24 +67,28 @@ export function useVisualBackground(scene: VisualBackgroundScene | null) {
       }
 
       clearRotationTimer();
-      setBackground((current) => (current.status === "ready" ? current : { status: "loading", selection: null, url: null, error: null }));
+      const cached = cachedVisualBackgrounds(scene);
+      if (cached && !force) {
+        setBackground(visualBackgroundState(cached));
+      } else if (force) {
+        setBackground((current) => current.status === "ready"
+          ? current
+          : { status: "loading", selection: null, url: null, error: null });
+      } else {
+        setBackground({ status: "loading", selection: null, url: null, error: null });
+      }
 
       const applyBackground = (data: Awaited<ReturnType<typeof getVisualBackgrounds>>) => {
-        const selection = pickVisualBackground(data);
-        if (!selection) {
-          setBackground({ status: "empty", selection: null, url: null, error: null });
-          return;
-        }
-        setBackground({ status: "ready", selection, url: selection.url, error: null });
+        setBackground(visualBackgroundState(data));
       };
 
-      void loadVisualBackgrounds(scene)
+      void loadVisualBackgrounds(scene, force)
         .then((data) => {
           if (cancelled) {
             return;
           }
 
-          applyBackground(data);
+          if (force || data !== cached) applyBackground(data);
 
           const intervalMs = visualBackgroundIntervalMs(data);
           if (intervalMs) {
@@ -75,8 +104,8 @@ export function useVisualBackground(scene: VisualBackgroundScene | null) {
         });
     };
 
-    loadBackground();
-    const unsubscribe = scene ? subscribeVisualBackgroundChanged(scene, loadBackground) : () => undefined;
+    loadBackground(false);
+    const unsubscribe = scene ? subscribeVisualBackgroundChanged(scene, () => loadBackground(true)) : () => undefined;
 
     return () => {
       cancelled = true;

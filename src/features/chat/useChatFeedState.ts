@@ -41,6 +41,7 @@ import {
 import { chatReadReceiptStableMs, selectChatReadThroughCandidate } from "./chatReadObserver";
 import { useChatLatestScrollStickiness } from "./useChatLatestScrollStickiness";
 import type { AppAttentionState } from "../interaction/appAttentionState";
+import { chatFeedSessionPrefetchRequests, chatFeedSessionSnapshots } from "./chatFeedSessionCache";
 
 export type ChatFeedThreadTarget = {
   focusMessageId: string;
@@ -115,7 +116,7 @@ export function useChatFeedState({
   const appAttentionStateRef = useRef(appAttentionState);
   const currentUserIdRef = useRef<string | undefined>(undefined);
   const contextRequestKeyRef = useRef<string | null>(null);
-  const feedCacheRef = useRef(new Map<string, ReturnType<typeof createFeedSnapshot>>());
+  const feedCacheRef = useRef(chatFeedSessionSnapshots());
   const manualUnreadAutoReadSuppressedRef = useRef(false);
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
   const messagesLoadingRef = useRef(false);
@@ -123,7 +124,7 @@ export function useChatFeedState({
   const olderLoadInFlightRef = useRef(false);
   const pendingReadReceiptRef = useRef<{ channelId: string; messageId: string; timer: number } | null>(null);
   const pendingUnreadScrollRef = useRef(false);
-  const prefetchRequestsRef = useRef(new Map<string, Promise<boolean>>());
+  const prefetchRequestsRef = useRef(chatFeedSessionPrefetchRequests());
   const readMarkInFlightRef = useRef<string | null>(null);
   const unreadAnchorRef = useRef<UnreadAnchor | null>(null);
   const activeChannelId = activeChannel?.id ?? null;
@@ -310,7 +311,7 @@ export function useChatFeedState({
   const loadLatestMessages = useCallback(async (behavior: ScrollBehavior = "smooth") => {
     const channelId = activeChannelIdRef.current;
     if (!channelId) return;
-    setMessagesLoading(true);
+    setMessagesLoading(!feedCacheRef.current.has(channelId));
     try {
       const response = await getChatMessages({ channelId, limit: chatMessagePageSize });
       const snapshot = replaceFeedMessages(feedCacheRef.current.get(channelId), response.messages);
@@ -478,8 +479,7 @@ export function useChatFeedState({
     setMessagesLoading(
       shouldOpenMainUnread ||
       !cachedFeed ||
-      Boolean(requestedMessageId && !cachedHasRequestedMessage) ||
-      (!requestedMessageId && !isFreshFeedSnapshot(cachedFeed)),
+      Boolean(requestedMessageId && !cachedHasRequestedMessage),
     );
     if (shouldOpenMainUnread) {
       if (cachedFeed) pendingUnreadScrollRef.current = true;
@@ -532,6 +532,7 @@ export function useChatFeedState({
         void loadLatestMessages("auto");
       } else {
         requestScrollToLatest("auto");
+        void loadLatestMessages("auto");
       }
     } else if (!requestedMessageId) {
       void getChatMessages({ channelId, limit: chatMessagePageSize })
@@ -871,7 +872,7 @@ export function useChatFeedState({
     ? false
     : activeFeedIsState
       ? messagesLoading
-      : !activeFeedSnapshot || !isFreshFeedSnapshot(activeFeedSnapshot);
+      : !activeFeedSnapshot;
   messagesLoadingRef.current = displayedMessagesLoading;
   messagesRef.current = displayedMessages;
 
