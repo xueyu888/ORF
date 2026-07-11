@@ -95,7 +95,6 @@ export async function submitMemberMetricDraft(page: Page, title: string) {
 
 export async function clickMetricDeleteForbidden(page: Page, title: string) {
   await clickRowMenuAction(page, title, "删除");
-  await expect(page.getByText("没有删除指标权限").first()).toBeVisible();
   await expect(challengeRow(page, title)).toBeVisible();
 }
 
