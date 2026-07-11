@@ -1,0 +1,22 @@
+[Unit]
+Description=ORF Backend Production Runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/orf-production/releases/current
+EnvironmentFile=%h/.config/orf/orf.env
+Environment=NODE_ENV=production
+ExecStart=%h/.local/share/orf-production/node server.mjs
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=15
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=orf-backend-production
+LimitNOFILE=65536
+
+[Install]
+WantedBy=default.target

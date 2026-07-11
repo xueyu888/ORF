@@ -24,6 +24,8 @@ test("GitHub ORF chat config ignores removed external chat variables", () => {
   assert.equal(config.GITHUB_SYNC_ENABLED, true);
   assert.equal(config.GITHUB_ISSUES_SYNC_ENABLED, true);
   assert.equal(config.GITHUB_ORF_CHAT_CHANNEL_NAME, "engineering");
+  assert.equal(config.GITHUB_SYNC_STATE_FILE, ".orf/integrations/github-sync-state.json");
+  assert.equal(config.GITHUB_SYNC_STATE_FILE.startsWith(".artifacts/"), false);
   assert.equal(legacyUrlKey in config, false);
   assert.equal(legacyChannelKey in config, false);
 });

@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUserScopeContext } from "../auth/accessPolicy";
 import { subscribeRealtimeEvents } from "../realtime/realtimeEventBus";
+import { registerRealtimeConnectionCloser } from "../realtime/realtimeConnectionRegistry";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import type { RealtimeEvent } from "../../src/types/realtime";
 
@@ -34,7 +35,7 @@ export function registerRealtimeRoutes(app: FastifyInstance) {
     reply.raw.write("retry: 3000\n\n");
 
     const write = (chunk: string) => {
-      if (!reply.raw.destroyed) {
+      if (!reply.raw.destroyed && !reply.raw.writableEnded) {
         reply.raw.write(chunk);
       }
     };
@@ -46,10 +47,21 @@ export function registerRealtimeRoutes(app: FastifyInstance) {
     });
     const heartbeat = setInterval(() => write(`: heartbeat ${Date.now()}\n\n`), HEARTBEAT_MS);
 
+    let cleaned = false;
+    let unregisterConnection = () => false;
     const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
       clearInterval(heartbeat);
       unsubscribe();
+      unregisterConnection();
     };
+    const close = () => {
+      if (!reply.raw.destroyed && !reply.raw.writableEnded) reply.raw.end();
+      cleanup();
+    };
+    unregisterConnection = registerRealtimeConnectionCloser(close);
     request.raw.on("close", cleanup);
+    reply.raw.on("error", cleanup);
   });
 }

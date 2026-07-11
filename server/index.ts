@@ -1,6 +1,7 @@
 import { buildServer } from "./app";
 import { closeDb } from "./db/client";
 import { env } from "./env";
+import { closeRealtimeConnections } from "./realtime/realtimeConnectionRegistry";
 
 let server: Awaited<ReturnType<typeof buildServer>> | null = null;
 let shutdownPromise: Promise<void> | null = null;
@@ -49,6 +50,8 @@ const shutdown = (reason: string) => {
   if (!shutdownPromise) {
     shutdownPromise = (async () => {
       logInfo("ORF backend shutdown started", { reason });
+      const realtimeConnectionsClosed = closeRealtimeConnections();
+      logInfo("ORF realtime connections closed", { realtimeConnectionsClosed, reason });
       await server?.close();
       await closeDb();
       logInfo("ORF backend shutdown completed", { reason });

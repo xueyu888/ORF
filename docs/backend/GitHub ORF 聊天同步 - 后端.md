@@ -37,7 +37,7 @@ GitHub repository activity 进入 ORF 原生聊天频道，不进入外部聊天
 | `GITHUB_SYNC_BRANCH` | 兼容旧配置；当前同步不按分支过滤，任何分支推送都通知。 |
 | `GITHUB_SYNC_INTERVAL_SECONDS` | 轮询间隔，默认 60 秒。 |
 | `GITHUB_SYNC_LOOKBACK` | 每次从 GitHub 拉取的提交数量，默认 20。 |
-| `GITHUB_SYNC_STATE_FILE` | 本地同步状态文件，用于记录已同步的最新提交。 |
+| `GITHUB_SYNC_STATE_FILE` | 本地同步状态文件，用于记录已同步的最新提交；开发默认 `.orf/integrations/github-sync-state.json`，生产必须配置到不可变发布目录之外的持久可写路径。 |
 | `GITHUB_SYNC_GIT_REMOTE` | GitHub API 被限流时使用的 Git remote，默认 `origin`。 |
 | `GITHUB_ISSUES_SYNC_ENABLED` | 是否启用 GitHub open issues 轮询同步。 |
 | `GITHUB_ISSUES_SYNC_INTERVAL_SECONDS` | issues 轮询间隔，默认 300 秒。 |

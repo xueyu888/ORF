@@ -20,7 +20,16 @@ environment_file="${ORF_ENVIRONMENT_FILE:-/mnt/data1/orf/secrets/orf.env}"
 node_bin="${ORF_NODE_BIN:-/opt/orf/node/bin/node}"
 backend_unit="${ORF_BACKEND_SYSTEMD_UNIT:-orf-backend.service}"
 health_url="${ORF_BACKEND_HEALTH_URL:-http://127.0.0.1:8787/health}"
+systemctl_scope="${ORF_SYSTEMCTL_SCOPE:-system}"
 incoming_dir=""
+
+systemctl_command=(systemctl)
+if [[ "$systemctl_scope" == "user" ]]; then
+  systemctl_command+=(--user)
+elif [[ "$systemctl_scope" != "system" ]]; then
+  echo "Unsupported ORF_SYSTEMCTL_SCOPE: $systemctl_scope" >&2
+  exit 2
+fi
 
 cleanup() {
   if [[ -n "$incoming_dir" ]]; then
@@ -109,7 +118,7 @@ next_link="$releases_root/.current-${release_id}"
 ln -s "$release_id" "$next_link"
 mv -Tf "$next_link" "$releases_root/current"
 
-systemctl restart "$backend_unit"
+"${systemctl_command[@]}" restart "$backend_unit"
 
 healthy=false
 for _ in $(seq 1 30); do
@@ -126,13 +135,19 @@ if [[ "$healthy" != true ]]; then
     rollback_link="$releases_root/.rollback-${release_id}"
     ln -s "$previous_target" "$rollback_link"
     mv -Tf "$rollback_link" "$releases_root/current"
-    systemctl restart "$backend_unit"
+    "${systemctl_command[@]}" restart "$backend_unit"
     echo "Application symlink rolled back to $previous_target; database migrations are forward-only and were not reverted." >&2
   else
     rm -f "$releases_root/current"
     echo "No previous application release existed; removed the failed current pointer. Database migrations are forward-only and were not reverted." >&2
   fi
   exit 1
+fi
+
+if [[ -n "$previous_target" ]]; then
+  previous_link="$releases_root/.previous-${release_id}"
+  ln -s "$previous_target" "$previous_link"
+  mv -Tf "$previous_link" "$releases_root/previous"
 fi
 
 echo "Activated ORF release $release_id"

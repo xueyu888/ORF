@@ -112,6 +112,8 @@ orf status
 
 生产部署使用 `npm run build:release` 在构建机生成不可变发布包。发布包包含编译后的 `server.mjs`、`migrate.mjs`、前端静态产物、SQL 迁移和产物清单；运行主机的 systemd 只从 `releases/current` 执行 Node 产物，不读取 TypeScript 源码，不需要 `tsx`，也不在启动时访问 npm registry。具体激活和回滚契约见 `deploy/orf-108/README.md`。
 
+所有运行时写入必须位于不可变发布目录之外。设置和客户端更新资产分别由 `ORF_SETTINGS_DATA_DIR`、`ORF_CLIENT_UPDATE_ASSET_DIR` 指向持久数据目录；GitHub 轮询游标由 `GITHUB_SYNC_STATE_FILE` 指向持久可写文件。当前对外主机的编译运行、user-systemd、日志和回滚契约见 `deploy/current-host/README.md`。
+
 生产页面边界以 `src/config/developmentRoutes.json` 为唯一清单：Vite 生产构建据此排除开发参考页及其页面 chunk，公网 Nginx 也在 SPA 回退之前对同一批路径返回 404。开发环境仍可使用这些页面做实现和视觉核对，不能把它们当成生产产品入口。
 
 以后需要打开本地前端页面时，先识别当前是否在 WSL：

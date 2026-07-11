@@ -101,6 +101,14 @@ async function main() {
   await cp(path.join(rootDir, "drizzle"), path.join(stageDir, "drizzle"), { recursive: true });
   await mkdir(path.join(stageDir, "public", "settings", "system"), { recursive: true });
   await mkdir(path.join(stageDir, "public", "settings", "user"), { recursive: true });
+  const backgroundSourceRoot = path.join(rootDir, "public", "settings", "backgrounds");
+  const backgroundTargetRoot = path.join(stageDir, "public", "settings", "backgrounds");
+  for (const scene of await readdir(backgroundSourceRoot, { withFileTypes: true })) {
+    if (!scene.isDirectory()) continue;
+    const sourceDirectory = path.join(backgroundSourceRoot, scene.name, "default");
+    if (!await pathExists(sourceDirectory)) continue;
+    await cp(sourceDirectory, path.join(backgroundTargetRoot, scene.name, "default"), { recursive: true });
+  }
   await cp(
     path.join(rootDir, "public", "settings", "system", "settings.json.example"),
     path.join(stageDir, "public", "settings", "system", "settings.json.example"),

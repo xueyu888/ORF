@@ -54,7 +54,7 @@ const configSchema = z.object({
   GITHUB_SYNC_BRANCH: z.string().default("*"),
   GITHUB_SYNC_INTERVAL_SECONDS: z.coerce.number().int().positive().default(60),
   GITHUB_SYNC_LOOKBACK: z.coerce.number().int().positive().default(20),
-  GITHUB_SYNC_STATE_FILE: z.string().default(".artifacts/github-sync-state.json"),
+  GITHUB_SYNC_STATE_FILE: z.string().default(".orf/integrations/github-sync-state.json"),
   GITHUB_SYNC_GIT_REMOTE: z.string().trim().min(1).default("origin"),
   GITHUB_SYNC_GIT_CWD: z.string().trim().min(1).optional(),
   GITHUB_ISSUES_SYNC_ENABLED: booleanEnvSchema,
