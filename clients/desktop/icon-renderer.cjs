@@ -1,14 +1,16 @@
 const UNREAD_BADGE_LIMIT = 99;
 
 const palette = {
-  markSky: { r: 84, g: 166, b: 255, a: 255 },
-  markBlue: { r: 47, g: 122, b: 255, a: 255 },
-  markMint: { r: 33, g: 229, b: 194, a: 255 },
+  surfaceShadow: { r: 2, g: 7, b: 22, a: 160 },
+  surfaceTop: { r: 13, g: 28, b: 72, a: 255 },
+  surfaceMiddle: { r: 34, g: 35, b: 111, a: 255 },
+  surfaceBottom: { r: 63, g: 26, b: 120, a: 255 },
+  markSky: { r: 42, g: 214, b: 255, a: 255 },
+  markBlue: { r: 64, g: 111, b: 255, a: 255 },
+  markMint: { r: 35, g: 244, b: 196, a: 255 },
+  markViolet: { r: 139, g: 92, b: 246, a: 255 },
+  markMagenta: { r: 245, g: 84, b: 220, a: 255 },
   markHighlight: { r: 233, g: 251, b: 255, a: 238 },
-  googleBlue: { r: 66, g: 133, b: 244, a: 255 },
-  googleGreen: { r: 52, g: 168, b: 83, a: 255 },
-  googleRed: { r: 234, g: 67, b: 53, a: 255 },
-  googleYellow: { r: 251, g: 188, b: 4, a: 255 },
   gold: { r: 255, g: 201, b: 91, a: 242 },
   shadow: { r: 4, g: 12, b: 24, a: 92 },
   badgeOuter: { r: 255, g: 255, b: 255, a: 245 },
@@ -37,10 +39,15 @@ function createAppIconRgba(width, height = width, options = {}) {
   const size = Math.min(width, height);
   const x = (width - size) / 2;
   const y = (height - size) / 2;
+  drawAppIconSurface(canvas, {
+    centerX: x + size * 0.5,
+    centerY: y + size * 0.5,
+    size: size * 0.88,
+  });
   drawAppMark(canvas, {
     centerX: x + size * 0.5,
     centerY: y + size * 0.5,
-    size,
+    size: size * 0.78,
   });
 
   if (Number.isFinite(options.unreadCount) && options.unreadCount > 0) {
@@ -57,11 +64,61 @@ function createAppIconRgba(width, height = width, options = {}) {
 function createAppIconForegroundRgba(width, height = width) {
   const canvas = createCanvas(width, height);
   const size = Math.min(width, height);
+  drawAppIconSurface(canvas, {
+    centerX: width / 2,
+    centerY: height / 2,
+    size: size * 0.82,
+  });
   drawAppMark(canvas, {
     centerX: width / 2,
     centerY: height / 2,
-    size,
+    size: size * 0.72,
   });
+  return canvas.buffer;
+}
+
+function createTrayIconRgba(width, height = width, options = {}) {
+  const canvas = createCanvas(width, height);
+  const size = Math.min(width, height);
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const state = options.state === "attention" || options.state === "unread" ? options.state : "normal";
+  const pulse = options.pulse === true;
+
+  if (state === "attention") {
+    drawCircleGradient(canvas, centerX, centerY, size * (pulse ? 0.5 : 0.47), [
+      { offset: 0, color: { ...palette.badgeRedDeep, a: pulse ? 210 : 150 } },
+      { offset: 0.72, color: { ...palette.badgeRed, a: pulse ? 238 : 190 } },
+      { offset: 1, color: { ...palette.badgeOuter, a: pulse ? 250 : 170 } },
+    ]);
+  }
+
+  drawAppIconSurface(canvas, {
+    centerX,
+    centerY,
+    size: size * (state === "attention" ? 0.82 : 0.88),
+  });
+  drawAppMark(canvas, {
+    centerX,
+    centerY,
+    size: size * (state === "attention" ? 0.68 : 0.74),
+  });
+
+  if (state === "unread") {
+    drawUnreadDot(canvas, {
+      centerX: centerX + size * 0.29,
+      centerY: centerY - size * 0.29,
+      radius: size * 0.115,
+    });
+  }
+  if (state === "attention") {
+    drawUnreadBadge(canvas, options.unreadCount ?? 1, {
+      centerX: centerX + size * 0.27,
+      centerY: centerY - size * 0.27,
+      radius: size * (pulse ? 0.205 : 0.185),
+    });
+  }
+
   return canvas.buffer;
 }
 
@@ -74,6 +131,23 @@ function createUnreadBadgeRgba(width, height = width, unreadCount = 0) {
     radius: size * 0.42,
   });
   return canvas.buffer;
+}
+
+function drawAppIconSurface(canvas, options) {
+  const size = options.size;
+  const x = options.centerX - size / 2;
+  const y = options.centerY - size / 2;
+  const radius = size * 0.255;
+  drawRoundedRect(canvas, x + size * 0.025, y + size * 0.045, size, size, radius, palette.surfaceShadow);
+  drawRoundedRectGradient(canvas, x, y, size, size, radius, [
+    { offset: 0, color: palette.surfaceTop },
+    { offset: 0.52, color: palette.surfaceMiddle },
+    { offset: 1, color: palette.surfaceBottom },
+  ]);
+  drawCircleGradient(canvas, options.centerX - size * 0.2, options.centerY - size * 0.22, size * 0.32, [
+    { offset: 0, color: { ...palette.markSky, a: 72 } },
+    { offset: 1, color: { ...palette.markSky, a: 0 } },
+  ]);
 }
 
 function drawAppMark(canvas, options) {
@@ -95,16 +169,16 @@ function drawAppMark(canvas, options) {
   ], { clipRoundedRect });
 
   drawRoundedLineGradient(canvas, cx - diagonal, cy + diagonal, cx + diagonal, cy - diagonal, stroke, [
-    { offset: 0, color: palette.googleGreen },
+    { offset: 0, color: palette.markMint },
     { offset: 0.36, color: palette.markMint },
-    { offset: 0.72, color: palette.googleBlue },
+    { offset: 0.72, color: palette.markSky },
     { offset: 1, color: palette.markBlue },
   ], { clipRoundedRect });
   drawRoundedLineGradient(canvas, cx - diagonal * 0.96, cy - diagonal * 0.96, cx + diagonal * 0.96, cy + diagonal * 0.96, stroke, [
-    { offset: 0, color: palette.googleRed },
-    { offset: 0.34, color: palette.googleYellow },
-    { offset: 0.72, color: palette.markSky },
-    { offset: 1, color: palette.googleBlue },
+    { offset: 0, color: palette.markMagenta },
+    { offset: 0.42, color: palette.markViolet },
+    { offset: 0.76, color: palette.markSky },
+    { offset: 1, color: palette.markBlue },
   ], { clipRoundedRect });
 
   drawRoundedLineGradient(canvas, cx - diagonal * 0.48, cy + diagonal * 0.78, cx + diagonal * 0.78, cy - diagonal * 0.48, stroke * 0.27, [
@@ -116,6 +190,14 @@ function drawAppMark(canvas, options) {
     { offset: 0, color: { ...palette.white, a: 230 } },
     { offset: 1, color: { ...palette.gold, a: 0 } },
   ], { clipRoundedRect });
+}
+
+function drawUnreadDot(canvas, options) {
+  drawCircle(canvas, options.centerX, options.centerY, options.radius, palette.badgeOuter);
+  drawCircleGradient(canvas, options.centerX, options.centerY, options.radius * 0.78, [
+    { offset: 0, color: palette.badgeRed },
+    { offset: 1, color: palette.badgeRedDeep },
+  ]);
 }
 
 function drawUnreadBadge(canvas, unreadCount, options) {
@@ -149,6 +231,25 @@ function drawRoundedRect(canvas, x, y, width, height, radius, color) {
     for (let pixelX = startX; pixelX < endX; pixelX += 1) {
       const coverage = roundedRectCoverage(pixelX + 0.5, pixelY + 0.5, rect);
       if (coverage > 0) blendPixel(canvas, pixelX, pixelY, { ...color, a: Math.round(color.a * coverage) });
+    }
+  }
+}
+
+function drawRoundedRectGradient(canvas, x, y, width, height, radius, stops) {
+  const rect = { x, y, width, height, radius };
+  const startX = Math.floor(x);
+  const endX = Math.ceil(x + width);
+  const startY = Math.floor(y);
+  const endY = Math.ceil(y + height);
+  for (let pixelY = startY; pixelY < endY; pixelY += 1) {
+    for (let pixelX = startX; pixelX < endX; pixelX += 1) {
+      const pointX = pixelX + 0.5;
+      const pointY = pixelY + 0.5;
+      const coverage = roundedRectCoverage(pointX, pointY, rect);
+      if (coverage <= 0) continue;
+      const position = clamp01(((pointX - x) / width + (pointY - y) / height) / 2);
+      const color = sampleStops(stops, position);
+      blendPixel(canvas, pixelX, pixelY, { ...color, a: Math.round(color.a * coverage) });
     }
   }
 }
@@ -303,5 +404,6 @@ function clamp01(value) {
 module.exports = {
   createAppIconForegroundRgba,
   createAppIconRgba,
+  createTrayIconRgba,
   createUnreadBadgeRgba,
 };

@@ -298,7 +298,7 @@ test("attention state keeps direct messages as actionable chat unread", () => {
 
   assert.equal(state.count, 3);
   assert.equal(state.badgeCount, 4);
-  assert.equal(state.level, "toast");
+  assert.equal(state.level, "flash");
   assert.equal(state.items.length, 1);
   assert.equal(state.items[0]?.kind, "chat.direct");
 });

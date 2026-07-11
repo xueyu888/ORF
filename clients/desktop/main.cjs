@@ -4,7 +4,7 @@ const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, net, powerMonitor, safeStorage, shell } = require("electron");
 const {
-  createAppIconRgba,
+  createTrayIconRgba,
   createUnreadBadgeRgba,
 } = require("./icon-renderer.cjs");
 
@@ -878,9 +878,35 @@ function updateTrayUnreadState() {
 }
 
 function createTrayIconImage(unreadCount) {
-  const image = createDesktopIconNativeImage(DESKTOP_ICON_BITMAP_SIZE, unreadCount);
+  const image = createNativeImageFromRgba(DESKTOP_ICON_BITMAP_SIZE, createTrayIconRgba(
+    DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
+    DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
+    {
+      state: desktopTrayVisualState(),
+      unreadCount,
+    },
+  ));
   image.setTemplateImage(false);
   return image;
+}
+
+function createTrayAttentionFrameImage(unreadCount, pulse) {
+  const image = createNativeImageFromRgba(DESKTOP_ICON_BITMAP_SIZE, createTrayIconRgba(
+    DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
+    DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
+    {
+      pulse,
+      state: "attention",
+      unreadCount,
+    },
+  ));
+  image.setTemplateImage(false);
+  return image;
+}
+
+function desktopTrayVisualState() {
+  if (shouldFlashTrayAttention()) return "attention";
+  return desktopAttentionBadgeCount() > 0 ? "unread" : "normal";
 }
 
 function updateTrayAttentionFlashState() {
@@ -924,19 +950,10 @@ function applyTrayAttentionFlashFrame() {
     stopTrayAttentionFlash();
     return;
   }
-  tray.setImage(desktopShellState.trayFlashVisible
-    ? createTrayIconImage(desktopAttentionBadgeCount())
-    : createTransparentTrayIconImage());
-}
-
-function createTransparentTrayIconImage() {
-  const physicalSize = DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE;
-  const image = createNativeImageFromRgba(
-    DESKTOP_ICON_BITMAP_SIZE,
-    Buffer.alloc(physicalSize * physicalSize * 4),
-  );
-  image.setTemplateImage(false);
-  return image;
+  tray.setImage(createTrayAttentionFrameImage(
+    desktopAttentionBadgeCount(),
+    !desktopShellState.trayFlashVisible,
+  ));
 }
 
 function createTaskbarUnreadOverlayImage(unreadCount) {
@@ -944,14 +961,6 @@ function createTaskbarUnreadOverlayImage(unreadCount) {
     DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
     DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
     unreadCount,
-  ));
-}
-
-function createDesktopIconNativeImage(logicalSize, unreadCount) {
-  return createNativeImageFromRgba(logicalSize, createAppIconRgba(
-    logicalSize * DESKTOP_ICON_BITMAP_SCALE,
-    logicalSize * DESKTOP_ICON_BITMAP_SCALE,
-    { unreadCount },
   ));
 }
 

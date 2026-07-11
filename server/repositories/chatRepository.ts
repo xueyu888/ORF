@@ -352,12 +352,16 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
         SELECT m.channel_id, count(*)::int AS count
         FROM chat_messages m
         INNER JOIN chat_channel_members cm ON cm.channel_id = m.channel_id AND cm.user_id = $2
+        LEFT JOIN chat_thread_follows f ON f.root_message_id = m.root_message_id AND f.user_id = $2
         WHERE m.channel_id = ANY($1::text[])
           AND m.author_user_id <> $2
           AND m.deleted_at IS NULL
-          AND m.root_message_id IS NULL
           AND (m.body LIKE $3 OR m.body ~* $4)
-          AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+          AND (
+            (m.root_message_id IS NULL AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at))
+            OR
+            (m.root_message_id IS NOT NULL AND (f.last_viewed_at IS NULL OR m.created_at > f.last_viewed_at))
+          )
           AND ${visibleChatMessageSql("m", "$2", "$5", "$6")}
         GROUP BY m.channel_id
       `,
@@ -1151,11 +1155,15 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
         FROM chat_messages m
         INNER JOIN chat_channel_members cm ON cm.channel_id = m.channel_id AND cm.user_id = $2
         INNER JOIN displayable_channels dc ON dc.id = m.channel_id
+        LEFT JOIN chat_thread_follows f ON f.root_message_id = m.root_message_id AND f.user_id = $2
         WHERE m.author_user_id <> $2
           AND m.deleted_at IS NULL
-          AND m.root_message_id IS NULL
           AND (m.body LIKE $3 OR m.body ~* $4)
-          AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+          AND (
+            (m.root_message_id IS NULL AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at))
+            OR
+            (m.root_message_id IS NOT NULL AND (f.last_viewed_at IS NULL OR m.created_at > f.last_viewed_at))
+          )
           AND ${visibleChatMessageSql("m", "$2", "$5", "$6")}
         GROUP BY m.channel_id
       ),

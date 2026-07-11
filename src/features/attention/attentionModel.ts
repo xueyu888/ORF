@@ -223,7 +223,7 @@ function attentionItemsFromActionableChatUnread(summary: ChatUnreadSummary): Att
       createdAt,
       eventId: "chat-direct-unread",
       kind: "chat.direct",
-      level: "toast",
+      level: "flash",
       source: "chat",
       targetPath: "/chat",
       title: "私聊消息未读",
