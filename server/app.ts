@@ -7,6 +7,7 @@ import { databaseUnavailablePayload, isDatabaseUnavailableError } from "./db/err
 import { assertRuntimeDatabaseSchema, databaseSchemaMismatchPayload, isDatabaseSchemaMismatchError } from "./db/schemaGuard";
 import { env } from "./env";
 import { startClientUpdatePushScheduler } from "./clientUpdates/clientUpdatePushScheduler";
+import { startChatMessageDeliveryScheduler } from "./chat/chatMessageDeliveryScheduler";
 import { registerOptionalIntegrations } from "./integrations";
 import { startNotificationDeliveryScheduler } from "./notifications/notificationDeliveryScheduler";
 import { registerSettingsRoutes } from "./routes/settingsRoutes";
@@ -124,11 +125,13 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   registerPermissionRoutes(app);
 
   const stopClientUpdatePushScheduler = startClientUpdatePushScheduler(app.log);
+  const stopChatMessageDeliveryScheduler = startChatMessageDeliveryScheduler(app.log);
   const stopNotificationDeliveryScheduler = startNotificationDeliveryScheduler(app.log);
   const stopReestimateAutoFreezeScheduler = startReestimateAutoFreezeScheduler(app.log);
   const stopWorkLogReminderScheduler = startWorkLogReminderScheduler(app.log);
   app.addHook("onClose", async () => {
     stopClientUpdatePushScheduler();
+    stopChatMessageDeliveryScheduler();
     stopNotificationDeliveryScheduler();
     stopReestimateAutoFreezeScheduler();
     stopWorkLogReminderScheduler();

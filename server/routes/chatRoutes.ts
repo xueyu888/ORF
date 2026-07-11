@@ -330,8 +330,8 @@ export function registerChatRoutes(app: FastifyInstance) {
     const params = channelIdParamsSchema.parse(request.params);
     const body = sendMessageBodySchema.parse(request.body);
     return sendOutcome(reply, await sendChatMessage({ ...body, channelId: params.channelId }, actor, {
-      onSideEffectError: (error, context) => {
-        request.log.warn({ err: error, ...context }, "Chat message side effect failed");
+      onDeliveryError: (error, context) => {
+        request.log.warn({ err: error, ...context }, "Chat message delivery failed and was scheduled for retry");
       },
     }));
   });

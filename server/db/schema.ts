@@ -1087,6 +1087,32 @@ export const chatMessages = pgTable(
   }),
 );
 
+export const chatMessageDeliveries = pgTable(
+  "chat_message_deliveries",
+  {
+    id: text("id").primaryKey(),
+    messageId: text("message_id").notNull().references(() => chatMessages.id, { onDelete: "cascade" }),
+    teamId: text("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+    channelId: text("channel_id").notNull().references(() => chatChannels.id, { onDelete: "cascade" }),
+    recipientUserId: uuid("recipient_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    transport: text("transport").notNull(),
+    status: text("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    nextAttemptAt: timestamp("next_attempt_at", { mode: "string", withTimezone: true }),
+    leaseExpiresAt: timestamp("lease_expires_at", { mode: "string", withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { mode: "string", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    messageRecipientTransport: uniqueIndex("chat_message_deliveries_message_recipient_transport_unique")
+      .on(table.messageId, table.recipientUserId, table.transport),
+    retry: index("chat_message_deliveries_retry_idx")
+      .on(table.status, table.nextAttemptAt, table.leaseExpiresAt, table.createdAt),
+  }),
+);
+
 export const notificationDeliveries = pgTable(
   "notification_deliveries",
   {

@@ -24,6 +24,11 @@ import { addDaysToIsoDate, hasExecutableChatSearch, parseChatSearchQuery } from 
 import { chatNotificationPreviewText } from "../../src/features/chat/chatNativeNotificationModel";
 import { pool } from "../db/client";
 import {
+  enqueueChatMessageDeliveries,
+  flushChatMessageDeliveries,
+  type ChatMessageDeliveryClaim,
+} from "../chat/chatMessageDeliveryOutbox";
+import {
   E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
   normalizedE2eNotificationViewerEmails,
   visibleSystemNotificationMessageSql,
@@ -624,6 +629,8 @@ async function publishPersonalizedMessageRealtimeEvent(input: {
   recipientUserIds: string[];
   rootMessageId?: string | null;
   teamId: string;
+  eventId?: string;
+  eventCreatedAt?: string;
 }) {
   const recipientUserIds = Array.from(new Set(input.recipientUserIds));
   await runBoundedTasks(recipientUserIds, CHAT_REALTIME_RECIPIENT_CONCURRENCY, async (recipientUserId) => {
@@ -635,6 +642,8 @@ async function publishPersonalizedMessageRealtimeEvent(input: {
     ]);
     if (!channel || !message) return;
     publishRealtimeChatEvent(input.teamId, [recipientUserId], {
+      id: input.eventId,
+      createdAt: input.eventCreatedAt,
       eventType: input.eventType,
       channelId: input.channelId,
       actorUserId: input.actorUserId,
@@ -654,14 +663,16 @@ function chatPushRecipientIds(input: { actorUserId: string; channel: ChatChannel
 }
 
 async function sendChatMessagePush(input: {
-  actor: ChatActor;
+  authorName: string;
+  authorUserId: string;
   channel: ChatChannel;
   message: ChatMessage;
   recipientUserIds: string[];
   rootMessageId?: string | null;
+  teamId: string;
 }) {
   const recipientUserIds = chatPushRecipientIds({
-    actorUserId: input.actor.id,
+    actorUserId: input.authorUserId,
     channel: input.channel,
     recipientUserIds: input.recipientUserIds,
   }).filter((userId) => userId !== input.message.system?.actorUserId);
@@ -669,14 +680,14 @@ async function sendChatMessagePush(input: {
 
   const preview = chatNotificationPreviewText(input.message);
   const title = input.message.rootMessageId
-    ? `回复：${input.channel.type === "direct" ? input.actor.name : input.channel.displayName || "聊天"}`
+    ? `回复：${input.channel.type === "direct" ? input.authorName : input.channel.displayName || "聊天"}`
     : input.channel.type === "direct"
-      ? input.actor.name
+      ? input.authorName
       : input.channel.displayName || "聊天";
-  const body = input.channel.type === "direct" ? preview : `${input.actor.name}: ${preview}`;
+  const body = input.channel.type === "direct" ? preview : `${input.authorName}: ${preview}`;
   const targetPath = `/chat/${encodeURIComponent(input.channel.id)}?message=${encodeURIComponent(input.message.id)}`;
 
-  await sendPushToUsers({
+  const delivery = await sendPushToUsers({
     body,
     channelId: chatPushChannelId,
     collapseKey: `chat-${input.channel.id}`,
@@ -689,96 +700,77 @@ async function sendChatMessagePush(input: {
     recipientUserIds,
     tag: input.message.id,
     targetPath,
-    teamId: storageTeamId(input.actor),
+    teamId: input.teamId,
     title,
   });
+  if (delivery.failureCount > 0) {
+    throw new Error(`Push delivery failed for ${delivery.failureCount} device(s).`);
+  }
 }
 
-type ChatMessageSideEffectStage = "recipients" | "realtime" | "push" | "unexpected";
-type ChatMessageSideEffectContext = {
+type ChatMessageDeliveryStage = "realtime" | "push" | "unexpected";
+type ChatMessageDeliveryContext = {
   channelId: string;
   messageId: string;
   rootMessageId: string | null;
-  stage: ChatMessageSideEffectStage;
+  stage: ChatMessageDeliveryStage;
   teamId: string;
 };
-type ChatMessageSideEffectErrorHandler = (error: unknown, context: ChatMessageSideEffectContext) => void;
+type ChatMessageDeliveryErrorHandler = (error: unknown, context: ChatMessageDeliveryContext) => void;
 
-function reportChatMessageSideEffectError(
+function reportChatMessageDeliveryError(
   error: unknown,
-  context: ChatMessageSideEffectContext,
-  onError?: ChatMessageSideEffectErrorHandler,
+  context: ChatMessageDeliveryContext,
+  onError?: ChatMessageDeliveryErrorHandler,
 ) {
   try {
     if (onError) {
       onError(error, context);
       return;
     }
-    console.warn("[chat] message side effect failed", context, error);
+    console.warn("[chat] message delivery failed", context, error);
   } catch {
-    // Side-effect logging must not change the committed message outcome.
+    // Delivery logging must not change the committed message outcome.
   }
 }
 
-async function runChatMessageSideEffect(
-  context: ChatMessageSideEffectContext,
-  operation: () => Promise<void>,
-  onError?: ChatMessageSideEffectErrorHandler,
-) {
-  try {
-    await operation();
-  } catch (error) {
-    reportChatMessageSideEffectError(error, context, onError);
-  }
-}
+export async function deliverChatMessageDelivery(claim: ChatMessageDeliveryClaim) {
+  const recipientActor = await chatActorForRealtimeRecipient(claim.teamId, claim.recipientUserId);
+  if (!recipientActor) return;
+  const [channel, message] = await Promise.all([
+    getVisibleChannel(recipientActor, claim.channelId),
+    getMessageById(recipientActor, claim.messageId),
+  ]);
+  if (!channel || !message || message.deletedAt) return;
 
-async function dispatchChatMessageSideEffects(input: {
-  actor: ChatActor;
-  body: string;
-  channel: ChatChannel;
-  message: ChatMessage;
-  onError?: ChatMessageSideEffectErrorHandler;
-  rootMessageId: string | null;
-  teamId: string;
-}) {
-  const baseContext = {
-    channelId: input.channel.id,
-    messageId: input.message.id,
-    rootMessageId: input.rootMessageId,
-    teamId: input.teamId,
-  };
-  let recipientUserIds: string[];
-  try {
-    recipientUserIds = await getChannelRecipientIds(input.teamId, input.channel.id);
-  } catch (error) {
-    reportChatMessageSideEffectError(error, { ...baseContext, stage: "recipients" }, input.onError);
+  if (claim.transport === "realtime") {
+    await publishPersonalizedMessageRealtimeEvent({
+      eventType: "message.created",
+      teamId: claim.teamId,
+      channelId: claim.channelId,
+      actorUserId: message.authorUserId,
+      messageId: claim.messageId,
+      rootMessageId: message.rootMessageId,
+      recipientUserIds: [claim.recipientUserId],
+      eventId: `chat-message-created-${claim.messageId}`,
+      eventCreatedAt: message.createdAt,
+    });
     return;
   }
 
-  await runChatMessageSideEffect(
-    { ...baseContext, stage: "realtime" },
-    () => publishPersonalizedMessageRealtimeEvent({
-      eventType: "message.created",
-      teamId: input.teamId,
-      channelId: input.channel.id,
-      actorUserId: input.actor.id,
-      messageId: input.message.id,
-      rootMessageId: input.rootMessageId,
-      recipientUserIds,
-    }),
-    input.onError,
-  );
-  await runChatMessageSideEffect(
-    { ...baseContext, stage: "push" },
-    () => sendChatMessagePush({
-      actor: input.actor,
-      channel: input.channel,
-      message: input.message,
-      recipientUserIds,
-      rootMessageId: input.rootMessageId,
-    }),
-    input.onError,
-  );
+  const membership = channel.members.find((member) => member.userId === claim.recipientUserId);
+  if (!membership || membership.muted || claim.recipientUserId === message.authorUserId || claim.recipientUserId === message.system?.actorUserId) {
+    return;
+  }
+  await sendChatMessagePush({
+    authorName: message.authorName,
+    authorUserId: message.authorUserId,
+    channel,
+    message,
+    recipientUserIds: [claim.recipientUserId],
+    rootMessageId: message.rootMessageId,
+    teamId: claim.teamId,
+  });
 }
 
 async function loadAttachments(messageIds: string[]) {
@@ -1934,7 +1926,7 @@ export async function sendChatMessage(
     systemMetadata?: ChatMessageSystemMetadata;
   },
   actor: ChatActor,
-  options: { onSideEffectError?: ChatMessageSideEffectErrorHandler } = {},
+  options: { onDeliveryError?: ChatMessageDeliveryErrorHandler } = {},
 ): Promise<Outcome<{ channel: ChatChannel; message: ChatMessage }>> {
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
   const body = input.body.trim();
@@ -2021,6 +2013,14 @@ export async function sendChatMessage(
       `,
       [rootMessageId ?? messageId, actor.id, now],
     );
+    await enqueueChatMessageDeliveries(client, {
+      authorUserId: actor.id,
+      channelId: input.channelId,
+      createdAt: now,
+      messageId,
+      systemActorUserId: systemMetadata.actorUserId,
+      teamId,
+    });
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
@@ -2032,21 +2032,23 @@ export async function sendChatMessage(
   const message = await getMessageById(actor, messageId);
   const updatedChannel = await getVisibleChannel(actor, input.channelId);
   if (!message || !updatedChannel) return { status: "notFound" };
-  void dispatchChatMessageSideEffects({
-    actor,
-    body,
-    channel: updatedChannel,
-    message,
-    onError: options.onSideEffectError,
-    rootMessageId,
-    teamId,
-  }).catch((error) => reportChatMessageSideEffectError(error, {
+  void flushChatMessageDeliveries({
+    deliver: deliverChatMessageDelivery,
+    messageId,
+    onError: (error, claim) => reportChatMessageDeliveryError(error, {
+      channelId: claim.channelId,
+      messageId: claim.messageId,
+      rootMessageId,
+      stage: claim.transport,
+      teamId: claim.teamId,
+    }, options.onDeliveryError),
+  }).catch((error) => reportChatMessageDeliveryError(error, {
     channelId: updatedChannel.id,
     messageId: message.id,
     rootMessageId,
     stage: "unexpected",
     teamId,
-  }, options.onSideEffectError));
+  }, options.onDeliveryError));
   return ok({ channel: updatedChannel, message });
 }
 

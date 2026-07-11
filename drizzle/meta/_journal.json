@@ -589,6 +589,13 @@
       "when": 1783732731517,
       "tag": "0083_candidate_stage_default",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1783733600000,
+      "tag": "0084_chat_message_delivery_outbox",
+      "breakpoints": true
     }
   ]
 }

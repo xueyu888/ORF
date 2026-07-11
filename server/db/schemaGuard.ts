@@ -539,6 +539,23 @@ export function validateWorkLogReminderStateSchema(snapshot: { columns: RuntimeT
   return errors;
 }
 
+export function validateChatMessageDeliverySchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const columns = new Map(snapshot.columns.map((column) => [column.columnName, column]));
+  const errors: string[] = [];
+  for (const columnName of [
+    "id", "message_id", "team_id", "channel_id", "recipient_user_id", "transport",
+    "status", "attempts", "created_at", "updated_at",
+  ]) {
+    const column = columns.get(columnName);
+    if (!column) errors.push(`chat_message_deliveries.${columnName} is missing.`);
+    else if (column.isNullable !== "NO") errors.push(`chat_message_deliveries.${columnName} must be NOT NULL.`);
+  }
+  for (const columnName of ["last_error", "next_attempt_at", "lease_expires_at", "delivered_at"]) {
+    if (!columns.has(columnName)) errors.push(`chat_message_deliveries.${columnName} is missing.`);
+  }
+  return errors;
+}
+
 export async function assertRuntimeDatabaseSchema() {
   const { pool } = await import("./client");
   const [
@@ -559,6 +576,7 @@ export async function assertRuntimeDatabaseSchema() {
     gitLabOrfChatColumnsResult,
     gitHubOrfChatColumnsResult,
     workLogReminderStateColumnsResult,
+    chatMessageDeliveryColumnsResult,
   ] = await Promise.all([
     pool.query<RuntimeSchemaColumn>(
       `
@@ -750,6 +768,14 @@ export async function assertRuntimeDatabaseSchema() {
           and table_name = 'work_log_reminder_states'
       `,
     ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select table_name as "tableName", column_name as "columnName", is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'chat_message_deliveries'
+      `,
+    ),
   ]);
   const commentTargetTypeResult = await pool.query<{ label: string }>(
     `
@@ -814,6 +840,9 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateWorkLogReminderStateSchema({
       columns: workLogReminderStateColumnsResult.rows,
+    }),
+    ...validateChatMessageDeliverySchema({
+      columns: chatMessageDeliveryColumnsResult.rows,
     }),
   ];
 

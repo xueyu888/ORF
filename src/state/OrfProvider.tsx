@@ -384,6 +384,14 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     const summary = await getChatUnreadSummary();
     setChatUnreadSummary(summary);
   }, []);
+  const lastChatReconciliationAtRef = useRef(0);
+  const reconcileChatDeliveryState = useCallback(() => {
+    const now = Date.now();
+    if (now - lastChatReconciliationAtRef.current < 5_000) return;
+    lastChatReconciliationAtRef.current = now;
+    publishChatRealtimeConnectionRestored();
+    void refreshChatUnreadSummary().catch(() => undefined);
+  }, [refreshChatUnreadSummary]);
   const reserveChatNotification = useCallback((messageId: string) => {
     const messageIds = notifiedChatMessageIdsRef.current;
     if (messageIds.includes(messageId)) return false;
@@ -454,12 +462,29 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     onBroadcast: receiveRealtimeBroadcast,
     onChatEvent: receiveRealtimeChatEvent,
     onClientUpdateAvailable: receiveClientUpdateAvailable,
-    onConnectionRestored: publishChatRealtimeConnectionRestored,
+    onConnectionRestored: reconcileChatDeliveryState,
     onNotification: receiveRealtimeNotification,
     onReadModelInvalidation: receiveReadModelInvalidation,
     onWorkLogReminderRequired: receiveWorkLogReminderRequired,
     onWorkLogReminderResolved: receiveWorkLogReminderResolved,
   });
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !isApproved) return;
+    const handleOnline = () => reconcileChatDeliveryState();
+    const handleFocus = () => reconcileChatDeliveryState();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") reconcileChatDeliveryState();
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [authReady, isApproved, isAuthenticated, reconcileChatDeliveryState]);
 
   useEffect(() => {
     if (!isAuthenticated || !isApproved) {
