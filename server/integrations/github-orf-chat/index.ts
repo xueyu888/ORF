@@ -13,6 +13,12 @@ import {
   ensureOrfChatNamedChannel,
   sendOrfChatMessage,
 } from "../orf-chat-delivery";
+import {
+  formatGitPushChatMessage,
+  newestFirstPushCommits,
+  type GitPushAction,
+  type GitPushCommit,
+} from "../git-push-chat-message";
 
 const execFileAsync = promisify(execFile);
 const gitFieldSeparator = "\x1f";
@@ -93,6 +99,7 @@ const githubPushPayloadSchema = z.object({
       html_url: z.string().url().optional(),
     })
     .optional(),
+  size: z.number().int().nonnegative().optional(),
   commits: z.array(githubCommitSchema).default([]),
   head_commit: githubCommitSchema.nullable().optional(),
 });
@@ -112,6 +119,7 @@ const githubApiCommitSchema = z.object({
   author: z
     .object({
       login: z.string().optional(),
+      html_url: z.string().url().optional(),
     })
     .nullable()
     .optional(),
@@ -318,25 +326,36 @@ function gitHubIssuesSnapshotDeliveryContext(input: {
   };
 }
 
-function firstCommitLine(message: string) {
-  return message.split(/\r?\n/, 1)[0]?.trim() || "No commit message";
-}
-
 function commitAuthor(commit: GitHubPushPayload["commits"][number]) {
   return commit.author?.username || commit.author?.name || commit.author?.email || "unknown";
 }
 
-function commitLine(commit: GitHubPushPayload["commits"][number]) {
-  const sha = shortSha(commit.id);
-  const prefix = commit.url ? `- [\`${sha}\`](${commit.url})` : `- \`${sha}\``;
-  return `${prefix} **${commitAuthor(commit)}**: ${firstCommitLine(commit.message)}`;
+function githubPushAction(payload: GitHubPushPayload): GitPushAction {
+  if (payload.after && /^0+$/.test(payload.after)) return "deleted";
+  if (payload.before && /^0+$/.test(payload.before)) return "created";
+  return "pushed";
 }
 
-function githubApiCommitLine(commit: GitHubApiCommit) {
-  const sha = shortSha(commit.sha);
-  const prefix = commit.html_url ? `- [\`${sha}\`](${commit.html_url})` : `- \`${sha}\``;
-  const author = commit.author?.login || commit.commit.author?.name || "unknown";
-  return `${prefix} **${author}**: ${firstCommitLine(commit.commit.message)}`;
+function githubPushCommit(commit: GitHubPushPayload["commits"][number]): GitPushCommit {
+  const username = commit.author?.username;
+  return {
+    authorName: commitAuthor(commit),
+    authorUrl: username ? `https://github.com/${encodeURIComponent(username)}` : undefined,
+    message: commit.message,
+    sha: commit.id,
+    timestamp: commit.timestamp,
+    url: commit.url,
+  };
+}
+
+function githubApiPushCommit(commit: GitHubApiCommit): GitPushCommit {
+  return {
+    authorName: commit.author?.login || commit.commit.author?.name || "unknown",
+    authorUrl: commit.author?.html_url,
+    message: commit.commit.message,
+    sha: commit.sha,
+    url: commit.html_url,
+  };
 }
 
 function issueAuthor(issue: GitHubIssue) {
@@ -361,31 +380,34 @@ function issueLine(issue: GitHubIssue) {
 }
 
 export function formatGitHubPushMessage(payload: GitHubPushPayload) {
-  const commits = payload.commits.length > 0 ? payload.commits : payload.head_commit ? [payload.head_commit] : [];
-  const commitCount = commits.length;
-  const visibleCommits = commits.slice(0, 8);
-  const repo = payload.repository.html_url ? `[${payload.repository.full_name}](${payload.repository.html_url})` : payload.repository.full_name;
-  const commitWord = commitCount === 1 ? "commit" : "commits";
-  const hiddenCommitCount = Math.max(0, commitCount - visibleCommits.length);
-  const commitLines = visibleCommits.map(commitLine);
-
-  if (hiddenCommitCount > 0) {
-    commitLines.push(`- ... ${hiddenCommitCount} more ${commitWord}`);
+  const payloadCommits = [...payload.commits];
+  if (payload.head_commit && !payloadCommits.some((commit) => commit.id === payload.head_commit?.id)) {
+    payloadCommits.push(payload.head_commit);
   }
-
-  return [
-    `#### GitHub push: ${repo}`,
-    commitLines.length > 0 ? commitLines.join("\n") : "_No commits were included in this push payload._",
-  ].join("\n\n");
+  const commits = newestFirstPushCommits(payloadCommits.map(githubPushCommit), payload.after);
+  return formatGitPushChatMessage({
+    action: githubPushAction(payload),
+    actorName: payload.sender?.login || payload.pusher?.name,
+    actorUrl: payload.sender?.html_url,
+    commits,
+    detailsUrl: payload.compare,
+    projectName: payload.repository.full_name,
+    projectUrl: payload.repository.html_url,
+    refKind: payload.ref.startsWith("refs/tags/") ? "tag" : "branch",
+    refName: refName(payload.ref),
+    totalCommitCount: payload.size ?? commits.length,
+  });
 }
 
 export function formatGitHubCommitSyncMessage(input: { repository: string; branch: string; commits: GitHubApiCommit[] }) {
   const repoUrl = `https://github.com/${input.repository}`;
-
-  return [
-    `#### GitHub push: [${input.repository}](${repoUrl})`,
-    input.commits.map(githubApiCommitLine).join("\n"),
-  ].join("\n\n");
+  return formatGitPushChatMessage({
+    commits: input.commits.map(githubApiPushCommit),
+    detailsUrl: `${repoUrl}/commits/${encodeURIComponent(input.branch)}`,
+    projectName: input.repository,
+    projectUrl: repoUrl,
+    refName: input.branch,
+  });
 }
 
 export function formatGitHubIssuesMessage(input: { repository: string; issues: GitHubIssue[]; mode: "current" | "new" }) {
@@ -801,14 +823,25 @@ async function fetchGitNewCommits(config: GitHubOrfChatConfig, lastSeenSha: stri
     const stdout = await runGit(config, [
       "log",
       `--max-count=${config.GITHUB_SYNC_LOOKBACK}`,
+      "--topo-order",
       "--format=%H%x1f%an%x1f%s%x1e",
       `${lastSeenSha}..${latestSha}`,
     ]);
-    return parseGitLog(stdout, config.GITHUB_REPOSITORY_FULL_NAME).reverse();
+    return parseGitLog(stdout, config.GITHUB_REPOSITORY_FULL_NAME);
   } catch {
     const latestCommit = await fetchGitCommit(config, latestSha);
     return latestCommit ? [latestCommit] : [];
   }
+}
+
+export function selectNewGitHubApiCommits(
+  latestFirstCommits: readonly GitHubApiCommit[],
+  lastSeenSha: string,
+) {
+  const lastSeenIndex = latestFirstCommits.findIndex((commit) => commit.sha === lastSeenSha);
+  return lastSeenIndex >= 0
+    ? latestFirstCommits.slice(0, lastSeenIndex)
+    : latestFirstCommits.slice(0, 1);
 }
 
 async function syncGitHubBranchCommits(
@@ -859,8 +892,7 @@ async function syncGitHubBranchCommits(
     return false;
   }
 
-  const lastSeenIndex = latestCommits.findIndex((commit) => commit.sha === lastSeenSha);
-  const newCommits = (lastSeenIndex >= 0 ? latestCommits.slice(0, lastSeenIndex) : latestCommits.slice(0, 1)).reverse();
+  const newCommits = selectNewGitHubApiCommits(latestCommits, lastSeenSha);
   if (newCommits.length === 0) {
     return false;
   }

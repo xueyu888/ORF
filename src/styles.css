@@ -40,6 +40,8 @@
   --orf-accent-soft: rgba(22, 133, 169, 0.11);
   --orf-accent-border: rgba(22, 133, 169, 0.22);
   --orf-accent-text: #0f6e8c;
+  --orf-link-text: #2563eb;
+  --orf-link-hover: #1d4ed8;
   --orf-success-text: #16846d;
   --orf-success-bg: rgba(22, 132, 109, 0.1);
   --orf-success-border: rgba(22, 132, 109, 0.2);
@@ -162,6 +164,8 @@ html[data-orf-display-contrast="high"] {
   --orf-accent-soft: rgba(56, 189, 248, 0.22) !important;
   --orf-accent-border: rgba(125, 211, 252, 0.54) !important;
   --orf-accent-text: #7dd3fc !important;
+  --orf-link-text: #93c5fd !important;
+  --orf-link-hover: #bae6fd !important;
   --orf-page-glow: #05070d !important;
   --orf-shadow-card:
     0 0 0 1px rgba(226, 232, 240, 0.18), 0 18px 42px rgba(0, 0, 0, 0.34) !important;
@@ -17252,9 +17256,24 @@ a.orf-sidebar-link,
 }
 
 .orf-chat-message-text a {
-  color: var(--orf-accent-text);
+  color: var(--orf-link-text);
   text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 52%, transparent);
+  text-decoration-thickness: 1px;
   text-underline-offset: 2px;
+  font-weight: 700;
+}
+
+.orf-chat-message-text a:hover,
+.orf-chat-message-text a:focus-visible {
+  color: var(--orf-link-hover);
+  text-decoration-color: currentColor;
+}
+
+.orf-chat-message-text a code {
+  border-color: color-mix(in srgb, var(--orf-link-text) 32%, var(--orf-border));
+  background: color-mix(in srgb, var(--orf-link-text) 8%, var(--orf-bg-muted));
+  color: inherit;
 }
 
 .orf-chat-message-text code,
@@ -22863,6 +22882,8 @@ button.orf-chat-image-attachment {
   --orf-accent-soft: rgba(88, 174, 191, 0.16);
   --orf-accent-border: rgba(103, 199, 215, 0.3);
   --orf-accent-text: #9adbe6;
+  --orf-link-text: #82b1ff;
+  --orf-link-hover: #a8c7ff;
   --orf-success-text: #7bd9b8;
   --orf-success-bg: rgba(61, 184, 135, 0.14);
   --orf-success-border: rgba(61, 184, 135, 0.28);

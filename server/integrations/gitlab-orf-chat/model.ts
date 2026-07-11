@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import {
+  formatGitPushChatMessage,
+  newestFirstPushCommits,
+  type GitPushCommit,
+} from "../git-push-chat-message";
 
 type HeaderValue = string | string[] | number | undefined;
 type HeaderMap = Record<string, HeaderValue>;
@@ -16,6 +21,7 @@ export type GitLabWebhookEventType = "push" | "tag_push" | "merge_request" | "is
 
 export type GitLabWebhookEvent = {
   actorName: string;
+  actorUrl?: string;
   eventKey: string;
   eventType: GitLabWebhookEventType;
   objectKind: string;
@@ -45,6 +51,7 @@ export function parseGitLabWebhookEvent(input: { headers?: HeaderMap; payload: u
 
   return {
     actorName: gitLabActorName(payload),
+    actorUrl: gitLabActorUrl(payload, project),
     eventKey,
     eventType,
     objectKind,
@@ -103,33 +110,36 @@ function formatPushEvent(event: GitLabWebhookEvent) {
   const totalCommits = numberValue(payload.total_commits_count) ?? commits.length;
   const compare = text(payload.compare);
   const isTag = event.eventType === "tag_push";
-  const refLabel = isTag ? "tag" : "branch";
   const action = after && zeroShaPattern.test(after)
     ? "deleted"
     : before && zeroShaPattern.test(before)
       ? "created"
       : "pushed";
-  const lines = [
-    `**GitLab ${isTag ? "tag" : "push"}** - ${projectLink(event.project)}`,
-    `${plain(event.actorName)} ${action} ${totalCommits} commit${totalCommits === 1 ? "" : "s"} to ${refLabel} ${code(ref || "unknown")}.`,
-  ];
-
-  for (const commit of commits.slice(0, 5)) {
-    const sha = shortSha(text(commit.id) ?? text(commit.sha) ?? "");
-    const message = firstLine(text(commit.message) ?? "(no commit message)");
+  const normalizedCommits = newestFirstPushCommits(commits.map((commit): GitPushCommit => {
     const author = record(commit.author);
-    const authorName = text(author?.name) ?? text(author?.username);
-    const url = text(commit.url);
-    lines.push(`- ${commitLink(sha, url)} ${plain(message)}${authorName ? ` - ${plain(authorName)}` : ""}`);
-  }
+    const authorUsername = text(author?.username);
+    return {
+      authorName: text(author?.name) ?? authorUsername,
+      authorUrl: gitLabProfileUrl(event.project, authorUsername),
+      message: text(commit.message) ?? "",
+      sha: text(commit.id) ?? text(commit.sha) ?? "",
+      timestamp: text(commit.timestamp),
+      url: text(commit.url),
+    };
+  }), after);
 
-  if (commits.length > 5) {
-    lines.push(`- ... ${commits.length - 5} more commits`);
-  }
-  if (compare) {
-    lines.push(`[Compare changes](${compare})`);
-  }
-  return lines.join("\n");
+  return formatGitPushChatMessage({
+    action,
+    actorName: event.actorName,
+    actorUrl: event.actorUrl,
+    commits: normalizedCommits,
+    detailsUrl: compare,
+    projectName: event.project.path,
+    projectUrl: event.project.url,
+    refKind: isTag ? "tag" : "branch",
+    refName: ref || "unknown",
+    totalCommitCount: totalCommits,
+  });
 }
 
 function formatMergeRequestEvent(event: GitLabWebhookEvent) {
@@ -196,6 +206,24 @@ function gitLabProject(payload: JsonRecord): GitLabOrfChatProject | null {
 function gitLabActorName(payload: JsonRecord) {
   const user = record(payload.user);
   return text(payload.user_username) ?? text(payload.user_name) ?? text(user?.username) ?? text(user?.name) ?? "GitLab";
+}
+
+function gitLabActorUrl(payload: JsonRecord, project: GitLabOrfChatProject) {
+  const user = record(payload.user);
+  const explicitUrl = text(payload.user_url) ?? text(user?.web_url) ?? text(user?.url);
+  if (explicitUrl) return explicitUrl;
+
+  const username = text(payload.user_username) ?? text(user?.username);
+  return gitLabProfileUrl(project, username);
+}
+
+function gitLabProfileUrl(project: GitLabOrfChatProject, username: string | undefined) {
+  if (!username || !project.url) return undefined;
+  try {
+    return new URL(`/${encodeURIComponent(username)}`, project.url).toString();
+  } catch {
+    return undefined;
+  }
 }
 
 function gitLabWebhookEventType(objectKind: string, headerEvent: string | undefined): GitLabWebhookEventType {
@@ -295,17 +323,8 @@ function shortSha(sha: string) {
   return sha ? sha.slice(0, 8) : "";
 }
 
-function firstLine(value: string) {
-  return value.split(/\r?\n/, 1)[0]?.trim() || value.trim();
-}
-
 function projectLink(project: GitLabOrfChatProject) {
   return project.url ? `[${plain(project.path)}](${project.url})` : plain(project.path);
-}
-
-function commitLink(sha: string, url: string | undefined) {
-  if (!sha) return code("unknown");
-  return url ? `[${plain(sha)}](${url})` : code(sha);
 }
 
 function code(value: string) {
