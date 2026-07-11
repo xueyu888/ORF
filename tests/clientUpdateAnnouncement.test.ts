@@ -28,6 +28,8 @@ test("client update automatic announcements are deduped per team and release", (
     const manual = publishClientUpdateAnnouncement({ mode: "manual", release, teamId });
 
     assert.equal(first.skipped, false);
+    assert.equal(first.realtimeRecipientUserCount, 1);
+    assert.equal("onlineUserCount" in first, false);
     assert.equal(duplicate.skipped, true);
     assert.equal(manual.skipped, false);
     assert.equal(events.filter((event) => event.kind === "client.update.available").length, 2);

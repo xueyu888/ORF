@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type {
   BountySource,
   ChallengeApplication,
@@ -665,6 +665,33 @@ export const pushRegistrationStatuses = pgTable(
   (table) => ({
     pk: primaryKey({ columns: [table.teamId, table.userId, table.platform] }),
     teamUpdated: index("push_registration_statuses_team_updated_idx").on(table.teamId, table.updatedAt),
+  }),
+);
+
+export const clientUpdateReceipts = pgTable(
+  "client_update_receipts",
+  {
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    releaseVersion: text("release_version").notNull(),
+    platform: text("platform").notNull(),
+    currentVersion: text("current_version").notNull(),
+    checkedAt: timestamp("checked_at", { mode: "string", withTimezone: true }).notNull(),
+    promptedAt: timestamp("prompted_at", { mode: "string", withTimezone: true }),
+    installStartedAt: timestamp("install_started_at", { mode: "string", withTimezone: true }),
+    activatedAt: timestamp("activated_at", { mode: "string", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    nativePlatform: check("client_update_receipts_platform_check", sql`${table.platform} IN ('android', 'desktop-windows')`),
+    pk: primaryKey({ columns: [table.teamId, table.userId, table.releaseVersion, table.platform] }),
+    teamRelease: index("client_update_receipts_team_release_idx").on(table.teamId, table.releaseVersion),
+    teamUpdated: index("client_update_receipts_team_updated_idx").on(table.teamId, table.updatedAt),
   }),
 );
 

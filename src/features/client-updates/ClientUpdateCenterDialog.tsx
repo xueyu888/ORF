@@ -7,6 +7,7 @@ import {
   clientUpdatePlatformLabel,
   formatClientUpdateBytes,
   formatUpdateDate,
+  reportClientUpdateReceipt,
   shouldOpenDownloadUrlAfterInstallResult,
   type ClientUpdateCheckResult,
 } from "./clientUpdateController";
@@ -31,6 +32,12 @@ export function ClientUpdateCenterDialog({ notice, onClose, open }: { notice?: s
     void runCheck(controller.signal);
     return () => controller.abort();
   }, [open]);
+
+  useEffect(() => {
+    if (open && centerState.status === "ready" && centerState.result.decision.status === "available") {
+      void reportClientUpdateReceipt(centerState.result, "prompted");
+    }
+  }, [centerState, open]);
 
   if (!open) return null;
 
@@ -67,6 +74,7 @@ export function ClientUpdateCenterDialog({ notice, onClose, open }: { notice?: s
     setInstalling(true);
     setInstallMessage(null);
     setInstallProgress(null);
+    await reportClientUpdateReceipt(result, "install_started");
     try {
       const installResult = await installClientUpdateAsset(result.decision.asset, { onProgress: setInstallProgress });
       setInstallMessage(clientUpdateInstallMessage(installResult, result.runtime.platform));

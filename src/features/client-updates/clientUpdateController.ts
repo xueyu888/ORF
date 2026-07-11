@@ -1,6 +1,13 @@
 import { orfClientCurrentVersion } from "./clientUpdateConfig";
 import { getLatestClientRelease } from "./clientUpdateApi";
-import { buildClientUpdateDecision, type ClientUpdateDecision, type ClientUpdatePlatform } from "./clientUpdateModel";
+import { recordClientUpdateReceiptRequest } from "../../state/apiClient";
+import {
+  buildClientUpdateDecision,
+  isClientUpdateNativePlatform,
+  type ClientUpdateDecision,
+  type ClientUpdatePlatform,
+  type ClientUpdateReceiptStage,
+} from "./clientUpdateModel";
 import {
   detectClientUpdateRuntimeInfo,
   type ClientUpdateInstallProgress,
@@ -18,7 +25,7 @@ export async function checkForClientUpdate(signal?: AbortSignal): Promise<Client
     detectClientUpdateRuntimeInfo(orfClientCurrentVersion),
     getLatestClientRelease(signal),
   ]);
-  return {
+  const result = {
     decision: buildClientUpdateDecision({
       currentVersion: runtime.currentVersion,
       platform: runtime.platform,
@@ -26,6 +33,20 @@ export async function checkForClientUpdate(signal?: AbortSignal): Promise<Client
     }),
     runtime,
   };
+  void reportClientUpdateReceipt(result, "checked");
+  return result;
+}
+
+export function reportClientUpdateReceipt(result: ClientUpdateCheckResult, stage: ClientUpdateReceiptStage) {
+  if (result.runtime.versionSource !== "native" || !isClientUpdateNativePlatform(result.runtime.platform)) {
+    return Promise.resolve();
+  }
+  return recordClientUpdateReceiptRequest({
+    currentVersion: result.runtime.currentVersion,
+    platform: result.runtime.platform,
+    releaseVersion: result.decision.release.version,
+    stage,
+  }).then(() => undefined).catch(() => undefined);
 }
 
 export function formatUpdateDate(value: string) {

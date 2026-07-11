@@ -7,6 +7,7 @@ import {
   clientUpdateInstallMessage,
   formatCurrentVersionLabel,
   formatUpdateDate,
+  reportClientUpdateReceipt,
   shouldOpenDownloadUrlAfterInstallResult,
 } from "./clientUpdateController";
 import { ClientUpdateInstallProgressView } from "./ClientUpdateInstallProgressView";
@@ -68,6 +69,21 @@ export function ClientUpdateNotice() {
     return { decision: noticeState.decision, runtime: noticeState.runtime };
   }, [noticeState]);
 
+  const availableReleaseVersion = availableDecision?.decision.release.version ?? null;
+  const showUpdateNotice = Boolean(
+    availableDecision &&
+    availableReleaseVersion &&
+    !dismissedVersions.has(availableReleaseVersion),
+  );
+  const showUpdatePrompt = Boolean(
+    showUpdateNotice && availableReleaseVersion && !promptDismissedVersions.has(availableReleaseVersion),
+  );
+  useEffect(() => {
+    if (availableDecision && showUpdateNotice) {
+      void reportClientUpdateReceipt(availableDecision, "prompted");
+    }
+  }, [availableDecision, showUpdateNotice]);
+
   if (!availableDecision || dismissedVersions.has(availableDecision.decision.release.version)) {
     return null;
   }
@@ -77,8 +93,6 @@ export function ClientUpdateNotice() {
   const asset = decision.asset;
   const secondaryUrl = release.htmlUrl;
   const dateLabel = release.publishedAt ? formatUpdateDate(release.publishedAt) : release.tagName;
-  const showUpdatePrompt = !promptDismissedVersions.has(release.version);
-
   const openUrl = async (url: string) => {
     setOpeningUrl(url);
     try {
@@ -97,6 +111,7 @@ export function ClientUpdateNotice() {
     setInstalling(true);
     setInstallMessage(null);
     setInstallProgress(null);
+    await reportClientUpdateReceipt(availableDecision, "install_started");
     try {
       const result = await installClientUpdateAsset(asset, { onProgress: setInstallProgress });
       setInstallMessage(clientUpdateInstallMessage(result, runtime.platform));

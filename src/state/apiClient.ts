@@ -56,7 +56,11 @@ import type {
   VisualBackgroundSwitchOrder,
   VisualBackgroundSwitchTrigger,
 } from "../domain/settings/visualBackgrounds";
-import type { ClientReleaseInfo } from "../features/client-updates/clientUpdateModel";
+import type {
+  ClientReleaseInfo,
+  ClientUpdateNativePlatform,
+  ClientUpdateReceiptStage,
+} from "../features/client-updates/clientUpdateModel";
 export type {
   VisualBackgroundConfig,
   VisualBackgroundCrop,
@@ -560,6 +564,22 @@ export async function getLatestClientUpdateRelease(signal?: AbortSignal) {
 
 export async function getClientUpdateRelease(version: string, signal?: AbortSignal) {
   return apiJson<ClientUpdateReleaseResponse>(`/api/client-updates/releases/${encodeURIComponent(version)}`, { signal });
+}
+
+export async function recordClientUpdateReceiptRequest(input: {
+  currentVersion: string;
+  platform: ClientUpdateNativePlatform;
+  releaseVersion: string;
+  stage: ClientUpdateReceiptStage;
+}) {
+  return apiJson<{ ok: true }>(`/api/client-updates/releases/${encodeURIComponent(input.releaseVersion)}/receipt`, {
+    body: JSON.stringify({
+      currentVersion: input.currentVersion,
+      platform: input.platform,
+      stage: input.stage,
+    }),
+    method: "POST",
+  });
 }
 
 export async function registerPushDeviceRequest(input: PushDeviceRegistrationInput) {

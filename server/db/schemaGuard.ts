@@ -556,6 +556,29 @@ export function validateChatMessageDeliverySchema(snapshot: { columns: RuntimeTa
   return errors;
 }
 
+export function validateClientUpdateReceiptSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const columns = new Map(snapshot.columns.map((column) => [column.columnName, column]));
+  const errors: string[] = [];
+  for (const columnName of [
+    "team_id",
+    "user_id",
+    "release_version",
+    "platform",
+    "current_version",
+    "checked_at",
+    "created_at",
+    "updated_at",
+  ]) {
+    const column = columns.get(columnName);
+    if (!column) errors.push(`client_update_receipts.${columnName} is missing.`);
+    else if (column.isNullable !== "NO") errors.push(`client_update_receipts.${columnName} must be NOT NULL.`);
+  }
+  for (const columnName of ["prompted_at", "install_started_at", "activated_at"]) {
+    if (!columns.has(columnName)) errors.push(`client_update_receipts.${columnName} is missing.`);
+  }
+  return errors;
+}
+
 export async function assertRuntimeDatabaseSchema() {
   const { pool } = await import("./client");
   const [
@@ -577,6 +600,7 @@ export async function assertRuntimeDatabaseSchema() {
     gitHubOrfChatColumnsResult,
     workLogReminderStateColumnsResult,
     chatMessageDeliveryColumnsResult,
+    clientUpdateReceiptColumnsResult,
   ] = await Promise.all([
     pool.query<RuntimeSchemaColumn>(
       `
@@ -776,6 +800,14 @@ export async function assertRuntimeDatabaseSchema() {
           and table_name = 'chat_message_deliveries'
       `,
     ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select table_name as "tableName", column_name as "columnName", is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'client_update_receipts'
+      `,
+    ),
   ]);
   const commentTargetTypeResult = await pool.query<{ label: string }>(
     `
@@ -843,6 +875,9 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateChatMessageDeliverySchema({
       columns: chatMessageDeliveryColumnsResult.rows,
+    }),
+    ...validateClientUpdateReceiptSchema({
+      columns: clientUpdateReceiptColumnsResult.rows,
     }),
   ];
 

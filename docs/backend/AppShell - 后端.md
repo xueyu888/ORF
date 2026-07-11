@@ -25,6 +25,9 @@ AppShell 没有独立业务模型，也不拥有页面数据计算规则。
 | 成员管理数据 | `/api/users` |
 | 当前用户权限 | `/api/me/access` |
 | 当前用户个人偏好 | `/api/settings/personal/preferences` |
+| 客户端最新发布 | `GET /api/client-updates/latest`、`GET /api/client-updates/releases/:version` |
+| 当前用户更新收据 | `POST /api/client-updates/releases/:version/receipt` |
+| 管理员发布覆盖 | `GET /api/client-updates/releases/:version/coverage` |
 
 ## 3. 说明
 
@@ -33,3 +36,4 @@ AppShell 后端文档只记录全局外壳依赖的接口边界；`新建目标`
 当前用户个人偏好在前端 API 层按 `userId` 做单飞缓存；AppShell、通知 Toast、个人设置页、登录落地页和页面筛选偏好共享同一个读取入口，保存成功后以返回值更新缓存。设置失效事件或登录成功落地页读取可以显式强制刷新，不能让每个组件各自轮询 `/api/settings/personal/preferences`。页面筛选偏好只保存用户视图选择，具体筛选槽位、合法值和 URL 深链优先级由对应页面模型定义，AppShell 后端不复制这些页面规则。
 具体页面的数据结构、业务计算和权限规则写入对应后端文档。
 消息系统模型和投递事件见 [消息系统开发.md](../project/消息系统开发.md)。
+客户端更新清单、广播、收据阶段、20 版本保留和覆盖统计口径见 [client-release.md](../project/client-release.md)。AppShell 只调用收据接口，不把本地提示状态或 SSE 连接数反向定义成发布覆盖事实。
