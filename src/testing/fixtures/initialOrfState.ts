@@ -1,0 +1,1718 @@
+import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../../domain/orfSettlement";
+import { userDisplayProfilesFromUsers } from "../../domain/userDisplayProfile";
+import {
+  objectiveParticipantSnapshot,
+  userNameByIdMap,
+} from "../../domain/orfObjectiveParticipants";
+import type { ChallengeApplication, Evidence, Feedback, Objective, ObjectiveLoot, OrfProject, OrfState, Result, Task } from "../../types/orf";
+import { addCalendarDays } from "../../utils/date";
+
+const USER_ALEX = "00000000-0000-4000-8000-000000000201";
+const USER_MIA = "00000000-0000-4000-8000-000000000202";
+const USER_ETHAN = "00000000-0000-4000-8000-000000000203";
+const USER_KAI = "00000000-0000-4000-8000-000000000204";
+const USER_NORA = "00000000-0000-4000-8000-000000000205";
+const USER_XUEYU = "00000000-0000-4000-8000-000000000206";
+
+type ObjectiveChallengeFields = Pick<
+  Objective,
+  | "finalDueAt"
+  | "flowStatus"
+  | "challengers"
+  | "challengerUserIds"
+  | "assignedChallengers"
+  | "assignedChallengerUserIds"
+  | "challengeApplications"
+  | "acceptedAt"
+  | "confirmationDueAt"
+  | "confirmedAt"
+  | "lootSubmittedAt"
+  | "acceptedResult"
+  | "completionMultiplier"
+  | "objectiveBasePoints"
+  | "objectiveSettlementPoints"
+>;
+type SeedObjectiveChallengeFields = Omit<ObjectiveChallengeFields, "challengeApplications"> & {
+  challengeApplications: ChallengeApplication[];
+};
+type SeedObjective = Omit<Objective, keyof ObjectiveChallengeFields> & Partial<SeedObjectiveChallengeFields>;
+type SeedResult = Omit<Result, "uncertaintyScore" | "acceptedResult" | "evidenceIds" | "createdAt" | "updatedAt"> &
+  Partial<Pick<Result, "uncertaintyScore" | "acceptedResult" | "evidenceIds" | "createdAt" | "updatedAt">> & {
+    owner?: string;
+    finalDueAt?: string;
+    assignedChallenger?: string | null;
+    acceptedAt?: string | null;
+    confirmationDueAt?: string | null;
+    confirmedAt?: string | null;
+    priorityChallengeExpiresAt?: string | null;
+    priorityDeclinedBy?: string[];
+    challengeApplications?: ChallengeApplication[];
+  };
+type SeedInitialState = Omit<OrfState, "evidence" | "feedback" | "objectiveAcceptanceReviews" | "objectiveLoot" | "objectiveSettlementEvents" | "objectives" | "results" | "tasks" | "userProfiles"> & {
+  evidence: Evidence[];
+  feedback: Feedback[];
+  objectiveAcceptanceReviews?: OrfState["objectiveAcceptanceReviews"];
+  objectiveLoot: ObjectiveLoot[];
+  objectiveSettlementEvents?: OrfState["objectiveSettlementEvents"];
+  objectives: SeedObjective[];
+  results: SeedResult[];
+  tasks: Task[];
+};
+
+function addDays(value: string, days: number) {
+  return addCalendarDays(value, days, value);
+}
+
+function latestDate(values: Array<string | undefined | null>) {
+  return values.filter(Boolean).sort().at(-1) ?? "";
+}
+
+const uncertaintyScore = uncertaintyScoreFor;
+
+function requiredSeedUserId(userId: string | null | undefined, context: string) {
+  const normalizedUserId = userId?.trim();
+  if (!normalizedUserId) {
+    throw new Error(`Initial ORF seed data is missing ${context} userId`);
+  }
+  return normalizedUserId;
+}
+
+function inferFlowStatus(objective: SeedObjective, challengerUserIds: string[], assignedChallengerUserIds: string[], challengeApplications: ChallengeApplication[]): Objective["flowStatus"] {
+  if (objective.flowStatus) return objective.flowStatus;
+  if (objective.objectiveSettlementPoints != null) return "settled";
+  if (objective.acceptedResult) return "accepted";
+  if (objective.lootSubmittedAt) return "submitted";
+  if (objective.confirmedAt || objective.stage === "goalFrozen") return "frozen";
+  if (challengerUserIds.length > 0) return "reestimating";
+  if (assignedChallengerUserIds.length > 0) return "recruiting";
+  if (challengeApplications.some((application) => application.status === "pending")) return "applying";
+  if (objective.stage === "resultClaiming") return "open";
+  return "candidate";
+}
+
+function normalizeInitialState(state: SeedInitialState): OrfState {
+  const projects: OrfProject[] = state.projects ?? [];
+  const objectiveUpdatedAtById = new Map(state.objectives.map((objective) => [objective.id, objective.updatedAt]));
+  const userNameById = userNameByIdMap(state.users);
+  const evidenceIdsByResult = new Map<string, string[]>();
+  for (const evidence of state.evidence) {
+    const ids = evidenceIdsByResult.get(evidence.linkedResultId) ?? [];
+    ids.push(evidence.id);
+    evidenceIdsByResult.set(evidence.linkedResultId, ids);
+  }
+  const results: Result[] = state.results.map((item) => {
+    const {
+      owner: _owner,
+      finalDueAt: _finalDueAt,
+      assignedChallenger: _assignedChallenger,
+      acceptedAt: _acceptedAt,
+      confirmationDueAt: _confirmationDueAt,
+      confirmedAt: _confirmedAt,
+      priorityChallengeExpiresAt: _priorityChallengeExpiresAt,
+      priorityDeclinedBy: _priorityDeclinedBy,
+      challengeApplications: _challengeApplications,
+      ...result
+    } = item;
+    const updatedAt = item.updatedAt ?? objectiveUpdatedAtById.get(item.objectiveId) ?? "2026-04-24";
+
+    const definerUserId = requiredSeedUserId(item.definerUserId, `result ${item.id} definer`);
+    return {
+      ...result,
+      definer: userNameById.get(definerUserId) ?? item.definer,
+      definerUserId,
+      uncertaintyScore: item.uncertaintyScore ?? uncertaintyScore(item.uncertaintyLevel),
+      acceptedResult: item.acceptedResult ?? "unreviewed",
+      evidenceIds: item.evidenceIds ?? evidenceIdsByResult.get(item.id) ?? [],
+      createdAt: item.createdAt ?? updatedAt,
+      updatedAt,
+    };
+  });
+
+  const objectives: Objective[] = state.objectives.map((objective) => {
+    const objectiveResults = state.results.filter((result) => result.objectiveId === objective.id);
+    const challengerUserIds = objective.challengerUserIds ?? [];
+    const assignedChallengerUserIds = objective.assignedChallengerUserIds ?? [];
+    const participants = objectiveParticipantSnapshot({
+      challengerUserIds,
+      challengers: objective.challengers,
+      assignedChallengerUserIds,
+      assignedChallengers: objective.assignedChallengers,
+      userNameById,
+    });
+    const challengeApplications = (objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? [])).map((application) => {
+      const applicantUserId = requiredSeedUserId(application.applicantUserId, `challenge application ${application.id} applicant`);
+      return {
+        ...application,
+        applicant: userNameById.get(applicantUserId) ?? application.applicant,
+        applicantUserId,
+      };
+    });
+    const finalDueAt = objective.finalDueAt || addDays(objective.updatedAt, 14);
+    const acceptedResults = results.filter(
+      (result) => result.objectiveId === objective.id && (result.acceptedResult === "completed" || result.acceptedResult === "falsified"),
+    );
+
+    return {
+      ...objective,
+      finalDueAt,
+      flowStatus: inferFlowStatus(objective, participants.challengerUserIds, participants.assignedChallengerUserIds, challengeApplications),
+      challengers: participants.challengers,
+      challengerUserIds: participants.challengerUserIds,
+      assignedChallengers: participants.assignedChallengers,
+      assignedChallengerUserIds: participants.assignedChallengerUserIds,
+      challengeApplications,
+      acceptedAt: objective.acceptedAt ?? objectiveResults.find((result) => result.acceptedAt)?.acceptedAt ?? null,
+      confirmationDueAt: objective.confirmationDueAt ?? (latestDate(objectiveResults.map((result) => result.confirmationDueAt)) || null),
+      confirmedAt: objective.confirmedAt ?? objectiveResults.find((result) => result.confirmedAt)?.confirmedAt ?? null,
+      lootSubmittedAt: objective.lootSubmittedAt ?? null,
+      acceptedResult: objective.acceptedResult ?? null,
+      completionMultiplier: objective.completionMultiplier ?? null,
+      objectiveBasePoints: objective.objectiveBasePoints ?? objectiveBasePointsForResults(acceptedResults),
+      objectiveSettlementPoints: objective.objectiveSettlementPoints ?? null,
+    };
+  });
+
+  return {
+    ...state,
+    users: state.users.map((user) => ({ ...user, status: user.status ?? "active" })),
+    userProfiles: userDisplayProfilesFromUsers(state.users),
+    projects,
+    objectives,
+    results,
+    evidence: state.evidence.map((item) => {
+      const ownerUserId = requiredSeedUserId(item.ownerUserId, `evidence ${item.id} owner`);
+      return { ...item, owner: userNameById.get(ownerUserId) ?? item.owner, ownerUserId };
+    }),
+    feedback: state.feedback.map((item) => {
+      const ownerUserId = requiredSeedUserId(item.ownerUserId, `feedback ${item.id} owner`);
+      return { ...item, owner: userNameById.get(ownerUserId) ?? item.owner, ownerUserId };
+    }),
+    tasks: state.tasks.map((item) => {
+      const assigneeUserId = requiredSeedUserId(item.assigneeUserId, `task ${item.id} assignee`);
+      return { ...item, assignee: userNameById.get(assigneeUserId) ?? item.assignee, assigneeUserId };
+    }),
+    objectiveLoot: (state.objectiveLoot ?? []).map((item) => {
+      const submittedByUserId = requiredSeedUserId(item.submittedByUserId, `objective loot ${item.id} submitter`);
+      return { ...item, submittedBy: userNameById.get(submittedByUserId) ?? item.submittedBy, submittedByUserId };
+    }),
+    objectiveTrialReviews: state.objectiveTrialReviews ?? [],
+    objectiveAcceptanceReviews: state.objectiveAcceptanceReviews ?? [],
+    objectiveAlignmentRequests: state.objectiveAlignmentRequests ?? [],
+    objectiveSettlementEvents: state.objectiveSettlementEvents ?? [],
+    pointLedger: state.pointLedger ?? [],
+  };
+}
+
+const defaultPermissionRules: OrfState["permissionRules"] = [
+  { role: "member", permissions: ["chat.read", "chat.write", "chat.channel.create"] },
+];
+
+const confidenceTrend = [
+  { date: "Apr 01", value: 61 },
+  { date: "Apr 08", value: 66 },
+  { date: "Apr 15", value: 64 },
+  { date: "Apr 22", value: 72 },
+];
+
+const initialOrfStateSeed: SeedInitialState = {
+  users: [
+    { id: USER_ALEX, name: "Alex Chen", email: "alex@orf.local", role: "admin", status: "active", lastOnlineAt: "2026-05-05T09:42:00.000Z" },
+    { id: USER_MIA, name: "Mia Zhang", email: "mia@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-04T18:10:00.000Z" },
+    { id: USER_ETHAN, name: "Ethan Liu", email: "ethan@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-03T14:25:00.000Z" },
+    { id: USER_KAI, name: "Kai Wang", email: "kai@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-02T10:00:00.000Z" },
+    { id: USER_NORA, name: "Nora Patel", email: "nora@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-01T10:00:00.000Z" },
+    { id: USER_XUEYU, name: "xueyu", email: "xueyu@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-01T09:00:00.000Z" },
+  ],
+  currentUserId: USER_ALEX,
+  permissionRules: defaultPermissionRules,
+  projects: [
+    { id: "project-ai-delivery", name: "AI 应用工程化", createdAt: "2026-04-24", updatedAt: "2026-04-24" },
+    { id: "project-feedback-eval", name: "反馈与评估", createdAt: "2026-04-24", updatedAt: "2026-04-24" },
+    { id: "project-cost-routing", name: "成本与路由", createdAt: "2026-04-24", updatedAt: "2026-04-24" },
+    { id: "project-acceptance-demo", name: "验收演示", createdAt: "2026-04-24", updatedAt: "2026-04-24" },
+  ],
+  causeCategories: [
+    "需求缺口",
+    "Prompt 问题",
+    "检索问题",
+    "重排问题",
+    "知识缺口",
+    "模型能力边界",
+    "工具调用失败",
+    "权限问题",
+    "时延问题",
+    "成本问题",
+    "体验问题",
+    "评估缺口",
+  ],
+  objectives: [
+    {
+      id: "obj-engineering",
+      title: "建立可持续交付大模型应用的工程能力",
+      description: "把项目从 Demo 驱动转向可评估、可追踪、可灰度、可回滚的工程化交付方式。",
+      whyItMatters: "AI 应用进入生产后，交付质量取决于评估、灰度、回滚和反馈闭环，而不是单次演示效果。",
+      projectId: "project-ai-delivery",
+      cycle: "2026 Q2",
+      stage: "orfReestimate",
+      status: "At Risk",
+      confidence: 68,
+      progress: 61,
+      boundary: "不重写底层模型服务，不把平台治理范围扩展到非 AI 业务系统。",
+      successDefinition: "核心 AI 场景具备评估、灰度、回滚和反馈闭环，生产问题能被快速定位并转成改进动作。",
+      resultIds: ["res-eval-coverage", "res-rag-recall", "res-hallucination", "res-tool-success", "res-latency"],
+      taskIds: ["ORF-128", "ORF-129", "ORF-130", "ORF-131", "ORF-132", "ORF-133"],
+      createdAt: "2026-04-01",
+      updatedAt: "2026-04-24",
+    },
+    {
+      id: "obj-feedback-loop",
+      title: "建立结构化反馈闭环，持续修正 Prompt、RAG 与 Agent 流程",
+      description: "将线上失败案例沉淀为可分类、可追踪、可转化为改进动作的反馈系统。",
+      whyItMatters: "没有结构化反馈，只能不断修补问题，无法把失败案例转成稳定的评估和工程能力。",
+      projectId: "project-feedback-eval",
+      cycle: "2026 Q2",
+      stage: "orfReestimate",
+      status: "On Track",
+      confidence: 82,
+      progress: 74,
+      boundary: "反馈只覆盖 AI 应用链路，不替代客服系统和事故管理系统。",
+      successDefinition: "核心失败案例能进入收件箱、完成分类，并在固定节奏内完成讨论、关闭或重新打开。",
+      resultIds: ["res-feedback-inbox", "res-feedback-classified", "res-high-risk-action", "res-eval-refresh"],
+      taskIds: ["ORF-134", "ORF-135"],
+      createdAt: "2026-04-01",
+      updatedAt: "2026-04-24",
+    },
+    {
+      id: "obj-cost-quality",
+      title: "降低 AI 应用运行成本并保持回答质量",
+      description: "通过成本观测、Prompt 压缩、缓存和路由策略，降低运行成本并保持质量指标稳定。",
+      whyItMatters: "AI 应用规模化后，成本和时延会直接影响上线范围、用户体验和业务可持续性。",
+      projectId: "project-cost-routing",
+      cycle: "2026 Q2",
+      stage: "orfReestimate",
+      status: "At Risk",
+      confidence: 64,
+      progress: 48,
+      boundary: "不牺牲关键场景准确率，不引入不可解释的自动降级策略。",
+      successDefinition: "成本下降 35%，高成本链路可观测，质量和时延保持在可接受范围内。",
+      resultIds: ["res-cost", "res-cost-observability", "res-token-redundancy", "res-cache-hit"],
+      taskIds: ["ORF-136", "ORF-137"],
+      createdAt: "2026-04-03",
+      updatedAt: "2026-04-23",
+    },
+    {
+      id: "obj-bounty-answer-citations",
+      title: "提升带引用回答的可验证性",
+      description: "让关键回答能稳定给出可核验引用，减少无依据结论。",
+      whyItMatters: "用户信任来自可追溯证据，引用质量直接影响 AI 应用能否进入核心业务流程。",
+      projectId: "project-feedback-eval",
+      cycle: "2026 Q2",
+      stage: "resultClaiming",
+      status: "Draft",
+      confidence: 48,
+      progress: 12,
+      boundary: "只覆盖权限、合同和知识库问答，不处理开放闲聊场景。",
+      successDefinition: "高价值问答能给出正确引用，错误引用进入回归评估。",
+      resultIds: ["res-bounty-citation-coverage", "res-bounty-citation-error"],
+      taskIds: [],
+      finalDueAt: "2026-06-26",
+      createdAt: "2026-05-10",
+      updatedAt: "2026-05-10",
+    },
+    {
+      id: "obj-bounty-agent-retry",
+      title: "修复 Agent 重试导致的重复副作用",
+      description: "为工具调用链路补齐幂等、重试和降级策略，避免重复创建或重复提交。",
+      whyItMatters: "Agent 一旦进入生产系统，重复副作用会直接制造业务风险。",
+      projectId: "project-ai-delivery",
+      cycle: "2026 Q2",
+      stage: "resultClaiming",
+      status: "At Risk",
+      confidence: 42,
+      progress: 18,
+      boundary: "只处理工单、权限和审计工具，不改造第三方系统。",
+      successDefinition: "重试场景下不再产生重复副作用，失败能被明确降级或上报。",
+      resultIds: ["res-bounty-agent-retry-idempotency", "res-bounty-agent-fallback"],
+      taskIds: [],
+      finalDueAt: "2026-06-18",
+      assignedChallengerUserIds: [USER_XUEYU, USER_MIA],
+      createdAt: "2026-05-11",
+      updatedAt: "2026-05-11",
+    },
+    {
+      id: "obj-bounty-eval-dataset",
+      title: "扩大高风险场景评估数据集",
+      description: "把线上失败和人工复盘样本转为稳定评估集，覆盖权限、成本和检索边界。",
+      whyItMatters: "评估数据集不足会让质量改进停留在感觉层面，无法判断真实进步。",
+      projectId: "project-feedback-eval",
+      cycle: "2026 Q2",
+      stage: "resultClaiming",
+      status: "On Track",
+      confidence: 57,
+      progress: 22,
+      boundary: "只沉淀高风险 AI 场景，不替代完整客服知识库。",
+      successDefinition: "新增样本能进入 nightly eval，并能定位主要失败原因。",
+      resultIds: ["res-bounty-eval-automation", "res-bounty-dataset-growth"],
+      taskIds: [],
+      finalDueAt: "2026-07-02",
+      challengeApplications: [{ id: "challenge-application-seed-1", applicant: "Kai Wang", applicantUserId: USER_KAI, status: "pending", createdAt: "2026-05-12T09:20:00.000Z" }],
+      createdAt: "2026-05-12",
+      updatedAt: "2026-05-12",
+    },
+    {
+      id: "obj-bounty-cost-routing",
+      title: "建立成本感知的模型路由策略",
+      description: "按问题风险和上下文复杂度选择模型与检索策略，在保证质量的前提下降低成本。",
+      whyItMatters: "成本不可控会限制 AI 应用规模化，路由策略是质量和成本之间的关键调节层。",
+      projectId: "project-cost-routing",
+      cycle: "2026 Q2",
+      stage: "resultClaiming",
+      status: "Draft",
+      confidence: 39,
+      progress: 8,
+      boundary: "不降低高风险场景的答案质量，不做不可解释的自动降级。",
+      successDefinition: "低风险请求自动走低成本路径，高风险请求保留高质量路径和观测记录。",
+      resultIds: ["res-bounty-cost-routing", "res-bounty-cache-reuse"],
+      taskIds: [],
+      finalDueAt: "2026-07-10",
+      createdAt: "2026-05-13",
+      updatedAt: "2026-05-13",
+    },
+    {
+      id: "obj-demo-frozen-evidence-pack",
+      title: "补齐 Agent 失败证据包",
+      description: "把 Agent 失败链路的日志、复现脚本和人工判定统一整理成可提交战利品。",
+      whyItMatters: "冻结后的目标需要挑战者按指标提交证据，否则验收页无法判断每个指标是否完成。",
+      projectId: "project-acceptance-demo",
+      cycle: "2026 Q2",
+      stage: "goalFrozen",
+      flowStatus: "frozen",
+      status: "On Track",
+      confidence: 63,
+      progress: 56,
+      boundary: "只覆盖生产 Agent 的工具调用失败，不整理普通问答质量问题。",
+      successDefinition: "每个关键失败类型都有复现脚本、日志样本和验收说明。",
+      resultIds: ["res-demo-evidence-pack-integrity", "res-demo-replay-script"],
+      taskIds: [],
+      finalDueAt: "2026-06-20",
+      challengerUserIds: [USER_XUEYU],
+      assignedChallengerUserIds: [],
+      challengeApplications: [],
+      acceptedAt: "2026-05-14T09:00:00.000Z",
+      confirmationDueAt: "2026-05-18T18:00:00.000Z",
+      confirmedAt: "2026-05-18T09:00:00.000Z",
+      objectiveBasePoints: 120,
+      createdAt: "2026-05-14",
+      updatedAt: "2026-05-18",
+    },
+    {
+      id: "obj-demo-submitted-peer-review",
+      title: "验收引用质量回归包",
+      description: "挑战者已提交战利品，等待指挥官按指标验收并读取匿名互评贡献结果。",
+      whyItMatters: "验收流程必须围绕每个指标的结论展开，贡献比例来自挑战者匿名互评。",
+      projectId: "project-acceptance-demo",
+      cycle: "2026 Q2",
+      stage: "goalFrozen",
+      flowStatus: "submitted",
+      status: "On Track",
+      confidence: 71,
+      progress: 92,
+      boundary: "只验收引用质量回归包，不扩展到新检索策略。",
+      successDefinition: "引用覆盖、错误引用两个指标都通过验收，并沉淀自测报告。",
+      resultIds: ["res-demo-review-citation-pass", "res-demo-review-regression-pass"],
+      taskIds: [],
+      finalDueAt: "2026-05-24",
+      challengerUserIds: [USER_MIA, USER_ETHAN],
+      assignedChallengerUserIds: [],
+      challengeApplications: [],
+      acceptedAt: "2026-05-10T09:00:00.000Z",
+      confirmationDueAt: "2026-05-13T09:00:00.000Z",
+      confirmedAt: "2026-05-13T09:30:00.000Z",
+      lootSubmittedAt: "2026-05-17T15:20:00.000Z",
+      objectiveBasePoints: 120,
+      createdAt: "2026-05-10",
+      updatedAt: "2026-05-17",
+    },
+    {
+      id: "obj-demo-settled-routing-quality",
+      title: "结算低风险模型路由验证",
+      description: "低风险问题路由策略已完成结算，用于展示积分和排行榜效果。",
+      whyItMatters: "结算后的目标需要沉淀指标验收结果、贡献比例和积分流水。",
+      projectId: "project-acceptance-demo",
+      cycle: "2026 Q2",
+      stage: "goalFrozen",
+      flowStatus: "settled",
+      status: "On Track",
+      confidence: 88,
+      progress: 100,
+      boundary: "只覆盖低风险问答请求，不影响合同审查等高风险路径。",
+      successDefinition: "低风险请求自动路由覆盖率和质量回归都达到验收标准。",
+      resultIds: ["res-demo-routing-coverage", "res-demo-routing-quality"],
+      taskIds: [],
+      finalDueAt: "2026-05-16",
+      challengerUserIds: [USER_KAI, USER_NORA],
+      assignedChallengerUserIds: [],
+      challengeApplications: [],
+      acceptedAt: "2026-05-01T09:00:00.000Z",
+      confirmationDueAt: "2026-05-04T09:00:00.000Z",
+      confirmedAt: "2026-05-04T11:00:00.000Z",
+      lootSubmittedAt: "2026-05-15T16:40:00.000Z",
+      acceptedResult: "completed",
+      completionMultiplier: 1,
+      objectiveBasePoints: 100,
+      objectiveSettlementPoints: 100,
+      createdAt: "2026-05-01",
+      updatedAt: "2026-05-16",
+    },
+  ],
+  results: [
+    {
+      id: "res-eval-coverage",
+      objectiveId: "obj-engineering",
+      title: "核心 AI 场景评估集覆盖率达到 90%",
+      detail: `说明：覆盖权限问答、合同审查、工单创建、知识库搜索和成本分析场景。
+
+要求：评估覆盖率：核心 AI 场景中，有标准样本和期望答案的场景占比达到 90% 及以上。
+
+统计对象：权限问答、合同审查、工单创建、知识库搜索、成本分析 5 类核心 AI 场景
+
+完成标准：每类场景至少有 20 条标准问题，且整体覆盖率达到 90% 及以上。
+
+样本集：指挥官确认的标准问题集；每题标注正确文本片段、期望答案和失败分类。
+
+测量范围：只统计已进入 nightly eval 的场景，不把临时人工验证计入覆盖率。`,
+      uncertaintyLevel: "进阶",
+      baseline: 35,
+      current: 62,
+      target: 90,
+      unit: "%",
+      direction: "increase",
+      status: "At Risk",
+      confidence: 62,
+      owner: "",
+      source: "managerDefined",
+      definer: "Alex Chen",
+      definerUserId: USER_ALEX,
+      assignedChallenger: "Alex Chen",
+      trend: [
+        { date: "Apr 01", value: 35 },
+        { date: "Apr 08", value: 44 },
+        { date: "Apr 15", value: 54 },
+        { date: "Apr 22", value: 62 },
+      ],
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-rag-recall",
+      objectiveId: "obj-engineering",
+      title: "RAG 检索 Recall@5 达到 85%",
+      detail: `说明：核心知识库问题的前 5 条检索结果应包含正确来源。
+
+要求：检索 Recall@5：标准问题集中，正确文本片段出现在前 5 条检索结果中的占比达到 85% 及以上。
+
+统计对象：一期标准知识库问题集的检索请求，单知识库不超过 10GB、10000 个文件。
+
+完成标准：Top5 命中率达到 85% 及以上；正确文本片段由指挥官提前标注。
+
+样本集：权限、合同、工单、知识库搜索四类标准问题集，标注正确文本片段和期望答案。
+
+测量范围：固定 embedding、reranker 和索引版本；只统计检索与重排链路，不统计模型生成耗时。`,
+      uncertaintyLevel: "破局",
+      baseline: 58,
+      current: 76,
+      target: 85,
+      unit: "%",
+      direction: "increase",
+      status: "On Track",
+      confidence: 78,
+      owner: "Kai Wang",
+      definerUserId: USER_KAI,
+      trend: [
+        { date: "Apr 01", value: 58 },
+        { date: "Apr 08", value: 64 },
+        { date: "Apr 15", value: 70 },
+        { date: "Apr 22", value: 76 },
+      ],
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-hallucination",
+      objectiveId: "obj-engineering",
+      title: "线上幻觉率降低到 3% 以下",
+      detail: `说明：权限、合同和成本问答场景的错误断言比例必须持续下降。
+
+要求：幻觉率：标准评估集中，模型回答包含无依据或错误断言的占比降低到 3% 以下。
+
+统计对象：权限、合同、成本问答场景的带引用回答。
+
+完成标准：固定评估集中幻觉率低于 3%，且高影响线上失败样本已进入回归集。
+
+样本集：标准问题集和线上高影响失败样本；每题标注期望答案、引用依据和错误判定原因。
+
+测量范围：固定模型、参数、上下文长度和输出长度；引用缺失或无法支撑关键结论计为失败。`,
+      uncertaintyLevel: "破局",
+      baseline: 11,
+      current: 6.5,
+      target: 3,
+      unit: "%",
+      direction: "decrease",
+      status: "At Risk",
+      confidence: 58,
+      owner: "Alex Chen",
+      definerUserId: USER_ALEX,
+      trend: [
+        { date: "Apr 01", value: 11 },
+        { date: "Apr 08", value: 9.2 },
+        { date: "Apr 15", value: 7.4 },
+        { date: "Apr 22", value: 6.5 },
+      ],
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-tool-success",
+      objectiveId: "obj-engineering",
+      title: "Agent 工具调用成功率达到 96%",
+      detail: `说明：Agent 调用工单、权限和审计工具时应稳定完成且避免重复提交。
+
+要求：工具调用成功率：Agent 调用工单、权限和审计工具后，返回成功且没有重复副作用的占比达到 96% 及以上。
+
+统计对象：工单创建、权限查询、审计检索三类 Agent 工具调用。
+
+完成标准：成功率达到 96% 及以上；重复提交、漏传参数、错误工具选择均计为失败。
+
+样本集：工具调用标准场景集和最近 7 天线上失败样本。
+
+测量范围：固定工具 schema 和权限上下文；只统计系统侧工具选择、参数组装和执行结果。`,
+      uncertaintyLevel: "进阶",
+      baseline: 81,
+      current: 91,
+      target: 96,
+      unit: "%",
+      direction: "increase",
+      status: "On Track",
+      confidence: 74,
+      owner: "Ethan Liu",
+      definerUserId: USER_ETHAN,
+      trend: [
+        { date: "Apr 01", value: 81 },
+        { date: "Apr 08", value: 85 },
+        { date: "Apr 15", value: 88 },
+        { date: "Apr 22", value: 91 },
+      ],
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-latency",
+      objectiveId: "obj-engineering",
+      title: "P95 响应时延控制在 3 秒以内",
+      detail: `说明：核心问答链路在 P95 下保持 3 秒以内，避免长上下文拖慢体验。
+
+要求：P95 时延：核心问答链路 95% 的请求耗时不超过 3 秒。
+
+统计对象：固定测试环境下的权限问答、知识库搜索和成本查询请求。
+
+完成标准：P95 总耗时不超过 3 秒；如模型侧耗时异常，必须单独记录模型耗时和系统侧耗时。
+
+样本集：覆盖 PDF、DOCX、HTML、TXT、MD 来源的标准查询集。
+
+测量范围：固定模型、参数、上下文长度和输出长度；分别记录检索、重排、引用组装和模型生成耗时。`,
+      uncertaintyLevel: "破局",
+      baseline: 6.8,
+      current: 4.2,
+      target: 3,
+      unit: "s",
+      direction: "decrease",
+      status: "At Risk",
+      confidence: 55,
+      owner: "Nora Patel",
+      definerUserId: USER_NORA,
+      trend: [
+        { date: "Apr 01", value: 6.8 },
+        { date: "Apr 08", value: 5.7 },
+        { date: "Apr 15", value: 4.9 },
+        { date: "Apr 22", value: 4.2 },
+      ],
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-feedback-inbox",
+      objectiveId: "obj-feedback-loop",
+      title: "每周 100% 核心失败案例进入反馈收件箱",
+      detail: `说明：核心线上失败必须被结构化记录。`,
+      baseline: 42,
+      current: 86,
+      target: 100,
+      unit: "%",
+      direction: "increase",
+      status: "On Track",
+      confidence: 84,
+      owner: "Ethan Liu",
+      definerUserId: USER_ETHAN,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-feedback-classified",
+      objectiveId: "obj-feedback-loop",
+      title: "80% 反馈能完成原因分类",
+      detail: `说明：每条反馈应有可追踪的原因分类，支撑趋势分析。`,
+      baseline: 30,
+      current: 72,
+      target: 80,
+      unit: "%",
+      direction: "increase",
+      status: "On Track",
+      confidence: 79,
+      owner: "Alex Chen",
+      definerUserId: USER_ALEX,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-high-risk-action",
+      objectiveId: "obj-feedback-loop",
+      title: "高风险反馈在 48 小时内形成调整动作",
+      detail: `说明：高影响反馈必须在 48 小时内完成责任人确认、讨论推进或关闭判断。`,
+      baseline: 24,
+      current: 68,
+      target: 90,
+      unit: "%",
+      direction: "increase",
+      status: "At Risk",
+      confidence: 66,
+      owner: "Mia Zhang",
+      definerUserId: USER_MIA,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-eval-refresh",
+      objectiveId: "obj-feedback-loop",
+      title: "每两周更新一次评估集和回归用例",
+      detail: `说明：把真实失败案例沉淀到评估集和回归用例。`,
+      baseline: 0,
+      current: 1,
+      target: 1,
+      unit: "cycle",
+      direction: "increase",
+      status: "On Track",
+      confidence: 76,
+      owner: "Kai Wang",
+      definerUserId: USER_KAI,
+      trend: confidenceTrend,
+      reviewCadence: "Bi-weekly",
+    },
+    {
+      id: "res-cost",
+      objectiveId: "obj-cost-quality",
+      title: "单次请求平均成本降低 35%",
+      detail: `说明：通过上下文裁剪、缓存和路由降低平均请求成本。`,
+      baseline: 0.058,
+      current: 0.038,
+      target: 0.026,
+      unit: "$",
+      direction: "decrease",
+      status: "At Risk",
+      confidence: 60,
+      owner: "Nora Patel",
+      definerUserId: USER_NORA,
+      trend: [
+        { date: "Apr 01", value: 0.058 },
+        { date: "Apr 08", value: 0.049 },
+        { date: "Apr 15", value: 0.043 },
+        { date: "Apr 22", value: 0.038 },
+      ],
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-cost-observability",
+      objectiveId: "obj-cost-quality",
+      title: "高成本链路 100% 可观测",
+      detail: `说明：高成本链路需要能追踪 prompt、model、RAG 和工具调用消耗。`,
+      baseline: 20,
+      current: 70,
+      target: 100,
+      unit: "%",
+      direction: "increase",
+      status: "On Track",
+      confidence: 72,
+      owner: "Nora Patel",
+      definerUserId: USER_NORA,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-token-redundancy",
+      objectiveId: "obj-cost-quality",
+      title: "Prompt token 冗余降低 25%",
+      detail: `说明：减少重复上下文、无效系统指令和过长检索片段。`,
+      baseline: 100,
+      current: 82,
+      target: 75,
+      unit: "%",
+      direction: "decrease",
+      status: "On Track",
+      confidence: 73,
+      owner: "",
+      source: "memberProposed",
+      definer: "Alex Chen",
+      definerUserId: USER_ALEX,
+      priorityChallengeExpiresAt: "2026-06-01T10:00:00.000Z",
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-cache-hit",
+      objectiveId: "obj-cost-quality",
+      title: "缓存命中率达到 40%",
+      detail: `说明：对重复高频查询和稳定知识问答引入缓存策略。`,
+      baseline: 4,
+      current: 18,
+      target: 40,
+      unit: "%",
+      direction: "increase",
+      status: "At Risk",
+      confidence: 52,
+      owner: "",
+      source: "managerDefined",
+      definer: "Alex Chen",
+      definerUserId: USER_ALEX,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-bounty-citation-coverage",
+      objectiveId: "obj-bounty-answer-citations",
+      title: "高价值回答引用覆盖率达到 92%",
+      detail: `说明：权限、合同和知识库问答的关键结论必须附带可核验引用。
+
+要求：高价值回答中，关键结论带正确引用的占比达到 92% 及以上。
+
+统计对象：权限、合同、知识库问答三类高价值问题。
+
+完成标准：固定评估集引用覆盖率达到 92%，且引用能支撑关键结论。
+
+样本集：120 条高价值问答样本，标注期望引用来源。
+
+测量范围：只统计需要引用的事实型回答，不统计开放讨论。`,
+      uncertaintyLevel: "破局",
+      baseline: 54,
+      current: 61,
+      target: 92,
+      unit: "%",
+      direction: "increase",
+      status: "At Risk",
+      confidence: 50,
+      owner: "",
+      source: "managerDefined",
+      definer: "Alex Chen",
+      definerUserId: USER_ALEX,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-bounty-citation-error",
+      objectiveId: "obj-bounty-answer-citations",
+      title: "错误引用率降低到 2% 以下",
+      detail: `说明：减少引用存在但无法支撑结论的情况。
+
+要求：引用无法支撑关键结论的回答占比低于 2%。
+
+统计对象：带引用回答的人工抽检样本。
+
+完成标准：连续两周抽检错误引用率低于 2%。
+
+样本集：每周 80 条带引用回答抽检样本。
+
+测量范围：只统计系统生成引用，不统计用户上传内容错误。`,
+      uncertaintyLevel: "进阶",
+      baseline: 9,
+      current: 7,
+      target: 2,
+      unit: "%",
+      direction: "decrease",
+      status: "At Risk",
+      confidence: 46,
+      owner: "",
+      source: "managerDefined",
+      definer: "Alex Chen",
+      definerUserId: USER_ALEX,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-bounty-agent-retry-idempotency",
+      objectiveId: "obj-bounty-agent-retry",
+      title: "工具重试幂等覆盖率达到 100%",
+      detail: `说明：关键工具调用必须带幂等键并能识别重复提交。
+
+要求：工单、权限、审计工具的重试链路 100% 具备幂等保护。
+
+统计对象：Agent 工具调用链路中的写操作。
+
+完成标准：重试、超时和网络抖动场景均不会产生重复副作用。
+
+样本集：工具调用回归用例和最近 14 天失败日志。
+
+测量范围：只统计写操作工具，不统计只读查询。`,
+      uncertaintyLevel: "渡劫",
+      baseline: 35,
+      current: 48,
+      target: 100,
+      unit: "%",
+      direction: "increase",
+      status: "At Risk",
+      confidence: 41,
+      owner: "",
+      source: "managerDefined",
+      definer: "Alex Chen",
+      definerUserId: USER_ALEX,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-bounty-agent-fallback",
+      objectiveId: "obj-bounty-agent-retry",
+      title: "工具失败可解释降级率达到 95%",
+      detail: `说明：工具失败时给出明确原因、下一步动作和人工接管入口。
+
+要求：工具失败后，95% 场景能给出可解释降级结果。
+
+统计对象：工单、权限和审计工具调用失败样本。
+
+完成标准：失败不静默吞掉，降级信息能被日志和用户界面同时追踪。
+
+样本集：工具调用失败回归集。
+
+测量范围：只统计系统可检测失败，不统计第三方系统长时间不可用。`,
+      uncertaintyLevel: "破局",
+      baseline: 22,
+      current: 37,
+      target: 95,
+      unit: "%",
+      direction: "increase",
+      status: "At Risk",
+      confidence: 38,
+      owner: "",
+      source: "managerDefined",
+      definer: "Alex Chen",
+      definerUserId: USER_ALEX,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-bounty-eval-automation",
+      objectiveId: "obj-bounty-eval-dataset",
+      title: "高风险评估样本自动入库率达到 85%",
+      detail: `说明：线上失败和人工复盘样本能自动转入待审核评估池。
+
+要求：高风险样本自动进入待审核评估池的比例达到 85% 及以上。
+
+统计对象：线上高风险失败样本和人工复盘样本。
+
+完成标准：入库样本包含问题、答案、期望依据和失败分类。
+
+样本集：最近 30 天失败样本。
+
+测量范围：只统计高风险标签样本，不统计普通用户反馈。`,
+      uncertaintyLevel: "破局",
+      baseline: 18,
+      current: 29,
+      target: 85,
+      unit: "%",
+      direction: "increase",
+      status: "At Risk",
+      confidence: 52,
+      owner: "",
+      source: "memberProposed",
+      definer: "Kai Wang",
+      definerUserId: USER_KAI,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-bounty-dataset-growth",
+      objectiveId: "obj-bounty-eval-dataset",
+      title: "新增 300 条高风险评估样本",
+      detail: `说明：补齐权限、成本、检索边界和工具失败样本。
+
+要求：新增 300 条已标注高风险评估样本。
+
+统计对象：通过审核并进入 nightly eval 的样本。
+
+完成标准：样本具备期望答案、引用依据和失败分类。
+
+样本集：线上日志、用户反馈和人工复盘记录。
+
+测量范围：只统计进入评估系统的样本，不统计草稿。`,
+      uncertaintyLevel: "进阶",
+      baseline: 0,
+      current: 46,
+      target: 300,
+      unit: "条",
+      direction: "increase",
+      status: "On Track",
+      confidence: 61,
+      owner: "",
+      source: "memberProposed",
+      definer: "Kai Wang",
+      definerUserId: USER_KAI,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-bounty-cost-routing",
+      objectiveId: "obj-bounty-cost-routing",
+      title: "低风险请求自动路由覆盖率达到 70%",
+      detail: `说明：低风险请求自动进入低成本模型或缓存路径。
+
+要求：70% 低风险请求能自动走低成本路径。
+
+统计对象：已打低风险标签的问答请求。
+
+完成标准：低成本路径质量不低于基线 98%。
+
+样本集：低风险问答请求和对应质量抽检。
+
+测量范围：只统计低风险请求，不统计合同审查等高风险场景。`,
+      uncertaintyLevel: "渡劫",
+      baseline: 0,
+      current: 8,
+      target: 70,
+      unit: "%",
+      direction: "increase",
+      status: "Draft",
+      confidence: 36,
+      owner: "",
+      source: "managerDefined",
+      definer: "Alex Chen",
+      definerUserId: USER_ALEX,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-bounty-cache-reuse",
+      objectiveId: "obj-bounty-cost-routing",
+      title: "稳定问题缓存复用率达到 45%",
+      detail: `说明：对重复、低风险、答案稳定的问题启用缓存复用。
+
+要求：稳定问题缓存复用率达到 45%。
+
+统计对象：低风险重复问答请求。
+
+完成标准：缓存复用不引入过期答案，高风险请求不走缓存。
+
+样本集：最近 14 天重复问答请求。
+
+测量范围：只统计可缓存问题，不统计动态权限和合同条款解释。`,
+      uncertaintyLevel: "进阶",
+      baseline: 5,
+      current: 13,
+      target: 45,
+      unit: "%",
+      direction: "increase",
+      status: "Draft",
+      confidence: 43,
+      owner: "",
+      source: "managerDefined",
+      definer: "Alex Chen",
+      definerUserId: USER_ALEX,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-demo-evidence-pack-integrity",
+      objectiveId: "obj-demo-frozen-evidence-pack",
+      title: "关键失败类型证据完整率达到 100%",
+      detail: `说明：每个关键失败类型都需要具备日志样本、复现步骤和人工判定说明。
+
+要求：关键失败类型中，证据包字段完整的比例达到 100%。
+
+统计对象：最近 30 天生产 Agent 工具调用失败类型。
+
+完成标准：每个失败类型至少 1 条可复现样本，且日志、步骤、判定说明齐全。
+
+样本集：生产日志、错误工单和人工复盘记录。
+
+测量范围：只统计 P1/P2 级 Agent 工具失败。`,
+      uncertaintyLevel: "进阶",
+      baseline: 35,
+      current: 72,
+      target: 100,
+      unit: "%",
+      direction: "increase",
+      status: "On Track",
+      confidence: 68,
+      owner: "",
+      source: "managerDefined",
+      definer: "xueyu",
+      definerUserId: USER_XUEYU,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-demo-replay-script",
+      objectiveId: "obj-demo-frozen-evidence-pack",
+      title: "复现脚本覆盖 8 类失败路径",
+      detail: `说明：每类失败路径都应有可运行的复现脚本和预期输出。
+
+要求：复现脚本覆盖 8 类关键 Agent 失败路径。
+
+统计对象：生产 Agent 的工具选择、参数组装、权限校验和重试路径。
+
+完成标准：8 类失败路径都能在本地或 CI 环境复现。
+
+样本集：P1/P2 失败复盘列表。
+
+测量范围：只统计已经被指挥官确认为关键的失败路径。`,
+      uncertaintyLevel: "破局",
+      baseline: 1,
+      current: 5,
+      target: 8,
+      unit: "类",
+      direction: "increase",
+      status: "At Risk",
+      confidence: 57,
+      owner: "",
+      source: "managerDefined",
+      definer: "xueyu",
+      definerUserId: USER_XUEYU,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-demo-review-citation-pass",
+      objectiveId: "obj-demo-submitted-peer-review",
+      title: "引用覆盖回归集通过率达到 95%",
+      detail: `说明：核心引用场景回归集需要稳定通过。
+
+要求：引用覆盖回归集通过率达到 95% 及以上。
+
+统计对象：120 条高价值引用问答回归样本。
+
+完成标准：回归集通过率达到 95%，失败样本全部有原因分类。
+
+样本集：指挥官确认的引用质量回归集。
+
+测量范围：只统计需要引用的事实型回答。`,
+      uncertaintyLevel: "破局",
+      baseline: 70,
+      current: 96,
+      target: 95,
+      unit: "%",
+      direction: "increase",
+      status: "On Track",
+      confidence: 83,
+      owner: "",
+      source: "memberProposed",
+      definer: "Mia Zhang",
+      definerUserId: USER_MIA,
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-demo-review-regression-pass",
+      objectiveId: "obj-demo-submitted-peer-review",
+      title: "错误引用回归样本全部修复",
+      detail: `说明：已知错误引用样本必须全部修复并进入回归。
+
+要求：错误引用回归样本修复率达到 100%。
+
+统计对象：上一轮验收发现的错误引用样本。
+
+完成标准：所有错误引用样本修复，且新增回归断言。
+
+样本集：错误引用复盘清单。
+
+测量范围：只统计已确认的错误引用样本。`,
+      uncertaintyLevel: "进阶",
+      baseline: 40,
+      current: 100,
+      target: 100,
+      unit: "%",
+      direction: "increase",
+      status: "On Track",
+      confidence: 86,
+      owner: "",
+      source: "memberProposed",
+      definer: "Ethan Liu",
+      definerUserId: USER_ETHAN,
+      acceptedResult: "unreviewed",
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-demo-routing-coverage",
+      objectiveId: "obj-demo-settled-routing-quality",
+      title: "低风险请求自动路由覆盖率达到 72%",
+      detail: `说明：低风险请求自动进入低成本模型或缓存路径。
+
+要求：低风险请求自动路由覆盖率达到 70% 及以上。
+
+统计对象：最近 7 天低风险问答请求。
+
+完成标准：覆盖率达到 70%，且路由结果可追踪。
+
+样本集：低风险请求抽样和路由日志。
+
+测量范围：不统计高风险合同、权限和审计请求。`,
+      uncertaintyLevel: "进阶",
+      baseline: 18,
+      current: 72,
+      target: 70,
+      unit: "%",
+      direction: "increase",
+      status: "On Track",
+      confidence: 90,
+      owner: "",
+      source: "managerDefined",
+      definer: "xueyu",
+      definerUserId: USER_XUEYU,
+      acceptedResult: "completed",
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+    {
+      id: "res-demo-routing-quality",
+      objectiveId: "obj-demo-settled-routing-quality",
+      title: "低成本路径质量不低于基线 98%",
+      detail: `说明：路由到低成本路径后，答案质量仍需保持稳定。
+
+要求：低成本路径质量保持率不低于高质量路径基线的 98%。
+
+统计对象：低风险请求质量抽检样本。
+
+完成标准：质量保持率达到 98%，无 P1/P2 误路由。
+
+样本集：人工抽检样本和自动评估样本。
+
+测量范围：只统计低风险路径，不统计人工升级后的请求。`,
+      uncertaintyLevel: "进阶",
+      baseline: 98,
+      current: 98.6,
+      target: 98,
+      unit: "%",
+      direction: "increase",
+      status: "On Track",
+      confidence: 87,
+      owner: "",
+      source: "managerDefined",
+      definer: "xueyu",
+      definerUserId: USER_XUEYU,
+      acceptedResult: "completed",
+      trend: confidenceTrend,
+      reviewCadence: "Weekly",
+    },
+  ],
+  evidence: [
+    {
+      id: "ev-eval-coverage",
+      type: "Eval run",
+      title: "AI 平台评估覆盖快照",
+      summary: "当前覆盖 31 / 50 个核心场景，权限继承和成本追问覆盖不足。",
+      source: "评估流水线",
+      date: "2026-04-22",
+      owner: "Mia Zhang",
+      ownerUserId: USER_MIA,
+      linkedResultId: "res-eval-coverage",
+    },
+    {
+      id: "ev-regression-gap",
+      type: "Dashboard snapshot",
+      title: "回归套件缺口评审",
+      summary: "工单 Agent 和成本分析 Assistant 缺少回归集。",
+      source: "评估仪表盘",
+      date: "2026-04-21",
+      owner: "Kai Wang",
+      ownerUserId: USER_KAI,
+      linkedResultId: "res-eval-coverage",
+    },
+    {
+      id: "ev-rag-run",
+      type: "Eval run",
+      title: "RAG Recall@5 夜间运行",
+      summary: "Recall@5 达到 76%，版本过滤场景仍低于 70%。",
+      source: "RAG 评估运行器",
+      date: "2026-04-24",
+      owner: "Kai Wang",
+      ownerUserId: USER_KAI,
+      linkedResultId: "res-rag-recall",
+    },
+    {
+      id: "ev-permission-logs",
+      type: "Log sample",
+      title: "权限策略过期引用",
+      summary: "3 条线上日志引用 2025 版权限策略文档。",
+      source: "生产日志",
+      date: "2026-04-23",
+      owner: "Alex Chen",
+      ownerUserId: USER_ALEX,
+      linkedResultId: "res-rag-recall",
+    },
+    {
+      id: "ev-hallucination-judge",
+      type: "Eval run",
+      title: "幻觉判定周报",
+      summary: "权限问答幻觉率 6.5%，主要来自过期知识和缺失引用。",
+      source: "Judge v0.8",
+      date: "2026-04-23",
+      owner: "Alex Chen",
+      ownerUserId: USER_ALEX,
+      linkedResultId: "res-hallucination",
+    },
+    {
+      id: "ev-tool-failure",
+      type: "Incident report",
+      title: "工单创建工具重复调用",
+      summary: "过去 7 天出现 18 次重复提交，集中在重试分支。",
+      source: "事故 ORF-2026-17",
+      date: "2026-04-22",
+      owner: "Ethan Liu",
+      ownerUserId: USER_ETHAN,
+      linkedResultId: "res-tool-success",
+    },
+    {
+      id: "ev-latency-cost",
+      type: "Dashboard snapshot",
+      title: "长上下文成本与时延尖峰",
+      summary: "成本追问场景 P95 超过 8 秒，长上下文检索占 61% 时延。",
+      source: "可观测性仪表盘",
+      date: "2026-04-20",
+      owner: "Nora Patel",
+      ownerUserId: USER_NORA,
+      linkedResultId: "res-latency",
+    },
+  ],
+  feedback: [
+    {
+      id: "fb-permission-old-doc",
+      projectId: "project-feedback-eval",
+      phenomenon: "用户问“权限策略继承规则”时，系统给出了旧版本答案。",
+      causeCategories: ["知识缺口", "检索问题"],
+      impact: "High",
+      suggestedAdjustment: "更新知识库元数据，增加文档版本过滤，补充回归用例。",
+      status: "Open",
+      owner: "Alex Chen",
+      ownerUserId: USER_ALEX,
+      createdAt: "2026-04-23",
+      updatedAt: "2026-04-24",
+      activity: [
+        { id: "act-1", actor: "Alex Chen", action: "分类为知识缺口 + 检索问题", at: "2026-04-23 10:12" },
+        { id: "act-2", actor: "Mia Zhang", action: "要求补充版本感知索引方案", at: "2026-04-24 09:30" },
+      ],
+    },
+    {
+      id: "fb-ticket-duplicate",
+      projectId: "project-ai-delivery",
+      phenomenon: "Agent 在调用工单系统 API 时经常重复提交。",
+      causeCategories: ["工具调用失败", "Prompt 问题"],
+      impact: "High",
+      suggestedAdjustment: "增加幂等键，工具调用前增加状态确认步骤。",
+      status: "Open",
+      owner: "Ethan Liu",
+      ownerUserId: USER_ETHAN,
+      createdAt: "2026-04-22",
+      updatedAt: "2026-04-24",
+      activity: [
+        { id: "act-3", actor: "Ethan Liu", action: "创建任务 ORF-131", at: "2026-04-22 16:50" },
+        { id: "act-4", actor: "Alex Chen", action: "补充 Prompt 回归用例", at: "2026-04-23 11:15" },
+      ],
+    },
+    {
+      id: "fb-cost-latency",
+      projectId: "project-cost-routing",
+      phenomenon: "用户对“模型部署成本”追问时，回答延迟超过 8 秒。",
+      causeCategories: ["时延问题", "成本问题"],
+      impact: "Medium",
+      suggestedAdjustment: "引入缓存，拆分长上下文，增加成本感知路由。",
+      status: "Open",
+      owner: "Nora Patel",
+      ownerUserId: USER_NORA,
+      createdAt: "2026-04-20",
+      updatedAt: "2026-04-20",
+      activity: [
+        { id: "act-5", actor: "Nora Patel", action: "从反馈整理中捕获", at: "2026-04-20 17:20" },
+      ],
+    },
+  ],
+  tasks: [
+    {
+      id: "ORF-128",
+      title: "构建 RAG 召回评估脚本",
+      description: "为权限问答、知识库搜索和合同审查建立 nightly Recall@5 评估脚本。",
+      status: "In Progress",
+      priority: "High",
+      assignee: "Kai Wang",
+      assigneeUserId: USER_KAI,
+      linkedObjectiveId: "obj-engineering",
+      dueDate: "2026-04-28",
+      tags: ["RAG", "Evaluation"],
+      checklist: [
+        { id: "ck-1", label: "整理权限问答标准样本", done: true, updatedAt: "2026-04-22" },
+        { id: "ck-2", label: "输出 Recall@5 明细报表", done: false, updatedAt: "2026-04-24" },
+        { id: "ck-3", label: "接入 nightly eval 流水线", done: false, updatedAt: "2026-04-24" },
+      ],
+      createdAt: "2026-04-16",
+      updatedAt: "2026-04-24",
+    },
+    {
+      id: "ORF-129",
+      title: "为权限文档增加版本元数据",
+      description: "让检索索引能优先返回最新版本权限文档。",
+      status: "Todo",
+      priority: "High",
+      assignee: "Mia Zhang",
+      assigneeUserId: USER_MIA,
+      linkedObjectiveId: "obj-engineering",
+      dueDate: "2026-04-29",
+      tags: ["Knowledge", "Retrieval"],
+      checklist: [
+        { id: "ck-4", label: "定义文档版本字段", done: true, updatedAt: "2026-04-24" },
+        { id: "ck-5", label: "回填历史权限文档元数据", done: false, updatedAt: "2026-04-24" },
+        { id: "ck-6", label: "更新索引过滤规则", done: false, updatedAt: "2026-04-23" },
+      ],
+      createdAt: "2026-04-23",
+      updatedAt: "2026-04-24",
+    },
+    {
+      id: "ORF-130",
+      title: "建立 Prompt 回归套件",
+      description: "将高频失败样本转成 Prompt 回归用例。",
+      status: "In Review",
+      priority: "High",
+      assignee: "Alex Chen",
+      assigneeUserId: USER_ALEX,
+      linkedObjectiveId: "obj-engineering",
+      dueDate: "2026-04-30",
+      tags: ["Prompt", "Regression"],
+      checklist: [
+        { id: "ck-7", label: "沉淀高频失败样本", done: true, updatedAt: "2026-04-21" },
+        { id: "ck-8", label: "固定 Prompt v2.3 对照组", done: true, updatedAt: "2026-04-23" },
+        { id: "ck-9", label: "补充成本问答回归用例", done: false, updatedAt: "2026-04-24" },
+      ],
+      createdAt: "2026-04-17",
+      updatedAt: "2026-04-24",
+    },
+    {
+      id: "ORF-131",
+      title: "增加 Agent 工具调用幂等保护",
+      description: "为工单创建工具增加幂等键和调用前状态确认。",
+      status: "In Progress",
+      priority: "Critical",
+      assignee: "Ethan Liu",
+      assigneeUserId: USER_ETHAN,
+      linkedObjectiveId: "obj-engineering",
+      dueDate: "2026-04-27",
+      tags: ["Agent", "Tooling"],
+      checklist: [
+        { id: "ck-10", label: "生成工单幂等键", done: true, updatedAt: "2026-04-23" },
+        { id: "ck-11", label: "调用前查询工单状态", done: false, updatedAt: "2026-04-24" },
+        { id: "ck-12", label: "补充重复提交回归测试", done: false, updatedAt: "2026-04-24" },
+      ],
+      createdAt: "2026-04-22",
+      updatedAt: "2026-04-24",
+    },
+    {
+      id: "ORF-132",
+      title: "接入成本统计面板",
+      description: "按 model version、prompt version、RAG version 展示请求成本。",
+      status: "Todo",
+      priority: "Medium",
+      assignee: "Nora Patel",
+      assigneeUserId: USER_NORA,
+      linkedObjectiveId: "obj-cost-quality",
+      dueDate: "2026-05-02",
+      tags: ["Cost", "Observability"],
+      checklist: [],
+      createdAt: "2026-04-18",
+      updatedAt: "2026-04-22",
+    },
+    {
+      id: "ORF-133",
+      title: "增加幻觉判定器",
+      description: "使用固定评估集检测权限和成本场景的错误断言。",
+      status: "Backlog",
+      priority: "High",
+      assignee: "Alex Chen",
+      assigneeUserId: USER_ALEX,
+      linkedObjectiveId: "obj-engineering",
+      dueDate: "2026-05-03",
+      tags: ["Evaluation", "Judge"],
+      checklist: [],
+      createdAt: "2026-04-18",
+      updatedAt: "2026-04-20",
+    },
+    {
+      id: "ORF-134",
+      title: "梳理高频失败案例 Top 20",
+      description: "把线上失败样本分类并沉淀到反馈收件箱。",
+      status: "Done",
+      priority: "Medium",
+      assignee: "Ethan Liu",
+      assigneeUserId: USER_ETHAN,
+      linkedObjectiveId: "obj-feedback-loop",
+      dueDate: "2026-04-24",
+      tags: ["Feedback"],
+      checklist: [
+        { id: "ck-13", label: "导出最近 30 天失败样本", done: true, updatedAt: "2026-04-20" },
+        { id: "ck-14", label: "按原因完成初始分类", done: true, updatedAt: "2026-04-22" },
+        { id: "ck-15", label: "同步到反馈收件箱", done: true, updatedAt: "2026-04-24" },
+      ],
+      createdAt: "2026-04-15",
+      updatedAt: "2026-04-24",
+    },
+    {
+      id: "ORF-135",
+      title: "灰度发布新版检索策略",
+      description: "对权限问答场景启用版本感知检索策略。",
+      status: "Todo",
+      priority: "High",
+      assignee: "Kai Wang",
+      assigneeUserId: USER_KAI,
+      linkedObjectiveId: "obj-engineering",
+      dueDate: "2026-05-01",
+      tags: ["RAG", "Release"],
+      checklist: [],
+      createdAt: "2026-04-24",
+      updatedAt: "2026-04-24",
+    },
+    {
+      id: "ORF-136",
+      title: "建立反馈 issue 的关闭与重开流程",
+      description: "定义内部反馈的讨论、关闭和重新打开口径。",
+      status: "In Progress",
+      priority: "Medium",
+      assignee: "Mia Zhang",
+      assigneeUserId: USER_MIA,
+      linkedObjectiveId: "obj-feedback-loop",
+      dueDate: "2026-05-02",
+      tags: ["ORF", "Process"],
+      checklist: [
+        { id: "ck-16", label: "定义反馈分级规则", done: true, updatedAt: "2026-04-22" },
+        { id: "ck-17", label: "补充关闭判断模板", done: false, updatedAt: "2026-04-24" },
+        { id: "ck-18", label: "建立重新打开确认节点", done: false, updatedAt: "2026-04-24" },
+      ],
+      createdAt: "2026-04-19",
+      updatedAt: "2026-04-24",
+    },
+    {
+      id: "ORF-137",
+      title: "拆分长上下文并增加成本感知路由",
+      description: "减少长上下文请求的时延和成本。",
+      status: "Backlog",
+      priority: "High",
+      assignee: "Nora Patel",
+      assigneeUserId: USER_NORA,
+      linkedObjectiveId: "obj-cost-quality",
+      dueDate: "2026-05-06",
+      tags: ["Latency", "Cost"],
+      checklist: [
+        { id: "ck-19", label: "识别长上下文高成本链路", done: false, updatedAt: "2026-04-20" },
+        { id: "ck-20", label: "拆分检索片段裁剪策略", done: false, updatedAt: "2026-04-20" },
+        { id: "ck-21", label: "设计成本感知路由规则", done: false, updatedAt: "2026-04-20" },
+      ],
+      createdAt: "2026-04-20",
+      updatedAt: "2026-04-20",
+    },
+  ],
+  decisions: [
+    {
+      id: "dec-version-aware",
+      title: "将权限问答检索切换为版本感知索引",
+      reason: "过期权限文档导致线上回答错误。",
+      evidence: "3 条生产日志和 Recall@5 回归运行。",
+      owner: "Mia Zhang",
+      date: "2026-04-24",
+      linkedObjectiveId: "obj-engineering",
+      linkedResultId: "res-rag-recall",
+    },
+    {
+      id: "dec-idempotency",
+      title: "为工单创建工具增加幂等键",
+      reason: "重试分支超时后 Agent 重复调用工具。",
+      evidence: "7 天内出现 18 次重复调用。",
+      owner: "Ethan Liu",
+      date: "2026-04-23",
+      linkedObjectiveId: "obj-engineering",
+      linkedResultId: "res-tool-success",
+    },
+    {
+      id: "dec-prompt-freeze",
+      title: "冻结 Prompt 模板 v2.3 用于回归测试",
+      reason: "Prompt 变化掩盖了检索质量回退。",
+      evidence: "跨 Prompt 版本的回归集对比。",
+      owner: "Alex Chen",
+      date: "2026-04-21",
+      linkedObjectiveId: "obj-engineering",
+      linkedResultId: "res-hallucination",
+    },
+  ],
+  evalRuns: [
+    {
+      id: "run-0424-a",
+      scenario: "权限问答",
+      dataset: "permissions-v4",
+      model: "model-router-prod",
+      promptVersion: "prompt-v2.3",
+      ragVersion: "rag-index-2026.04",
+      accuracy: 82,
+      hallucination: 6.5,
+      latency: 4.2,
+      cost: 0.038,
+      status: "At Risk",
+      linkedResultId: "res-hallucination",
+    },
+    {
+      id: "run-0424-b",
+      scenario: "工单创建 Agent",
+      dataset: "agent-tools-v2",
+      model: "model-router-prod",
+      promptVersion: "agent-prompt-v1.8",
+      ragVersion: "tool-docs-2026.04",
+      accuracy: 88,
+      hallucination: 3.2,
+      latency: 3.6,
+      cost: 0.031,
+      status: "On Track",
+      linkedResultId: "res-tool-success",
+    },
+    {
+      id: "run-0424-c",
+      scenario: "成本分析助手",
+      dataset: "cost-queries-v1",
+      model: "model-router-prod",
+      promptVersion: "cost-prompt-v0.9",
+      ragVersion: "billing-index-2026.04",
+      accuracy: 79,
+      hallucination: 5.1,
+      latency: 5.8,
+      cost: 0.049,
+      status: "At Risk",
+      linkedResultId: "res-cost",
+    },
+  ],
+  scenarios: [
+    {
+      id: "sc-permission",
+      title: "权限问答",
+      qualityScore: 78,
+      lastRun: "2026-04-24",
+      topFailureCause: "知识缺口",
+      linkedObjectiveId: "obj-engineering",
+      openFeedbackCount: 3,
+    },
+    {
+      id: "sc-contract",
+      title: "合同审查助手",
+      qualityScore: 84,
+      lastRun: "2026-04-23",
+      topFailureCause: "评估缺口",
+      linkedObjectiveId: "obj-engineering",
+      openFeedbackCount: 1,
+    },
+    {
+      id: "sc-ticket",
+      title: "工单创建 Agent",
+      qualityScore: 86,
+      lastRun: "2026-04-24",
+      topFailureCause: "工具调用失败",
+      linkedObjectiveId: "obj-engineering",
+      openFeedbackCount: 2,
+    },
+    {
+      id: "sc-knowledge",
+      title: "知识库搜索",
+      qualityScore: 76,
+      lastRun: "2026-04-24",
+      topFailureCause: "检索问题",
+      linkedObjectiveId: "obj-feedback-loop",
+      openFeedbackCount: 4,
+    },
+    {
+      id: "sc-cost",
+      title: "成本分析助手",
+      qualityScore: 72,
+      lastRun: "2026-04-22",
+      topFailureCause: "时延问题",
+      linkedObjectiveId: "obj-cost-quality",
+      openFeedbackCount: 2,
+    },
+  ],
+  failureSamples: [
+    {
+      id: "fail-permission",
+      question: "权限策略继承规则在项目级和资源级冲突时如何处理？",
+      modelAnswer: "系统优先使用 2025 版权限继承规则，项目级策略覆盖资源级策略。",
+      expectedAnswer: "2026 版规则要求资源级拒绝策略优先，并记录审计事件。",
+      reason: "模型引用了旧版本文档，检索未进行版本过滤。",
+      linkedResultId: "res-rag-recall",
+    },
+    {
+      id: "fail-ticket",
+      question: "创建客户升级工单并附加最近 3 条错误日志。",
+      modelAnswer: "Agent 重复提交两次工单，第二次缺少日志附件。",
+      expectedAnswer: "只创建一次工单，并携带完整日志附件和幂等键。",
+      reason: "工具调用缺少幂等键，重试分支未检查状态。",
+      linkedResultId: "res-tool-success",
+    },
+  ],
+  comments: [],
+  objectiveLoot: [
+    {
+      id: "loot-demo-peer-review-1",
+      objectiveId: "obj-demo-submitted-peer-review",
+      submittedBy: "Mia Zhang",
+      submittedByUserId: USER_MIA,
+      body: "引用覆盖回归包已经完成，错误引用样本已全部修复，证据链接和自测报告见下方。",
+      resultClaims: [
+        {
+          resultId: "res-demo-review-citation-pass",
+          claim: "completed",
+          evidenceText: "引用覆盖回归集通过率 96%，失败样本已分类归档。",
+        },
+        {
+          resultId: "res-demo-review-regression-pass",
+          claim: "completed",
+          evidenceText: "上一轮错误引用样本 100% 修复，并新增回归断言。",
+        },
+      ],
+      selfTestReportUrl: "https://example.com/orf/demo-citation-review-report",
+      selfTestReportBody: "自测覆盖 120 条引用问答样本，包含错误引用回归、引用缺失和来源不匹配三类检查。",
+      submittedAt: "2026-05-17T15:20:00.000Z",
+    },
+  ],
+  objectiveTrialReviews: [],
+  objectiveAcceptanceReviews: [],
+  objectiveAlignmentRequests: [],
+  objectiveSettlementEvents: [],
+  pointLedger: [
+    {
+      id: "ledger-demo-routing-kai",
+      objectiveId: "obj-demo-settled-routing-quality",
+      userId: "00000000-0000-4000-8000-000000000204",
+      memberName: "Kai Wang",
+      points: 60,
+      reason: "匿名互评贡献比例 60%",
+      settlementPeriodAt: "2026-05-16T10:00:00.000Z",
+      createdAt: "2026-05-16T10:00:00.000Z",
+    },
+    {
+      id: "ledger-demo-routing-nora",
+      objectiveId: "obj-demo-settled-routing-quality",
+      userId: "00000000-0000-4000-8000-000000000205",
+      memberName: "Nora Patel",
+      points: 40,
+      reason: "匿名互评贡献比例 40%",
+      settlementPeriodAt: "2026-05-16T10:00:00.000Z",
+      createdAt: "2026-05-16T10:00:00.000Z",
+    },
+  ],
+  rules: {
+    requireResultForTask: false,
+    requireEvidenceForFeedback: true,
+    weeklyFeedbackCadence: true,
+    autoCreateReviewSummary: true,
+  },
+};
+
+export const initialOrfState: OrfState = normalizeInitialState(initialOrfStateSeed);

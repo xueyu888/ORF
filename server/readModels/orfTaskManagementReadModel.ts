@@ -1,6 +1,5 @@
 import { desc, eq, inArray } from "drizzle-orm";
-import { initialOrfState } from "../../src/data/initialOrfState";
-import type { ReportsPageData, TaskManagementData } from "../../src/domain/orfReadModel";
+import { createDefaultOrfReadModelRules, type ReportsPageData, type TaskManagementData } from "../../src/domain/orfReadModel";
 import type {
   CommentThread,
   Evidence,
@@ -60,7 +59,7 @@ import {
 } from "./orfReadModelMappers";
 
 export type TaskManagementDataScope = {
-  scope?: RuntimeScope | null;
+  scope: RuntimeScope;
 };
 
 type CommentThreadRow = typeof commentThreads.$inferSelect;
@@ -77,21 +76,18 @@ function isMissingCommentStorageError(error: unknown) {
   return cause.code === "42P01" || cause.code === "42704";
 }
 
-function storageScope(id: string | null | undefined): RuntimeScope | null {
-  const storageId = id?.trim();
-  return storageId ? runtimeScope(storageId) : null;
+function scopedStorageId(scope: TaskManagementDataScope) {
+  const storageId = runtimeScopeStorageId(scope.scope).trim();
+  if (!storageId) {
+    throw new Error("Runtime scope is required");
+  }
+  return storageId;
 }
 
-function scopedStorageId(scope: TaskManagementDataScope = {}) {
-  return scope.scope ? runtimeScopeStorageId(scope.scope).trim() : "";
-}
-
-async function getCommentRows(scope: TaskManagementDataScope = {}): Promise<[CommentThreadRow[], CommentMessageRow[], CommentAttachmentRow[]]> {
+async function getCommentRows(scope: TaskManagementDataScope): Promise<[CommentThreadRow[], CommentMessageRow[], CommentAttachmentRow[]]> {
   try {
     const storageScopeId = scopedStorageId(scope);
-    const threadRows = storageScopeId
-      ? await db.select().from(commentThreads).where(eq(commentThreads.teamId, storageScopeId))
-      : await db.select().from(commentThreads);
+    const threadRows = await db.select().from(commentThreads).where(eq(commentThreads.teamId, storageScopeId));
     const threadIds = threadRows.map((thread) => thread.id);
     const messageRows =
       threadIds.length > 0
@@ -225,36 +221,24 @@ export function userProfilesForReportsPageData(
   return profiles.filter((profile) => ids.has(profile.id));
 }
 
-export async function getTaskManagementData(scope: TaskManagementDataScope = {}): Promise<TaskManagementData> {
+export async function getTaskManagementData(scope: TaskManagementDataScope): Promise<TaskManagementData> {
   const storageScopeId = scopedStorageId(scope);
-  const objectiveRows = storageScopeId
-    ? await db.select().from(objectives).where(eq(objectives.teamId, storageScopeId)).orderBy(desc(objectives.createdAt), desc(objectives.id))
-    : await db.select().from(objectives).orderBy(desc(objectives.createdAt), desc(objectives.id));
-  const projectRows = storageScopeId ? await db.select().from(projects).where(eq(projects.teamId, storageScopeId)).orderBy(desc(projects.createdAt), desc(projects.id)) : await db.select().from(projects);
-  const resultRows = storageScopeId ? await db.select().from(results).where(eq(results.teamId, storageScopeId)) : await db.select().from(results);
-  const taskRows = storageScopeId ? await db.select().from(tasks).where(eq(tasks.teamId, storageScopeId)) : await db.select().from(tasks);
-  const evidenceRows = storageScopeId ? await db.select().from(evidence).where(eq(evidence.teamId, storageScopeId)) : await db.select().from(evidence);
-  const feedbackRows = storageScopeId
-    ? await db
-        .select()
-        .from(feedback)
-        .where(eq(feedback.teamId, storageScopeId))
-        .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id))
-    : await db.select().from(feedback).orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id));
-  const objectiveLootRows = storageScopeId ? await db.select().from(objectiveLoot).where(eq(objectiveLoot.teamId, storageScopeId)) : await db.select().from(objectiveLoot);
-  const objectiveTrialReviewRows = storageScopeId
-    ? await db.select().from(objectiveTrialReviews).where(eq(objectiveTrialReviews.teamId, storageScopeId))
-    : await db.select().from(objectiveTrialReviews);
-  const objectiveAcceptanceReviewRows = storageScopeId
-    ? await db.select().from(objectiveAcceptanceReviews).where(eq(objectiveAcceptanceReviews.teamId, storageScopeId))
-    : await db.select().from(objectiveAcceptanceReviews);
-  const objectiveAlignmentRequestRows = storageScopeId
-    ? await db.select().from(objectiveAlignmentRequests).where(eq(objectiveAlignmentRequests.teamId, storageScopeId))
-    : await db.select().from(objectiveAlignmentRequests);
-  const objectiveSettlementEventRows = storageScopeId
-    ? await db.select().from(objectiveSettlementEvents).where(eq(objectiveSettlementEvents.teamId, storageScopeId))
-    : await db.select().from(objectiveSettlementEvents);
-  const pointLedgerRows = storageScopeId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId)) : await db.select().from(pointLedger);
+  const objectiveRows = await db.select().from(objectives).where(eq(objectives.teamId, storageScopeId)).orderBy(desc(objectives.createdAt), desc(objectives.id));
+  const projectRows = await db.select().from(projects).where(eq(projects.teamId, storageScopeId)).orderBy(desc(projects.createdAt), desc(projects.id));
+  const resultRows = await db.select().from(results).where(eq(results.teamId, storageScopeId));
+  const taskRows = await db.select().from(tasks).where(eq(tasks.teamId, storageScopeId));
+  const evidenceRows = await db.select().from(evidence).where(eq(evidence.teamId, storageScopeId));
+  const feedbackRows = await db
+    .select()
+    .from(feedback)
+    .where(eq(feedback.teamId, storageScopeId))
+    .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id));
+  const objectiveLootRows = await db.select().from(objectiveLoot).where(eq(objectiveLoot.teamId, storageScopeId));
+  const objectiveTrialReviewRows = await db.select().from(objectiveTrialReviews).where(eq(objectiveTrialReviews.teamId, storageScopeId));
+  const objectiveAcceptanceReviewRows = await db.select().from(objectiveAcceptanceReviews).where(eq(objectiveAcceptanceReviews.teamId, storageScopeId));
+  const objectiveAlignmentRequestRows = await db.select().from(objectiveAlignmentRequests).where(eq(objectiveAlignmentRequests.teamId, storageScopeId));
+  const objectiveSettlementEventRows = await db.select().from(objectiveSettlementEvents).where(eq(objectiveSettlementEvents.teamId, storageScopeId));
+  const pointLedgerRows = await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId));
   const resultIds = resultRows.map((result) => result.id);
   const taskIds = taskRows.map((task) => task.id);
   const feedbackIssueIds = feedbackRows.map((item) => item.id);
@@ -262,7 +246,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const checklistRows = await getChecklistRows(taskIds);
   const causeRows = await getFeedbackCauseRows(feedbackIssueIds);
   const feedbackActivityRows = await getFeedbackActivityRows(feedbackIssueIds);
-  const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
+  const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows(scope);
   const { userNameById, userProfiles: scopeUserProfiles } = await getUserMapsForStorageScope(storageScopeId);
   const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
   const objectiveParticipantAvatarUrls = await getUserAvatarUrlMap(objectiveRows.flatMap((objective) => [...objective.challengerUserIds, ...objective.assignedChallengerUserIds]));
@@ -495,45 +479,27 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   };
 }
 
-export async function getReportsPageData(scope: TaskManagementDataScope = {}): Promise<ReportsPageData> {
+export async function getReportsPageData(scope: TaskManagementDataScope): Promise<ReportsPageData> {
   const storageScopeId = scopedStorageId(scope);
-  const objectiveRows = storageScopeId
-    ? await db
-        .select({
-          acceptedResult: objectives.acceptedResult,
-          createdAt: objectives.createdAt,
-          flowStatus: objectives.flowStatus,
-          id: objectives.id,
-          updatedAt: objectives.updatedAt,
-        })
-        .from(objectives)
-        .where(eq(objectives.teamId, storageScopeId))
-        .orderBy(desc(objectives.createdAt), desc(objectives.id))
-    : await db
-        .select({
-          acceptedResult: objectives.acceptedResult,
-          createdAt: objectives.createdAt,
-          flowStatus: objectives.flowStatus,
-          id: objectives.id,
-          updatedAt: objectives.updatedAt,
-        })
-        .from(objectives)
-        .orderBy(desc(objectives.createdAt), desc(objectives.id));
-  const objectiveAcceptanceReviewRows = storageScopeId
-    ? await db
-        .select({
-          acceptedResult: objectiveAcceptanceReviews.acceptedResult,
-          objectiveId: objectiveAcceptanceReviews.objectiveId,
-        })
-        .from(objectiveAcceptanceReviews)
-        .where(eq(objectiveAcceptanceReviews.teamId, storageScopeId))
-    : await db
-        .select({
-          acceptedResult: objectiveAcceptanceReviews.acceptedResult,
-          objectiveId: objectiveAcceptanceReviews.objectiveId,
-        })
-        .from(objectiveAcceptanceReviews);
-  const pointLedgerRows = storageScopeId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId)) : await db.select().from(pointLedger);
+  const objectiveRows = await db
+    .select({
+      acceptedResult: objectives.acceptedResult,
+      createdAt: objectives.createdAt,
+      flowStatus: objectives.flowStatus,
+      id: objectives.id,
+      updatedAt: objectives.updatedAt,
+    })
+    .from(objectives)
+    .where(eq(objectives.teamId, storageScopeId))
+    .orderBy(desc(objectives.createdAt), desc(objectives.id));
+  const objectiveAcceptanceReviewRows = await db
+    .select({
+      acceptedResult: objectiveAcceptanceReviews.acceptedResult,
+      objectiveId: objectiveAcceptanceReviews.objectiveId,
+    })
+    .from(objectiveAcceptanceReviews)
+    .where(eq(objectiveAcceptanceReviews.teamId, storageScopeId));
+  const pointLedgerRows = await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId));
   const { userNameById, userProfiles: scopeUserProfiles } = await getUserMapsForStorageScope(storageScopeId);
   const data: ReportsPageData = {
     objectives: objectiveRows,
@@ -547,19 +513,20 @@ export async function getReportsPageData(scope: TaskManagementDataScope = {}): P
   };
 }
 
-export async function getOrfStateSnapshot(scope: TaskManagementDataScope = {}): Promise<OrfState> {
+export async function getOrfStateSnapshot(scope: TaskManagementDataScope): Promise<OrfState> {
   const storageScopeId = scopedStorageId(scope);
   const data = await getTaskManagementData(scope);
-  const [scopeRow] = storageScopeId
-    ? await db.select({ id: teams.id }).from(teams).where(eq(teams.id, storageScopeId)).limit(1)
-    : await db.select({ id: teams.id }).from(teams).limit(1);
-  const scopeUsers = scopeRow ? await getScopedUsers(runtimeScope(scopeRow.id)) : initialOrfState.users;
-  const permissionRules = scopeRow ? await getPermissionRulesForScope(runtimeScope(scopeRow.id)) : initialOrfState.permissionRules;
+  const [scopeRow] = await db.select({ id: teams.id }).from(teams).where(eq(teams.id, storageScopeId)).limit(1);
+  if (!scopeRow) {
+    throw new Error(`Runtime scope not found: ${storageScopeId}`);
+  }
+  const scopeUsers = await getScopedUsers(runtimeScope(scopeRow.id));
+  const permissionRules = await getPermissionRulesForScope(runtimeScope(scopeRow.id));
 
   return {
     ...data,
     users: scopeUsers,
-    currentUserId: scopeUsers[0]?.id ?? initialOrfState.currentUserId,
+    currentUserId: scopeUsers[0]?.id ?? "",
     permissionRules,
     decisions: [],
     evalRuns: [],
@@ -567,11 +534,6 @@ export async function getOrfStateSnapshot(scope: TaskManagementDataScope = {}): 
     failureSamples: [],
     comments: data.comments,
     causeCategories: Array.from(new Set(data.feedback.flatMap((item) => item.causeCategories))),
-    rules: {
-      requireResultForTask: false,
-      requireEvidenceForFeedback: true,
-      weeklyFeedbackCadence: true,
-      autoCreateReviewSummary: false,
-    },
+    rules: createDefaultOrfReadModelRules(),
   };
 }

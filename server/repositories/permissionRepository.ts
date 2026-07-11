@@ -1,6 +1,5 @@
 import { and, eq } from "drizzle-orm";
 import { hasRolePermission, normalizePermissionKeys, permissionKeys, type PermissionKey } from "../../src/config/permissions";
-import { initialOrfState } from "../../src/data/initialOrfState";
 import type { PermissionRule, UserRole } from "../../src/types/orf";
 import { db } from "../db/client";
 import { rolePermissions } from "../db/schema";
@@ -13,13 +12,13 @@ export const persistedPermissionRoles = ["member"] as const satisfies readonly U
 export const permissionStorageStage = "global";
 export const permissionStorageResource = "permissionKeys";
 
-function defaultPermissionRulesForRole(role: UserRole): PermissionRule[] {
-  if (role === "admin") {
-    return [];
-  }
+export class PermissionConfigurationMissingError extends Error {
+  statusCode = 503;
 
-  const initialRule = initialOrfState.permissionRules.find((rule) => rule.role === role);
-  return [{ role, permissions: normalizePermissionKeys(initialRule?.permissions ?? []) }];
+  constructor(scopeId: string, role: UserRole) {
+    super(`Permission configuration is missing for scope ${scopeId} and role ${role}`);
+    this.name = "PermissionConfigurationMissingError";
+  }
 }
 
 function normalizePermissionRules(role: UserRole, rules: readonly PermissionRule[]): PermissionRule[] {
@@ -30,53 +29,26 @@ function normalizePermissionRules(role: UserRole, rules: readonly PermissionRule
   return [{ role, permissions: normalizePermissionKeys(rules.find((rule) => rule.role === role)?.permissions ?? []) }];
 }
 
-function permissionRulesFromRows(role: UserRole, rows: { stage: string; resource: string; actions: string[] }[]): PermissionRule[] {
-  const storedRule = rows.find((row) => row.stage === permissionStorageStage && row.resource === permissionStorageResource);
-  if (!storedRule) {
-    return defaultPermissionRulesForRole(role);
-  }
-
-  return [{ role, permissions: normalizePermissionKeys(storedRule.actions) }];
-}
-
-export async function ensureDefaultPermissionRules(scope: RuntimeScope): Promise<void> {
-  const defaultRules = persistedPermissionRoles.flatMap((role) => defaultPermissionRulesForRole(role));
-  if (defaultRules.length === 0) {
-    return;
-  }
-  const storageScopeId = runtimeScopeStorageId(scope);
-
-  await db
-    .insert(rolePermissions)
-    .values(
-      defaultRules.map((rule) => ({
-        teamId: storageScopeId,
-        role: rule.role,
-        stage: permissionStorageStage,
-        resource: permissionStorageResource,
-        actions: rule.permissions,
-      })),
-    )
-    .onConflictDoNothing();
-}
-
 export async function getPermissionRulesForScope(scope: RuntimeScope): Promise<PermissionRule[]> {
-  await ensureDefaultPermissionRules(scope);
+  const storageScopeId = runtimeScopeStorageId(scope);
+  const rows = await db
+    .select({ actions: rolePermissions.actions, role: rolePermissions.role })
+    .from(rolePermissions)
+    .where(
+      and(
+        eq(rolePermissions.teamId, storageScopeId),
+        eq(rolePermissions.stage, permissionStorageStage),
+        eq(rolePermissions.resource, permissionStorageResource),
+      ),
+    );
 
-  const rows = await db.select().from(rolePermissions).where(eq(rolePermissions.teamId, runtimeScopeStorageId(scope)));
-
-  return persistedPermissionRoles.flatMap((role) =>
-    permissionRulesFromRows(
-      role,
-      rows
-        .filter((row) => row.role === role)
-        .map((row) => ({
-          stage: row.stage,
-          resource: row.resource,
-          actions: row.actions,
-        })),
-    ),
-  );
+  return persistedPermissionRoles.map((role) => {
+    const storedRule = rows.find((row) => row.role === role);
+    if (!storedRule) {
+      throw new PermissionConfigurationMissingError(storageScopeId, role);
+    }
+    return { role, permissions: normalizePermissionKeys(storedRule.actions) };
+  });
 }
 
 export async function replaceRolePermissionRules(scope: RuntimeScope, role: UserRole, rules: readonly PermissionRule[]): Promise<PermissionRule[]> {
@@ -101,7 +73,7 @@ export async function replaceRolePermissionRules(scope: RuntimeScope, role: User
     );
   });
 
-  return getPermissionRulesForScope(scope);
+  return normalizedRules;
 }
 
 export async function getRolePermissionKeysForScope(scope: RuntimeScope, role: UserRole): Promise<PermissionKey[]> {

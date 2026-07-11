@@ -9,6 +9,7 @@ import type {
 } from "../../types/orf";
 import type { PermissionKey } from "../../config/permissions";
 export type { ReportsPageData } from "../reportsLeaderboard";
+export { createDefaultOrfReadModelRules, defaultOrfReadModelRules } from "./orfStateDefaults";
 
 export type TaskManagementData = Pick<
   OrfState,

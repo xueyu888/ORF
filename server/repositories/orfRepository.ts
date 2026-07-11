@@ -197,9 +197,12 @@ function taskDefinitionContributorUserIds(current: string[] | null | undefined, 
   return actorUserId ? uniqueParticipantUserIds([...(current ?? []), actorUserId]) : current ?? [];
 }
 
-function storageScope(id: string | null | undefined): RuntimeScope | null {
+function requiredStorageScope(id: string | null | undefined): RuntimeScope {
   const storageId = id?.trim();
-  return storageId ? runtimeScope(storageId) : null;
+  if (!storageId) {
+    throw new Error("Team scope is required");
+  }
+  return runtimeScope(storageId);
 }
 
 function statusFromChecklist(rows: readonly { done: boolean }[], fallback: TaskStatus = "Todo"): TaskStatus {
@@ -1334,13 +1337,13 @@ export type ObjectiveAlignmentMutationOutcome =
   | { status: "duplicate" }
   | { status: "closed" };
 
-async function objectiveOutcome(objectiveId: string, scope?: RuntimeScope | null): Promise<ObjectiveFlowMutationOutcome> {
+async function objectiveOutcome(objectiveId: string, scope: RuntimeScope): Promise<ObjectiveFlowMutationOutcome> {
   const data = await getOrfStateSnapshot({ scope });
   const objective = data.objectives.find((item) => item.id === objectiveId);
   return objective ? { status: "ok", objective } : { status: "notFound" };
 }
 
-async function objectiveAlignmentOutcome(requestId: string, scope?: RuntimeScope | null): Promise<ObjectiveAlignmentMutationOutcome> {
+async function objectiveAlignmentOutcome(requestId: string, scope: RuntimeScope): Promise<ObjectiveAlignmentMutationOutcome> {
   const data = await getOrfStateSnapshot({ scope });
   const request = data.objectiveAlignmentRequests.find((item) => item.id === requestId);
   return request ? { status: "ok", request } : { status: "notFound" };
@@ -1372,7 +1375,7 @@ export async function publishObjective(objectiveId: string, actorId: string): Pr
     objectiveId,
     teamId: published.teamId,
   });
-  return objectiveOutcome(objectiveId, storageScope(published.teamId));
+  return objectiveOutcome(objectiveId, requiredStorageScope(published.teamId));
 }
 
 export async function approveObjectiveChallengeApplication(
@@ -2131,10 +2134,10 @@ export async function canDeleteObjective(objectiveId: string): Promise<Objective
     : { status: "locked", flowStatus: objective.flowStatus };
 }
 
-export async function canEditObjectiveResultsDuringReestimate(objectiveId: string, memberUserId: string, scope?: RuntimeScope | null): Promise<boolean> {
+export async function canEditObjectiveResultsDuringReestimate(objectiveId: string, memberUserId: string, scope: RuntimeScope): Promise<boolean> {
   const actorUserId = memberUserId.trim();
   if (!actorUserId) return false;
-  const storageScopeId = scope ? runtimeScopeStorageId(scope) : "";
+  const storageScopeId = runtimeScopeStorageId(scope);
 
   const [objective] = await db
     .select({
@@ -2150,7 +2153,7 @@ export async function canEditObjectiveResultsDuringReestimate(objectiveId: strin
   return (
     objective &&
     isObjectiveReestimateWindowOpen(objective) &&
-    (!storageScopeId || objective.teamId === storageScopeId) &&
+    objective.teamId === storageScopeId &&
     (objective.challengerUserIds ?? []).includes(actorUserId)
   );
 }

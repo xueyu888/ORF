@@ -68,23 +68,27 @@ function objectiveAvailableForBountyApplication(objective: Objective) {
   return canApplyForObjectiveChallenge(objective) && !objectiveChallengeEntryClosed(objective);
 }
 
-function scopedStorageId(scope: TaskManagementDataScope = {}) {
-  return scope.scope ? runtimeScopeStorageId(scope.scope).trim() : "";
+function scopedStorageId(scope: TaskManagementDataScope) {
+  const storageScopeId = runtimeScopeStorageId(scope.scope).trim();
+  if (!storageScopeId) {
+    throw new Error("Runtime scope is required");
+  }
+  return storageScopeId;
 }
 
-async function getBountyHallSourceRows(scope: TaskManagementDataScope = {}) {
+async function getBountyHallSourceRows(scope: TaskManagementDataScope) {
   const storageScopeId = scopedStorageId(scope);
-  const objectiveRows = storageScopeId
-    ? await db.select().from(objectives).where(eq(objectives.teamId, storageScopeId)).orderBy(desc(objectives.createdAt), desc(objectives.id))
-    : await db.select().from(objectives).orderBy(desc(objectives.createdAt), desc(objectives.id));
-  const resultRows = storageScopeId ? await db.select().from(results).where(eq(results.teamId, storageScopeId)) : await db.select().from(results);
-  const pointLedgerRows = storageScopeId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId)) : await db.select().from(pointLedger);
-  const taskRows = storageScopeId
-    ? await db
-        .select({ id: tasks.id, linkedObjectiveId: tasks.linkedObjectiveId, sortOrder: tasks.sortOrder })
-        .from(tasks)
-        .where(eq(tasks.teamId, storageScopeId))
-    : await db.select({ id: tasks.id, linkedObjectiveId: tasks.linkedObjectiveId, sortOrder: tasks.sortOrder }).from(tasks);
+  const objectiveRows = await db
+    .select()
+    .from(objectives)
+    .where(eq(objectives.teamId, storageScopeId))
+    .orderBy(desc(objectives.createdAt), desc(objectives.id));
+  const resultRows = await db.select().from(results).where(eq(results.teamId, storageScopeId));
+  const pointLedgerRows = await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId));
+  const taskRows = await db
+    .select({ id: tasks.id, linkedObjectiveId: tasks.linkedObjectiveId, sortOrder: tasks.sortOrder })
+    .from(tasks)
+    .where(eq(tasks.teamId, storageScopeId));
   const resultIds = resultRows.map((result) => result.id);
   const trendRows = resultIds.length > 0 ? await db.select().from(resultTrendPoints).where(inArray(resultTrendPoints.resultId, resultIds)) : [];
   const evidenceRows =
@@ -155,7 +159,7 @@ function bountyContributionSummary(input: {
   };
 }
 
-export async function getBountyHallData(viewer: { id: string; name: string; role: UserRole }, scope: TaskManagementDataScope = {}): Promise<BountyHallData> {
+export async function getBountyHallData(viewer: { id: string; name: string; role: UserRole }, scope: TaskManagementDataScope): Promise<BountyHallData> {
   const rows = await getBountyHallSourceRows(scope);
   const { userNameById } = await getUserMapsForStorageScope(rows.storageScopeId);
   const objectiveParticipantAvatarUrls = await getUserAvatarUrlMap(rows.objectiveRows.flatMap((objective) => [...objective.challengerUserIds, ...objective.assignedChallengerUserIds]));
@@ -237,7 +241,7 @@ function applicationCreatedAt(application: { createdAt?: string | null }) {
   return application.createdAt ?? "";
 }
 
-export async function getMyChallengesData(memberUserId: string, includeAll = false, scope: TaskManagementDataScope = {}): Promise<TaskManagementData> {
+export async function getMyChallengesData(memberUserId: string, includeAll: boolean, scope: TaskManagementDataScope): Promise<TaskManagementData> {
   const data = await getTaskManagementData(scope);
   if (includeAll) return data;
 
