@@ -109,6 +109,7 @@ import {
   getActiveTeamNotificationRecipients,
   getUserNameById,
 } from "./notificationRepository";
+import { getFeedbackOrdinaryNotificationRecipients } from "./feedbackSubscriptionRepository";
 import { publishNotificationEvent } from "../notifications/publisher";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScope, runtimeScopeStorageId } from "./runtimeScope";
@@ -797,26 +798,15 @@ async function getFeedbackCommentNotificationRecipients(input: {
     return [];
   }
 
-  const participantRows = await db
-    .select({ authorUserId: commentMessages.authorUserId })
-    .from(commentThreads)
-    .innerJoin(commentMessages, eq(commentMessages.threadId, commentThreads.id))
-    .where(
-      and(
-        eq(commentThreads.teamId, input.teamId),
-        eq(commentThreads.targetType, "feedback"),
-        eq(commentThreads.targetId, input.feedbackId),
-      ),
-    );
-  const participantUserIds = participantRows.map((row) => row.authorUserId);
-  const relatedUserIds = uniqueNotificationUserIds([target.createdBy, target.ownerUserId, ...participantUserIds]);
-  const [adminUserIds, activeRelatedUserIds] = await Promise.all([
-    getActiveAdminNotificationRecipients(input.teamId),
-    getActiveMemberNotificationRecipientsByIds(input.teamId, relatedUserIds),
-  ]);
-
   const excludedUserIds = new Set(uniqueNotificationUserIds([input.actorUserId, ...input.excludedUserIds]));
-  return uniqueNotificationUserIds([...adminUserIds, ...activeRelatedUserIds]).filter(
+  const recipientUserIds = await getFeedbackOrdinaryNotificationRecipients({
+    createdBy: target.createdBy,
+    feedbackId: input.feedbackId,
+    includeCommentParticipants: true,
+    ownerUserId: target.ownerUserId,
+    teamId: input.teamId,
+  });
+  return recipientUserIds.filter(
     (userId) => !excludedUserIds.has(userId),
   );
 }
@@ -953,15 +943,27 @@ export async function deleteProject(projectId: string, context: { scope: Runtime
       .for("update");
     if (!project) return null;
 
+    const [linkedFeedback] = await tx
+      .select({ id: feedback.id })
+      .from(feedback)
+      .where(and(eq(feedback.teamId, storageScopeId), eq(feedback.projectId, nextProjectId)))
+      .limit(1);
+    if (linkedFeedback) {
+      return { status: "hasFeedback" as const, project };
+    }
+
     await tx
       .update(objectives)
       .set({ projectId: null, updatedAt: today(), updatedBy: context.userId })
       .where(and(eq(objectives.teamId, storageScopeId), eq(objectives.projectId, nextProjectId)));
     await tx.delete(projects).where(and(eq(projects.id, nextProjectId), eq(projects.teamId, storageScopeId)));
-    return project;
+    return { status: "deleted" as const, project };
   });
 
   if (!deletedProject) return { status: "notFound" as const };
+  if (deletedProject.status === "hasFeedback") {
+    return deletedProject;
+  }
 
   publishOrfDataInvalidation({
     actorUserId: context.userId,
@@ -971,7 +973,7 @@ export async function deleteProject(projectId: string, context: { scope: Runtime
     teamId: storageScopeId,
   });
 
-  return { status: "deleted" as const, project: deletedProject };
+  return { status: "deleted" as const, project: deletedProject.project };
 }
 
 export async function createObjective(input: CreateObjectiveInput, context: { scope: RuntimeScope; userId: string }): Promise<Objective | null> {

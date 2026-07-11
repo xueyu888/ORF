@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEventHandler } from "react";
 import { clsx } from "clsx";
 import { Download, File as FileIcon, FileText, Image as ImageIcon, Loader2, Minus, Plus, RotateCcw, Type, X } from "lucide-react";
-import mammoth from "mammoth";
 import { useParams } from "react-router-dom";
 import { IconButton } from "../../components/ui";
 import type { Drive, DrivePreviewKind } from "../../types/orf";
@@ -63,6 +62,7 @@ export function DriveDocxPreview({
       .then(async (response) => {
         if (!response.ok) throw new Error(`DOCX preview failed with ${response.status}`);
         const arrayBuffer = await response.arrayBuffer();
+        const { default: mammoth } = await import("mammoth");
         const result = await mammoth.convertToHtml(
           { arrayBuffer },
           {

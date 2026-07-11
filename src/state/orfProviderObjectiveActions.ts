@@ -126,7 +126,7 @@ export function useOrfProviderObjectiveActions({
           notify("项目已删除，目标已移到未归属");
           return true;
         } catch (error) {
-          notify(businessMutationFailureMessage(error, "项目删除失败"));
+          notify(businessMutationFailureMessage(error, "项目删除失败；若项目下有关联反馈，需要先移出反馈项目"));
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }

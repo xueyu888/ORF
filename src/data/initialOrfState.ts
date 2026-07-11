@@ -1286,6 +1286,7 @@ const initialOrfStateSeed: SeedInitialState = {
   feedback: [
     {
       id: "fb-permission-old-doc",
+      projectId: "project-feedback-eval",
       phenomenon: "用户问“权限策略继承规则”时，系统给出了旧版本答案。",
       causeCategories: ["知识缺口", "检索问题"],
       impact: "High",
@@ -1302,6 +1303,7 @@ const initialOrfStateSeed: SeedInitialState = {
     },
     {
       id: "fb-ticket-duplicate",
+      projectId: "project-ai-delivery",
       phenomenon: "Agent 在调用工单系统 API 时经常重复提交。",
       causeCategories: ["工具调用失败", "Prompt 问题"],
       impact: "High",
@@ -1318,6 +1320,7 @@ const initialOrfStateSeed: SeedInitialState = {
     },
     {
       id: "fb-cost-latency",
+      projectId: "project-cost-routing",
       phenomenon: "用户对“模型部署成本”追问时，回答延迟超过 8 秒。",
       causeCategories: ["时延问题", "成本问题"],
       impact: "Medium",

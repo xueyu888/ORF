@@ -7,7 +7,8 @@
 - `Result`、`Task`、评论、试验收、对齐申请、战利品和积分账本都挂在 `Objective` 下；它们是子事实或派生读模型，不反向拥有目标生命周期。
 - 数据库是业务事实源；前端 `OrfState` 是服务端 read model 快照，`completion/title/creation` overlay 只是临时 UI 状态。
 - 悬赏大厅是发布后到结算的公开生命周期读模型，我的挑战是 `TaskManagementData` 的执行详情成员视图；它们都不是第二套事实源。
-- 项目归属由 `Project` 注册表和可空 `Objective.projectId` 组成；`Project.name` 是项目名称事实源，目标可以保持未归属，项目不参与权限、成员、生命周期或积分结算。
+- 项目归属由 `Project` 注册表、可空 `Objective.projectId` 和可空 `Feedback.projectId` 组成；`Project.name` 是项目名称事实源，目标和反馈都可以保持未归属，项目不参与权限、成员、生命周期、反馈通知收件人或积分结算。
+- 反馈 issue 的业务事实源是 `feedback`、`feedback_cause_categories`、`feedback_activity_events`、首条评论正文和 `feedback_subscriptions`。反馈项目归属、标题、影响、分类、处理人和状态是反馈元数据；正文和附件属于评论事实源；列表搜索、侧栏展示和参与者是派生展示状态。
 - 匿名互评原始数据、服务器草稿、提交历史和汇总计算以共享结算服务为事实源；ORF 后端只认证、校验权限、按服务端指标和挑战者事实补齐矩阵并代理请求，不保存匿名原始评价。ORF 业务事实源只接收指挥官确认后的结算事件、贡献分配和公开积分账本。
 - 新增模块必须通过显式输入输出组合，不让页面局部状态、仓库私有 helper 或旧 store mutation 成为隐式状态机。
 
@@ -19,7 +20,7 @@
 - `server/readModels/orfTaskManagementReadModel.ts` 负责从数据库事实构造 `TaskManagementData` 和 `OrfState` 快照；写入逻辑只通过 `getOrfStateSnapshot` 做写后回读。
 - `server/readModels/orfChallengeReadModels.ts` 负责构造悬赏大厅读模型，并从 `TaskManagementData` 收敛我的挑战数据。
 - `server/readModels/currentUserAccessReadModel.ts` 负责当前用户 access 读模型；Provider 全局权限判断只读取 `/api/me/access`，不依赖任务管理读模型。
-- `server/repositories/orfFeedbackRepository.ts` 自包含反馈创建、owner 校验、状态变更权限和写后回读，`feedbackRoutes` 不再依赖完整 `orfRepository`。
+- `server/repositories/orfFeedbackRepository.ts` 自包含反馈创建、owner 校验、元数据更新、状态变更权限、活动事件和写后回读；`server/repositories/feedbackSubscriptionRepository.ts` 自包含反馈普通通知收件人和订阅/静音状态；`feedbackRoutes` 不再依赖完整 `orfRepository`。
 - `server/access/orfTargetAccess.ts` 负责 work item、feedback 的 scope 解析和访问边界判断，避免 `accessPolicy` 依赖完整写仓库。
 - `src/domain/orfReadModel/` 是前后端共享 read model DTO 契约。
 - `src/domain/orfChallengeEntry/` 是挑战入口关闭、申请、接受等纯派生判断。

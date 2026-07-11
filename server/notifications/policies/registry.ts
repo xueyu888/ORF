@@ -52,6 +52,11 @@ export const notificationPolicyRegistry: Record<NotificationKind, NotificationPo
     replyTarget: "notification-target",
     stream: "personalNotification",
   },
+  "feedback.assigned": {
+    kind: "feedback.assigned",
+    replyTarget: "notification-target",
+    stream: "personalNotification",
+  },
   "objective.alignment.requested": {
     kind: "objective.alignment.requested",
     replyTarget: "notification-target",

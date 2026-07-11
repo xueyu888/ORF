@@ -832,6 +832,7 @@ export const feedback = pgTable("feedback", {
   teamId: text("team_id")
     .notNull()
     .references(() => teams.id, { onDelete: "cascade" }),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "restrict" }),
   phenomenon: text("phenomenon").notNull(),
   impact: impactEnum("impact").notNull(),
   suggestedAdjustment: text("suggested_adjustment").notNull(),
@@ -843,6 +844,51 @@ export const feedback = pgTable("feedback", {
   createdBy: uuid("created_by").references(() => users.id),
   updatedBy: uuid("updated_by").references(() => users.id),
 });
+
+export const feedbackActivityEvents = pgTable(
+  "feedback_activity_events",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    feedbackId: text("feedback_id")
+      .notNull()
+      .references(() => feedback.id, { onDelete: "cascade" }),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    actorName: text("actor_name").notNull(),
+    action: text("action").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    feedbackCreated: index("feedback_activity_events_feedback_created_idx").on(table.feedbackId, table.createdAt),
+    teamCreated: index("feedback_activity_events_team_created_idx").on(table.teamId, table.createdAt),
+  }),
+);
+
+export const feedbackSubscriptions = pgTable(
+  "feedback_subscriptions",
+  {
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    feedbackId: text("feedback_id")
+      .notNull()
+      .references(() => feedback.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    mode: text("mode").$type<"subscribed" | "muted">().notNull(),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.feedbackId, table.userId] }),
+    feedbackMode: index("feedback_subscriptions_feedback_mode_idx").on(table.teamId, table.feedbackId, table.mode),
+    userMode: index("feedback_subscriptions_user_mode_idx").on(table.teamId, table.userId, table.mode),
+  }),
+);
 
 export const feedbackCauseCategories = pgTable(
   "feedback_cause_categories",

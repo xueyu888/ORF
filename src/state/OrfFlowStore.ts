@@ -458,13 +458,14 @@ export class OrfFlowStore {
     };
   }
 
-  createFeedback(state: OrfState, input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "ownerUserId">): OrfState {
+  createFeedback(state: OrfState, input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "ownerUserId"> & Partial<Pick<Feedback, "projectId">>): OrfState {
     const id = makeId("fb");
     const now = currentDate();
     const ownerUserId = input.ownerUserId || currentUserId(state);
     const owner = userNameForId(state, ownerUserId, currentUserName(state));
     const feedback: Feedback = {
       id,
+      projectId: input.projectId?.trim() || null,
       phenomenon: input.phenomenon,
       causeCategories: input.causeCategories,
       impact: input.impact,

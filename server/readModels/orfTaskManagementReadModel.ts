@@ -22,6 +22,7 @@ import {
   commentThreads,
   evidence,
   feedback,
+  feedbackActivityEvents,
   feedbackCauseCategories,
   objectiveAcceptanceReviews,
   objectiveAlignmentRequests,
@@ -125,6 +126,11 @@ async function getChecklistRows(taskIds: string[]) {
 async function getFeedbackCauseRows(feedbackIssueIds: string[]) {
   if (feedbackIssueIds.length === 0) return [];
   return db.select().from(feedbackCauseCategories).where(inArray(feedbackCauseCategories.feedbackId, feedbackIssueIds));
+}
+
+async function getFeedbackActivityRows(feedbackIssueIds: string[]) {
+  if (feedbackIssueIds.length === 0) return [];
+  return db.select().from(feedbackActivityEvents).where(inArray(feedbackActivityEvents.feedbackId, feedbackIssueIds));
 }
 
 function taskDefinitionContributorUserIds(task: TaskRow) {
@@ -255,6 +261,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const trendRows = await getResultTrendRows(resultIds);
   const checklistRows = await getChecklistRows(taskIds);
   const causeRows = await getFeedbackCauseRows(feedbackIssueIds);
+  const feedbackActivityRows = await getFeedbackActivityRows(feedbackIssueIds);
   const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
   const { userNameById, userProfiles: scopeUserProfiles } = await getUserMapsForStorageScope(storageScopeId);
   const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
@@ -278,6 +285,17 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     const list = causeCategoriesByFeedback.get(item.feedbackId) ?? [];
     list.push(item.category);
     causeCategoriesByFeedback.set(item.feedbackId, list);
+  }
+  const activityByFeedback = new Map<string, Feedback["activity"]>();
+  for (const item of feedbackActivityRows.sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
+    const list = activityByFeedback.get(item.feedbackId) ?? [];
+    list.push({
+      id: item.id,
+      actor: item.actorName,
+      action: item.action,
+      at: item.createdAt,
+    });
+    activityByFeedback.set(item.feedbackId, list);
   }
 
   const orderedResultRows = [...resultRows].sort((left, right) => left.sortOrder - right.sortOrder);
@@ -359,6 +377,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
 
   const feedbackItems: Feedback[] = feedbackRows.map((item) => ({
     id: item.id,
+    projectId: item.projectId,
     phenomenon: item.phenomenon,
     causeCategories: causeCategoriesByFeedback.get(item.id) ?? [],
     impact: item.impact,
@@ -370,7 +389,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     updatedBy: item.updatedBy,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
-    activity: [],
+    activity: activityByFeedback.get(item.id) ?? [],
   }));
 
   const resultItems: Result[] = mapResultRows({
