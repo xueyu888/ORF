@@ -624,6 +624,13 @@
       "when": 1783779218805,
       "tag": "0088_chat_delivery_truthful_outcomes",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1783846800000,
+      "tag": "0089_isolate_chat_push_delivery",
+      "breakpoints": true
     }
   ]
 }

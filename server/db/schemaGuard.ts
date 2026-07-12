@@ -539,54 +539,70 @@ export function validateWorkLogReminderStateSchema(snapshot: { columns: RuntimeT
   return errors;
 }
 
-export function validateChatMessageDeliverySchema(snapshot: {
+export function validateChatPushDeliverySchema(snapshot: {
   columns: RuntimeTableColumn[];
   constraints: RuntimeSchemaConstraint[];
 }) {
   const columns = new Map(snapshot.columns.map((column) => [column.columnName, column]));
   const errors: string[] = [];
   for (const columnName of [
-    "id", "message_id", "team_id", "channel_id", "recipient_user_id", "transport",
+    "id", "message_id", "team_id", "channel_id", "recipient_user_id",
     "status", "attempts", "target_count", "success_count", "failure_count", "created_at", "updated_at",
   ]) {
     const column = columns.get(columnName);
-    if (!column) errors.push(`chat_message_deliveries.${columnName} is missing.`);
-    else if (column.isNullable !== "NO") errors.push(`chat_message_deliveries.${columnName} must be NOT NULL.`);
+    if (!column) errors.push(`chat_push_deliveries.${columnName} is missing.`);
+    else if (column.isNullable !== "NO") errors.push(`chat_push_deliveries.${columnName} must be NOT NULL.`);
   }
   for (const columnName of ["outcome", "last_error", "next_attempt_at", "lease_expires_at", "completed_at"]) {
-    if (!columns.has(columnName)) errors.push(`chat_message_deliveries.${columnName} is missing.`);
+    if (!columns.has(columnName)) errors.push(`chat_push_deliveries.${columnName} is missing.`);
   }
-  if (columns.has("delivered_at")) {
-    errors.push("chat_message_deliveries.delivered_at must be replaced by completed_at.");
+  if (columns.has("transport")) {
+    errors.push("chat_push_deliveries.transport must not exist; this queue is push-only.");
   }
 
   const constraintByName = new Map(snapshot.constraints.map((constraint) => [constraint.constraintName, constraint]));
-  const statusDefinition = constraintByName.get("chat_message_deliveries_status_check")?.definition.toLowerCase() ?? "";
+  const statusDefinition = constraintByName.get("chat_push_deliveries_status_check")?.definition.toLowerCase() ?? "";
   for (const status of ["pending", "processing", "retry_scheduled", "completed", "dead_letter"]) {
     if (!statusDefinition.includes(`'${status}'`)) {
-      errors.push(`chat_message_deliveries status ${status} is missing from the status guard.`);
+      errors.push(`chat_push_deliveries status ${status} is missing from the status guard.`);
     }
   }
   if (statusDefinition.includes("'delivered'") || statusDefinition.includes("'failed'")) {
-    errors.push("chat_message_deliveries legacy delivered/failed statuses must be removed.");
+    errors.push("chat_push_deliveries legacy delivered/failed statuses must be removed.");
   }
 
-  const outcomeDefinition = constraintByName.get("chat_message_deliveries_outcome_check")?.definition.toLowerCase() ?? "";
+  const outcomeDefinition = constraintByName.get("chat_push_deliveries_outcome_check")?.definition.toLowerCase() ?? "";
   for (const outcome of [
-    "legacy_processed", "sent_to_connection", "no_online_subscriber", "push_accepted",
+    "legacy_processed", "push_accepted",
     "push_partially_accepted", "push_rejected", "no_push_device", "push_disabled", "not_applicable", "failed",
   ]) {
     if (!outcomeDefinition.includes(`'${outcome}'`)) {
-      errors.push(`chat_message_deliveries outcome ${outcome} is missing from the outcome guard.`);
+      errors.push(`chat_push_deliveries outcome ${outcome} is missing from the outcome guard.`);
+    }
+  }
+  for (const retiredOutcome of ["sent_to_connection", "no_online_subscriber"]) {
+    if (outcomeDefinition.includes(`'${retiredOutcome}'`)) {
+      errors.push(`chat_push_deliveries must not retain realtime outcome ${retiredOutcome}.`);
     }
   }
   for (const constraintName of [
-    "chat_message_deliveries_counts_check",
-    "chat_message_deliveries_state_shape_check",
+    "chat_push_deliveries_counts_check",
+    "chat_push_deliveries_state_shape_check",
   ]) {
     if (!constraintByName.has(constraintName)) {
       errors.push(`${constraintName} is missing.`);
     }
+  }
+  return errors;
+}
+
+export function validateLegacyRealtimeDeliveryArchiveSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const columns = new Map(snapshot.columns.map((column) => [column.columnName, column]));
+  const errors: string[] = [];
+  for (const columnName of ["id", "status", "final_reason", "original_status", "completed_at", "purge_after"]) {
+    const column = columns.get(columnName);
+    if (!column) errors.push(`chat_legacy_realtime_deliveries.${columnName} is missing.`);
+    else if (column.isNullable !== "NO") errors.push(`chat_legacy_realtime_deliveries.${columnName} must be NOT NULL.`);
   }
   return errors;
 }
@@ -662,8 +678,9 @@ export async function assertRuntimeDatabaseSchema() {
     gitLabOrfChatColumnsResult,
     gitHubOrfChatColumnsResult,
     workLogReminderStateColumnsResult,
-    chatMessageDeliveryColumnsResult,
-    chatMessageDeliveryConstraintsResult,
+    chatPushDeliveryColumnsResult,
+    chatPushDeliveryConstraintsResult,
+    legacyRealtimeDeliveryArchiveColumnsResult,
     clientUpdateReceiptColumnsResult,
     chatSyncEventColumnsResult,
     chatSyncEventConstraintsResult,
@@ -863,7 +880,7 @@ export async function assertRuntimeDatabaseSchema() {
         select table_name as "tableName", column_name as "columnName", is_nullable as "isNullable"
         from information_schema.columns
         where table_schema = current_schema()
-          and table_name = 'chat_message_deliveries'
+          and table_name = 'chat_push_deliveries'
       `,
     ),
     pool.query<RuntimeSchemaConstraint>(
@@ -873,8 +890,16 @@ export async function assertRuntimeDatabaseSchema() {
         join pg_class rel on rel.oid = con.conrelid
         join pg_namespace nsp on nsp.oid = rel.relnamespace
         where nsp.nspname = current_schema()
-          and rel.relname = 'chat_message_deliveries'
+          and rel.relname = 'chat_push_deliveries'
           and con.contype = 'c'
+      `,
+    ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select table_name as "tableName", column_name as "columnName", is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'chat_legacy_realtime_deliveries'
       `,
     ),
     pool.query<RuntimeTableColumn>(
@@ -969,10 +994,11 @@ export async function assertRuntimeDatabaseSchema() {
     ...validateWorkLogReminderStateSchema({
       columns: workLogReminderStateColumnsResult.rows,
     }),
-    ...validateChatMessageDeliverySchema({
-      columns: chatMessageDeliveryColumnsResult.rows,
-      constraints: chatMessageDeliveryConstraintsResult.rows,
+    ...validateChatPushDeliverySchema({
+      columns: chatPushDeliveryColumnsResult.rows,
+      constraints: chatPushDeliveryConstraintsResult.rows,
     }),
+    ...validateLegacyRealtimeDeliveryArchiveSchema({ columns: legacyRealtimeDeliveryArchiveColumnsResult.rows }),
     ...validateClientUpdateReceiptSchema({
       columns: clientUpdateReceiptColumnsResult.rows,
     }),

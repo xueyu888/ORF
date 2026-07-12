@@ -94,10 +94,11 @@ test("reconciliation is single-flight and runs one trailing request instead of d
   coordinator.request({ epoch: 1, reason: "connection" });
   await waitForImmediate();
   coordinator.request({ epoch: 1, reason: "focus" });
+  coordinator.request({ epoch: 1, reason: "realtime-event" });
   assert.deepEqual(requests, ["1:connection"]);
   releases.shift()?.();
   await waitForImmediate();
-  assert.deepEqual(requests, ["1:connection", "1:focus"]);
+  assert.deepEqual(requests, ["1:connection", "1:realtime-event"]);
   releases.shift()?.();
   await waitForImmediate();
   assert.equal(coordinator.snapshot().status, "ready");

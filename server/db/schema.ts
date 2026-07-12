@@ -1135,15 +1135,14 @@ export const chatSyncEvents = pgTable(
   }),
 );
 
-export const chatMessageDeliveries = pgTable(
-  "chat_message_deliveries",
+export const chatPushDeliveries = pgTable(
+  "chat_push_deliveries",
   {
     id: text("id").primaryKey(),
     messageId: text("message_id").notNull().references(() => chatMessages.id, { onDelete: "cascade" }),
     teamId: text("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
     channelId: text("channel_id").notNull().references(() => chatChannels.id, { onDelete: "cascade" }),
     recipientUserId: uuid("recipient_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    transport: text("transport").notNull(),
     status: text("status").notNull().default("pending"),
     outcome: text("outcome"),
     attempts: integer("attempts").notNull().default(0),
@@ -1158,10 +1157,37 @@ export const chatMessageDeliveries = pgTable(
     updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
   },
   (table) => ({
-    messageRecipientTransport: uniqueIndex("chat_message_deliveries_message_recipient_transport_unique")
-      .on(table.messageId, table.recipientUserId, table.transport),
-    retry: index("chat_message_deliveries_retry_idx")
+    messageRecipient: uniqueIndex("chat_push_deliveries_message_recipient_unique")
+      .on(table.messageId, table.recipientUserId),
+    retry: index("chat_push_deliveries_retry_idx")
       .on(table.status, table.nextAttemptAt, table.leaseExpiresAt, table.createdAt),
+  }),
+);
+
+export const chatLegacyRealtimeDeliveries = pgTable(
+  "chat_legacy_realtime_deliveries",
+  {
+    id: text("id").primaryKey(),
+    messageId: text("message_id").notNull(),
+    teamId: text("team_id").notNull(),
+    channelId: text("channel_id").notNull(),
+    recipientUserId: uuid("recipient_user_id").notNull(),
+    status: text("status").notNull().default("completed"),
+    finalReason: text("final_reason").notNull().default("legacy_realtime_retired"),
+    originalStatus: text("original_status").notNull(),
+    originalOutcome: text("original_outcome"),
+    attempts: integer("attempts").notNull().default(0),
+    targetCount: integer("target_count").notNull().default(0),
+    successCount: integer("success_count").notNull().default(0),
+    failureCount: integer("failure_count").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    originalUpdatedAt: timestamp("original_updated_at", { mode: "string", withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+    purgeAfter: timestamp("purge_after", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    purge: index("chat_legacy_realtime_deliveries_purge_idx").on(table.purgeAfter),
   }),
 );
 

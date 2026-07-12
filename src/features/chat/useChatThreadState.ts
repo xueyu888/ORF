@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getChatThread } from "../../state/apiClient";
+import { ApiError, getChatThread } from "../../state/apiClient";
 import type { ChatChannel, ChatMessage, ChatThread } from "../../types/orf";
 import {
   markPendingChatMessageFailed,
@@ -16,6 +16,7 @@ type UseChatThreadStateInput = {
   onActivateThreadPanel: () => void;
   onChannelUpdate: (channel: ChatChannel) => void;
   onUnreadSummaryRefresh: () => Promise<void>;
+  onThreadUnavailable?: () => void;
 };
 
 export type ChatOpenThreadOptions = {
@@ -28,7 +29,7 @@ function chatThreadContainsMessage(thread: ChatThread, messageId: string | null 
   return thread.rootMessage.id === messageId || thread.replies.some((reply) => reply.id === messageId);
 }
 
-export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpdate, onUnreadSummaryRefresh }: UseChatThreadStateInput) {
+export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpdate, onThreadUnavailable, onUnreadSummaryRefresh }: UseChatThreadStateInput) {
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [threadFocusMessageId, setThreadFocusMessageId] = useState<string | null>(null);
   const [threadComposerFocusRootId, setThreadComposerFocusRootId] = useState<string | null>(null);
@@ -83,7 +84,11 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
         setThread(null);
         setThreadFocusMessageId(null);
         setThreadComposerFocusRootId(null);
-        notify(error instanceof Error ? error.message : "加载线程失败");
+        if (error instanceof ApiError && [403, 404, 410].includes(error.status)) {
+          onThreadUnavailable?.();
+        } else {
+          notify(error instanceof Error ? error.message : "加载线程失败");
+        }
       } finally {
         if (threadRequestIdRef.current === requestId) {
           loadingThreadRootIdRef.current = null;
@@ -91,7 +96,7 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
         }
       }
     },
-    [notify, onActivateThreadPanel, onChannelUpdate, onUnreadSummaryRefresh],
+    [notify, onActivateThreadPanel, onChannelUpdate, onThreadUnavailable, onUnreadSummaryRefresh],
   );
 
   useEffect(() => {

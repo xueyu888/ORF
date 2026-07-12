@@ -25,7 +25,7 @@ export type ReconciliationState = {
 
 export type ReconciliationRequest = {
   epoch: number;
-  reason: "connection" | "focus" | "online" | "page-mounted" | "visibility";
+  reason: "connection" | "focus" | "online" | "page-mounted" | "realtime-event" | "visibility";
 };
 
 export type ChatRealtimeRecoveryStatus =

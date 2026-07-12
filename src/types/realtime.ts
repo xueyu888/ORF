@@ -1,4 +1,4 @@
-import type { AppNotification, ChatChannel, ChatMessage, NotificationKind, WorkLogReminderState } from "./orf";
+import type { AppNotification, NotificationKind, WorkLogReminderState } from "./orf";
 
 export type RealtimeEventKind =
   | "notification.created"
@@ -109,10 +109,13 @@ export interface ChatRealtimeEvent {
   eventType: ChatRealtimeEventType;
   channelId: string;
   actorUserId?: string | null;
-  channel?: ChatChannel;
-  message?: ChatMessage;
   messageId?: string;
   rootMessageId?: string | null;
+  notification?: {
+    body: string;
+    targetPath: string;
+    title: string;
+  };
   typing?: {
     userId: string;
     userName: string;

@@ -1,17 +1,10 @@
-import type { ChatChannel, ChatMessage } from "../../types/orf";
 import type { ChatRealtimeEvent } from "../../types/realtime";
-import { orfRichTextMarkdownToPlainText } from "../rich-text/orfRichTextMarkdown";
-import { currentMembership } from "./chatModels";
 
 export type ChatNativeNotificationSkipReason =
   | "active_channel"
   | "active_thread"
-  | "channel_muted"
-  | "message_deleted"
-  | "missing_channel"
   | "missing_current_user"
-  | "missing_member"
-  | "missing_message"
+  | "missing_notification"
   | "not_message_created"
   | "own_message";
 
@@ -43,70 +36,26 @@ export function buildChatNativeNotificationDecision(input: {
   const { currentUserId, event, focus } = input;
   if (event.eventType !== "message.created") return { action: "skip", reason: "not_message_created" };
   if (!currentUserId) return { action: "skip", reason: "missing_current_user" };
-  if (!event.message) return { action: "skip", reason: "missing_message" };
-  if (!event.channel) return { action: "skip", reason: "missing_channel" };
-
-  const { channel, message } = event;
-  if (message.authorUserId === currentUserId) return { action: "skip", reason: "own_message" };
-  if (message.deletedAt) return { action: "skip", reason: "message_deleted" };
-
-  const membership = currentMembership(channel, currentUserId);
-  if (!membership) return { action: "skip", reason: "missing_member" };
-  if (membership.muted) return { action: "skip", reason: "channel_muted" };
-
-  if (shouldSuppressChatNotificationForActiveView(message, focus)) {
-    return { action: "skip", reason: message.rootMessageId ? "active_thread" : "active_channel" };
+  if (event.actorUserId === currentUserId) return { action: "skip", reason: "own_message" };
+  if (!event.notification || !event.messageId) return { action: "skip", reason: "missing_notification" };
+  if (focus.appFocused) {
+    if (event.rootMessageId && focus.activeThreadRootMessageId === event.rootMessageId) {
+      return { action: "skip", reason: "active_thread" };
+    }
+    if (!event.rootMessageId && focus.activeChannelId === event.channelId) {
+      return { action: "skip", reason: "active_channel" };
+    }
   }
-
   return {
     action: "notify",
     notification: {
-      body: chatNotificationBody(channel, message),
-      channelId: channel.id,
+      body: event.notification.body,
+      channelId: event.channelId,
       createdAt: event.createdAt,
       id: event.id,
-      messageId: message.id,
-      targetPath: chatNotificationTargetPath(message),
-      title: chatNotificationTitle(channel, message),
+      messageId: event.messageId,
+      targetPath: event.notification.targetPath,
+      title: event.notification.title,
     },
   };
-}
-
-function shouldSuppressChatNotificationForActiveView(message: ChatMessage, focus: ChatNativeNotificationFocusState) {
-  if (!focus.appFocused) return false;
-  if (message.rootMessageId) {
-    return focus.activeThreadRootMessageId === message.rootMessageId;
-  }
-  return focus.activeChannelId === message.channelId;
-}
-
-function chatNotificationTargetPath(message: ChatMessage) {
-  return `/chat/${encodeURIComponent(message.channelId)}?message=${encodeURIComponent(message.id)}`;
-}
-
-function chatNotificationTitle(channel: ChatChannel, message: ChatMessage) {
-  const baseTitle = channel.type === "direct" ? message.authorName : channel.displayName || "聊天";
-  return message.rootMessageId ? `回复：${baseTitle}` : baseTitle;
-}
-
-function chatNotificationBody(channel: ChatChannel, message: ChatMessage) {
-  const preview = chatNotificationPreviewText(message);
-  return channel.type === "direct" ? preview : `${message.authorName}: ${preview}`;
-}
-
-export function chatNotificationPreviewText(message: Pick<ChatMessage, "attachments" | "body">) {
-  const text = stripChatNotificationMarkdown(message.body);
-  if (text) return truncateChatNotificationText(text, 100);
-  if (message.attachments.length === 0) return "发送了一条消息";
-  if (message.attachments.length > 1) return `发送了 ${message.attachments.length} 个附件`;
-  return message.attachments[0]?.mimeType.startsWith("image/") ? "发送了一张图片" : "发送了一个文件";
-}
-
-export function stripChatNotificationMarkdown(body: string) {
-  return orfRichTextMarkdownToPlainText(body, { attachmentText: "" });
-}
-
-function truncateChatNotificationText(text: string, limit: number) {
-  if (text.length <= limit) return text;
-  return `${text.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
 }

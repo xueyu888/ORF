@@ -1017,10 +1017,22 @@ export interface ChatUnreadSummary {
   mainMentionCount: number;
   mentionCount: number;
   messageUnreadCount: number;
+  nextTarget: ChatUnreadSummaryNextTarget | null;
   threadMentionCount: number;
   threadUnreadCount: number;
   totalUnreadCount: number;
   unreadChannelCount: number;
+}
+
+export type ChatUnreadTargetReason = "direct" | "mention_me" | "mention_all" | "system" | "normal";
+
+export interface ChatUnreadSummaryNextTarget {
+  channelId: string;
+  messageId: string;
+  reason: ChatUnreadTargetReason;
+  surface: "main" | "threadMention";
+  targetPath: string;
+  threadRootMessageId?: string | null;
 }
 
 export interface OrfState {

@@ -13,6 +13,7 @@ import {
   upsertChannel,
 } from "../src/features/chat/chatModels";
 import { getChatUnreadTarget } from "../src/state/apiClient";
+import { chatMessageTargetPath } from "../src/domain/chatNavigation";
 import type { ChatChannel, ChatMessage } from "../src/types/orf";
 
 const currentUserId = "00000000-0000-4000-8000-000000000001";
@@ -95,6 +96,14 @@ test("broadcast thread mentions auto-follow every other channel member", () => {
     body: "@所有人 请处理这个话题",
     channelMemberUserIds: [currentUserId, authorUserId, otherUserId],
   })), new Set([currentUserId, otherUserId]));
+});
+
+test("all chat message entry points share one thread-aware target path", () => {
+  assert.equal(chatMessageTargetPath({ channelId: "channel /一", messageId: "message ?1" }), "/chat/channel%20%2F%E4%B8%80?message=message%20%3F1");
+  assert.equal(
+    chatMessageTargetPath({ channelId: "channel-1", messageId: "reply-1", threadRootMessageId: "root-1" }),
+    "/chat/channel-1?thread=root-1&message=reply-1",
+  );
 });
 
 test("opening a thread advances only through messages returned to the reader", () => {
@@ -264,6 +273,33 @@ test("repository guard keeps thread read, delivery and legacy fallback contracts
 
   const sendStart = repositorySource.indexOf("export async function sendChatMessage(");
   const followWrite = repositorySource.indexOf("await followMentionedThreadRecipients(client", sendStart);
-  const deliveryEnqueue = repositorySource.indexOf("await enqueueChatMessageDeliveries(client", sendStart);
+  const deliveryEnqueue = repositorySource.indexOf("await enqueueChatPushDeliveries(client", sendStart);
   assert.ok(sendStart >= 0 && followWrite > sendStart && deliveryEnqueue > followWrite);
+});
+
+test("global unread target uses the shared read cursor, visibility and fixed priority contract", () => {
+  const repositorySource = readFileSync(new URL("../server/repositories/chatRepository.ts", import.meta.url), "utf8");
+  const unreadSqlSource = readFileSync(new URL("../server/chat/chatUnreadSql.ts", import.meta.url), "utf8");
+  assert.match(repositorySource, /unread_message_facts AS/);
+  assert.match(repositorySource, /unread_by_channel AS/);
+  assert.match(repositorySource, /FROM unread_message_facts/);
+  assert.doesNotMatch(repositorySource, /message_unread AS|mention_unread AS|direct_message_unread AS|thread_unread AS/);
+  assert.match(repositorySource, /chatUnreadMessageFactsSql/);
+  assert.match(unreadSqlSource, /WHEN dc\.type = 'direct' AND dc\.system_kind IS NULL THEN 1/);
+  assert.match(unreadSqlSource, /WHEN m\.body LIKE \$\{input\.currentUserMentionParam\} THEN 2/);
+  assert.match(unreadSqlSource, /WHEN m\.body ~\* \$\{input\.broadcastMentionParam\} THEN 3/);
+  assert.match(unreadSqlSource, /WHEN dc\.system_kind IS NOT NULL OR m\.source = 'system' THEN 4/);
+  assert.match(repositorySource, /ORDER BY priority ASC, created_at ASC, message_id ASC/);
+  assert.match(repositorySource, /surface: row\.target_root_message_id \? "threadMention" as const : "main" as const/);
+  assert.match(repositorySource, /targetPath: chatMessageTargetPath\(\{/);
+
+  const pageSource = readFileSync(new URL("../src/pages/ChatPage.tsx", import.meta.url), "utf8");
+  assert.match(pageSource, /const requestedThreadRootMessageId = searchParams\.get\("thread"\)/);
+  assert.match(pageSource, /requestedMessageId: requestedThreadRootMessageId \? null : focusMessageId/);
+  assert.match(pageSource, /openThread\(requestedThreadRootMessageId, \{ focusMessageId \}\)/);
+
+  const sidebarSource = readFileSync(new URL("../src/components/Sidebar.tsx", import.meta.url), "utf8");
+  const mobileSource = readFileSync(new URL("../src/components/MobileBottomNav.tsx", import.meta.url), "utf8");
+  assert.match(sidebarSource, /useChatUnreadNavigation/);
+  assert.match(mobileSource, /useChatUnreadNavigation/);
 });

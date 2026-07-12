@@ -104,6 +104,7 @@ export function buildAttentionState(input: BuildAttentionStateInput): AttentionS
   const urgentCount = allItems.filter((item) => item.level === "urgent").length;
   const flashCount = allItems.filter((item) => item.level === "flash" || item.level === "urgent").length;
   const fallbackChatUnread = chatUnreadSummaryText(input.chatUnreadSummary);
+  const fallbackChatTargetPath = input.chatUnreadSummary.nextTarget?.targetPath ?? "/chat";
   const fallbackBadgeNotification = notificationBadgeOnlyText(notificationBadgeOnlyCount);
   const fallbackBadgeText = fallbackChatUnread ?? fallbackBadgeNotification;
   const title = latestItem?.title ?? (fallbackChatUnread ? "聊天消息未读" : fallbackBadgeNotification ? "系统通知未读" : emptyAttentionState.title);
@@ -117,7 +118,7 @@ export function buildAttentionState(input: BuildAttentionStateInput): AttentionS
     flashCount,
     items,
     latestEventId: latestItem?.eventId ?? (fallbackChatUnread ? "chat-unread" : fallbackBadgeNotification ? "notification-unread" : null),
-    latestTargetPath: latestItem?.targetPath ?? (fallbackChatUnread ? "/chat" : fallbackBadgeNotification ? SYSTEM_NOTIFICATION_TARGET_PATH : null),
+    latestTargetPath: latestItem?.targetPath ?? (fallbackChatUnread ? fallbackChatTargetPath : fallbackBadgeNotification ? SYSTEM_NOTIFICATION_TARGET_PATH : null),
     level,
     reason,
     signature: [
@@ -127,7 +128,7 @@ export function buildAttentionState(input: BuildAttentionStateInput): AttentionS
       urgentCount,
       flashCount,
       latestItem?.eventId ?? (fallbackChatUnread ? "chat-unread" : fallbackBadgeNotification ? "notification-unread" : "none"),
-      latestItem?.targetPath ?? (fallbackChatUnread ? "/chat" : fallbackBadgeNotification ? SYSTEM_NOTIFICATION_TARGET_PATH : "none"),
+      latestItem?.targetPath ?? (fallbackChatUnread ? fallbackChatTargetPath : fallbackBadgeNotification ? SYSTEM_NOTIFICATION_TARGET_PATH : "none"),
     ].join(":"),
     title,
     urgentCount,
@@ -204,44 +205,54 @@ function attentionItemFromNotification(notification: AppNotification, input: Bui
 function attentionItemsFromActionableChatUnread(summary: ChatUnreadSummary): AttentionItem[] {
   if (chatActionableUnreadCount(summary) <= 0) return [];
   const createdAt = new Date(0).toISOString();
-  const items: AttentionItem[] = [];
-  if (summary.mentionCount > 0) {
-    items.push({
+  const targetPath = summary.nextTarget?.targetPath ?? "/chat";
+  const targetReason = summary.nextTarget?.reason;
+  if (targetReason === "mention_me" || targetReason === "mention_all" || (!targetReason && summary.mentionCount > 0)) {
+    return [{
       body: `${summary.mentionCount} 条 @ 你的聊天消息`,
       createdAt,
       eventId: "chat-mention-unread",
       kind: "chat.mention",
       level: "flash",
       source: "chat",
-      targetPath: "/chat",
+      targetPath,
       title: "聊天中有人提到你",
-    });
+    }];
   }
-  if (summary.mentionCount <= 0 && summary.directMessageUnreadCount > 0) {
-    items.push({
+  if (targetReason === "direct" || (!targetReason && summary.directMessageUnreadCount > 0)) {
+    return [{
       body: `${summary.directMessageUnreadCount} 条私聊消息未读`,
       createdAt,
       eventId: "chat-direct-unread",
       kind: "chat.direct",
       level: "flash",
       source: "chat",
-      targetPath: "/chat",
+      targetPath,
       title: "私聊消息未读",
-    });
+    }];
   }
-  if (summary.threadUnreadCount > 0 && summary.threadMentionCount <= 0) {
-    items.push({
+  if (summary.nextTarget?.threadRootMessageId || (!targetReason && summary.threadUnreadCount > 0)) {
+    return [{
       body: `${summary.threadUnreadCount} 条线程回复未读`,
       createdAt,
       eventId: "chat-thread-unread",
       kind: "chat.thread",
       level: "toast",
       source: "chat",
-      targetPath: "/chat",
+      targetPath,
       title: "聊天线程有新回复",
-    });
+    }];
   }
-  return items;
+  return [{
+    body: chatUnreadSummaryText(summary) ?? "聊天有新的未读消息",
+    createdAt,
+    eventId: "chat-actionable-unread",
+    kind: "chat.unread",
+    level: "toast",
+    source: "chat",
+    targetPath,
+    title: "聊天消息未读",
+  }];
 }
 
 function attentionItemFromWorkLogReminder(

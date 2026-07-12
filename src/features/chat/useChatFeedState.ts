@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  ApiError,
   getChatMessageContext,
   getChatMessages,
   getChatUnreadContext,
@@ -36,7 +37,6 @@ import {
   removeMessageById,
   replaceFeedMessages,
   replacePendingMessage,
-  shouldFollowIncomingMessage,
   shouldPreserveFeedWindow,
   updatePendingMessageDelivery,
   upsertChannelMessage,
@@ -59,6 +59,7 @@ type UseChatFeedStateInput = {
   onChannelUpdate: (channel: ChatChannel) => void;
   onRequestedMessageConsumed: () => void;
   onRequestedMessageLocated: (messageId: string) => void;
+  onRequestedMessageUnavailable: () => void;
   onRequestedMessageRedirect: (messageId: string) => void;
   onThreadTarget: (target: ChatFeedThreadTarget) => void;
   onUnreadSummaryRefresh: () => Promise<void>;
@@ -102,6 +103,7 @@ export function useChatFeedState({
   onChannelUpdate,
   onRequestedMessageConsumed,
   onRequestedMessageLocated,
+  onRequestedMessageUnavailable,
   onRequestedMessageRedirect,
   onThreadTarget,
   onUnreadSummaryRefresh,
@@ -398,28 +400,6 @@ export function useChatFeedState({
     return request;
   }, [applySnapshotToActiveFeed]);
 
-  const applyRealtimeMessageToFeed = useCallback((message: ChatMessage, applyMessageEffects: (message: ChatMessage) => void) => {
-    const activeMessageChannelId = activeChannelIdRef.current;
-    const isActiveMessage = message.channelId === activeMessageChannelId;
-    const currentFeed = isActiveMessage ? feedCacheRef.current.get(message.channelId) : undefined;
-    const shouldFollowLatest = shouldFollowIncomingMessage(
-      message,
-      currentUserIdRef.current,
-      isActiveMessage && !currentFeed?.hasNewerMessages && (isFollowingLatest() || isMessageScrollNearLatest()),
-    );
-    applyMessageToFeed(message);
-    applyMessageEffects(message);
-    if (isActiveMessage && shouldFollowLatest) {
-      if (currentFeed?.hasNewerMessages) {
-        void loadLatestMessages("smooth");
-      } else {
-        requestScrollToLatest("smooth");
-      }
-    } else if (isActiveMessage && !message.rootMessageId) {
-      setPendingNewMessageCount((count) => count + 1);
-    }
-  }, [applyMessageToFeed, isFollowingLatest, isMessageScrollNearLatest, loadLatestMessages, requestScrollToLatest]);
-
   const cancelPendingReadReceipt = useCallback(() => {
     const pending = pendingReadReceiptRef.current;
     if (pending) window.clearTimeout(pending.timer);
@@ -674,8 +654,12 @@ export function useChatFeedState({
       })
       .catch((error) => {
         if (!cancelled) {
-          notify(error instanceof Error ? error.message : "加载目标消息失败");
           onRequestedMessageConsumed();
+          if (error instanceof ApiError && [403, 404, 410].includes(error.status)) {
+            onRequestedMessageUnavailable();
+          } else {
+            notify(error instanceof Error ? error.message : "加载目标消息失败");
+          }
         }
       })
       .finally(() => {
@@ -694,6 +678,7 @@ export function useChatFeedState({
     notify,
     onRequestedMessageConsumed,
     onRequestedMessageRedirect,
+    onRequestedMessageUnavailable,
     onThreadTarget,
     requestedMessageId,
   ]);
@@ -927,7 +912,6 @@ export function useChatFeedState({
   return {
     applyMessageToFeed,
     applyPendingMessageToFeed,
-    applyRealtimeMessageToFeed,
     clearActiveChannelUnread,
     handleMessageScroll,
     hasNewerMessages: displayedHasNewerMessages,

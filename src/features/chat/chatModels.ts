@@ -28,7 +28,7 @@ export type ChatSendInput = {
 };
 
 export type ChatSendHandler = (input: ChatSendInput) => Promise<void>;
-export type ChatMessageDeliveryStatus = "failed" | "sending";
+export type ChatMessageSendStatus = "failed" | "sending";
 export type ChatPendingSendPayload = {
   attachmentIds: string[];
   body: string;
@@ -38,7 +38,7 @@ export type ChatPendingSendPayload = {
 };
 export type ChatOptimisticMessage = ChatMessage & {
   deliveryError?: string;
-  deliveryStatus?: ChatMessageDeliveryStatus;
+  sendStatus?: ChatMessageSendStatus;
   pendingSend?: ChatPendingSendPayload;
 };
 
@@ -214,8 +214,8 @@ export function upsertMessage(messages: ChatMessage[], next: ChatMessage) {
   return updated.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
 
-export function chatMessageDeliveryStatus(message: ChatMessage): ChatMessageDeliveryStatus | null {
-  return (message as ChatOptimisticMessage).deliveryStatus ?? null;
+export function chatMessageSendStatus(message: ChatMessage): ChatMessageSendStatus | null {
+  return (message as ChatOptimisticMessage).sendStatus ?? null;
 }
 
 export function chatMessagePendingSend(message: ChatMessage): ChatPendingSendPayload | null {
@@ -268,7 +268,7 @@ export function createPendingChatMessage(input: {
     savedByCurrentUser: false,
     attachments: input.attachments,
     reactions: [],
-    deliveryStatus: "sending",
+    sendStatus: "sending",
     pendingSend: input.pendingSend,
   };
 }
@@ -277,7 +277,7 @@ export function markPendingChatMessageSending(message: ChatMessage): ChatOptimis
   return {
     ...(message as ChatOptimisticMessage),
     deliveryError: undefined,
-    deliveryStatus: "sending",
+    sendStatus: "sending",
   };
 }
 
@@ -285,13 +285,13 @@ export function markPendingChatMessageFailed(message: ChatMessage, error: string
   return {
     ...(message as ChatOptimisticMessage),
     deliveryError: error,
-    deliveryStatus: "failed",
+    sendStatus: "failed",
   };
 }
 
 export function pendingChatMessageMatchesServerMessage(pendingMessage: ChatMessage, serverMessage: ChatMessage) {
   const pending = pendingMessage as ChatOptimisticMessage;
-  if (!pending.deliveryStatus || !pending.pendingSend) return false;
+  if (!pending.sendStatus || !pending.pendingSend) return false;
   const pendingAttachmentIds = [...pending.pendingSend.attachmentIds].sort();
   const serverAttachmentIds = serverMessage.attachments.map((attachment) => attachment.id).sort();
   return (
@@ -644,10 +644,6 @@ export function resolveUnreadJumpTarget(input: {
     jumpTarget: { contextRequired: false, messageId: message.id, surface: "main" },
     messageId: message.id,
   };
-}
-
-export function shouldFollowIncomingMessage(message: ChatMessage, currentUserId: string | undefined, nearLatest: boolean) {
-  return !message.rootMessageId && (message.authorUserId === currentUserId || nearLatest);
 }
 
 export function applyThreadSummaryMessage(

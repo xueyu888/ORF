@@ -4,6 +4,7 @@ import { HttpsProxyAgent } from "https-proxy-agent";
 import type { Agent } from "node:http";
 import { readFileSync } from "node:fs";
 import { env } from "../env";
+import { PUSH_PROVIDER_TIMEOUT_MS } from "./pushTransportPolicy";
 
 export type FcmPushMessage = {
   body: string;
@@ -50,7 +51,7 @@ export async function sendFcmPushMessage(input: FcmPushMessage): Promise<FcmPush
 
   for (let index = 0; index < uniqueTokens.length; index += maxFcmBatchSize) {
     const tokens = uniqueTokens.slice(index, index + maxFcmBatchSize);
-    const response = await messaging.sendEachForMulticast({
+    const response = await withPushProviderDeadline(messaging.sendEachForMulticast({
       tokens,
       notification: {
         title: input.title,
@@ -65,7 +66,7 @@ export async function sendFcmPushMessage(input: FcmPushMessage): Promise<FcmPush
           tag: input.tag,
         },
       },
-    });
+    }), PUSH_PROVIDER_TIMEOUT_MS);
 
     successCount += response.successCount;
     failureCount += response.failureCount;
@@ -82,6 +83,20 @@ export async function sendFcmPushMessage(input: FcmPushMessage): Promise<FcmPush
     invalidTokens: invalidTokens.filter(Boolean),
     successCount,
   };
+}
+
+export async function withPushProviderDeadline<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`Push provider timed out after ${timeoutMs}ms.`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function ensureFirebaseApp() {

@@ -113,6 +113,7 @@ const emptyChatUnreadSummary: ChatUnreadSummary = {
   mainMentionCount: 0,
   mentionCount: 0,
   messageUnreadCount: 0,
+  nextTarget: null,
   threadMentionCount: 0,
   threadUnreadCount: 0,
   totalUnreadCount: 0,
@@ -158,7 +159,7 @@ interface OrfContextValue {
   removeToast: (id: string) => void;
   dismissSystemBroadcast: (id: string) => void;
   resetState: () => void;
-  refreshChatUnreadSummary: () => Promise<void>;
+  refreshChatUnreadSummary: () => Promise<ChatUnreadSummary>;
   refreshWorkLogReminderState: () => Promise<void>;
   refreshNotifications: () => Promise<void>;
   snoozeWorkLogReminder: () => Promise<void>;
@@ -407,7 +408,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const refreshChatUnreadSummary = useCallback(async () => {
     const summary = await getChatUnreadSummary();
     setChatUnreadSummary(summary);
+    return summary;
   }, []);
+  const requestChatAttentionRealtimeReconciliationRef = useRef<() => void>(() => undefined);
   const reconcileChatAttentionState = useCallback(async () => {
     let synchronizedCursor: Awaited<ReturnType<typeof resolveChatSyncCheckpoint>> | null = null;
     if (currentUser?.id) {
@@ -447,8 +450,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     if (decision.action === "notify" && reserveChatNotification(decision.notification.messageId)) {
       void sendNativeChatNotification(decision.notification).catch(() => undefined);
     }
-    void refreshChatUnreadSummary().catch(() => undefined);
-  }, [appAttentionState.activelyViewed, currentUser?.id, location.pathname, refreshChatUnreadSummary, reserveChatNotification]);
+    requestChatAttentionRealtimeReconciliationRef.current();
+  }, [appAttentionState.activelyViewed, currentUser?.id, location.pathname, reserveChatNotification]);
 
   const receiveWorkLogReminderRequired = useCallback((event: { reminder: WorkLogReminderState }) => {
     setWorkLogReminderState(event.reminder);
@@ -503,6 +506,14 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     enabled: authReady && isAuthenticated && isApproved,
     reconcile: reconcileChatAttentionState,
   });
+  useEffect(() => {
+    requestChatAttentionRealtimeReconciliationRef.current = () => {
+      chatAttentionReconciliation.request("realtime-event");
+    };
+    return () => {
+      requestChatAttentionRealtimeReconciliationRef.current = () => undefined;
+    };
+  }, [chatAttentionReconciliation.request]);
   const chatRealtimeRecoveryState = useMemo(
     () => buildChatRealtimeRecoveryState(realtimeConnectionState, chatAttentionReconciliation.state),
     [chatAttentionReconciliation.state, realtimeConnectionState],
