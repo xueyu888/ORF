@@ -14,7 +14,7 @@ type RealtimeSubscriber = {
   id: string;
   teamId: string;
   userId: string;
-  send: (event: RealtimeEvent) => void;
+  send: (event: RealtimeEvent) => unknown;
 };
 
 const subscribersByUser = new Map<string, Map<string, RealtimeSubscriber>>();
@@ -55,20 +55,30 @@ function publishPresenceInvalidation(teamId: string, userId: string) {
 
 function deliverRealtimeEvent(subscriber: RealtimeSubscriber, event: RealtimeEvent) {
   try {
-    subscriber.send(event);
+    if (subscriber.send(event) !== false) return true;
   } catch {
-    if (removeSubscriber(subscriber)) {
-      publishPresenceInvalidation(subscriber.teamId, subscriber.userId);
-    }
+    // The shared cleanup below removes connections that are no longer writable.
   }
+  if (removeSubscriber(subscriber)) {
+    publishPresenceInvalidation(subscriber.teamId, subscriber.userId);
+  }
+  return false;
 }
+
+export type RealtimePublishResult = {
+  failureCount: number;
+  successCount: number;
+  targetCount: number;
+};
+
+const emptyRealtimePublishResult = (): RealtimePublishResult => ({ failureCount: 0, successCount: 0, targetCount: 0 });
 
 export function subscribeRealtimeEvents(input: {
   clientId?: string | null;
   id?: string;
   teamId: string;
   userId: string;
-  send: (event: RealtimeEvent) => void;
+  send: (event: RealtimeEvent) => unknown;
 }) {
   const key = subscriberKey(input.teamId, input.userId);
   const subscriber: RealtimeSubscriber = {
@@ -185,27 +195,40 @@ export function publishRealtimeChatEvent(teamId: string, recipientUserIds: strin
     kind: "chat.event",
     createdAt,
   };
+  const result = emptyRealtimePublishResult();
   for (const userId of Array.from(new Set(recipientUserIds))) {
-    publishRealtimeEventToUser(teamId, userId, payload);
+    const userResult = publishRealtimeEventToUser(teamId, userId, payload);
+    result.targetCount += userResult.targetCount;
+    result.successCount += userResult.successCount;
+    result.failureCount += userResult.failureCount;
   }
+  return result;
 }
 
 export function publishRealtimeEventToUser(teamId: string, userId: string, event: RealtimeEvent) {
   const subscribers = subscribersByUser.get(subscriberKey(teamId, userId));
-  if (!subscribers) return;
+  if (!subscribers) return emptyRealtimePublishResult();
 
+  const result = emptyRealtimePublishResult();
   for (const subscriber of Array.from(subscribers.values())) {
-    deliverRealtimeEvent(subscriber, event);
+    result.targetCount += 1;
+    if (deliverRealtimeEvent(subscriber, event)) result.successCount += 1;
+    else result.failureCount += 1;
   }
+  return result;
 }
 
 export function publishRealtimeEventToTeam(teamId: string, event: RealtimeEvent) {
   const subscribers = subscribersByTeam.get(teamId);
-  if (!subscribers) return;
+  if (!subscribers) return emptyRealtimePublishResult();
 
+  const result = emptyRealtimePublishResult();
   for (const subscriber of Array.from(subscribers.values())) {
-    deliverRealtimeEvent(subscriber, event);
+    result.targetCount += 1;
+    if (deliverRealtimeEvent(subscriber, event)) result.successCount += 1;
+    else result.failureCount += 1;
   }
+  return result;
 }
 
 export function realtimeSubscriberCount() {

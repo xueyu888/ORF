@@ -539,19 +539,54 @@ export function validateWorkLogReminderStateSchema(snapshot: { columns: RuntimeT
   return errors;
 }
 
-export function validateChatMessageDeliverySchema(snapshot: { columns: RuntimeTableColumn[] }) {
+export function validateChatMessageDeliverySchema(snapshot: {
+  columns: RuntimeTableColumn[];
+  constraints: RuntimeSchemaConstraint[];
+}) {
   const columns = new Map(snapshot.columns.map((column) => [column.columnName, column]));
   const errors: string[] = [];
   for (const columnName of [
     "id", "message_id", "team_id", "channel_id", "recipient_user_id", "transport",
-    "status", "attempts", "created_at", "updated_at",
+    "status", "attempts", "target_count", "success_count", "failure_count", "created_at", "updated_at",
   ]) {
     const column = columns.get(columnName);
     if (!column) errors.push(`chat_message_deliveries.${columnName} is missing.`);
     else if (column.isNullable !== "NO") errors.push(`chat_message_deliveries.${columnName} must be NOT NULL.`);
   }
-  for (const columnName of ["last_error", "next_attempt_at", "lease_expires_at", "delivered_at"]) {
+  for (const columnName of ["outcome", "last_error", "next_attempt_at", "lease_expires_at", "completed_at"]) {
     if (!columns.has(columnName)) errors.push(`chat_message_deliveries.${columnName} is missing.`);
+  }
+  if (columns.has("delivered_at")) {
+    errors.push("chat_message_deliveries.delivered_at must be replaced by completed_at.");
+  }
+
+  const constraintByName = new Map(snapshot.constraints.map((constraint) => [constraint.constraintName, constraint]));
+  const statusDefinition = constraintByName.get("chat_message_deliveries_status_check")?.definition.toLowerCase() ?? "";
+  for (const status of ["pending", "processing", "retry_scheduled", "completed", "dead_letter"]) {
+    if (!statusDefinition.includes(`'${status}'`)) {
+      errors.push(`chat_message_deliveries status ${status} is missing from the status guard.`);
+    }
+  }
+  if (statusDefinition.includes("'delivered'") || statusDefinition.includes("'failed'")) {
+    errors.push("chat_message_deliveries legacy delivered/failed statuses must be removed.");
+  }
+
+  const outcomeDefinition = constraintByName.get("chat_message_deliveries_outcome_check")?.definition.toLowerCase() ?? "";
+  for (const outcome of [
+    "legacy_processed", "sent_to_connection", "no_online_subscriber", "push_accepted",
+    "push_partially_accepted", "push_rejected", "no_push_device", "push_disabled", "not_applicable", "failed",
+  ]) {
+    if (!outcomeDefinition.includes(`'${outcome}'`)) {
+      errors.push(`chat_message_deliveries outcome ${outcome} is missing from the outcome guard.`);
+    }
+  }
+  for (const constraintName of [
+    "chat_message_deliveries_counts_check",
+    "chat_message_deliveries_state_shape_check",
+  ]) {
+    if (!constraintByName.has(constraintName)) {
+      errors.push(`${constraintName} is missing.`);
+    }
   }
   return errors;
 }
@@ -628,6 +663,7 @@ export async function assertRuntimeDatabaseSchema() {
     gitHubOrfChatColumnsResult,
     workLogReminderStateColumnsResult,
     chatMessageDeliveryColumnsResult,
+    chatMessageDeliveryConstraintsResult,
     clientUpdateReceiptColumnsResult,
     chatSyncEventColumnsResult,
     chatSyncEventConstraintsResult,
@@ -830,6 +866,17 @@ export async function assertRuntimeDatabaseSchema() {
           and table_name = 'chat_message_deliveries'
       `,
     ),
+    pool.query<RuntimeSchemaConstraint>(
+      `
+        select con.conname as "constraintName", pg_get_constraintdef(con.oid) as "definition"
+        from pg_constraint con
+        join pg_class rel on rel.oid = con.conrelid
+        join pg_namespace nsp on nsp.oid = rel.relnamespace
+        where nsp.nspname = current_schema()
+          and rel.relname = 'chat_message_deliveries'
+          and con.contype = 'c'
+      `,
+    ),
     pool.query<RuntimeTableColumn>(
       `
         select table_name as "tableName", column_name as "columnName", is_nullable as "isNullable"
@@ -924,6 +971,7 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateChatMessageDeliverySchema({
       columns: chatMessageDeliveryColumnsResult.rows,
+      constraints: chatMessageDeliveryConstraintsResult.rows,
     }),
     ...validateClientUpdateReceiptSchema({
       columns: clientUpdateReceiptColumnsResult.rows,

@@ -11,10 +11,8 @@ const realtimeQuerySchema = z.object({
   clientId: z.string().trim().min(1).max(128).optional(),
 });
 
-function writeSseEvent(write: (chunk: string) => void, event: RealtimeEvent) {
-  write(`id: ${event.id}\n`);
-  write(`event: ${event.kind}\n`);
-  write(`data: ${JSON.stringify(event)}\n\n`);
+function sseEventChunk(event: RealtimeEvent) {
+  return `id: ${event.id}\nevent: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`;
 }
 
 export function registerRealtimeRoutes(app: FastifyInstance) {
@@ -35,15 +33,15 @@ export function registerRealtimeRoutes(app: FastifyInstance) {
     reply.raw.write("retry: 3000\n\n");
 
     const write = (chunk: string) => {
-      if (!reply.raw.destroyed && !reply.raw.writableEnded) {
-        reply.raw.write(chunk);
-      }
+      if (reply.raw.destroyed || reply.raw.writableEnded) return false;
+      reply.raw.write(chunk);
+      return true;
     };
     const unsubscribe = subscribeRealtimeEvents({
       clientId: query.clientId,
       teamId: runtimeScopeStorageId(context.scope),
       userId: context.user.id,
-      send: (event) => writeSseEvent(write, event),
+      send: (event) => write(sseEventChunk(event)),
     });
     const heartbeat = setInterval(() => write(`: heartbeat ${Date.now()}\n\n`), HEARTBEAT_MS);
 

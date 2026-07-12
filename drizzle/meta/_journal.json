@@ -617,6 +617,13 @@
       "when": 1783774300000,
       "tag": "0087_chat_sync_metadata_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1783779218805,
+      "tag": "0088_chat_delivery_truthful_outcomes",
+      "breakpoints": true
     }
   ]
 }
