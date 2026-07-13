@@ -1,4 +1,4 @@
-import type { AppNotification, NotificationKind, WorkLogReminderState } from "./orf";
+import type { AppNotification, ChatUnreadTargetReason, NotificationKind, WorkLogReminderState } from "./orf";
 
 export type RealtimeEventKind =
   | "notification.created"
@@ -111,8 +111,17 @@ export interface ChatRealtimeEvent {
   actorUserId?: string | null;
   messageId?: string;
   rootMessageId?: string | null;
+  attention?: {
+    reason: Extract<ChatUnreadTargetReason, "direct" | "mention_all" | "mention_me">;
+    targetPath: string;
+  };
   notification?: {
     body: string;
+    sender?: {
+      avatarUrl?: string | null;
+      name: string;
+      userId: string;
+    };
     targetPath: string;
     title: string;
   };

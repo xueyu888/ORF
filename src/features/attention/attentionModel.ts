@@ -5,6 +5,7 @@ import type {
   WorkLogReminderState,
 } from "../../types/orf";
 import type { AppAttentionState } from "../interaction/appAttentionState";
+import type { ChatRealtimeAttentionIntent } from "../chat/chatNativeNotificationModel";
 import {
   attentionLevelRank,
   emptyAttentionState,
@@ -17,6 +18,7 @@ type BuildAttentionStateInput = {
   appAttentionState: AppAttentionState;
   authenticated: boolean;
   chatUnreadSummary: ChatUnreadSummary;
+  chatRealtimeAttentionIntents?: ChatRealtimeAttentionIntent[];
   currentPath: string;
   currentUserId?: string | null;
   notifications: AppNotification[];
@@ -33,6 +35,11 @@ type DesktopAttentionToastInput = {
 export type AttentionToastIntent = {
   body: string;
   id: string;
+  sender?: {
+    avatarUrl?: string | null;
+    name: string;
+    userId?: string | null;
+  };
   level: Extract<AttentionLevel, "toast" | "flash" | "urgent">;
   targetPath: string;
   title: string;
@@ -90,12 +97,18 @@ export function buildAttentionState(input: BuildAttentionStateInput): AttentionS
   const notificationItems = notificationCandidates.filter((item) => item.level !== "badge");
   const notificationBadgeOnlyCount = notificationCandidates.length - notificationItems.length;
   const workLogItem = attentionItemFromWorkLogReminder(input.workLogReminderState, input);
-  const chatItems = attentionItemsFromActionableChatUnread(input.chatUnreadSummary);
+  const realtimeChatItems = attentionItemsFromRealtimeChat(input.chatRealtimeAttentionIntents ?? []);
+  const durableChatItems = attentionItemsFromActionableChatUnread(input.chatUnreadSummary);
+  const realtimeChatKinds = new Set(realtimeChatItems.map((item) => item.kind));
+  const chatItems = [
+    ...realtimeChatItems,
+    ...durableChatItems.filter((item) => !realtimeChatKinds.has(item.kind)),
+  ];
   const allItems = [...notificationItems, ...chatItems, ...(workLogItem ? [workLogItem] : [])]
     .sort(compareAttentionItems);
   const items = allItems.slice(0, MAX_ATTENTION_ITEMS);
   const latestItem = items[0] ?? null;
-  const count = attentionCount(allItems, input.chatUnreadSummary);
+  const count = attentionCount(allItems, input.chatUnreadSummary, realtimeChatItems.length);
   const badgeCount = attentionBadgeCount(count + notificationBadgeOnlyCount, input.chatUnreadSummary);
   const level = allItems.reduce<AttentionLevel>(
     (current, item) => maxAttentionLevel(current, item.level),
@@ -146,6 +159,13 @@ export function attentionToastIntentFromNotification(input: DesktopAttentionToas
   return {
     body: cleanAttentionText(input.notification.body, "你有一条新的提醒"),
     id: input.notification.id,
+    sender: input.notification.actorUserId
+      ? {
+          avatarUrl: input.notification.actorAvatarUrl ?? null,
+          name: cleanAttentionText(input.notification.actorName, "ORF"),
+          userId: input.notification.actorUserId,
+        }
+      : undefined,
     level,
     targetPath,
     title: cleanAttentionText(input.notification.title, "ORF 提醒"),
@@ -255,6 +275,19 @@ function attentionItemsFromActionableChatUnread(summary: ChatUnreadSummary): Att
   }];
 }
 
+function attentionItemsFromRealtimeChat(intents: ChatRealtimeAttentionIntent[]): AttentionItem[] {
+  return intents.map((intent) => ({
+    body: intent.body,
+    createdAt: intent.createdAt,
+    eventId: intent.eventId,
+    kind: intent.kind,
+    level: "flash" as const,
+    source: "chat" as const,
+    targetPath: intent.targetPath,
+    title: intent.title,
+  }));
+}
+
 function attentionItemFromWorkLogReminder(
   reminder: WorkLogReminderState | null,
   input: BuildAttentionStateInput,
@@ -313,9 +346,9 @@ function normalizeComparablePath(path: string) {
   return normalized.split("?")[0] ?? null;
 }
 
-function attentionCount(items: AttentionItem[], summary: ChatUnreadSummary) {
+function attentionCount(items: AttentionItem[], summary: ChatUnreadSummary, realtimeChatCount: number) {
   const nonChatItemCount = items.filter((item) => item.source !== "chat").length;
-  return chatActionableUnreadCount(summary) + nonChatItemCount;
+  return Math.max(chatActionableUnreadCount(summary), realtimeChatCount) + nonChatItemCount;
 }
 
 function attentionBadgeCount(unreadAttentionCount: number, summary: ChatUnreadSummary) {

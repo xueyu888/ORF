@@ -24,6 +24,7 @@ import {
   normalizedE2eNotificationViewerEmails,
 } from "../notifications/notificationIsolationPolicy";
 import { publishRealtimeNotification } from "../realtime/realtimeEventBus";
+import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { sendChatMessage, type ChatActor } from "./chatRepository";
 import { makeId, nowIso, stableConversationName } from "./chatRepositoryModel";
 import type { RuntimeScope } from "./runtimeScope";
@@ -48,6 +49,8 @@ export type NotificationEventInput = {
 };
 
 type NotificationEventRow = {
+  actor_avatar_object_key: string | null;
+  actor_avatar_updated_at: Date | string | null;
   actor_name: string;
   actor_user_id: string | null;
   body: string;
@@ -140,6 +143,13 @@ function toNotification(row: NotificationEventRow): AppNotification {
     recipientUserId: row.recipient_user_id,
     actorUserId: row.actor_user_id,
     actorName: row.actor_name || SYSTEM_BOT_NAME,
+    actorAvatarUrl: row.actor_user_id
+      ? avatarUrlForUser({
+          id: row.actor_user_id,
+          avatarObjectKey: row.actor_avatar_object_key,
+          avatarUpdatedAt: iso(row.actor_avatar_updated_at),
+        })
+      : null,
     title: row.title,
     body: row.body,
     stream: row.stream,
@@ -618,6 +628,8 @@ async function listNotificationsForEvent(eventId: string): Promise<AppNotificati
         e.stream,
         e.actor_user_id::text,
         e.actor_name,
+        actor.avatar_object_key AS actor_avatar_object_key,
+        actor.avatar_updated_at AS actor_avatar_updated_at,
         e.kind,
         e.title,
         e.body,
@@ -633,6 +645,7 @@ async function listNotificationsForEvent(eventId: string): Promise<AppNotificati
         r.delivered_at
       FROM notification_events e
       INNER JOIN notification_receipts r ON r.event_id = e.id
+      LEFT JOIN users actor ON actor.id = e.actor_user_id
       WHERE e.id = $1
       ORDER BY r.delivered_at DESC, r.recipient_user_id
     `,
@@ -747,6 +760,8 @@ async function notificationReceiptProjection(input: { notificationId: string; us
         e.stream,
         e.actor_user_id::text,
         e.actor_name,
+        actor.avatar_object_key AS actor_avatar_object_key,
+        actor.avatar_updated_at AS actor_avatar_updated_at,
         e.kind,
         e.title,
         e.body,
@@ -806,6 +821,8 @@ export async function listNotificationsForUser(userId: string, scope: RuntimeSco
         e.stream,
         e.actor_user_id::text,
         e.actor_name,
+        actor.avatar_object_key AS actor_avatar_object_key,
+        actor.avatar_updated_at AS actor_avatar_updated_at,
         e.kind,
         e.title,
         e.body,

@@ -132,6 +132,7 @@ export interface AppNotification {
   recipientUserId: string;
   actorUserId?: string | null;
   actorName: string;
+  actorAvatarUrl?: string | null;
   title: string;
   body: string;
   stream: NotificationStream;

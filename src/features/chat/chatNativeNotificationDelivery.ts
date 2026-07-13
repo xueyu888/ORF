@@ -1,6 +1,7 @@
 import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import type { ChatNativeNotificationPayload } from "./chatNativeNotificationModel";
+import { prepareDesktopNotificationAvatar } from "../desktop/desktopNotificationAvatar";
 
 type NativeChatNotificationResult = {
   data?: string;
@@ -10,7 +11,7 @@ type NativeChatNotificationResult = {
 
 type OrfNativeNotificationBridge = {
   onOpenChatTarget?: (handler: (targetPath: string) => void) => (() => void);
-  showChatMessage?: (payload: ChatNativeNotificationPayload) => Promise<NativeChatNotificationResult>;
+  showChatMessage?: (payload: ChatNativeNotificationPayload & { avatarDataUrl?: string | null }) => Promise<NativeChatNotificationResult>;
 };
 
 declare global {
@@ -25,7 +26,8 @@ let androidLocalNotificationReady: Promise<NativeChatNotificationResult> | null 
 export async function sendNativeChatNotification(payload: ChatNativeNotificationPayload): Promise<NativeChatNotificationResult> {
   if (typeof window !== "undefined" && window.orfNativeNotifications?.showChatMessage) {
     try {
-      return normalizeNativeChatNotificationResult(await window.orfNativeNotifications.showChatMessage(payload));
+      const desktopPayload = await prepareDesktopNotificationAvatar(payload);
+      return normalizeNativeChatNotificationResult(await window.orfNativeNotifications.showChatMessage(desktopPayload));
     } catch (error) {
       return { status: "error", reason: "desktop_bridge", data: String(error) };
     }
