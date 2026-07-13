@@ -1,6 +1,9 @@
 const chatFeedLatestThresholdPx = 160;
+const chatFeedLatestStickinessThresholdPx = 12;
 const chatFeedOldestThresholdPx = 220;
 const chatFeedUnreadOffsetPx = 48;
+
+export type ChatFeedViewportMode = "browsingHistory" | "followingLatest";
 
 type ChatFeedScrollOptions = {
   behavior?: ScrollBehavior;
@@ -16,6 +19,24 @@ export type ChatFeedScrollAnchor = {
 export function isChatFeedNearLatest(element: HTMLElement | null, threshold = chatFeedLatestThresholdPx) {
   if (!element) return true;
   return element.scrollHeight - element.scrollTop - element.clientHeight < threshold;
+}
+
+export function isChatFeedAtLatest(element: HTMLElement | null, threshold = chatFeedLatestStickinessThresholdPx) {
+  if (!element) return true;
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold;
+}
+
+export function chatFeedViewportModeAfterScroll(input: {
+  atLatest: boolean;
+  currentMode: ChatFeedViewportMode;
+  previousScrollTop: number;
+  programmatic: boolean;
+  scrollTop: number;
+}): ChatFeedViewportMode {
+  if (input.programmatic) return input.currentMode;
+  if (input.scrollTop < input.previousScrollTop) return "browsingHistory";
+  if (input.atLatest) return "followingLatest";
+  return input.currentMode;
 }
 
 export function isChatFeedNearOldest(element: HTMLElement | null, threshold = chatFeedOldestThresholdPx) {

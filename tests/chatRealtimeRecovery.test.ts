@@ -6,6 +6,12 @@ import {
   promoteReconciledLatestWindow,
   reconcileFeedLatestWindow,
 } from "../src/features/chat/chatModels";
+import { chatRealtimeReconciliationScope } from "../src/features/chat/chatRealtimeReconciliation";
+import {
+  chatFeedViewportModeAfterScroll,
+  isChatFeedAtLatest,
+  isChatFeedNearLatest,
+} from "../src/features/chat/chatFeedScroll";
 import {
   buildChatRealtimeRecoveryState,
   createReconciliationCoordinator,
@@ -134,6 +140,71 @@ test("failed reconciliation remains retryable and advances to ready after retry"
   assert.equal(coordinator.snapshot().reconciledEpoch, 3);
   assert.ok(states.some((state) => state.status === "retrying"));
   coordinator.dispose();
+});
+
+test("chat realtime events reconcile only the projections they own", () => {
+  assert.deepEqual(chatRealtimeReconciliationScope("read.changed"), {
+    bootstrap: true,
+    feed: false,
+    thread: true,
+  });
+  assert.deepEqual(chatRealtimeReconciliationScope("message.created"), {
+    bootstrap: true,
+    feed: true,
+    thread: true,
+  });
+  assert.deepEqual(chatRealtimeReconciliationScope("reaction.changed"), {
+    bootstrap: false,
+    feed: true,
+    thread: true,
+  });
+  assert.deepEqual(chatRealtimeReconciliationScope("channel.updated"), {
+    bootstrap: true,
+    feed: false,
+    thread: false,
+  });
+  assert.deepEqual(chatRealtimeReconciliationScope("typing"), {
+    bootstrap: false,
+    feed: false,
+    thread: false,
+  });
+});
+
+test("user scrolling upward leaves latest-following mode even inside the near-latest range", () => {
+  assert.equal(chatFeedViewportModeAfterScroll({
+    atLatest: true,
+    currentMode: "followingLatest",
+    previousScrollTop: 1_000,
+    programmatic: false,
+    scrollTop: 990,
+  }), "browsingHistory");
+});
+
+test("latest-following uses a strict boundary independent from the near-latest UI range", () => {
+  const element = {
+    clientHeight: 500,
+    scrollHeight: 1_000,
+    scrollTop: 450,
+  } as HTMLElement;
+  assert.equal(isChatFeedNearLatest(element), true);
+  assert.equal(isChatFeedAtLatest(element), false);
+});
+
+test("programmatic scrolling does not redefine user viewport intent", () => {
+  assert.equal(chatFeedViewportModeAfterScroll({
+    atLatest: true,
+    currentMode: "browsingHistory",
+    previousScrollTop: 500,
+    programmatic: true,
+    scrollTop: 900,
+  }), "browsingHistory");
+  assert.equal(chatFeedViewportModeAfterScroll({
+    atLatest: true,
+    currentMode: "browsingHistory",
+    previousScrollTop: 900,
+    programmatic: false,
+    scrollTop: 1_000,
+  }), "followingLatest");
 });
 
 test("history feed reconciles latest data without replacing the visible reading window", () => {

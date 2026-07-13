@@ -10,7 +10,6 @@ import {
 } from "../../state/apiClient";
 import type { ChatChannel, ChatMessage } from "../../types/orf";
 import {
-  isChatFeedNearLatest,
   isChatFeedNearOldest,
   isChatFeedMessageVisible,
   readChatFeedScrollAnchor,
@@ -150,8 +149,8 @@ export function useChatFeedState({
 
   const {
     handleScroll: handleLatestStickinessScroll,
-    isFollowingLatest,
     isLatestScrollPending,
+    readViewportSnapshot,
     requestScrollToLatest: requestLatestStickinessScroll,
     setFollowingLatest,
   } = useChatLatestScrollStickiness({
@@ -166,10 +165,6 @@ export function useChatFeedState({
     requestLatestStickinessScroll(behavior);
     setPendingNewMessageCount(0);
   }, [requestLatestStickinessScroll]);
-
-  const isMessageScrollNearLatest = useCallback(() => {
-    return isChatFeedNearLatest(messageScrollRef.current);
-  }, []);
 
   const applySnapshotToActiveFeed = useCallback((channelId: string, snapshot: ReturnType<typeof createFeedSnapshot>) => {
     if (activeChannelIdRef.current !== channelId) return false;
@@ -313,9 +308,49 @@ export function useChatFeedState({
     }
   }, []);
 
+  const applyLatestMessagesToViewport = useCallback((
+    channelId: string,
+    latestMessages: ChatMessage[],
+    behavior: ScrollBehavior,
+  ) => {
+    if (activeChannelIdRef.current !== channelId) return;
+    const viewport = readViewportSnapshot();
+    const scrollAnchor = viewport.mode === "browsingHistory"
+      ? readChatFeedScrollAnchor(messageScrollRef.current)
+      : null;
+    const currentSnapshot = feedCacheRef.current.get(channelId);
+    const reconciliation = viewport.mode === "followingLatest"
+      ? {
+          newMessageCount: 0,
+          snapshot: replaceFeedMessages(currentSnapshot, latestMessages),
+          visibleMessagesChanged: true,
+        }
+      : reconcileFeedLatestWindow(currentSnapshot, latestMessages);
+    feedCacheRef.current.set(channelId, reconciliation.snapshot);
+    applySnapshotToActiveFeed(channelId, reconciliation.snapshot);
+
+    if (viewport.mode === "followingLatest") {
+      setPendingNewMessageCount(0);
+      requestScrollToLatest(behavior);
+      return;
+    }
+
+    setPendingNewMessageCount((count) => Math.max(count, reconciliation.newMessageCount));
+    if (!reconciliation.visibleMessagesChanged || !scrollAnchor) return;
+    window.requestAnimationFrame(() => {
+      if (activeChannelIdRef.current !== channelId) return;
+      const currentViewport = readViewportSnapshot();
+      if (currentViewport.mode !== "browsingHistory" || currentViewport.revision !== viewport.revision) return;
+      const element = messageScrollRef.current;
+      if (!restoreChatFeedScrollAnchor(element, scrollAnchor)) return;
+      feedCacheRef.current.set(channelId, rememberFeedScroll(feedCacheRef.current.get(channelId), element?.scrollTop ?? 0));
+    });
+  }, [applySnapshotToActiveFeed, readViewportSnapshot, requestScrollToLatest]);
+
   const loadLatestMessages = useCallback(async (behavior: ScrollBehavior = "smooth") => {
     const channelId = activeChannelIdRef.current;
     if (!channelId) return;
+    setFollowingLatest(true);
     const reconciledSnapshot = promoteReconciledLatestWindow(feedCacheRef.current.get(channelId));
     if (reconciledSnapshot) {
       const previousSnapshot = feedCacheRef.current.get(channelId);
@@ -332,11 +367,7 @@ export function useChatFeedState({
     setMessagesLoading(!feedCacheRef.current.has(channelId));
     try {
       const response = await getChatMessages({ channelId, limit: chatMessagePageSize });
-      const snapshot = replaceFeedMessages(feedCacheRef.current.get(channelId), response.messages);
-      feedCacheRef.current.set(channelId, snapshot);
-      if (applySnapshotToActiveFeed(channelId, snapshot)) {
-        requestScrollToLatest(behavior);
-      }
+      applyLatestMessagesToViewport(channelId, response.messages, behavior);
     } catch (error) {
       if (activeChannelIdRef.current === channelId) {
         notify(error instanceof Error ? error.message : "加载最新消息失败");
@@ -344,40 +375,14 @@ export function useChatFeedState({
     } finally {
       if (activeChannelIdRef.current === channelId) setMessagesLoading(false);
     }
-  }, [applySnapshotToActiveFeed, notify, requestScrollToLatest, setFollowingLatest]);
+  }, [applyLatestMessagesToViewport, applySnapshotToActiveFeed, notify, requestScrollToLatest, setFollowingLatest]);
 
   const reconcileLatestMessagesPreservingPosition = useCallback(async () => {
     const channelId = activeChannelIdRef.current;
     if (!channelId) return;
-    const previousSnapshot = feedCacheRef.current.get(channelId);
-    const shouldFollowLatest = !previousSnapshot?.hasNewerMessages && (isFollowingLatest() || isMessageScrollNearLatest());
-    const scrollAnchor = shouldFollowLatest ? null : readChatFeedScrollAnchor(messageScrollRef.current);
     const response = await getChatMessages({ channelId, limit: chatMessagePageSize });
-    if (activeChannelIdRef.current !== channelId) return;
-    const reconciliation = reconcileFeedLatestWindow(feedCacheRef.current.get(channelId), response.messages);
-    feedCacheRef.current.set(channelId, reconciliation.snapshot);
-    applySnapshotToActiveFeed(channelId, reconciliation.snapshot);
-    if (shouldFollowLatest) {
-      setPendingNewMessageCount(0);
-      requestScrollToLatest("auto");
-      return;
-    }
-    setFollowingLatest(false);
-    setPendingNewMessageCount((count) => Math.max(count, reconciliation.newMessageCount));
-    if (reconciliation.visibleMessagesChanged && scrollAnchor) {
-      window.requestAnimationFrame(() => {
-        const element = messageScrollRef.current;
-        if (!restoreChatFeedScrollAnchor(element, scrollAnchor)) return;
-        feedCacheRef.current.set(channelId, rememberFeedScroll(feedCacheRef.current.get(channelId), element?.scrollTop ?? 0));
-      });
-    }
-  }, [
-    applySnapshotToActiveFeed,
-    isFollowingLatest,
-    isMessageScrollNearLatest,
-    requestScrollToLatest,
-    setFollowingLatest,
-  ]);
+    applyLatestMessagesToViewport(channelId, response.messages, "auto");
+  }, [applyLatestMessagesToViewport]);
 
   const prefetchChannelMessages = useCallback((channelId: string) => {
     if (feedCacheRef.current.has(channelId)) return Promise.resolve(true);

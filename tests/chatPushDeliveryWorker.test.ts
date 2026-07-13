@@ -183,6 +183,9 @@ test("active chat push modules contain no realtime outbox path", () => {
   assert.doesNotMatch(`${realtime}\n${channelRealtime}`, /getVisibleChannel|getMessageById/);
   assert.doesNotMatch(realtimeTypes, /\bchannel\?:\s*ChatChannel|\bmessage\?:\s*ChatMessage/);
   assert.doesNotMatch(chatPage, /payload\.(?:channel|message)\b/);
-  assert.match(chatPage, /chatPageReconciliation\.request\("realtime-event"\)/);
+  assert.match(chatPage, /chatRealtimeReconciliationScope\(payload\.eventType\)/);
+  assert.match(chatPage, /chatBootstrapReconciliation\.request\("realtime-event"\)/);
+  assert.match(chatPage, /chatFeedReconciliation\.request\("realtime-event"\)/);
+  assert.doesNotMatch(chatPage, /payload\.eventType\s*!==\s*"typing"/);
   assert.match(provider, /chatAttentionReconciliation\.request\("realtime-event"\)/);
 });

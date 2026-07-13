@@ -16662,6 +16662,7 @@ a.orf-sidebar-link,
   box-sizing: border-box;
   min-height: 0;
   overflow-y: auto;
+  overflow-anchor: none;
   overscroll-behavior: contain;
   scroll-behavior: smooth;
   padding: 16px 18px 8px;

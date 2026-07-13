@@ -19,6 +19,7 @@ import { ChatSidebar, type ChatSidebarCreateCommand } from "../features/chat/Cha
 import { ChatTypingLine } from "../features/chat/ChatTypingLine";
 import type { ChatDriveResourceLinkTarget, ChatDriveResourceSelectionRequest } from "../features/chat/chatDriveResourceLinks";
 import { chatPresenceProtocolUpgradeMessage, hasChatPresenceProtocolMismatch } from "../features/chat/chatPresence";
+import { chatRealtimeReconciliationScope } from "../features/chat/chatRealtimeReconciliation";
 import { resetChatNativeNotificationViewState, setChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
 import { requestClientUpdateCenterOpen } from "../features/client-updates/clientUpdateCenterEvents";
 import { feedbackIssueIdsFromText } from "../features/feedback/model/feedbackIssue";
@@ -827,29 +828,44 @@ export function ChatPage() {
     setDraftChannelIds(storedDraftChannelIds(channels));
   }, [channels]);
 
-  const reconcileChatPageProjection = useCallback(async () => {
-    await Promise.all([
-      refreshBootstrap(true),
-      reconcileLatestMessagesPreservingPosition(),
-      reconcileOpenThread(),
-    ]);
-  }, [reconcileLatestMessagesPreservingPosition, reconcileOpenThread, refreshBootstrap]);
-  const chatPageReconciliation = useRealtimeReconciliation({
+  const chatBootstrapReconciliation = useRealtimeReconciliation({
     connected: chatRealtimeRecoveryState.connected,
     connectionEpoch: chatRealtimeRecoveryState.connectionEpoch,
     enabled: Boolean(currentUser),
-    reconcile: reconcileChatPageProjection,
+    reconcile: async () => {
+      await refreshBootstrap(true);
+    },
+  });
+  const chatFeedReconciliation = useRealtimeReconciliation({
+    connected: chatRealtimeRecoveryState.connected,
+    connectionEpoch: chatRealtimeRecoveryState.connectionEpoch,
+    enabled: Boolean(currentUser),
+    reconcile: reconcileLatestMessagesPreservingPosition,
+  });
+  const chatThreadReconciliation = useRealtimeReconciliation({
+    connected: chatRealtimeRecoveryState.connected,
+    connectionEpoch: chatRealtimeRecoveryState.connectionEpoch,
+    enabled: Boolean(currentUser),
+    reconcile: reconcileOpenThread,
   });
 
   useChatRealtimeEvents((payload) => {
-      if (payload.eventType === "channel.archived") {
-        setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
-        if (payload.channelId === activeChannel?.id) navigate("/chat", { replace: true });
-      }
-      if (payload.eventType !== "typing") {
-        chatPageReconciliation.request("realtime-event");
-      }
-      if (payload.eventType === "typing") applyTypingEvent(payload.channelId, payload.typing);
+    if (payload.eventType === "channel.archived") {
+      setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
+      if (payload.channelId === activeChannel?.id) navigate("/chat", { replace: true });
+    }
+    if (payload.eventType === "typing") {
+      applyTypingEvent(payload.channelId, payload.typing);
+      return;
+    }
+    const scope = chatRealtimeReconciliationScope(payload.eventType);
+    if (scope.bootstrap) chatBootstrapReconciliation.request("realtime-event");
+    if (scope.feed && payload.channelId === activeChannel?.id) {
+      chatFeedReconciliation.request("realtime-event");
+    }
+    if (scope.thread && payload.channelId === thread?.rootMessage.channelId) {
+      chatThreadReconciliation.request("realtime-event");
+    }
   });
 
   const submitPendingChatMessage = useCallback(
