@@ -15,6 +15,8 @@ const workLogEditorDraftStorageVersion = 1;
 const workLogEditorDraftStoragePrefix = "orf.workLogs.editorDraft.v1";
 const objectiveFlowStatusSet = new Set<string>(objectiveFlowStatuses);
 
+export type WorkLogEditorDraftMoveResult = "moved" | "targetOccupied" | "unavailable";
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -52,7 +54,6 @@ function parseStoredDraft(value: unknown): WorkLogEditorDraft {
     categoryName: cleanString(value.categoryName, 48),
     categoryNameSnapshot: cleanNullableString(value.categoryNameSnapshot, 120),
     classificationKind: cleanClassificationKind(value.classificationKind),
-    durationMinutes: cleanNullableInteger(value.durationMinutes, 1, 1440),
     editingEntryId: cleanNullableString(value.editingEntryId, 200),
     objectiveId: cleanString(value.objectiveId, 200).trim(),
     objectiveTitleSnapshot: cleanNullableString(value.objectiveTitleSnapshot, 200),
@@ -102,7 +103,6 @@ export function workLogEditorDraftHasAutosaveContent(draft: WorkLogEditorDraft) 
       draft.bodyMarkdown.trim() ||
       draft.categoryId.trim() ||
       draft.categoryName.trim() ||
-      draft.durationMinutes !== null ||
       draft.objectiveId.trim() ||
       draft.progressEstimatePercent !== null,
   );
@@ -151,15 +151,51 @@ export function writeStoredWorkLogEditorDraft(input: {
     }
     window.localStorage.setItem(
       key,
-      JSON.stringify({
-        version: workLogEditorDraftStorageVersion,
-        savedAt: new Date().toISOString(),
-        draft: input.draft,
-        selectedObjective: input.selectedObjective ?? null,
-      }),
+      serializeStoredWorkLogEditorDraft(input.draft, input.selectedObjective),
     );
   } catch {
     // Local draft recovery is best-effort and must never block the editor.
+  }
+}
+
+function serializeStoredWorkLogEditorDraft(
+  draft: WorkLogEditorDraft,
+  selectedObjective?: WorkLogObjectiveOption | null,
+) {
+  return JSON.stringify({
+    version: workLogEditorDraftStorageVersion,
+    savedAt: new Date().toISOString(),
+    draft,
+    selectedObjective: selectedObjective ?? null,
+  });
+}
+
+export function moveStoredWorkLogEditorDraft(input: {
+  draft: WorkLogEditorDraft;
+  fromWorkDate: string;
+  selectedObjective?: WorkLogObjectiveOption | null;
+  toWorkDate: string;
+  userId: string;
+}): WorkLogEditorDraftMoveResult {
+  if (typeof window === "undefined") return "unavailable";
+  if (input.fromWorkDate === input.toWorkDate) return "moved";
+  const fromKey = workLogEditorDraftStorageKey({ userId: input.userId, workDate: input.fromWorkDate });
+  const toKey = workLogEditorDraftStorageKey({ userId: input.userId, workDate: input.toWorkDate });
+  try {
+    const targetDraft = parseStoredWorkLogEditorDraft(window.localStorage.getItem(toKey));
+    if (targetDraft) return "targetOccupied";
+    if (workLogEditorDraftHasAutosaveContent(input.draft)) {
+      window.localStorage.setItem(
+        toKey,
+        serializeStoredWorkLogEditorDraft(input.draft, input.selectedObjective),
+      );
+    } else {
+      window.localStorage.removeItem(toKey);
+    }
+    window.localStorage.removeItem(fromKey);
+    return "moved";
+  } catch {
+    return "unavailable";
   }
 }
 

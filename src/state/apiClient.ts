@@ -281,7 +281,7 @@ export type WorkLogEntrySaveInput = {
   bodyMarkdown: string;
   categoryId?: string | null;
   categoryName?: string | null;
-  durationMinutes?: number | null;
+  classificationSuggestion?: WorkLogClassificationSuggestion | null;
   objectiveId?: string | null;
   remainingEstimatePercent?: number | null;
 };

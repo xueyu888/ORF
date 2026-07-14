@@ -532,10 +532,12 @@ export interface WorkLogCategoryOption {
 }
 
 export type WorkLogClassificationKind = "category" | "objective" | "uncategorized";
+export type WorkLogClassificationSuggestionKind = WorkLogClassificationKind | "newCategory";
+export type WorkLogClassificationDecisionOperation = "create" | "update";
 export type WorkLogObjectiveSelectionAvailability = "default" | "searchOnly";
 
 export interface WorkLogClassificationSuggestion {
-  kind: WorkLogClassificationKind | "newCategory";
+  kind: WorkLogClassificationSuggestionKind;
   objectiveId?: string | null;
   categoryId?: string | null;
   categoryName?: string | null;

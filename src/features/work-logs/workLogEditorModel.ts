@@ -14,7 +14,6 @@ export type WorkLogEditorDraft = {
   categoryName: string;
   categoryNameSnapshot?: string | null;
   classificationKind: WorkLogClassificationKind;
-  durationMinutes: number | null;
   editingEntryId: string | null;
   objectiveId: string;
   objectiveTitleSnapshot?: string | null;
@@ -28,7 +27,6 @@ export type WorkLogEditorDraftPatch = Partial<
     | "categoryId"
     | "categoryName"
     | "classificationKind"
-    | "durationMinutes"
     | "objectiveId"
     | "progressEstimatePercent"
   >
@@ -78,7 +76,6 @@ export const blankWorkLogEditorDraft = (): WorkLogEditorDraft => ({
   categoryId: "",
   categoryName: "",
   classificationKind: "uncategorized",
-  durationMinutes: null,
   editingEntryId: null,
   objectiveId: "",
   progressEstimatePercent: null,
@@ -139,7 +136,6 @@ export function workLogEditorDraftFromEntry(entry: WorkLogEntry): WorkLogEditorD
     categoryName: "",
     categoryNameSnapshot: entry.categoryNameSnapshot,
     classificationKind: classification.kind,
-    durationMinutes: entry.durationMinutes ?? null,
     editingEntryId: entry.id,
     objectiveId: classification.kind === "objective" ? entry.objectiveIdSnapshot ?? "" : "",
     objectiveTitleSnapshot: entry.objectiveTitleSnapshot,
@@ -154,13 +150,6 @@ export function parseWorkLogProgressEstimateInput(value: string) {
   return normalizeWorkLogEstimatePercent(parsed);
 }
 
-export function parseWorkLogDurationInput(value: string) {
-  if (!value.trim()) return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return null;
-  return Math.max(1, Math.min(1440, Math.round(parsed)));
-}
-
 export function canonicalWorkLogEditorDraft(draft: WorkLogEditorDraft) {
   return {
     bodyMarkdown: draft.bodyMarkdown.trim(),
@@ -172,7 +161,6 @@ export function canonicalWorkLogEditorDraft(draft: WorkLogEditorDraft) {
       draft.classificationKind === "category" && !draft.categoryId.trim()
         ? draft.categoryName.trim() || null
         : null,
-    durationMinutes: draft.durationMinutes,
     objectiveId:
       draft.classificationKind === "objective"
         ? draft.objectiveId.trim() || null
@@ -191,7 +179,6 @@ export function canonicalWorkLogEntryForEdit(entry: WorkLogEntry) {
     categoryId:
       classification.kind === "category" ? entry.categoryIdSnapshot ?? null : null,
     categoryName: null,
-    durationMinutes: entry.durationMinutes ?? null,
     objectiveId:
       classification.kind === "objective" ? entry.objectiveIdSnapshot ?? null : null,
     remainingEstimatePercent: entry.remainingEstimatePercent ?? null,
