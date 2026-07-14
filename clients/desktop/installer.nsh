@@ -28,3 +28,16 @@
     ${EndIf}
   ${EndIf}
 !macroend
+
+!macro customInstall
+  ; electron-builder only honors --force-run automatically for silent assisted
+  ; installs. Our updater is intentionally visible, so complete the same
+  ; contract here after files, shortcuts and uninstall metadata are in place.
+  ${If} ${isForceRun}
+  ${AndIfNot} ${Silent}
+    HideWindow
+    ${StdUtils.ExecShellAsUser} $R0 "$launchLink" "open" "--updated"
+    SetErrorLevel 0
+    Quit
+  ${EndIf}
+!macroend

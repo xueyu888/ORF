@@ -96,7 +96,7 @@ GitHub Actions 在两个平台产物都生成后，只上传 GitHub Release 镜�
 
 本地发布脚本目标默认取 `ORF_APP_URL`，也可以通过 `ORF_CLIENT_UPDATE_PUBLISH_URL` 或 `--publish-url` 覆盖；在 ORF 服务和发布脚本运行在同一台机器时，建议把 `ORF_CLIENT_UPDATE_PUBLISH_URL` 指向本机 API 地址以避免公网回环上传大包。广播目标默认取 `ORF_APP_URL`，也可以通过 `ORF_CLIENT_UPDATE_BROADCAST_URL` 或 `--broadcast-url` 覆盖。本地脚本未配置对应 secret 或目标地址时会明确提示已跳过主更新源同步或在线广播；需要刻意跳过时分别使用 `--no-publish-assets` 或 `--no-broadcast`。
 
-Win11 应用内更新由 Electron 主进程拥有完整生命周期：渲染层只提交一次可信安装资产，并展示下载与校验进度；主进程下载完成后启动独立 WSH 交接进程，先让当前 ORF 完整退出，再以 `--updated --force-run --keep-shortcuts` 打开可见的 NSIS 安装器。交接和安装器进程探测都不依赖 PowerShell，避免系统 PowerShell 卡住时阻塞更新。NSIS 的原生界面是安装阶段的唯一进度事实源，不能再用 `/S` 隐藏；安装器自身也会把 0.0.93 及更早客户端遗留的 `/S` 恢复为可见模式，保证首次修复升级就能看到安装进度和错误，并通过 NSIS 原生进程能力关闭旧 ORF。`--updated` 保持升级语义，`--force-run` 在覆盖完成后自动重新打开 ORF，`--keep-shortcuts` 保留用户已有快捷方式选择。交接进程启动失败时不能退出当前客户端；同一时间只能存在一个更新安装请求。Android 仍必须进入系统安装界面，系统级安装确认和签名校验不能由 ORF 绕过。
+Win11 应用内更新由 Electron 主进程拥有完整生命周期：渲染层只提交一次可信安装资产，并展示下载与校验进度；主进程下载完成后启动独立 WSH 交接进程，先让当前 ORF 完整退出，再以 `--updated --force-run --keep-shortcuts` 打开可见的 NSIS 安装器。交接和安装器进程探测都不依赖 PowerShell，避免系统 PowerShell 卡住时阻塞更新。NSIS 的原生界面是安装阶段的唯一进度事实源，不能再用 `/S` 隐藏；安装器自身也会把 0.0.94 及更早客户端遗留的 `/S` 恢复为可见模式，保证首次修复升级就能看到安装进度和错误，并通过 NSIS 原生进程能力关闭旧 ORF。`--updated` 保持升级语义，`--force-run` 由 ORF 自有安装宏在文件、快捷方式和卸载信息写入完成后重新打开 ORF，不依赖 electron-builder 只对静默安装生效的默认分支；`--keep-shortcuts` 保留用户已有快捷方式选择。交接进程启动失败时不能退出当前客户端；同一时间只能存在一个更新安装请求。Android 仍必须进入系统安装界面，系统级安装确认和签名校验不能由 ORF 绕过。
 
 发布资产：
 
