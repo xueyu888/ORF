@@ -20,6 +20,9 @@ import type {
   OrfStage,
   ResultAcceptedResult,
   UserStatus,
+  WorkLogClassificationDecisionOperation,
+  WorkLogClassificationKind,
+  WorkLogClassificationSuggestionKind,
   WorkLogReminderStatus,
 } from "../../src/types/orf";
 
@@ -493,6 +496,39 @@ export const workLogEntries = pgTable(
     teamDate: index("work_log_entries_team_date_idx").on(table.teamId, table.workDate),
     objective: index("work_log_entries_objective_snapshot_idx").on(table.teamId, table.objectiveIdSnapshot),
     category: index("work_log_entries_category_snapshot_idx").on(table.teamId, table.categoryIdSnapshot),
+  }),
+);
+
+export const workLogClassificationDecisions = pgTable(
+  "work_log_classification_decisions",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    entryId: text("entry_id")
+      .notNull()
+      .references(() => workLogEntries.id, { onDelete: "cascade" }),
+    operation: text("operation").$type<WorkLogClassificationDecisionOperation>().notNull(),
+    suggestedKind: text("suggested_kind").$type<WorkLogClassificationSuggestionKind>().notNull(),
+    suggestedTargetId: text("suggested_target_id"),
+    suggestedTargetName: text("suggested_target_name").notNull(),
+    suggestedConfidence: real("suggested_confidence").notNull(),
+    suggestedReason: text("suggested_reason"),
+    bodyMarkdownSnapshot: text("body_markdown_snapshot").notNull(),
+    selectedKind: text("selected_kind").$type<WorkLogClassificationKind>().notNull(),
+    selectedTargetId: text("selected_target_id"),
+    selectedTargetName: text("selected_target_name").notNull(),
+    isMatch: boolean("is_match").notNull(),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    operation: check("work_log_classification_decisions_operation_check", sql`${table.operation} IN ('create', 'update')`),
+    suggestedKind: check("work_log_classification_decisions_suggested_kind_check", sql`${table.suggestedKind} IN ('objective', 'category', 'newCategory', 'uncategorized')`),
+    suggestedConfidence: check("work_log_classification_decisions_confidence_check", sql`${table.suggestedConfidence} >= 0 AND ${table.suggestedConfidence} <= 1`),
+    selectedKind: check("work_log_classification_decisions_selected_kind_check", sql`${table.selectedKind} IN ('objective', 'category', 'uncategorized')`),
+    teamCreated: index("work_log_classification_decisions_team_created_idx").on(table.teamId, table.createdAt),
+    entryCreated: index("work_log_classification_decisions_entry_created_idx").on(table.entryId, table.createdAt),
   }),
 );
 

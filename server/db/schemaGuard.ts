@@ -539,6 +539,38 @@ export function validateWorkLogReminderStateSchema(snapshot: { columns: RuntimeT
   return errors;
 }
 
+export function validateWorkLogClassificationDecisionSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const errors: string[] = [];
+  const columnsByName = new Map(snapshot.columns.map((column) => [column.columnName, column]));
+  for (const columnName of [
+    "id",
+    "team_id",
+    "entry_id",
+    "operation",
+    "suggested_kind",
+    "suggested_target_name",
+    "suggested_confidence",
+    "body_markdown_snapshot",
+    "selected_kind",
+    "selected_target_name",
+    "is_match",
+    "created_at",
+  ]) {
+    const column = columnsByName.get(columnName);
+    if (!column) {
+      errors.push(`work_log_classification_decisions.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`work_log_classification_decisions.${columnName} must be NOT NULL.`);
+    }
+  }
+  for (const columnName of ["suggested_target_id", "suggested_reason", "selected_target_id"]) {
+    if (!columnsByName.has(columnName)) {
+      errors.push(`work_log_classification_decisions.${columnName} is missing.`);
+    }
+  }
+  return errors;
+}
+
 export function validateChatPushDeliverySchema(snapshot: {
   columns: RuntimeTableColumn[];
   constraints: RuntimeSchemaConstraint[];
@@ -678,6 +710,7 @@ export async function assertRuntimeDatabaseSchema() {
     gitLabOrfChatColumnsResult,
     gitHubOrfChatColumnsResult,
     workLogReminderStateColumnsResult,
+    workLogClassificationDecisionColumnsResult,
     chatPushDeliveryColumnsResult,
     chatPushDeliveryConstraintsResult,
     legacyRealtimeDeliveryArchiveColumnsResult,
@@ -877,6 +910,17 @@ export async function assertRuntimeDatabaseSchema() {
     ),
     pool.query<RuntimeTableColumn>(
       `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'work_log_classification_decisions'
+      `,
+    ),
+    pool.query<RuntimeTableColumn>(
+      `
         select table_name as "tableName", column_name as "columnName", is_nullable as "isNullable"
         from information_schema.columns
         where table_schema = current_schema()
@@ -993,6 +1037,9 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateWorkLogReminderStateSchema({
       columns: workLogReminderStateColumnsResult.rows,
+    }),
+    ...validateWorkLogClassificationDecisionSchema({
+      columns: workLogClassificationDecisionColumnsResult.rows,
     }),
     ...validateChatPushDeliverySchema({
       columns: chatPushDeliveryColumnsResult.rows,

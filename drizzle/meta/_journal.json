@@ -631,6 +631,20 @@
       "when": 1783846800000,
       "tag": "0089_isolate_chat_push_delivery",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1784010000000,
+      "tag": "0090_work_log_classification_decisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1784013600000,
+      "tag": "0091_work_log_classification_body_snapshot",
+      "breakpoints": true
     }
   ]
 }
