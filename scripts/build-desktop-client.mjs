@@ -13,6 +13,7 @@ const electronBuilderCli = path.resolve(repoRoot, "node_modules", "electron-buil
 
 const appPackage = JSON.parse(fs.readFileSync(path.resolve(repoRoot, "clients/desktop/package.json"), "utf8"));
 const iconRendererSource = path.resolve(repoRoot, "clients/desktop/icon-renderer.cjs");
+const installerIncludeSource = path.resolve(repoRoot, "clients/desktop/installer.nsh");
 const mainSource = path.resolve(repoRoot, "clients/desktop/main.cjs");
 const notificationRendererSource = path.resolve(repoRoot, "clients/desktop/notification-renderer.cjs");
 const preloadSource = path.resolve(repoRoot, "clients/desktop/preload.cjs");
@@ -29,6 +30,7 @@ const appAssetsTargetDir = path.resolve(tempRoot, "assets");
 const buildResourcesTargetDir = path.resolve(tempRoot, "buildResources");
 const appIconTarget = path.resolve(appAssetsTargetDir, "icon.png");
 const buildIconTarget = path.resolve(buildResourcesTargetDir, "icon.png");
+const installerIncludeTarget = path.resolve(buildResourcesTargetDir, "installer.nsh");
 const desktopIconSizePx = 256;
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -73,6 +75,7 @@ const builderConfig = {
     allowToChangeInstallationDirectory: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
+    include: "buildResources/installer.nsh",
     shortcutName: "ORF",
   },
 };
@@ -275,6 +278,7 @@ const crc32Table = (() => {
 
 try {
   prepareDesktopIcons();
+  fs.copyFileSync(installerIncludeSource, installerIncludeTarget);
   fs.copyFileSync(iconRendererSource, iconRendererTarget);
   fs.copyFileSync(mainSource, mainTarget);
   fs.copyFileSync(notificationRendererSource, notificationRendererTarget);

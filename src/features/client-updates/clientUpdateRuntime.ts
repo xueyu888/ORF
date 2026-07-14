@@ -32,7 +32,7 @@ export type ClientUpdateInstallResult = {
   status: "error" | "not_sent" | "success" | "unsupported";
 };
 
-export type ClientUpdateInstallProgressStage = "preparing" | "downloading" | "downloaded" | "validating" | "opening" | "complete" | "failed";
+export type ClientUpdateInstallProgressStage = "preparing" | "downloading" | "downloaded" | "validating" | "opening" | "closing" | "complete" | "failed";
 
 export type ClientUpdateInstallProgress = {
   assetName?: string;
@@ -264,6 +264,10 @@ function emitTerminalInstallProgress(
   emitProgress: ClientUpdateProgressEmitter,
 ) {
   if (result.status === "success") {
+    if (result.reason === "installer_scheduled") {
+      emitProgress({ percent: 100, stage: "closing" });
+      return;
+    }
     emitProgress({ percent: 100, stage: "complete" });
     return;
   }

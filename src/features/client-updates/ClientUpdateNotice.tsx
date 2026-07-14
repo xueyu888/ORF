@@ -251,7 +251,7 @@ export function ClientUpdateNotice() {
 function clientUpdatePromptSummary(decision: ClientUpdateDecision, runtime: ClientUpdateRuntimeInfo) {
   const currentVersion = formatCurrentVersionLabel(decision, runtime);
   if (runtime.platform === "desktop-windows") {
-    return `${currentVersion}，新版本已经发布。点击更新后会自动完成安装并重新打开 ORF。`;
+    return `${currentVersion}，新版本已经发布。下载完成后会先关闭 ORF，再显示 Windows 安装进度，完成后自动重新打开。`;
   }
   if (runtime.platform === "android") {
     return `${currentVersion}，新版本已经发布。下载完成后将进入 Android 系统安装流程。`;

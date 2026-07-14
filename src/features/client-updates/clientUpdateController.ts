@@ -127,8 +127,9 @@ export function clientUpdateInstallProgressMessage(progress: ClientUpdateInstall
   if (progress.stage === "downloading") return "正在下载更新安装包";
   if (progress.stage === "downloaded") return "安装包已下载，正在处理";
   if (progress.stage === "validating") return "正在校验安装包";
-  if (progress.stage === "opening") return "正在启动自动安装";
-  if (progress.stage === "complete") return "正在完成更新";
+  if (progress.stage === "opening") return "正在准备 Windows 安装程序";
+  if (progress.stage === "closing") return "安装包已就绪，正在关闭 ORF";
+  if (progress.stage === "complete") return "安装流程已启动";
   return progress.error ? `下载或安装失败：${cleanClientUpdateErrorDetail(progress.error)}` : "下载或安装失败";
 }
 

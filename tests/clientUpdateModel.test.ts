@@ -16,10 +16,14 @@ import {
 const require = createRequire(import.meta.url);
 const {
   desktopUpdateInstallerArgs,
-  launchDesktopUpdateInstaller,
+  desktopUpdateInstallerLauncherScript,
+  desktopUpdateLauncherExecutable,
+  launchDesktopUpdateInstallerAfterExit,
 } = require("../clients/desktop/update-installer.cjs") as {
   desktopUpdateInstallerArgs: readonly string[];
-  launchDesktopUpdateInstaller: (installerPath: string, spawnProcess: (...args: unknown[]) => EventEmitter & { unref: () => void }) => Promise<void>;
+  desktopUpdateInstallerLauncherScript: (installerPath: string, processId: number) => string;
+  desktopUpdateLauncherExecutable: string;
+  launchDesktopUpdateInstallerAfterExit: (installerPath: string, processId: number, spawnProcess: (...args: unknown[]) => EventEmitter & { unref: () => void }) => Promise<void>;
 };
 
 const release: ClientReleaseInfo = {
@@ -146,7 +150,7 @@ test("client update install falls back to trusted mirror only after native URL r
   );
 });
 
-test("Win11 automatic update launches NSIS silently, marks it as an update and restarts ORF", async () => {
+test("Win11 update waits for ORF to exit before showing the NSIS installer with progress", async () => {
   const child = new EventEmitter() as EventEmitter & { unref: () => void; unrefCalled?: boolean };
   child.unref = () => {
     child.unrefCalled = true;
@@ -158,13 +162,25 @@ test("Win11 automatic update launches NSIS silently, marks it as an update and r
     return child;
   };
 
-  await launchDesktopUpdateInstaller("C:\\Temp\\ORF-update.exe", spawnProcess);
+  await launchDesktopUpdateInstallerAfterExit("C:\\Temp\\ORF-update.exe", 4242, spawnProcess);
 
-  assert.deepEqual(desktopUpdateInstallerArgs, ["/S", "--updated", "--force-run", "--keep-shortcuts"]);
+  assert.deepEqual(desktopUpdateInstallerArgs, ["--updated", "--force-run", "--keep-shortcuts"]);
+  const launcherScript = desktopUpdateInstallerLauncherScript("C:\\Temp\\ORF-update.exe", 4242);
   assert.deepEqual(spawnCall, {
-    args: ["/S", "--updated", "--force-run", "--keep-shortcuts"],
-    file: "C:\\Temp\\ORF-update.exe",
+    args: [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-WindowStyle",
+      "Hidden",
+      "-Command",
+      launcherScript,
+    ],
+    file: desktopUpdateLauncherExecutable,
     options: { detached: true, stdio: "ignore", windowsHide: true },
   });
+  assert.match(launcherScript, /Wait-Process -Id 4242/);
+  assert.equal(launcherScript.includes("Start-Process -FilePath 'C:\\Temp\\ORF-update.exe'"), true);
+  assert.doesNotMatch(launcherScript, /\/S/);
   assert.equal(child.unrefCalled, true);
 });

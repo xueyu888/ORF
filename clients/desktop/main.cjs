@@ -10,7 +10,7 @@ const {
   createUnreadBadgeRgba,
 } = require("./icon-renderer.cjs");
 const { windowsNotificationToastXml } = require("./notification-renderer.cjs");
-const { launchDesktopUpdateInstaller } = require("./update-installer.cjs");
+const { launchDesktopUpdateInstallerAfterExit } = require("./update-installer.cjs");
 
 const DEFAULT_ORF_CLIENT_URL = "https://orf-xueyu.duckdns.org:8443/";
 const DESKTOP_PACKAGE_PATH = path.join(__dirname, "package.json");
@@ -1672,10 +1672,10 @@ function registerNativeRuntimeBridge() {
     }
     try {
       sendProgress({ percent: 100, stage: "opening" });
-      await launchDesktopUpdateInstaller(installerPath);
-      sendProgress({ percent: 100, stage: "complete" });
+      await launchDesktopUpdateInstallerAfterExit(installerPath);
+      sendProgress({ percent: 100, stage: "closing" });
       scheduleDesktopQuitForUpdate();
-      return { status: "success", data: installerPath };
+      return { status: "success", reason: "installer_scheduled", data: installerPath };
     } catch (error) {
       desktopShellState.clientUpdateInstallInProgress = false;
       const message = readableErrorMessage(error);
@@ -1687,7 +1687,7 @@ function registerNativeRuntimeBridge() {
 
 function scheduleDesktopQuitForUpdate() {
   desktopShellState.isQuitting = true;
-  const timer = setTimeout(() => app.quit(), 180);
+  const timer = setTimeout(() => app.quit(), 650);
   if (typeof timer.unref === "function") timer.unref();
 }
 
