@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import {
   buildClientUpdateDecision,
@@ -161,26 +164,27 @@ test("Win11 update waits for ORF to exit before showing the NSIS installer with 
     queueMicrotask(() => child.emit("spawn"));
     return child;
   };
+  const installDir = mkdtempSync(path.join(tmpdir(), "orf-update-installer-test-"));
+  const installerPath = path.join(installDir, "ORF-update.exe");
+  const launcherPath = `${installerPath}.4242.handoff.js`;
 
-  await launchDesktopUpdateInstallerAfterExit("C:\\Temp\\ORF-update.exe", 4242, spawnProcess);
+  await launchDesktopUpdateInstallerAfterExit(installerPath, 4242, spawnProcess);
 
   assert.deepEqual(desktopUpdateInstallerArgs, ["--updated", "--force-run", "--keep-shortcuts"]);
-  const launcherScript = desktopUpdateInstallerLauncherScript("C:\\Temp\\ORF-update.exe", 4242);
+  const launcherScript = desktopUpdateInstallerLauncherScript(installerPath, 4242);
   assert.deepEqual(spawnCall, {
     args: [
-      "-NoLogo",
-      "-NoProfile",
-      "-NonInteractive",
-      "-WindowStyle",
-      "Hidden",
-      "-Command",
-      launcherScript,
+      "//Nologo",
+      launcherPath,
     ],
     file: desktopUpdateLauncherExecutable,
     options: { detached: true, stdio: "ignore", windowsHide: true },
   });
-  assert.match(launcherScript, /Wait-Process -Id 4242/);
-  assert.equal(launcherScript.includes("Start-Process -FilePath 'C:\\Temp\\ORF-update.exe'"), true);
+  assert.match(launcherScript, /Win32_Process WHERE ProcessId =/);
+  assert.match(launcherScript, /shell\.Run\(installerCommand, 1, false\)/);
   assert.doesNotMatch(launcherScript, /\/S/);
+  assert.doesNotMatch(launcherScript, /PowerShell/i);
   assert.equal(child.unrefCalled, true);
+  assert.equal(readFileSync(launcherPath, "utf8"), launcherScript);
+  rmSync(installDir, { force: true, recursive: true });
 });
