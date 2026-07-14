@@ -24,6 +24,13 @@ import {
   parseStoredWorkLogEditorDraft,
   workLogEditorDraftStorageKey,
 } from "../src/features/work-logs/workLogDraftStorage";
+import {
+  applyWorkLogEditorSessionDraftPatch,
+  blankWorkLogEditorDraft,
+  createWorkLogEditorSession,
+  moveWorkLogEditorSession,
+  workLogEditorSessionShouldFollowViewDate,
+} from "../src/features/work-logs/workLogEditorModel";
 
 test("work log default target list only includes ongoing objectives", () => {
   assert.equal(canShowObjectiveInDefaultWorkLogList("accepted"), false);
@@ -119,6 +126,67 @@ test("work log local draft storage parses only the editor draft contract", () =>
   assert.equal(stored?.draft.progressEstimatePercent, 89);
   assert.equal(stored?.selectedObjective?.title, "工作日志体验");
   assert.equal(parseStoredWorkLogEditorDraft("{bad json"), null);
+});
+
+test("work log editor session keeps draft ownership across refresh and resets for the next entry", () => {
+  const initial = createWorkLogEditorSession({
+    userId: "user-1",
+    workDate: "2026-07-14",
+  });
+  const editing = applyWorkLogEditorSessionDraftPatch(initial, {
+    bodyMarkdown: "第一条日志",
+  });
+
+  assert.equal(editing.revision, initial.revision);
+  assert.equal(
+    workLogEditorSessionShouldFollowViewDate(
+      editing,
+      "user-1",
+      "2026-07-13",
+    ),
+    false,
+  );
+
+  const moved = moveWorkLogEditorSession(editing, "2026-07-13");
+  assert.equal(moved.revision, editing.revision);
+  assert.equal(moved.draft.bodyMarkdown, "第一条日志");
+
+  const nextEntry = createWorkLogEditorSession({
+    draft: blankWorkLogEditorDraft(),
+    previousRevision: moved.revision,
+    userId: moved.userId,
+    workDate: moved.workDate,
+  });
+  assert.equal(nextEntry.revision, moved.revision + 1);
+  assert.equal(nextEntry.draft.bodyMarkdown, "");
+  assert.equal(nextEntry.draft.editingEntryId, null);
+  assert.equal(
+    workLogEditorSessionShouldFollowViewDate(
+      nextEntry,
+      "user-1",
+      "2026-07-14",
+    ),
+    true,
+  );
+
+  const historicalEdit = createWorkLogEditorSession({
+    draft: {
+      ...blankWorkLogEditorDraft(),
+      bodyMarkdown: "历史日志",
+      editingEntryId: "entry-1",
+    },
+    previousRevision: nextEntry.revision,
+    userId: "user-1",
+    workDate: "2026-07-14",
+  });
+  const cancelledEdit = createWorkLogEditorSession({
+    previousRevision: historicalEdit.revision,
+    userId: historicalEdit.userId,
+    workDate: historicalEdit.workDate,
+  });
+  assert.equal(cancelledEdit.draft.editingEntryId, null);
+  assert.equal(cancelledEdit.draft.bodyMarkdown, "");
+  assert.equal(cancelledEdit.revision, historicalEdit.revision + 1);
 });
 
 test("work log AI classification correctness compares canonical user selection", () => {

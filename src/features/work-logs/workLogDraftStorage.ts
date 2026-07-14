@@ -2,6 +2,7 @@ import { objectiveFlowStatuses } from "../../domain/orfLifecycle";
 import type { WorkLogObjectiveOption } from "../../types/orf";
 import {
   blankWorkLogEditorDraft,
+  workLogEditorDraftHasContent,
   type WorkLogEditorDraft,
 } from "./workLogEditorModel";
 
@@ -98,14 +99,7 @@ export function workLogEditorDraftStorageKey(input: { userId: string; workDate: 
 }
 
 export function workLogEditorDraftHasAutosaveContent(draft: WorkLogEditorDraft) {
-  return Boolean(
-    draft.editingEntryId ||
-      draft.bodyMarkdown.trim() ||
-      draft.categoryId.trim() ||
-      draft.categoryName.trim() ||
-      draft.objectiveId.trim() ||
-      draft.progressEstimatePercent !== null,
-  );
+  return workLogEditorDraftHasContent(draft);
 }
 
 export function parseStoredWorkLogEditorDraft(raw: string | null): StoredWorkLogEditorDraft | null {

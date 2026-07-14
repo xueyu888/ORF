@@ -32,6 +32,13 @@ export type WorkLogEditorDraftPatch = Partial<
   >
 >;
 
+export type WorkLogEditorSession = {
+  draft: WorkLogEditorDraft;
+  revision: number;
+  userId: string;
+  workDate: string;
+};
+
 export type WorkLogClassificationSelectValue =
   | "category:new"
   | "uncategorized"
@@ -80,6 +87,60 @@ export const blankWorkLogEditorDraft = (): WorkLogEditorDraft => ({
   objectiveId: "",
   progressEstimatePercent: null,
 });
+
+export function workLogEditorDraftHasContent(draft: WorkLogEditorDraft) {
+  return Boolean(
+    draft.editingEntryId ||
+      draft.bodyMarkdown.trim() ||
+      draft.categoryId.trim() ||
+      draft.categoryName.trim() ||
+      draft.objectiveId.trim() ||
+      draft.progressEstimatePercent !== null,
+  );
+}
+
+export function createWorkLogEditorSession(input: {
+  draft?: WorkLogEditorDraft;
+  previousRevision?: number;
+  userId: string;
+  workDate: string;
+}): WorkLogEditorSession {
+  return {
+    draft: input.draft ?? blankWorkLogEditorDraft(),
+    revision: (input.previousRevision ?? 0) + 1,
+    userId: input.userId,
+    workDate: input.workDate,
+  };
+}
+
+export function applyWorkLogEditorSessionDraftPatch(
+  session: WorkLogEditorSession,
+  patch: WorkLogEditorDraftPatch,
+): WorkLogEditorSession {
+  return {
+    ...session,
+    draft: applyWorkLogEditorDraftPatch(session.draft, patch),
+  };
+}
+
+export function moveWorkLogEditorSession(
+  session: WorkLogEditorSession,
+  workDate: string,
+): WorkLogEditorSession {
+  return {
+    ...session,
+    workDate,
+  };
+}
+
+export function workLogEditorSessionShouldFollowViewDate(
+  session: WorkLogEditorSession | null,
+  userId: string,
+  viewDate: string,
+) {
+  if (!session || session.userId !== userId) return true;
+  return session.workDate !== viewDate && !workLogEditorDraftHasContent(session.draft);
+}
 
 export function applyWorkLogEditorDraftPatch(
   draft: WorkLogEditorDraft,
