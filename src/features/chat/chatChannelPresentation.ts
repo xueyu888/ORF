@@ -48,6 +48,14 @@ export function chatChannelAvatarUsers(channel: ChatChannel, currentUserId: stri
   return sortChatChannelAvatarUsers(visibleMembers.length > 0 ? visibleMembers : members).slice(0, 3);
 }
 
+export function chatChannelMemberNamePreview(channel: ChatChannel, usersById: ReadonlyMap<string, ChatUser>, limit: number) {
+  return channel.members
+    .map((member) => usersById.get(member.userId)?.name)
+    .filter((name): name is string => Boolean(name))
+    .slice(0, limit)
+    .join(", ");
+}
+
 export function chatDirectPeer(channel: ChatChannel, currentUserId: string | undefined, usersById: ReadonlyMap<string, ChatUser>) {
   if (channel.systemKind) return null;
   if (channel.type !== "direct") return null;

@@ -5,7 +5,7 @@ import { IconButton, actionButtonClassName } from "../../components/ui";
 import { isChatConversation } from "../../domain/chatConversation";
 import type { ChatChannel, ChatUser } from "../../types/orf";
 import { ChatIntegrationBrandMark, chatChannelIntegrationBrand } from "./chatIntegrationBrand";
-import { channelIcon, chatChannelDisplayLabel, chatChannelInfoLabel } from "./chatChannelPresentation";
+import { channelIcon, chatChannelDisplayLabel, chatChannelInfoLabel, chatChannelMemberNamePreview } from "./chatChannelPresentation";
 import { currentMembership } from "./chatModels";
 import type { ActivePanel } from "./chatPanelTypes";
 
@@ -61,11 +61,7 @@ export function ChatHeader({
   const [moreOpen, setMoreOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const showThreadShortcut = channel.threadUnreadCount > 0;
-  const memberNames = channel.members
-    .slice(0, 4)
-    .map((member) => usersById.get(member.userId)?.name)
-    .filter(Boolean)
-    .join(", ");
+  const memberNames = chatChannelMemberNamePreview(channel, usersById, 4);
 
   useEffect(() => {
     if (!moreOpen) return undefined;

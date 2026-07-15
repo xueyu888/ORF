@@ -294,7 +294,7 @@ async function loadMembers(channelIds: string[]) {
           c.type <> 'public'
           OR (tm.user_id IS NOT NULL AND COALESCE(u.status, 'active') = 'active')
         )
-      ORDER BY m.joined_at ASC
+      ORDER BY m.channel_id ASC, m.joined_at ASC, m.user_id ASC
     `,
     [channelIds],
   );
