@@ -5,6 +5,21 @@
   SetSilent normal
 !macroend
 
+!macro customInstallMode
+  ; An in-app update must preserve the one existing installation scope instead
+  ; of stopping at the assisted install-mode page. If both scopes exist, keep
+  ; the page visible because choosing which installation to update is ambiguous.
+  ${If} ${isUpdated}
+    ${If} $hasPerUserInstallation == "1"
+    ${AndIf} $hasPerMachineInstallation == "0"
+      StrCpy $isForceCurrentInstall "1"
+    ${ElseIf} $hasPerMachineInstallation == "1"
+    ${AndIf} $hasPerUserInstallation == "0"
+      StrCpy $isForceMachineInstall "1"
+    ${EndIf}
+  ${EndIf}
+!macroend
+
 !macro customCheckAppRunning
   ; Avoid electron-builder's PowerShell process probe. On affected Windows
   ; machines that probe can remain alive forever and block the installer.
@@ -30,14 +45,13 @@
 !macroend
 
 !macro customInstall
-  ; electron-builder only honors --force-run automatically for silent assisted
-  ; installs. Our updater is intentionally visible, so complete the same
-  ; contract here after files, shortcuts and uninstall metadata are in place.
-  ${If} ${isForceRun}
+  ; In-app update mode is the source of truth for restart behavior. The updater
+  ; is intentionally visible, so restart only after files, shortcuts and
+  ; uninstall metadata are committed by the install section.
+  ${If} ${isUpdated}
   ${AndIfNot} ${Silent}
     HideWindow
-    ${StdUtils.ExecShellAsUser} $R0 "$launchLink" "open" "--updated"
-    SetErrorLevel 0
-    Quit
+    !insertmacro StartApp
+    !insertmacro quitSuccess
   ${EndIf}
 !macroend
