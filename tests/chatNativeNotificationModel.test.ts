@@ -836,3 +836,10 @@ test("Win11 desktop shell uses separate crisp taskbar and tray sizes with no num
   assert.match(source, /targetWindow\.setOverlayIcon\(null, ""\)/);
   assert.doesNotMatch(source, /createUnreadBadgeRgba/);
 });
+
+test("Win11 desktop shutdown stops the attention icon timer through its lifecycle owner", () => {
+  const source = readFileSync(new URL("../clients/desktop/main.cjs", import.meta.url), "utf8");
+
+  assert.match(source, /app\.on\("before-quit", \(\) => \{[\s\S]*?stopDesktopAttentionIconFlash\(\);/);
+  assert.doesNotMatch(source, /stopTrayAttentionFlash/);
+});

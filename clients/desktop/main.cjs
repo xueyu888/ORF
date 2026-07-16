@@ -1824,7 +1824,7 @@ if (!hasSingleInstanceLock) {
 
   app.on("before-quit", () => {
     desktopShellState.isQuitting = true;
-    stopTrayAttentionFlash();
+    stopDesktopAttentionIconFlash();
     if (desktopShellState.tray && !desktopShellState.tray.isDestroyed()) {
       desktopShellState.tray.destroy();
     }
