@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
 import {
@@ -38,9 +39,54 @@ const { windowsNotificationToastXml } = require("../clients/desktop/notification
     title: string;
   }) => string;
 };
+const { createTrayIconRgba } = require("../clients/desktop/icon-renderer.cjs") as {
+  createTrayIconRgba: (width: number, height: number, options: {
+    pulse?: boolean;
+    state?: "attention" | "normal" | "unread";
+    unreadCount?: number;
+  }) => Buffer;
+};
 
 const currentUserId = "user-current";
 const authorUserId = "user-author";
+
+function changedPixelRatio(first: Buffer, second: Buffer, size: number, insetRatio = 0) {
+  let changed = 0;
+  let compared = 0;
+  const inset = Math.floor(size * insetRatio);
+  for (let y = inset; y < size - inset; y += 1) {
+    for (let x = inset; x < size - inset; x += 1) {
+      const offset = (y * size + x) * 4;
+      const difference = Math.abs(first[offset] - second[offset])
+        + Math.abs(first[offset + 1] - second[offset + 1])
+        + Math.abs(first[offset + 2] - second[offset + 2])
+        + Math.abs(first[offset + 3] - second[offset + 3]);
+      compared += 1;
+      if (difference > 30) changed += 1;
+    }
+  }
+  return changed / compared;
+}
+
+function opaquePixelBounds(buffer: Buffer, size: number) {
+  let minX = size;
+  let minY = size;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      if (buffer[(y * size + x) * 4 + 3] <= 8) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  return {
+    height: maxY >= minY ? maxY - minY + 1 : 0,
+    width: maxX >= minX ? maxX - minX + 1 : 0,
+  };
+}
 
 function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
   return {
@@ -762,4 +808,31 @@ test("stripChatNotificationMarkdown removes common formatting without dropping t
     stripChatNotificationMarkdown("> ## 标题\n- **重点**：`code`\n1. [链接](https://example.test)"),
     "标题 重点：code 链接",
   );
+});
+
+test("Win11 attention frames flash the whole high-resolution icon without numeric badges", () => {
+  const size = 128;
+  const normalFrame = createTrayIconRgba(size, size, { state: "attention", pulse: false });
+  const highlightedFrame = createTrayIconRgba(size, size, { state: "attention", pulse: true });
+  const legacyCountFrame = createTrayIconRgba(size, size, { state: "attention", pulse: false, unreadCount: 88 });
+  const bounds = opaquePixelBounds(normalFrame, size);
+
+  assert.equal(normalFrame.length, size * size * 4);
+  assert.equal(highlightedFrame.length, size * size * 4);
+  assert.ok(bounds.width >= size * 0.94);
+  assert.ok(bounds.height >= size * 0.94);
+  assert.ok(changedPixelRatio(normalFrame, highlightedFrame, size) > 0.85);
+  assert.ok(changedPixelRatio(normalFrame, highlightedFrame, size, 0.15) > 0.95);
+  assert.deepEqual(legacyCountFrame, normalFrame);
+});
+
+test("Win11 desktop shell uses separate crisp taskbar and tray sizes with no numeric overlay", () => {
+  const source = readFileSync(new URL("../clients/desktop/main.cjs", import.meta.url), "utf8");
+
+  assert.match(source, /DESKTOP_TASKBAR_ICON_BITMAP_SIZE = 32/);
+  assert.match(source, /DESKTOP_TRAY_ICON_BITMAP_SIZE = 16/);
+  assert.match(source, /targetWindow\.setIcon\(createDesktopTaskbarIconImage\(state, pulse\)\)/);
+  assert.match(source, /tray\.setImage\(createDesktopTrayIconImage\(state, pulse\)\)/);
+  assert.match(source, /targetWindow\.setOverlayIcon\(null, ""\)/);
+  assert.doesNotMatch(source, /createUnreadBadgeRgba/);
 });
