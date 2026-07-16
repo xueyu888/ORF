@@ -15,7 +15,7 @@ const noReconciliation: ChatRealtimeReconciliationScope = {
 export function chatRealtimeReconciliationScope(eventType: ChatRealtimeEventType): ChatRealtimeReconciliationScope {
   if (eventType === "typing") return noReconciliation;
   if (eventType === "read.changed") {
-    return { bootstrap: true, feed: false, thread: true };
+    return { bootstrap: true, feed: false, thread: false };
   }
   if (eventType === "message.created") {
     return { bootstrap: true, feed: true, thread: true };
