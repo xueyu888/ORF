@@ -1,13 +1,16 @@
 const fs = require("node:fs");
+const { createHash } = require("node:crypto");
 const path = require("node:path");
 const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
+const { pathToFileURL } = require("node:url");
 const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, net, powerMonitor, safeStorage, shell } = require("electron");
 const {
   createTrayIconRgba,
   createUnreadBadgeRgba,
 } = require("./icon-renderer.cjs");
-const { launchDesktopUpdateInstaller } = require("./update-installer.cjs");
+const { windowsNotificationToastXml } = require("./notification-renderer.cjs");
+const { launchDesktopUpdateInstallerAfterExit } = require("./update-installer.cjs");
 
 const DEFAULT_ORF_CLIENT_URL = "https://orf-xueyu.duckdns.org:8443/";
 const DESKTOP_PACKAGE_PATH = path.join(__dirname, "package.json");
@@ -31,6 +34,8 @@ const DESKTOP_ICON_BITMAP_SCALE = 4;
 const MAX_PENDING_CHAT_NOTIFICATION_TARGETS = 16;
 const MAX_PENDING_DESKTOP_TARGETS = 16;
 const MAX_SEEN_ATTENTION_TOAST_IDS = 128;
+const MAX_NOTIFICATION_AVATAR_CACHE_FILES = 64;
+const MAX_NOTIFICATION_AVATAR_DATA_URL_LENGTH = 1_000_000;
 const CHAT_NOTIFICATION_ACTIVATION_PREFIX = "orf-chat-notification";
 const ATTENTION_NOTIFICATION_ACTIVATION_PREFIX = "orf-attention-notification";
 const DESKTOP_ATTENTION_FLASH_COOLDOWN_MS = 12000;
@@ -71,6 +76,7 @@ const desktopShellState = {
   isQuitting: false,
   lastAttentionFlashAt: 0,
   mainWindow: null,
+  notificationAvatarFilePaths: [],
   pendingChatNotificationTargetsByWebContents: new Map(),
   pendingDesktopTargetsByWebContents: new Map(),
   recoveryStateByWebContents: new Map(),
@@ -1047,9 +1053,11 @@ function normalizeDesktopAttentionToast(input) {
   const id = notificationText(input.id, 160);
   if (!id) return null;
   return {
+    avatarDataUrl: normalizeNotificationAvatarDataUrl(input.avatarDataUrl),
     body: notificationText(input.body, 500) || "你有一条新的提醒",
     id,
     level: normalizeDesktopAttentionLevel(input.level, 1),
+    sender: normalizeNotificationSender(input.sender),
     targetPath: input.targetPath,
     title: notificationText(input.title, 120) || "ORF 提醒",
   };
@@ -1108,9 +1116,12 @@ function attentionNotificationPayload(input, clientUrl) {
   if (targetUrl.origin !== clientUrl.origin) return null;
 
   return {
+    avatarDataUrl: normalizeNotificationAvatarDataUrl(input.avatarDataUrl),
+    avatarImageUri: materializeNotificationAvatar(input.avatarDataUrl),
     body,
     id,
     level: normalizeDesktopAttentionLevel(input.level, 1),
+    sender: normalizeNotificationSender(input.sender),
     targetPath: `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`,
     title,
   };
@@ -1140,22 +1151,19 @@ function attentionNotificationOptions(payload) {
   return {
     title: payload.title,
     body: payload.body,
-    icon: resolveDesktopIconPath(),
+    icon: notificationIcon(payload.avatarDataUrl),
     silent: false,
   };
 }
 
 function windowsAttentionNotificationToastXml(payload) {
-  return [
-    `<toast launch="${escapeXmlAttribute(attentionNotificationActivationArguments(payload.targetPath))}">`,
-    "<visual>",
-    '<binding template="ToastGeneric">',
-    `<text>${escapeXmlText(payload.title)}</text>`,
-    `<text>${escapeXmlText(payload.body)}</text>`,
-    "</binding>",
-    "</visual>",
-    "</toast>",
-  ].join("");
+  return windowsNotificationToastXml({
+    activationArguments: attentionNotificationActivationArguments(payload.targetPath),
+    avatarAlt: payload.sender?.name,
+    avatarImageUri: payload.avatarImageUri,
+    body: payload.body,
+    title: payload.title,
+  });
 }
 
 function isSafeDesktopTargetPath(targetPath) {
@@ -1352,7 +1360,10 @@ function chatNotificationPayload(input, clientUrl) {
   if (targetUrl.origin !== clientUrl.origin) return null;
 
   return {
+    avatarDataUrl: normalizeNotificationAvatarDataUrl(input.avatarDataUrl),
+    avatarImageUri: materializeNotificationAvatar(input.avatarDataUrl),
     body,
+    sender: normalizeNotificationSender(input.sender),
     targetPath: `${targetUrl.pathname}${targetUrl.search}`,
     title,
   };
@@ -1382,33 +1393,88 @@ function chatNotificationOptions(payload) {
   return {
     title: payload.title,
     body: payload.body,
-    icon: resolveDesktopIconPath(),
+    icon: notificationIcon(payload.avatarDataUrl),
     silent: false,
   };
 }
 
 function windowsChatNotificationToastXml(payload) {
-  return [
-    `<toast launch="${escapeXmlAttribute(chatNotificationActivationArguments(payload.targetPath))}">`,
-    "<visual>",
-    '<binding template="ToastGeneric">',
-    `<text>${escapeXmlText(payload.title)}</text>`,
-    `<text>${escapeXmlText(payload.body)}</text>`,
-    "</binding>",
-    "</visual>",
-    "</toast>",
-  ].join("");
+  return windowsNotificationToastXml({
+    activationArguments: chatNotificationActivationArguments(payload.targetPath),
+    avatarAlt: payload.sender?.name,
+    avatarImageUri: payload.avatarImageUri,
+    body: payload.body,
+    title: payload.title,
+  });
 }
 
-function escapeXmlAttribute(value) {
-  return escapeXmlText(value).replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+function normalizeNotificationSender(input) {
+  if (!input || typeof input !== "object") return undefined;
+  const name = notificationText(input.name, 120);
+  if (!name) return undefined;
+  return {
+    name,
+    userId: notificationText(input.userId, 160) || null,
+  };
 }
 
-function escapeXmlText(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+function normalizeNotificationAvatarDataUrl(value) {
+  return notificationAvatarPngBuffer(value) ? value : null;
+}
+
+function notificationAvatarPngBuffer(value) {
+  if (typeof value !== "string" || value.length > MAX_NOTIFICATION_AVATAR_DATA_URL_LENGTH) return null;
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+  if (!match) return null;
+  const buffer = Buffer.from(match[1], "base64");
+  if (buffer.length === 0 || buffer.length > 750_000) return null;
+  const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  return buffer.subarray(0, pngSignature.length).equals(pngSignature) ? buffer : null;
+}
+
+function notificationIcon(avatarDataUrl) {
+  const avatarBuffer = notificationAvatarPngBuffer(avatarDataUrl);
+  if (!avatarBuffer) return resolveDesktopIconPath();
+  const image = nativeImage.createFromBuffer(avatarBuffer);
+  return image.isEmpty() ? resolveDesktopIconPath() : image;
+}
+
+function notificationAvatarCacheDirectory() {
+  return path.join(app.getPath("temp"), "orf-notification-avatars");
+}
+
+function resetNotificationAvatarCache() {
+  const cacheDirectory = notificationAvatarCacheDirectory();
+  try {
+    fs.rmSync(cacheDirectory, { force: true, recursive: true });
+    fs.mkdirSync(cacheDirectory, { mode: 0o700, recursive: true });
+    desktopShellState.notificationAvatarFilePaths = [];
+  } catch {
+    // Avatar cache is a best-effort presentation detail and must never block startup.
+  }
+}
+
+function materializeNotificationAvatar(avatarDataUrl) {
+  if (process.platform !== "win32") return null;
+  const avatarBuffer = notificationAvatarPngBuffer(avatarDataUrl);
+  if (!avatarBuffer) return null;
+  const cacheDirectory = notificationAvatarCacheDirectory();
+  const filePath = path.join(cacheDirectory, `${createHash("sha256").update(avatarBuffer).digest("hex")}.png`);
+  try {
+    fs.mkdirSync(cacheDirectory, { mode: 0o700, recursive: true });
+    if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, avatarBuffer, { mode: 0o600 });
+    desktopShellState.notificationAvatarFilePaths = [
+      ...desktopShellState.notificationAvatarFilePaths.filter((candidate) => candidate !== filePath),
+      filePath,
+    ];
+    while (desktopShellState.notificationAvatarFilePaths.length > MAX_NOTIFICATION_AVATAR_CACHE_FILES) {
+      const expiredPath = desktopShellState.notificationAvatarFilePaths.shift();
+      if (expiredPath) fs.rmSync(expiredPath, { force: true });
+    }
+    return pathToFileURL(filePath).toString();
+  } catch {
+    return null;
+  }
 }
 
 function registerNativeNotificationBridge(clientUrl) {
@@ -1431,6 +1497,7 @@ function registerNativeNotificationBridge(clientUrl) {
   }));
 
   ipcMain.handle("orf:chat-notification:show", (event, input) => {
+    if (!isTrustedDesktopIpcSender(event, clientUrl)) return { status: "not_sent", reason: "untrusted_sender" };
     const payload = chatNotificationPayload(input, clientUrl);
     if (!payload) return { status: "not_sent", reason: "invalid_payload" };
     if (!Notification.isSupported()) return { status: "unsupported", reason: "notification_not_supported" };
@@ -1442,17 +1509,18 @@ function registerNativeNotificationBridge(clientUrl) {
       });
     }
     notification.show();
-    requestDesktopAttention(BrowserWindow.fromWebContents(event.sender));
     return { status: "success" };
   });
 }
 
-function registerDesktopShellBridge() {
-  ipcMain.handle("orf:desktop-shell:set-attention-state", (_event, input) => {
+function registerDesktopShellBridge(clientUrl) {
+  ipcMain.handle("orf:desktop-shell:set-attention-state", (event, input) => {
+    if (!isTrustedDesktopIpcSender(event, clientUrl)) return { status: "error", reason: "untrusted_sender" };
     setDesktopAttentionState(input);
     return { status: "success", data: desktopShellState.attentionState };
   });
-  ipcMain.handle("orf:desktop-shell:set-chat-unread-count", (_event, input) => {
+  ipcMain.handle("orf:desktop-shell:set-chat-unread-count", (event, input) => {
+    if (!isTrustedDesktopIpcSender(event, clientUrl)) return { status: "error", reason: "untrusted_sender" };
     const unreadCount = normalizeDesktopUnreadInput(input);
     setDesktopUnreadCount(unreadCount);
     return { status: "success", data: unreadCount };
@@ -1604,10 +1672,10 @@ function registerNativeRuntimeBridge() {
     }
     try {
       sendProgress({ percent: 100, stage: "opening" });
-      await launchDesktopUpdateInstaller(installerPath);
-      sendProgress({ percent: 100, stage: "complete" });
+      await launchDesktopUpdateInstallerAfterExit(installerPath);
+      sendProgress({ percent: 100, stage: "closing" });
       scheduleDesktopQuitForUpdate();
-      return { status: "success", data: installerPath };
+      return { status: "success", reason: "installer_scheduled", data: installerPath };
     } catch (error) {
       desktopShellState.clientUpdateInstallInProgress = false;
       const message = readableErrorMessage(error);
@@ -1619,7 +1687,7 @@ function registerNativeRuntimeBridge() {
 
 function scheduleDesktopQuitForUpdate() {
   desktopShellState.isQuitting = true;
-  const timer = setTimeout(() => app.quit(), 180);
+  const timer = setTimeout(() => app.quit(), 650);
   if (typeof timer.unref === "function") timer.unref();
 }
 
@@ -1789,9 +1857,10 @@ if (!hasSingleInstanceLock) {
     const clientUrl = resolveClientUrl();
     const startHidden = shouldStartHidden();
     desktopShellState.clientUrl = clientUrl;
+    resetNotificationAvatarCache();
     registerNativeNotificationBridge(clientUrl);
     registerNativeRuntimeBridge();
-    registerDesktopShellBridge();
+    registerDesktopShellBridge(clientUrl);
     registerDesktopCredentialBridge(clientUrl);
     createDesktopTray(clientUrl);
     const mainWindow = createMainWindow(clientUrl, { show: !startHidden });

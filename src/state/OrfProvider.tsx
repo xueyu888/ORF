@@ -2,6 +2,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useL
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   API_AUTHENTICATION_EXPIRED_EVENT,
+  getChatSync,
   getChatUnreadSummary,
   getUserPreferences,
   getWorkLogReminderState,
@@ -30,12 +31,17 @@ import { type MoveResultInput, useOrfProviderResultActions } from "./orfProvider
 import { type MoveSubtaskInput, type MoveTaskInput, useOrfProviderTaskActions } from "./orfProviderTaskActions";
 import { useOrfProviderUserActions } from "./orfProviderUserActions";
 import { enqueueSystemBroadcast } from "../features/notifications/notificationBroadcasts";
-import { publishChatRealtimeConnectionRestored, publishChatRealtimeEvent } from "../features/realtime/chatRealtimeEventBus";
+import { publishChatRealtimeEvent } from "../features/realtime/chatRealtimeEventBus";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { clearReadModelCache } from "./readModelCache";
 import { clearChatFeedSessionCache } from "../features/chat/chatFeedSessionCache";
 import { clearPreparedVisualBackgrounds } from "../utils/visualBackgrounds";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
+import { useRealtimeReconciliation } from "../features/realtime/useRealtimeReconciliation";
+import {
+  buildChatRealtimeRecoveryState,
+  type ChatRealtimeRecoveryState,
+} from "../features/realtime/realtimeRecoveryModel";
 import { requestClientUpdateCheck } from "../features/client-updates/clientUpdateCenterEvents";
 import {
   attentionToastIntentFromNotification,
@@ -43,7 +49,11 @@ import {
   buildAttentionState,
 } from "../features/attention/attentionModel";
 import type { AttentionState } from "../features/attention/attentionTypes";
-import { buildChatNativeNotificationDecision } from "../features/chat/chatNativeNotificationModel";
+import {
+  buildChatNativeNotificationDecision,
+  buildChatRealtimeAttentionIntent,
+  type ChatRealtimeAttentionIntent,
+} from "../features/chat/chatNativeNotificationModel";
 import type { AppAttentionState } from "../features/interaction/appAttentionState";
 import { useAppAttentionState } from "../features/interaction/useAppAttentionState";
 import {
@@ -51,6 +61,7 @@ import {
   subscribeDesktopAttentionTargetOpen,
   type DesktopAttentionToast,
 } from "../features/desktop/desktopShellRuntime";
+import { prepareDesktopNotificationAvatar } from "../features/desktop/desktopNotificationAvatar";
 import { registerOrfPushNotifications, revokeOrfPushNotifications } from "../features/push/orfPushRegistration";
 import { GlobalWorkLogReminderModal } from "../features/work-logs/GlobalWorkLogReminderModal";
 import {
@@ -60,6 +71,8 @@ import {
   subscribeNativeChatNotificationOpen,
 } from "../features/chat/chatNativeNotificationDelivery";
 import { getChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
+import { readChatSyncCursor, writeChatSyncCursor } from "../features/chat/chatSyncCursor";
+import { resolveChatSyncCheckpoint } from "../features/chat/chatSyncRecovery";
 import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import type { ReportsPageData } from "../domain/reportsLeaderboard";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
@@ -102,8 +115,11 @@ interface ToastMessage {
 const emptyChatUnreadSummary: ChatUnreadSummary = {
   actionableMessageUnreadCount: 0,
   directMessageUnreadCount: 0,
+  mainMentionCount: 0,
   mentionCount: 0,
   messageUnreadCount: 0,
+  nextTarget: null,
+  threadMentionCount: 0,
   threadUnreadCount: 0,
   totalUnreadCount: 0,
   unreadChannelCount: 0,
@@ -137,6 +153,7 @@ interface OrfContextValue {
   systemBroadcasts: SystemBroadcast[];
   workLogReminderState: WorkLogReminderState | null;
   chatUnreadSummary: ChatUnreadSummary;
+  chatRealtimeRecoveryState: ChatRealtimeRecoveryState;
   notifications: AppNotification[];
   unreadNotificationCount: number;
   markAllNotificationsRead: () => Promise<number>;
@@ -147,7 +164,7 @@ interface OrfContextValue {
   removeToast: (id: string) => void;
   dismissSystemBroadcast: (id: string) => void;
   resetState: () => void;
-  refreshChatUnreadSummary: () => Promise<void>;
+  refreshChatUnreadSummary: () => Promise<ChatUnreadSummary>;
   refreshWorkLogReminderState: () => Promise<void>;
   refreshNotifications: () => Promise<void>;
   snoozeWorkLogReminder: () => Promise<void>;
@@ -255,9 +272,11 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [systemBroadcasts, setSystemBroadcasts] = useState<SystemBroadcast[]>([]);
   const [workLogReminderState, setWorkLogReminderState] = useState<WorkLogReminderState | null>(null);
   const [chatUnreadSummary, setChatUnreadSummary] = useState<ChatUnreadSummary>(emptyChatUnreadSummary);
+  const [chatRealtimeAttentionIntents, setChatRealtimeAttentionIntents] = useState<ChatRealtimeAttentionIntent[]>([]);
   const [desktopAttentionToast, setDesktopAttentionToast] = useState<DesktopAttentionToast | null>(null);
   const authenticationExpiryConfirmationRef = useRef<Promise<void> | null>(null);
   const notifiedChatMessageIdsRef = useRef<string[]>([]);
+  const chatRealtimeAttentionIntentsRef = useRef<ChatRealtimeAttentionIntent[]>([]);
   const [readModelSessionUserId, setReadModelSessionUserId] = useState<string | null>(null);
   const notify = useCallback((message: string) => {
     if (!toastEnabled) {
@@ -299,13 +318,14 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     () => buildAttentionState({
       appAttentionState,
       authenticated: isAuthenticated && isApproved,
+      chatRealtimeAttentionIntents,
       chatUnreadSummary,
       currentPath,
       currentUserId: currentUser?.id,
       notifications,
       workLogReminderState,
     }),
-    [appAttentionState, chatUnreadSummary, currentPath, currentUser?.id, isApproved, isAuthenticated, notifications, workLogReminderState],
+    [appAttentionState, chatRealtimeAttentionIntents, chatUnreadSummary, currentPath, currentUser?.id, isApproved, isAuthenticated, notifications, workLogReminderState],
   );
   const {
     applyCommentThread,
@@ -358,6 +378,12 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     setSystemBroadcasts((items) => items.filter((item) => item.id !== id));
   }, []);
 
+  const showDesktopAttentionToast = useCallback((toast: DesktopAttentionToast) => {
+    void prepareDesktopNotificationAvatar(toast)
+      .then(setDesktopAttentionToast)
+      .catch(() => setDesktopAttentionToast(toast));
+  }, []);
+
   const receiveRealtimeNotification = useCallback(
     (notification: AppNotification) => {
       receiveNotification(notification);
@@ -368,10 +394,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         notification,
       });
       if (toastIntent) {
-        setDesktopAttentionToast(toastIntent);
+        showDesktopAttentionToast(toastIntent);
       }
     },
-    [appAttentionState, currentPath, currentUser?.id, receiveNotification],
+    [appAttentionState, currentPath, currentUser?.id, receiveNotification, showDesktopAttentionToast],
   );
   const receiveRealtimeBroadcast = useCallback((broadcast: SystemBroadcast) => {
     if (isClientUpdateSystemBroadcast(broadcast)) {
@@ -396,15 +422,29 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const refreshChatUnreadSummary = useCallback(async () => {
     const summary = await getChatUnreadSummary();
     setChatUnreadSummary(summary);
+    return summary;
   }, []);
-  const lastChatReconciliationAtRef = useRef(0);
-  const reconcileChatDeliveryState = useCallback(() => {
-    const now = Date.now();
-    if (now - lastChatReconciliationAtRef.current < 5_000) return;
-    lastChatReconciliationAtRef.current = now;
-    publishChatRealtimeConnectionRestored();
-    void refreshChatUnreadSummary().catch(() => undefined);
-  }, [refreshChatUnreadSummary]);
+  const requestChatAttentionRealtimeReconciliationRef = useRef<() => void>(() => undefined);
+  const reconcileChatAttentionState = useCallback(async () => {
+    const settledRealtimeEventIds = new Set(chatRealtimeAttentionIntentsRef.current.map((intent) => intent.eventId));
+    let synchronizedCursor: Awaited<ReturnType<typeof resolveChatSyncCheckpoint>> | null = null;
+    if (currentUser?.id) {
+      const storedCursor = readChatSyncCursor(currentUser.id);
+      synchronizedCursor = await resolveChatSyncCheckpoint({ fetchPage: getChatSync, storedCursor });
+    }
+    await Promise.all([
+      refreshChatUnreadSummary(),
+      refreshNotifications(),
+    ]);
+    if (currentUser?.id && synchronizedCursor) {
+      writeChatSyncCursor(currentUser.id, synchronizedCursor);
+    }
+    if (settledRealtimeEventIds.size > 0) {
+      const remainingIntents = chatRealtimeAttentionIntentsRef.current.filter((intent) => !settledRealtimeEventIds.has(intent.eventId));
+      chatRealtimeAttentionIntentsRef.current = remainingIntents;
+      setChatRealtimeAttentionIntents(remainingIntents);
+    }
+  }, [currentUser?.id, refreshChatUnreadSummary, refreshNotifications]);
   const reserveChatNotification = useCallback((messageId: string) => {
     const messageIds = notifiedChatMessageIdsRef.current;
     if (messageIds.includes(messageId)) return false;
@@ -418,20 +458,34 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     publishChatRealtimeEvent(event);
     if (event.eventType === "typing") return;
     const viewState = getChatNativeNotificationViewState();
+    const focus = {
+      activeChannelId: viewState.activeChannelId ?? chatRouteChannelIdFromPathname(location.pathname),
+      activeThreadRootMessageId: viewState.activeThreadRootMessageId,
+      appFocused: appAttentionState.activelyViewed,
+    };
+    const attentionIntent = buildChatRealtimeAttentionIntent({
+      currentUserId: currentUser?.id,
+      event,
+      focus,
+    });
+    if (attentionIntent) {
+      const nextIntents = [
+        attentionIntent,
+        ...chatRealtimeAttentionIntentsRef.current.filter((intent) => intent.eventId !== attentionIntent.eventId),
+      ].slice(0, 32);
+      chatRealtimeAttentionIntentsRef.current = nextIntents;
+      setChatRealtimeAttentionIntents(nextIntents);
+    }
     const decision = buildChatNativeNotificationDecision({
       currentUserId: currentUser?.id,
       event,
-      focus: {
-        activeChannelId: viewState.activeChannelId ?? chatRouteChannelIdFromPathname(location.pathname),
-        activeThreadRootMessageId: viewState.activeThreadRootMessageId,
-        appFocused: appAttentionState.activelyViewed,
-      },
+      focus,
     });
     if (decision.action === "notify" && reserveChatNotification(decision.notification.messageId)) {
       void sendNativeChatNotification(decision.notification).catch(() => undefined);
     }
-    void refreshChatUnreadSummary().catch(() => undefined);
-  }, [appAttentionState.activelyViewed, currentUser?.id, location.pathname, refreshChatUnreadSummary, reserveChatNotification]);
+    requestChatAttentionRealtimeReconciliationRef.current();
+  }, [appAttentionState.activelyViewed, currentUser?.id, location.pathname, reserveChatNotification]);
 
   const receiveWorkLogReminderRequired = useCallback((event: { reminder: WorkLogReminderState }) => {
     setWorkLogReminderState(event.reminder);
@@ -440,9 +494,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       currentPath,
     });
     if (toastIntent) {
-      setDesktopAttentionToast(toastIntent);
+      showDesktopAttentionToast(toastIntent);
     }
-  }, [appAttentionState, currentPath]);
+  }, [appAttentionState, currentPath, showDesktopAttentionToast]);
 
   const receiveWorkLogReminderResolved = useCallback((event: { reminder: WorkLogReminderState }) => {
     setWorkLogReminderState(event.reminder);
@@ -470,24 +524,41 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     }).catch(() => undefined);
   }, [authReady, isApproved, isAuthenticated, navigate]);
 
-  useRealtimeEvents({
+  const realtimeConnectionState = useRealtimeEvents({
     enabled: authReady && isAuthenticated && isApproved,
     onBroadcast: receiveRealtimeBroadcast,
     onChatEvent: receiveRealtimeChatEvent,
     onClientUpdateAvailable: receiveClientUpdateAvailable,
-    onConnectionRestored: reconcileChatDeliveryState,
     onNotification: receiveRealtimeNotification,
     onReadModelInvalidation: receiveReadModelInvalidation,
     onWorkLogReminderRequired: receiveWorkLogReminderRequired,
     onWorkLogReminderResolved: receiveWorkLogReminderResolved,
   });
+  const chatAttentionReconciliation = useRealtimeReconciliation({
+    connected: realtimeConnectionState.status === "connected",
+    connectionEpoch: realtimeConnectionState.connectionEpoch,
+    enabled: authReady && isAuthenticated && isApproved,
+    reconcile: reconcileChatAttentionState,
+  });
+  useEffect(() => {
+    requestChatAttentionRealtimeReconciliationRef.current = () => {
+      chatAttentionReconciliation.request("realtime-event");
+    };
+    return () => {
+      requestChatAttentionRealtimeReconciliationRef.current = () => undefined;
+    };
+  }, [chatAttentionReconciliation.request]);
+  const chatRealtimeRecoveryState = useMemo(
+    () => buildChatRealtimeRecoveryState(realtimeConnectionState, chatAttentionReconciliation.state),
+    [chatAttentionReconciliation.state, realtimeConnectionState],
+  );
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) return;
-    const handleOnline = () => reconcileChatDeliveryState();
-    const handleFocus = () => reconcileChatDeliveryState();
+    const handleOnline = () => chatAttentionReconciliation.request("online");
+    const handleFocus = () => chatAttentionReconciliation.request("focus");
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") reconcileChatDeliveryState();
+      if (document.visibilityState === "visible") chatAttentionReconciliation.request("visibility");
     };
     window.addEventListener("online", handleOnline);
     window.addEventListener("focus", handleFocus);
@@ -497,11 +568,13 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [authReady, isApproved, isAuthenticated, reconcileChatDeliveryState]);
+  }, [authReady, chatAttentionReconciliation.request, isApproved, isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated || !isApproved) {
       setChatUnreadSummary(emptyChatUnreadSummary);
+      chatRealtimeAttentionIntentsRef.current = [];
+      setChatRealtimeAttentionIntents([]);
       setDesktopAttentionToast(null);
       setReadModelInvalidations([]);
       setSystemBroadcasts([]);
@@ -686,6 +759,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       systemBroadcasts,
       workLogReminderState,
       chatUnreadSummary,
+      chatRealtimeRecoveryState,
       notifications,
       unreadNotificationCount,
       markAllNotificationsRead,
@@ -717,6 +791,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       attentionState,
       appAttentionState,
       chatUnreadSummary,
+      chatRealtimeRecoveryState,
       commentActions,
       currentUser,
       dismissSystemBroadcast,

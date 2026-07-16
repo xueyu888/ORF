@@ -132,6 +132,7 @@ export interface AppNotification {
   recipientUserId: string;
   actorUserId?: string | null;
   actorName: string;
+  actorAvatarUrl?: string | null;
   title: string;
   body: string;
   stream: NotificationStream;
@@ -531,10 +532,12 @@ export interface WorkLogCategoryOption {
 }
 
 export type WorkLogClassificationKind = "category" | "objective" | "uncategorized";
+export type WorkLogClassificationSuggestionKind = WorkLogClassificationKind | "newCategory";
+export type WorkLogClassificationDecisionOperation = "create" | "update";
 export type WorkLogObjectiveSelectionAvailability = "default" | "searchOnly";
 
 export interface WorkLogClassificationSuggestion {
-  kind: WorkLogClassificationKind | "newCategory";
+  kind: WorkLogClassificationSuggestionKind;
   objectiveId?: string | null;
   categoryId?: string | null;
   categoryName?: string | null;
@@ -900,7 +903,10 @@ export interface ChatChannel {
   memberCount: number;
   members: ChatChannelMember[];
   unreadCount: number;
+  mainMentionCount: number;
   mentionCount: number;
+  threadMentionCount: number;
+  threadReadAt?: string | null;
   threadUnreadCount: number;
   lastMessageAt?: string | null;
   lastMessagePreview?: string | null;
@@ -980,6 +986,17 @@ export interface ChatMessageContext {
   targetMessageId: string;
 }
 
+export type ChatUnreadTarget =
+  | {
+      kind: "main";
+      context: ChatMessageContext;
+    }
+  | {
+      kind: "threadMention";
+      rootMessageId: string;
+      targetMessageId: string;
+    };
+
 export interface ChatBootstrap {
   channels: ChatChannel[];
   settings: {
@@ -1000,11 +1017,25 @@ export interface ChatBootstrap {
 export interface ChatUnreadSummary {
   actionableMessageUnreadCount: number;
   directMessageUnreadCount: number;
+  mainMentionCount: number;
   mentionCount: number;
   messageUnreadCount: number;
+  nextTarget: ChatUnreadSummaryNextTarget | null;
+  threadMentionCount: number;
   threadUnreadCount: number;
   totalUnreadCount: number;
   unreadChannelCount: number;
+}
+
+export type ChatUnreadTargetReason = "direct" | "mention_me" | "mention_all" | "system" | "normal";
+
+export interface ChatUnreadSummaryNextTarget {
+  channelId: string;
+  messageId: string;
+  reason: ChatUnreadTargetReason;
+  surface: "main" | "threadMention";
+  targetPath: string;
+  threadRootMessageId?: string | null;
 }
 
 export interface OrfState {

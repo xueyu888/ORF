@@ -9,7 +9,7 @@ import type { ClientUpdateAvailable, SystemBroadcast } from "../../src/types/rea
 type ClientUpdateRelease = ClientUpdateReleaseResponse["release"];
 
 export type ClientUpdateAnnouncementResult = {
-  onlineUserCount: number;
+  realtimeRecipientUserCount: number;
   releaseTag: string;
   releaseVersion: string;
   skipped: boolean;
@@ -25,7 +25,7 @@ export function publishClientUpdateAnnouncement(input: {
   const dedupeKey = clientUpdateAnnouncementDedupeKey(input.teamId, input.release.version);
   if (mode === "automatic" && automaticClientUpdateAnnouncements.has(dedupeKey)) {
     return {
-      onlineUserCount: realtimeConnectedUserIds(input.teamId).size,
+      realtimeRecipientUserCount: realtimeConnectedUserIds(input.teamId).size,
       releaseTag: input.release.tagName,
       releaseVersion: input.release.version,
       skipped: true,
@@ -43,7 +43,7 @@ export function publishClientUpdateAnnouncement(input: {
   }
 
   return {
-    onlineUserCount: realtimeConnectedUserIds(input.teamId).size,
+    realtimeRecipientUserCount: realtimeConnectedUserIds(input.teamId).size,
     releaseTag: input.release.tagName,
     releaseVersion: input.release.version,
     skipped: false,

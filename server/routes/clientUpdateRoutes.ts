@@ -4,12 +4,17 @@ import {
   isClientReleaseVersion,
   isTrustedClientUpdateUrl,
   normalizeReleaseVersion,
+  resolveClientUpdateReceiptStage,
   selectClientUpdateAsset,
   type ClientReleaseInfo,
 } from "../../src/features/client-updates/clientUpdateModel";
-import { requireAdminContext } from "../auth/accessPolicy";
+import { requireAdminContext, requireUserScopeContext } from "../auth/accessPolicy";
 import { publishClientUpdateAnnouncement } from "../clientUpdates/clientUpdateAnnouncement";
 import { clearClientReleaseCache, getCachedClientReleaseByVersion, getCachedLatestClientRelease } from "../clientUpdates/clientReleaseRepository";
+import {
+  getClientUpdateCoverage,
+  recordClientUpdateReceipt,
+} from "../clientUpdates/clientUpdateReceiptRepository";
 import {
   buildClientUpdateAssetDownloadUrl,
   getStoredClientUpdateAsset,
@@ -70,6 +75,15 @@ const releaseAssetParamsSchema = z.object({
     .transform(normalizeReleaseVersion)
     .refine(isClientReleaseVersion, { message: "Invalid client release version" }),
 });
+const clientUpdateReceiptBodySchema = z.object({
+  currentVersion: z.string()
+    .trim()
+    .min(1)
+    .transform(normalizeReleaseVersion)
+    .refine(isClientReleaseVersion, { message: "Invalid current client version" }),
+  platform: z.enum(["android", "desktop-windows"]),
+  stage: z.enum(["checked", "prompted", "install_started", "activated"]),
+});
 
 type ClientUpdateBroadcastRequest = FastifyRequest & { orfClientUpdateBroadcastAuthorized?: boolean };
 type ClientUpdateAssetPublishRequest = FastifyRequest & { orfClientUpdatePublishAuthorized?: boolean };
@@ -128,6 +142,60 @@ export function registerClientUpdateRoutes(app: FastifyInstance) {
       }
       app.log.warn({ error }, "Client update release lookup failed");
       return reply.code(502).send({ error: "Client update release lookup failed" });
+    }
+  });
+
+  app.post("/api/client-updates/releases/:version/receipt", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) return reply;
+
+    try {
+      const { version } = releaseVersionParamsSchema.parse(request.params);
+      const body = clientUpdateReceiptBodySchema.parse(request.body);
+      await getCachedClientReleaseByVersion(version);
+      const stage = resolveClientUpdateReceiptStage({
+        currentVersion: body.currentVersion,
+        releaseVersion: version,
+        stage: body.stage,
+      });
+      if (!stage) {
+        return reply.code(409).send({ error: "Current client version cannot activate this release" });
+      }
+      await recordClientUpdateReceipt({
+        currentVersion: body.currentVersion,
+        platform: body.platform,
+        releaseVersion: version,
+        stage,
+        teamId: runtimeScopeStorageId(context.scope),
+        userId: context.user.id,
+      });
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({ error: "Invalid client update receipt" });
+      }
+      request.log.warn({ error }, "Client update receipt write failed");
+      return reply.code(502).send({ error: "Client update receipt write failed" });
+    }
+  });
+
+  app.get("/api/client-updates/releases/:version/coverage", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) return reply;
+
+    try {
+      const { version } = releaseVersionParamsSchema.parse(request.params);
+      await getCachedClientReleaseByVersion(version);
+      return {
+        coverage: await getClientUpdateCoverage(runtimeScopeStorageId(context.scope), version),
+        releaseVersion: version,
+      };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({ error: "Invalid client release version" });
+      }
+      request.log.warn({ error }, "Client update coverage read failed");
+      return reply.code(502).send({ error: "Client update coverage read failed" });
     }
   });
 
@@ -196,19 +264,23 @@ export function registerClientUpdateRoutes(app: FastifyInstance) {
         return reply.code(409).send({ error: "Latest client release has no Win11 installer" });
       }
 
+      const teamId = runtimeScopeStorageId(context.scope);
       const result = publishClientUpdateAnnouncement({
         release,
-        teamId: runtimeScopeStorageId(context.scope),
+        teamId,
       });
+      const coverage = await getClientUpdateCoverage(teamId, result.releaseVersion);
       request.log.info({
         actorUserId: context.user.id,
-        onlineUserCount: result.onlineUserCount,
+        coverage,
+        realtimeRecipientUserCount: result.realtimeRecipientUserCount,
         releaseVersion: result.releaseVersion,
-        teamId: runtimeScopeStorageId(context.scope),
+        teamId,
       }, "Broadcast ORF client update announcement by admin request");
       return {
         ok: true,
         ...result,
+        coverage,
       };
     } catch (error) {
       request.log.warn({ error }, "Client update release broadcast failed");
@@ -229,22 +301,26 @@ export function registerClientUpdateRoutes(app: FastifyInstance) {
         return reply.code(409).send({ error: "Client release has no Win11 installer" });
       }
 
+      const teamId = runtimeScopeStorageId(context.scope);
       const result = publishClientUpdateAnnouncement({
         mode: context.kind === "machine" ? "automatic" : "manual",
         release,
-        teamId: runtimeScopeStorageId(context.scope),
+        teamId,
       });
+      const coverage = await getClientUpdateCoverage(teamId, result.releaseVersion);
       request.log.info({
         actorUserId: context.kind === "admin" ? context.user.id : null,
         actorType: context.kind,
-        onlineUserCount: result.onlineUserCount,
+        coverage,
+        realtimeRecipientUserCount: result.realtimeRecipientUserCount,
         releaseVersion: result.releaseVersion,
         skipped: result.skipped,
-        teamId: runtimeScopeStorageId(context.scope),
+        teamId,
       }, "Broadcast ORF client update announcement by release version");
       return {
         ok: true,
         ...result,
+        coverage,
       };
     } catch (error) {
       if (error instanceof z.ZodError) {

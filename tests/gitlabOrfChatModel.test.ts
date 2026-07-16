@@ -30,8 +30,9 @@ test("GitLab push webhook prefers event UUID for delivery key and formats commit
       ref: "refs/heads/main",
       before: "1111111111111111111111111111111111111111",
       after: "2222222222222222222222222222222222222222",
-      total_commits_count: 1,
+      total_commits_count: 2,
       user_username: "alice",
+      user_url: "https://gitlab.example.com/alice",
       project: {
         id: 12345,
         path_with_namespace: project.path,
@@ -39,10 +40,18 @@ test("GitLab push webhook prefers event UUID for delivery key and formats commit
       },
       commits: [
         {
-          id: "2222222222222222222222222222222222222222",
+          id: "1111111111111111111111111111111111111111",
           message: "Implement native chat delivery\n\nbody",
+          url: "https://gitlab.example.com/commit/1111",
+          timestamp: "2026-06-19T01:00:00Z",
+          author: { name: "Alice", username: "alice" },
+        },
+        {
+          id: "2222222222222222222222222222222222222222",
+          message: "Render newest commits first",
           url: "https://gitlab.example.com/commit/2222",
-          author: { name: "Alice" },
+          timestamp: "2026-06-19T02:00:00Z",
+          author: { name: "Bob", username: "bob" },
         },
       ],
     },
@@ -53,9 +62,13 @@ test("GitLab push webhook prefers event UUID for delivery key and formats commit
   assert.equal(event.eventType, "push");
 
   const message = formatGitLabWebhookChatMessage(event);
-  assert.match(message, /\*\*GitLab push\*\*/);
-  assert.match(message, /alice pushed 1 commit to branch `main`/);
-  assert.match(message, /Implement native chat delivery/);
+  assert.match(message, /alice.*推送了 2 个提交到.*develop\/platform\/orf-api.*`main` 分支/);
+  assert.match(message, /\[\*\*alice\*\*\]\(https:\/\/gitlab\.example\.com\/alice\)/);
+  assert.match(message, /\[develop\/platform\/orf-api\]\(https:\/\/gitlab\.example\.com\/develop\/platform\/orf-api\)/);
+  assert.match(message, /\[\`2222222\`\]\(https:\/\/gitlab\.example\.com\/commit\/2222\)/);
+  assert.match(message, /\[Bob\]\(https:\/\/gitlab\.example\.com\/bob\)/);
+  assert.ok(message.indexOf("Render newest commits first") < message.indexOf("Implement native chat delivery"));
+  assert.doesNotMatch(message, /\*\*GitLab push\*\*/);
 });
 
 test("GitLab fallback event key is deterministic without event UUID", () => {

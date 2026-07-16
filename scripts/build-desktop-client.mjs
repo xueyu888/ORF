@@ -13,12 +13,15 @@ const electronBuilderCli = path.resolve(repoRoot, "node_modules", "electron-buil
 
 const appPackage = JSON.parse(fs.readFileSync(path.resolve(repoRoot, "clients/desktop/package.json"), "utf8"));
 const iconRendererSource = path.resolve(repoRoot, "clients/desktop/icon-renderer.cjs");
+const installerIncludeSource = path.resolve(repoRoot, "clients/desktop/installer.nsh");
 const mainSource = path.resolve(repoRoot, "clients/desktop/main.cjs");
+const notificationRendererSource = path.resolve(repoRoot, "clients/desktop/notification-renderer.cjs");
 const preloadSource = path.resolve(repoRoot, "clients/desktop/preload.cjs");
 const updateInstallerSource = path.resolve(repoRoot, "clients/desktop/update-installer.cjs");
 const desktopAppIconSource = path.resolve(repoRoot, "src/assets/brand/orf-app-icon.png");
 const iconRendererTarget = path.resolve(tempRoot, "icon-renderer.cjs");
 const mainTarget = path.resolve(tempRoot, "main.cjs");
+const notificationRendererTarget = path.resolve(tempRoot, "notification-renderer.cjs");
 const preloadTarget = path.resolve(tempRoot, "preload.cjs");
 const updateInstallerTarget = path.resolve(tempRoot, "update-installer.cjs");
 const packageTarget = path.resolve(tempRoot, "package.json");
@@ -27,6 +30,7 @@ const appAssetsTargetDir = path.resolve(tempRoot, "assets");
 const buildResourcesTargetDir = path.resolve(tempRoot, "buildResources");
 const appIconTarget = path.resolve(appAssetsTargetDir, "icon.png");
 const buildIconTarget = path.resolve(buildResourcesTargetDir, "icon.png");
+const installerIncludeTarget = path.resolve(buildResourcesTargetDir, "installer.nsh");
 const desktopIconSizePx = 256;
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -43,6 +47,7 @@ const builderConfig = {
     "assets/icon.png",
     "icon-renderer.cjs",
     "main.cjs",
+    "notification-renderer.cjs",
     "package.json",
     "preload.cjs",
     "update-installer.cjs",
@@ -70,6 +75,7 @@ const builderConfig = {
     allowToChangeInstallationDirectory: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
+    include: "buildResources/installer.nsh",
     shortcutName: "ORF",
   },
 };
@@ -272,8 +278,10 @@ const crc32Table = (() => {
 
 try {
   prepareDesktopIcons();
+  fs.copyFileSync(installerIncludeSource, installerIncludeTarget);
   fs.copyFileSync(iconRendererSource, iconRendererTarget);
   fs.copyFileSync(mainSource, mainTarget);
+  fs.copyFileSync(notificationRendererSource, notificationRendererTarget);
   fs.copyFileSync(preloadSource, preloadTarget);
   fs.copyFileSync(updateInstallerSource, updateInstallerTarget);
   fs.writeFileSync(packageTarget, `${JSON.stringify(appPackage, null, 2)}\n`);

@@ -7,8 +7,14 @@ export type DesktopShellUnreadResult = {
 };
 
 export type DesktopAttentionToast = {
+  avatarDataUrl?: string | null;
   body: string;
   id: string;
+  sender?: {
+    avatarUrl?: string | null;
+    name: string;
+    userId?: string | null;
+  };
   level?: AttentionLevel;
   targetPath: string;
   title: string;
@@ -284,12 +290,30 @@ function normalizeDesktopAttentionPayload(payload: DesktopAttentionPayload): Des
 function normalizeDesktopAttentionToast(toast: DesktopAttentionPayload["toast"]): DesktopAttentionToast | null {
   if (!toast || !isSafeDesktopAttentionTargetPath(toast.targetPath)) return null;
   return {
+    avatarDataUrl: normalizeDesktopAvatarDataUrl(toast.avatarDataUrl),
     body: normalizeDesktopAttentionText(toast.body, "你有一条新的提醒"),
     id: normalizeDesktopAttentionText(toast.id, ""),
+    sender: normalizeDesktopNotificationSender(toast.sender),
     level: normalizeAttentionLevel(toast.level ?? "toast", 1),
     targetPath: toast.targetPath,
     title: normalizeDesktopAttentionText(toast.title, "ORF 提醒"),
   };
+}
+
+function normalizeDesktopNotificationSender(sender: DesktopAttentionToast["sender"]): DesktopAttentionToast["sender"] {
+  if (!sender) return undefined;
+  const name = normalizeDesktopAttentionText(sender.name, "");
+  if (!name) return undefined;
+  return {
+    avatarUrl: typeof sender.avatarUrl === "string" ? sender.avatarUrl : null,
+    name,
+    userId: normalizeDesktopAttentionText(sender.userId, "") || null,
+  };
+}
+
+function normalizeDesktopAvatarDataUrl(value: string | null | undefined) {
+  if (typeof value !== "string" || value.length > 1_000_000 || !value.startsWith("data:image/png;base64,")) return null;
+  return value;
 }
 
 function normalizeAttentionLevel(level: AttentionLevel | undefined, count: number): AttentionLevel {

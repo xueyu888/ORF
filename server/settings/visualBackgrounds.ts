@@ -254,11 +254,10 @@ async function writeUniqueUploadFile(directory: string, fileName: string, buffer
 }
 
 async function ensureBackgroundDirectories() {
-  const systemScopes: CanonicalBackgroundScope[] = ["default", "system"];
   await Promise.all([
     ensurePrivateSettingsStorage(),
     ensureSystemSettingsDirectory(),
-    ...visualBackgroundScenes.flatMap((scene) => systemScopes.map((scope) => mkdir(sceneDir(scene, scope), { recursive: true }))),
+    ...visualBackgroundScenes.map((scene) => mkdir(sceneDir(scene, "system"), { recursive: true })),
   ]);
 }
 
@@ -312,7 +311,7 @@ async function scanBackgroundScope(scene: CanonicalBackgroundScene, scope: Canon
   for (const storageScene of storageSceneNames(scene)) {
     for (const storageScope of storageScopeNames(scope)) {
       const directory = sceneDir(storageScene, storageScope);
-      await mkdir(directory, { recursive: true });
+      if (storageScope !== "default") await mkdir(directory, { recursive: true });
 
       const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
       images.push(

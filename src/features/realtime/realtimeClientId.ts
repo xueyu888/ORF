@@ -12,10 +12,25 @@ export function getRealtimeClientId() {
     return randomClientId();
   }
 
-  const stored = window.sessionStorage.getItem(realtimeClientIdStorageKey);
-  if (stored) return stored;
+  try {
+    const stored = window.localStorage.getItem(realtimeClientIdStorageKey);
+    if (stored) return stored;
+
+    const legacySessionId = window.sessionStorage.getItem(realtimeClientIdStorageKey);
+    if (legacySessionId) {
+      window.localStorage.setItem(realtimeClientIdStorageKey, legacySessionId);
+      window.sessionStorage.removeItem(realtimeClientIdStorageKey);
+      return legacySessionId;
+    }
+  } catch {
+    return randomClientId();
+  }
 
   const next = randomClientId();
-  window.sessionStorage.setItem(realtimeClientIdStorageKey, next);
+  try {
+    window.localStorage.setItem(realtimeClientIdStorageKey, next);
+  } catch {
+    return next;
+  }
   return next;
 }

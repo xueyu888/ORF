@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUserScopeContext } from "../auth/accessPolicy";
 import { subscribeRealtimeEvents } from "../realtime/realtimeEventBus";
+import { registerRealtimeConnectionCloser } from "../realtime/realtimeConnectionRegistry";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import type { RealtimeEvent } from "../../src/types/realtime";
 
@@ -10,10 +11,8 @@ const realtimeQuerySchema = z.object({
   clientId: z.string().trim().min(1).max(128).optional(),
 });
 
-function writeSseEvent(write: (chunk: string) => void, event: RealtimeEvent) {
-  write(`id: ${event.id}\n`);
-  write(`event: ${event.kind}\n`);
-  write(`data: ${JSON.stringify(event)}\n\n`);
+function sseEventChunk(event: RealtimeEvent) {
+  return `id: ${event.id}\nevent: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`;
 }
 
 export function registerRealtimeRoutes(app: FastifyInstance) {
@@ -34,22 +33,33 @@ export function registerRealtimeRoutes(app: FastifyInstance) {
     reply.raw.write("retry: 3000\n\n");
 
     const write = (chunk: string) => {
-      if (!reply.raw.destroyed) {
-        reply.raw.write(chunk);
-      }
+      if (reply.raw.destroyed || reply.raw.writableEnded) return false;
+      reply.raw.write(chunk);
+      return true;
     };
     const unsubscribe = subscribeRealtimeEvents({
       clientId: query.clientId,
       teamId: runtimeScopeStorageId(context.scope),
       userId: context.user.id,
-      send: (event) => writeSseEvent(write, event),
+      send: (event) => write(sseEventChunk(event)),
     });
     const heartbeat = setInterval(() => write(`: heartbeat ${Date.now()}\n\n`), HEARTBEAT_MS);
 
+    let cleaned = false;
+    let unregisterConnection = () => false;
     const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
       clearInterval(heartbeat);
       unsubscribe();
+      unregisterConnection();
     };
+    const close = () => {
+      if (!reply.raw.destroyed && !reply.raw.writableEnded) reply.raw.end();
+      cleanup();
+    };
+    unregisterConnection = registerRealtimeConnectionCloser(close);
     request.raw.on("close", cleanup);
+    reply.raw.on("error", cleanup);
   });
 }

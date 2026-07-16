@@ -19,15 +19,15 @@ import { ChatSidebar, type ChatSidebarCreateCommand } from "../features/chat/Cha
 import { ChatTypingLine } from "../features/chat/ChatTypingLine";
 import type { ChatDriveResourceLinkTarget, ChatDriveResourceSelectionRequest } from "../features/chat/chatDriveResourceLinks";
 import { chatPresenceProtocolUpgradeMessage, hasChatPresenceProtocolMismatch } from "../features/chat/chatPresence";
+import { chatRealtimeReconciliationScope } from "../features/chat/chatRealtimeReconciliation";
 import { resetChatNativeNotificationViewState, setChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
 import { requestClientUpdateCenterOpen } from "../features/client-updates/clientUpdateCenterEvents";
 import { feedbackIssueIdsFromText } from "../features/feedback/model/feedbackIssue";
 import {
   chatMessageCopyText,
-  chatMessageDeliveryStatus,
+  chatMessageSendStatus,
   chatMessagePendingSend,
   createPendingChatMessage,
-  findMatchingPendingChatMessage,
   type ChatSendInput,
   currentMembership,
   hasStoredDraftForChannel,
@@ -46,7 +46,10 @@ import { useChatPanelState } from "../features/chat/useChatPanelState";
 import { useChatRealtimeEvents } from "../features/chat/useChatRealtimeEvents";
 import { useChatThreadState } from "../features/chat/useChatThreadState";
 import { useChatTypingState } from "../features/chat/useChatTypingState";
+import { useChatUnreadNavigation } from "../features/chat/useChatUnreadNavigation";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
+import { chatMessageTargetPath } from "../domain/chatNavigation";
+import { useRealtimeReconciliation } from "../features/realtime/useRealtimeReconciliation";
 import {
   addChatChannelMembersRequest,
   archiveChatChannelRequest,
@@ -82,7 +85,6 @@ import {
 const chatFeedPrefetchDelayMs = 250;
 const chatLocatedMessageHighlightMs = 3_200;
 const chatPresenceRefreshThrottleMs = 15_000;
-const chatConnectionRestoredBootstrapThrottleMs = 15_000;
 
 function isChatGlobalShortcutEditableTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable]"));
@@ -144,7 +146,17 @@ export function ChatPage() {
   const routeChannelId = routeSystemConversationId ? undefined : routeParams.channelId;
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { appAttentionState, currentUser, notify, readModelInvalidations, refreshChatUnreadSummary, refreshNotifications, state } = useOrf();
+  const {
+    appAttentionState,
+    chatRealtimeRecoveryState,
+    currentUser,
+    notify,
+    readModelInvalidations,
+    refreshChatUnreadSummary,
+    refreshNotifications,
+    state,
+  } = useOrf();
+  const openNextChatUnreadTarget = useChatUnreadNavigation();
   const initialBootstrapRef = useRef<ChatBootstrap | undefined>(chatBootstrapSnapshot());
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(() => initialBootstrapRef.current ?? null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
@@ -170,7 +182,6 @@ export function ChatPage() {
   const driveSelectionRequestIdRef = useRef(0);
   const handledBootstrapInvalidationKeyRef = useRef("");
   const handledPresenceInvalidationKeyRef = useRef("");
-  const lastConnectionRestoredBootstrapRefreshAtRef = useRef(0);
   const lastPresenceRefreshAtRef = useRef(0);
   const locatedMessageTimerRef = useRef<number | null>(null);
   const openChannelRequestIdRef = useRef(0);
@@ -191,6 +202,7 @@ export function ChatPage() {
   const routeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : null;
   const activeChannel = routeSystemConversationId ? routeSystemChannel : routeChannel ?? (!mobileViewport && !routeChannelId ? channels[0] ?? null : null);
   const focusMessageId = searchParams.get("message");
+  const requestedThreadRootMessageId = searchParams.get("thread");
   const usersById = useMemo(() => new Map((bootstrap?.users ?? []).map((user) => [user.id, user])), [bootstrap?.users]);
   const activeMentionableUsers = useMemo(() => {
     return mentionableUsersForChannel(activeChannel, bootstrap?.users);
@@ -337,6 +349,9 @@ export function ChatPage() {
       refreshNotifications(),
     ]);
   }, [refreshChatUnreadSummary, refreshNotifications]);
+  const handleRequestedMessageUnavailable = useCallback(() => {
+    void openNextChatUnreadTarget();
+  }, [openNextChatUnreadTarget]);
 
   const {
     appendThreadReply,
@@ -344,6 +359,7 @@ export function ChatPage() {
     markThreadPendingMessageFailed,
     markThreadPendingMessageSending,
     openThread,
+    reconcileOpenThread,
     removeThreadPendingMessage,
     requestThreadTarget,
     resolveThreadPendingMessage,
@@ -357,8 +373,14 @@ export function ChatPage() {
     notify,
     onActivateThreadPanel: activateThreadPanel,
     onChannelUpdate: applyChannel,
+    onThreadUnavailable: handleRequestedMessageUnavailable,
     onUnreadSummaryRefresh: refreshChatAttentionReadState,
   });
+
+  useEffect(() => {
+    if (!activeChannel || !requestedThreadRootMessageId) return;
+    void openThread(requestedThreadRootMessageId, { focusMessageId });
+  }, [activeChannel, focusMessageId, openThread, requestedThreadRootMessageId]);
 
   const threadChannel = useMemo(() => {
     if (!thread) return null;
@@ -381,6 +403,7 @@ export function ChatPage() {
   const consumeRequestedMessage = useCallback(() => {
     setSearchParams((params) => {
       params.delete("message");
+      params.delete("thread");
       return params;
     }, { replace: true });
   }, [setSearchParams]);
@@ -401,7 +424,6 @@ export function ChatPage() {
       locatedMessageTimerRef.current = null;
     }, chatLocatedMessageHighlightMs);
   }, []);
-
   useEffect(() => {
     return () => {
       if (locatedMessageTimerRef.current !== null) {
@@ -416,7 +438,6 @@ export function ChatPage() {
   const {
     applyMessageToFeed,
     applyPendingMessageToFeed,
-    applyRealtimeMessageToFeed,
     clearActiveChannelUnread,
     handleMessageScroll,
     hasNewerMessages,
@@ -435,10 +456,10 @@ export function ChatPage() {
     olderMessagesLoading,
     pendingNewMessageCount,
     prefetchChannelMessages,
+    reconcileLatestMessagesPreservingPosition,
     removePendingMessageFromFeed,
     requestScrollToLatest,
     resolvePendingMessageInFeed,
-    syncLatestMessagesIfFollowing,
     unreadAnchor,
   } = useChatFeedState({
     activeChannel,
@@ -448,10 +469,11 @@ export function ChatPage() {
     onChannelUpdate: applyChannel,
     onRequestedMessageConsumed: consumeRequestedMessage,
     onRequestedMessageLocated: holdLocatedMessageHighlight,
+    onRequestedMessageUnavailable: handleRequestedMessageUnavailable,
     onRequestedMessageRedirect: redirectRequestedMessage,
     onThreadTarget: requestThreadTarget,
     onUnreadSummaryRefresh: refreshChatAttentionReadState,
-    requestedMessageId: focusMessageId,
+    requestedMessageId: requestedThreadRootMessageId ? null : focusMessageId,
   });
   const feedPrefetchChannelIds = useMemo(
     () => selectChatFeedPrefetchChannelIds({
@@ -639,7 +661,11 @@ export function ChatPage() {
   const handleOpenChatResult = useCallback((result: ChatSearchResult) => {
     applyChannel(result.channel);
     setLocatedMessageId(null);
-    navigate(`/chat/${encodeURIComponent(result.channel.id)}?message=${encodeURIComponent(result.message.id)}`);
+    navigate(chatMessageTargetPath({
+      channelId: result.channel.id,
+      messageId: result.message.id,
+      threadRootMessageId: result.message.rootMessageId,
+    }));
     if (mobileViewport) closePanel();
   }, [applyChannel, closePanel, mobileViewport, navigate]);
 
@@ -802,52 +828,45 @@ export function ChatPage() {
     setDraftChannelIds(storedDraftChannelIds(channels));
   }, [channels]);
 
-  const handleRealtimeConnectionRestored = useCallback(() => {
-    const now = Date.now();
-    if (now - lastConnectionRestoredBootstrapRefreshAtRef.current >= chatConnectionRestoredBootstrapThrottleMs) {
-      lastConnectionRestoredBootstrapRefreshAtRef.current = now;
-      void refreshBootstrap(true).catch(() => undefined);
+  const chatBootstrapReconciliation = useRealtimeReconciliation({
+    connected: chatRealtimeRecoveryState.connected,
+    connectionEpoch: chatRealtimeRecoveryState.connectionEpoch,
+    enabled: Boolean(currentUser),
+    reconcile: async () => {
+      await refreshBootstrap(true);
+    },
+  });
+  const chatFeedReconciliation = useRealtimeReconciliation({
+    connected: chatRealtimeRecoveryState.connected,
+    connectionEpoch: chatRealtimeRecoveryState.connectionEpoch,
+    enabled: Boolean(currentUser),
+    reconcile: reconcileLatestMessagesPreservingPosition,
+  });
+  const chatThreadReconciliation = useRealtimeReconciliation({
+    connected: chatRealtimeRecoveryState.connected,
+    connectionEpoch: chatRealtimeRecoveryState.connectionEpoch,
+    enabled: Boolean(currentUser),
+    reconcile: reconcileOpenThread,
+  });
+
+  useChatRealtimeEvents((payload) => {
+    if (payload.eventType === "channel.archived") {
+      setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
+      if (payload.channelId === activeChannel?.id) navigate("/chat", { replace: true });
     }
-    syncLatestMessagesIfFollowing();
-  }, [refreshBootstrap, syncLatestMessagesIfFollowing]);
-
-  const resolveRealtimePendingMessage = useCallback(
-    (message: ChatMessage) => {
-      const pendingMessage = findMatchingPendingChatMessage(
-        [
-          ...messages,
-          ...(thread ? [thread.rootMessage, ...thread.replies] : []),
-        ],
-        message,
-      );
-      if (!pendingMessage) return false;
-      resolvePendingMessageInFeed(pendingMessage.id, message);
-      resolveThreadPendingMessage(pendingMessage.id, message);
-      return true;
-    },
-    [messages, resolvePendingMessageInFeed, resolveThreadPendingMessage, thread],
-  );
-
-  useChatRealtimeEvents(
-    (payload) => {
-      if (payload.channel) applyChannel(payload.channel);
-      if (payload.eventType === "channel.archived") {
-        setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
-        if (payload.channelId === activeChannel?.id) navigate("/chat", { replace: true });
-      }
-      if (payload.eventType === "member.changed" && !payload.channel) {
-        setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
-        if (payload.channelId === activeChannel?.id) navigate("/chat", { replace: true });
-      }
-      if (payload.message) {
-        if (!resolveRealtimePendingMessage(payload.message)) {
-          applyRealtimeMessageToFeed(payload.message, applyMessageEffects);
-        }
-      }
-      if (payload.eventType === "typing") applyTypingEvent(payload.channelId, payload.typing);
-    },
-    { onConnectionRestored: handleRealtimeConnectionRestored },
-  );
+    if (payload.eventType === "typing") {
+      applyTypingEvent(payload.channelId, payload.typing);
+      return;
+    }
+    const scope = chatRealtimeReconciliationScope(payload.eventType);
+    if (scope.bootstrap) chatBootstrapReconciliation.request("realtime-event");
+    if (scope.feed && payload.channelId === activeChannel?.id) {
+      chatFeedReconciliation.request("realtime-event");
+    }
+    if (scope.thread && payload.channelId === thread?.rootMessage.channelId) {
+      chatThreadReconciliation.request("realtime-event");
+    }
+  });
 
   const submitPendingChatMessage = useCallback(
     (pendingMessage: ChatMessage, options: { loadLatestAfterSuccess?: boolean } = {}) => {
@@ -968,7 +987,7 @@ export function ChatPage() {
   const handleReplyToLatestMessage = useCallback(() => {
     const latestRootMessage = [...messages]
       .reverse()
-      .find((message) => !message.rootMessageId && !message.deletedAt && !chatMessageDeliveryStatus(message));
+      .find((message) => !message.rootMessageId && !message.deletedAt && !chatMessageSendStatus(message));
     if (latestRootMessage) {
       void openThread(latestRootMessage.id, { focusComposer: true });
     }
@@ -980,7 +999,7 @@ export function ChatPage() {
       .find((message) => (
         !message.rootMessageId &&
         !message.deletedAt &&
-        !chatMessageDeliveryStatus(message) &&
+        !chatMessageSendStatus(message) &&
         message.authorUserId === currentUser?.id
       ));
     if (!latestOwnRootMessage) {
@@ -993,7 +1012,7 @@ export function ChatPage() {
   const handleReactToLatestMessage = useCallback(() => {
     const latestRootMessage = [...messages]
       .reverse()
-      .find((message) => !message.rootMessageId && !message.deletedAt && !chatMessageDeliveryStatus(message));
+      .find((message) => !message.rootMessageId && !message.deletedAt && !chatMessageSendStatus(message));
     if (!latestRootMessage) {
       notify("当前没有可添加表情的消息");
       return;
@@ -1045,7 +1064,11 @@ export function ChatPage() {
   }, [deleteSubmitting, deletingMessage, handleDeleteMessage, notify]);
 
   const handleCopyMessageLink = useCallback(async (message: ChatMessage) => {
-    const url = `${window.location.origin}/chat/${encodeURIComponent(message.channelId)}?message=${encodeURIComponent(message.id)}`;
+    const url = `${window.location.origin}${chatMessageTargetPath({
+      channelId: message.channelId,
+      messageId: message.id,
+      threadRootMessageId: message.rootMessageId,
+    })}`;
     try {
       await navigator.clipboard.writeText(url);
       notify("已复制消息链接");
@@ -1305,7 +1328,10 @@ export function ChatPage() {
           threadSummariesLoading={threadSummariesLoading}
           onOpenResult={handleOpenChatResult}
           onOpenThreadSummary={(summary) => {
-            navigate(`/chat/${encodeURIComponent(summary.channel.id)}?message=${encodeURIComponent(summary.rootMessage.id)}`);
+            navigate(chatMessageTargetPath({
+              channelId: summary.channel.id,
+              messageId: summary.rootMessage.id,
+            }));
             markThreadSummaryViewed(summary.rootMessage.id);
             void openThread(summary.rootMessage.id);
           }}

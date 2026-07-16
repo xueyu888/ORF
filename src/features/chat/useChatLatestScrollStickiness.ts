@@ -1,9 +1,20 @@
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import { isChatFeedNearLatest, scrollChatFeedToLatest } from "./chatFeedScroll";
+import {
+  chatFeedViewportModeAfterScroll,
+  type ChatFeedViewportMode,
+  isChatFeedAtLatest,
+  isChatFeedNearLatest,
+  scrollChatFeedToLatest,
+} from "./chatFeedScroll";
 
 type PendingLatestScroll = {
   behavior: ScrollBehavior;
   token: number;
+};
+
+export type ChatFeedViewportSnapshot = {
+  mode: ChatFeedViewportMode;
+  revision: number;
 };
 
 type UseChatLatestScrollStickinessInput<T extends HTMLElement> = {
@@ -23,10 +34,18 @@ export function useChatLatestScrollStickiness<T extends HTMLElement>({
 }: UseChatLatestScrollStickinessInput<T>) {
   const latestScrollTokenRef = useRef(0);
   const pendingLatestScrollRef = useRef<PendingLatestScroll | null>(null);
-  const shouldStickToLatestRef = useRef(true);
+  const previousScrollTopRef = useRef(0);
+  const viewportModeRef = useRef<ChatFeedViewportMode>("followingLatest");
+  const viewportRevisionRef = useRef(0);
+
+  const setViewportMode = useCallback((mode: ChatFeedViewportMode, recordIntent = true) => {
+    viewportModeRef.current = mode;
+    if (recordIntent) viewportRevisionRef.current += 1;
+  }, []);
 
   const scrollToLatest = useCallback((behavior: ScrollBehavior) => {
     if (scrollChatFeedToLatest(scrollRef.current, behavior)) {
+      previousScrollTopRef.current = scrollRef.current?.scrollTop ?? previousScrollTopRef.current;
       onAfterScrollToLatest?.();
     }
   }, [onAfterScrollToLatest, scrollRef]);
@@ -34,30 +53,55 @@ export function useChatLatestScrollStickiness<T extends HTMLElement>({
   const requestScrollToLatest = useCallback((behavior: ScrollBehavior = "smooth") => {
     const token = latestScrollTokenRef.current + 1;
     latestScrollTokenRef.current = token;
-    shouldStickToLatestRef.current = true;
+    setViewportMode("followingLatest");
     pendingLatestScrollRef.current = { behavior, token };
     window.requestAnimationFrame(() => {
       if (pendingLatestScrollRef.current?.token === token) scrollToLatest(behavior);
     });
-  }, [scrollToLatest]);
+  }, [scrollToLatest, setViewportMode]);
 
   const setFollowingLatest = useCallback((following: boolean) => {
-    shouldStickToLatestRef.current = following;
+    setViewportMode(following ? "followingLatest" : "browsingHistory");
     if (!following) {
       latestScrollTokenRef.current += 1;
       pendingLatestScrollRef.current = null;
     }
-  }, []);
+  }, [setViewportMode]);
 
-  const isFollowingLatest = useCallback(() => shouldStickToLatestRef.current, []);
+  const isFollowingLatest = useCallback(() => viewportModeRef.current === "followingLatest", []);
+
+  const readViewportSnapshot = useCallback((): ChatFeedViewportSnapshot => ({
+    mode: viewportModeRef.current,
+    revision: viewportRevisionRef.current,
+  }), []);
 
   const isLatestScrollPending = useCallback(() => Boolean(pendingLatestScrollRef.current), []);
 
   const handleScroll = useCallback(() => {
-    const nearLatest = isChatFeedNearLatest(scrollRef.current);
-    if (!pendingLatestScrollRef.current) shouldStickToLatestRef.current = nearLatest;
+    const element = scrollRef.current;
+    const nearLatest = isChatFeedNearLatest(element);
+    if (!element) return nearLatest;
+    const previousScrollTop = previousScrollTopRef.current;
+    const scrollTop = element.scrollTop;
+    const movingAwayFromLatest = scrollTop < previousScrollTop;
+    if (movingAwayFromLatest && pendingLatestScrollRef.current) {
+      latestScrollTokenRef.current += 1;
+      pendingLatestScrollRef.current = null;
+    }
+    const programmatic = Boolean(pendingLatestScrollRef.current);
+    const nextMode = chatFeedViewportModeAfterScroll({
+      atLatest: isChatFeedAtLatest(element),
+      currentMode: viewportModeRef.current,
+      previousScrollTop,
+      programmatic,
+      scrollTop,
+    });
+    if (!programmatic && scrollTop !== previousScrollTop) {
+      setViewportMode(nextMode);
+    }
+    previousScrollTopRef.current = scrollTop;
     return nearLatest;
-  }, [scrollRef]);
+  }, [scrollRef, setViewportMode]);
 
   useLayoutEffect(() => {
     const pending = pendingLatestScrollRef.current;
@@ -103,8 +147,9 @@ export function useChatLatestScrollStickiness<T extends HTMLElement>({
       frame = window.requestAnimationFrame(() => {
         frame = null;
         if (disabled) return;
-        if (!pendingLatestScrollRef.current && !shouldStickToLatestRef.current) return;
+        if (!pendingLatestScrollRef.current && viewportModeRef.current !== "followingLatest") return;
         if (scrollChatFeedToLatest(element, "auto")) {
+          previousScrollTopRef.current = element.scrollTop;
           onAfterScrollToLatest?.();
         }
       });
@@ -139,6 +184,7 @@ export function useChatLatestScrollStickiness<T extends HTMLElement>({
     handleScroll,
     isFollowingLatest,
     isLatestScrollPending,
+    readViewportSnapshot,
     requestScrollToLatest,
     setFollowingLatest,
   };

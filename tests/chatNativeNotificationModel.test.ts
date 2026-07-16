@@ -1,15 +1,22 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import test from "node:test";
 import {
+  buildChatRealtimeAttentionIntent,
   buildChatNativeNotificationDecision,
+} from "../src/features/chat/chatNativeNotificationModel";
+import {
   chatNotificationPreviewText,
   stripChatNotificationMarkdown,
-} from "../src/features/chat/chatNativeNotificationModel";
+} from "../src/domain/chatNotificationPresentation";
 import {
   appAttentionStateFromBrowserDocument,
   appAttentionStateFromDesktopWindow,
 } from "../src/features/interaction/appAttentionState";
-import { buildAttentionState } from "../src/features/attention/attentionModel";
+import {
+  attentionToastIntentFromNotification,
+  buildAttentionState,
+} from "../src/features/attention/attentionModel";
 import { chatPresenceBadgeState, chatPresenceState, formatPresence, isChatUserOnline } from "../src/features/chat/chatPresence";
 import {
   connectRealtimePresence,
@@ -18,57 +25,22 @@ import {
   recordRealtimePresenceActivity,
   resolveRealtimeUserPresence,
 } from "../server/realtime/presenceRegistry";
-import type { AppNotification, ChatChannel, ChatMessage, ChatUnreadSummary, ChatUser } from "../src/types/orf";
+import type { AppNotification, ChatMessage, ChatUnreadSummary, ChatUser } from "../src/types/orf";
 import type { ChatRealtimeEvent } from "../src/types/realtime";
+
+const require = createRequire(import.meta.url);
+const { windowsNotificationToastXml } = require("../clients/desktop/notification-renderer.cjs") as {
+  windowsNotificationToastXml: (input: {
+    activationArguments: string;
+    avatarAlt?: string;
+    avatarImageUri?: string;
+    body: string;
+    title: string;
+  }) => string;
+};
 
 const currentUserId = "user-current";
 const authorUserId = "user-author";
-
-function channel(overrides: Partial<ChatChannel> = {}): ChatChannel {
-  return {
-    id: "channel-1",
-    type: "private",
-    name: "private-channel",
-    displayName: "项目沟通",
-    purpose: "",
-    header: "",
-    createdBy: authorUserId,
-    createdAt: "2026-06-07T09:00:00.000Z",
-    updatedAt: "2026-06-07T09:00:00.000Z",
-    archivedAt: null,
-    memberCount: 2,
-    members: [
-      {
-        userId: currentUserId,
-        role: "member",
-        favorite: false,
-        muted: false,
-        manuallyUnread: false,
-        joinedAt: "2026-06-07T09:00:00.000Z",
-        lastReadAt: null,
-        lastReadMessageId: null,
-        lastViewedAt: null,
-      },
-      {
-        userId: authorUserId,
-        role: "member",
-        favorite: false,
-        muted: false,
-        manuallyUnread: false,
-        joinedAt: "2026-06-07T09:00:00.000Z",
-        lastReadAt: null,
-        lastReadMessageId: null,
-        lastViewedAt: null,
-      },
-    ],
-    unreadCount: 1,
-    mentionCount: 0,
-    threadUnreadCount: 0,
-    lastMessageAt: "2026-06-07T09:30:00.000Z",
-    lastMessagePreview: "hello",
-    ...overrides,
-  };
-}
 
 function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
   return {
@@ -120,8 +92,11 @@ function chatUnreadSummary(overrides: Partial<ChatUnreadSummary> = {}): ChatUnre
   return {
     actionableMessageUnreadCount: 0,
     directMessageUnreadCount: 0,
+    mainMentionCount: 0,
     mentionCount: 0,
     messageUnreadCount: 0,
+    nextTarget: null,
+    threadMentionCount: 0,
     threadUnreadCount: 0,
     totalUnreadCount: 0,
     unreadChannelCount: 0,
@@ -131,6 +106,7 @@ function chatUnreadSummary(overrides: Partial<ChatUnreadSummary> = {}): ChatUnre
 
 function attentionNotification(overrides: Partial<AppNotification> = {}): AppNotification {
   return {
+    actorAvatarUrl: `/api/users/${authorUserId}/avatar`,
     actorName: "系统",
     actorUserId: authorUserId,
     body: "请处理这条反馈",
@@ -155,6 +131,7 @@ function attentionInput(overrides: Partial<Parameters<typeof buildAttentionState
   return {
     appAttentionState: { activelyViewed: false, source: "browser-document" },
     authenticated: true,
+    chatRealtimeAttentionIntents: [],
     chatUnreadSummary: chatUnreadSummary(),
     currentPath: "/tasks",
     currentUserId,
@@ -165,18 +142,29 @@ function attentionInput(overrides: Partial<Parameters<typeof buildAttentionState
 }
 
 function realtimeEvent(overrides: Partial<ChatRealtimeEvent> = {}): ChatRealtimeEvent {
-  const eventMessage = message(overrides.message);
   return {
     id: "event-1",
     kind: "chat.event",
     createdAt: "2026-06-07T09:30:00.000Z",
     eventType: "message.created",
-    channelId: eventMessage.channelId,
-    actorUserId: eventMessage.authorUserId,
-    channel: channel(),
-    message: eventMessage,
-    messageId: eventMessage.id,
-    rootMessageId: eventMessage.rootMessageId,
+    channelId: "channel-1",
+    actorUserId: authorUserId,
+    attention: {
+      reason: "direct",
+      targetPath: "/chat/channel-1?message=message-1",
+    },
+    messageId: "message-1",
+    notification: {
+      body: "吴禹志: 请看这个方案",
+      sender: {
+        avatarUrl: `/api/users/${authorUserId}/avatar`,
+        name: "吴禹志",
+        userId: authorUserId,
+      },
+      targetPath: "/chat/channel-1?message=message-1",
+      title: "项目沟通",
+    },
+    rootMessageId: null,
     ...overrides,
   };
 }
@@ -184,24 +172,19 @@ function realtimeEvent(overrides: Partial<ChatRealtimeEvent> = {}): ChatRealtime
 test("chat native notification skips own messages", () => {
   const decision = buildChatNativeNotificationDecision({
     currentUserId,
-    event: realtimeEvent({ message: message({ authorUserId: currentUserId }) }),
+    event: realtimeEvent({ actorUserId: currentUserId }),
     focus: { appFocused: false },
   });
   assert.deepEqual(decision, { action: "skip", reason: "own_message" });
 });
 
-test("chat native notification skips muted channels", () => {
-  const mutedChannel = channel({
-    members: channel().members.map((member) => (
-      member.userId === currentUserId ? { ...member, muted: true } : member
-    )),
-  });
+test("chat native notification skips recipients whose server event has no notification intent", () => {
   const decision = buildChatNativeNotificationDecision({
     currentUserId,
-    event: realtimeEvent({ channel: mutedChannel }),
+    event: realtimeEvent({ notification: undefined }),
     focus: { appFocused: false },
   });
-  assert.deepEqual(decision, { action: "skip", reason: "channel_muted" });
+  assert.deepEqual(decision, { action: "skip", reason: "missing_notification" });
 });
 
 test("chat native notification suppresses active focused channel but not background channel", () => {
@@ -218,6 +201,149 @@ test("chat native notification suppresses active focused channel but not backgro
     focus: { activeChannelId: "channel-1", appFocused: false },
   });
   assert.equal(backgroundDecision.action, "notify");
+});
+
+test("chat realtime direct-message intent flashes immediately before durable unread reconciliation", () => {
+  const intent = buildChatRealtimeAttentionIntent({
+    currentUserId,
+    event: realtimeEvent(),
+    focus: { appFocused: false },
+  });
+  assert.ok(intent);
+
+  const state = buildAttentionState(attentionInput({
+    chatRealtimeAttentionIntents: [intent],
+  }));
+  assert.equal(state.level, "flash");
+  assert.equal(state.count, 1);
+  assert.equal(state.badgeCount, 1);
+  assert.equal(state.items[0]?.kind, "chat.direct");
+  assert.equal(state.latestTargetPath, "/chat/channel-1?message=message-1");
+});
+
+test("chat realtime intent hands over to durable unread without double counting", () => {
+  const intent = buildChatRealtimeAttentionIntent({
+    currentUserId,
+    event: realtimeEvent(),
+    focus: { appFocused: false },
+  });
+  assert.ok(intent);
+
+  const state = buildAttentionState(attentionInput({
+    chatRealtimeAttentionIntents: [intent],
+    chatUnreadSummary: chatUnreadSummary({
+      actionableMessageUnreadCount: 1,
+      directMessageUnreadCount: 1,
+      messageUnreadCount: 1,
+      nextTarget: {
+        channelId: "channel-1",
+        messageId: "message-1",
+        reason: "direct",
+        surface: "main",
+        targetPath: "/chat/channel-1?message=message-1",
+      },
+      totalUnreadCount: 1,
+      unreadChannelCount: 1,
+    }),
+  }));
+  assert.equal(state.count, 1);
+  assert.equal(state.badgeCount, 1);
+  assert.equal(state.items.filter((item) => item.kind === "chat.direct").length, 1);
+});
+
+test("chat realtime strong attention respects an actively viewed direct conversation", () => {
+  const intent = buildChatRealtimeAttentionIntent({
+    currentUserId,
+    event: realtimeEvent(),
+    focus: { activeChannelId: "channel-1", appFocused: true },
+  });
+  assert.equal(intent, null);
+});
+
+test("muted direct messages suppress Toast but retain realtime tray attention", () => {
+  const event = realtimeEvent({ notification: undefined });
+  const nativeDecision = buildChatNativeNotificationDecision({
+    currentUserId,
+    event,
+    focus: { appFocused: false },
+  });
+  assert.deepEqual(nativeDecision, { action: "skip", reason: "missing_notification" });
+
+  const intent = buildChatRealtimeAttentionIntent({
+    currentUserId,
+    event,
+    focus: { appFocused: false },
+  });
+  assert.equal(intent?.kind, "chat.direct");
+  assert.equal(intent?.body, "你有一条新的私聊消息");
+});
+
+test("lightweight realtime wakeup can notify without carrying a second chat projection", () => {
+  const decision = buildChatNativeNotificationDecision({
+    currentUserId,
+    event: realtimeEvent({
+      notification: {
+        body: "吴禹志: 请看这个方案",
+        sender: {
+          avatarUrl: `/api/users/${authorUserId}/avatar`,
+          name: "吴禹志",
+          userId: authorUserId,
+        },
+        targetPath: "/chat/channel-1?message=message-1",
+        title: "项目沟通",
+      },
+    }),
+    focus: { appFocused: false },
+  });
+  assert.equal(decision.action, "notify");
+  if (decision.action === "notify") {
+    assert.equal(decision.notification.messageId, "message-1");
+    assert.equal(decision.notification.targetPath, "/chat/channel-1?message=message-1");
+    assert.deepEqual(decision.notification.sender, {
+      avatarUrl: `/api/users/${authorUserId}/avatar`,
+      name: "吴禹志",
+      userId: authorUserId,
+    });
+  }
+});
+
+test("system attention Toast carries the actor avatar projection", () => {
+  const notification = attentionNotification();
+  const intent = attentionToastIntentFromNotification({
+    appAttentionState: { activelyViewed: false, source: "browser-document" },
+    currentPath: "/tasks",
+    currentUserId,
+    notification,
+  });
+  assert.deepEqual(intent?.sender, {
+    avatarUrl: `/api/users/${authorUserId}/avatar`,
+    name: "系统",
+    userId: authorUserId,
+  });
+});
+
+test("Windows Toast renderer uses one escaped circular sender-avatar contract", () => {
+  const xml = windowsNotificationToastXml({
+    activationArguments: "orf-chat-notification?targetPath=%2Fchat%2F1&message=2",
+    avatarAlt: '吴<&"',
+    avatarImageUri: "file:///C:/Temp/avatar&1.png",
+    body: "正文 <待处理>",
+    title: "项目 & 沟通",
+  });
+  assert.match(xml, /placement="appLogoOverride"/);
+  assert.match(xml, /hint-crop="circle"/);
+  assert.match(xml, /src="file:\/\/\/C:\/Temp\/avatar&amp;1\.png"/);
+  assert.match(xml, /alt="吴&lt;&amp;&quot;"/);
+  assert.match(xml, /项目 &amp; 沟通/);
+  assert.match(xml, /正文 &lt;待处理&gt;/);
+  assert.match(xml, /launch="orf-chat-notification\?targetPath=%2Fchat%2F1&amp;message=2"/);
+
+  const withoutAvatar = windowsNotificationToastXml({
+    activationArguments: "orf-attention-notification?targetPath=%2Ftasks",
+    body: "提醒",
+    title: "ORF",
+  });
+  assert.doesNotMatch(withoutAvatar, /<image /);
 });
 
 test("app attention state treats only focused visible browser documents as actively viewed", () => {
@@ -254,6 +380,13 @@ test("attention state keeps ordinary chat unread out of workbar while retaining 
   const state = buildAttentionState(attentionInput({
     chatUnreadSummary: chatUnreadSummary({
       messageUnreadCount: 43,
+      nextTarget: {
+        channelId: "channel-normal",
+        messageId: "message-normal",
+        reason: "normal",
+        surface: "main",
+        targetPath: "/chat/channel-normal?message=message-normal",
+      },
       totalUnreadCount: 43,
       unreadChannelCount: 1,
     }),
@@ -263,7 +396,7 @@ test("attention state keeps ordinary chat unread out of workbar while retaining 
   assert.equal(state.badgeCount, 43);
   assert.equal(state.level, "badge");
   assert.equal(state.items.length, 0);
-  assert.equal(state.latestTargetPath, "/chat");
+  assert.equal(state.latestTargetPath, "/chat/channel-normal?message=message-normal");
   assert.equal(state.reason, "chat.unread");
 });
 
@@ -271,8 +404,16 @@ test("attention state promotes only actionable chat unread into workbar count", 
   const state = buildAttentionState(attentionInput({
     chatUnreadSummary: chatUnreadSummary({
       actionableMessageUnreadCount: 2,
+      mainMentionCount: 2,
       mentionCount: 2,
       messageUnreadCount: 5,
+      nextTarget: {
+        channelId: "channel-mention",
+        messageId: "message-mention",
+        reason: "mention_me",
+        surface: "main",
+        targetPath: "/chat/channel-mention?message=message-mention",
+      },
       totalUnreadCount: 5,
       unreadChannelCount: 1,
     }),
@@ -283,6 +424,55 @@ test("attention state promotes only actionable chat unread into workbar count", 
   assert.equal(state.level, "flash");
   assert.equal(state.items.length, 1);
   assert.equal(state.items[0]?.kind, "chat.mention");
+  assert.equal(state.items[0]?.targetPath, "/chat/channel-mention?message=message-mention");
+});
+
+test("attention state does not double count a thread mention as both a mention and a followed thread", () => {
+  const state = buildAttentionState(attentionInput({
+    chatUnreadSummary: chatUnreadSummary({
+      mentionCount: 1,
+      nextTarget: {
+        channelId: "channel-thread",
+        messageId: "reply-mention",
+        reason: "mention_me",
+        surface: "threadMention",
+        targetPath: "/chat/channel-thread?thread=root-1&message=reply-mention",
+        threadRootMessageId: "root-1",
+      },
+      threadMentionCount: 1,
+      threadUnreadCount: 1,
+      totalUnreadCount: 1,
+      unreadChannelCount: 1,
+    }),
+  }));
+
+  assert.equal(state.count, 1);
+  assert.equal(state.badgeCount, 1);
+  assert.equal(state.level, "flash");
+  assert.equal(state.items.length, 1);
+  assert.equal(state.items.some((item) => item.kind === "chat.mention"), true);
+});
+
+test("attention state retains one ordinary thread item when there is no thread mention", () => {
+  const state = buildAttentionState(attentionInput({
+    chatUnreadSummary: chatUnreadSummary({
+      threadUnreadCount: 2,
+      nextTarget: {
+        channelId: "channel-thread",
+        messageId: "reply-normal",
+        reason: "normal",
+        surface: "threadMention",
+        targetPath: "/chat/channel-thread?thread=root-1&message=reply-normal",
+        threadRootMessageId: "root-1",
+      },
+      totalUnreadCount: 2,
+      unreadChannelCount: 1,
+    }),
+  }));
+
+  assert.equal(state.count, 2);
+  assert.equal(state.items.length, 1);
+  assert.equal(state.items[0]?.kind, "chat.thread");
 });
 
 test("attention state keeps direct messages as actionable chat unread", () => {
@@ -291,6 +481,13 @@ test("attention state keeps direct messages as actionable chat unread", () => {
       actionableMessageUnreadCount: 3,
       directMessageUnreadCount: 3,
       messageUnreadCount: 4,
+      nextTarget: {
+        channelId: "channel-direct",
+        messageId: "message-direct",
+        reason: "direct",
+        surface: "main",
+        targetPath: "/chat/channel-direct?message=message-direct",
+      },
       totalUnreadCount: 4,
       unreadChannelCount: 2,
     }),
@@ -301,6 +498,33 @@ test("attention state keeps direct messages as actionable chat unread", () => {
   assert.equal(state.level, "flash");
   assert.equal(state.items.length, 1);
   assert.equal(state.items[0]?.kind, "chat.direct");
+});
+
+test("attention copy and navigation both follow the same highest-priority unread target", () => {
+  const state = buildAttentionState(attentionInput({
+    chatUnreadSummary: chatUnreadSummary({
+      actionableMessageUnreadCount: 3,
+      directMessageUnreadCount: 1,
+      mainMentionCount: 2,
+      mentionCount: 2,
+      messageUnreadCount: 3,
+      nextTarget: {
+        channelId: "channel-direct",
+        messageId: "message-direct",
+        reason: "direct",
+        surface: "main",
+        targetPath: "/chat/channel-direct?message=message-direct",
+      },
+      totalUnreadCount: 3,
+      unreadChannelCount: 2,
+    }),
+  }));
+
+  assert.equal(state.items.length, 1);
+  assert.equal(state.items[0]?.kind, "chat.direct");
+  assert.equal(state.items[0]?.body, "1 条私聊消息未读");
+  assert.equal(state.items[0]?.targetPath, "/chat/channel-direct?message=message-direct");
+  assert.equal(state.latestTargetPath, "/chat/channel-direct?message=message-direct");
 });
 
 test("attention state separates notification work items from ordinary chat badge", () => {
@@ -470,11 +694,13 @@ test("realtime presence uses recent activity heartbeat when event stream session
 
 test("chat native notification suppresses active thread replies only for the open thread", () => {
   const replyEvent = realtimeEvent({
-    message: message({
-      id: "reply-1",
-      rootMessageId: "root-1",
-      parentMessageId: "root-1",
-    }),
+    messageId: "reply-1",
+    rootMessageId: "root-1",
+    notification: {
+      body: "吴禹志: 回复内容",
+      targetPath: "/chat/channel-1?thread=root-1&message=reply-1",
+      title: "回复：项目沟通",
+    },
   });
   const activeThreadDecision = buildChatNativeNotificationDecision({
     currentUserId,
@@ -493,8 +719,11 @@ test("chat native notification suppresses active thread replies only for the ope
 
 test("chat native notification formats direct message title and markdown-stripped body", () => {
   const directEvent = realtimeEvent({
-    channel: channel({ type: "direct", displayName: "吴禹志" }),
-    message: message({ body: "请看 @[薛雨](orf-user:user-current) 的 `PR`：[链接](https://example.test)" }),
+    notification: {
+      body: chatNotificationPreviewText(message({ body: "请看 @[薛雨](orf-user:user-current) 的 `PR`：[链接](https://example.test)" })),
+      targetPath: "/chat/channel-1?message=message-1",
+      title: "吴禹志",
+    },
   });
   const decision = buildChatNativeNotificationDecision({
     currentUserId,

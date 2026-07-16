@@ -5,7 +5,12 @@ import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { formatDay } from "./chatFormat";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
-import { resolveUnreadJumpTarget, type ChatUnreadJumpTarget, type UnreadAnchor } from "./chatModels";
+import {
+  chatUnreadControlKind,
+  resolveUnreadJumpTarget,
+  type ChatUnreadJumpTarget,
+  type UnreadAnchor,
+} from "./chatModels";
 import { ChatMessageItem } from "./ChatMessageItem";
 import type { ChatOpenThreadOptions } from "./useChatThreadState";
 
@@ -202,11 +207,16 @@ function MessageList({
   const unreadTarget = resolveUnreadJumpTarget({ currentUserId, hasOlderMessages, messages, unreadAnchor });
   const unreadDividerIndex = unreadTarget?.dividerIndex ?? -1;
   const unreadMessageId = unreadTarget?.messageId ?? null;
+  const threadMentionCount = unreadAnchor?.threadMentionCount ?? 0;
   const threadUnreadCount = unreadAnchor?.threadUnreadCount ?? 0;
-  const showThreadUnreadOnly = !unreadTarget && threadUnreadCount > 0;
+  const unreadControl = chatUnreadControlKind({
+    hasMainTarget: Boolean(unreadTarget),
+    threadMentionCount,
+    threadUnreadCount,
+  });
   return (
     <div className="orf-chat-message-list">
-      {unreadTarget && (
+      {unreadTarget && unreadControl === "main" && (
         <div className="orf-chat-unread-controls">
           <button className="orf-chat-unread-jump" type="button" onClick={() => onJumpUnread(unreadTarget.jumpTarget)}>
             <ChevronDown className="h-4 w-4" />
@@ -218,7 +228,23 @@ function MessageList({
           </button>
         </div>
       )}
-      {showThreadUnreadOnly && (
+      {unreadControl === "threadMention" && (
+        <div className="orf-chat-unread-controls">
+          <button
+            className="orf-chat-unread-jump"
+            type="button"
+            onClick={() => onJumpUnread({ contextRequired: true, surface: "threadMention" })}
+          >
+            <Reply className="h-4 w-4" />
+            跳到最早 @（{threadMentionCount}）
+          </button>
+          <button className="orf-chat-unread-clear" type="button" onClick={onClearUnread}>
+            <CheckCheck className="h-4 w-4" />
+            标记已读
+          </button>
+        </div>
+      )}
+      {unreadControl === "threadInbox" && (
         <div className="orf-chat-unread-controls">
           <button className="orf-chat-unread-jump" type="button" onClick={onOpenThreadInbox}>
             <Reply className="h-4 w-4" />

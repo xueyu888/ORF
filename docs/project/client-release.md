@@ -92,11 +92,11 @@ ORF 客户端运行时默认使用 ORF 主更新源：
 - 已安装旧版 Win11 或 Android 原生壳如果尚未信任 ORF 主更新源，会在拒绝安装参数后由 Web 运行时自动改用 GitHub 镜像地址重试；这只用于旧壳兼容，不改变新客户端默认走 ORF 主更新源的规则。
 - 如果旧客户端已经打开且仍运行旧 Web 代码，当前版本的客户端清单可以临时把可信 GitHub 镜像设为主下载地址、把 ORF 资产地址保留为镜像；发布脚本后续默认仍写 ORF 主源。
 
-GitHub Actions 在两个平台产物都生成后，只上传 GitHub Release 镜像。发布脚本的 `--watch` 会等待工作流完成、核对镜像资产，再由本机把安装包同步到 ORF 主更新源，并把 ORF 发布清单作为最后一步写入，让客户端只在主源资产和镜像地址都准备好后看到新版本。自动化不会把管理员登录态写进发布流程；服务端和发布环境必须配置同一个 `ORF_CLIENT_UPDATE_PUBLISH_SECRET` 才能同步主更新源，必须配置同一个 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 才会广播在线客户端。
+GitHub Actions 在两个平台产物都生成后，只上传 GitHub Release 镜像。发布脚本的 `--watch` 会等待工作流完成、核对镜像资产，再由本机把安装包同步到 ORF 主更新源，并把 ORF 发布清单作为最后一步写入，让客户端只在主源资产和镜像地址都准备好后看到新版本。自动化不会把管理员登录态写进发布流程；服务端和发布环境必须配置同一个 `ORF_CLIENT_UPDATE_PUBLISH_SECRET` 才能同步主更新源，必须配置同一个 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 才会广播当前 SSE 实时连接客户端。
 
 本地发布脚本目标默认取 `ORF_APP_URL`，也可以通过 `ORF_CLIENT_UPDATE_PUBLISH_URL` 或 `--publish-url` 覆盖；在 ORF 服务和发布脚本运行在同一台机器时，建议把 `ORF_CLIENT_UPDATE_PUBLISH_URL` 指向本机 API 地址以避免公网回环上传大包。广播目标默认取 `ORF_APP_URL`，也可以通过 `ORF_CLIENT_UPDATE_BROADCAST_URL` 或 `--broadcast-url` 覆盖。本地脚本未配置对应 secret 或目标地址时会明确提示已跳过主更新源同步或在线广播；需要刻意跳过时分别使用 `--no-publish-assets` 或 `--no-broadcast`。
 
-Win11 应用内更新由 Electron 主进程拥有完整生命周期：渲染层只提交一次可信安装资产；主进程下载完成后以 `/S --updated --force-run --keep-shortcuts` 启动 NSIS，随后退出当前 ORF。`--updated` 让安装器按升级路径自动处理正在运行的旧进程，`/S` 不展示安装向导或关闭确认，`--force-run` 在覆盖完成后自动重新打开 ORF，`--keep-shortcuts` 保留用户已有快捷方式选择。安装器启动失败时不能退出当前客户端；同一时间只能存在一个更新安装请求。Android 仍必须进入系统安装界面，系统级安装确认和签名校验不能由 ORF 绕过。
+Win11 应用内更新由 Electron 主进程拥有完整生命周期：渲染层只提交一次可信安装资产，并展示下载与校验进度；主进程下载完成后启动独立 WSH 交接进程，先让当前 ORF 完整退出，再以 `--updated --force-run --keep-shortcuts` 打开可见的 NSIS 安装器。交接和安装器进程探测都不依赖 PowerShell，避免系统 PowerShell 卡住时阻塞更新。NSIS 的原生界面是安装阶段的唯一进度事实源，不能再用 `/S` 隐藏；安装器自身也会把 0.0.94 及更早客户端遗留的 `/S` 恢复为可见模式，保证首次修复升级就能看到安装进度和错误，并通过 NSIS 原生进程能力关闭旧 ORF。`--updated` 保持升级语义，`--force-run` 由 ORF 自有安装宏在文件、快捷方式和卸载信息写入完成后重新打开 ORF，不依赖 electron-builder 只对静默安装生效的默认分支；`--keep-shortcuts` 保留用户已有快捷方式选择。交接进程启动失败时不能退出当前客户端；同一时间只能存在一个更新安装请求。Android 仍必须进入系统安装界面，系统级安装确认和签名校验不能由 ORF 绕过。
 
 发布资产：
 
@@ -147,13 +147,35 @@ npm run push:diagnose -- --send-test --user-email <email>
 
 ## Win11 在线更新广播
 
-Win11 客户端没有后台系统 Push 通道。运行中的 Win11 客户端通过 `/api/events` SSE 接收在线实时事件。发布脚本在 `--watch` 确认 ORF 主更新源已同步后，会用 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 调用 `POST /api/client-updates/broadcast-release`，按本次发布版本向在线作用域广播一次 `client.update.available`；新版客户端收到后立即触发已有更新检查，并由 `ClientUpdateNotice` 以应用内持久通知卡展示，直到用户处理或关闭本版本提醒。旧客户端不认识该专用事件，因此服务端同时发送兼容的 `system.broadcast` 横幅，提醒用户打开“版本与更新”检查；新版客户端会忽略这个兼容横幅，不再把客户端更新展示成 18 秒横幅。
+Win11 客户端没有后台系统 Push 通道。运行中的 Win11 客户端通过 `/api/events` SSE 接收实时事件。发布脚本在 `--watch` 确认 ORF 主更新源已同步后，会用 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 调用 `POST /api/client-updates/broadcast-release`，按本次发布版本向当前 SSE 实时连接广播一次 `client.update.available`；新版客户端收到后立即触发已有更新检查，并由 `ClientUpdateNotice` 以应用内持久通知卡展示，直到用户处理或关闭本版本提醒。旧客户端不认识该专用事件，因此服务端同时发送兼容的 `system.broadcast` 横幅，提醒用户打开“版本与更新”检查；新版客户端会忽略这个兼容横幅，不再把客户端更新展示成 18 秒横幅。
 
 - 客户端更新的运行时事实源是 ORF 主更新源；GitHub Release 是外部镜像和兜底来源。实时事件只负责唤醒检查或兼容旧客户端横幅，不写入 `notifications` 表。
 - 发布后广播按 tag 精确读取对应 ORF 发布清单，不依赖 `/api/client-updates/latest` 的短缓存，避免刚发布时误发旧版本。
 - 发布脚本广播和服务端定时发现共用同一套自动广播去重；同一 team 同一版本只自动广播一次，避免发布后下一轮定时器重复刷屏。
 - 服务端运行期间仍会定时发现带 Win11 安装包的新客户端版本，作为发布脚本未配置或广播失败后的在线兜底。
 - 已发布版本需要补发在线横幅时，管理员可调用 `POST /api/client-updates/broadcast-latest`。该接口会校验当前 latest release 存在 Win11 安装包后，再向当前默认作用域在线用户广播一次。
+
+## 发布覆盖与更新收据
+
+客户端发布覆盖必须区分不同事实，不能再把 SSE 连接数命名为“在线用户数”：
+
+| 事实 | 唯一来源 | 含义 |
+| --- | --- | --- |
+| 最近 2 分钟活跃用户 | `users.last_online_at` + 当前 team membership | 客户端最近通过现有活动心跳证明正在使用 ORF；不是广播接收证明 |
+| SSE 即时触达用户 | 当前后端进程的 `/api/events` 去重订阅者 | 发布广播发生时能够立即收到实时事件的用户；进程重启后会重新建立，不能代表全部在线用户 |
+| Android 推送尝试用户 | `push_devices` / 历史兼容 `push_vendor_devices` 的 `last_client_update_version` | 服务端已对该版本发起过系统 Push 的去重用户；尝试不等于用户已看到或已安装 |
+| 客户端更新阶段 | `client_update_receipts` | 原生客户端对某个发布版本已经检查、展示、开始安装或运行新版的持久收据 |
+
+`client_update_receipts` 按 `teamId + userId + releaseVersion + platform` 唯一，平台只允许 `desktop-windows` 和 `android`。同一用户可以在两个原生平台分别形成收据，但覆盖统计按用户去重，不能把设备数相加冒充人数。表只保存当前客户端版本和以下首次发生时间，不保存安装包内容、页面行为轨迹或额外设备详情：
+
+1. `checked_at`：客户端成功取得最新发布并完成本地版本判断；任一后续阶段都会保证该字段存在。
+2. `prompted_at`：可更新提示实际进入 AppShell 展示树；仅检查到版本但没有展示时不能写入。
+3. `install_started_at`：用户点击更新后、调用原生安装器前写入；收据失败不能阻断安装，但客户端必须先等待本次上报结束。
+4. `activated_at`：原生容器再次运行，并在“已检查”上报中证明当前版本不低于该发布版本后由服务端派生；它表达“已运行新版”，不是根据下载或安装器启动反推的“安装完成”。客户端显式上报不满足版本条件的 `activated` 必须被拒绝。
+
+客户端通过 `POST /api/client-updates/releases/:version/receipt` 幂等推进自己的收据；管理员通过 `GET /api/client-updates/releases/:version/coverage` 读取去重覆盖。收据只保留语义版本号最新的 20 个发布版本，旧版本在新收据写入时自动清理，并在用户或团队删除时级联删除。普通 Web 浏览器不属于原生客户端升级覆盖，不写收据。
+
+发布脚本广播结果必须同时输出“SSE 即时触达”“最近 2 分钟活跃”和当前持久收据统计；这些集合可能重叠，禁止相加得到所谓总触达人数。发布清单仍是离线发现更新的事实源：没有即时 SSE 的客户端在启动和周期检查时仍能发现更新，收据只观测阶段，不反向决定版本是否可用。
 
 ## 版本事实源
 

@@ -28,7 +28,7 @@ export type ChatSendInput = {
 };
 
 export type ChatSendHandler = (input: ChatSendInput) => Promise<void>;
-export type ChatMessageDeliveryStatus = "failed" | "sending";
+export type ChatMessageSendStatus = "failed" | "sending";
 export type ChatPendingSendPayload = {
   attachmentIds: string[];
   body: string;
@@ -38,7 +38,7 @@ export type ChatPendingSendPayload = {
 };
 export type ChatOptimisticMessage = ChatMessage & {
   deliveryError?: string;
-  deliveryStatus?: ChatMessageDeliveryStatus;
+  sendStatus?: ChatMessageSendStatus;
   pendingSend?: ChatPendingSendPayload;
 };
 
@@ -47,7 +47,9 @@ export type UnreadAnchor = {
   lastReadAt?: string | null;
   lastReadMessageId?: string | null;
   manuallyUnread: boolean;
+  mainMentionCount: number;
   mentionCount: number;
+  threadMentionCount: number;
   threadUnreadCount: number;
   unreadCount: number;
 };
@@ -55,7 +57,10 @@ export type UnreadAnchor = {
 export type ChatUnreadJumpTarget = {
   contextRequired: boolean;
   messageId?: string | null;
+  surface: "main" | "threadMention";
 };
+
+export type ChatUnreadControlKind = "main" | "threadInbox" | "threadMention";
 
 export type ChatFeedWindowKind = "context" | "latest" | "unread";
 
@@ -63,6 +68,7 @@ export type ChatFeedSnapshot = {
   hasNewerMessages: boolean;
   hasOlderMessages: boolean;
   hasScrollPosition: boolean;
+  latestWindowMessages: ChatMessage[];
   messages: ChatMessage[];
   scrollTop: number;
   syncedAt?: string;
@@ -131,8 +137,31 @@ export function sortChannels(channels: ChatChannel[], currentUserId?: string) {
 }
 
 export function upsertChannel(channels: ChatChannel[], next: ChatChannel, currentUserId?: string) {
-  const found = channels.some((channel) => channel.id === next.id);
-  return sortChannels(found ? channels.map((channel) => (channel.id === next.id ? next : channel)) : [next, ...channels], currentUserId);
+  const current = channels.find((channel) => channel.id === next.id);
+  if (!current) return sortChannels([next, ...channels], currentUserId);
+
+  const currentMember = currentMembership(current, currentUserId);
+  const nextMember = currentMembership(next, currentUserId);
+  const mainReadRegressed = Boolean(
+    currentMember?.lastViewedAt && (!nextMember?.lastViewedAt || nextMember.lastViewedAt < currentMember.lastViewedAt),
+  );
+  const threadReadRegressed = Boolean(
+    current.threadReadAt && (!next.threadReadAt || next.threadReadAt < current.threadReadAt),
+  );
+  const members = mainReadRegressed && currentMember
+    ? next.members.map((member) => member.userId === currentMember.userId ? currentMember : member)
+    : next.members;
+  const merged = {
+    ...next,
+    members,
+    mainMentionCount: mainReadRegressed ? current.mainMentionCount : next.mainMentionCount,
+    threadMentionCount: threadReadRegressed ? current.threadMentionCount : next.threadMentionCount,
+    threadReadAt: threadReadRegressed ? current.threadReadAt : next.threadReadAt,
+    threadUnreadCount: threadReadRegressed ? current.threadUnreadCount : next.threadUnreadCount,
+    unreadCount: mainReadRegressed ? current.unreadCount : next.unreadCount,
+  };
+  merged.mentionCount = merged.mainMentionCount + merged.threadMentionCount;
+  return sortChannels(channels.map((channel) => channel.id === next.id ? merged : channel), currentUserId);
 }
 
 export function isUnreadChannel(channel: ChatChannel, currentUserId?: string) {
@@ -185,8 +214,8 @@ export function upsertMessage(messages: ChatMessage[], next: ChatMessage) {
   return updated.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
 
-export function chatMessageDeliveryStatus(message: ChatMessage): ChatMessageDeliveryStatus | null {
-  return (message as ChatOptimisticMessage).deliveryStatus ?? null;
+export function chatMessageSendStatus(message: ChatMessage): ChatMessageSendStatus | null {
+  return (message as ChatOptimisticMessage).sendStatus ?? null;
 }
 
 export function chatMessagePendingSend(message: ChatMessage): ChatPendingSendPayload | null {
@@ -239,7 +268,7 @@ export function createPendingChatMessage(input: {
     savedByCurrentUser: false,
     attachments: input.attachments,
     reactions: [],
-    deliveryStatus: "sending",
+    sendStatus: "sending",
     pendingSend: input.pendingSend,
   };
 }
@@ -248,7 +277,7 @@ export function markPendingChatMessageSending(message: ChatMessage): ChatOptimis
   return {
     ...(message as ChatOptimisticMessage),
     deliveryError: undefined,
-    deliveryStatus: "sending",
+    sendStatus: "sending",
   };
 }
 
@@ -256,13 +285,13 @@ export function markPendingChatMessageFailed(message: ChatMessage, error: string
   return {
     ...(message as ChatOptimisticMessage),
     deliveryError: error,
-    deliveryStatus: "failed",
+    sendStatus: "failed",
   };
 }
 
 export function pendingChatMessageMatchesServerMessage(pendingMessage: ChatMessage, serverMessage: ChatMessage) {
   const pending = pendingMessage as ChatOptimisticMessage;
-  if (!pending.deliveryStatus || !pending.pendingSend) return false;
+  if (!pending.sendStatus || !pending.pendingSend) return false;
   const pendingAttachmentIds = [...pending.pendingSend.attachmentIds].sort();
   const serverAttachmentIds = serverMessage.attachments.map((attachment) => attachment.id).sort();
   return (
@@ -342,6 +371,7 @@ export function createFeedSnapshot(input?: Partial<ChatFeedSnapshot>): ChatFeedS
     hasNewerMessages: input?.hasNewerMessages ?? false,
     hasOlderMessages: input?.hasOlderMessages ?? false,
     hasScrollPosition: input?.hasScrollPosition ?? false,
+    latestWindowMessages: input?.latestWindowMessages ?? [],
     messages: input?.messages ?? [],
     scrollTop: input?.scrollTop ?? 0,
     syncedAt: input?.syncedAt,
@@ -359,6 +389,7 @@ export function replaceFeedMessages(
     hasNewerMessages: flags?.hasNewerMessages ?? false,
     hasOlderMessages: flags?.hasOlderMessages ?? messages.length >= pageSize,
     hasScrollPosition: snapshot?.hasScrollPosition ?? false,
+    latestWindowMessages: [],
     messages,
     scrollTop: snapshot?.scrollTop ?? 0,
     syncedAt: new Date().toISOString(),
@@ -384,7 +415,13 @@ export function applyFeedMessage(snapshot: ChatFeedSnapshot | undefined, message
     return messages === current.messages ? current : { ...current, messages };
   }
   const messageExists = current.messages.some((item) => item.id === message.id);
-  if (!messageExists && current.hasNewerMessages) return current;
+  if (!messageExists && current.hasNewerMessages) {
+    if (message.rootMessageId) return current;
+    return {
+      ...current,
+      latestWindowMessages: upsertChannelMessage(current.latestWindowMessages, message),
+    };
+  }
   const messages = upsertChannelMessage(current.messages, message);
   if (messages === current.messages) return current;
   const trimmed = trimFeedWindow(messages, "newer");
@@ -393,6 +430,65 @@ export function applyFeedMessage(snapshot: ChatFeedSnapshot | undefined, message
     hasOlderMessages: current.hasOlderMessages || trimmed.droppedOlder,
     messages: trimmed.messages,
   };
+}
+
+export type ChatFeedLatestReconciliation = {
+  newMessageCount: number;
+  snapshot: ChatFeedSnapshot;
+  visibleMessagesChanged: boolean;
+};
+
+export function reconcileFeedLatestWindow(
+  snapshot: ChatFeedSnapshot | undefined,
+  latestMessages: ChatMessage[],
+  pageSize = chatMessagePageSize,
+): ChatFeedLatestReconciliation {
+  const current = snapshot ?? createFeedSnapshot();
+  const currentIds = new Set(current.messages.map((message) => message.id));
+  const latestRootMessages = latestMessages.filter((message) => !message.rootMessageId);
+  const newMessageCount = latestRootMessages.filter((message) => !currentIds.has(message.id)).length;
+  const windowsOverlap = latestRootMessages.some((message) => currentIds.has(message.id));
+  const canMergeVisibleWindow =
+    current.messages.length === 0 ||
+    !current.hasNewerMessages ||
+    current.windowKind === "latest" ||
+    windowsOverlap;
+
+  if (!canMergeVisibleWindow) {
+    return {
+      newMessageCount,
+      snapshot: createFeedSnapshot({
+        ...current,
+        hasNewerMessages: true,
+        latestWindowMessages: latestMessages,
+        syncedAt: new Date().toISOString(),
+      }),
+      visibleMessagesChanged: false,
+    };
+  }
+
+  const byId = new Map<string, ChatMessage>();
+  for (const message of [...current.messages, ...latestMessages]) byId.set(message.id, message);
+  const merged = Array.from(byId.values()).sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  const trimmed = trimFeedWindow(merged, "newer");
+  return {
+    newMessageCount,
+    snapshot: createFeedSnapshot({
+      ...current,
+      hasNewerMessages: false,
+      hasOlderMessages: current.hasOlderMessages || latestMessages.length >= pageSize || trimmed.droppedOlder,
+      latestWindowMessages: [],
+      messages: trimmed.messages,
+      syncedAt: new Date().toISOString(),
+      windowKind: "latest",
+    }),
+    visibleMessagesChanged: true,
+  };
+}
+
+export function promoteReconciledLatestWindow(snapshot: ChatFeedSnapshot | undefined) {
+  if (!snapshot?.latestWindowMessages.length) return snapshot;
+  return replaceFeedMessages(snapshot, snapshot.latestWindowMessages);
 }
 
 export function optimisticToggleChatReaction(message: ChatMessage, emojiName: string, currentUserId?: string): ChatMessage {
@@ -478,7 +574,9 @@ export function buildUnreadAnchor(channel: ChatChannel, currentUserId?: string):
   const member = currentMembership(channel, currentUserId);
   const hasUnreadState =
     channel.unreadCount > 0 ||
+    channel.mainMentionCount > 0 ||
     channel.mentionCount > 0 ||
+    channel.threadMentionCount > 0 ||
     channel.threadUnreadCount > 0 ||
     Boolean(member?.manuallyUnread);
   return hasUnreadState ? {
@@ -486,7 +584,9 @@ export function buildUnreadAnchor(channel: ChatChannel, currentUserId?: string):
     lastReadAt: member?.lastReadAt ?? null,
     lastReadMessageId: member?.lastReadMessageId ?? null,
     manuallyUnread: Boolean(member?.manuallyUnread),
+    mainMentionCount: channel.mainMentionCount,
     mentionCount: channel.mentionCount,
+    threadMentionCount: channel.threadMentionCount,
     threadUnreadCount: channel.threadUnreadCount,
     unreadCount: channel.unreadCount,
   } : null;
@@ -495,8 +595,19 @@ export function buildUnreadAnchor(channel: ChatChannel, currentUserId?: string):
 export function hasMainFeedUnread(unreadAnchor: UnreadAnchor | null): unreadAnchor is UnreadAnchor {
   return Boolean(
     unreadAnchor &&
-    (unreadAnchor.unreadCount > 0 || unreadAnchor.mentionCount > 0 || unreadAnchor.manuallyUnread),
+    (unreadAnchor.unreadCount > 0 || unreadAnchor.mainMentionCount > 0 || unreadAnchor.manuallyUnread),
   );
+}
+
+export function chatUnreadControlKind(input: {
+  hasMainTarget: boolean;
+  threadMentionCount: number;
+  threadUnreadCount: number;
+}): ChatUnreadControlKind | null {
+  if (input.hasMainTarget) return "main";
+  if (input.threadMentionCount > 0) return "threadMention";
+  if (input.threadUnreadCount > 0) return "threadInbox";
+  return null;
 }
 
 export function resolveUnreadJumpTarget(input: {
@@ -515,7 +626,7 @@ export function resolveUnreadJumpTarget(input: {
   });
 
   if (firstUnreadIndex < 0) {
-    return { dividerIndex: -1, jumpTarget: { contextRequired: true }, messageId: null };
+    return { dividerIndex: -1, jumpTarget: { contextRequired: true, surface: "main" }, messageId: null };
   }
 
   const message = messages[firstUnreadIndex];
@@ -525,18 +636,14 @@ export function resolveUnreadJumpTarget(input: {
     (!unreadAnchor.lastReadAt || message.createdAt > unreadAnchor.lastReadAt);
 
   if (boundaryMayBeOlder) {
-    return { dividerIndex: -1, jumpTarget: { contextRequired: true }, messageId: null };
+    return { dividerIndex: -1, jumpTarget: { contextRequired: true, surface: "main" }, messageId: null };
   }
 
   return {
     dividerIndex: firstUnreadIndex,
-    jumpTarget: { contextRequired: false, messageId: message.id },
+    jumpTarget: { contextRequired: false, messageId: message.id, surface: "main" },
     messageId: message.id,
   };
-}
-
-export function shouldFollowIncomingMessage(message: ChatMessage, currentUserId: string | undefined, nearLatest: boolean) {
-  return !message.rootMessageId && (message.authorUserId === currentUserId || nearLatest);
 }
 
 export function applyThreadSummaryMessage(

@@ -19,10 +19,14 @@
 业务 mutation 成功
   -> 通知事件写入 notification_events / notification_receipts / notification_deliveries
   -> 系统消息投影到 chat_messages
+聊天消息事务提交
+  -> 按收件人发送轻量 realtime（强提醒原因、统一目标、发送者展示身份）
+  -> 前端立即产生短生命周期强提醒意图
   -> 前端读取可处理聊天提醒、普通聊天未读、系统通知、工作日志提醒、窗口状态、当前路由和用户偏好
   -> buildAttentionState 派生注意力状态
   -> AppShell 展示侧边栏待我处理入口
   -> Win11 桌面壳展示任务栏角标、系统 Toast、任务栏闪烁、托盘图标闪烁和托盘菜单
+  -> 持久未读对账成功后接管或清除 realtime 强提醒意图
 ```
 
 唯一事实源：
@@ -36,6 +40,7 @@
 | 聊天未读 | `chat_channel_members`、`chat_thread_follows` 派生的聊天未读读模型 |
 | 工作日志欠账是否继续提醒 | `work_log_reminder_states` |
 | 待处理数量、桌面红点数量、注意力等级、最新强提醒、是否需要闪烁 | `buildAttentionState` 的前端派生结果 |
+| realtime 强提醒意图 | 当前客户端内存；仅用于填补消息到达与持久未读对账之间的时间窗，不写数据库 |
 | Toast/flash 冷却和同事件去重 | 前端或桌面壳本地运行态；当前桌面 flash 冷却为 12 秒 |
 
 ## 注意力等级
@@ -58,9 +63,10 @@
 3. 静音频道抑制普通聊天 Toast；但私聊和实际命中当前用户的具名/广播提及仍保留托盘持续闪烁，避免静音让高相关消息完全不可见。反馈指派、工作日志欠账、数据同步冲突等强业务事件也不应被聊天静音误伤。
 4. 普通聊天总未读只进入聊天入口角标和 `AttentionState.badgeCount`；只有后端 `actionableMessageUnreadCount` 覆盖的 @我/私聊、我关注的话题回复或业务系统通知才进入 `AttentionState.count` 和“待我处理”。
 5. Win11 窗口聚焦并可见时通常不 flash；窗口失焦、最小化或隐藏到托盘时才允许 flash。
-6. 同一事件只弹一次 Toast；重复实时事件只能刷新未读和待处理入口。
+6. 同一事件只弹一次 Toast；系统频道聊天消息只是通知事件的阅读投影，不再重复弹聊天 Toast。重复实时事件只能刷新未读和待处理入口。
 7. 同类高频提醒需要合并或冷却，不能连续刷屏。
 8. `urgent` 在对应事实仍未解除前保留在“待我处理”，但不持续弹 Toast 或持续闪烁。
+9. realtime 强提醒不得自行清除；只有持久未读、系统通知和同步游标都对账成功后才能由持久投影接管。对账失败时保留临时强提醒，避免网络竞态吞掉托盘闪烁。
 
 建议冷却口径：
 
@@ -124,6 +130,8 @@
 ## 桌面壳职责
 
 Win11 桌面壳只消费注意力状态，不理解业务语义。
+
+聊天 Toast 和系统通知 Toast 复用同一个桌面渲染契约：标题、正文、目标路径、提醒等级、事件 ID，以及可选的发送者展示身份。发送者头像 URL 仍由用户头像事实派生；前端使用当前登录态读取头像并缩放为受限 PNG，Windows 壳只把这份展示数据写入有数量上限的临时图片缓存，再以 `appLogoOverride + hint-crop="circle"` 渲染。无头像、读取失败或非用户事件统一回退为姓名首字头像或 ORF 应用图标，不新增头像事实表，也不让桌面壳读取业务接口。
 
 保留现有兼容接口：
 
@@ -227,7 +235,7 @@ type AttentionState = {
 
 | 输入 | 用途 |
 | --- | --- |
-| `chatUnreadSummary` | 普通未读、`actionableMessageUnreadCount`、私聊未读、@我、线程未读聚合；普通未读只生成 `badgeCount` |
+| `chatUnreadSummary` | 普通未读、`actionableMessageUnreadCount`、私聊未读、主消息提及、话题提及、话题未读聚合；`mentionCount` 只由 `mainMentionCount + threadMentionCount` 派生，普通未读只生成 `badgeCount` |
 | `AppNotification[]` / `unreadNotificationCount` | 系统通知 kind、targetHref、readAt |
 | `WorkLogReminderState` | 工作日志欠账是否仍需提醒 |
 | `AppAttentionState` | 当前窗口是否被用户主动查看 |
@@ -247,12 +255,15 @@ type AttentionState = {
 当前实现完成最小闭环：
 
 1. `chatUnreadSummary.totalUnreadCount > 0` 只派生 `badgeCount` 和 `badge`，不增加 `AttentionState.count`，不生成“待我处理”项。
-2. 私聊、聊天具名 `@我`、`@所有人` 和话题内显式提及统一派生 `flash` 并进入“待我处理”；普通关注话题回复派生 `toast` 并进入“待我处理”；普通聊天未读只派生聊天入口和桌面红点。聊天实时 Toast 继续由原聊天原生通知模型负责，避免重复分发。
+2. 私聊、聊天具名 `@我`、`@所有人` 和话题内显式提及在 realtime 到达时立即产生 `flash` 意图，再由持久未读汇总接管；两者按消息和提醒类型合并计数，不能重复生成“待我处理”项。普通关注话题回复派生 `toast`，普通聊天未读只派生聊天入口和桌面红点。聊天实时 Toast 仍由聊天原生通知模型一次性投递，强提醒意图只驱动统一注意力状态和托盘/任务栏，不重复弹 Toast。
 3. `worklog.reminder.required` 或 active `WorkLogReminderState` 派生 `urgent`，并通过 `shouldRemindNow` 尊重工作日志自身提醒节奏。
 4. 业务系统通知按 `NotificationKind` 映射为 `badge`、`toast`、`flash` 或 `urgent`；正在查看对应目标时降级为 `badge`。
 5. Win11 托盘菜单提供“打开待处理提醒”，点击后跳转到 `latestTargetPath`；托盘图标具有 `normal/unread/attention` 三个明确状态，`flash/urgent` 且 `count > 0` 时在两帧 attention 图标间持续闪烁，清空或降级后恢复 unread/normal 图标。
 6. 侧边栏新增“待我处理”入口，只在 `AttentionState.count > 0` 时展示数量和轻量面板；通知项点击进入现有聊天系统消息或业务页面前会调用通知已读接口，面板也提供“通知全部已读”用于清理历史未读积压。
 7. 移动端底部导航只在 `AttentionState.count > 0` 时新增 `待办` 入口，不新增独立页面；点击进入最新待处理目标或个人系统通知，最新项是通知时先调用通知已读接口。
+8. 首次 SSE 连接、每次重连、网络恢复、窗口聚焦和页面重新可见都会进入同一个 `connectionEpoch` 对账链；未读汇总恢复后重新派生 `AttentionState`，桌面任务栏和托盘不依赖错过的瞬时事件继续保持旧状态。
+9. 恢复对账只刷新持久未读和注意力派生状态，不补弹已经错过的一次性 Toast；同一实时消息仍按 `messageId` 去重，避免连接抖动导致重复系统通知。
+10. 聊天和有用户触发人的系统 Toast 展示发送者头像；Windows 使用临时本地 PNG 生成圆形 `appLogoOverride`，其他桌面平台使用同一 PNG 作为通知 icon。Android 继续使用应用通知图标，因为现有本地通知插件的 `largeIcon` 契约只接受 Android drawable 资源，不另建一套头像缓存和下载链。
 
 当前不做：
 
@@ -270,15 +281,20 @@ type AttentionState = {
 | 窗口打开但在其他页面 | 可弹系统 Toast，保留 badge |
 | 窗口失焦 | `flash` 或 `urgent` 触发任务栏闪烁和托盘图标闪烁 |
 | 窗口最小化 | `flash` 或 `urgent` 触发系统 Toast、任务栏闪烁和托盘图标闪烁 |
+| 私聊或用户触发的系统通知弹出 | 展示发送者头像；头像不可用时回退为姓名首字头像或 ORF 图标 |
 | 窗口隐藏到托盘 | `flash` 或 `urgent` 触发托盘图标闪烁，托盘菜单可以打开待处理提醒 |
 | 点击系统 Toast | 跳到 `latestTargetPath` |
 | 点击托盘“打开待处理提醒” | 跳到 `latestTargetPath` |
 | 工作日志欠账仍 active | 侧边栏“待我处理”保留工作日志项 |
 | 工作日志欠账 resolved | 侧边栏“待我处理”移除工作日志项 |
 | 同一事件重复实时推送 | 不重复 Toast |
+| 客户端更新期间收到私聊或 @，随后首次连接 | 无需刷新即可恢复未读，失焦时任务栏和托盘按 `flash` 状态提示 |
+| 聊天页在连接恢复后才挂载 | 页面读取当前连接 epoch，补做频道、消息窗口和话题对账 |
+| 用户停在历史消息位置时恢复 | 后台取得最新窗口但保持阅读锚点，只提示有新消息；进入最新位置后显示已同步消息 |
 | 自己触发的通知事件 | 不进入强提醒 |
 | 静音聊天频道收到普通消息 | 不触发 Toast、flash 或 urgent |
 | 静音聊天频道中的私聊或消息实际提到当前用户 | 不弹普通聊天 Toast，但托盘持续闪烁并保留任务栏角标 |
+| realtime 到达后未读汇总请求仍在进行 | 立即进入 `flash`；对账成功后由持久未读接管，对账失败不提前清除 |
 | GitHub commit 同步到普通 GitHub 频道 | 聊天入口和桌面红点可增加；侧边栏“待我处理”和移动端 `待办` 不显示 |
 | 聊天系统通知消息被读到 | 对应 `notification_receipts.read_at` 同步更新，“待我处理”减少 |
 

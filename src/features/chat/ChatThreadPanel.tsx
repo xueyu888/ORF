@@ -7,7 +7,7 @@ import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { scrollChatFeedToMessage } from "./chatFeedScroll";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
-import { chatMessageDeliveryStatus, type ChatSendHandler } from "./chatModels";
+import { chatMessageSendStatus, type ChatSendHandler } from "./chatModels";
 import { useChatLatestScrollStickiness } from "./useChatLatestScrollStickiness";
 
 type ChatThreadPanelProps = {
@@ -96,7 +96,7 @@ export function ChatThreadPanel({
       .find((message) => (
         message.authorUserId === currentUserId &&
         !message.deletedAt &&
-        !chatMessageDeliveryStatus(message)
+        !chatMessageSendStatus(message)
       ));
     if (latestOwnMessage) {
       onEdit(latestOwnMessage);
@@ -105,7 +105,7 @@ export function ChatThreadPanel({
   const reactToLatestThreadMessage = useCallback(() => {
     const latestMessage = [thread.rootMessage, ...thread.replies]
       .reverse()
-      .find((message) => !message.deletedAt && !chatMessageDeliveryStatus(message));
+      .find((message) => !message.deletedAt && !chatMessageSendStatus(message));
     if (!latestMessage) return;
     scrollChatFeedToMessage(threadPanelRef.current, latestMessage.id, { behavior: "auto", block: "center" });
     window.requestAnimationFrame(() => {

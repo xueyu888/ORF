@@ -68,10 +68,10 @@ function broadcastNewClientUpdateToOnlineClients(log: FastifyBaseLogger, release
       continue;
     }
     log.info({
-      onlineUserCount: result.onlineUserCount,
+      realtimeRecipientUserCount: result.realtimeRecipientUserCount,
       releaseVersion: result.releaseVersion,
       teamId,
-    }, "Broadcast ORF client update announcement to online clients");
+    }, "Broadcast ORF client update announcement to realtime-connected clients");
   }
 }
 

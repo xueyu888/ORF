@@ -3,11 +3,9 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
-  BrainCircuit,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  Clock3,
   File,
   FileText,
   Folder,
@@ -18,6 +16,7 @@ import {
   Plus,
   RefreshCw,
   Save,
+  Sparkles,
   Tags,
   Target,
   Trash2,
@@ -54,20 +53,23 @@ import {
   requiresObjectiveProgressEstimate,
 } from "../domain/orfWorkLogs";
 import {
-  applyWorkLogEditorDraftPatch,
+  applyWorkLogEditorSessionDraftPatch,
   blankWorkLogEditorDraft,
   buildWorkLogClassificationChoices,
   canonicalWorkLogEditorDraft,
   canonicalWorkLogEntryForEdit,
   classificationSelectValueFromDraft,
+  createWorkLogEditorSession,
   formatWorkLogDurationMinutes,
-  parseWorkLogDurationInput,
+  moveWorkLogEditorSession,
   parseWorkLogProgressEstimateInput,
   suggestionMatchesWorkLogDraft,
   validateWorkLogEditorDraft,
   workLogDraftPatchFromClassificationSelect,
   workLogDraftPatchFromSuggestion,
+  workLogEditorDraftHasContent,
   workLogEditorDraftFromEntry,
+  workLogEditorSessionShouldFollowViewDate,
   workLogEntryClassification,
   workLogProgressEstimatePercentFromRemaining,
   workLogEntryTargetLabel,
@@ -75,6 +77,7 @@ import {
   type WorkLogClassificationChoice,
   type WorkLogEditorDraft,
   type WorkLogEditorDraftPatch,
+  type WorkLogEditorSession,
 } from "../features/work-logs/workLogEditorModel";
 import {
   createMyWorkLogEntry,
@@ -112,6 +115,7 @@ import type {
 } from "../types/orf";
 import {
   clearStoredWorkLogEditorDraft,
+  moveStoredWorkLogEditorDraft,
   readStoredWorkLogEditorDraft,
   writeStoredWorkLogEditorDraft,
 } from "../features/work-logs/workLogDraftStorage";
@@ -124,9 +128,9 @@ import {
 
 type WorkLogViewMode = "report" | "today";
 
-type WorkLogEditorDraftScope = {
-  userId: string;
-  workDate: string;
+type WorkLogClassificationObservation = {
+  bodyMarkdown: string;
+  suggestion: WorkLogClassificationSuggestion;
 };
 
 type WorkLogReportCellPopoverState = {
@@ -200,6 +204,8 @@ function workLogObjectiveSelectionSubmitMessage(objective: WorkLogObjectiveOptio
 export function WorkLogsPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const viewDate = dateFromSearch(location.search);
+  const viewMode = viewFromSearch(location.search);
   const {
     currentUser,
     dismissSystemBroadcast,
@@ -208,9 +214,6 @@ export function WorkLogsPage() {
     refreshWorkLogReminderState,
     systemBroadcasts,
   } = useOrf();
-  const [selectedDate, setSelectedDate] = useState(() =>
-    dateFromSearch(location.search),
-  );
   const [objectives, setObjectives] = useState<WorkLogObjectiveOption[]>(() => workLogObjectivesSnapshot()?.objectives ?? []);
   const [objectiveSearchQuery, setObjectiveSearchQuery] = useState("");
   const [objectiveSearchResults, setObjectiveSearchResults] = useState<WorkLogObjectiveOption[]>([]);
@@ -218,16 +221,17 @@ export function WorkLogsPage() {
   const [categories, setCategories] = useState<WorkLogCategoryOption[]>(() => workLogObjectivesSnapshot()?.categories ?? []);
   const [classificationSuggestionEnabled, setClassificationSuggestionEnabled] =
     useState(false);
-  const [classificationSuggestion, setClassificationSuggestion] =
-    useState<WorkLogClassificationSuggestion | null>(null);
+  const [classificationObservation, setClassificationObservation] =
+    useState<WorkLogClassificationObservation | null>(null);
   const [classificationSuggestionLoading, setClassificationSuggestionLoading] =
     useState(false);
   const [myEntries, setMyEntries] = useState<WorkLogEntry[]>(() => workLogDaySnapshot(dateFromSearch(location.search))?.entries ?? []);
-  const [editorDraft, setEditorDraft] = useState<WorkLogEditorDraft>(() =>
-    blankWorkLogEditorDraft(),
-  );
-  const [editorDraftScope, setEditorDraftScope] =
-    useState<WorkLogEditorDraftScope | null>(null);
+  const [editorSession, setEditorSessionState] =
+    useState<WorkLogEditorSession | null>(null);
+  const editorSessionRef = useRef<WorkLogEditorSession | null>(editorSession);
+  const myDayLoadRevisionRef = useRef(0);
+  const viewDateRef = useRef(viewDate);
+  viewDateRef.current = viewDate;
   const [activityEntries, setActivityEntries] = useState<WorkLogActivityItem[]>(() =>
     workLogActivitySnapshot(workLogActivityCollapsedLimit + 1)?.entries ?? [],
   );
@@ -240,8 +244,8 @@ export function WorkLogsPage() {
   const [report, setReport] = useState<WorkLogReport | null>(() =>
     workLogReportSnapshot(initialReportRange.from, initialReportRange.to, reportScope)?.report ?? null,
   );
-  const [loading, setLoading] = useState(() =>
-    workLogObjectivesSnapshot() === undefined || workLogDaySnapshot(dateFromSearch(location.search)) === undefined,
+  const [dayLoading, setDayLoading] = useState(
+    () => !workLogObjectivesSnapshot() || !workLogDaySnapshot(viewDate),
   );
   const [activityLoading, setActivityLoading] = useState(() =>
     workLogActivitySnapshot(workLogActivityCollapsedLimit + 1) === undefined,
@@ -255,9 +259,7 @@ export function WorkLogsPage() {
   const [reportError, setReportError] = useState("");
   const [workLogResourceRevision, setWorkLogResourceRevision] = useState(0);
   const handledWorkLogsInvalidationKeyRef = useRef("");
-  const [viewMode, setViewMode] = useState<WorkLogViewMode>(() =>
-    viewFromSearch(location.search),
-  );
+  const editorDraft = editorSession?.draft ?? blankWorkLogEditorDraft();
   const workLogsInvalidationKey = useMemo(
     () => readModelInvalidationKey(readModelInvalidations, "workLogs"),
     [readModelInvalidations],
@@ -285,70 +287,65 @@ export function WorkLogsPage() {
     () => new Map(categories.map((category) => [category.id, category])),
     [categories],
   );
+  const classificationSuggestion = classificationObservation?.suggestion ?? null;
+  const editorWorkDate = editorSession?.workDate ?? viewDate;
 
-  useEffect(() => {
-    const nextDate = dateFromSearch(location.search);
-    setSelectedDate(nextDate);
-    setViewMode(viewFromSearch(location.search));
-  }, [location.search]);
+  const commitEditorSession = useCallback((nextSession: WorkLogEditorSession | null) => {
+    editorSessionRef.current = nextSession;
+    setEditorSessionState(nextSession);
+  }, []);
+
+  const replaceEditorSession = useCallback((input: {
+    draft?: WorkLogEditorDraft;
+    userId: string;
+    workDate: string;
+  }) => {
+    const nextSession = createWorkLogEditorSession({
+      ...input,
+      previousRevision: editorSessionRef.current?.revision,
+    });
+    commitEditorSession(nextSession);
+    return nextSession;
+  }, [commitEditorSession]);
 
   const loadMyDay = useCallback(async (date: string, force = false) => {
-    const userId = currentUser?.id ?? "";
+    const loadRevision = myDayLoadRevisionRef.current + 1;
+    myDayLoadRevisionRef.current = loadRevision;
+    const isCurrentLoad = () =>
+      myDayLoadRevisionRef.current === loadRevision && viewDateRef.current === date;
     const cachedObjectives = workLogObjectivesSnapshot();
     const cachedDay = workLogDaySnapshot(date);
-    if (cachedObjectives) {
-      setObjectives(cachedObjectives.objectives);
-      setCategories(cachedObjectives.categories);
-      setClassificationSuggestionEnabled(cachedObjectives.classificationSuggestionEnabled);
+    if (isCurrentLoad()) {
+      if (cachedObjectives) {
+        setObjectives(cachedObjectives.objectives);
+        setCategories(cachedObjectives.categories);
+        setClassificationSuggestionEnabled(cachedObjectives.classificationSuggestionEnabled);
+      }
+      setMyEntries(cachedDay?.entries ?? []);
+      setDayLoading(!cachedObjectives || !cachedDay);
+      setError("");
     }
-    setMyEntries(cachedDay?.entries ?? []);
-    setLoading(!cachedObjectives || !cachedDay);
-    setError("");
-    setEditorDraftScope(null);
     try {
       const [objectiveResponse, dayResponse] = await Promise.all([
         loadWorkLogObjectives({ force }),
         loadWorkLogDay(date, { force }),
       ]);
-      const storedDraft = userId
-        ? readStoredWorkLogEditorDraft({ userId, workDate: date })
-        : null;
-      const storedDraftAvailable = Boolean(
-        storedDraft &&
-          (!storedDraft.draft.editingEntryId ||
-            dayResponse.entries.some((entry) => entry.id === storedDraft.draft.editingEntryId)),
-      );
-      if (storedDraft && !storedDraftAvailable && userId) {
-        clearStoredWorkLogEditorDraft({ userId, workDate: date });
-      }
+      if (!isCurrentLoad()) return;
       setObjectives(objectiveResponse.objectives);
-      setObjectiveSearchQuery("");
-      setObjectiveSearchResults([]);
-      setSelectedObjectiveCache(
-        storedDraftAvailable && storedDraft?.selectedObjective
-          ? [storedDraft.selectedObjective]
-          : [],
-      );
       setCategories(objectiveResponse.categories);
       setClassificationSuggestionEnabled(
         objectiveResponse.classificationSuggestionEnabled,
       );
       setMyEntries(dayResponse.entries);
-      setEditorDraft(
-        storedDraftAvailable && storedDraft
-          ? storedDraft.draft
-          : blankWorkLogEditorDraft(),
-      );
-      setEditorDraftScope(userId ? { userId, workDate: date } : null);
-      setClassificationSuggestion(null);
     } catch (loadError) {
+      if (!isCurrentLoad()) return;
       setError(
         loadError instanceof Error ? loadError.message : "工作日志加载失败",
       );
     } finally {
-      setLoading(false);
+      if (isCurrentLoad()) setDayLoading(false);
     }
-  }, [currentUser?.id]);
+  }, []);
 
   useEffect(() => {
     const query = objectiveSearchQuery.trim();
@@ -419,8 +416,67 @@ export function WorkLogsPage() {
   );
 
   useEffect(() => {
-    void loadMyDay(selectedDate, false);
-  }, [loadMyDay, selectedDate]);
+    const userId = currentUser?.id;
+    if (!userId) {
+      if (editorSessionRef.current) commitEditorSession(null);
+      return;
+    }
+    if (!workLogEditorSessionShouldFollowViewDate(editorSessionRef.current, userId, viewDate)) {
+      return;
+    }
+
+    const storedDraft = readStoredWorkLogEditorDraft({ userId, workDate: viewDate });
+    const cachedDay = workLogDaySnapshot(viewDate);
+    const storedDraftAvailable = Boolean(
+      storedDraft &&
+        (!storedDraft.draft.editingEntryId ||
+          !cachedDay ||
+          cachedDay.entries.some((entry) => entry.id === storedDraft.draft.editingEntryId)),
+    );
+    if (storedDraft && !storedDraftAvailable) {
+      clearStoredWorkLogEditorDraft({ userId, workDate: viewDate });
+    }
+    replaceEditorSession({
+      draft: storedDraftAvailable && storedDraft
+        ? storedDraft.draft
+        : blankWorkLogEditorDraft(),
+      userId,
+      workDate: viewDate,
+    });
+    setObjectiveSearchQuery("");
+    setObjectiveSearchResults([]);
+    setSelectedObjectiveCache(
+      storedDraftAvailable && storedDraft?.selectedObjective
+        ? [storedDraft.selectedObjective]
+        : [],
+    );
+    setClassificationObservation(null);
+  }, [commitEditorSession, currentUser?.id, replaceEditorSession, viewDate]);
+
+  useEffect(() => {
+    const session = editorSessionRef.current;
+    const editingEntryId = session?.draft.editingEntryId;
+    if (
+      !session ||
+      !editingEntryId ||
+      session.userId !== currentUser?.id ||
+      session.workDate !== viewDate
+    ) {
+      return;
+    }
+    const daySnapshot = workLogDaySnapshot(viewDate);
+    if (!daySnapshot || daySnapshot.entries.some((entry) => entry.id === editingEntryId)) {
+      return;
+    }
+    clearStoredWorkLogEditorDraft(session);
+    replaceEditorSession({ userId: session.userId, workDate: session.workDate });
+    setSelectedObjectiveCache([]);
+    setClassificationObservation(null);
+  }, [currentUser?.id, editorSession?.revision, myEntries, replaceEditorSession, viewDate]);
+
+  useEffect(() => {
+    void loadMyDay(viewDate, false);
+  }, [loadMyDay, viewDate]);
 
   useEffect(() => {
     void loadActivity(activityExpanded, false);
@@ -436,10 +492,10 @@ export function WorkLogsPage() {
     invalidateWorkLogObjectives();
     invalidateWorkLogActivity();
     invalidateWorkLogReports();
-    void loadMyDay(selectedDate, true);
+    void loadMyDay(viewDate, true);
     void loadActivity(activityExpanded, true);
     void loadReport(reportMonth, reportScope, true);
-  }, [activityExpanded, loadActivity, loadMyDay, loadReport, reportMonth, reportScope, selectedDate, workLogsInvalidationKey]);
+  }, [activityExpanded, loadActivity, loadMyDay, loadReport, reportMonth, reportScope, viewDate, workLogsInvalidationKey]);
 
   const changeDate = (date: string) => {
     const query = new URLSearchParams(location.search);
@@ -466,34 +522,130 @@ export function WorkLogsPage() {
   };
 
   const startNewEntry = () => {
-    setEditorDraft(blankWorkLogEditorDraft());
+    if (!currentUser?.id || saving) return;
+    if (editorSessionRef.current) {
+      clearStoredWorkLogEditorDraft(editorSessionRef.current);
+    }
+    replaceEditorSession({ userId: currentUser.id, workDate: viewDate });
+    setObjectiveSearchQuery("");
+    setObjectiveSearchResults([]);
+    setSelectedObjectiveCache([]);
+    setClassificationObservation(null);
     changeView("today");
   };
 
   const editExistingEntry = (entry: WorkLogEntry) => {
-    setEditorDraft(workLogEditorDraftFromEntry(entry));
+    if (!currentUser?.id || saving) return;
+    if (editorSessionRef.current) {
+      clearStoredWorkLogEditorDraft(editorSessionRef.current);
+    }
+    replaceEditorSession({
+      draft: workLogEditorDraftFromEntry(entry),
+      userId: currentUser.id,
+      workDate: entry.workDate,
+    });
+    setObjectiveSearchQuery("");
+    setObjectiveSearchResults([]);
+    setSelectedObjectiveCache([]);
+    setClassificationObservation(null);
     changeView("today");
   };
 
-  const updateEditorDraft = (patch: WorkLogEditorDraftPatch) => {
-    setEditorDraft((item) => {
-      return applyWorkLogEditorDraftPatch(item, patch);
+  const resetEditorDraft = () => {
+    const currentSession = editorSessionRef.current;
+    if (!currentSession || saving) return;
+    if (currentSession.draft.editingEntryId) {
+      startNewEntry();
+      return;
+    }
+    clearStoredWorkLogEditorDraft(currentSession);
+    replaceEditorSession({
+      userId: currentSession.userId,
+      workDate: currentSession.workDate,
     });
+    setObjectiveSearchQuery("");
+    setObjectiveSearchResults([]);
+    setSelectedObjectiveCache([]);
+    setClassificationObservation(null);
+  };
+
+  const updateEditorDraft = (patch: WorkLogEditorDraftPatch) => {
+    const currentSession = editorSessionRef.current;
+    if (!currentSession || saving) return;
+    commitEditorSession(
+      applyWorkLogEditorSessionDraftPatch(currentSession, patch),
+    );
   };
 
   const rememberSelectedObjective = (objective: WorkLogObjectiveOption) => {
     setSelectedObjectiveCache((current) => mergeWorkLogObjectiveOptions([objective], current));
   };
 
+  const changeEditorWorkDate = (date: string) => {
+    const currentSession = editorSessionRef.current;
+    if (
+      !currentUser?.id ||
+      !currentSession ||
+      saving ||
+      currentSession.draft.editingEntryId ||
+      !isDateOnlyString(date) ||
+      date === currentSession.workDate
+    ) return;
+    const currentDraft = currentSession.draft;
+    const selectedObjective = currentDraft.objectiveId
+      ? objectiveOptionsById.get(currentDraft.objectiveId) ?? null
+      : null;
+    if (workLogEditorDraftHasContent(currentDraft)) {
+      const moveResult = moveStoredWorkLogEditorDraft({
+        draft: currentDraft,
+        fromWorkDate: currentSession.workDate,
+        selectedObjective,
+        toWorkDate: date,
+        userId: currentUser.id,
+      });
+      if (moveResult === "targetOccupied") {
+        setError(`${date} 已有未提交草稿，请先提交或清空该日期草稿。`);
+        return;
+      }
+      if (moveResult === "unavailable") {
+        setError("本机草稿暂时无法迁移，填写日期未改变。请稍后重试。");
+        return;
+      }
+      commitEditorSession(moveWorkLogEditorSession(currentSession, date));
+    } else {
+      let storedDraft = readStoredWorkLogEditorDraft({ userId: currentUser.id, workDate: date });
+      if (storedDraft?.draft.editingEntryId) {
+        const storedEditingEntryId = storedDraft.draft.editingEntryId;
+        const cachedTargetDay = workLogDaySnapshot(date);
+        if (!cachedTargetDay) {
+          setError(`${date} 有历史日志编辑草稿，请先通过顶部查看日期打开。`);
+          return;
+        }
+        if (!cachedTargetDay.entries.some((entry) => entry.id === storedEditingEntryId)) {
+          clearStoredWorkLogEditorDraft({ userId: currentUser.id, workDate: date });
+          storedDraft = null;
+        }
+      }
+      replaceEditorSession({
+        draft: storedDraft?.draft ?? blankWorkLogEditorDraft(),
+        userId: currentUser.id,
+        workDate: date,
+      });
+      setSelectedObjectiveCache(storedDraft?.selectedObjective ? [storedDraft.selectedObjective] : []);
+      setClassificationObservation(null);
+    }
+    setError("");
+  };
+
   const editingEntry = editorDraft.editingEntryId
-    ? (myEntries.find((entry) => entry.id === editorDraft.editingEntryId) ??
+    ? ((editorWorkDate === viewDate ? myEntries : workLogDaySnapshot(editorWorkDate)?.entries ?? [])
+        .find((entry) => entry.id === editorDraft.editingEntryId) ??
       null)
     : null;
   const draftInput = canonicalWorkLogEditorDraft(editorDraft);
   const draftHasInput = Boolean(
     draftInput.categoryId ||
     draftInput.categoryName ||
-    draftInput.durationMinutes !== null ||
     draftInput.objectiveId ||
     orfRichTextHasMeaningfulContent(draftInput.bodyMarkdown),
   );
@@ -512,7 +664,6 @@ export function WorkLogsPage() {
           bodyMarkdown: "",
           categoryId: null,
           categoryName: null,
-          durationMinutes: null,
           objectiveId: null,
           remainingEstimatePercent: null,
         },
@@ -521,15 +672,20 @@ export function WorkLogsPage() {
   const hasChanges = draftKey !== editorBaselineKey;
   const saveDisabled =
     saving ||
-    loading ||
+    !editorSession ||
     !canWrite ||
     !draftHasInput ||
     Boolean(draftValidation) ||
     !hasChanges;
 
   const saveEntry = async () => {
-    if (saveDisabled) return;
-    const selectedObjective = draftInput.objectiveId ? objectiveOptionsById.get(draftInput.objectiveId) : undefined;
+    const submittedSession = editorSessionRef.current;
+    if (saveDisabled || !submittedSession) return;
+    const submittedDraft = submittedSession.draft;
+    const submittedDraftInput = canonicalWorkLogEditorDraft(submittedDraft);
+    const selectedObjective = submittedDraftInput.objectiveId
+      ? objectiveOptionsById.get(submittedDraftInput.objectiveId)
+      : undefined;
     if (selectedObjective && workLogObjectiveSelectionNotices(selectedObjective).length > 0) {
       const confirmed = window.confirm(workLogObjectiveSelectionSubmitMessage(selectedObjective));
       if (!confirmed) return;
@@ -537,28 +693,50 @@ export function WorkLogsPage() {
     setSaving(true);
     setError("");
     try {
-      const response = editorDraft.editingEntryId
-        ? await updateMyWorkLogEntry(editorDraft.editingEntryId, draftInput)
-        : await createMyWorkLogEntry(selectedDate, draftInput);
-      setMyEntries(response.entries);
-      setWorkLogDaySnapshot(selectedDate, response);
-      if (draftInput.categoryName) {
+      const savedWorkDate = submittedSession.workDate;
+      const classificationSuggestionForSave = classificationObservation?.bodyMarkdown === submittedDraft.bodyMarkdown
+        ? classificationObservation.suggestion
+        : null;
+      const saveInput = {
+        ...submittedDraftInput,
+        classificationSuggestion: classificationSuggestionForSave,
+      };
+      const response = submittedDraft.editingEntryId
+        ? await updateMyWorkLogEntry(submittedDraft.editingEntryId, saveInput)
+        : await createMyWorkLogEntry(savedWorkDate, saveInput);
+      setWorkLogDaySnapshot(savedWorkDate, response);
+      if (viewDateRef.current === savedWorkDate) {
+        setMyEntries(response.entries);
+      }
+      if (submittedDraftInput.categoryName) {
         invalidateWorkLogObjectives();
-        const objectiveResponse = await loadWorkLogObjectives({ force: true });
-        setObjectives(objectiveResponse.objectives);
-        setCategories(objectiveResponse.categories);
-        setClassificationSuggestionEnabled(
-          objectiveResponse.classificationSuggestionEnabled,
-        );
+        void loadWorkLogObjectives({ force: true })
+          .then((objectiveResponse) => {
+            setObjectives(objectiveResponse.objectives);
+            setCategories(objectiveResponse.categories);
+            setClassificationSuggestionEnabled(
+              objectiveResponse.classificationSuggestionEnabled,
+            );
+          })
+          .catch(() => undefined);
       }
-      setEditorDraft(blankWorkLogEditorDraft());
-      if (currentUser?.id) {
-        clearStoredWorkLogEditorDraft({
-          userId: currentUser.id,
-          workDate: selectedDate,
+      const currentSession = editorSessionRef.current;
+      if (currentSession?.revision === submittedSession.revision) {
+        clearStoredWorkLogEditorDraft(submittedSession);
+        replaceEditorSession({
+          userId: submittedSession.userId,
+          workDate: savedWorkDate,
         });
+        setObjectiveSearchQuery("");
+        setObjectiveSearchResults([]);
+        setSelectedObjectiveCache([]);
+        setClassificationObservation(null);
+      } else if (
+        currentSession?.userId !== submittedSession.userId ||
+        currentSession?.workDate !== submittedSession.workDate
+      ) {
+        clearStoredWorkLogEditorDraft(submittedSession);
       }
-      setClassificationSuggestion(null);
       invalidateWorkLogActivity();
       invalidateWorkLogReports();
       void loadActivity(activityExpanded, true);
@@ -569,7 +747,10 @@ export function WorkLogsPage() {
           (broadcast) => broadcast.notificationKind === "worklog.reminder",
         )
         .forEach((broadcast) => dismissSystemBroadcast(broadcast.id));
-      notify(editorDraft.editingEntryId ? "工作日志已更新" : "工作日志已提交");
+      if (viewDate !== savedWorkDate) {
+        changeDate(savedWorkDate);
+      }
+      notify(submittedDraft.editingEntryId ? "工作日志已更新" : "工作日志已提交");
     } catch (saveError) {
       setError(
         saveError instanceof Error ? saveError.message : "工作日志保存失败",
@@ -580,40 +761,31 @@ export function WorkLogsPage() {
   };
 
   useEffect(() => {
-    const userId = currentUser?.id;
-    if (
-      !userId ||
-      loading ||
-      !editorDraftScope ||
-      editorDraftScope.userId !== userId ||
-      editorDraftScope.workDate !== selectedDate
-    ) {
+    if (!editorSession || editorSession.userId !== currentUser?.id) {
       return;
     }
 
-    const selectedObjective = editorDraft.objectiveId
-      ? objectiveOptionsById.get(editorDraft.objectiveId) ?? null
+    const selectedObjective = editorSession.draft.objectiveId
+      ? objectiveOptionsById.get(editorSession.draft.objectiveId) ?? null
       : null;
     try {
       writeStoredWorkLogEditorDraft({
-        draft: editorDraft,
+        draft: editorSession.draft,
         selectedObjective,
-        userId,
-        workDate: selectedDate,
+        userId: editorSession.userId,
+        workDate: editorSession.workDate,
       });
     } catch {
       // Draft autosave is best-effort local recovery and must not block editing.
     }
   }, [
     currentUser?.id,
-    editorDraft,
-    editorDraftScope,
-    loading,
+    editorSession,
     objectiveOptionsById,
-    selectedDate,
   ]);
 
   const deleteEntry = async (entry: WorkLogEntry) => {
+    if (saving) return;
     const confirmed = window.confirm(
       "删除这条工作日志？删除后不会影响目标、进度、验收或积分。",
     );
@@ -623,9 +795,16 @@ export function WorkLogsPage() {
     try {
       const response = await deleteMyWorkLogEntry(entry.id);
       setMyEntries(response.entries);
-      setWorkLogDaySnapshot(selectedDate, response);
-      if (editorDraft.editingEntryId === entry.id) {
-        setEditorDraft(blankWorkLogEditorDraft());
+      setWorkLogDaySnapshot(viewDate, response);
+      const currentSession = editorSessionRef.current;
+      if (currentSession?.draft.editingEntryId === entry.id) {
+        clearStoredWorkLogEditorDraft(currentSession);
+        replaceEditorSession({
+          userId: currentSession.userId,
+          workDate: currentSession.workDate,
+        });
+        setSelectedObjectiveCache([]);
+        setClassificationObservation(null);
       }
       invalidateWorkLogActivity();
       invalidateWorkLogReports();
@@ -644,7 +823,7 @@ export function WorkLogsPage() {
 
   useEffect(() => {
     if (!canManageWorkLogCategories || !classificationSuggestionEnabled) {
-      setClassificationSuggestion(null);
+      setClassificationObservation(null);
       setClassificationSuggestionLoading(false);
       return undefined;
     }
@@ -652,25 +831,30 @@ export function WorkLogsPage() {
       editorDraft.bodyMarkdown.trim().length < 8 ||
       !orfRichTextHasMeaningfulContent(editorDraft.bodyMarkdown)
     ) {
-      setClassificationSuggestion(null);
+      setClassificationObservation(null);
       setClassificationSuggestionLoading(false);
       return undefined;
     }
 
     let cancelled = false;
     const timeout = window.setTimeout(() => {
+      const analyzedBodyMarkdown = editorDraft.bodyMarkdown;
       setClassificationSuggestionLoading(true);
       void suggestWorkLogClassification({
-        bodyMarkdown: editorDraft.bodyMarkdown,
+        bodyMarkdown: analyzedBodyMarkdown,
       })
         .then((response) => {
           if (!cancelled) {
-            setClassificationSuggestion(response.suggestion);
+            setClassificationObservation(
+              response.suggestion
+                ? { bodyMarkdown: analyzedBodyMarkdown, suggestion: response.suggestion }
+                : null,
+            );
           }
         })
         .catch(() => {
           if (!cancelled) {
-            setClassificationSuggestion(null);
+            setClassificationObservation(null);
           }
         })
         .finally(() => {
@@ -717,7 +901,7 @@ export function WorkLogsPage() {
     <PageScaffold title="工作日志" hideHeader>
       <div className="work-logs-toolbar">
         <WorkLogViewTabs onChange={changeView} value={viewMode} />
-        <WorkLogDateControl date={selectedDate} onChange={changeDate} />
+        <WorkLogDateControl date={viewDate} onChange={changeDate} />
       </div>
 
       {viewMode === "today" && (
@@ -794,6 +978,7 @@ export function WorkLogsPage() {
                   {canManageWorkLogCategories && classificationSuggestionEnabled && (
                     <WorkLogClassificationSuggestionSlot
                       categories={categories}
+                      disabled={saving}
                       draft={editorDraft}
                       loading={classificationSuggestionLoading}
                       objectives={objectives}
@@ -824,7 +1009,7 @@ export function WorkLogsPage() {
                   <NotebookPen className="h-6 w-6" />
                   <span>当前账号不能填写个人工作日志</span>
                 </div>
-              ) : loading ? (
+              ) : !editorSession ? (
                 <div className="work-logs-loading">
                   <Loader2 className="h-5 w-5 animate-spin" />
                   加载中
@@ -840,8 +1025,11 @@ export function WorkLogsPage() {
                             : undefined
                         }
                         currentUserId={currentUser?.id ?? ""}
+                        disabled={saving}
                         draft={editorDraft}
                         editingEntry={editingEntry}
+                        key={editorSession.revision}
+                        onWorkDateChange={changeEditorWorkDate}
                         objective={
                           editorDraft.objectiveId
                             ? objectiveOptionsById.get(editorDraft.objectiveId)
@@ -862,19 +1050,14 @@ export function WorkLogsPage() {
                         onObjectiveSearchQueryChange={setObjectiveSearchQuery}
                         onObjectiveSelect={rememberSelectedObjective}
                         requireProgressEstimate={objectiveProgressEstimateRequired}
+                        workDate={editorWorkDate}
                       />
                     </div>
 
                   <div className="work-logs-editor-actions">
                     <Button
                       variant="ghost"
-                      onClick={() =>
-                        setEditorDraft(
-                          editingEntry
-                            ? workLogEditorDraftFromEntry(editingEntry)
-                            : blankWorkLogEditorDraft(),
-                        )
-                      }
+                      onClick={resetEditorDraft}
                       disabled={
                         (!hasChanges && !editorDraft.editingEntryId) || saving
                       }
@@ -898,7 +1081,7 @@ export function WorkLogsPage() {
             </Card>
 
             <Card className="work-logs-panel work-logs-history-panel">
-              {loading ? (
+              {dayLoading ? (
                 <div className="work-logs-loading">
                   <Loader2 className="h-5 w-5 animate-spin" />
                   加载中
@@ -1023,6 +1206,7 @@ function WorkLogEditorCard({
   category,
   classificationOptions,
   currentUserId,
+  disabled,
   draft,
   editingEntry,
   objective,
@@ -1030,12 +1214,15 @@ function WorkLogEditorCard({
   onChange,
   onObjectiveSearchQueryChange,
   onObjectiveSelect,
+  onWorkDateChange,
   requireProgressEstimate,
+  workDate,
 }: {
   canUseCategories: boolean;
   category?: WorkLogCategoryOption;
   classificationOptions: WorkLogClassificationChoice[];
   currentUserId: string;
+  disabled: boolean;
   draft: WorkLogEditorDraft;
   editingEntry: WorkLogEntry | null;
   objective?: WorkLogObjectiveOption;
@@ -1043,7 +1230,9 @@ function WorkLogEditorCard({
   onChange: (patch: WorkLogEditorDraftPatch) => void;
   onObjectiveSearchQueryChange: (query: string) => void;
   onObjectiveSelect: (objective: WorkLogObjectiveOption) => void;
+  onWorkDateChange: (date: string) => void;
   requireProgressEstimate: boolean;
+  workDate: string;
 }) {
   const estimateEnabled = draft.classificationKind === "objective" && Boolean(draft.objectiveId);
   const estimateLabel =
@@ -1070,11 +1259,29 @@ function WorkLogEditorCard({
   };
   return (
     <section className="work-logs-draft-entry">
+      <div className="work-logs-entry-date-control" data-readonly={Boolean(draft.editingEntryId)}>
+        <div className="work-logs-entry-date-label">
+          <CalendarDays className="h-4 w-4" />
+          <div>
+            <span>填写日期</span>
+            <small>{draft.editingEntryId ? "历史日志日期不可修改" : "这条日志实际归属的日期"}</small>
+          </div>
+        </div>
+        <FantasyDatePicker
+          ariaLabel="选择填写日期"
+          disabled={disabled || Boolean(draft.editingEntryId)}
+          onChange={onWorkDateChange}
+          value={workDate}
+        >
+          <CalendarDays className="h-4 w-4" />
+          <span>{workDate}</span>
+        </FantasyDatePicker>
+      </div>
       <div className="work-logs-draft-entry-header">
         <FantasySelectMenu
           ariaLabel="日志归类"
           className="work-logs-objective-select"
-          disabled={false}
+          disabled={disabled}
           leadingIcon={
             draft.classificationKind === "category" ? (
               <Tags className="h-4 w-4" />
@@ -1102,6 +1309,7 @@ function WorkLogEditorCard({
           <Tags className="h-4 w-4" />
           <input
             aria-label="新建日志分类名称"
+            disabled={disabled}
             maxLength={48}
             onChange={(event) => onChange({ categoryName: event.target.value })}
             placeholder="输入新分类名称"
@@ -1127,7 +1335,7 @@ function WorkLogEditorCard({
       )}
       <div
         className="work-logs-estimate-control"
-        data-disabled={!estimateEnabled}
+        data-disabled={disabled || !estimateEnabled}
       >
         <div className="work-logs-estimate-heading">
           <div>
@@ -1139,7 +1347,7 @@ function WorkLogEditorCard({
         <div className="work-logs-estimate-inputs">
           <input
             aria-label="目标进度估计滑块"
-            disabled={!estimateEnabled}
+            disabled={disabled || !estimateEnabled}
             max={100}
             min={0}
             onChange={(event) =>
@@ -1150,7 +1358,7 @@ function WorkLogEditorCard({
           />
           <input
             aria-label="目标进度估计百分比"
-            disabled={!estimateEnabled}
+            disabled={disabled || !estimateEnabled}
             inputMode="numeric"
             max={100}
             min={0}
@@ -1168,38 +1376,9 @@ function WorkLogEditorCard({
           <button
             type="button"
             disabled={
-              !estimateEnabled || draft.progressEstimatePercent === null
+              disabled || !estimateEnabled || draft.progressEstimatePercent === null
             }
             onClick={() => onChange({ progressEstimatePercent: null })}
-          >
-            清除
-          </button>
-        </div>
-      </div>
-      <div className="work-logs-duration-control">
-        <div>
-          <Clock3 className="h-4 w-4" />
-          <span>记录时间</span>
-          <small>可选，想记就记</small>
-        </div>
-        <div className="work-logs-duration-inputs">
-          <input
-            aria-label="记录时间分钟数"
-            inputMode="numeric"
-            max={1440}
-            min={1}
-            onChange={(event) =>
-              onChange({ durationMinutes: parseWorkLogDurationInput(event.target.value) })
-            }
-            placeholder="--"
-            type="number"
-            value={draft.durationMinutes ?? ""}
-          />
-          <span>分钟</span>
-          <button
-            type="button"
-            disabled={draft.durationMinutes === null}
-            onClick={() => onChange({ durationMinutes: null })}
           >
             清除
           </button>
@@ -1209,10 +1388,11 @@ function WorkLogEditorCard({
         autoGrow
         className="work-logs-editor"
         currentUserId={currentUserId}
+        disabled={disabled}
         idleHint="Markdown"
         mentionableUsers={[]}
         onChange={(bodyMarkdown) => onChange({ bodyMarkdown })}
-        placeholder="写下今天完成了什么"
+        placeholder="写下这一天完成了什么"
         submitOnEnter={false}
         value={draft.bodyMarkdown}
       />
@@ -1222,6 +1402,7 @@ function WorkLogEditorCard({
 
 function WorkLogClassificationSuggestionSlot({
   categories,
+  disabled,
   draft,
   loading,
   objectives,
@@ -1229,6 +1410,7 @@ function WorkLogClassificationSuggestionSlot({
   suggestion,
 }: {
   categories: WorkLogCategoryOption[];
+  disabled: boolean;
   draft: WorkLogEditorDraft;
   loading: boolean;
   objectives: WorkLogObjectiveOption[];
@@ -1263,7 +1445,7 @@ function WorkLogClassificationSuggestionSlot({
         aria-live="polite"
       >
         <span className="work-logs-ai-suggestion-icon" aria-hidden="true">
-          <BrainCircuit className="h-4 w-4" />
+          <Sparkles className="h-4 w-4" />
         </span>
         <div>
           <span>智能分析</span>
@@ -1281,13 +1463,13 @@ function WorkLogClassificationSuggestionSlot({
       title={suggestion.reason ?? undefined}
     >
       <span className="work-logs-ai-suggestion-icon" aria-hidden="true">
-        <BrainCircuit className="h-4 w-4" />
+        <Sparkles className="h-4 w-4" />
       </span>
       <div>
         <span>AI 建议</span>
         <strong>{label}</strong>
       </div>
-      <button type="button" onClick={() => onApply(suggestion)}>
+      <button disabled={disabled} type="button" onClick={() => onApply(suggestion)}>
         采用
       </button>
     </div>

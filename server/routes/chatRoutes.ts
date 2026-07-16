@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { PermissionKey } from "../../src/config/permissions";
 import { requireUserScopeContext } from "../auth/accessPolicy";
 import { env } from "../env";
+import { CHAT_SYNC_PAGE_SIZE, CHAT_SYNC_PROTOCOL_VERSION, isChatSyncCursor } from "../../src/domain/chatSync";
+import { getChatSync } from "../chat/chatSyncRepository";
 import { getRolePermissionKeysForScope } from "../repositories/permissionRepository";
 import {
   addChatChannelMembers,
@@ -14,6 +16,7 @@ import {
   getChatBootstrap,
   getChatMessageContext,
   getChatUnreadContext,
+  getChatUnreadTarget,
   getChatUnreadSummary,
   getChatThread,
   listProjectChatChannels,
@@ -60,6 +63,10 @@ const unreadContextQuerySchema = messageContextQuerySchema.extend({
     .refine((value) => value.trim() === "" || !Number.isNaN(Date.parse(value)), "Invalid lastReadAt")
     .optional(),
   manuallyUnread: z.enum(["true", "false"]).optional(),
+});
+
+const unreadTargetQuerySchema = unreadContextQuerySchema.extend({
+  surface: z.enum(["main", "threadMention"]),
 });
 
 const createChannelBodySchema = z.object({
@@ -132,6 +139,12 @@ const searchQuerySchema = z.object({
   type: channelTypeSchema.optional(),
 });
 const projectChannelsQuerySchema = z.object({ projectId: z.string().trim().min(1) });
+const chatSyncQuerySchema = z.object({
+  cursor: z.string().refine(isChatSyncCursor, "Invalid chat sync cursor").optional(),
+  limit: z.coerce.number().int().positive().max(CHAT_SYNC_PAGE_SIZE).default(CHAT_SYNC_PAGE_SIZE),
+  permissionFingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  protocolVersion: z.coerce.number().int().positive().optional(),
+});
 
 async function chatActorFromRequest(request: FastifyRequest, reply: FastifyReply): Promise<ChatActor | null> {
   const context = await requireUserScopeContext(request, reply);
@@ -188,6 +201,20 @@ export function registerChatRoutes(app: FastifyInstance) {
     return getChatBootstrap(actor);
   });
 
+  app.get("/api/chat/sync", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    if (!actor.canRead) return reply.code(403).send({ error: "Forbidden" });
+    const query = chatSyncQuerySchema.parse(request.query);
+    return getChatSync({
+      actor,
+      cursor: query.cursor,
+      limit: query.limit,
+      permissionFingerprint: query.permissionFingerprint,
+      protocolVersion: query.protocolVersion ?? CHAT_SYNC_PROTOCOL_VERSION,
+    });
+  });
+
   app.get("/api/chat/users", async (request, reply) => {
     const actor = await chatActorFromRequest(request, reply);
     if (!actor) return reply;
@@ -231,6 +258,23 @@ export function registerChatRoutes(app: FastifyInstance) {
       manuallyUnread: query.manuallyUnread === "true",
     };
     return sendOutcome(reply, await getChatUnreadContext({ anchor, channelId: params.channelId, limit: query.limit }, actor));
+  });
+
+  app.get("/api/chat/channels/:channelId/unread-target", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const params = channelIdParamsSchema.parse(request.params);
+    const query = unreadTargetQuerySchema.parse(request.query);
+    const anchor = query.lastReadAt === undefined && query.manuallyUnread === undefined ? undefined : {
+      lastReadAt: query.lastReadAt?.trim() ? query.lastReadAt : null,
+      manuallyUnread: query.manuallyUnread === "true",
+    };
+    return sendOutcome(reply, await getChatUnreadTarget({
+      anchor,
+      channelId: params.channelId,
+      limit: query.limit,
+      surface: query.surface,
+    }, actor));
   });
 
   app.get("/api/chat/channels/:channelId/mentionable-users", async (request, reply) => {
@@ -329,11 +373,7 @@ export function registerChatRoutes(app: FastifyInstance) {
     if (!actor) return reply;
     const params = channelIdParamsSchema.parse(request.params);
     const body = sendMessageBodySchema.parse(request.body);
-    return sendOutcome(reply, await sendChatMessage({ ...body, channelId: params.channelId }, actor, {
-      onDeliveryError: (error, context) => {
-        request.log.warn({ err: error, ...context }, "Chat message delivery failed and was scheduled for retry");
-      },
-    }));
+    return sendOutcome(reply, await sendChatMessage({ ...body, channelId: params.channelId }, actor));
   });
 
   app.get("/api/chat/channels/:channelId/messages/:messageId/context", async (request, reply) => {

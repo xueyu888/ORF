@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import type {
   WorkLogActivityItem,
   WorkLogCategoryOption,
+  WorkLogClassificationDecisionOperation,
   WorkLogClassificationKind,
+  WorkLogClassificationSuggestion,
   WorkLogEntry,
   WorkLogObjectiveOption,
   WorkLogReport,
@@ -16,17 +18,19 @@ import {
   canUseAllWorkLogObjectiveOptions,
   canUseWorkLogCategoryInput,
   canUseWorkLogCategories,
+  doesWorkLogClassificationSuggestionMatch,
   findBuiltInWorkLogCategoryForInput,
   listBuiltInWorkLogCategoryOptions,
   requiresObjectiveProgressEstimate,
   unscopedWorkLogMemberNameList,
   workLogObjectiveSelectionCandidateFlowStatuses,
   workLogObjectiveDefaultFlowStatuses,
+  type WorkLogClassificationSelection,
 } from "../../src/domain/orfWorkLogs";
 import { isObjectiveChallenger } from "../../src/domain/orfObjectiveParticipants";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { db } from "../db/client";
-import { objectives, teamMembers, users, workLogCategories, workLogEntries } from "../db/schema";
+import { objectives, teamMembers, users, workLogCategories, workLogClassificationDecisions, workLogEntries } from "../db/schema";
 import { publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
 import type { AuthenticatedOrfUser } from "../auth/accessPolicy";
 import type { RuntimeScope } from "./runtimeScope";
@@ -38,6 +42,7 @@ export type WorkLogDayEntryInput = {
   bodyMarkdown: string;
   categoryId?: string | null;
   categoryName?: string | null;
+  classificationSuggestion?: WorkLogClassificationSuggestion | null;
   durationMinutes?: number | null;
   objectiveId?: string | null;
   remainingEstimatePercent?: number | null;
@@ -80,6 +85,7 @@ type WorkLogObjectiveListScope = "attachment" | "default" | "search";
 const nowIso = () => new Date().toISOString();
 const makeWorkLogId = () => `worklog-${Date.now()}-${Math.random().toString(16).slice(2)}-${randomUUID()}`;
 const makeWorkLogCategoryId = () => `worklog-category-${Date.now()}-${Math.random().toString(16).slice(2)}-${randomUUID()}`;
+const makeWorkLogClassificationDecisionId = () => `worklog-classification-decision-${Date.now()}-${randomUUID()}`;
 
 function normalizeWorkLogCategoryDisplayName(value: string) {
   return value.replace(/\s+/g, " ").trim().slice(0, 48);
@@ -132,13 +138,19 @@ function reconcileReminderAfterWorkLogChange(teamId: string, userId: string) {
   });
 }
 
-function normalizeWorkLogEntryInput(user: AuthenticatedOrfUser, input: WorkLogDayEntryInput) {
+function normalizeWorkLogEntryInput(
+  user: AuthenticatedOrfUser,
+  input: WorkLogDayEntryInput,
+  options: { existingDurationMinutes?: number | null } = {},
+) {
   const objectiveId = input.objectiveId?.trim() || null;
   const categoryId = input.categoryId?.trim() || null;
   const categoryName = normalizeWorkLogCategoryDisplayName(input.categoryName ?? "");
   const bodyMarkdown = input.bodyMarkdown.trim();
   const remainingEstimatePercent = input.remainingEstimatePercent ?? null;
-  const durationMinutes = input.durationMinutes ?? null;
+  const durationMinutes = input.durationMinutes === undefined
+    ? options.existingDurationMinutes ?? null
+    : input.durationMinutes;
   if (!bodyMarkdown) {
     return { status: "invalid" as const, reason: "emptyBody" as const };
   }
@@ -350,6 +362,29 @@ type ResolvedWorkLogCategory = {
   storageCategoryId: string | null;
 };
 
+function selectedWorkLogClassificationSnapshot(input: {
+  categoryId?: string | null;
+  categoryName?: string | null;
+  objectiveId?: string | null;
+  objectiveTitle?: string | null;
+}): WorkLogClassificationSelection {
+  if (input.objectiveId) {
+    return {
+      kind: "objective",
+      targetId: input.objectiveId,
+      targetName: input.objectiveTitle ?? input.objectiveId,
+    };
+  }
+  if (input.categoryId || input.categoryName) {
+    return {
+      kind: "category",
+      targetId: input.categoryId ?? null,
+      targetName: input.categoryName ?? input.categoryId ?? "历史分类",
+    };
+  }
+  return { kind: "uncategorized", targetId: null, targetName: "未归类" };
+}
+
 async function findWorkLogCategoryById(scope: RuntimeScope, categoryId: string) {
   const [category] = await db
     .select({
@@ -372,6 +407,71 @@ async function findWorkLogCategoryByName(scope: RuntimeScope, name: string) {
     .where(and(eq(workLogCategories.teamId, runtimeScopeStorageId(scope)), eq(workLogCategories.normalizedName, normalizeWorkLogCategoryNameKey(name))))
     .limit(1);
   return category ?? null;
+}
+
+async function suggestedWorkLogClassificationSnapshot(input: {
+  scope: RuntimeScope;
+  suggestion: WorkLogClassificationSuggestion;
+  user: AuthenticatedOrfUser;
+}) {
+  const { suggestion } = input;
+  if (suggestion.kind === "objective") {
+    const objectiveId = suggestion.objectiveId ?? "";
+    const [objective] = objectiveId
+      ? await db
+          .select({ title: objectives.title })
+          .from(objectives)
+          .where(and(eq(objectives.teamId, runtimeScopeStorageId(input.scope)), eq(objectives.id, objectiveId)))
+          .limit(1)
+      : [];
+    return { targetId: objectiveId || null, targetName: objective?.title ?? (objectiveId || "未知目标") };
+  }
+  if (suggestion.kind === "category") {
+    const categoryId = suggestion.categoryId ?? "";
+    const builtInCategory = listBuiltInWorkLogCategoryOptions(input.user).find((category) => category.id === categoryId);
+    const category = builtInCategory ?? (categoryId ? await findWorkLogCategoryById(input.scope, categoryId) : null);
+    return { targetId: categoryId || null, targetName: category?.name ?? (categoryId || "未知分类") };
+  }
+  if (suggestion.kind === "newCategory") {
+    const categoryName = normalizeWorkLogCategoryDisplayName(suggestion.categoryName ?? "");
+    return { targetId: null, targetName: categoryName || "新分类" };
+  }
+  return { targetId: null, targetName: "未归类" };
+}
+
+async function buildWorkLogClassificationDecision(input: {
+  bodyMarkdownSnapshot: string;
+  createdAt: string;
+  entryId: string;
+  operation: WorkLogClassificationDecisionOperation;
+  scope: RuntimeScope;
+  selected: WorkLogClassificationSelection;
+  suggestion?: WorkLogClassificationSuggestion | null;
+  user: AuthenticatedOrfUser;
+}) {
+  if (!input.suggestion || !canUseWorkLogCategories(input.user)) return null;
+  const suggestedTarget = await suggestedWorkLogClassificationSnapshot({
+    scope: input.scope,
+    suggestion: input.suggestion,
+    user: input.user,
+  });
+  return {
+    id: makeWorkLogClassificationDecisionId(),
+    teamId: runtimeScopeStorageId(input.scope),
+    entryId: input.entryId,
+    operation: input.operation,
+    suggestedKind: input.suggestion.kind,
+    suggestedTargetId: suggestedTarget.targetId,
+    suggestedTargetName: suggestedTarget.targetName,
+    suggestedConfidence: input.suggestion.confidence,
+    suggestedReason: input.suggestion.reason?.trim() || null,
+    bodyMarkdownSnapshot: input.bodyMarkdownSnapshot,
+    selectedKind: input.selected.kind,
+    selectedTargetId: input.selected.targetId,
+    selectedTargetName: input.selected.targetName,
+    isMatch: doesWorkLogClassificationSuggestionMatch(input.suggestion, input.selected),
+    createdAt: input.createdAt,
+  };
 }
 
 async function resolveOrCreateWorkLogCategoryForInput(input: {
@@ -557,7 +657,24 @@ export async function createMyWorkLogEntry(
   const objective = objectiveResult.objective;
   const category = categoryResult.category;
   const entryId = makeWorkLogId();
-  await db.insert(workLogEntries).values({
+  const selectedClassification = selectedWorkLogClassificationSnapshot({
+    objectiveId: objective?.id,
+    objectiveTitle: objective?.title,
+    categoryId: category?.snapshotCategoryId,
+    categoryName: category?.name,
+  });
+  const classificationDecision = await buildWorkLogClassificationDecision({
+    bodyMarkdownSnapshot: normalized.entry.bodyMarkdown,
+    createdAt: updatedAt,
+    entryId,
+    operation: "create",
+    scope,
+    selected: selectedClassification,
+    suggestion: input.classificationSuggestion,
+    user,
+  });
+  const sortOrder = await getNextWorkLogSortOrder(scope, user.id, workDate);
+  const entryRow = {
     id: entryId,
     teamId: storageScopeId,
     authorUserId: user.id,
@@ -572,9 +689,15 @@ export async function createMyWorkLogEntry(
     bodyMarkdown: normalized.entry.bodyMarkdown,
     remainingEstimatePercent: normalized.entry.remainingEstimatePercent,
     durationMinutes: normalized.entry.durationMinutes,
-    sortOrder: await getNextWorkLogSortOrder(scope, user.id, workDate),
+    sortOrder,
     createdAt: updatedAt,
     updatedAt,
+  };
+  await db.transaction(async (tx) => {
+    await tx.insert(workLogEntries).values(entryRow);
+    if (classificationDecision) {
+      await tx.insert(workLogClassificationDecisions).values(classificationDecision);
+    }
   });
 
   publishRealtimeReadModelInvalidation(storageScopeId, {
@@ -584,16 +707,11 @@ export async function createMyWorkLogEntry(
     target: { id: `${user.id}:${workDate}`, type: "workLog" },
   });
   reconcileReminderAfterWorkLogChange(storageScopeId, user.id);
-  const classificationKind: WorkLogClassificationKind = objective
-    ? "objective"
-    : category
-      ? "category"
-      : "uncategorized";
   await notifyTeamOfWorkLogSubmission({
     authorName: user.name,
     authorUserId: user.id,
-    classificationKind,
-    classificationTitle: objective?.title ?? category?.name ?? "未归类",
+    classificationKind: selectedClassification.kind,
+    classificationTitle: selectedClassification.targetName,
     entryId,
     teamId: storageScopeId,
     workDate,
@@ -624,7 +742,9 @@ export async function updateMyWorkLogEntry(
     return { status: "notFound" };
   }
 
-  const normalized = normalizeWorkLogEntryInput(user, input);
+  const normalized = normalizeWorkLogEntryInput(user, input, {
+    existingDurationMinutes: existing.durationMinutes,
+  });
   if (normalized.status !== "ok") {
     return normalized;
   }
@@ -664,17 +784,48 @@ export async function updateMyWorkLogEntry(
         categoryIdSnapshot: categoryResult.category?.snapshotCategoryId ?? null,
         categoryNameSnapshot: categoryResult.category?.name ?? null,
       };
-  await db
-    .update(workLogEntries)
-    .set({
-      ...targetPatch,
-      ...categoryPatch,
-      bodyMarkdown: normalized.entry.bodyMarkdown,
-      remainingEstimatePercent: normalized.entry.remainingEstimatePercent,
-      durationMinutes: normalized.entry.durationMinutes,
-      updatedAt,
-    })
-    .where(eq(workLogEntries.id, existing.id));
+  const selectedClassification = selectedWorkLogClassificationSnapshot({
+    objectiveId: normalized.entry.objectiveId,
+    objectiveTitle: objectiveResult.preserveExistingSnapshot
+      ? existing.objectiveTitleSnapshot
+      : objectiveResult.objective?.title,
+    categoryId: normalized.entry.categoryId || normalized.entry.categoryName
+      ? (categoryResult.preserveExistingSnapshot
+          ? existing.categoryIdSnapshot
+          : categoryResult.category?.snapshotCategoryId)
+      : null,
+    categoryName: normalized.entry.categoryId || normalized.entry.categoryName
+      ? (categoryResult.preserveExistingSnapshot
+          ? existing.categoryNameSnapshot
+          : categoryResult.category?.name)
+      : null,
+  });
+  const classificationDecision = await buildWorkLogClassificationDecision({
+    bodyMarkdownSnapshot: normalized.entry.bodyMarkdown,
+    createdAt: updatedAt,
+    entryId: existing.id,
+    operation: "update",
+    scope,
+    selected: selectedClassification,
+    suggestion: input.classificationSuggestion,
+    user,
+  });
+  await db.transaction(async (tx) => {
+    await tx
+      .update(workLogEntries)
+      .set({
+        ...targetPatch,
+        ...categoryPatch,
+        bodyMarkdown: normalized.entry.bodyMarkdown,
+        remainingEstimatePercent: normalized.entry.remainingEstimatePercent,
+        durationMinutes: normalized.entry.durationMinutes,
+        updatedAt,
+      })
+      .where(eq(workLogEntries.id, existing.id));
+    if (classificationDecision) {
+      await tx.insert(workLogClassificationDecisions).values(classificationDecision);
+    }
+  });
 
   publishRealtimeReadModelInvalidation(storageScopeId, {
     actorUserId: user.id,

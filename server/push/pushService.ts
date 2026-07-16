@@ -1,6 +1,6 @@
 import { env } from "../env";
 import { disablePushDevicesByTokenHashes, hashPushToken, listPushDevicesForUsers, type PushDeviceRecord } from "./pushRepository";
-import { sendFcmPushMessage } from "./firebasePushClient";
+import { isFirebasePushConfigured, sendFcmPushMessage } from "./firebasePushClient";
 
 export const chatPushChannelId = "orf-chat-messages";
 export const clientUpdatePushChannelId = "orf-client-updates";
@@ -24,13 +24,14 @@ export type SendPushToUsersInput = {
 };
 
 export async function sendPushToUsers(input: SendPushToUsersInput) {
-  if (!env.ORF_PUSH_ENABLED) return emptyPushDelivery();
+  if (!isFirebasePushConfigured()) return emptyPushDelivery("disabled");
   const fcmDevices = await listPushDevicesForUsers(input.teamId, input.recipientUserIds, "android");
   return sendPushToDevices({ ...input, devices: fcmDevices });
 }
 
 export async function sendPushToDevices(input: Omit<SendPushToUsersInput, "recipientUserIds"> & { devices: PushDeviceRecord[] }) {
-  if (!env.ORF_PUSH_ENABLED || input.devices.length === 0) return emptyPushDelivery();
+  if (!isFirebasePushConfigured()) return emptyPushDelivery("disabled");
+  if (input.devices.length === 0) return emptyPushDelivery("no_devices");
 
   const tokens = input.devices.map((device) => device.token);
   const display = displayContent(input);
@@ -50,6 +51,7 @@ export async function sendPushToDevices(input: Omit<SendPushToUsersInput, "recip
   }
 
   return {
+    availability: "attempted" as const,
     failureCount: result.failureCount,
     invalidTokenCount: result.invalidTokens.length,
     successCount: result.successCount,
@@ -82,8 +84,9 @@ function safeTargetPath(value: string) {
   return value.startsWith("/") && !value.startsWith("//") ? value : "/";
 }
 
-function emptyPushDelivery() {
+function emptyPushDelivery(availability: "disabled" | "no_devices") {
   return {
+    availability,
     failureCount: 0,
     invalidTokenCount: 0,
     successCount: 0,

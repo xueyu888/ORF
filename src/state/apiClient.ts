@@ -10,6 +10,7 @@ import type {
   ChatThread,
   ChatThreadSummary,
   ChatUnreadSummary,
+  ChatUnreadTarget,
   ChatUser,
   ProjectChatChannel,
   ChatDriveLink,
@@ -43,6 +44,7 @@ import type {
   WorkLogReport,
   WorkLogReportScope,
 } from "../types/orf";
+import type { ChatSyncResponse } from "../domain/chatSync";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
 import type { ChatTheme, UserDisplayPreferences, WorkspaceLayoutPreferences } from "../domain/settings/personalPreferences";
 import type { FilterPreferenceRecord, UserFilterPreferences } from "../domain/settings/filterPreferences";
@@ -55,7 +57,11 @@ import type {
   VisualBackgroundSwitchOrder,
   VisualBackgroundSwitchTrigger,
 } from "../domain/settings/visualBackgrounds";
-import type { ClientReleaseInfo } from "../features/client-updates/clientUpdateModel";
+import type {
+  ClientReleaseInfo,
+  ClientUpdateNativePlatform,
+  ClientUpdateReceiptStage,
+} from "../features/client-updates/clientUpdateModel";
 export type {
   VisualBackgroundConfig,
   VisualBackgroundCrop,
@@ -151,8 +157,10 @@ export type CommentAttachmentUploadResponse = CommentAttachmentUploadResult & {
 export type ChatBootstrapResponse = ChatBootstrap;
 export type ChatUsersResponse = { status?: "ok"; users: ChatUser[] };
 export type ChatUnreadSummaryResponse = ChatUnreadSummary;
+export type ChatSyncApiResponse = ChatSyncResponse;
 export type ChatMessagesResponse = { status?: "ok"; messages: ChatMessage[] };
 export type ChatMessageContextResponse = { status?: "ok" } & ChatMessageContext;
+export type ChatUnreadTargetResponse = { status?: "ok"; target: ChatUnreadTarget };
 export type ChatChannelResponse = { status?: "ok"; channel: ChatChannel };
 export type ProjectChatChannelsResponse = { status?: "ok"; channels: ProjectChatChannel[] };
 export type ChatNullableChannelResponse = { status?: "ok"; channel: ChatChannel | null };
@@ -273,7 +281,7 @@ export type WorkLogEntrySaveInput = {
   bodyMarkdown: string;
   categoryId?: string | null;
   categoryName?: string | null;
-  durationMinutes?: number | null;
+  classificationSuggestion?: WorkLogClassificationSuggestion | null;
   objectiveId?: string | null;
   remainingEstimatePercent?: number | null;
 };
@@ -560,6 +568,22 @@ export async function getClientUpdateRelease(version: string, signal?: AbortSign
   return apiJson<ClientUpdateReleaseResponse>(`/api/client-updates/releases/${encodeURIComponent(version)}`, { signal });
 }
 
+export async function recordClientUpdateReceiptRequest(input: {
+  currentVersion: string;
+  platform: ClientUpdateNativePlatform;
+  releaseVersion: string;
+  stage: ClientUpdateReceiptStage;
+}) {
+  return apiJson<{ ok: true }>(`/api/client-updates/releases/${encodeURIComponent(input.releaseVersion)}/receipt`, {
+    body: JSON.stringify({
+      currentVersion: input.currentVersion,
+      platform: input.platform,
+      stage: input.stage,
+    }),
+    method: "POST",
+  });
+}
+
 export async function registerPushDeviceRequest(input: PushDeviceRegistrationInput) {
   return apiJson<PushDeviceRegistrationResponse>("/api/push/devices", {
     method: "POST",
@@ -653,6 +677,19 @@ export async function getChatBootstrap() {
   return request;
 }
 
+export async function getChatSync(input: {
+  cursor?: string;
+  limit?: number;
+  permissionFingerprint?: string;
+  protocolVersion: number;
+}) {
+  const query = new URLSearchParams({ protocolVersion: String(input.protocolVersion) });
+  if (input.cursor !== undefined) query.set("cursor", input.cursor);
+  if (input.limit !== undefined) query.set("limit", String(input.limit));
+  if (input.permissionFingerprint !== undefined) query.set("permissionFingerprint", input.permissionFingerprint);
+  return apiJson<ChatSyncApiResponse>(`/api/chat/sync?${query.toString()}`);
+}
+
 export async function getChatUsers() {
   if (chatUsersRequest) {
     return chatUsersRequest;
@@ -697,6 +734,23 @@ export async function getChatUnreadContext(input: {
   }
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return apiJson<ChatMessageContextResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/unread-context${suffix}`);
+}
+
+export async function getChatUnreadTarget(input: {
+  anchor?: { lastReadAt?: string | null; manuallyUnread: boolean } | null;
+  channelId: string;
+  limit?: number;
+  surface: "main" | "threadMention";
+}) {
+  const query = new URLSearchParams({ surface: input.surface });
+  if (input.limit) query.set("limit", String(input.limit));
+  if (input.anchor) {
+    query.set("lastReadAt", input.anchor.lastReadAt ?? "");
+    query.set("manuallyUnread", input.anchor.manuallyUnread ? "true" : "false");
+  }
+  return apiJson<ChatUnreadTargetResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/unread-target?${query.toString()}`,
+  );
 }
 
 export async function createChatChannel(input: {

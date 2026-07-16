@@ -42,10 +42,46 @@ const entryParamsSchema = z.object({
   entryId: z.string().trim().min(1),
 });
 
+const classificationDecisionSuggestionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("objective"),
+    objectiveId: z.string().trim().min(1),
+    categoryId: z.null().optional(),
+    categoryName: z.null().optional(),
+    confidence: z.number().min(0).max(1),
+    reason: z.string().trim().max(80).nullish(),
+  }),
+  z.object({
+    kind: z.literal("category"),
+    objectiveId: z.null().optional(),
+    categoryId: z.string().trim().min(1),
+    categoryName: z.null().optional(),
+    confidence: z.number().min(0).max(1),
+    reason: z.string().trim().max(80).nullish(),
+  }),
+  z.object({
+    kind: z.literal("newCategory"),
+    objectiveId: z.null().optional(),
+    categoryId: z.null().optional(),
+    categoryName: z.string().trim().min(1).max(48),
+    confidence: z.number().min(0).max(1),
+    reason: z.string().trim().max(80).nullish(),
+  }),
+  z.object({
+    kind: z.literal("uncategorized"),
+    objectiveId: z.null().optional(),
+    categoryId: z.null().optional(),
+    categoryName: z.null().optional(),
+    confidence: z.number().min(0).max(1),
+    reason: z.string().trim().max(80).nullish(),
+  }),
+]);
+
 const entryBodySchema = z.object({
   bodyMarkdown: z.string().trim().min(1).max(12000),
   categoryId: z.string().trim().min(1).nullish(),
   categoryName: z.string().trim().min(1).max(48).nullish(),
+  classificationSuggestion: classificationDecisionSuggestionSchema.nullish(),
   durationMinutes: z.number().int().min(1).max(1440).nullish(),
   objectiveId: z.string().trim().min(1).nullish(),
   remainingEstimatePercent: z.number().int().min(0).max(100).nullish(),

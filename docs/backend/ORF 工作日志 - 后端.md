@@ -20,16 +20,18 @@
 | `category_name_snapshot` | 填写时分类名称快照；未指定分类时为空 |
 | `body_markdown` | Markdown 日志正文 |
 | `remaining_estimate_percent` | 兼容存储字段，保存这条日志里作者对目标剩余比例的主观估计，`0..100`；页面展示为目标进度估计 `100 - remaining_estimate_percent`；未填写或未指定目标时为空 |
-| `duration_minutes` | 可选记录时间，单位分钟，`1..1440`；未填写时为空 |
+| `duration_minutes` | 历史记录时间，单位分钟，`1..1440`；当前前端不再提供填写入口，新日志默认为空，旧值保留用于历史展示和报表 |
 | `sort_order` | 当天日志展示顺序 |
 
 `work_log_categories` 是管理员维护分类事实源。分类只用于工作日志归类，按团队内规范化名称唯一，由管理员创建；它不是目标，不参与目标进度、验收、积分或结算。内置特殊分类 `请假` 不依赖 `work_log_categories`，保存时只写入 `work_log_entries.category_id_snapshot` 和 `category_name_snapshot` 快照。
 
-同一用户同一天可以提交多条工作日志，也可以多次记录同一个目标或分类。目标/分类改名、删除或进入已验收/已结算/已关闭后，历史日志继续显示快照；编辑已有日志时，如果目标/分类没有变化，只修改正文、目标进度估计、记录时间并保留原快照。普通成员默认目标候选只包含当前用户参与且尚未完成的目标；指挥官/管理员默认目标候选包含当前团队全部可挂载目标；`mode=search` 按关键词查询当前团队全部目标，包括已验收、已结算、已关闭以及当前用户不是挑战者的目标。
+同一用户同一天可以提交多条工作日志，也可以多次记录同一个目标或分类。目标/分类改名、删除或进入已验收/已结算/已关闭后，历史日志继续显示快照；编辑已有日志时，如果目标/分类没有变化，只修改正文和目标进度估计并保留原快照。当前前端省略 `durationMinutes`，更新边界会保留已有 `duration_minutes`；兼容旧客户端显式传值或传 `null` 时仍按请求更新。普通成员默认目标候选只包含当前用户参与且尚未完成的目标；指挥官/管理员默认目标候选包含当前团队全部可挂载目标；`mode=search` 按关键词查询当前团队全部目标，包括已验收、已结算、已关闭以及当前用户不是挑战者的目标。
 
 日志资源不写入 `work_log_entries`。云盘文件与某条日志的引用关系由 `drive_node_context_links` 表达，`context_type = 'workLog'` 且 `context_id = work_log_entries.id`。当天资源列表只是读取当前日期多条日志资源后的派生汇总；它不能反向定义日志正文、目标进度、日期归属或云盘文件归属。
 
-`remaining_estimate_percent` 和 `duration_minutes` 都只属于日志事实。前者是页面“目标进度估计”的兼容存储值，不反向写入 `Objective.progress`；普通非 FAE 成员选择目标时必须填写，页面可以默认沿用该用户上一次给同一目标记录的估计，数值允许上调、下调或保持不变；后者不参与强制工时核算；二者都不改变目标进度、验收、积分或结算。
+`remaining_estimate_percent` 和历史 `duration_minutes` 都只属于日志事实。前者是页面“目标进度估计”的兼容存储值，不反向写入 `Objective.progress`；普通非 FAE 成员选择目标时必须填写，页面可以默认沿用该用户上一次给同一目标记录的估计，数值允许上调、下调或保持不变；后者已退出当前填写流程，只保留历史读取和兼容写入，不参与强制工时核算；二者都不改变目标进度、验收、积分或结算。
+
+`work_log_classification_decisions` 是 AI 分类判断对比事实源。每次成功创建或更新日志时，如果请求携带一条仍对应当前正文的 AI 建议，仓库层会在同一事务中记录判断时正文快照、建议种类、目标 ID/名称、置信度、理由、用户最终选择及 `is_match`。正文快照保证日志后续修改后仍能复盘当时输入；正确次数从 `is_match` 聚合，不维护第二个计数器。没有建议、建议已过期、请求失败或未提交草稿都不产生明细。明细通过 `entry_id` 回链日志，日志删除时级联删除，不反向定义日志分类、目标或权限。
 
 新增日志保存成功后会创建 `worklog.submitted` 系统公告，通知当前团队 active 成员有人提交了某天某个目标/分类的工作日志。通知只包含摘要和跳转到当天工作日志页的链接，不保存完整日志正文；编辑和删除历史日志不发送这类公告。通知事实源仍是 `notification_events`、`notification_receipts` 和 `notification_deliveries`，不能反向定义日志正文、报表或欠账状态。
 
@@ -71,11 +73,16 @@
   "categoryName": null,
   "bodyMarkdown": "今天完成了接口联调。",
   "remainingEstimatePercent": 35,
-  "durationMinutes": 90
+  "classificationSuggestion": {
+    "kind": "objective",
+    "objectiveId": "obj-1",
+    "confidence": 0.92,
+    "reason": "正文与目标内容一致"
+  }
 }
 ```
 
-`objectiveId`、`categoryId`、`categoryName` 只能三选一。普通非 FAE 成员默认必须提供 `objectiveId` 和 `remainingEstimatePercent`；所有 active 成员都可以用内置 `请假` 分类提交免目标日志；管理员和当前临时 FAE 例外成员可以不提供目标。只有管理员可以提供管理分类 `categoryId` 或新分类 `categoryName`，普通成员不能选择 `管理事务` 等管理分类。`remainingEstimatePercent` 对管理员、当前临时 FAE 例外成员、内置 `请假` 或未指定目标日志可为空；未指定目标时后端会归空；前端“目标进度估计”输入会在保存边界换算成这个兼容剩余字段。`durationMinutes` 可为空；填写时必须是 `1..1440` 的整数。
+`objectiveId`、`categoryId`、`categoryName` 只能三选一。普通非 FAE 成员默认必须提供 `objectiveId` 和 `remainingEstimatePercent`；所有 active 成员都可以用内置 `请假` 分类提交免目标日志；管理员和当前临时 FAE 例外成员可以不提供目标。只有管理员可以提供管理分类 `categoryId` 或新分类 `categoryName`，普通成员不能选择 `管理事务` 等管理分类。`remainingEstimatePercent` 对管理员、当前临时 FAE 例外成员、内置 `请假` 或未指定目标日志可为空；未指定目标时后端会归空；前端“目标进度估计”输入会在保存边界换算成这个兼容剩余字段。当前前端不发送 `durationMinutes`；后端继续接受兼容输入，创建时缺省为空，更新时缺省则保留旧值。`classificationSuggestion` 只作为管理员 AI 判断证据，不能绕过最终分类校验。
 
 `POST /api/work-logs/classification-suggestion` 请求体：
 
@@ -179,6 +186,8 @@
 - 推荐结果不写入 `work_log_entries`。
 - 推荐新分类不写入 `work_log_categories`。
 - 用户点击“采用”只改变前端草稿；只有用户随后保存日志，仓库层才会按 `objectiveId`、`categoryId`、`categoryName` 三选一规则持久化。
+- 成功保存时，如果管理员请求携带最新有效建议，仓库层与日志写入在同一事务内新增一条 `work_log_classification_decisions`；判断时正文、建议目标和最终选择都保存快照，`newCategory` 按规范化名称比较，其余种类按目标/分类 ID 比较。
+- `is_match` 只是建议与最终选择的对比结果，正确次数由明细聚合；判断记录不改变日志最终分类，也不触发目标、分类或权限副作用。
 - 新分类只在指挥官/管理员保存带 `categoryName` 的日志时创建，并按团队内规范化名称唯一。内置 `请假` 不创建管理分类记录。
 - 普通成员始终不能通过 LLM 绕过目标绑定规则；当前临时 FAE 例外只允许手工保存未归类日志，不开放 LLM 分类建议。
 

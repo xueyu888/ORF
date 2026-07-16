@@ -596,6 +596,55 @@
       "when": 1783733600000,
       "tag": "0084_chat_message_delivery_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1783755000000,
+      "tag": "0085_client_update_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1783773347326,
+      "tag": "0086_chat_sync_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1783774300000,
+      "tag": "0087_chat_sync_metadata_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1783779218805,
+      "tag": "0088_chat_delivery_truthful_outcomes",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1783846800000,
+      "tag": "0089_isolate_chat_push_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1784010000000,
+      "tag": "0090_work_log_classification_decisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1784013600000,
+      "tag": "0091_work_log_classification_body_snapshot",
+      "breakpoints": true
     }
   ]
 }

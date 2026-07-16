@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -92,7 +92,7 @@ async function main() {
       return;
     case 'down':
     case 'stop':
-      stopDetached();
+      stopDetached({ names: args.length > 0 ? args : undefined });
       return;
     case 'restart':
       stopDetached({ quiet: true });
@@ -148,7 +148,7 @@ function printHelp() {
 
 Usage:
   orf up              Check locked dependencies and runtime services, then start backend and frontend
-  orf down            Stop background backend and frontend
+  orf down [service]  Stop background backend and frontend, or only backend/frontend
   orf restart         Restart background backend and frontend
   orf status          Check PostgreSQL, Ory, MinIO, settlement service, backend, and frontend health
   orf dev             Run backend and frontend in the foreground
@@ -232,7 +232,14 @@ async function startDetached() {
 function stopDetached(options = {}) {
   ensureRunDirs();
   let stopped = 0;
-  for (const name of Object.keys(appServices)) {
+  const names = options.names ?? Object.keys(appServices);
+  const unknownNames = names.filter((name) => !appServices[name]);
+  if (unknownNames.length > 0) {
+    console.error(`Unknown ORF service: ${unknownNames.join(', ')}`);
+    process.exitCode = 2;
+    return;
+  }
+  for (const name of names) {
     const pid = readPid(name);
     if (!pid) {
       continue;
@@ -335,8 +342,16 @@ function printLogs(serviceName) {
     process.exitCode = 1;
     return;
   }
-  const text = readFileSync(file, 'utf8');
-  console.log(text.slice(-20000));
+  const descriptor = openSync(file, 'r');
+  try {
+    const size = fstatSync(descriptor).size;
+    const length = Math.min(size, 20000);
+    const buffer = Buffer.alloc(length);
+    readSync(descriptor, buffer, 0, length, size - length);
+    console.log(buffer.toString('utf8'));
+  } finally {
+    closeSync(descriptor);
+  }
 }
 
 async function prepareRuntimeDependencies() {

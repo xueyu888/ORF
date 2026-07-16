@@ -7,6 +7,7 @@ import {
   clientUpdatePlatformLabel,
   formatClientUpdateBytes,
   formatUpdateDate,
+  reportClientUpdateReceipt,
   shouldOpenDownloadUrlAfterInstallResult,
   type ClientUpdateCheckResult,
 } from "./clientUpdateController";
@@ -31,6 +32,12 @@ export function ClientUpdateCenterDialog({ notice, onClose, open }: { notice?: s
     void runCheck(controller.signal);
     return () => controller.abort();
   }, [open]);
+
+  useEffect(() => {
+    if (open && centerState.status === "ready" && centerState.result.decision.status === "available") {
+      void reportClientUpdateReceipt(centerState.result, "prompted");
+    }
+  }, [centerState, open]);
 
   if (!open) return null;
 
@@ -67,6 +74,7 @@ export function ClientUpdateCenterDialog({ notice, onClose, open }: { notice?: s
     setInstalling(true);
     setInstallMessage(null);
     setInstallProgress(null);
+    await reportClientUpdateReceipt(result, "install_started");
     try {
       const installResult = await installClientUpdateAsset(result.decision.asset, { onProgress: setInstallProgress });
       setInstallMessage(clientUpdateInstallMessage(installResult, result.runtime.platform));
@@ -195,7 +203,7 @@ function clientUpdateDecisionTitle(status: ClientUpdateCheckResult["decision"]["
 }
 
 function clientUpdateDecisionDescription(status: ClientUpdateCheckResult["decision"]["status"], platform: ClientUpdateCheckResult["runtime"]["platform"]) {
-  if (status === "available" && platform === "desktop-windows") return "点击后将自动完成安装并重新打开 ORF。";
+  if (status === "available" && platform === "desktop-windows") return "下载完成后会先关闭 ORF，再显示 Windows 安装进度，完成后自动重新打开。";
   if (status === "available" && platform === "android") return "点击后下载更新，并进入 Android 系统安装流程。";
   if (status === "available") return "可以在应用内下载并启动安装。";
   if (status === "not_newer") return "后续也可以从这里手动检查新版本。";

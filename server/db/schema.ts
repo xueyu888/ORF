@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, bigserial, boolean, check, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type {
   BountySource,
   ChallengeApplication,
@@ -20,6 +20,9 @@ import type {
   OrfStage,
   ResultAcceptedResult,
   UserStatus,
+  WorkLogClassificationDecisionOperation,
+  WorkLogClassificationKind,
+  WorkLogClassificationSuggestionKind,
   WorkLogReminderStatus,
 } from "../../src/types/orf";
 
@@ -496,6 +499,39 @@ export const workLogEntries = pgTable(
   }),
 );
 
+export const workLogClassificationDecisions = pgTable(
+  "work_log_classification_decisions",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    entryId: text("entry_id")
+      .notNull()
+      .references(() => workLogEntries.id, { onDelete: "cascade" }),
+    operation: text("operation").$type<WorkLogClassificationDecisionOperation>().notNull(),
+    suggestedKind: text("suggested_kind").$type<WorkLogClassificationSuggestionKind>().notNull(),
+    suggestedTargetId: text("suggested_target_id"),
+    suggestedTargetName: text("suggested_target_name").notNull(),
+    suggestedConfidence: real("suggested_confidence").notNull(),
+    suggestedReason: text("suggested_reason"),
+    bodyMarkdownSnapshot: text("body_markdown_snapshot").notNull(),
+    selectedKind: text("selected_kind").$type<WorkLogClassificationKind>().notNull(),
+    selectedTargetId: text("selected_target_id"),
+    selectedTargetName: text("selected_target_name").notNull(),
+    isMatch: boolean("is_match").notNull(),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    operation: check("work_log_classification_decisions_operation_check", sql`${table.operation} IN ('create', 'update')`),
+    suggestedKind: check("work_log_classification_decisions_suggested_kind_check", sql`${table.suggestedKind} IN ('objective', 'category', 'newCategory', 'uncategorized')`),
+    suggestedConfidence: check("work_log_classification_decisions_confidence_check", sql`${table.suggestedConfidence} >= 0 AND ${table.suggestedConfidence} <= 1`),
+    selectedKind: check("work_log_classification_decisions_selected_kind_check", sql`${table.selectedKind} IN ('objective', 'category', 'uncategorized')`),
+    teamCreated: index("work_log_classification_decisions_team_created_idx").on(table.teamId, table.createdAt),
+    entryCreated: index("work_log_classification_decisions_entry_created_idx").on(table.entryId, table.createdAt),
+  }),
+);
+
 export const notifications = pgTable(
   "notifications",
   {
@@ -665,6 +701,33 @@ export const pushRegistrationStatuses = pgTable(
   (table) => ({
     pk: primaryKey({ columns: [table.teamId, table.userId, table.platform] }),
     teamUpdated: index("push_registration_statuses_team_updated_idx").on(table.teamId, table.updatedAt),
+  }),
+);
+
+export const clientUpdateReceipts = pgTable(
+  "client_update_receipts",
+  {
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    releaseVersion: text("release_version").notNull(),
+    platform: text("platform").notNull(),
+    currentVersion: text("current_version").notNull(),
+    checkedAt: timestamp("checked_at", { mode: "string", withTimezone: true }).notNull(),
+    promptedAt: timestamp("prompted_at", { mode: "string", withTimezone: true }),
+    installStartedAt: timestamp("install_started_at", { mode: "string", withTimezone: true }),
+    activatedAt: timestamp("activated_at", { mode: "string", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    nativePlatform: check("client_update_receipts_platform_check", sql`${table.platform} IN ('android', 'desktop-windows')`),
+    pk: primaryKey({ columns: [table.teamId, table.userId, table.releaseVersion, table.platform] }),
+    teamRelease: index("client_update_receipts_team_release_idx").on(table.teamId, table.releaseVersion),
+    teamUpdated: index("client_update_receipts_team_updated_idx").on(table.teamId, table.updatedAt),
   }),
 );
 
@@ -1087,29 +1150,80 @@ export const chatMessages = pgTable(
   }),
 );
 
-export const chatMessageDeliveries = pgTable(
-  "chat_message_deliveries",
+export const chatSyncEvents = pgTable(
+  "chat_sync_events",
+  {
+    seq: bigserial("seq", { mode: "bigint" }).primaryKey(),
+    teamId: text("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+    protocolVersion: integer("protocol_version").notNull().default(1),
+    eventType: text("event_type").notNull(),
+    objectType: text("object_type").notNull(),
+    objectId: text("object_id").notNull(),
+    channelId: text("channel_id").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    occurredAt: timestamp("occurred_at", { mode: "string", withTimezone: true }).notNull(),
+    metadataJson: jsonb("metadata_json").$type<Record<string, boolean | number | string | null>>().notNull().default({}),
+  },
+  (table) => ({
+    teamSeq: index("chat_sync_events_team_seq_idx").on(table.teamId, table.seq),
+    teamOccurred: index("chat_sync_events_team_occurred_idx").on(table.teamId, table.occurredAt),
+    channelSeq: index("chat_sync_events_channel_seq_idx").on(table.channelId, table.seq),
+  }),
+);
+
+export const chatPushDeliveries = pgTable(
+  "chat_push_deliveries",
   {
     id: text("id").primaryKey(),
     messageId: text("message_id").notNull().references(() => chatMessages.id, { onDelete: "cascade" }),
     teamId: text("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
     channelId: text("channel_id").notNull().references(() => chatChannels.id, { onDelete: "cascade" }),
     recipientUserId: uuid("recipient_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    transport: text("transport").notNull(),
     status: text("status").notNull().default("pending"),
+    outcome: text("outcome"),
     attempts: integer("attempts").notNull().default(0),
+    targetCount: integer("target_count").notNull().default(0),
+    successCount: integer("success_count").notNull().default(0),
+    failureCount: integer("failure_count").notNull().default(0),
     lastError: text("last_error"),
     nextAttemptAt: timestamp("next_attempt_at", { mode: "string", withTimezone: true }),
     leaseExpiresAt: timestamp("lease_expires_at", { mode: "string", withTimezone: true }),
-    deliveredAt: timestamp("delivered_at", { mode: "string", withTimezone: true }),
+    completedAt: timestamp("completed_at", { mode: "string", withTimezone: true }),
     createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
   },
   (table) => ({
-    messageRecipientTransport: uniqueIndex("chat_message_deliveries_message_recipient_transport_unique")
-      .on(table.messageId, table.recipientUserId, table.transport),
-    retry: index("chat_message_deliveries_retry_idx")
+    messageRecipient: uniqueIndex("chat_push_deliveries_message_recipient_unique")
+      .on(table.messageId, table.recipientUserId),
+    retry: index("chat_push_deliveries_retry_idx")
       .on(table.status, table.nextAttemptAt, table.leaseExpiresAt, table.createdAt),
+  }),
+);
+
+export const chatLegacyRealtimeDeliveries = pgTable(
+  "chat_legacy_realtime_deliveries",
+  {
+    id: text("id").primaryKey(),
+    messageId: text("message_id").notNull(),
+    teamId: text("team_id").notNull(),
+    channelId: text("channel_id").notNull(),
+    recipientUserId: uuid("recipient_user_id").notNull(),
+    status: text("status").notNull().default("completed"),
+    finalReason: text("final_reason").notNull().default("legacy_realtime_retired"),
+    originalStatus: text("original_status").notNull(),
+    originalOutcome: text("original_outcome"),
+    attempts: integer("attempts").notNull().default(0),
+    targetCount: integer("target_count").notNull().default(0),
+    successCount: integer("success_count").notNull().default(0),
+    failureCount: integer("failure_count").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    originalUpdatedAt: timestamp("original_updated_at", { mode: "string", withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { mode: "string", withTimezone: true }).notNull().defaultNow(),
+    purgeAfter: timestamp("purge_after", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    purge: index("chat_legacy_realtime_deliveries_purge_idx").on(table.purgeAfter),
   }),
 );
 

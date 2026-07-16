@@ -1,6 +1,13 @@
 import { orfClientCurrentVersion } from "./clientUpdateConfig";
 import { getLatestClientRelease } from "./clientUpdateApi";
-import { buildClientUpdateDecision, type ClientUpdateDecision, type ClientUpdatePlatform } from "./clientUpdateModel";
+import { recordClientUpdateReceiptRequest } from "../../state/apiClient";
+import {
+  buildClientUpdateDecision,
+  isClientUpdateNativePlatform,
+  type ClientUpdateDecision,
+  type ClientUpdatePlatform,
+  type ClientUpdateReceiptStage,
+} from "./clientUpdateModel";
 import {
   detectClientUpdateRuntimeInfo,
   type ClientUpdateInstallProgress,
@@ -18,7 +25,7 @@ export async function checkForClientUpdate(signal?: AbortSignal): Promise<Client
     detectClientUpdateRuntimeInfo(orfClientCurrentVersion),
     getLatestClientRelease(signal),
   ]);
-  return {
+  const result = {
     decision: buildClientUpdateDecision({
       currentVersion: runtime.currentVersion,
       platform: runtime.platform,
@@ -26,6 +33,20 @@ export async function checkForClientUpdate(signal?: AbortSignal): Promise<Client
     }),
     runtime,
   };
+  void reportClientUpdateReceipt(result, "checked");
+  return result;
+}
+
+export function reportClientUpdateReceipt(result: ClientUpdateCheckResult, stage: ClientUpdateReceiptStage) {
+  if (result.runtime.versionSource !== "native" || !isClientUpdateNativePlatform(result.runtime.platform)) {
+    return Promise.resolve();
+  }
+  return recordClientUpdateReceiptRequest({
+    currentVersion: result.runtime.currentVersion,
+    platform: result.runtime.platform,
+    releaseVersion: result.decision.release.version,
+    stage,
+  }).then(() => undefined).catch(() => undefined);
 }
 
 export function formatUpdateDate(value: string) {
@@ -106,8 +127,9 @@ export function clientUpdateInstallProgressMessage(progress: ClientUpdateInstall
   if (progress.stage === "downloading") return "正在下载更新安装包";
   if (progress.stage === "downloaded") return "安装包已下载，正在处理";
   if (progress.stage === "validating") return "正在校验安装包";
-  if (progress.stage === "opening") return "正在启动自动安装";
-  if (progress.stage === "complete") return "正在完成更新";
+  if (progress.stage === "opening") return "正在准备 Windows 安装程序";
+  if (progress.stage === "closing") return "安装包已就绪，正在关闭 ORF";
+  if (progress.stage === "complete") return "安装流程已启动";
   return progress.error ? `下载或安装失败：${cleanClientUpdateErrorDetail(progress.error)}` : "下载或安装失败";
 }
 

@@ -11,6 +11,13 @@ GitLab 工程动态进入 ORF 原生频道消息流。每个 ORF 公开或私有
 3. `gitlab_orf_event_deliveries` 是每个频道的事件投递和去重事实源。
 4. 投递结果是普通 `chat_messages`，由现有聊天系统负责频道可见性、未读、实时事件和推送副作用。
 
+Push 展示契约：
+
+1. GitLab webhook 的 commits 在适配边界归一为“最新提交在前”，聊天格式化层只消费归一后的顺序。
+2. 正文先展示推送人、提交总数、项目和分支或标签，再展示最新 5 条提交；截断必须发生在顺序归一之后。
+3. 推送人、可定位的提交作者、项目名和短 SHA 都是可点击链接，并使用聊天统一的高识别度链接色；每条提交其余部分只保留单行标题，其余提交由数量提示和 compare 链接承接。
+4. GitLab 与 GitHub push 共用 `git-push-chat-message.ts` 的展示规则，机器人名称和时间仍由普通聊天消息头负责。
+
 ## 边界
 
 GitLab push、tag、merge request、issue、pipeline 是频道消息，不写入 `notification_events` / `notification_receipts`。

@@ -1,4 +1,6 @@
 export type ClientUpdatePlatform = "android" | "desktop-windows" | "desktop-other" | "web";
+export type ClientUpdateNativePlatform = Extract<ClientUpdatePlatform, "android" | "desktop-windows">;
+export type ClientUpdateReceiptStage = "activated" | "checked" | "install_started" | "prompted";
 
 export type ClientReleaseAsset = {
   contentType?: string | null;
@@ -63,6 +65,21 @@ export function selectClientUpdateAsset(assets: ClientReleaseAsset[], platform: 
     return assets.find((asset) => isAndroidApkAsset(asset)) ?? null;
   }
   return null;
+}
+
+export function isClientUpdateNativePlatform(platform: ClientUpdatePlatform): platform is ClientUpdateNativePlatform {
+  return platform === "android" || platform === "desktop-windows";
+}
+
+export function resolveClientUpdateReceiptStage(input: {
+  currentVersion: string;
+  releaseVersion: string;
+  stage: ClientUpdateReceiptStage;
+}): ClientUpdateReceiptStage | null {
+  const runningRelease = compareReleaseVersions(input.currentVersion, input.releaseVersion) >= 0;
+  if (input.stage === "activated") return runningRelease ? "activated" : null;
+  if (input.stage === "checked" && runningRelease) return "activated";
+  return input.stage;
 }
 
 export function compareReleaseVersions(left: string, right: string) {

@@ -14,7 +14,6 @@ export type WorkLogEditorDraft = {
   categoryName: string;
   categoryNameSnapshot?: string | null;
   classificationKind: WorkLogClassificationKind;
-  durationMinutes: number | null;
   editingEntryId: string | null;
   objectiveId: string;
   objectiveTitleSnapshot?: string | null;
@@ -28,11 +27,17 @@ export type WorkLogEditorDraftPatch = Partial<
     | "categoryId"
     | "categoryName"
     | "classificationKind"
-    | "durationMinutes"
     | "objectiveId"
     | "progressEstimatePercent"
   >
 >;
+
+export type WorkLogEditorSession = {
+  draft: WorkLogEditorDraft;
+  revision: number;
+  userId: string;
+  workDate: string;
+};
 
 export type WorkLogClassificationSelectValue =
   | "category:new"
@@ -78,11 +83,64 @@ export const blankWorkLogEditorDraft = (): WorkLogEditorDraft => ({
   categoryId: "",
   categoryName: "",
   classificationKind: "uncategorized",
-  durationMinutes: null,
   editingEntryId: null,
   objectiveId: "",
   progressEstimatePercent: null,
 });
+
+export function workLogEditorDraftHasContent(draft: WorkLogEditorDraft) {
+  return Boolean(
+    draft.editingEntryId ||
+      draft.bodyMarkdown.trim() ||
+      draft.categoryId.trim() ||
+      draft.categoryName.trim() ||
+      draft.objectiveId.trim() ||
+      draft.progressEstimatePercent !== null,
+  );
+}
+
+export function createWorkLogEditorSession(input: {
+  draft?: WorkLogEditorDraft;
+  previousRevision?: number;
+  userId: string;
+  workDate: string;
+}): WorkLogEditorSession {
+  return {
+    draft: input.draft ?? blankWorkLogEditorDraft(),
+    revision: (input.previousRevision ?? 0) + 1,
+    userId: input.userId,
+    workDate: input.workDate,
+  };
+}
+
+export function applyWorkLogEditorSessionDraftPatch(
+  session: WorkLogEditorSession,
+  patch: WorkLogEditorDraftPatch,
+): WorkLogEditorSession {
+  return {
+    ...session,
+    draft: applyWorkLogEditorDraftPatch(session.draft, patch),
+  };
+}
+
+export function moveWorkLogEditorSession(
+  session: WorkLogEditorSession,
+  workDate: string,
+): WorkLogEditorSession {
+  return {
+    ...session,
+    workDate,
+  };
+}
+
+export function workLogEditorSessionShouldFollowViewDate(
+  session: WorkLogEditorSession | null,
+  userId: string,
+  viewDate: string,
+) {
+  if (!session || session.userId !== userId) return true;
+  return session.workDate !== viewDate && !workLogEditorDraftHasContent(session.draft);
+}
 
 export function applyWorkLogEditorDraftPatch(
   draft: WorkLogEditorDraft,
@@ -139,7 +197,6 @@ export function workLogEditorDraftFromEntry(entry: WorkLogEntry): WorkLogEditorD
     categoryName: "",
     categoryNameSnapshot: entry.categoryNameSnapshot,
     classificationKind: classification.kind,
-    durationMinutes: entry.durationMinutes ?? null,
     editingEntryId: entry.id,
     objectiveId: classification.kind === "objective" ? entry.objectiveIdSnapshot ?? "" : "",
     objectiveTitleSnapshot: entry.objectiveTitleSnapshot,
@@ -154,13 +211,6 @@ export function parseWorkLogProgressEstimateInput(value: string) {
   return normalizeWorkLogEstimatePercent(parsed);
 }
 
-export function parseWorkLogDurationInput(value: string) {
-  if (!value.trim()) return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return null;
-  return Math.max(1, Math.min(1440, Math.round(parsed)));
-}
-
 export function canonicalWorkLogEditorDraft(draft: WorkLogEditorDraft) {
   return {
     bodyMarkdown: draft.bodyMarkdown.trim(),
@@ -172,7 +222,6 @@ export function canonicalWorkLogEditorDraft(draft: WorkLogEditorDraft) {
       draft.classificationKind === "category" && !draft.categoryId.trim()
         ? draft.categoryName.trim() || null
         : null,
-    durationMinutes: draft.durationMinutes,
     objectiveId:
       draft.classificationKind === "objective"
         ? draft.objectiveId.trim() || null
@@ -191,7 +240,6 @@ export function canonicalWorkLogEntryForEdit(entry: WorkLogEntry) {
     categoryId:
       classification.kind === "category" ? entry.categoryIdSnapshot ?? null : null,
     categoryName: null,
-    durationMinutes: entry.durationMinutes ?? null,
     objectiveId:
       classification.kind === "objective" ? entry.objectiveIdSnapshot ?? null : null,
     remainingEstimatePercent: entry.remainingEstimatePercent ?? null,

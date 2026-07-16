@@ -14,7 +14,7 @@ import { ChatReactionEmoji } from "./ChatReactionEmoji";
 import { ChatReactionPicker } from "./ChatReactionPicker";
 import { canonicalChatReactionName, isVisibleChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
 import { ChatDraftEditor } from "./ChatDraftEditor";
-import { chatMessageDeliveryStatus, draftFromStoredBody, serializeDraft, type ChatDraft } from "./chatModels";
+import { chatMessageSendStatus, draftFromStoredBody, serializeDraft, type ChatDraft } from "./chatModels";
 import type { ChatOpenThreadOptions } from "./useChatThreadState";
 
 type ChatMessageItemProps = {
@@ -452,10 +452,10 @@ export function ChatMessageItem({
   const emojiAnchorRef = useRef<HTMLDivElement | null>(null);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const moreMenuInitialFocusRef = useRef<"first" | "last" | null>(null);
-  const deliveryStatus = chatMessageDeliveryStatus(message);
+  const sendStatus = chatMessageSendStatus(message);
   const isSystemMessage = message.source === "system";
-  const canMutate = !isSystemMessage && !deliveryStatus && message.authorUserId === currentUserId && !message.deletedAt;
-  const canUseServerActions = !deliveryStatus && !message.deletedAt;
+  const canMutate = !isSystemMessage && !sendStatus && message.authorUserId === currentUserId && !message.deletedAt;
+  const canUseServerActions = !sendStatus && !message.deletedAt;
   const canDeleteMessage = !isSystemMessage && (canMutate || (canDeleteAnyMessage && canUseServerActions));
   const visibleReactions = message.reactions.filter((reaction) => isVisibleChatReactionEmoji(reaction.emojiName));
   const transformPastedFeedbackText = useCallback(
@@ -503,13 +503,13 @@ export function ChatMessageItem({
   };
   const handleOpenThreadClick = (event: MouseEvent<HTMLElement>) => {
     if (!onThread) return;
-    if (editing || message.deletedAt || deliveryStatus) return;
+    if (editing || message.deletedAt || sendStatus) return;
     if (isInteractiveMessageTarget(event.target) || hasSelectedMessageText(event.currentTarget)) return;
     onThread(message.rootMessageId ?? message.id);
   };
   const handleReplyToThreadDoubleClick = (event: MouseEvent<HTMLElement>) => {
     if (!onThread) return;
-    if (editing || message.deletedAt || deliveryStatus) return;
+    if (editing || message.deletedAt || sendStatus) return;
     if (isInteractiveMessageTarget(event.target)) return;
     event.preventDefault();
     onThread(message.rootMessageId ?? message.id, { focusComposer: true });
@@ -517,7 +517,7 @@ export function ChatMessageItem({
   const handleOpenThreadKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     if (!onThread) return;
-    if (editing || message.deletedAt || deliveryStatus || isInteractiveMessageTarget(event.target)) return;
+    if (editing || message.deletedAt || sendStatus || isInteractiveMessageTarget(event.target)) return;
     event.preventDefault();
     onThread(message.rootMessageId ?? message.id);
   };
@@ -623,7 +623,7 @@ export function ChatMessageItem({
         focused && "orf-chat-message-focused",
         emojiOpen && "orf-chat-message-actions-open",
         moreOpen && "orf-chat-message-actions-open",
-        deliveryStatus === "failed" && "orf-chat-message-failed",
+        sendStatus === "failed" && "orf-chat-message-failed",
       )}
       data-chat-message-id={message.id}
       data-chat-unread-message={firstUnread ? "true" : undefined}
@@ -631,7 +631,7 @@ export function ChatMessageItem({
       onClick={onThread ? handleOpenThreadClick : undefined}
       onDoubleClick={onThread ? handleReplyToThreadDoubleClick : undefined}
       onKeyDown={onThread ? handleOpenThreadKeyDown : undefined}
-      tabIndex={onThread && !editing && !message.deletedAt && !deliveryStatus ? 0 : undefined}
+      tabIndex={onThread && !editing && !message.deletedAt && !sendStatus ? 0 : undefined}
     >
       {compact ? (
         <div className="orf-chat-message-compact-time" title={formatDateTime(message.createdAt)}>{formatTime(message.createdAt)}</div>
@@ -690,7 +690,7 @@ export function ChatMessageItem({
               usersById={usersById}
             />
             <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
-            {deliveryStatus === "failed" && (
+            {sendStatus === "failed" && (
               <div className="orf-chat-delivery-status" role="alert">
                 <span>发送失败</span>
                 {onRetryPending && (

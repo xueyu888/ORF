@@ -14,6 +14,7 @@ import { canShowFrontend, canShowFrontendPath } from "../config/frontendVisibili
 import { navItems } from "../config/navigation";
 import type { VisualBackgroundCrop } from "../domain/settings/visualBackgrounds";
 import { AttentionWorkbar } from "../features/attention/AttentionWorkbar";
+import { useChatUnreadNavigation } from "../features/chat/useChatUnreadNavigation";
 import { useOrf } from "../state/OrfProvider";
 import { ImagePreviewDialog } from "./ImagePreviewDialog";
 import { VisualBackgroundSlot } from "./VisualBackgroundSlot";
@@ -47,6 +48,7 @@ export function Sidebar({
   onOpenClientUpdateCenter: () => void;
 }) {
   const { chatUnreadSummary, currentUser, logout } = useOrf();
+  const openChatUnreadTarget = useChatUnreadNavigation(onNavigateIntent);
   const visibleGroups = sidebarGroups
     .map((group) => ({ ...group, items: group.items.filter((item) => canShowFrontendPath(currentUser, item.path)) }))
     .filter((group) => group.items.length > 0);
@@ -149,6 +151,7 @@ export function Sidebar({
                   key={item.path}
                   item={item}
                   onNavigateIntent={onNavigateIntent}
+                  onOpenUnreadTarget={item.path === "/chat" ? openChatUnreadTarget : undefined}
                   unreadCount={item.path === "/chat" ? chatUnreadSummary.totalUnreadCount : 0}
                 />
               ))}
@@ -240,11 +243,13 @@ function SidebarLink({
   item,
   label = item.label,
   onNavigateIntent,
+  onOpenUnreadTarget,
   unreadCount = 0,
 }: {
   item: (typeof navItems)[number];
   label?: string;
   onNavigateIntent?: (path: string) => void;
+  onOpenUnreadTarget?: () => Promise<void>;
   unreadCount?: number;
 }) {
   const visibleUnreadCount = Math.max(0, unreadCount);
@@ -254,13 +259,22 @@ function SidebarLink({
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     onNavigateIntent?.(item.path);
   };
+  const handleClick = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (!onOpenUnreadTarget || visibleUnreadCount === 0) {
+      handleNavigateIntent(event);
+      return;
+    }
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    void onOpenUnreadTarget();
+  };
 
   return (
     <NavLink
       to={item.path}
       title={ariaLabel}
       aria-label={ariaLabel}
-      onClick={handleNavigateIntent}
+      onClick={handleClick}
       onPointerDown={handleNavigateIntent}
       onPointerEnter={() => onNavigateIntent?.(item.path)}
       onFocus={() => onNavigateIntent?.(item.path)}

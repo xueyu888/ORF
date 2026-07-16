@@ -1,4 +1,10 @@
-import type { ObjectiveFlowStatus, WorkLogCategoryOption, WorkLogObjectiveSelectionAvailability } from "../../types/orf";
+import type {
+  ObjectiveFlowStatus,
+  WorkLogCategoryOption,
+  WorkLogClassificationKind,
+  WorkLogClassificationSuggestion,
+  WorkLogObjectiveSelectionAvailability,
+} from "../../types/orf";
 import { isObjectiveAcceptedByFlow, isObjectiveSettledOrClosed, objectiveFlowStatuses } from "../orfLifecycle";
 
 type WorkLogPermissionUser = {
@@ -21,6 +27,12 @@ type WorkLogBuiltInCategoryPolicy = {
 
 type WorkLogUnscopedPolicy = {
   memberNames: readonly string[];
+};
+
+export type WorkLogClassificationSelection = {
+  kind: WorkLogClassificationKind;
+  targetId: string | null;
+  targetName: string;
 };
 
 export const unscopedWorkLogMemberNameList = ["邓滨虎", "何永杰"] as const;
@@ -63,6 +75,23 @@ function normalizedUserName(name: string | null | undefined) {
 
 function normalizedCategoryName(value: string | null | undefined) {
   return value?.replace(/\s+/g, " ").trim().toLocaleLowerCase() ?? "";
+}
+
+export function doesWorkLogClassificationSuggestionMatch(
+  suggestion: WorkLogClassificationSuggestion,
+  selected: WorkLogClassificationSelection,
+) {
+  if (suggestion.kind === "objective") {
+    return selected.kind === "objective" && selected.targetId === suggestion.objectiveId;
+  }
+  if (suggestion.kind === "category") {
+    return selected.kind === "category" && selected.targetId === suggestion.categoryId;
+  }
+  if (suggestion.kind === "newCategory") {
+    return selected.kind === "category" &&
+      normalizedCategoryName(selected.targetName) === normalizedCategoryName(suggestion.categoryName);
+  }
+  return selected.kind === "uncategorized";
 }
 
 function canWriteWorkLog(user: WorkLogPermissionUser | null | undefined) {

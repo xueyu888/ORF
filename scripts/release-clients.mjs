@@ -139,7 +139,7 @@ function printHelp() {
   - 默认只触发 .github/workflows/release-clients.yml，不等待 GitHub Actions。
   - 加 --watch 时才等待工作流完成并核对 GitHub Release 镜像资产。
   - --watch 核对 GitHub Release 镜像资产后，会在配置 ORF_CLIENT_UPDATE_PUBLISH_SECRET 时把安装包同步到 ORF 主更新源。
-  - --watch 确认 Release 资产后，会在配置 ORF_CLIENT_UPDATE_BROADCAST_SECRET 时调用 ORF 服务端广播在线客户端。
+  - --watch 确认 Release 资产后，会在配置 ORF_CLIENT_UPDATE_BROADCAST_SECRET 时调用 ORF 服务端广播当前 SSE 实时连接客户端。
   - 可用 --no-publish-assets 跳过 ORF 主更新源同步，或用 --publish-url 覆盖 ORF_CLIENT_UPDATE_PUBLISH_URL / ORF_APP_URL。
   - 可用 --no-broadcast 跳过发布后广播，或用 --broadcast-url 覆盖 ORF_CLIENT_UPDATE_BROADCAST_URL / ORF_APP_URL。
 `);
@@ -339,7 +339,7 @@ async function broadcastClientUpdateRelease(release) {
   }
 
   const releaseVersion = normalizeReleaseVersion(release.tagName);
-  logSection(`广播在线客户端更新 ${releaseVersion}`);
+  logSection(`广播 SSE 实时连接客户端更新 ${releaseVersion}`);
   const endpoint = clientUpdateBroadcastEndpoint(targetUrl);
   const response = await fetch(endpoint, {
     body: JSON.stringify({ version: releaseVersion }),
@@ -360,7 +360,17 @@ async function broadcastClientUpdateRelease(release) {
 
   const body = bodyText ? JSON.parse(bodyText) : {};
   const skipped = body.skipped ? "，同版本自动广播已处理过" : "";
-  console.log(`已广播 ORF 客户端 ${body.releaseVersion ?? releaseVersion}，在线用户 ${body.onlineUserCount ?? 0} 人${skipped}。`);
+  const realtimeRecipientUserCount = body.realtimeRecipientUserCount ?? body.onlineUserCount ?? 0;
+  console.log(`已广播 ORF 客户端 ${body.releaseVersion ?? releaseVersion}，SSE 即时触达 ${realtimeRecipientUserCount} 人${skipped}。`);
+  if (body.coverage) {
+    console.log(
+      `发布覆盖基线：最近 2 分钟活跃 ${body.coverage.recentActiveUserCount ?? 0} 人，` +
+      `有效账号 ${body.coverage.activeAccountCount ?? 0} 人；` +
+      `已检查 ${body.coverage.checkedUserCount ?? 0} 人，已展示 ${body.coverage.promptedUserCount ?? 0} 人，` +
+      `开始安装 ${body.coverage.installStartedUserCount ?? 0} 人，已运行新版 ${body.coverage.activatedUserCount ?? 0} 人，` +
+      `Android 推送尝试 ${body.coverage.androidPushAttemptedUserCount ?? 0} 人。`,
+    );
+  }
 }
 
 function clientUpdateBroadcastEndpoint(value) {
