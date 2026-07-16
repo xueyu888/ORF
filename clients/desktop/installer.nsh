@@ -51,7 +51,11 @@
   ${If} ${isUpdated}
   ${AndIfNot} ${Silent}
     HideWindow
-    !insertmacro StartApp
+    ; StartApp cannot be expanded here because electron-builder also expands
+    ; it for the assisted installer's finish page and its global variable is
+    ; only legal once. Use the same launch contract directly for this early,
+    ; completed-update exit path.
+    ${StdUtils.ExecShellAsUser} $0 "$launchLink" "open" "--updated"
     !insertmacro quitSuccess
   ${EndIf}
 !macroend

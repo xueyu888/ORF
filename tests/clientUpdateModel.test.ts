@@ -195,6 +195,7 @@ test("Win11 visible installer preserves an unambiguous install scope and restart
   assert.match(installerInclude, /!macro customInstallMode/);
   assert.match(installerInclude, /\$hasPerUserInstallation == "1"[\s\S]*\$hasPerMachineInstallation == "0"[\s\S]*\$isForceCurrentInstall "1"/);
   assert.match(installerInclude, /\$hasPerMachineInstallation == "1"[\s\S]*\$hasPerUserInstallation == "0"[\s\S]*\$isForceMachineInstall "1"/);
-  assert.match(installerInclude, /!macro customInstall[\s\S]*\$\{isUpdated\}[\s\S]*!insertmacro StartApp[\s\S]*!insertmacro quitSuccess/);
+  assert.match(installerInclude, /!macro customInstall[\s\S]*\$\{isUpdated\}[\s\S]*\$\{StdUtils\.ExecShellAsUser\}[\s\S]*"--updated"[\s\S]*!insertmacro quitSuccess/);
+  assert.doesNotMatch(installerInclude, /!insertmacro StartApp/);
   assert.doesNotMatch(installerInclude, /customInstall[\s\S]*\$\{isForceRun\}/);
 });
