@@ -221,8 +221,6 @@ export async function prepareStageObjective(input: {
     status: "On Track",
     challengers: [input.memberUser.name],
     challengerUserIds: [input.memberUser.userId],
-    assignedChallengers: [input.memberUser.name],
-    assignedChallengerUserIds: [input.memberUser.userId],
     createdBy: input.memberUser.userId,
     updatedBy: input.memberUser.userId,
   });
