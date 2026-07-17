@@ -39,6 +39,10 @@ const githubStateFile = path.join(runtimeRoot, "data", "github-sync-state.json")
 const githubStateIndex = lines.findIndex((line) => line.startsWith("GITHUB_SYNC_STATE_FILE="));
 if (githubStateIndex >= 0) lines[githubStateIndex] = `GITHUB_SYNC_STATE_FILE=${githubStateFile}`;
 else lines.push(`GITHUB_SYNC_STATE_FILE=${githubStateFile}`);
+const webReleaseDirectory = path.join(runtimeRoot, "releases", "current", "web");
+const webReleaseIndex = lines.findIndex((line) => line.startsWith("ORF_WEB_RELEASE_DIR="));
+if (webReleaseIndex >= 0) lines[webReleaseIndex] = `ORF_WEB_RELEASE_DIR=${webReleaseDirectory}`;
+else lines.push(`ORF_WEB_RELEASE_DIR=${webReleaseDirectory}`);
 if (!lines.some((line) => line.startsWith("NODE_EXTRA_CA_CERTS="))) {
   const caLine = lines.find((line) => line.startsWith("ORF_PUBLIC_CA_CERT="));
   if (caLine) lines.push(`NODE_EXTRA_CA_CERTS=${caLine.slice(caLine.indexOf("=") + 1)}`);
