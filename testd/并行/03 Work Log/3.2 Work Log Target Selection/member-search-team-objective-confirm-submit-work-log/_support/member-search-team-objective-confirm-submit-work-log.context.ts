@@ -28,10 +28,8 @@ export type MemberSearchTeamObjectiveConfirmSubmitWorkLogCaseData = {
   confirmContinueNotice: string;
   logBodyMarker: string;
   logBody: string;
-  durationMinutes: number;
   progressEstimatePercent: number;
   remainingEstimatePercent: number;
-  expectedDurationLabel: string;
   expectedProgressLabel: string;
 };
 

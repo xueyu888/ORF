@@ -9,7 +9,7 @@ import {
 import { memberReestimateMetricActionPermissionsCase } from "../member-reestimate-metric-action-permissions.case";
 import { memberReestimateMetricActionPermissionsOperators } from "../member-reestimate-metric-action-permissions.operators";
 
-test.describe("参与的普通成员在重估中阶段可新增修改指标可新增修改删除行动项但不可删除指标测试用例", () => {
+test.describe("参与的普通成员在重估中阶段可新增修改删除指标和行动项测试用例", () => {
   test(memberReestimateMetricActionPermissionsCase.title, async ({ context, page }, testInfo) => {
     const ctx: TestContext = { context, page };
 

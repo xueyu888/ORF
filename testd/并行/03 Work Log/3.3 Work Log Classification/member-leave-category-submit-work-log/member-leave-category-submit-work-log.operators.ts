@@ -92,14 +92,14 @@ export const memberLeaveCategorySubmitWorkLogOperators:
     },
 
     "page.work_logs.duration_input": {
-      fill: async ({ ctx, params }) => {
-        await ctx.page.getByLabel("记录时间分钟数", { exact: true }).fill(String(requiredNumber(params, "value")));
+      absent: async ({ ctx }) => {
+        await expect(ctx.page.getByLabel("记录时间分钟数", { exact: true })).toHaveCount(0);
       },
     },
 
     "page.work_logs.body_editor": {
       fill: async ({ ctx, params }) => {
-        await ctx.page.getByLabel("写下今天完成了什么", { exact: true }).fill(requiredString(params, "value"));
+        await ctx.page.getByLabel("写下这一天完成了什么", { exact: true }).fill(requiredString(params, "value"));
       },
     },
 
@@ -118,8 +118,8 @@ export const memberLeaveCategorySubmitWorkLogOperators:
         await expect(workLogHistoryEntry(ctx.page, requiredString(params, "bodyMarker"))).toContainText(requiredString(params, "categoryName"));
       },
 
-      contains_duration: async ({ ctx, params }) => {
-        await expect(workLogHistoryEntry(ctx.page, requiredString(params, "bodyMarker"))).toContainText(requiredString(params, "durationLabel"));
+      not_contains_duration: async ({ ctx, params }) => {
+        await expect(workLogHistoryEntry(ctx.page, requiredString(params, "bodyMarker")).locator(".work-logs-duration-pill")).toHaveCount(0);
       },
 
       not_contains_progress: async ({ ctx, params }) => {
@@ -207,13 +207,13 @@ export const memberLeaveCategorySubmitWorkLogOperators:
           .toBe(true);
       },
 
-      duration_minutes: async ({ ctx, params }) => {
+      duration_minutes_empty: async ({ ctx, params }) => {
         await expect
           .poll(() =>
             apiMyDayEntryFieldEquals(ctx.page, {
               bodyMarker: requiredString(params, "bodyMarker"),
               field: "durationMinutes",
-              value: requiredNumber(params, "value"),
+              value: null,
             }),
           )
           .toBe(true);
@@ -289,9 +289,9 @@ export const memberLeaveCategorySubmitWorkLogOperators:
     },
 
     "db.work_log_entry.duration_minutes": {
-      equals: async ({ params }) => {
+      empty: async ({ params }) => {
         const entry = requiredWorkLogEntry(params.entry);
-        expect(entry.durationMinutes).toBe(requiredNumber(params, "value"));
+        expect(entry.durationMinutes).toBeNull();
       },
     },
 

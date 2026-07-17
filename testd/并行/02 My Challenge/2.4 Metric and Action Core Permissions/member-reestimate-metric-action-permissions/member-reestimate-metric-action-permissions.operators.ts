@@ -14,16 +14,14 @@ import {
   actionPrefixAbsent,
   challengeRow,
   clickMemberProposeMetric,
-  clickMetricDeleteForbidden,
   clickObjectiveAddAction,
   clickRowMenuAction,
   confirmNextDelete,
-  deleteMetricRequestForbidden,
   deleteObjectivesByTitlePrefix,
   editActionTitle,
   editMetricTitle,
   loginAsMember,
-  memberMetricDeleteForbidden,
+  memberHasNoDirectMetricDeleteCapability,
   memberMetricMutationAllowed,
   memberWorkItemMutationAllowed,
   metricExistsForObjective,
@@ -39,6 +37,7 @@ import {
   prepareMetric,
   readSessionUserName,
   startActionDelete,
+  startMetricDelete,
   submitActionDraft,
   submitMemberMetricDraft,
 } from "./_support/member-reestimate-metric-action-permissions.helpers";
@@ -64,9 +63,9 @@ export const memberReestimateMetricActionPermissionsOperators: OperatorRegistry<
     },
   },
 
-  "api.member_metric_delete_permission": {
+  "api.member_role_metric_delete_capability": {
     forbidden: async ({ ctx }) => {
-      await expect.poll(() => memberMetricDeleteForbidden(ctx.page)).toBe(true);
+      await expect.poll(() => memberHasNoDirectMetricDeleteCapability(ctx.page)).toBe(true);
     },
   },
 
@@ -81,12 +80,6 @@ export const memberReestimateMetricActionPermissionsOperators: OperatorRegistry<
           }),
         )
         .toBe(true);
-    },
-  },
-
-  "api.metric_delete_request": {
-    forbidden: async ({ ctx, params }) => {
-      await deleteMetricRequestForbidden(ctx.page, requiredString(params, "title"));
     },
   },
 
@@ -165,8 +158,8 @@ export const memberReestimateMetricActionPermissionsOperators: OperatorRegistry<
       await expect(ctx.page.getByLabel("编辑指标标题", { exact: true })).toBeVisible();
     },
 
-    click_delete_forbidden: async ({ ctx, params }) => {
-      await clickMetricDeleteForbidden(ctx.page, requiredString(params, "title"));
+    click_delete: async ({ ctx, params }) => {
+      await startMetricDelete(ctx.page, requiredString(params, "title"));
     },
   },
 
@@ -202,6 +195,12 @@ export const memberReestimateMetricActionPermissionsOperators: OperatorRegistry<
   "page.action_delete_confirm": {
     confirm: async ({ ctx }) => {
       await confirmNextDelete(ctx.page, "行动项");
+    },
+  },
+
+  "page.metric_delete_confirm": {
+    confirm: async ({ ctx }) => {
+      await confirmNextDelete(ctx.page, "指标");
     },
   },
 

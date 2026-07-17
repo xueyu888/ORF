@@ -24,6 +24,7 @@ import {
   openMyChallenges,
   readSessionUserName,
   startActionDelete,
+  startMetricDelete,
   submitActionDraft,
   submitMetricDraft,
   confirmNextDelete,
@@ -33,7 +34,6 @@ import type {
   MetricItemData,
   ObjectiveStageTargetData,
   TestUserAccountRecord,
-  MetricRecord,
 } from "./member-reestimate-metric-action-permissions.context";
 
 export {
@@ -53,6 +53,7 @@ export {
   openMyChallenges,
   readSessionUserName,
   startActionDelete,
+  startMetricDelete,
   submitActionDraft,
 };
 
@@ -91,31 +92,6 @@ export async function clickObjectiveAddAction(page: Page, objectiveTitle: string
 
 export async function submitMemberMetricDraft(page: Page, title: string) {
   return submitMetricDraft(page, title);
-}
-
-export async function clickMetricDeleteForbidden(page: Page, title: string) {
-  await clickRowMenuAction(page, title, "删除");
-  await expect(challengeRow(page, title)).toBeVisible();
-}
-
-export async function deleteMetricRequestForbidden(page: Page, title: string) {
-  const metric = await requiredMetricByTitle(title);
-  const response = await page.evaluate(async (resultId) => {
-    const deleteResponse = await fetch(`/api/results/${encodeURIComponent(resultId)}`, {
-      method: "DELETE",
-      credentials: "include",
-    });
-    return {
-      status: deleteResponse.status,
-      body: await deleteResponse.json().catch(() => ({})),
-    };
-  }, metric.id);
-
-  if (response.status !== 403) {
-    throw new Error(`普通成员删除指标应被拒绝: expected=403, actual=${response.status}`);
-  }
-  await expect.poll(() => metricExistsForObjectiveById(metric.id)).toBe(true);
-  return response;
 }
 
 export async function prepareMemberReestimateObjective(input: {
@@ -277,7 +253,7 @@ export async function memberMetricMutationAllowed(input: { page: Page; objective
   return sessionOk && objectiveOk;
 }
 
-export async function memberMetricDeleteForbidden(page: Page) {
+export async function memberHasNoDirectMetricDeleteCapability(page: Page) {
   const response = await page.evaluate(async () => {
     const accessResponse = await fetch("/api/me/access", { credentials: "include" });
     return {
@@ -335,27 +311,6 @@ async function objectiveByTitle(title: string) {
     .where(eq(objectives.title, title))
     .limit(1);
   return row ?? null;
-}
-
-async function requiredMetricByTitle(title: string): Promise<MetricRecord> {
-  const [row] = await db
-    .select({
-      id: results.id,
-      objectiveId: results.objectiveId,
-      title: results.title,
-    })
-    .from(results)
-    .where(eq(results.title, title))
-    .limit(1);
-  if (!row) {
-    throw new Error(`未找到本用例指标: ${title}`);
-  }
-  return row;
-}
-
-async function metricExistsForObjectiveById(id: string) {
-  const [row] = await db.select({ id: results.id }).from(results).where(eq(results.id, id)).limit(1);
-  return Boolean(row);
 }
 
 export async function objectiveStageStill(input: {

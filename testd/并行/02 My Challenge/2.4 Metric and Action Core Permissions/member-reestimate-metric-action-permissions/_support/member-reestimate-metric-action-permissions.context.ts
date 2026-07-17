@@ -63,9 +63,3 @@ export type TestUserAccountRecord = {
   email: string;
   name: string;
 };
-
-export type MetricRecord = {
-  id: string;
-  objectiveId: string;
-  title: string;
-};

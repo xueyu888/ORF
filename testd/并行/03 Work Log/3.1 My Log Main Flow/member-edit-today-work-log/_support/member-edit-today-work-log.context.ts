@@ -25,10 +25,8 @@ export type MemberEditTodayWorkLogCaseData = {
   originalExpectedProgressLabel: string;
   updatedLogBodyMarker: string;
   updatedLogBody: string;
-  updatedDurationMinutes: number;
   updatedProgressEstimatePercent: number;
   updatedRemainingEstimatePercent: number;
-  updatedExpectedDurationLabel: string;
   updatedExpectedProgressLabel: string;
 };
 

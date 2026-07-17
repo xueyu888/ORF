@@ -105,14 +105,14 @@ export const memberEditYesterdayWorkLogOperators: OperatorRegistry<TestContext, 
   },
 
   "page.work_logs.duration_input": {
-    fill: async ({ ctx, params }) => {
-      await ctx.page.getByLabel("记录时间分钟数", { exact: true }).fill(String(requiredNumber(params, "value")));
+    absent: async ({ ctx }) => {
+      await expect(ctx.page.getByLabel("记录时间分钟数", { exact: true })).toHaveCount(0);
     },
   },
 
   "page.work_logs.body_editor": {
     fill: async ({ ctx, params }) => {
-      await ctx.page.getByLabel("写下今天完成了什么", { exact: true }).fill(requiredString(params, "value"));
+      await ctx.page.getByLabel("写下这一天完成了什么", { exact: true }).fill(requiredString(params, "value"));
     },
   },
 

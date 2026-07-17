@@ -25,10 +25,8 @@ export type MemberDeleteResubmitTodayWorkLogCaseData = {
   originalExpectedProgressLabel: string;
   resubmittedLogBodyMarker: string;
   resubmittedLogBody: string;
-  resubmittedDurationMinutes: number;
   resubmittedProgressEstimatePercent: number;
   resubmittedRemainingEstimatePercent: number;
-  resubmittedExpectedDurationLabel: string;
   resubmittedExpectedProgressLabel: string;
 };
 

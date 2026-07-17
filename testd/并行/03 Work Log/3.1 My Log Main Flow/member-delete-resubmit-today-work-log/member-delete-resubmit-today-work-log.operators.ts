@@ -103,14 +103,14 @@ export const memberDeleteResubmitTodayWorkLogOperators: OperatorRegistry<TestCon
   },
 
   "page.work_logs.duration_input": {
-    fill: async ({ ctx, params }) => {
-      await ctx.page.getByLabel("记录时间分钟数", { exact: true }).fill(String(requiredNumber(params, "value")));
+    absent: async ({ ctx }) => {
+      await expect(ctx.page.getByLabel("记录时间分钟数", { exact: true })).toHaveCount(0);
     },
   },
 
   "page.work_logs.body_editor": {
     fill: async ({ ctx, params }) => {
-      await ctx.page.getByLabel("写下今天完成了什么", { exact: true }).fill(requiredString(params, "value"));
+      await ctx.page.getByLabel("写下这一天完成了什么", { exact: true }).fill(requiredString(params, "value"));
     },
   },
 
@@ -137,6 +137,10 @@ export const memberDeleteResubmitTodayWorkLogOperators: OperatorRegistry<TestCon
 
     contains_duration: async ({ ctx, params }) => {
       await expect(workLogHistoryEntry(ctx.page, requiredString(params, "bodyMarker"))).toContainText(requiredString(params, "durationLabel"));
+    },
+
+    not_contains_duration: async ({ ctx, params }) => {
+      await expect(workLogHistoryEntry(ctx.page, requiredString(params, "bodyMarker")).locator(".work-logs-duration-pill")).toHaveCount(0);
     },
 
     contains_progress: async ({ ctx, params }) => {
@@ -192,6 +196,18 @@ export const memberDeleteResubmitTodayWorkLogOperators: OperatorRegistry<TestCon
             bodyMarker: requiredString(params, "bodyMarker"),
             field: "durationMinutes",
             value: requiredNumber(params, "value"),
+          }),
+        )
+        .toBe(true);
+    },
+
+    duration_minutes_empty: async ({ ctx, params }) => {
+      await expect
+        .poll(() =>
+          apiMyDayEntryFieldEquals(ctx.page, {
+            bodyMarker: requiredString(params, "bodyMarker"),
+            field: "durationMinutes",
+            value: null,
           }),
         )
         .toBe(true);
@@ -277,6 +293,11 @@ export const memberDeleteResubmitTodayWorkLogOperators: OperatorRegistry<TestCon
     equals: async ({ params }) => {
       const entry = requiredWorkLogEntry(params.entry);
       expect(entry.durationMinutes).toBe(requiredNumber(params, "value"));
+    },
+
+    empty: async ({ params }) => {
+      const entry = requiredWorkLogEntry(params.entry);
+      expect(entry.durationMinutes).toBeNull();
     },
   },
 

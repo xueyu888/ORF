@@ -16,8 +16,6 @@ export type AdminManagementAffairsCategorySubmitWorkLogCaseData = {
   teamName: string;
   logBodyMarker: string;
   logBody: string;
-  durationMinutes: number;
-  expectedDurationLabel: string;
 };
 
 export type WorkLogCategoryFixture = {

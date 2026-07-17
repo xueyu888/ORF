@@ -14,8 +14,6 @@ export type MemberLeaveCategorySubmitWorkLogCaseData = {
   memberStatus: Extract<UserStatus, "active">;
   logBodyMarker: string;
   logBody: string;
-  durationMinutes: number;
-  expectedDurationLabel: string;
 };
 
 export type WorkLogCategoryOptionFixture = {

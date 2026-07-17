@@ -18,10 +18,8 @@ export type MemberSubmitTodayWorkLogCaseData = {
   objectiveStatus: Extract<WorkStatus, "On Track">;
   logBodyMarker: string;
   logBody: string;
-  durationMinutes: number;
   progressEstimatePercent: number;
   remainingEstimatePercent: number;
-  expectedDurationLabel: string;
   expectedProgressLabel: string;
 };
 

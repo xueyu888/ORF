@@ -19,6 +19,7 @@ const testdTimeoutMs = positiveIntegerEnv(
   "TESTD_TEST_TIMEOUT_MS",
   serialSuite ? 180_000 : 60_000,
 );
+const testdActionTimeoutMs = positiveIntegerEnv("TESTD_ACTION_TIMEOUT_MS", 10_000);
 
 const suiteTestMatch = serialSuite ? serialSpecGlobs : undefined;
 const suiteTestIgnore = testdSuite === "parallel"
@@ -54,6 +55,7 @@ export default defineConfig({
   fullyParallel: !realSystemEnabled && !serialSuite,
   workers: realSystemEnabled || serialSuite ? 1 : undefined,
   use: {
+    actionTimeout: testdActionTimeoutMs,
     baseURL,
     trace: "on-first-retry",
   },
