@@ -359,7 +359,7 @@ export function ChallengePlanPage() {
     return () => {
       cancelled = true;
     };
-  }, [applyChallengePlanFilterPreference, canShowAllChallenges, currentUser?.id, hasObjectiveCreationEntry, linkedChallengeTarget]);
+  }, [applyChallengePlanFilterPreference, canShowAllChallenges, currentUser?.id]);
 
   useEffect(() => {
     if (!openActionId) return undefined;
@@ -717,6 +717,8 @@ export function ChallengePlanPage() {
         return;
       }
 
+      // 创建入口接管筛选状态后，禁止仍在途的偏好读取覆盖“未归属目标”创建上下文。
+      filterPreferenceTouchedRef.current = true;
       setObjectiveCreationSession((current) =>
         beginObjectiveCreationSession(
           current,
@@ -757,6 +759,7 @@ export function ChallengePlanPage() {
     const objectiveId = objectiveIdForLinkedChallengeTarget(linkedChallengeTarget, challengeState) ?? objectiveIdForLinkedChallengeTarget(linkedChallengeTarget, state);
     if (!objectiveId) return;
     appliedLinkedTargetRef.current = linkedTargetKey;
+    filterPreferenceTouchedRef.current = true;
     setObjectiveInteractionAnchor(null);
 
     if (canShowAllChallenges && scope !== "all") setScope("all");
