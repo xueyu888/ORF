@@ -645,6 +645,13 @@
       "when": 1784013600000,
       "tag": "0091_work_log_classification_body_snapshot",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1784282400000,
+      "tag": "0092_chat_sync_deleted_actor_guard",
+      "breakpoints": true
     }
   ]
 }
