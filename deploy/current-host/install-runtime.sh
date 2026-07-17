@@ -23,7 +23,7 @@ install -d -m 755 "$unit_root"
 ln -sfn "$node_bin" "$runtime_root/node"
 install -m 600 "$repo_root/.env" "$config_root/orf.env"
 
-node --input-type=module - "$config_root/orf.env" "$repo_root" "$runtime_root" <<'NODE'
+"$node_bin" --input-type=module - "$config_root/orf.env" "$repo_root" "$runtime_root" <<'NODE'
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
