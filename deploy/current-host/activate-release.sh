@@ -8,6 +8,7 @@ config_root="${ORF_CURRENT_HOST_CONFIG_ROOT:-$HOME/.config/orf}"
 unit="orf-backend-production.service"
 had_current=false
 verify_only=false
+previous_target="$(readlink "$runtime_root/releases/current" 2>/dev/null || true)"
 
 if [[ "${1:-}" == "--verify-only" ]]; then
   verify_only=true
@@ -40,6 +41,19 @@ if [[ "$verify_only" == true ]]; then
   exit 0
 fi
 
+if ! "$repo_root/deploy/current-host/refresh-public-gateway.sh"; then
+  echo "New release backend is healthy, but public-gateway activation failed." >&2
+  if [[ -n "$previous_target" ]]; then
+    echo "Restoring the previous complete application release: $previous_target" >&2
+    "$repo_root/deploy/current-host/rollback-release.sh" "$previous_target"
+  else
+    systemctl --user disable --now "$unit" >/dev/null 2>&1 || true
+    rm -f "$runtime_root/releases/current"
+    node "$repo_root/bin/orf.mjs" up
+  fi
+  exit 1
+fi
+
 systemctl --user is-active --quiet "$unit"
 main_pid="$(systemctl --user show "$unit" --property MainPID --value)"
 command_line="$(tr '\0' ' ' < "/proc/$main_pid/cmdline")"
@@ -48,4 +62,4 @@ if [[ "$command_line" != *"server.mjs"* || "$command_line" == *"tsx"* ]]; then
   exit 1
 fi
 
-echo "Current host now serves the compiled ORF backend: pid=$main_pid"
+echo "Current host now serves the complete compiled ORF release: pid=$main_pid"
