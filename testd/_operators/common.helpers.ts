@@ -1,7 +1,18 @@
 import type { BrowserContext, Page, Response } from "@playwright/test";
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "./testd-db-client";
-import { commentThreads, objectives, results, taskChecklistItems, tasks, teamMembers, teams, users } from "../../server/db/schema";
+import {
+  chatChannelMembers,
+  chatSyncEvents,
+  commentThreads,
+  objectives,
+  results,
+  taskChecklistItems,
+  tasks,
+  teamMembers,
+  teams,
+  users,
+} from "../../server/db/schema";
 import { canDeleteObjectiveByFlow } from "../../src/domain/orfLifecycle";
 import type { UserRole, UserStatus } from "../../src/types/orf";
 import type { ChallengeApplication, ObjectiveFlowStatus, OrfStage, WorkStatus } from "../../src/types/orf";
@@ -587,13 +598,28 @@ export async function deleteTestUserMemberships(input: { email?: string; emails?
   }
 }
 
+async function deleteTestUserChatState(userId: string) {
+  const testUserEventPredicate = or(
+    eq(chatSyncEvents.actorUserId, userId),
+    and(eq(chatSyncEvents.objectType, "user"), eq(chatSyncEvents.objectId, userId)),
+  );
+
+  await db.delete(chatSyncEvents).where(testUserEventPredicate);
+  await db.delete(chatChannelMembers).where(eq(chatChannelMembers.userId, userId));
+  await db.delete(chatSyncEvents).where(testUserEventPredicate);
+}
+
 export async function deleteTestUsers(input: { email?: string; emails?: string[]; userId?: string }) {
   const deadline = Date.now() + 10_000;
+  const explicitUserId = isUuid(input.userId) ? input.userId : null;
   let absentSince: number | null = null;
 
   while (Date.now() < deadline) {
     const ids = await readTestUserIds(input);
     if (ids.length === 0) {
+      if (explicitUserId) {
+        await deleteTestUserChatState(explicitUserId);
+      }
       absentSince ??= Date.now();
       if (Date.now() - absentSince >= 750) {
         return;
@@ -601,8 +627,12 @@ export async function deleteTestUsers(input: { email?: string; emails?: string[]
     } else {
       absentSince = null;
       for (const id of ids) {
+        await deleteTestUserChatState(id);
         await db.delete(teamMembers).where(eq(teamMembers.userId, id));
         await db.delete(users).where(eq(users.id, id));
+        await db
+          .delete(chatSyncEvents)
+          .where(and(eq(chatSyncEvents.objectType, "user"), eq(chatSyncEvents.objectId, id)));
       }
     }
 
