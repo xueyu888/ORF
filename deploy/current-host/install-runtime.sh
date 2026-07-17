@@ -6,7 +6,14 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 runtime_root="${ORF_CURRENT_HOST_RUNTIME_ROOT:-$HOME/.local/share/orf-production}"
 config_root="${ORF_CURRENT_HOST_CONFIG_ROOT:-$HOME/.config/orf}"
 unit_root="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-node_bin="$(readlink -f "$(command -v node)")"
+node_path="$(command -v node || true)"
+if [[ -n "$node_path" ]]; then
+  node_bin="$(readlink -f "$node_path")"
+elif [[ -x "$runtime_root/node" ]]; then
+  node_bin="$(readlink -f "$runtime_root/node")"
+else
+  node_bin=""
+fi
 
 [[ -x "$node_bin" ]] || { echo "Node runtime not found" >&2; exit 1; }
 [[ -f "$repo_root/.env" ]] || { echo "Runtime environment not found: $repo_root/.env" >&2; exit 1; }
