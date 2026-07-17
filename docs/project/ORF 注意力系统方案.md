@@ -49,9 +49,9 @@
 
 | 等级 | 展示效果 | 适合事件 |
 | --- | --- | --- |
-| `badge` | 只显示聊天入口、任务栏和托盘红点或数字；不单独生成“待我处理”入口 | 普通群聊未读、GitHub/GitLab 工程动态、普通系统公告、`objective.published`、`worklog.submitted`、`objective.settled` |
+| `badge` | 只显示聊天入口、任务栏和托盘无数字红点；不单独生成“待我处理”入口 | 普通群聊未读、GitHub/GitLab 工程动态、普通系统公告、`objective.published`、`worklog.submitted`、`objective.settled` |
 | `toast` | Windows 右下角系统 Toast；点击进入聊天或业务目标 | 普通回复、我关注的话题有回复、`feedback.commented`、`feedback.status.changed`、`comment.reply.created` |
-| `flash` | `toast` + Win11 任务栏图标闪烁 + 右下角托盘图标持续闪烁；任务栏闪烁仅在窗口不在前台时触发 | `comment.mention.created`、私聊、聊天具名 `@我`、`@所有人`、话题内显式提及 |
+| `flash` | `toast` + Win11 任务栏与右下角托盘的整枚 ORF 图标持续闪烁；窗口不在前台时额外触发系统任务栏提醒 | `comment.mention.created`、私聊、聊天具名 `@我`、`@所有人`、话题内显式提及 |
 | `urgent` | `toast` + 任务栏闪烁 + 右下角托盘图标闪烁 + 托盘置顶入口 + 侧边栏“待我处理”置顶 | `feedback.assigned`、`objective.recruitment.created`、`objective.reinforcement.added`、`objective.alignment.requested`、`objective.loot.submitted`、`objective.peerReview.requested`、`objective.revision.required`、active `WorkLogReminderState`、`data.sync.conflict` |
 
 默认等级只是初始策略；运行时必须结合当前上下文降级或抑制。
@@ -74,8 +74,8 @@
 | --- | --- |
 | 同一事件 Toast | 只允许一次 |
 | 同类 Toast | 60 秒 |
-| 任务栏 flash | 当前实现 12 秒 |
-| 托盘图标 flash | `flash/urgent` 且 `count > 0` 时在普通高亮帧和强高亮帧之间持续闪烁，直到注意力等级降级或清空；不得再用整枚图标透明/消失制造闪烁 |
+| 系统任务栏 flash | 当前实现 12 秒冷却；只作为窗口不在前台时的附加提醒 |
+| 任务栏/托盘整图 flash | `flash/urgent` 且 `count > 0` 时在深色彩色 X 正常帧和亮色白色 X 提醒帧之间持续闪烁，直到注意力等级降级或清空；两帧都保持整枚图标可见，不使用数字或透明消失制造闪烁 |
 | 未处理 urgent 再提醒 | 10 分钟，且必须尊重工作日志等业务自身的 `next_remind_at` |
 
 ## 侧边栏待我处理
@@ -168,17 +168,17 @@ setChatUnreadCount({ count }) => setAttentionState({
 })
 ```
 
-`count` 在桌面 IPC 中保留为旧壳兼容红点数量；新桌面壳使用 `badgeCount` 画任务栏/托盘红点，使用 `workItemCount` 判断是否展示“打开待处理提醒”。前端 `AttentionState.count` 仍表示 AppShell 侧边栏和移动端 `待办` 的待处理数量。
+`count` 在桌面 IPC 中保留为旧壳兼容红点数量；新桌面壳使用 `badgeCount` 派生任务栏/托盘的 `normal/unread/attention` 图标状态，使用 `workItemCount` 判断是否展示“打开待处理提醒”。前端 `AttentionState.count` 仍表示 AppShell 侧边栏和移动端 `待办` 的待处理数量。任务栏和托盘图标不显示未读数字，数量只保留在聊天入口、待处理入口和托盘菜单文案。
 
 桌面表现：
 
-| 等级 | 任务栏 overlay | Windows 系统 Toast | 任务栏 flash | 托盘图标 flash | 托盘菜单 |
+| 等级 | 任务栏图标 | Windows 系统 Toast | 系统任务栏 flash | 托盘图标 | 托盘菜单 |
 | --- | --- | --- | --- | --- | --- |
-| `none` | 清空 | 不展示 | 停止 | 停止 | 普通菜单 |
-| `badge` | 显示数字/红点 | 不展示 | 不触发 | 不触发 | 仅有普通聊天未读时显示“打开聊天（n）”；有待处理项时显示“打开待处理提醒（n）” |
-| `toast` | 显示数字/红点 | 展示一次 | 不触发 | 不触发 | 打开聊天/系统通知 |
-| `flash` | 显示数字/红点 | 展示一次 | 窗口不在前台时触发 | 持续闪烁 | 打开最新提醒 |
-| `urgent` | 显示数字/红点 | 展示一次 | 窗口不在前台时触发 | 持续闪烁 | 置顶“打开待处理提醒” |
+| `none` | 正常高清 ORF 图标 | 不展示 | 停止 | 正常高清 ORF 图标 | 普通菜单 |
+| `badge` | 无数字红点图标 | 不展示 | 不触发 | 无数字红点图标 | 仅有普通聊天未读时显示“打开聊天（n）”；有待处理项时显示“打开待处理提醒（n）” |
+| `toast` | 无数字红点图标 | 展示一次 | 不触发 | 无数字红点图标 | 打开聊天/系统通知 |
+| `flash` | 正常帧与亮色提醒帧整图交替 | 展示一次 | 窗口不在前台时触发 | 同步整图交替 | 打开最新提醒 |
+| `urgent` | 正常帧与亮色提醒帧整图交替 | 展示一次 | 窗口不在前台时触发 | 同步整图交替 | 置顶“打开待处理提醒” |
 
 托盘菜单建议：
 
@@ -246,7 +246,7 @@ type AttentionState = {
 
 | 输出 | 消费方 |
 | --- | --- |
-| `AttentionState.badgeCount/level/latestTargetPath` | 桌面壳角标、托盘红点和普通聊天未读入口 |
+| `AttentionState.badgeCount/level/latestTargetPath` | 桌面壳任务栏/托盘图标状态和普通聊天未读入口 |
 | `AttentionState.count/items` | 侧边栏和移动端“待我处理” |
 | `AttentionState.title/body` | 系统 Toast |
 
@@ -258,7 +258,7 @@ type AttentionState = {
 2. 私聊、聊天具名 `@我`、`@所有人` 和话题内显式提及在 realtime 到达时立即产生 `flash` 意图，再由持久未读汇总接管；两者按消息和提醒类型合并计数，不能重复生成“待我处理”项。普通关注话题回复派生 `toast`，普通聊天未读只派生聊天入口和桌面红点。聊天实时 Toast 仍由聊天原生通知模型一次性投递，强提醒意图只驱动统一注意力状态和托盘/任务栏，不重复弹 Toast。
 3. `worklog.reminder.required` 或 active `WorkLogReminderState` 派生 `urgent`，并通过 `shouldRemindNow` 尊重工作日志自身提醒节奏。
 4. 业务系统通知按 `NotificationKind` 映射为 `badge`、`toast`、`flash` 或 `urgent`；正在查看对应目标时降级为 `badge`。
-5. Win11 托盘菜单提供“打开待处理提醒”，点击后跳转到 `latestTargetPath`；托盘图标具有 `normal/unread/attention` 三个明确状态，`flash/urgent` 且 `count > 0` 时在两帧 attention 图标间持续闪烁，清空或降级后恢复 unread/normal 图标。
+5. Win11 托盘菜单提供“打开待处理提醒”，点击后跳转到 `latestTargetPath`；任务栏与托盘共用 `normal/unread/attention` 三态图标事实源，使用适合各自系统槽位的独立逻辑尺寸和同一份四倍超采样渲染。`unread` 只显示无数字红点；`flash/urgent` 且 `count > 0` 时整枚图标在正常帧和高对比提醒帧之间持续闪烁，清空或降级后同步恢复 unread/normal 图标。
 6. 侧边栏新增“待我处理”入口，只在 `AttentionState.count > 0` 时展示数量和轻量面板；通知项点击进入现有聊天系统消息或业务页面前会调用通知已读接口，面板也提供“通知全部已读”用于清理历史未读积压。
 7. 移动端底部导航只在 `AttentionState.count > 0` 时新增 `待办` 入口，不新增独立页面；点击进入最新待处理目标或个人系统通知，最新项是通知时先调用通知已读接口。
 8. 首次 SSE 连接、每次重连、网络恢复、窗口聚焦和页面重新可见都会进入同一个 `connectionEpoch` 对账链；未读汇总恢复后重新派生 `AttentionState`，桌面任务栏和托盘不依赖错过的瞬时事件继续保持旧状态。

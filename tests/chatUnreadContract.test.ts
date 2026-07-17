@@ -269,6 +269,9 @@ test("repository guard keeps thread read, delivery and legacy fallback contracts
   assert.match(repositorySource, /current_membership\.channel_id = \$4 AND current_membership\.user_id = mentioned\.mentioned_user_id/);
   assert.match(repositorySource, /const readThroughAt = chatThreadReadThroughAt\(messages\)/);
   assert.doesNotMatch(repositorySource, /VALUES \(\$1, \$2, true, \$3, \$3\)\s+ON CONFLICT \(root_message_id, user_id\)\s+DO UPDATE SET last_viewed_at/);
+  assert.match(repositorySource, /WHERE chat_thread_follows\.last_viewed_at IS NULL\s+OR chat_thread_follows\.last_viewed_at < EXCLUDED\.last_viewed_at/);
+  assert.match(repositorySource, /RETURNING following, true AS read_state_changed/);
+  assert.match(repositorySource, /if \(followRows\[0\]\?\.read_state_changed\) \{\s+publishChatChannelRealtime/);
   assert.match(repositorySource, /const threadTarget = await findFirstUnreadThreadMention\(input\.channelId, actor\)/);
 
   const sendStart = repositorySource.indexOf("export async function sendChatMessage(");

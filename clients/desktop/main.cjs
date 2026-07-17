@@ -5,10 +5,7 @@ const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const { pathToFileURL } = require("node:url");
 const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, net, powerMonitor, safeStorage, shell } = require("electron");
-const {
-  createTrayIconRgba,
-  createUnreadBadgeRgba,
-} = require("./icon-renderer.cjs");
+const { createTrayIconRgba } = require("./icon-renderer.cjs");
 const { windowsNotificationToastXml } = require("./notification-renderer.cjs");
 const { launchDesktopUpdateInstallerAfterExit } = require("./update-installer.cjs");
 
@@ -29,8 +26,9 @@ const REPO_ANDROID_LAUNCHER_ICON_PATH = path.resolve(
 );
 const DESKTOP_UNREAD_BADGE_LIMIT = 99;
 const ORF_APP_NAME = "ORF";
-const DESKTOP_ICON_BITMAP_SIZE = 32;
 const DESKTOP_ICON_BITMAP_SCALE = 4;
+const DESKTOP_TASKBAR_ICON_BITMAP_SIZE = 32;
+const DESKTOP_TRAY_ICON_BITMAP_SIZE = 16;
 const MAX_PENDING_CHAT_NOTIFICATION_TARGETS = 16;
 const MAX_PENDING_DESKTOP_TARGETS = 16;
 const MAX_SEEN_ATTENTION_TOAST_IDS = 128;
@@ -39,7 +37,7 @@ const MAX_NOTIFICATION_AVATAR_DATA_URL_LENGTH = 1_000_000;
 const CHAT_NOTIFICATION_ACTIVATION_PREFIX = "orf-chat-notification";
 const ATTENTION_NOTIFICATION_ACTIVATION_PREFIX = "orf-attention-notification";
 const DESKTOP_ATTENTION_FLASH_COOLDOWN_MS = 12000;
-const DESKTOP_TRAY_ATTENTION_FLASH_INTERVAL_MS = 700;
+const DESKTOP_ATTENTION_ICON_FLASH_INTERVAL_MS = 700;
 const DESKTOP_RECOVERY_ROOT_CHECK_DELAY_MS = 4000;
 const DESKTOP_RECOVERY_RELOAD_COOLDOWN_MS = 8000;
 const DESKTOP_RECOVERY_STABLE_RESET_DELAY_MS = 30000;
@@ -70,6 +68,8 @@ const DESKTOP_RECOVERY_CHECK_SCRIPT = `
 `;
 
 const desktopShellState = {
+  attentionIconFlashHighlighted: false,
+  attentionIconFlashTimer: null,
   attentionState: createEmptyDesktopAttentionState(),
   clientUpdateInstallInProgress: false,
   clientUrl: null,
@@ -83,8 +83,6 @@ const desktopShellState = {
   seenAttentionToastIds: [],
   storagePaths: null,
   tray: null,
-  trayFlashTimer: null,
-  trayFlashVisible: true,
   unreadCount: 0,
 };
 
@@ -132,7 +130,7 @@ function createMainWindow(clientUrl, options = {}) {
   const mainWindow = new BrowserWindow({
     ...DESKTOP_MAIN_WINDOW_SIZE,
     title: "ORF",
-    icon: resolveDesktopIconPath(),
+    icon: createDesktopTaskbarIconImage("normal", false),
     frame: false,
     backgroundColor: "#f6f8fb",
     autoHideMenuBar: true,
@@ -647,7 +645,7 @@ function shouldKeepWindowInTray() {
 function createDesktopTray(clientUrl) {
   if (process.platform !== "win32" || desktopShellState.tray) return;
   desktopShellState.clientUrl = clientUrl;
-  const tray = new Tray(createTrayIconImage(desktopAttentionBadgeCount()));
+  const tray = new Tray(createDesktopTrayIconImage("normal", false));
   desktopShellState.tray = tray;
   tray.on("click", () => showMainWindow());
   tray.on("double-click", () => showMainWindow("/chat"));
@@ -810,18 +808,17 @@ function setDesktopAttentionState(input) {
 
 function updateDesktopUnreadState(options = {}) {
   updateTrayUnreadState();
+  updateDesktopAttentionIconState();
   const targetWindow = desktopShellState.mainWindow;
   if (process.platform !== "win32" || !targetWindow || targetWindow.isDestroyed()) return;
 
-  const attentionState = desktopShellState.attentionState;
   const attentionCount = desktopAttentionBadgeCount();
+  targetWindow.setOverlayIcon(null, "");
   if (attentionCount > 0) {
-    targetWindow.setOverlayIcon(createTaskbarUnreadOverlayImage(attentionCount), desktopAttentionDescription(attentionState));
     requestDesktopAttentionForState(options);
     return;
   }
 
-  targetWindow.setOverlayIcon(null, "");
   targetWindow.flashFrame(false);
 }
 
@@ -879,97 +876,78 @@ function updateTrayUnreadState() {
       },
     },
   );
-  tray.setImage(createTrayIconImage(badgeCount));
   tray.setToolTip(badgeCount > 0 ? `${ORF_APP_NAME} - ${desktopAttentionDescription(attentionState)}` : ORF_APP_NAME);
   tray.setContextMenu(Menu.buildFromTemplate(menuTemplate));
-  updateTrayAttentionFlashState();
 }
 
-function createTrayIconImage(unreadCount) {
-  const image = createNativeImageFromRgba(DESKTOP_ICON_BITMAP_SIZE, createTrayIconRgba(
-    DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
-    DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
-    {
-      state: desktopTrayVisualState(),
-      unreadCount,
-    },
-  ));
+function createDesktopTrayIconImage(state, pulse) {
+  const image = createDesktopShellIconImage(DESKTOP_TRAY_ICON_BITMAP_SIZE, state, pulse);
   image.setTemplateImage(false);
   return image;
 }
 
-function createTrayAttentionFrameImage(unreadCount, pulse) {
-  const image = createNativeImageFromRgba(DESKTOP_ICON_BITMAP_SIZE, createTrayIconRgba(
-    DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
-    DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
-    {
-      pulse,
-      state: "attention",
-      unreadCount,
-    },
-  ));
+function createDesktopTaskbarIconImage(state, pulse) {
+  const image = createDesktopShellIconImage(DESKTOP_TASKBAR_ICON_BITMAP_SIZE, state, pulse);
   image.setTemplateImage(false);
   return image;
 }
 
-function desktopTrayVisualState() {
-  if (shouldFlashTrayAttention()) return "attention";
+function createDesktopShellIconImage(logicalSize, state, pulse) {
+  return createNativeImageFromRgba(logicalSize, createTrayIconRgba(
+    logicalSize * DESKTOP_ICON_BITMAP_SCALE,
+    logicalSize * DESKTOP_ICON_BITMAP_SCALE,
+    { pulse, state },
+  ));
+}
+
+function desktopAttentionIconVisualState() {
+  if (shouldFlashDesktopAttentionIcons()) return "attention";
   return desktopAttentionBadgeCount() > 0 ? "unread" : "normal";
 }
 
-function updateTrayAttentionFlashState() {
-  if (!shouldFlashTrayAttention()) {
-    stopTrayAttentionFlash();
+function updateDesktopAttentionIconState() {
+  if (!shouldFlashDesktopAttentionIcons()) {
+    stopDesktopAttentionIconFlash();
+    applyDesktopAttentionIconFrame();
     return;
   }
-  if (desktopShellState.trayFlashTimer) return;
-  desktopShellState.trayFlashVisible = true;
-  applyTrayAttentionFlashFrame();
-  desktopShellState.trayFlashTimer = setInterval(() => {
-    desktopShellState.trayFlashVisible = !desktopShellState.trayFlashVisible;
-    applyTrayAttentionFlashFrame();
-  }, DESKTOP_TRAY_ATTENTION_FLASH_INTERVAL_MS);
-  if (typeof desktopShellState.trayFlashTimer.unref === "function") {
-    desktopShellState.trayFlashTimer.unref();
+  if (desktopShellState.attentionIconFlashTimer) return;
+  desktopShellState.attentionIconFlashHighlighted = false;
+  applyDesktopAttentionIconFrame();
+  desktopShellState.attentionIconFlashTimer = setInterval(() => {
+    desktopShellState.attentionIconFlashHighlighted = !desktopShellState.attentionIconFlashHighlighted;
+    applyDesktopAttentionIconFrame();
+  }, DESKTOP_ATTENTION_ICON_FLASH_INTERVAL_MS);
+  if (typeof desktopShellState.attentionIconFlashTimer.unref === "function") {
+    desktopShellState.attentionIconFlashTimer.unref();
   }
 }
 
-function stopTrayAttentionFlash() {
-  if (desktopShellState.trayFlashTimer) {
-    clearInterval(desktopShellState.trayFlashTimer);
-    desktopShellState.trayFlashTimer = null;
+function stopDesktopAttentionIconFlash() {
+  if (desktopShellState.attentionIconFlashTimer) {
+    clearInterval(desktopShellState.attentionIconFlashTimer);
+    desktopShellState.attentionIconFlashTimer = null;
   }
-  desktopShellState.trayFlashVisible = true;
-  const tray = desktopShellState.tray;
-  if (!tray || tray.isDestroyed()) return;
-  tray.setImage(createTrayIconImage(desktopAttentionBadgeCount()));
+  desktopShellState.attentionIconFlashHighlighted = false;
 }
 
-function shouldFlashTrayAttention() {
+function shouldFlashDesktopAttentionIcons() {
   return process.platform === "win32"
     && desktopAttentionBadgeCount() > 0
     && attentionLevelRank(desktopShellState.attentionState.level) >= attentionLevelRank("flash");
 }
 
-function applyTrayAttentionFlashFrame() {
+function applyDesktopAttentionIconFrame() {
+  const state = desktopAttentionIconVisualState();
+  const pulse = state === "attention" && desktopShellState.attentionIconFlashHighlighted;
   const tray = desktopShellState.tray;
-  if (!tray || tray.isDestroyed()) return;
-  if (!shouldFlashTrayAttention()) {
-    stopTrayAttentionFlash();
-    return;
+  if (tray && !tray.isDestroyed()) {
+    tray.setImage(createDesktopTrayIconImage(state, pulse));
   }
-  tray.setImage(createTrayAttentionFrameImage(
-    desktopAttentionBadgeCount(),
-    !desktopShellState.trayFlashVisible,
-  ));
-}
-
-function createTaskbarUnreadOverlayImage(unreadCount) {
-  return createNativeImageFromRgba(DESKTOP_ICON_BITMAP_SIZE, createUnreadBadgeRgba(
-    DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
-    DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
-    unreadCount,
-  ));
+  const targetWindow = desktopShellState.mainWindow;
+  if (targetWindow && !targetWindow.isDestroyed()) {
+    targetWindow.setIcon(createDesktopTaskbarIconImage(state, pulse));
+  }
 }
 
 function createNativeImageFromRgba(logicalSize, rgbaBuffer) {
@@ -1846,7 +1824,7 @@ if (!hasSingleInstanceLock) {
 
   app.on("before-quit", () => {
     desktopShellState.isQuitting = true;
-    stopTrayAttentionFlash();
+    stopDesktopAttentionIconFlash();
     if (desktopShellState.tray && !desktopShellState.tray.isDestroyed()) {
       desktopShellState.tray.destroy();
     }

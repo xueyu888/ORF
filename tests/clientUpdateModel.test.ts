@@ -188,3 +188,14 @@ test("Win11 update waits for ORF to exit before showing the NSIS installer with 
   assert.equal(readFileSync(launcherPath, "utf8"), launcherScript);
   rmSync(installDir, { force: true, recursive: true });
 });
+
+test("Win11 visible installer preserves an unambiguous install scope and restarts completed updates", () => {
+  const installerInclude = readFileSync(path.resolve("clients/desktop/installer.nsh"), "utf8");
+
+  assert.match(installerInclude, /!macro customInstallMode/);
+  assert.match(installerInclude, /\$hasPerUserInstallation == "1"[\s\S]*\$hasPerMachineInstallation == "0"[\s\S]*\$isForceCurrentInstall "1"/);
+  assert.match(installerInclude, /\$hasPerMachineInstallation == "1"[\s\S]*\$hasPerUserInstallation == "0"[\s\S]*\$isForceMachineInstall "1"/);
+  assert.match(installerInclude, /!macro customInstall[\s\S]*\$\{isUpdated\}[\s\S]*\$\{StdUtils\.ExecShellAsUser\}[\s\S]*"--updated"[\s\S]*!insertmacro quitSuccess/);
+  assert.doesNotMatch(installerInclude, /!insertmacro StartApp/);
+  assert.doesNotMatch(installerInclude, /customInstall[\s\S]*\$\{isForceRun\}/);
+});

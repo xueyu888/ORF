@@ -294,7 +294,7 @@ async function loadMembers(channelIds: string[]) {
           c.type <> 'public'
           OR (tm.user_id IS NOT NULL AND COALESCE(u.status, 'active') = 'active')
         )
-      ORDER BY m.joined_at ASC
+      ORDER BY m.channel_id ASC, m.joined_at ASC, m.user_id ASC
     `,
     [channelIds],
   );
@@ -1491,32 +1491,42 @@ export async function getChatThread(rootMessageId: string, actor: ChatActor): Pr
 
   const now = nowIso();
   const readThroughAt = chatThreadReadThroughAt(messages) ?? rootMessage.createdAt;
-  const { rows: followRows } = await pool.query<{ following: boolean }>(
+  const { rows: followRows } = await pool.query<{ following: boolean; read_state_changed: boolean }>(
     `
-      INSERT INTO chat_thread_follows (root_message_id, user_id, following, last_viewed_at, updated_at)
-      VALUES ($1, $2, true, $3, $4)
-      ON CONFLICT (root_message_id, user_id)
-      DO UPDATE SET
-        last_viewed_at = CASE
-          WHEN chat_thread_follows.last_viewed_at IS NULL
-            OR chat_thread_follows.last_viewed_at < EXCLUDED.last_viewed_at
-          THEN EXCLUDED.last_viewed_at
-          ELSE chat_thread_follows.last_viewed_at
-        END,
-        updated_at = EXCLUDED.updated_at
-      RETURNING following
+      WITH advanced_follow AS (
+        INSERT INTO chat_thread_follows (root_message_id, user_id, following, last_viewed_at, updated_at)
+        VALUES ($1, $2, true, $3, $4)
+        ON CONFLICT (root_message_id, user_id)
+        DO UPDATE SET
+          last_viewed_at = EXCLUDED.last_viewed_at,
+          updated_at = EXCLUDED.updated_at
+        WHERE chat_thread_follows.last_viewed_at IS NULL
+          OR chat_thread_follows.last_viewed_at < EXCLUDED.last_viewed_at
+        RETURNING following, true AS read_state_changed
+      )
+      SELECT following, read_state_changed
+      FROM advanced_follow
+      UNION ALL
+      SELECT existing.following, false AS read_state_changed
+      FROM chat_thread_follows existing
+      WHERE existing.root_message_id = $1
+        AND existing.user_id = $2
+        AND NOT EXISTS (SELECT 1 FROM advanced_follow)
+      LIMIT 1
     `,
     [rootMessageId, actor.id, readThroughAt, now],
   );
   const updatedChannel = await getVisibleChannel(actor, root.channel_id);
   if (!updatedChannel) return { status: "notFound" };
-  publishChatChannelRealtime({
-    teamId: storageTeamId(actor),
-    recipientUserIds: [actor.id],
-    eventType: "read.changed",
-    channelId: updatedChannel.id,
-    actorUserId: actor.id,
-  });
+  if (followRows[0]?.read_state_changed) {
+    publishChatChannelRealtime({
+      teamId: storageTeamId(actor),
+      recipientUserIds: [actor.id],
+      eventType: "read.changed",
+      channelId: updatedChannel.id,
+      actorUserId: actor.id,
+    });
+  }
   return ok({
     channel: updatedChannel,
     thread: {

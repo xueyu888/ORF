@@ -142,11 +142,11 @@ test("failed reconciliation remains retryable and advances to ready after retry"
   coordinator.dispose();
 });
 
-test("chat realtime events reconcile only the projections they own", () => {
+test("chat realtime events reconcile only the projections they own without feeding read receipts back into thread reads", () => {
   assert.deepEqual(chatRealtimeReconciliationScope("read.changed"), {
     bootstrap: true,
     feed: false,
-    thread: true,
+    thread: false,
   });
   assert.deepEqual(chatRealtimeReconciliationScope("message.created"), {
     bootstrap: true,
