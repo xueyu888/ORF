@@ -8012,6 +8012,11 @@ button:disabled {
   padding: 16px;
 }
 
+.work-logs-history-panel {
+  container-name: work-log-history;
+  container-type: inline-size;
+}
+
 .work-logs-panel-heading {
   display: flex;
   align-items: flex-start;
@@ -8878,6 +8883,18 @@ button:disabled {
   flex: 0 0 auto;
   min-height: 30px;
   font-size: 12px;
+}
+
+@container work-log-history (max-width: 440px) {
+  .work-logs-history-entry-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .work-logs-history-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
 }
 
 .work-logs-history-empty {
