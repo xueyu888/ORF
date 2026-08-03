@@ -76,6 +76,48 @@ npm run release:clients -- --tag v0.0.1 --notes "说明本版本面向用户更�
 npm run release:clients -- --tag v0.0.1 --notes-file release-notes/v0.0.1.md --watch
 ```
 
+## 发布须知
+
+当用户说“发布新版本”时，默认表示同一版本的完整可用性发布，不只是生成 Win11 / Android 安装包。除非用户明确收窄为“只发客户端安装包”“只打 GitHub Release”或“只保存版本”，发布者必须走完以下闭环：
+
+1. 版本事实：根 `package.json` 更新版本，并运行 `npm run client:sync-versions` 同步 Win11 和 Android 版本。
+2. 提交事实：按明确路径提交并推送本次变更，推送前核对 `origin/<branch>..HEAD` 的完整提交范围。
+3. 客户端资产：运行 `npm run release:clients -- --tag vX.Y.Z --watch`，确认 GitHub Actions、GitHub Release、ORF 主更新源同步和在线客户端广播都完成。
+4. 生产 Web 入口：运行 `npm run build:release` 生成不可变生产运行包，把生成的 `.artifacts/releases/<releaseId>` 部署到 `/home/xue/.local/share/orf-production/releases/<releaseId>`，再把 `/home/xue/.local/share/orf-production/releases/current` 切到这个新目录，`previous` 保留为旧目录。
+5. 生产后端：重启 `orf-backend-production.service`，确认进程工作目录已经是新的 `releases/current`。
+6. 生产网关：强制重建 `public-gateway` 容器，让 nginx 重新挂载新的 `ORF_WEB_RELEASE_DIR=/home/xue/.local/share/orf-production/releases/current/web`。
+7. 入口验收：直接用 8443 域名入口验证 HTML 主包 hash、新版页面 chunk、后端健康检查和网关健康检查。
+
+生产网页入口 `https://orf-xueyu.duckdns.org:8443/` 的静态 HTML 和 JS 不是由 ORF 后端进程直接返回，而是由 Docker 中的 `public-gateway` nginx 容器读取 `ORF_WEB_RELEASE_DIR` bind mount。`releases/current` symlink 切到新目录后，已创建的 nginx 容器可能仍持有旧目录挂载；只重启 `orf-backend-production.service` 只能让后端 API 加载新版 `server.mjs`，不能保证 8443 继续服务的前端包已经换新。因此生产 Web 发布必须同时切换不可变运行目录、重启后端、强制重建 `public-gateway`。
+
+当前生产机的最小验证命令：
+
+```bash
+npm run build:release
+
+readlink -f /home/xue/.local/share/orf-production/releases/current
+systemctl --user show orf-backend-production.service --property=MainPID,ActiveState,SubState,WorkingDirectory
+readlink -f /proc/<MainPID>/cwd
+
+ORF_WEB_RELEASE_DIR=/home/xue/.local/share/orf-production/releases/current/web \
+  docker compose -f docker-compose.ory.yml -f docker-compose.minio.yml -f docker-compose.public.yml \
+  up -d --no-deps --force-recreate public-gateway
+
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8787/health
+curl -k -sS -o /dev/null -w '%{http_code}\n' https://orf-xueyu.duckdns.org:8443/
+curl -k -sS https://orf-xueyu.duckdns.org:8443/ | rg -o 'assets/[^" ]+'
+docker inspect orf-public-gateway-1 --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
+```
+
+如果本次改动包含网页可见文字或交互规则，发布验收还必须在 `releases/current/web/assets` 中定位包含该改动的 chunk，并通过 8443 直接拉取同一个 chunk 验证新版内容已经由网关服务。例如：
+
+```bash
+rg -n '<本次可见文字或稳定标识>' /home/xue/.local/share/orf-production/releases/current/web/assets
+curl -k -sS https://orf-xueyu.duckdns.org:8443/assets/<chunk>.js | rg '<本次可见文字或稳定标识>'
+```
+
+只有上述生产入口验证通过后，才能把“网页端已发布新版”报告给用户。若验证通过而用户浏览器仍看到旧行为，再让用户普通刷新或 `Ctrl+F5` 硬刷新；不能在验证生产入口之前把问题归因于浏览器缓存。
+
 客户端发布有两个必须分开的事实源：
 
 - 版本号事实源：根 `package.json`，由 `scripts/sync-client-versions.mjs` 同步到 Win11 和 Android 客户端工程。
