@@ -44,8 +44,12 @@ import {
 import { resultDetailText } from "../domain/orfResultDetails";
 import {
   acceptedResultForClaim,
+  canUseFullCompletionSettlementMultiplier,
   objectiveAcceptedResultFromReviews,
   objectiveSettlementReviewWindow,
+  planObjectiveSettlementEvent,
+  type ObjectiveSettlementEventPlan,
+  type SettlementMultiplierMode,
 } from "../domain/orfSettlement";
 import type {
   ContributionAllocation,
@@ -389,6 +393,8 @@ export function LootSubmitPage() {
   >({});
   const [resolutionEdited, setResolutionEdited] = useState(false);
   const [resolutionReason, setResolutionReason] = useState("");
+  const [settlementMultiplierMode, setSettlementMultiplierMode] =
+    useState<SettlementMultiplierMode>("default");
   const [settlementSummary, setSettlementSummary] = useState<LocalSettlementSummary | null>(null);
   const [settlementSummaryError, setSettlementSummaryError] = useState("");
   const [settlementSummaryLoading, setSettlementSummaryLoading] = useState(false);
@@ -435,6 +441,68 @@ export function LootSubmitPage() {
       return next;
     });
   }, [latestLoot, results]);
+
+  const hasDeadlinePenaltySettlementEvent = useMemo(
+    () => objectiveSettlementEvents.some((event) => event.kind === "deadlinePenalty"),
+    [objectiveSettlementEvents],
+  );
+  const settlementMultiplierInput = useMemo(
+    () =>
+      objective && latestLoot && settlementEventKind && objective.acceptedResult
+        ? {
+            acceptedResult: objective.acceptedResult,
+            finalDueAt: objective.finalDueAt,
+            hasDeadlinePenaltyEvent: hasDeadlinePenaltySettlementEvent,
+            kind: settlementEventKind,
+            lootSubmittedAt: latestLoot.submittedAt,
+          }
+        : null,
+    [
+      hasDeadlinePenaltySettlementEvent,
+      latestLoot,
+      objective,
+      settlementEventKind,
+    ],
+  );
+  const canUseFullCompletionMultiplier = useMemo(
+    () =>
+      settlementMultiplierInput
+        ? canUseFullCompletionSettlementMultiplier(settlementMultiplierInput)
+        : false,
+    [settlementMultiplierInput],
+  );
+  useEffect(() => {
+    if (!canUseFullCompletionMultiplier && settlementMultiplierMode !== "default") {
+      setSettlementMultiplierMode("default");
+    }
+  }, [canUseFullCompletionMultiplier, settlementMultiplierMode]);
+  const defaultSettlementEventPlan = useMemo(
+    () =>
+      settlementMultiplierInput && objective
+        ? planObjectiveSettlementEvent({
+            ...settlementMultiplierInput,
+            basePoints: objective.objectiveBasePoints,
+            settlementMultiplierMode: "default",
+          })
+        : null,
+    [objective, settlementMultiplierInput],
+  );
+  const selectedSettlementEventPlan = useMemo(
+    () =>
+      settlementMultiplierInput && objective
+        ? planObjectiveSettlementEvent({
+            ...settlementMultiplierInput,
+            basePoints: objective.objectiveBasePoints,
+            settlementMultiplierMode,
+          })
+        : defaultSettlementEventPlan,
+    [
+      defaultSettlementEventPlan,
+      objective,
+      settlementMultiplierInput,
+      settlementMultiplierMode,
+    ],
+  );
 
   const settlementContributionTargets = challengerAllocationTargets;
   const contributionReviewMatrix = useMemo(
@@ -937,6 +1005,22 @@ export function LootSubmitPage() {
       resolutionResult,
       settlementTargets: settlementContributionTargets,
     });
+    if (
+      canUseFullCompletionMultiplier &&
+      defaultSettlementEventPlan &&
+      selectedSettlementEventPlan
+    ) {
+      const confirmed = window.confirm(
+        fullCompletionMultiplierConfirmMessage({
+          defaultPlan: defaultSettlementEventPlan,
+          finalDueAt: objective.finalDueAt,
+          lootSubmittedAt: latestLoot.submittedAt,
+          selectedMode: settlementMultiplierMode,
+          selectedPlan: selectedSettlementEventPlan,
+        }),
+      );
+      if (!confirmed) return;
+    }
 
     setSubmittingAction("settle");
     try {
@@ -944,6 +1028,7 @@ export function LootSubmitPage() {
         contributionResolution,
         lootId: latestLoot.id,
         reason: finalResolutionReason,
+        settlementMultiplierMode,
         settlementParticipantUserIds,
       });
       if (ok) navigate("/reports");
@@ -1200,6 +1285,20 @@ export function LootSubmitPage() {
                 ) : (
                   <SingleContributionSummaryView
                     member={settlementContributionTargets[0]?.member ?? currentMemberName}
+                  />
+                )}
+                {defaultSettlementEventPlan && selectedSettlementEventPlan && (
+                  <SettlementMultiplierPanel
+                    canUseFullCompletionMultiplier={canUseFullCompletionMultiplier}
+                    defaultPlan={defaultSettlementEventPlan}
+                    finalDueAt={objective.finalDueAt}
+                    lootSubmittedAt={latestLoot?.submittedAt ?? null}
+                    mode={settlementMultiplierMode}
+                    selectedPlan={selectedSettlementEventPlan}
+                    onModeChange={(mode) => {
+                      setSettlementMultiplierMode(mode);
+                      if (error) setError("");
+                    }}
                   />
                 )}
                 {needsContributionResolution && (
@@ -2198,6 +2297,81 @@ function SingleContributionSummaryView({ member }: { member: string }) {
   );
 }
 
+function SettlementMultiplierPanel({
+  canUseFullCompletionMultiplier,
+  defaultPlan,
+  finalDueAt,
+  lootSubmittedAt,
+  mode,
+  selectedPlan,
+  onModeChange,
+}: {
+  canUseFullCompletionMultiplier: boolean;
+  defaultPlan: ObjectiveSettlementEventPlan;
+  finalDueAt: string;
+  lootSubmittedAt: string | null;
+  mode: SettlementMultiplierMode;
+  selectedPlan: ObjectiveSettlementEventPlan;
+  onModeChange: (mode: SettlementMultiplierMode) => void;
+}) {
+  const isUsingFullCompletion = mode === "fullCompletion";
+  return (
+    <div
+      className={
+        canUseFullCompletionMultiplier
+          ? "orf-loot-panel orf-loot-multiplier-panel orf-loot-multiplier-panel-warning"
+          : "orf-loot-panel orf-loot-multiplier-panel"
+      }
+    >
+      <div className="orf-loot-panel-heading">
+        <div>
+          <div className="text-sm font-semibold orf-text-primary">结算倍率</div>
+          <div className="text-xs orf-text-secondary">
+            截止 {finalDueAt} · 提交 {lootSubmittedAt ? formatSummaryTime(lootSubmittedAt) : "-"}
+          </div>
+        </div>
+        <span className="orf-loot-total-pill">
+          本次 {formatMultiplier(selectedPlan.multiplier)}
+        </span>
+      </div>
+      <div className="orf-loot-multiplier-grid">
+        <div>
+          <span>目标基础分</span>
+          <strong>{formatSettlementPoints(defaultPlan.basePoints)}</strong>
+        </div>
+        <div>
+          <span>系统默认</span>
+          <strong>
+            {formatMultiplier(defaultPlan.multiplier)} · {formatSettlementPoints(defaultPlan.settlementPoints)}
+          </strong>
+        </div>
+        <div>
+          <span>本次写入</span>
+          <strong>
+            {formatMultiplier(selectedPlan.multiplier)} · {formatSettlementPoints(selectedPlan.settlementPoints)}
+          </strong>
+        </div>
+      </div>
+      {canUseFullCompletionMultiplier ? (
+        <label className="orf-loot-multiplier-option">
+          <input
+            type="checkbox"
+            checked={isUsingFullCompletion}
+            onChange={(event) =>
+              onModeChange(event.target.checked ? "fullCompletion" : "default")
+            }
+          />
+          <span>不使用延期 0.5，本次按完整 1 倍结算</span>
+        </label>
+      ) : (
+        <div className="text-xs orf-text-secondary">
+          当前目标不触发延期 0.5 选择，按系统默认倍率结算。
+        </div>
+      )}
+    </div>
+  );
+}
+
 function isContributionPercentTotalValid(total: number) {
   return (
     Math.abs(total - CONTRIBUTION_PERCENT_TOTAL) <=
@@ -2361,6 +2535,40 @@ function submissionNote(submission: LocalSettlementSubmission | undefined) {
 function formatSummaryTime(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function formatSettlementPoints(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function formatMultiplier(value: number) {
+  return `${formatSettlementPoints(value)} 倍`;
+}
+
+function fullCompletionMultiplierConfirmMessage({
+  defaultPlan,
+  finalDueAt,
+  lootSubmittedAt,
+  selectedMode,
+  selectedPlan,
+}: {
+  defaultPlan: ObjectiveSettlementEventPlan;
+  finalDueAt: string;
+  lootSubmittedAt: string;
+  selectedMode: SettlementMultiplierMode;
+  selectedPlan: ObjectiveSettlementEventPlan;
+}) {
+  const modeLabel = selectedMode === "fullCompletion"
+    ? "完整 1 倍"
+    : "系统默认延期 0.5";
+  return [
+    "该目标晚于截止日提交。",
+    `截止日：${finalDueAt}`,
+    `提交时间：${formatSummaryTime(lootSubmittedAt)}`,
+    `系统默认：${formatMultiplier(defaultPlan.multiplier)}，结算 ${formatSettlementPoints(defaultPlan.settlementPoints)} 分。`,
+    `当前选择：${modeLabel}，将写入 ${formatSettlementPoints(selectedPlan.settlementPoints)} 分。`,
+    "确认后会写入公开积分流水。",
+  ].join("\n");
 }
 
 function percentInputsToAllocations(

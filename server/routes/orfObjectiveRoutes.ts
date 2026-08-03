@@ -116,6 +116,7 @@ const contributionAllocationSchema = z.object({
   memberUserId: z.string().trim().min(1),
   ratio: z.number().min(0).max(1),
 });
+const settlementMultiplierModeSchema = z.enum(["default", "fullCompletion"]);
 const reviewLootBodySchema = z.object({
   lootId: z.string().min(1).optional(),
   acceptedResult: objectiveAcceptedResultSchema.optional(),
@@ -133,6 +134,7 @@ const settleLootBodySchema = z.object({
   }).optional(),
   contributionRatios: z.array(contributionAllocationSchema).min(1).optional(),
   reason: z.string().trim().optional(),
+  settlementMultiplierMode: settlementMultiplierModeSchema.optional(),
 });
 
 async function requireObjectiveDeleteUnlocked(reply: FastifyReply, objectiveId: string) {

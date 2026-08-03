@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  canUseFullCompletionSettlementMultiplier,
   canEditObjectiveBasePointsByFlow,
   objectiveSettlementReviewWindow,
   planObjectiveSettlementEvent,
@@ -67,6 +68,56 @@ test("final completion without prior penalty follows the original deadline multi
       lootSubmittedAt: "2026-06-30T09:00:00.000Z",
     }).settlementPoints,
     50,
+  );
+});
+
+test("delayed final completion can be explicitly settled at full multiplier", () => {
+  const multiplierInput = {
+    acceptedResult: "completed" as const,
+    finalDueAt: "2026-06-24",
+    hasDeadlinePenaltyEvent: false,
+    kind: "finalCompletion" as const,
+    lootSubmittedAt: "2026-06-30T09:00:00.000Z",
+  };
+
+  assert.equal(canUseFullCompletionSettlementMultiplier(multiplierInput), true);
+  assert.deepEqual(
+    planObjectiveSettlementEvent({
+      ...multiplierInput,
+      basePoints: 100,
+      settlementMultiplierMode: "fullCompletion",
+    }),
+    {
+      kind: "finalCompletion",
+      basePoints: 100,
+      multiplier: 1,
+      settlementPoints: 100,
+    },
+  );
+});
+
+test("full multiplier selection does not bypass prior deadline penalty", () => {
+  const multiplierInput = {
+    acceptedResult: "completed" as const,
+    finalDueAt: "2026-06-24",
+    hasDeadlinePenaltyEvent: true,
+    kind: "finalCompletion" as const,
+    lootSubmittedAt: "2026-06-30T09:00:00.000Z",
+  };
+
+  assert.equal(canUseFullCompletionSettlementMultiplier(multiplierInput), false);
+  assert.deepEqual(
+    planObjectiveSettlementEvent({
+      ...multiplierInput,
+      basePoints: 100,
+      settlementMultiplierMode: "fullCompletion",
+    }),
+    {
+      kind: "finalCompletion",
+      basePoints: 100,
+      multiplier: 0,
+      settlementPoints: 0,
+    },
   );
 });
 

@@ -70,6 +70,7 @@ export type ObjectiveSettlementEventPlan = {
   multiplier: number;
   settlementPoints: number;
 };
+export type SettlementMultiplierMode = "default" | "fullCompletion";
 export type ObjectiveSettlementReviewWindow = {
   kind: ObjectiveSettlementEventKind | null;
   open: boolean;
@@ -173,13 +174,15 @@ export function completionMultiplierFor(
   return lootSubmittedAt.slice(0, 10) <= finalDueAt ? 1 : 0.5;
 }
 
-export function settlementEventMultiplierFor(input: {
+type SettlementEventMultiplierInput = {
   acceptedResult: ObjectiveAcceptedResult;
   finalDueAt: string;
   hasDeadlinePenaltyEvent: boolean;
   kind: ObjectiveSettlementEventKind;
   lootSubmittedAt: string | null;
-}) {
+};
+
+export function defaultSettlementEventMultiplierFor(input: SettlementEventMultiplierInput) {
   if (input.kind === "deadlinePenalty") return 0.5;
   if (input.kind === "finalCompletion" && input.hasDeadlinePenaltyEvent) return 0;
   return completionMultiplierFor(
@@ -189,6 +192,33 @@ export function settlementEventMultiplierFor(input: {
   );
 }
 
+export function canUseFullCompletionSettlementMultiplier(input: SettlementEventMultiplierInput) {
+  return Boolean(
+    input.kind === "finalCompletion" &&
+      !input.hasDeadlinePenaltyEvent &&
+      (input.acceptedResult === "completed" || input.acceptedResult === "falsified") &&
+      input.lootSubmittedAt &&
+      input.finalDueAt &&
+      input.lootSubmittedAt.slice(0, 10) > input.finalDueAt &&
+      defaultSettlementEventMultiplierFor(input) === 0.5,
+  );
+}
+
+export function settlementEventMultiplierFor(
+  input: SettlementEventMultiplierInput & {
+    settlementMultiplierMode?: SettlementMultiplierMode;
+  },
+) {
+  if (
+    input.settlementMultiplierMode === "fullCompletion" &&
+    canUseFullCompletionSettlementMultiplier(input)
+  ) {
+    return 1;
+  }
+
+  return defaultSettlementEventMultiplierFor(input);
+}
+
 export function planObjectiveSettlementEvent(input: {
   acceptedResult: ObjectiveAcceptedResult;
   basePoints: number;
@@ -196,6 +226,7 @@ export function planObjectiveSettlementEvent(input: {
   hasDeadlinePenaltyEvent: boolean;
   kind: ObjectiveSettlementEventKind;
   lootSubmittedAt: string | null;
+  settlementMultiplierMode?: SettlementMultiplierMode;
 }): ObjectiveSettlementEventPlan {
   const multiplier = settlementEventMultiplierFor(input);
   return {

@@ -9870,6 +9870,57 @@ button.work-logs-team-cell:focus-visible {
   background: var(--orf-loot-panel-strong-bg);
 }
 
+.orf-loot-multiplier-panel {
+  border-color: color-mix(in srgb, var(--orf-accent-border) 54%, var(--orf-loot-border));
+  background: var(--orf-loot-panel-strong-bg);
+}
+
+.orf-loot-multiplier-panel-warning {
+  border-color: color-mix(in srgb, var(--orf-warning-text) 42%, var(--orf-loot-border));
+}
+
+.orf-loot-multiplier-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.orf-loot-multiplier-grid div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--orf-loot-border);
+  border-radius: 8px;
+  background: var(--orf-loot-muted-bg);
+  padding: 9px 10px;
+}
+
+.orf-loot-multiplier-grid span {
+  color: var(--orf-text-secondary);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.orf-loot-multiplier-grid strong {
+  color: var(--orf-text-primary);
+  font-size: 13px;
+  font-weight: 820;
+  line-height: 1.35;
+}
+
+.orf-loot-multiplier-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--orf-text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.orf-loot-multiplier-option input {
+  margin-top: 3px;
+}
+
 .orf-loot-single-summary,
 .orf-loot-peer-review-empty-state {
   display: grid;
@@ -10579,6 +10630,7 @@ button.work-logs-team-cell:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .orf-loot-multiplier-grid,
   .orf-loot-peer-review-stats,
   .orf-loot-peer-review-allocation-row {
     grid-template-columns: 1fr;

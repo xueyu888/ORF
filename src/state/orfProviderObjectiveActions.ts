@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { hasPermission } from "../config/permissions";
 import { isObjectiveChallenger, objectiveChallengerCount } from "../domain/orfObjectiveParticipants";
+import type { SettlementMultiplierMode } from "../domain/orfSettlement";
 import { canAcceptObjectiveChallengeEntryForActor, canApplyToObjectiveChallengeEntry } from "../domain/orfChallengeEntry";
 import { fetchLocalSettlementSummary, submitLocalContributionReview } from "../services/localSettlementClient";
 import { apiJson, apiRequest } from "./apiClient";
@@ -48,6 +49,7 @@ export type SettleObjectiveLootInput = {
   contributionRatios?: ContributionAllocation[];
   reason?: string;
   settlementParticipantUserIds?: string[];
+  settlementMultiplierMode?: SettlementMultiplierMode;
 };
 export type ReviewObjectiveTrialReviewInput = {
   status: Exclude<ObjectiveTrialReviewStatus, "requested">;

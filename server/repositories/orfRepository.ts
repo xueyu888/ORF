@@ -32,11 +32,13 @@ import type {
 } from "../../src/types/orf";
 import {
   allocateSettlementPoints,
+  canUseFullCompletionSettlementMultiplier,
   canEditObjectiveBasePointsByFlow,
   hasPositiveObjectiveBasePoints,
   planObjectiveAcceptance,
   planObjectiveSettlement,
   planObjectiveSettlementEvent,
+  type SettlementMultiplierMode,
   uncertaintyScoreFor,
 } from "../../src/domain/orfSettlement";
 import {
@@ -3435,6 +3437,7 @@ export interface SettleObjectiveLootInput {
   contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
   contributionRatios?: ContributionAllocation[];
   reason?: string;
+  settlementMultiplierMode?: SettlementMultiplierMode;
 }
 
 export async function reviewObjectiveLoot(
@@ -3644,13 +3647,24 @@ export async function settleObjectiveLoot(
   });
   if (!settlementPlan) return { status: "invalid" };
   const hasDeadlinePenaltyEvent = existingSettlementEvents.some((event) => event.kind === "deadlinePenalty");
-  const eventPlan = planObjectiveSettlementEvent({
+  const eventMultiplierInput = {
     acceptedResult: settlementPlan.objectiveAcceptedResult,
-    basePoints: settlementPlan.basePoints,
     finalDueAt: objective.finalDueAt,
     hasDeadlinePenaltyEvent,
     kind: settlementEventKind,
     lootSubmittedAt: loot.submittedAt,
+  };
+  const settlementMultiplierMode = input.settlementMultiplierMode ?? "default";
+  if (
+    settlementMultiplierMode === "fullCompletion" &&
+    !canUseFullCompletionSettlementMultiplier(eventMultiplierInput)
+  ) {
+    return { status: "invalid" };
+  }
+  const eventPlan = planObjectiveSettlementEvent({
+    ...eventMultiplierInput,
+    basePoints: settlementPlan.basePoints,
+    settlementMultiplierMode,
   });
   const contributionRatios = settlementPlan.contributionRatios.map((item) => {
     const userId = item.memberUserId?.trim() || "";
