@@ -107,7 +107,7 @@
 | `PATCH /api/objectives/:objectiveId/challenge-applications/:applicationId/approve` | 指挥官通过申请，目标进入重估 |
 | `PATCH /api/objectives/:objectiveId/challenge-applications/:applicationId/reject` | 指挥官拒绝申请 |
 | `PATCH /api/objectives/:objectiveId/publish` | 指挥官发布候选目标 |
-| `PATCH /api/objectives/:objectiveId/base-points` | 指挥官修改目标基础分；进入 `accepted` 前可改，之后锁定 |
+| `PATCH /api/objectives/:objectiveId/base-points` | 指挥官修改目标基础分；进入 `settled` 前可改，确认结算后锁定 |
 | `PATCH /api/objectives/:objectiveId/freeze` | 指挥官完成重估并冻结 |
 | `POST /api/objectives/:objectiveId/alignment-requests` | 挑战者申请完成重估、重新重估或验收对齐；重新重估只允许 `frozen` 目标且必须提交理由，待验收目标只能申请验收对齐 |
 | `PATCH /api/objectives/:objectiveId/alignment-requests/:alignmentRequestId` | 指挥官处理对齐申请；重新重估审批通过时传新的 `confirmationDueAt` |

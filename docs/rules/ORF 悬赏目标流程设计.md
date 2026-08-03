@@ -52,9 +52,9 @@
 | `recruiting` | 征召中 | 指挥官指定待接受成员 | 被征召成员接受 |
 | `reestimating` | 重估中 | 申请被通过或征召被接受；重新重估审批通过 | 其他 active 普通成员继续申请；指挥官改目标、指标和目标分数；挑战者提出指标、编辑指标、维护任务、评论；挑战者申请完成重估后，指挥官完成并冻结或打回重估；重估完成期限到期后后端自动尝试冻结 |
 | `frozen` | 已冻结 | 重估完成期限到期且冻结校验通过，或指挥官确认重估完成 | 挑战者填写理由申请重新重估；挑战者提交战利品 |
-| `submitted` | 待验收 | 挑战者提交战利品 | 指挥官验收指标；进入 accepted 前仍可改目标分数；不再允许重新重估 |
+| `submitted` | 待验收 | 挑战者提交战利品 | 指挥官验收指标；仍可改目标分数；不再允许重新重估 |
 | `revisionRequired` | 待返工 | 指挥官验收不通过 | 截止日已到且 `deadlinePenalty` 尚未结算时进行匿名互评和逾期惩罚结算；挑战者继续完成并重新提交 |
-| `accepted` | 已验收 | 指挥官确认验收通过 | 挑战者匿名互评；指挥官确认结算 |
+| `accepted` | 已验收 | 指挥官确认验收通过 | 挑战者匿名互评；指挥官仍可改目标分数；指挥官确认结算 |
 | `settled` | 已结算 | 指挥官确认最终比例并写入积分 | 查看结果和排行榜 |
 | `closed` | 已关闭 | 目标关闭或放弃 | 无 |
 
@@ -124,7 +124,7 @@
 - 写入每个 `Result.acceptedResult`。
 - 按每个指标验收结论汇总 `Objective.acceptedResult`；该字段记录最近一次验收结论，不反向定义生命周期状态。
 - 写入 `completionMultiplier`，并读取当前 `objectiveBasePoints` 作为本次结算基数。
-- 验收通过时 `Objective.flowStatus` 从 `submitted` 进入 `accepted`，锁定目标基础分，并提醒挑战者可以重新检查匿名互评。
+- 验收通过时 `Objective.flowStatus` 从 `submitted` 进入 `accepted`，打开最终匿名互评，并提醒挑战者可以重新检查匿名互评；目标基础分仍允许指挥官在确认结算前调整。
 - 验收不通过时 `Objective.flowStatus` 从 `submitted` 进入 `revisionRequired`；如果已到截止日且 `deadlinePenalty` 尚未结算，仍要进行匿名互评和逾期惩罚结算。
 
 指挥官结算 `revisionRequired` 或 `accepted` 目标后：
@@ -138,7 +138,7 @@
 - `accepted` 的 `finalCompletion` 事件在已有惩罚事件时写入 `0` 分，本期扣掉的分不补回；没有惩罚事件时沿用按时/延期完成倍率。最终结算后 `Objective.flowStatus` 从 `accepted` 进入 `settled`。
 - 向目标 `Objective.challengerUserIds` 中的 active 成员发送个人系统通知；通知不包含匿名互评明细。
 
-`Objective.objectiveBasePoints` 是目标基础分事实源。Result 不直接给目标或个人计分；个人积分按目标级结算事件的贡献比例分配。单人目标也走相同结算事件，默认比例为 `100%`。
+`Objective.objectiveBasePoints` 是目标基础分事实源。指挥官在最终匿名互评阶段仍可修改目标基础分；点击确认结算写入结算事件并进入 `settled` 后锁定。Result 不直接给目标或个人计分；个人积分按目标级结算事件的贡献比例分配。单人目标也走相同结算事件，默认比例为 `100%`。
 
 ## TODO
 

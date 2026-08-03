@@ -1600,7 +1600,7 @@ function objectiveBasePointsUnavailableMessage({
 }) {
   if (draft) return "请先完成目标标题，再设置目标分数";
   if (!canManage) return "只有指挥官可以修改目标分数";
-  if (!lifecycleEditable) return "目标进入匿名互评后，目标分数已锁定";
+  if (!lifecycleEditable) return "目标完成结算后，目标分数已锁定";
   return "当前不能修改目标分数";
 }
 

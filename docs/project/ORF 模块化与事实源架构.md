@@ -3,7 +3,7 @@
 ## 业务状态链
 
 - `Objective` 是挑战流程的业务事实主体；`Objective.flowStatus` 是生命周期唯一业务状态，`stage` 只作为由 `flowStatus` 映射得到的页面兼容投影。生产代码只写 `flowStatus`，数据库触发器和约束负责派生并校验 `stage`。
-- 主链路是 `candidate -> open/applying/recruiting -> reestimating -> frozen -> submitted -> accepted -> settled/closed`；`reestimating` 的默认完成期限由 `Objective.confirmationDueAt` 表达，到期后后端自动尝试冻结，手动提前完成和自动到期冻结共用同一套“至少一个指标”的冻结校验。冻结后如需修改指标口径，只能在正式提交战利品前由挑战者发起带理由的 `frozenReestimate` 对齐申请，指挥官审批并设置不超过 `finalDueAt` 的新 `confirmationDueAt` 后，目标从 `frozen` 回到现有 `reestimating` 链路。`submitted` 已有正式战利品和 `lootSubmittedAt`，不允许再重新重估。目标分数以 `Objective.objectiveBasePoints` 为唯一事实源，指挥官在 `accepted` 前可修改，进入 `accepted` 并打开最终匿名互评后锁定。验收不通过走 `submitted -> revisionRequired -> submitted` 返工重提支线，发布、申请、征召、接受、冻结、重新重估、提交战利品、验收、返工重提和结算只能通过后端接口推进。
+- 主链路是 `candidate -> open/applying/recruiting -> reestimating -> frozen -> submitted -> accepted -> settled/closed`；`reestimating` 的默认完成期限由 `Objective.confirmationDueAt` 表达，到期后后端自动尝试冻结，手动提前完成和自动到期冻结共用同一套“至少一个指标”的冻结校验。冻结后如需修改指标口径，只能在正式提交战利品前由挑战者发起带理由的 `frozenReestimate` 对齐申请，指挥官审批并设置不超过 `finalDueAt` 的新 `confirmationDueAt` 后，目标从 `frozen` 回到现有 `reestimating` 链路。`submitted` 已有正式战利品和 `lootSubmittedAt`，不允许再重新重估。目标分数以 `Objective.objectiveBasePoints` 为唯一事实源，指挥官在 `accepted` 最终匿名互评阶段仍可修改，确认结算写入事件并进入 `settled` 后锁定。验收不通过走 `submitted -> revisionRequired -> submitted` 返工重提支线，发布、申请、征召、接受、冻结、重新重估、提交战利品、验收、返工重提和结算只能通过后端接口推进。
 - `Result`、`Task`、评论、试验收、对齐申请、战利品和积分账本都挂在 `Objective` 下；它们是子事实或派生读模型，不反向拥有目标生命周期。
 - 数据库是业务事实源；前端 `OrfState` 是服务端 read model 快照，`completion/title/creation` overlay 只是临时 UI 状态。
 - 所有 ORF 业务读模型必须携带明确团队作用域；作用域缺失或团队不存在时明确失败，不能退回全库读取、默认团队或 Alex/Mia 等演示数据。

@@ -146,6 +146,7 @@ export function canEditObjectiveBasePointsByFlow(
         "reestimating",
         "frozen",
         "submitted",
+        "accepted",
       ].includes(objective.flowStatus),
   );
 }

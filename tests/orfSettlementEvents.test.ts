@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  canEditObjectiveBasePointsByFlow,
   objectiveSettlementReviewWindow,
   planObjectiveSettlementEvent,
 } from "../src/domain/orfSettlement";
@@ -107,6 +108,24 @@ test("deadline penalty review window stays closed before the due date", () => {
     }),
     { kind: "deadlinePenalty", open: false, reason: "deadlinePending" },
   );
+});
+
+test("objective base points stay editable until settlement is confirmed", () => {
+  for (const flowStatus of [
+    "candidate",
+    "open",
+    "applying",
+    "recruiting",
+    "reestimating",
+    "frozen",
+    "submitted",
+    "accepted",
+  ] as const) {
+    assert.equal(canEditObjectiveBasePointsByFlow({ flowStatus }), true, flowStatus);
+  }
+
+  assert.equal(canEditObjectiveBasePointsByFlow({ flowStatus: "settled" }), false);
+  assert.equal(canEditObjectiveBasePointsByFlow({ flowStatus: "closed" }), false);
 });
 
 test("member peer review action follows the settlement review window", () => {
