@@ -51,6 +51,11 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
 
 ensureTestdConfigFileExists();
 
+if (process.env.TESTD_INCLUDE_DISABLED_SPECS !== "1" && areAllConfiguredTestdCasesDisabled()) {
+  console.error("TestD 当前配置已禁用所有用例，跳过执行。");
+  process.exit(0);
+}
+
 if (await shouldRunRecoveryPass(extraArgs)) {
   for (const suite of runnableSuites) {
     if (terminating) {
@@ -215,6 +220,17 @@ function ensureTestdConfigFileExists() {
     }
     throw error;
   }
+}
+
+function areAllConfiguredTestdCasesDisabled() {
+  const configPath = path.join(process.cwd(), "testd", "testd.config.ts");
+  if (!fs.existsSync(configPath)) {
+    return false;
+  }
+
+  const configSource = fs.readFileSync(configPath, "utf8");
+  const casesMatch = configSource.match(/export const testdCases\s*=\s*\[([\s\S]*?)\]\s*satisfies/);
+  return casesMatch ? !/\benabled:\s*true\b/.test(casesMatch[1]) : false;
 }
 
 function hasRunnableSpecsForSuite(suite, args) {
