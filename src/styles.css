@@ -7699,11 +7699,42 @@ button:disabled {
   gap: 6px;
 }
 
+.reports-custom-range-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .reports-period-date-button {
   gap: 7px;
   min-width: 142px;
   justify-content: center;
   font-variant-numeric: tabular-nums;
+}
+
+.reports-custom-boundary-button {
+  gap: 7px;
+  min-width: 168px;
+  justify-content: flex-start;
+  font-variant-numeric: tabular-nums;
+}
+
+.reports-custom-boundary-button span {
+  color: var(--orf-text-secondary);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.reports-custom-boundary-button strong {
+  color: var(--orf-text-primary);
+  font-size: 12px;
+  font-weight: 840;
+}
+
+.reports-custom-boundary-button[data-active="true"] {
+  border-color: color-mix(in srgb, var(--orf-accent-text) 44%, var(--orf-border));
+  background: var(--orf-accent-soft);
+  color: var(--orf-accent-text);
 }
 
 .reports-calendar-shell {
@@ -7822,6 +7853,12 @@ button:disabled {
   border-color: color-mix(in srgb, var(--orf-accent-text) 58%, var(--orf-border));
   background: var(--orf-accent-soft);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orf-accent-text) 34%, transparent);
+}
+
+.reports-calendar-day[data-range-start="true"],
+.reports-calendar-day[data-range-end="true"] {
+  border-color: color-mix(in srgb, var(--orf-accent-text) 48%, var(--orf-border));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orf-accent-text) 24%, transparent);
 }
 
 .reports-calendar-day[data-today="true"] .reports-calendar-day-number {
@@ -8053,11 +8090,13 @@ button:disabled {
   }
 
   .reports-period-actions,
-  .reports-period-stepper {
+  .reports-period-stepper,
+  .reports-custom-range-controls {
     width: 100%;
   }
 
-  .reports-period-date-button {
+  .reports-period-date-button,
+  .reports-custom-boundary-button {
     flex: 1;
     min-width: 0;
   }

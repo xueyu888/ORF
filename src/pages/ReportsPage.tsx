@@ -9,7 +9,9 @@ import {
   buildLeaderboardRows,
   buildSettlementDaySummaries,
   shiftLeaderboardEndDate,
+  type LeaderboardDateRange,
   type LeaderboardRangeBounds,
+  type LeaderboardRangeSelection,
   type LeaderboardRankChange,
   type LeaderboardRow,
   type ReportsPageData,
@@ -24,6 +26,7 @@ const timeRangeOptions: { label: string; value: TimeRange }[] = [
   { label: "月度", value: "month" },
   { label: "季度", value: "quarter" },
   { label: "年度", value: "year" },
+  { label: "自定义", value: "custom" },
   { label: "全部", value: "all" },
 ];
 
@@ -39,11 +42,20 @@ export function ReportsPage() {
   const today = useMemo(() => localDateString(new Date()), []);
   const [timeRange, setTimeRange] = useState<TimeRange>("quarter");
   const [endDate, setEndDate] = useState(() => localDateString(new Date()));
+  const [customRange, setCustomRange] = useState<LeaderboardDateRange>(() => defaultCustomRange(localDateString(new Date())));
+  const [customDateBoundary, setCustomDateBoundary] = useState<CustomDateBoundary>("end");
   const [calendarDisplayMonth, setCalendarDisplayMonth] = useState(() => monthForDate(localDateString(new Date())));
 
   const reportsProjection = reportsData ?? reportsPageSnapshot() ?? emptyReportsData;
-  const rangeBounds = useMemo(() => buildLeaderboardRangeBounds(timeRange, endDate), [endDate, timeRange]);
-  const rows = useMemo<LeaderboardRow[]>(() => buildLeaderboardRows(reportsProjection, timeRange, endDate), [endDate, reportsProjection, timeRange]);
+  const leaderboardRangeSelection = useMemo<LeaderboardRangeSelection | string>(
+    () => timeRange === "custom" ? { customRange, endDate: customRange.end } : endDate,
+    [customRange, endDate, timeRange],
+  );
+  const rangeBounds = useMemo(() => buildLeaderboardRangeBounds(timeRange, leaderboardRangeSelection), [leaderboardRangeSelection, timeRange]);
+  const rows = useMemo<LeaderboardRow[]>(
+    () => buildLeaderboardRows(reportsProjection, timeRange, leaderboardRangeSelection),
+    [leaderboardRangeSelection, reportsProjection, timeRange],
+  );
   const summary = useMemo(() => buildReportSummary(rows), [rows]);
   const settlementDaySummaries = useMemo(() => buildSettlementDaySummaries(reportsProjection.pointLedger), [reportsProjection.pointLedger]);
   const settlementDaySummaryByDate = useMemo(
@@ -55,12 +67,28 @@ export function ReportsPage() {
     setEndDate(nextDate);
     setCalendarDisplayMonth(monthForDate(nextDate));
   };
+  const changeTimeRange = (nextRange: TimeRange) => {
+    if (nextRange === "custom" && timeRange !== "custom") {
+      const nextCustomRange = rangeBounds ? { end: rangeBounds.end, start: rangeBounds.start } : defaultCustomRange(endDate);
+      setCustomRange(nextCustomRange);
+      setCustomDateBoundary("end");
+      setCalendarDisplayMonth(monthForDate(nextCustomRange.end));
+    }
+    setTimeRange(nextRange);
+  };
+  const changeCustomDate = (nextDate: string) => {
+    setCustomRange((current) => customRangeWithBoundary(current, customDateBoundary, nextDate));
+    setCalendarDisplayMonth(monthForDate(nextDate));
+    if (customDateBoundary === "start") {
+      setCustomDateBoundary("end");
+    }
+  };
 
   return (
     <PageScaffold
       title="统计"
       subtitle="成员积分、完成率和排名变化。"
-      action={<TimeRangeControl timeRange={timeRange} onChange={setTimeRange} />}
+      action={<TimeRangeControl timeRange={timeRange} onChange={changeTimeRange} />}
     >
       <div className="orf-stat-grid">
         <Card className="orf-stat-card">
@@ -98,11 +126,17 @@ export function ReportsPage() {
       </div>
 
       <ReportsPeriodCard
+        customDateBoundary={customDateBoundary}
+        customRange={customRange}
         dailySummaryByDate={settlementDaySummaryByDate}
         displayMonth={calendarDisplayMonth}
         endDate={endDate}
+        onCustomDateBoundaryChange={(boundary) => {
+          setCustomDateBoundary(boundary);
+          setCalendarDisplayMonth(monthForDate(customRange[boundary]));
+        }}
         onDisplayMonthChange={setCalendarDisplayMonth}
-        onEndDateChange={changeEndDate}
+        onSelectDate={timeRange === "custom" ? changeCustomDate : changeEndDate}
         onShiftEndDate={(amount) => changeEndDate(shiftLeaderboardEndDate(endDate, timeRange, amount))}
         rangeBounds={rangeBounds}
         timeRange={timeRange}
@@ -154,27 +188,34 @@ export function ReportsPage() {
 }
 
 function ReportsPeriodCard({
+  customDateBoundary,
+  customRange,
   dailySummaryByDate,
   displayMonth,
   endDate,
+  onCustomDateBoundaryChange,
   onDisplayMonthChange,
-  onEndDateChange,
+  onSelectDate,
   onShiftEndDate,
   rangeBounds,
   timeRange,
   today,
 }: {
+  customDateBoundary: CustomDateBoundary;
+  customRange: LeaderboardDateRange;
   dailySummaryByDate: Map<string, SettlementDaySummary>;
   displayMonth: Date;
   endDate: string;
+  onCustomDateBoundaryChange: (boundary: CustomDateBoundary) => void;
   onDisplayMonthChange: (date: Date) => void;
-  onEndDateChange: (date: string) => void;
+  onSelectDate: (date: string) => void;
   onShiftEndDate: (amount: number) => void;
   rangeBounds: LeaderboardRangeBounds | null;
   timeRange: TimeRange;
   today: string;
 }) {
   const monthTotal = settlementMonthTotal(dailySummaryByDate, displayMonth);
+  const selectedCalendarDate = timeRange === "custom" ? customRange[customDateBoundary] : endDate;
   return (
     <Card className="reports-period-card">
       <div className="reports-period-heading">
@@ -183,7 +224,36 @@ function ReportsPeriodCard({
           <p>{periodRangeDescription(timeRange, rangeBounds)}</p>
         </div>
         <div className="reports-period-actions">
-          {timeRange !== "all" && (
+          {timeRange === "custom" ? (
+            <div className="reports-custom-range-controls" aria-label="自定义统计日期">
+              <Button
+                aria-pressed={customDateBoundary === "start"}
+                className="reports-custom-boundary-button"
+                data-active={customDateBoundary === "start"}
+                onClick={() => onCustomDateBoundaryChange("start")}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                <CalendarDays className="h-4 w-4" />
+                <span>开始</span>
+                <strong>{customRange.start}</strong>
+              </Button>
+              <Button
+                aria-pressed={customDateBoundary === "end"}
+                className="reports-custom-boundary-button"
+                data-active={customDateBoundary === "end"}
+                onClick={() => onCustomDateBoundaryChange("end")}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                <CalendarDays className="h-4 w-4" />
+                <span>结束</span>
+                <strong>{customRange.end}</strong>
+              </Button>
+            </div>
+          ) : timeRange !== "all" && (
             <div className="reports-period-stepper" aria-label="统计结束日期">
               <IconButton
                 icon={ChevronLeft}
@@ -203,7 +273,7 @@ function ReportsPeriodCard({
               />
             </div>
           )}
-          <Button disabled={endDate === today} onClick={() => onEndDateChange(today)} size="sm" type="button" variant="secondary">
+          <Button disabled={selectedCalendarDate === today} onClick={() => onSelectDate(today)} size="sm" type="button" variant="secondary">
             今天
           </Button>
         </div>
@@ -235,9 +305,9 @@ function ReportsPeriodCard({
         <SettlementCalendar
           dailySummaryByDate={dailySummaryByDate}
           displayMonth={displayMonth}
-          endDate={endDate}
-          onSelectDate={onEndDateChange}
+          onSelectDate={onSelectDate}
           rangeBounds={rangeBounds}
+          selectedDate={selectedCalendarDate}
         />
       </div>
     </Card>
@@ -247,17 +317,17 @@ function ReportsPeriodCard({
 function SettlementCalendar({
   dailySummaryByDate,
   displayMonth,
-  endDate,
   onSelectDate,
   rangeBounds,
+  selectedDate,
 }: {
   dailySummaryByDate: Map<string, SettlementDaySummary>;
   displayMonth: Date;
-  endDate: string;
   onSelectDate: (date: string) => void;
   rangeBounds: LeaderboardRangeBounds | null;
+  selectedDate: string;
 }) {
-  const cells = buildFantasyDateGrid(displayMonth, endDate);
+  const cells = buildFantasyDateGrid(displayMonth, selectedDate);
   return (
     <div className="reports-calendar-grid" role="grid" aria-label={`${fantasyMonthLabel(displayMonth)}每日结算分`}>
       {["一", "二", "三", "四", "五", "六", "日"].map((label) => (
@@ -273,13 +343,15 @@ function SettlementCalendar({
           <button
             aria-current={cell.isToday ? "date" : undefined}
             aria-label={`${cell.value}${hasLedger ? `，结算 ${formatPlainPoints(summary?.points ?? 0)} 分` : "，无结算积分"}`}
-            aria-selected={cell.value === endDate}
+            aria-selected={cell.value === selectedDate}
             className="reports-calendar-day"
             data-has-points={hasLedger}
             data-in-range={inActiveRange}
             data-outside-month={!cell.inMonth}
             data-points-tone={pointsTone(summary?.points ?? 0)}
-            data-selected={cell.value === endDate}
+            data-range-end={rangeBounds?.end === cell.value}
+            data-range-start={rangeBounds?.start === cell.value}
+            data-selected={cell.value === selectedDate}
             data-today={cell.isToday}
             key={cell.value}
             onClick={() => onSelectDate(cell.value)}
@@ -399,12 +471,16 @@ function previousRangeLabel(timeRange: TimeRange) {
   if (timeRange === "month") return "上一月度窗口";
   if (timeRange === "quarter") return "上一季度窗口";
   if (timeRange === "year") return "上一年度窗口";
+  if (timeRange === "custom") return "自定义上一周期";
   return "上一周期";
 }
 
 function leaderboardDescription(timeRange: TimeRange, rangeBounds: LeaderboardRangeBounds | null) {
   if (timeRange === "all") {
     return "汇总全部公开积分流水，全部时间不计算排名变化。";
+  }
+  if (timeRange === "custom") {
+    return `${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}（含结束日）的积分和完成率；自定义范围不计算排名变化。`;
   }
 
   return `${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}（含结束日）的积分和完成率，并对比${previousRangeLabel(timeRange)}排名。`;
@@ -413,6 +489,9 @@ function leaderboardDescription(timeRange: TimeRange, rangeBounds: LeaderboardRa
 function rankChangeSummary(summary: ReturnType<typeof buildReportSummary>, timeRange: TimeRange) {
   if (timeRange === "all") {
     return "全部时间无上一周期";
+  }
+  if (timeRange === "custom") {
+    return "自定义范围无上一周期";
   }
 
   const parts = [
@@ -428,6 +507,9 @@ function periodRangeDescription(timeRange: TimeRange, rangeBounds: LeaderboardRa
   if (timeRange === "all") {
     return "全部公开积分流水；日历展示每天按结算日期汇总的积分。";
   }
+  if (timeRange === "custom") {
+    return `统计范围：${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}，结束日期包含当天。`;
+  }
   return `统计范围：${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}，结束日期包含当天。`;
 }
 
@@ -436,6 +518,28 @@ function periodWindowName(timeRange: TimeRange) {
   if (timeRange === "quarter") return "季度窗口";
   if (timeRange === "year") return "年度窗口";
   return "窗口";
+}
+
+type CustomDateBoundary = "end" | "start";
+
+function defaultCustomRange(endDate: string): LeaderboardDateRange {
+  const bounds = buildLeaderboardRangeBounds("month", endDate);
+  return {
+    end: bounds?.end ?? endDate,
+    start: bounds?.start ?? endDate,
+  };
+}
+
+function customRangeWithBoundary(current: LeaderboardDateRange, boundary: CustomDateBoundary, value: string): LeaderboardDateRange {
+  if (boundary === "start") {
+    return value <= current.end
+      ? { ...current, start: value }
+      : { end: value, start: current.end };
+  }
+
+  return value >= current.start
+    ? { ...current, end: value }
+    : { end: current.start, start: value };
 }
 
 function monthForDate(value: string) {

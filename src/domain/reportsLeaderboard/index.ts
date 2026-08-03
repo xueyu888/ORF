@@ -2,7 +2,7 @@ import { userDisplayProfileMap } from "../userDisplayProfile";
 import type { Objective, ObjectiveAcceptanceReview, OrfState, OrfUser, OrfUserDisplayProfile, PointLedgerEntry } from "../../types/orf";
 import { addCalendarDays, isDateOnlyString, localDateString } from "../../utils/date";
 
-export type TimeRange = "month" | "quarter" | "year" | "all";
+export type TimeRange = "month" | "quarter" | "year" | "custom" | "all";
 
 export type LeaderboardObjectiveFact = Pick<Objective, "acceptedResult" | "createdAt" | "flowStatus" | "id" | "updatedAt">;
 
@@ -44,6 +44,13 @@ export type LeaderboardRangeBounds = {
   start: string;
 };
 
+export type LeaderboardDateRange = Pick<LeaderboardRangeBounds, "end" | "start">;
+
+export type LeaderboardRangeSelection = {
+  customRange?: LeaderboardDateRange;
+  endDate?: string;
+};
+
 export type SettlementDaySummary = {
   count: number;
   date: string;
@@ -51,12 +58,13 @@ export type SettlementDaySummary = {
 };
 
 type PeriodLeaderboardRow = Omit<LeaderboardRow, "rankChange">;
+type RollingTimeRange = Exclude<TimeRange, "all" | "custom">;
 type ObjectiveCompletionCounts = { completed: number; total: number };
 type ObjectiveAcceptanceReviewSummary = {
   hasFailedAcceptance: boolean;
 };
 
-const windowMonthsByRange: Record<Exclude<TimeRange, "all">, number> = {
+const windowMonthsByRange: Record<RollingTimeRange, number> = {
   month: 1,
   quarter: 3,
   year: 12,
@@ -101,18 +109,44 @@ export function addCalendarMonths(value: string, amount: number) {
 }
 
 export function shiftLeaderboardEndDate(endDate: string, range: TimeRange, amount: number) {
-  if (range === "all") {
+  if (!isRollingRange(range)) {
     return normalizeDateKey(endDate);
   }
   return addCalendarMonths(endDate, windowMonthsByRange[range] * amount);
 }
 
-export function buildLeaderboardRangeBounds(range: TimeRange, endDate = todayDateKey()): LeaderboardRangeBounds | null {
+function isRollingRange(range: TimeRange): range is RollingTimeRange {
+  return range !== "all" && range !== "custom";
+}
+
+function normalizeLeaderboardRangeSelection(selection: LeaderboardRangeSelection | string | undefined): LeaderboardRangeSelection {
+  return typeof selection === "string" ? { endDate: selection } : selection ?? {};
+}
+
+function normalizeDateRange(range: LeaderboardDateRange | undefined, fallbackEndDate: string): LeaderboardDateRange {
+  const safeEnd = normalizeDateKey(range?.end, fallbackEndDate);
+  const safeStart = normalizeDateKey(range?.start, safeEnd);
+  return safeStart <= safeEnd
+    ? { end: safeEnd, start: safeStart }
+    : { end: safeStart, start: safeEnd };
+}
+
+export function buildLeaderboardRangeBounds(range: TimeRange, selection: LeaderboardRangeSelection | string = todayDateKey()): LeaderboardRangeBounds | null {
   if (range === "all") {
     return null;
   }
 
-  const safeEndDate = normalizeDateKey(endDate);
+  const normalizedSelection = normalizeLeaderboardRangeSelection(selection);
+  const safeEndDate = normalizeDateKey(normalizedSelection.endDate);
+  if (range === "custom") {
+    const customRange = normalizeDateRange(normalizedSelection.customRange, safeEndDate);
+    return {
+      end: customRange.end,
+      endExclusive: addCalendarDays(customRange.end, 1, customRange.end),
+      start: customRange.start,
+    };
+  }
+
   return {
     end: safeEndDate,
     endExclusive: addCalendarDays(safeEndDate, 1, safeEndDate),
@@ -120,21 +154,23 @@ export function buildLeaderboardRangeBounds(range: TimeRange, endDate = todayDat
   };
 }
 
-function previousRangeBounds(range: TimeRange, endDate: string): LeaderboardRangeBounds | null {
-  if (range === "all") {
+function previousRangeBounds(range: TimeRange, selection: LeaderboardRangeSelection | string): LeaderboardRangeBounds | null {
+  if (!isRollingRange(range)) {
     return null;
   }
 
-  return buildLeaderboardRangeBounds(range, shiftLeaderboardEndDate(endDate, range, -1));
+  const { endDate } = normalizeLeaderboardRangeSelection(selection);
+  const safeEndDate = normalizeDateKey(endDate);
+  return buildLeaderboardRangeBounds(range, shiftLeaderboardEndDate(safeEndDate, range, -1));
 }
 
-function isInRange(value: string | null | undefined, range: TimeRange, endDate: string) {
+function isInRange(value: string | null | undefined, range: TimeRange, selection: LeaderboardRangeSelection | string) {
   const key = dateOnly(value);
   if (!key) {
     return range === "all";
   }
 
-  const bounds = buildLeaderboardRangeBounds(range, endDate);
+  const bounds = buildLeaderboardRangeBounds(range, selection);
   return !bounds || (key >= bounds.start && key < bounds.endExclusive);
 }
 
@@ -267,12 +303,13 @@ export function buildSettlementDaySummaries(entries: readonly PointLedgerEntry[]
   return Array.from(summariesByDate.values()).sort((left, right) => left.date.localeCompare(right.date));
 }
 
-export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRange, endDate = todayDateKey()): LeaderboardRow[] {
-  const safeEndDate = normalizeDateKey(endDate);
-  const ledger = state.pointLedger.filter((entry) => isInRange(ledgerPeriodAt(entry), timeRange, safeEndDate));
+export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRange, selection: LeaderboardRangeSelection | string = todayDateKey()): LeaderboardRow[] {
+  const normalizedSelection = normalizeLeaderboardRangeSelection(selection);
+  const effectiveSelection = typeof selection === "string" ? selection : normalizedSelection;
+  const ledger = state.pointLedger.filter((entry) => isInRange(ledgerPeriodAt(entry), timeRange, effectiveSelection));
   const acceptanceReviewSummary = buildObjectiveAcceptanceReviewSummary(state.objectiveAcceptanceReviews ?? []);
   const currentRows = buildPeriodRows(state.users, state.userProfiles, ledger, state.objectives, acceptanceReviewSummary, 10);
-  const previousBounds = previousRangeBounds(timeRange, safeEndDate);
+  const previousBounds = previousRangeBounds(timeRange, effectiveSelection);
 
   if (!previousBounds) {
     return currentRows.map((row) => ({

@@ -358,6 +358,67 @@ test("leaderboard rolling range uses the selected end date and includes that day
   });
 });
 
+test("leaderboard custom range uses explicit inclusive start and end dates", () => {
+  assert.deepEqual(buildLeaderboardRangeBounds("custom", { customRange: { end: "2026-08-20", start: "2026-07-01" } }), {
+    end: "2026-08-20",
+    endExclusive: "2026-08-21",
+    start: "2026-07-01",
+  });
+  assert.deepEqual(buildLeaderboardRangeBounds("custom", { customRange: { end: "2026-07-01", start: "2026-08-20" } }), {
+    end: "2026-08-20",
+    endExclusive: "2026-08-21",
+    start: "2026-07-01",
+  });
+});
+
+test("custom leaderboard filters by explicit settlement range without rank comparison", () => {
+  const rows = buildLeaderboardRows(
+    state({
+      objectives: [objective({})],
+      pointLedger: [
+        ledger({
+          createdAt: "2026-06-30T10:00:00.000Z",
+          id: "ledger-before-custom",
+          memberName: "成员甲",
+          points: 900,
+          settlementPeriodAt: "2026-06-30T10:00:00.000Z",
+          userId: "user-a",
+        }),
+        ledger({
+          createdAt: "2026-07-01T10:00:00.000Z",
+          id: "ledger-custom-start",
+          memberName: "成员甲",
+          points: 30,
+          settlementPeriodAt: "2026-07-01T10:00:00.000Z",
+          userId: "user-a",
+        }),
+        ledger({
+          createdAt: "2026-08-20T10:00:00.000Z",
+          id: "ledger-custom-end",
+          memberName: "成员甲",
+          points: 20,
+          settlementPeriodAt: "2026-08-20T10:00:00.000Z",
+          userId: "user-a",
+        }),
+        ledger({
+          createdAt: "2026-08-21T10:00:00.000Z",
+          id: "ledger-after-custom",
+          memberName: "成员乙",
+          points: 800,
+          settlementPeriodAt: "2026-08-21T10:00:00.000Z",
+          userId: "user-b",
+        }),
+      ],
+    }),
+    "custom",
+    { customRange: { end: "2026-08-20", start: "2026-07-01" } },
+  );
+
+  assert.deepEqual(rows.map((row) => row.memberName), ["成员甲"]);
+  assert.equal(rows[0]?.points, 50);
+  assert.equal(rows[0]?.rankChange.kind, "unavailable");
+});
+
 test("settlement day summaries aggregate points by settlement period date", () => {
   const summaries = buildSettlementDaySummaries([
     ledger({
