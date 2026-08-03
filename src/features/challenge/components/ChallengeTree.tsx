@@ -840,6 +840,38 @@ function dateTimeLocalInputToIso(value: string) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+type ObjectiveProjectMenuPosition = {
+  left: number;
+  maxHeight: number;
+  placement: "bottom" | "top";
+  top: number;
+  width: number;
+};
+
+function objectiveProjectMenuPosition(anchor: HTMLElement, menu: HTMLElement | null, projectCount: number): ObjectiveProjectMenuPosition {
+  const viewportPadding = 12;
+  const gap = 8;
+  const anchorRect = anchor.getBoundingClientRect();
+  const width = Math.max(188, Math.min(260, window.innerWidth - viewportPadding * 2));
+  const fallbackHeight = Math.min(360, Math.max(156, (projectCount + 1) * 36 + 54));
+  const popoverHeight = menu?.offsetHeight ?? fallbackHeight;
+  const belowTop = anchorRect.bottom + gap;
+  const belowSpace = window.innerHeight - belowTop - viewportPadding;
+  const aboveSpace = anchorRect.top - gap - viewportPadding;
+  const placement = belowSpace < Math.min(popoverHeight, 180) && aboveSpace > belowSpace ? "top" : "bottom";
+  const maxHeight = Math.max(156, Math.min(360, placement === "top" ? aboveSpace : belowSpace));
+  const top =
+    placement === "top"
+      ? Math.max(viewportPadding, anchorRect.top - gap - Math.min(popoverHeight, maxHeight))
+      : Math.min(belowTop, window.innerHeight - viewportPadding - Math.min(popoverHeight, maxHeight));
+  const left = Math.min(
+    Math.max(viewportPadding, anchorRect.left),
+    Math.max(viewportPadding, window.innerWidth - viewportPadding - width),
+  );
+
+  return { left, maxHeight, placement, top, width };
+}
+
 function ObjectiveProjectMenu({
   objectiveId,
   onCreateProject,
@@ -858,9 +890,44 @@ function ObjectiveProjectMenu({
   projects: OrfProject[];
 }) {
   const [newProjectName, setNewProjectName] = useState("");
+  const [position, setPosition] = useState<ObjectiveProjectMenuPosition | null>(null);
+  const anchorRef = useRef<HTMLSpanElement | null>(null);
+  const menuRef = useRef<HTMLSpanElement | null>(null);
   const [saving, setSaving] = useState(false);
 
-  if (!open) return null;
+  useEffect(() => {
+    if (!open) {
+      setPosition(null);
+      return undefined;
+    }
+
+    const syncPosition = () => {
+      if (!anchorRef.current || typeof window === "undefined") return;
+      setPosition(objectiveProjectMenuPosition(anchorRef.current, menuRef.current, projects.length));
+    };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (anchorRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      onOpenChange(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onOpenChange(false);
+    };
+
+    syncPosition();
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", syncPosition);
+    window.addEventListener("scroll", syncPosition, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", syncPosition);
+      window.removeEventListener("scroll", syncPosition, true);
+    };
+  }, [onOpenChange, open, projects.length]);
 
   const setProject = async (nextProjectId: string | null) => {
     setSaving(true);
@@ -889,40 +956,63 @@ function ObjectiveProjectMenu({
     }
   };
 
-  return (
-    <span className="orf-objective-project-menu-anchor" data-challenge-row-actions="true" data-no-row-edit="true" onPointerDown={(event) => event.stopPropagation()}>
-      <span className="orf-popover orf-objective-project-menu">
-        <button className="orf-objective-project-menu-item" disabled={saving || projectId === null} type="button" onClick={() => void setProject(null)}>
-          移出项目
-        </button>
-        {projects.map((project) => (
-          <button
-            key={project.id}
-            className="orf-objective-project-menu-item"
-            disabled={saving || project.id === projectId}
-            type="button"
-            onClick={() => void setProject(project.id)}
-          >
-            {project.name}
+  const menuStyle: CSSProperties = {
+    left: position?.left ?? -9999,
+    maxHeight: position?.maxHeight,
+    top: position?.top ?? -9999,
+    width: position?.width,
+  };
+  const menu = open && typeof document !== "undefined"
+    ? createPortal(
+        <span
+          ref={menuRef}
+          className="orf-popover orf-objective-project-menu"
+          data-challenge-row-actions="true"
+          data-no-row-edit="true"
+          data-placement={position?.placement}
+          style={menuStyle}
+          onClick={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <button className="orf-objective-project-menu-item" disabled={saving || projectId === null} type="button" onClick={() => void setProject(null)}>
+            移出项目
           </button>
-        ))}
-        <span className="orf-objective-project-create">
-          <input
-            aria-label="新项目名称"
-            disabled={saving}
-            onChange={(event) => setNewProjectName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void createAndAssign();
-              }
-            }}
-            placeholder="新建并放入"
-            value={newProjectName}
-          />
-          <IconButton icon={Plus} label="新建并放入项目" disabled={saving || !newProjectName.trim()} size="sm" type="button" onClick={() => void createAndAssign()} />
-        </span>
-      </span>
+          {projects.map((project) => (
+            <button
+              key={project.id}
+              className="orf-objective-project-menu-item"
+              disabled={saving || project.id === projectId}
+              type="button"
+              onClick={() => void setProject(project.id)}
+            >
+              {project.name}
+            </button>
+          ))}
+          <span className="orf-objective-project-create">
+            <input
+              aria-label="新项目名称"
+              disabled={saving}
+              onChange={(event) => setNewProjectName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void createAndAssign();
+                }
+              }}
+              placeholder="新建并放入"
+              value={newProjectName}
+            />
+            <IconButton icon={Plus} label="新建并放入项目" disabled={saving || !newProjectName.trim()} size="sm" type="button" onClick={() => void createAndAssign()} />
+          </span>
+        </span>,
+        document.body,
+      )
+    : null;
+
+  return (
+    <span ref={anchorRef} className="orf-objective-project-menu-anchor" data-challenge-row-actions="true" data-no-row-edit="true" onPointerDown={(event) => event.stopPropagation()}>
+      {menu}
     </span>
   );
 }

@@ -11813,13 +11813,14 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-objective-project-menu {
-  position: absolute;
-  z-index: 60;
-  top: 14px;
-  left: 0;
+  position: fixed;
+  z-index: 2200;
   display: grid;
   width: min(260px, 82vw);
+  max-width: calc(100vw - 24px);
   gap: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 8px;
 }
 
