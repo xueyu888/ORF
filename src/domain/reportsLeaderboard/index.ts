@@ -1,5 +1,6 @@
 import { userDisplayProfileMap } from "../userDisplayProfile";
 import type { Objective, ObjectiveAcceptanceReview, OrfState, OrfUser, OrfUserDisplayProfile, PointLedgerEntry } from "../../types/orf";
+import { addCalendarDays, isDateOnlyString, localDateString } from "../../utils/date";
 
 export type TimeRange = "month" | "quarter" | "year" | "all";
 
@@ -37,108 +38,109 @@ export type LeaderboardRow = {
   userId: string;
 };
 
-type DateBounds = {
+export type LeaderboardRangeBounds = {
   end: string;
+  endExclusive: string;
   start: string;
 };
+
+export type SettlementDaySummary = {
+  count: number;
+  date: string;
+  points: number;
+};
+
 type PeriodLeaderboardRow = Omit<LeaderboardRow, "rankChange">;
 type ObjectiveCompletionCounts = { completed: number; total: number };
 type ObjectiveAcceptanceReviewSummary = {
   hasFailedAcceptance: boolean;
 };
 
+const windowMonthsByRange: Record<Exclude<TimeRange, "all">, number> = {
+  month: 1,
+  quarter: 3,
+  year: 12,
+};
+
 function dateOnly(value: string | null | undefined) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
 }
 
-function toDateKey(date: Date) {
-  return date.toISOString().slice(0, 10);
+function todayDateKey() {
+  return localDateString(new Date());
 }
 
 function ledgerPeriodAt(entry: PointLedgerEntry) {
   return entry.settlementPeriodAt || entry.createdAt;
 }
 
-function latestDate(entries: readonly PointLedgerEntry[], objectives: readonly LeaderboardObjectiveFact[]) {
-  const ledgerDates = entries.map((entry) => dateOnly(ledgerPeriodAt(entry))).filter((value): value is string => Boolean(value));
-  const dates = ledgerDates.length > 0
-    ? ledgerDates
-    : objectives.map((objective) => dateOnly(objective.updatedAt) ?? dateOnly(objective.createdAt)).filter((value): value is string => Boolean(value));
-
-  return dates.sort().at(-1) ?? new Date().toISOString().slice(0, 10);
+function normalizeDateKey(value: string | undefined, fallback = todayDateKey()) {
+  return value && isDateOnlyString(value) ? value : fallback;
 }
 
-function rangeBounds(range: TimeRange, anchorDate: string): DateBounds | null {
+function dateParts(value: string) {
+  return {
+    day: Number(value.slice(8, 10)),
+    monthIndex: Number(value.slice(5, 7)) - 1,
+    year: Number(value.slice(0, 4)),
+  };
+}
+
+function calendarMonthLength(year: number, monthIndex: number) {
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+export function addCalendarMonths(value: string, amount: number) {
+  const safeValue = normalizeDateKey(value);
+  const { day, monthIndex, year } = dateParts(safeValue);
+  const targetMonth = new Date(year, monthIndex + amount, 1);
+  const targetYear = targetMonth.getFullYear();
+  const targetMonthIndex = targetMonth.getMonth();
+  const targetDay = Math.min(day, calendarMonthLength(targetYear, targetMonthIndex));
+  return localDateString(new Date(targetYear, targetMonthIndex, targetDay));
+}
+
+export function shiftLeaderboardEndDate(endDate: string, range: TimeRange, amount: number) {
+  if (range === "all") {
+    return normalizeDateKey(endDate);
+  }
+  return addCalendarMonths(endDate, windowMonthsByRange[range] * amount);
+}
+
+export function buildLeaderboardRangeBounds(range: TimeRange, endDate = todayDateKey()): LeaderboardRangeBounds | null {
   if (range === "all") {
     return null;
   }
 
-  const anchor = new Date(`${anchorDate}T00:00:00.000Z`);
-  const year = anchor.getUTCFullYear();
-  if (range === "month") {
-    const month = anchor.getUTCMonth();
-    const start = new Date(Date.UTC(year, month, 1));
-    const end = new Date(Date.UTC(year, month + 1, 1));
-    return {
-      start: toDateKey(start),
-      end: toDateKey(end),
-    };
-  }
-
-  if (range === "year") {
-    return {
-      start: `${year}-01-01`,
-      end: `${year + 1}-01-01`,
-    };
-  }
-
-  const quarterStartMonth = Math.floor(anchor.getUTCMonth() / 3) * 3;
-  const start = new Date(Date.UTC(year, quarterStartMonth, 1));
-  const end = new Date(Date.UTC(year, quarterStartMonth + 3, 1));
+  const safeEndDate = normalizeDateKey(endDate);
   return {
-    start: toDateKey(start),
-    end: toDateKey(end),
+    end: safeEndDate,
+    endExclusive: addCalendarDays(safeEndDate, 1, safeEndDate),
+    start: addCalendarMonths(safeEndDate, -windowMonthsByRange[range]),
   };
 }
 
-function previousRangeBounds(range: TimeRange, anchorDate: string): DateBounds | null {
-  const currentBounds = rangeBounds(range, anchorDate);
-  if (!currentBounds) {
+function previousRangeBounds(range: TimeRange, endDate: string): LeaderboardRangeBounds | null {
+  if (range === "all") {
     return null;
   }
 
-  const start = new Date(`${currentBounds.start}T00:00:00.000Z`);
-  const end = new Date(`${currentBounds.end}T00:00:00.000Z`);
-  if (range === "year") {
-    start.setUTCFullYear(start.getUTCFullYear() - 1);
-    end.setUTCFullYear(end.getUTCFullYear() - 1);
-  } else if (range === "month") {
-    start.setUTCMonth(start.getUTCMonth() - 1);
-    end.setUTCMonth(end.getUTCMonth() - 1);
-  } else {
-    start.setUTCMonth(start.getUTCMonth() - 3);
-    end.setUTCMonth(end.getUTCMonth() - 3);
-  }
-
-  return {
-    start: toDateKey(start),
-    end: toDateKey(end),
-  };
+  return buildLeaderboardRangeBounds(range, shiftLeaderboardEndDate(endDate, range, -1));
 }
 
-function isInRange(value: string | null | undefined, range: TimeRange, anchorDate: string) {
+function isInRange(value: string | null | undefined, range: TimeRange, endDate: string) {
   const key = dateOnly(value);
   if (!key) {
     return range === "all";
   }
 
-  const bounds = rangeBounds(range, anchorDate);
-  return !bounds || (key >= bounds.start && key < bounds.end);
+  const bounds = buildLeaderboardRangeBounds(range, endDate);
+  return !bounds || (key >= bounds.start && key < bounds.endExclusive);
 }
 
-function isInBounds(value: string | null | undefined, bounds: DateBounds) {
+function isInBounds(value: string | null | undefined, bounds: LeaderboardRangeBounds) {
   const key = dateOnly(value);
-  return Boolean(key && key >= bounds.start && key < bounds.end);
+  return Boolean(key && key >= bounds.start && key < bounds.endExclusive);
 }
 
 function userIds(
@@ -250,12 +252,27 @@ function rankChangeFor(row: PeriodLeaderboardRow, previousRanks: Map<string, num
   };
 }
 
-export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRange): LeaderboardRow[] {
-  const anchorDate = latestDate(state.pointLedger, state.objectives);
-  const ledger = state.pointLedger.filter((entry) => isInRange(ledgerPeriodAt(entry), timeRange, anchorDate));
+export function buildSettlementDaySummaries(entries: readonly PointLedgerEntry[]): SettlementDaySummary[] {
+  const summariesByDate = new Map<string, SettlementDaySummary>();
+  for (const entry of entries) {
+    const date = dateOnly(ledgerPeriodAt(entry));
+    if (!date) continue;
+
+    const current = summariesByDate.get(date) ?? { count: 0, date, points: 0 };
+    current.count += 1;
+    current.points += entry.points;
+    summariesByDate.set(date, current);
+  }
+
+  return Array.from(summariesByDate.values()).sort((left, right) => left.date.localeCompare(right.date));
+}
+
+export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRange, endDate = todayDateKey()): LeaderboardRow[] {
+  const safeEndDate = normalizeDateKey(endDate);
+  const ledger = state.pointLedger.filter((entry) => isInRange(ledgerPeriodAt(entry), timeRange, safeEndDate));
   const acceptanceReviewSummary = buildObjectiveAcceptanceReviewSummary(state.objectiveAcceptanceReviews ?? []);
   const currentRows = buildPeriodRows(state.users, state.userProfiles, ledger, state.objectives, acceptanceReviewSummary, 10);
-  const previousBounds = previousRangeBounds(timeRange, anchorDate);
+  const previousBounds = previousRangeBounds(timeRange, safeEndDate);
 
   if (!previousBounds) {
     return currentRows.map((row) => ({

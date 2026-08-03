@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildLeaderboardRows } from "../src/domain/reportsLeaderboard";
+import { buildLeaderboardRangeBounds, buildLeaderboardRows, buildSettlementDaySummaries } from "../src/domain/reportsLeaderboard";
 import type { Objective, ObjectiveAcceptanceReview, PointLedgerEntry, OrfUser, OrfUserDisplayProfile } from "../src/types/orf";
 
 const users: OrfUser[] = [
@@ -211,13 +211,14 @@ test("quarterly leaderboard marks members without previous period ranks as new",
       ],
     }),
     "quarter",
+    "2026-06-30",
   );
 
   assert.equal(rows[0]?.rankChange.kind, "new");
   assert.equal(rows[1]?.rankChange.kind, "new");
 });
 
-test("monthly leaderboard compares against the previous month ranking only", () => {
+test("monthly leaderboard compares against the previous rolling month window", () => {
   const rows = buildLeaderboardRows(
     state({
       objectives: [
@@ -269,6 +270,7 @@ test("monthly leaderboard compares against the previous month ranking only", () 
       ],
     }),
     "month",
+    "2026-06-30",
   );
 
   assert.equal(rows.find((row) => row.memberName === "成员甲")?.points, 30);
@@ -325,6 +327,7 @@ test("monthly leaderboard assigns settlement to final acceptance period instead 
       ],
     }),
     "month",
+    "2026-06-30",
   );
 
   assert.equal(rows.find((row) => row.memberName === "成员甲")?.points, 30);
@@ -335,6 +338,43 @@ test("monthly leaderboard assigns settlement to final acceptance period instead 
     kind: "moved",
     previousRank: 2,
   });
+});
+
+test("leaderboard rolling range uses the selected end date and includes that day", () => {
+  assert.deepEqual(buildLeaderboardRangeBounds("month", "2026-08-03"), {
+    end: "2026-08-03",
+    endExclusive: "2026-08-04",
+    start: "2026-07-03",
+  });
+  assert.deepEqual(buildLeaderboardRangeBounds("quarter", "2026-08-03"), {
+    end: "2026-08-03",
+    endExclusive: "2026-08-04",
+    start: "2026-05-03",
+  });
+  assert.deepEqual(buildLeaderboardRangeBounds("year", "2026-08-03"), {
+    end: "2026-08-03",
+    endExclusive: "2026-08-04",
+    start: "2025-08-03",
+  });
+});
+
+test("settlement day summaries aggregate points by settlement period date", () => {
+  const summaries = buildSettlementDaySummaries([
+    ledger({
+      createdAt: "2026-08-04T10:00:00.000Z",
+      id: "ledger-late-write",
+      points: 30,
+      settlementPeriodAt: "2026-08-03T18:00:00.000Z",
+    }),
+    ledger({
+      createdAt: "2026-08-03T10:00:00.000Z",
+      id: "ledger-same-day",
+      points: -5,
+      settlementPeriodAt: "2026-08-03T09:00:00.000Z",
+    }),
+  ]);
+
+  assert.deepEqual(summaries, [{ count: 2, date: "2026-08-03", points: 25 }]);
 });
 
 test("quarterly rank change compares against the full previous period ranking", () => {
@@ -384,6 +424,7 @@ test("quarterly rank change compares against the full previous period ranking", 
       ],
     }),
     "quarter",
+    "2026-06-30",
   );
 
   const renamedMember = rows.find((row) => row.userId === "user-c");

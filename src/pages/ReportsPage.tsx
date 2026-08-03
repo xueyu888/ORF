@@ -1,11 +1,24 @@
-import { BarChart3, CalendarDays, Minus, Target, TrendingDown, TrendingUp, Trophy, Users } from "lucide-react";
+import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Minus, Target, TrendingDown, TrendingUp, Trophy, Users } from "lucide-react";
 import { useMemo, useState } from "react";
+import { buildFantasyDateGrid, fantasyMonthLabel } from "../components/FantasyDatePicker";
 import { PageScaffold } from "../components/PageScaffold";
 import { UserAvatar } from "../components/UserAvatar";
-import { Card, ProgressBar } from "../components/ui";
-import { buildLeaderboardRows, type LeaderboardRankChange, type LeaderboardRow, type ReportsPageData, type TimeRange } from "../domain/reportsLeaderboard";
+import { Button, Card, IconButton, ProgressBar } from "../components/ui";
+import {
+  buildLeaderboardRangeBounds,
+  buildLeaderboardRows,
+  buildSettlementDaySummaries,
+  shiftLeaderboardEndDate,
+  type LeaderboardRangeBounds,
+  type LeaderboardRankChange,
+  type LeaderboardRow,
+  type ReportsPageData,
+  type SettlementDaySummary,
+  type TimeRange,
+} from "../domain/reportsLeaderboard";
 import { useOrf } from "../state/OrfProvider";
 import { reportsPageSnapshot } from "../state/readModelQueries";
+import { localDateString } from "../utils/date";
 
 const timeRangeOptions: { label: string; value: TimeRange }[] = [
   { label: "月度", value: "month" },
@@ -23,12 +36,25 @@ const emptyReportsData: ReportsPageData = {
 
 export function ReportsPage() {
   const { reportsData } = useOrf();
+  const today = useMemo(() => localDateString(new Date()), []);
   const [timeRange, setTimeRange] = useState<TimeRange>("quarter");
+  const [endDate, setEndDate] = useState(() => localDateString(new Date()));
+  const [calendarDisplayMonth, setCalendarDisplayMonth] = useState(() => monthForDate(localDateString(new Date())));
 
   const reportsProjection = reportsData ?? reportsPageSnapshot() ?? emptyReportsData;
-  const rows = useMemo<LeaderboardRow[]>(() => buildLeaderboardRows(reportsProjection, timeRange), [reportsProjection, timeRange]);
+  const rangeBounds = useMemo(() => buildLeaderboardRangeBounds(timeRange, endDate), [endDate, timeRange]);
+  const rows = useMemo<LeaderboardRow[]>(() => buildLeaderboardRows(reportsProjection, timeRange, endDate), [endDate, reportsProjection, timeRange]);
   const summary = useMemo(() => buildReportSummary(rows), [rows]);
+  const settlementDaySummaries = useMemo(() => buildSettlementDaySummaries(reportsProjection.pointLedger), [reportsProjection.pointLedger]);
+  const settlementDaySummaryByDate = useMemo(
+    () => new Map(settlementDaySummaries.map((item) => [item.date, item])),
+    [settlementDaySummaries],
+  );
   const maxPoints = Math.max(1, ...rows.map((row) => row.points));
+  const changeEndDate = (nextDate: string) => {
+    setEndDate(nextDate);
+    setCalendarDisplayMonth(monthForDate(nextDate));
+  };
 
   return (
     <PageScaffold
@@ -71,11 +97,23 @@ export function ReportsPage() {
         </Card>
       </div>
 
+      <ReportsPeriodCard
+        dailySummaryByDate={settlementDaySummaryByDate}
+        displayMonth={calendarDisplayMonth}
+        endDate={endDate}
+        onDisplayMonthChange={setCalendarDisplayMonth}
+        onEndDateChange={changeEndDate}
+        onShiftEndDate={(amount) => changeEndDate(shiftLeaderboardEndDate(endDate, timeRange, amount))}
+        rangeBounds={rangeBounds}
+        timeRange={timeRange}
+        today={today}
+      />
+
       <Card className="reports-leaderboard-card">
         <div className="reports-leaderboard-heading">
           <div>
             <h2>成员积分排行榜</h2>
-            <p>{leaderboardDescription(timeRange)}</p>
+            <p>{leaderboardDescription(timeRange, rangeBounds)}</p>
           </div>
           <div className="reports-leaderboard-count">
             <Trophy className="h-4 w-4" />
@@ -112,6 +150,150 @@ export function ReportsPage() {
         )}
       </Card>
     </PageScaffold>
+  );
+}
+
+function ReportsPeriodCard({
+  dailySummaryByDate,
+  displayMonth,
+  endDate,
+  onDisplayMonthChange,
+  onEndDateChange,
+  onShiftEndDate,
+  rangeBounds,
+  timeRange,
+  today,
+}: {
+  dailySummaryByDate: Map<string, SettlementDaySummary>;
+  displayMonth: Date;
+  endDate: string;
+  onDisplayMonthChange: (date: Date) => void;
+  onEndDateChange: (date: string) => void;
+  onShiftEndDate: (amount: number) => void;
+  rangeBounds: LeaderboardRangeBounds | null;
+  timeRange: TimeRange;
+  today: string;
+}) {
+  const monthTotal = settlementMonthTotal(dailySummaryByDate, displayMonth);
+  return (
+    <Card className="reports-period-card">
+      <div className="reports-period-heading">
+        <div>
+          <h2>结算日历</h2>
+          <p>{periodRangeDescription(timeRange, rangeBounds)}</p>
+        </div>
+        <div className="reports-period-actions">
+          {timeRange !== "all" && (
+            <div className="reports-period-stepper" aria-label="统计结束日期">
+              <IconButton
+                icon={ChevronLeft}
+                label={`上一${periodWindowName(timeRange)}`}
+                onClick={() => onShiftEndDate(-1)}
+                size="sm"
+              />
+              <Button className="reports-period-date-button" onClick={() => onDisplayMonthChange(monthForDate(endDate))} size="sm" type="button" variant="secondary">
+                <CalendarDays className="h-4 w-4" />
+                {endDate}
+              </Button>
+              <IconButton
+                icon={ChevronRight}
+                label={`下一${periodWindowName(timeRange)}`}
+                onClick={() => onShiftEndDate(1)}
+                size="sm"
+              />
+            </div>
+          )}
+          <Button disabled={endDate === today} onClick={() => onEndDateChange(today)} size="sm" type="button" variant="secondary">
+            今天
+          </Button>
+        </div>
+      </div>
+
+      <div className="reports-calendar-shell">
+        <div className="reports-calendar-header">
+          <IconButton
+            icon={ChevronLeft}
+            label="上个月"
+            onClick={() => onDisplayMonthChange(addDisplayMonths(displayMonth, -1))}
+            size="sm"
+          />
+          <div className="reports-calendar-title">
+            <CalendarDays className="h-4 w-4" />
+            <span>{fantasyMonthLabel(displayMonth)}</span>
+          </div>
+          <IconButton
+            icon={ChevronRight}
+            label="下个月"
+            onClick={() => onDisplayMonthChange(addDisplayMonths(displayMonth, 1))}
+            size="sm"
+          />
+          <div className="reports-calendar-month-total">
+            <span>本月结算</span>
+            <strong>{formatSignedPoints(monthTotal)} 分</strong>
+          </div>
+        </div>
+        <SettlementCalendar
+          dailySummaryByDate={dailySummaryByDate}
+          displayMonth={displayMonth}
+          endDate={endDate}
+          onSelectDate={onEndDateChange}
+          rangeBounds={rangeBounds}
+        />
+      </div>
+    </Card>
+  );
+}
+
+function SettlementCalendar({
+  dailySummaryByDate,
+  displayMonth,
+  endDate,
+  onSelectDate,
+  rangeBounds,
+}: {
+  dailySummaryByDate: Map<string, SettlementDaySummary>;
+  displayMonth: Date;
+  endDate: string;
+  onSelectDate: (date: string) => void;
+  rangeBounds: LeaderboardRangeBounds | null;
+}) {
+  const cells = buildFantasyDateGrid(displayMonth, endDate);
+  return (
+    <div className="reports-calendar-grid" role="grid" aria-label={`${fantasyMonthLabel(displayMonth)}每日结算分`}>
+      {["一", "二", "三", "四", "五", "六", "日"].map((label) => (
+        <div className="reports-calendar-weekday" key={label} role="columnheader">
+          {label}
+        </div>
+      ))}
+      {cells.map((cell) => {
+        const summary = dailySummaryByDate.get(cell.value);
+        const hasLedger = Boolean(summary?.count);
+        const inActiveRange = Boolean(rangeBounds && cell.value >= rangeBounds.start && cell.value <= rangeBounds.end);
+        return (
+          <button
+            aria-current={cell.isToday ? "date" : undefined}
+            aria-label={`${cell.value}${hasLedger ? `，结算 ${formatPlainPoints(summary?.points ?? 0)} 分` : "，无结算积分"}`}
+            aria-selected={cell.value === endDate}
+            className="reports-calendar-day"
+            data-has-points={hasLedger}
+            data-in-range={inActiveRange}
+            data-outside-month={!cell.inMonth}
+            data-points-tone={pointsTone(summary?.points ?? 0)}
+            data-selected={cell.value === endDate}
+            data-today={cell.isToday}
+            key={cell.value}
+            onClick={() => onSelectDate(cell.value)}
+            role="gridcell"
+            type="button"
+          >
+            <span className="reports-calendar-day-number">{cell.day}</span>
+            <span className={hasLedger ? "reports-calendar-day-points" : "reports-calendar-day-points reports-calendar-day-points-empty"}>
+              {hasLedger ? formatCalendarPoints(summary?.points ?? 0) : ""}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -214,18 +396,18 @@ function buildReportSummary(rows: LeaderboardRow[]) {
 }
 
 function previousRangeLabel(timeRange: TimeRange) {
-  if (timeRange === "month") return "上月";
-  if (timeRange === "quarter") return "上一季度";
-  if (timeRange === "year") return "上一年度";
+  if (timeRange === "month") return "上一月度窗口";
+  if (timeRange === "quarter") return "上一季度窗口";
+  if (timeRange === "year") return "上一年度窗口";
   return "上一周期";
 }
 
-function leaderboardDescription(timeRange: TimeRange) {
+function leaderboardDescription(timeRange: TimeRange, rangeBounds: LeaderboardRangeBounds | null) {
   if (timeRange === "all") {
     return "汇总全部公开积分流水，全部时间不计算排名变化。";
   }
 
-  return `当前时间范围内的积分和完成率，并对比${previousRangeLabel(timeRange)}排名。`;
+  return `${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}（含结束日）的积分和完成率，并对比${previousRangeLabel(timeRange)}排名。`;
 }
 
 function rankChangeSummary(summary: ReturnType<typeof buildReportSummary>, timeRange: TimeRange) {
@@ -240,4 +422,58 @@ function rankChangeSummary(summary: ReturnType<typeof buildReportSummary>, timeR
   ].filter(Boolean);
 
   return parts.length > 0 ? `较${previousRangeLabel(timeRange)}：${parts.join("，")}` : `较${previousRangeLabel(timeRange)}暂无变化`;
+}
+
+function periodRangeDescription(timeRange: TimeRange, rangeBounds: LeaderboardRangeBounds | null) {
+  if (timeRange === "all") {
+    return "全部公开积分流水；日历展示每天按结算日期汇总的积分。";
+  }
+  return `统计范围：${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}，结束日期包含当天。`;
+}
+
+function periodWindowName(timeRange: TimeRange) {
+  if (timeRange === "month") return "月度窗口";
+  if (timeRange === "quarter") return "季度窗口";
+  if (timeRange === "year") return "年度窗口";
+  return "窗口";
+}
+
+function monthForDate(value: string) {
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? new Date() : new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+}
+
+function addDisplayMonths(value: Date, amount: number) {
+  return new Date(value.getFullYear(), value.getMonth() + amount, 1);
+}
+
+function settlementMonthTotal(dailySummaryByDate: Map<string, SettlementDaySummary>, displayMonth: Date) {
+  const monthKey = `${displayMonth.getFullYear()}-${String(displayMonth.getMonth() + 1).padStart(2, "0")}`;
+  return Array.from(dailySummaryByDate.values())
+    .filter((summary) => summary.date.startsWith(monthKey))
+    .reduce((total, summary) => total + summary.points, 0);
+}
+
+function pointsTone(points: number) {
+  if (points > 0) return "positive";
+  if (points < 0) return "negative";
+  return "zero";
+}
+
+function formatPlainPoints(points: number) {
+  return points.toFixed(1);
+}
+
+function formatSignedPoints(points: number) {
+  const prefix = points > 0 ? "+" : "";
+  return `${prefix}${formatPlainPoints(points)}`;
+}
+
+function formatCalendarPoints(points: number) {
+  const prefix = points > 0 ? "+" : points < 0 ? "-" : "";
+  const absolute = Math.abs(points);
+  if (absolute >= 1000) {
+    return `${prefix}${(absolute / 1000).toFixed(absolute >= 10000 ? 0 : 1)}k`;
+  }
+  return `${prefix}${absolute.toFixed(absolute >= 100 ? 0 : 1)}`;
 }
