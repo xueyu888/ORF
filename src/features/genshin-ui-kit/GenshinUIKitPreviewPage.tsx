@@ -117,19 +117,10 @@ export function GenshinUIKitPreviewPage() {
                     <GiInput placeholder="搜索悬赏目标或指标..." />
                   </div>
                 </GiField>
-                <GiField label="难度">
-                  <GiSelect defaultValue="all">
-                    <option value="all">全部难度</option>
-                    <option value="simple">简易</option>
-                    <option value="entry">入门</option>
-                    <option value="advanced">进阶</option>
-                    <option value="hard">破局</option>
-                  </GiSelect>
-                </GiField>
                 <GiField label="排序">
                   <GiSelect defaultValue="deadline">
                     <option value="deadline">截止时间</option>
-                    <option value="points">不确定性分</option>
+                    <option value="points">目标分数</option>
                     <option value="created">发布时间</option>
                   </GiSelect>
                 </GiField>

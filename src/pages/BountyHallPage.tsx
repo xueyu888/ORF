@@ -21,7 +21,7 @@ import {
   searchableBountyText,
 } from "../features/bounty-hall/model/bountyHallItems";
 import { bountyCycleLabel } from "../features/bounty-hall/model/bountyHallSummary";
-import type { BountyItem, ChallengeConfirmTarget, DifficultyFilter, HallTab, SortKey } from "../features/bounty-hall/model/bountyHallTypes";
+import type { BountyItem, ChallengeConfirmTarget, HallTab, SortKey } from "../features/bounty-hall/model/bountyHallTypes";
 import { challengePathForTarget, parseChallengeTargetHash } from "../features/challenge/model/challengeLinks";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import type { BountyHallData } from "../state/apiClient";
@@ -41,7 +41,6 @@ export function BountyHallPage() {
   const [bountyData, setBountyData] = useState<BountyHallData | null>(() => bountyHallSnapshot() ?? null);
   const [loadingBounties, setLoadingBounties] = useState(() => bountyHallSnapshot() === undefined);
   const [query, setQuery] = useState("");
-  const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("deadline");
   const [activeTab, setActiveTab] = useState<HallTab>(defaultHallTab);
   const [confirmTarget, setConfirmTarget] = useState<ChallengeConfirmTarget | null>(null);
@@ -111,19 +110,17 @@ export function BountyHallPage() {
     const normalizedQuery = query.trim().toLowerCase();
     const filtered = tabbedHallItems.filter((item) => {
       const queryMatch = !normalizedQuery || searchableBountyText(item).includes(normalizedQuery);
-      const difficultyMatch = difficultyFilter === "all" || item.results.some((result) => result.uncertaintyLevel === difficultyFilter);
-      return queryMatch && difficultyMatch;
+      return queryMatch;
     });
 
     return [...filtered].sort((left, right) => compareHallItems(left, right, sortKey));
-  }, [difficultyFilter, query, sortKey, tabbedHallItems]);
+  }, [query, sortKey, tabbedHallItems]);
 
-  const hasFilters = query.trim() || difficultyFilter !== "all";
+  const hasFilters = query.trim();
 
   useEffect(() => {
     if (!linkedBountyObjectiveId) return;
     setQuery("");
-    setDifficultyFilter("all");
   }, [linkedBountyObjectiveId]);
 
   useEffect(() => {
@@ -150,7 +147,6 @@ export function BountyHallPage() {
 
   const clearFilters = () => {
     setQuery("");
-    setDifficultyFilter("all");
   };
 
   const applyChallenge = async (item: BountyItem, reason: string) => {
@@ -203,10 +199,8 @@ export function BountyHallPage() {
       <section className="grid gap-4" aria-label="悬赏目标列表">
         <div className="bounty-toolbar-panel">
           <BountyToolbar
-            difficultyFilter={difficultyFilter}
             query={query}
             sortKey={sortKey}
-            onDifficultyChange={setDifficultyFilter}
             onQueryChange={setQuery}
             onSortChange={setSortKey}
           />

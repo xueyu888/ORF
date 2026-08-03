@@ -156,7 +156,7 @@ type ObjectiveFlowStatus =
 }
 ```
 
-新前端不调用该接口。普通成员页面只提交逐指标 `0..100` 整数百分比矩阵到 `/api/local-settlement/objectives/:objectiveId/reviews/submit`，输入到一半自动保存到 `/api/local-settlement/objectives/:objectiveId/reviews/draft`。ORF 后端按服务端指标和挑战者事实补齐矩阵后转发给共享结算服务，由共享结算服务派生目标级 `allocations` 和逐指标 `metricScores`。重新评价时，当前挑战者可通过 `/api/local-settlement/objectives/:objectiveId/reviews/me` 读取自己的服务器草稿和最新一版提交回填；历史旧提交若没有 `metricRows` 或 `metricScores`，只能展示目标级比例。
+新前端不调用该接口。普通成员页面只提交目标级 `0..100` 整数百分比 `allocations` 到 `/api/local-settlement/objectives/:objectiveId/reviews/submit`，输入到一半自动保存到 `/api/local-settlement/objectives/:objectiveId/reviews/draft`。ORF 后端按当前目标挑战者事实补齐成员展示名和稳定 `memberUserId` 后转发给共享结算服务。重新评价时，当前挑战者可通过 `/api/local-settlement/objectives/:objectiveId/reviews/me` 读取自己的服务器草稿和最新一版提交回填；历史逐指标旧提交只作为兼容明细展示，新提交不再产生 `metricRows`。
 
 `POST /api/objectives/:objectiveId/trial-reviews` 使用与 `POST /api/objectives/:objectiveId/loot` 相同的请求体和指标主张校验。成功后写入 `objectiveTrialReviews`，不写入 `objectiveLoot`，不改变 `Objective.flowStatus` 和 `Objective.lootSubmittedAt`。同一目标只能有一条试验收记录。
 
@@ -196,7 +196,7 @@ type ObjectiveFlowStatus =
 }
 ```
 
-共享结算服务计算当前匿名互评均值；ORF 后端通过同源代理读取提交状态、目标级原始评分、逐指标评分明细、弃权说明、偏离提醒和默认比例。指挥官结算时通过 `contributionResolution` 提供确认后的比例和说明。`contributionResolution.ratios[].memberUserId` 对应 `users.id`，是积分归属事实源；`member` 只作为展示文本。单人目标也走同一结算事件，默认用 `100%` 比例确认。
+共享结算服务计算当前匿名互评均值；ORF 后端通过同源代理读取提交状态、目标级原始评分、弃权说明、偏离提醒和默认比例。指挥官结算时通过 `contributionResolution` 提供确认后的比例和说明。`contributionResolution.ratios[].memberUserId` 对应 `users.id`，是积分归属事实源；`member` 只作为展示文本。单人目标也走同一结算事件，默认用 `100%` 比例确认。
 
 结算后后端写入：
 
@@ -209,7 +209,7 @@ type ObjectiveFlowStatus =
 
 逾期惩罚结算通知和最终结算通知都只发给目标 `Objective.challengerUserIds` 中仍为 active 的相关成员。通知正文只说明结算事件和跳转位置，不携带匿名互评原始评分、比例矩阵或个人积分明细。
 
-`Result.uncertaintyScore` 是当前实现里的等级积分事实源，由 `Result.uncertaintyLevel` 映射写入；业务口径中的“基础”在代码枚举迁移前对应历史实现名“入门”。指标可以先创建为待校准，但 `reestimating -> frozen` 前，后端必须校验目标下每个指标都已设置积分等级；`Objective.objectiveBasePoints` 只从这些指标积分汇总得到，不作为目标创建或发布接口的输入字段。
+`Objective.objectiveBasePoints` 是目标基础分事实源，由指挥官直接设置为正整数。目标进入 `accepted` 并打开最终匿名互评后锁定目标分数；此前即使已冻结或已提交待验收，指挥官仍可修改。指标不再设置等级积分，`Result.uncertaintyLevel` / `Result.uncertaintyScore` 仅作为历史兼容字段保留，不参与新结算。
 
 `Result.detail` 是指标详情唯一事实源。评论只保存讨论记录，不承载指标详情定义；战利品提交和验收读取同一个 `Result.detail` 字段作为只读上下文。
 
@@ -229,8 +229,8 @@ type ObjectiveFlowStatus =
 - 任务和子任务维护权限以 `Objective.challengerUserIds` 为身份边界；同一目标正式挑战者可以共同新增、编辑、勾选、移动和删除目标下任务与子任务，旁观成员返回 403，指挥官/管理员可维护任意目标任务。
 - `Task.assignee` 不表达所有权，`Task.createdBy` / `updatedBy` 只作为审计字段返回给前端和测试，不能参与维护授权判断；`Task.definitionContributorUserIds` 只表达谁定义过行动项，读模型派生的 `definitionContributorProfiles` 用于行动项定义者头像组展示。
 - 任务 ID 必须使用带单调计数和 UUID 后缀的 `ORF-*` 形式；同一毫秒内的并发创建不能因为时间戳或伪随机数相同而撞主键。
-- 重估同时覆盖指标口径和等级积分。`reestimating` 阶段挑战者申请完成重估后，指挥官可以提前完成并冻结，也可以把该对齐申请标记为 `needsWork` 打回重估；到达 `Objective.confirmationDueAt` 后，后端调度器会按同一套冻结校验自动尝试冻结。目标至少已有一个指标且每个指标都已校准等级积分后才能从 `reestimating` 进入 `frozen`；未满足时自动冻结会被阻断并保留 `reestimating`，等待管理员补齐后重新走完成重估或下次调度。
-- 冻结后不允许直接改指标口径或等级积分。目标挑战者可以发起 `frozenReestimate` 对齐申请，申请必须填写理由；指挥官审批通过时必须设置新的 `confirmationDueAt`，该时间必须晚于当前时间且不能超过 `Objective.finalDueAt` 当日 23:59。审批通过后目标从 `frozen/goalFrozen` 回到 `reestimating/orfReestimate`，清空当前 `confirmedAt`，复用现有指标与等级编辑权限和完成重估后再次冻结的状态链；申请记录保留申请理由和审批时的 `confirmationDueAt` 快照。目标进入 `submitted` 后，`objectiveLoot` 和 `Objective.lootSubmittedAt` 已成为正式提交事实，后端不得接受重新重估或等级修改。
+- 重估覆盖指标口径和目标协作拆解。`reestimating` 阶段挑战者申请完成重估后，指挥官可以提前完成并冻结，也可以把该对齐申请标记为 `needsWork` 打回重估；到达 `Objective.confirmationDueAt` 后，后端调度器会按同一套冻结校验自动尝试冻结。目标至少已有一个指标后才能从 `reestimating` 进入 `frozen`；未满足时自动冻结会被阻断并保留 `reestimating`，等待补齐后重新走完成重估或下次调度。
+- 冻结后不允许直接改指标口径。目标挑战者可以发起 `frozenReestimate` 对齐申请，申请必须填写理由；指挥官审批通过时必须设置新的 `confirmationDueAt`，该时间必须晚于当前时间且不能超过 `Objective.finalDueAt` 当日 23:59。审批通过后目标从 `frozen/goalFrozen` 回到 `reestimating/orfReestimate`，清空当前 `confirmedAt`，复用现有指标编辑权限和完成重估后再次冻结的状态链；申请记录保留申请理由和审批时的 `confirmationDueAt` 快照。目标进入 `submitted` 后，`objectiveLoot` 和 `Objective.lootSubmittedAt` 已成为正式提交事实，后端不得接受重新重估。目标基础分由指挥官直接编辑，在 `accepted` 前不因冻结或提交而锁定。
 - 截止日期修改以 `Objective.finalDueAt` 为唯一输入；目标仍处于 `reestimating` 且日期实际变更时同步重算 `confirmationDueAt`，冻结后直接改截止日期只能延后，不会自动重新重估或修改 `confirmationDueAt`。重新重估必须走 `frozenReestimate` 对齐申请审批。
 - 任务、子任务和评论允许在挑战协作中维护，但不自动推导验收或结算。
 - 评论线程标题必须由后端根据真实目标、指标、任务或子任务解析；客户端提交的 `targetTitle` 只能作为兼容字段，不能覆盖真实标题。

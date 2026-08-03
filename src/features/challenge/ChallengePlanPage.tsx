@@ -14,7 +14,7 @@ import { isObjectiveChallenger } from "../../domain/orfObjectiveParticipants";
 import { objectiveLifecycleInitialState, objectiveStageForFlowStatus } from "../../domain/orfLifecycle";
 import type { ResultDetailsInput } from "../../domain/orfResultDetails";
 import { fetchMyLocalSettlementReview, type LocalSettlementReview } from "../../services/localSettlementClient";
-import type { Objective, ObjectiveSettlementEvent, OrfProject, OrfState, Result, UncertaintyLevel } from "../../types/orf";
+import type { Objective, ObjectiveSettlementEvent, OrfProject, OrfState, Result } from "../../types/orf";
 import { localDateString } from "../../utils/date";
 import { applyListItemAnchor, createListItemAnchor, listContainsAnchoredItem, type ListItemAnchor } from "../interaction/listItemAnchor";
 import { useChallengeReadModelData, type ChallengeReadModelState } from "./hooks/useChallengeReadModelData";
@@ -256,11 +256,11 @@ export function ChallengePlanPage() {
     state,
     updateCommentMessage,
     updateObjectiveFinalDueAt,
+    updateObjectiveBasePoints,
     setObjectiveProject,
     updateObjectiveTitle,
     updateResultDetails,
     updateResultTitle,
-    updateResultUncertaintyLevel,
     updateTaskChecklistItem,
     updateTaskChecklistItemLabel,
     updateTaskTitle,
@@ -1216,12 +1216,6 @@ export function ChallengePlanPage() {
     return true;
   };
 
-  const saveMetricDifficulty = async (target: ChallengeTarget, uncertaintyLevel: UncertaintyLevel) => {
-    if (target.type !== "bounty") return false;
-    if (!requireTargetPermission(target, "edit")) return false;
-    return updateResultUncertaintyLevel(target.id, uncertaintyLevel);
-  };
-
   const saveMetricDetails = async (target: ChallengeTarget, details: ResultDetailsInput) => {
     if (target.type !== "bounty") return false;
     if (!requireTargetPermission(target, "edit")) return false;
@@ -1341,6 +1335,14 @@ export function ChallengePlanPage() {
     const anchor = createListItemAnchor(displayedGroups, objectiveId, objectiveGroupId);
     if (anchor) setObjectiveInteractionAnchor(anchor);
     const ok = await updateObjectiveFinalDueAt(objectiveId, finalDueAt);
+    if (!ok && anchor) setObjectiveInteractionAnchor((current) => (current?.itemId === objectiveId ? null : current));
+    return ok;
+  };
+
+  const saveObjectiveBasePoints = async (objectiveId: string, objectiveBasePoints: number) => {
+    const anchor = createListItemAnchor(displayedGroups, objectiveId, objectiveGroupId);
+    if (anchor) setObjectiveInteractionAnchor(anchor);
+    const ok = await updateObjectiveBasePoints(objectiveId, objectiveBasePoints);
     if (!ok && anchor) setObjectiveInteractionAnchor((current) => (current?.itemId === objectiveId ? null : current));
     return ok;
   };
@@ -1496,7 +1498,6 @@ export function ChallengePlanPage() {
                   permissionRules: challengeState.permissionRules,
                   now,
                 })?.label ?? null,
-              metricEditAccess: metricEditAccessForObjectiveId,
               canPublishObjective: () => canCreateObjective,
               canRecruitObjective: (objective) =>
                 canRecruitObjectiveChallengers({
@@ -1536,10 +1537,10 @@ export function ChallengePlanPage() {
               onCreateProject: (name) => createProject({ name }),
               onDeleteProject: deleteProject,
               onSaveObjectiveDeadline: saveObjectiveDeadline,
+              onSaveObjectiveBasePoints: saveObjectiveBasePoints,
               onSetObjectiveProject: setObjectiveProject,
               onUnavailableObjectiveDeadline: notifyUnavailableObjectiveDeadline,
               onUnavailableMetricEdit: notifyUnavailableMetricEdit,
-              onSaveMetricDifficulty: saveMetricDifficulty,
               onSaveTitle: saveTitle,
               onSelectMetric: selectMetric,
               onSubActionDoneChange: setSubActionDone,
@@ -1565,7 +1566,6 @@ export function ChallengePlanPage() {
             onDirtyChange={setMetricInspectorDirty}
             onDiscardPendingSelection={applyPendingMetricSelection}
             onSaveDetails={(details) => saveMetricDetails(metricTargetForResult(selectedMetric), details)}
-            onSaveDifficulty={(uncertaintyLevel) => saveMetricDifficulty(metricTargetForResult(selectedMetric), uncertaintyLevel)}
             onSavePendingSelection={applyPendingMetricSelection}
             pendingSelectionTitle={pendingSelectedMetric?.title ?? null}
             result={selectedMetric}

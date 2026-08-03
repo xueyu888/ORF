@@ -2,8 +2,10 @@ import { localSettlementProxyBasePath } from "../domain/orfLocalSettlement";
 import type {
   ContributionAllocation,
   ContributionReviewDraftMetricRow,
+  ContributionReviewDraftPercentAllocation,
   ContributionReviewMetricRow,
   ContributionReviewMetricScore,
+  ContributionReviewPercentAllocation,
 } from "../types/orf";
 
 export type LocalSettlementSummary = {
@@ -73,7 +75,8 @@ export type LocalSettlementReview =
 
 export type LocalSettlementDraft =
   | {
-      metricRows: ContributionReviewDraftMetricRow[];
+      allocations?: ContributionReviewDraftPercentAllocation[];
+      metricRows?: ContributionReviewDraftMetricRow[];
       reviewer: string;
       reviewerUserId: string;
       status: "scored";
@@ -135,6 +138,7 @@ export async function fetchMyLocalSettlementReview(input: { objectiveId: string 
 
 export async function saveLocalSettlementReviewDraft(input: {
   abstentionReason?: string;
+  allocations?: ContributionReviewDraftPercentAllocation[];
   kind: "score" | "abstain";
   metricRows?: ContributionReviewDraftMetricRow[];
   objectiveId: string;
@@ -142,7 +146,7 @@ export async function saveLocalSettlementReviewDraft(input: {
   const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/reviews/draft`, {
     body: JSON.stringify(input.kind === "abstain"
       ? { abstentionReason: input.abstentionReason ?? "", kind: "abstain" }
-      : { kind: "score", metricRows: input.metricRows ?? [] }),
+      : { allocations: input.allocations ?? [], kind: "score" }),
     headers: { "content-type": "application/json" },
     method: "PUT",
   });
@@ -158,6 +162,7 @@ export async function clearLocalSettlementReviewDraft(input: { objectiveId: stri
 
 export async function submitLocalContributionReview(input: {
   abstentionReason?: string;
+  allocations?: ContributionReviewPercentAllocation[];
   kind: "score" | "abstain";
   metricRows?: ContributionReviewMetricRow[];
   objectiveId: string;
@@ -165,7 +170,7 @@ export async function submitLocalContributionReview(input: {
   const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/reviews/submit`, {
     body: JSON.stringify(input.kind === "abstain"
       ? { abstentionReason: input.abstentionReason ?? "", kind: "abstain" }
-      : { kind: "score", metricRows: input.metricRows ?? [] }),
+      : { allocations: input.allocations ?? [], kind: "score" }),
     headers: { "content-type": "application/json" },
     method: "POST",
   });

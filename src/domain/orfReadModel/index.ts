@@ -49,10 +49,9 @@ export type BountyHallItem = {
   approvedApplicants: string[];
   assignedChallengers: string[];
   challengers: string[];
-  uncertaintyPoints: number;
+  objectiveBasePoints: number;
   deadline: string;
   definer: string;
-  difficultyRank: number;
   hasCurrentApplication: boolean;
   isCurrentChallenger: boolean;
   isRecruitment: boolean;

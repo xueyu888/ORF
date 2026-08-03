@@ -37,13 +37,15 @@ export const uncertaintyScores: Record<UncertaintyLevel, number> = {
   飞升: 810,
 };
 
+export const OBJECTIVE_BASE_POINTS_MIN = 1;
+
 export type SettlementResult = Pick<
   Result,
-  "id" | "uncertaintyLevel" | "uncertaintyScore"
+  "id"
 >;
 export type SettlementObjective = Pick<
   Objective,
-  "challengers" | "challengerUserIds" | "finalDueAt" | "title"
+  "challengers" | "challengerUserIds" | "finalDueAt" | "objectiveBasePoints" | "title"
 >;
 export type SettlementLoot = Pick<
   ObjectiveLoot,
@@ -83,6 +85,8 @@ export type SettlementPointAllocation<T extends ContributionAllocation = Contrib
 };
 type SettlementReviewObjective = Pick<Objective, "finalDueAt" | "flowStatus">;
 type SettlementReviewEvent = Pick<ObjectiveSettlementEvent, "kind">;
+type ObjectiveBasePointsTarget = Pick<Objective, "objectiveBasePoints">;
+type ObjectiveBasePointsMutationTarget = Pick<Objective, "flowStatus">;
 
 export function uncertaintyScoreFor(
   level: UncertaintyLevel | null | undefined,
@@ -112,6 +116,37 @@ export function objectiveBasePointsForResults(
   return results.reduce(
     (sum, result) => sum + calibratedResultPoints(result),
     0,
+  );
+}
+
+export function normalizedObjectiveBasePoints(
+  objective: ObjectiveBasePointsTarget | null | undefined,
+) {
+  const points = Number(objective?.objectiveBasePoints ?? 0);
+  if (!Number.isFinite(points)) return 0;
+  return Math.max(0, Math.floor(points));
+}
+
+export function hasPositiveObjectiveBasePoints(
+  objective: ObjectiveBasePointsTarget | null | undefined,
+) {
+  return normalizedObjectiveBasePoints(objective) >= OBJECTIVE_BASE_POINTS_MIN;
+}
+
+export function canEditObjectiveBasePointsByFlow(
+  objective: ObjectiveBasePointsMutationTarget | null | undefined,
+) {
+  return Boolean(
+    objective &&
+      [
+        "candidate",
+        "open",
+        "applying",
+        "recruiting",
+        "reestimating",
+        "frozen",
+        "submitted",
+      ].includes(objective.flowStatus),
   );
 }
 
@@ -259,7 +294,7 @@ export function planObjectiveAcceptance(input: {
   );
   const objectiveAcceptedResult =
     input.acceptedResult ?? objectiveAcceptedResultFromReviews(acceptedResults);
-  const basePoints = objectiveBasePointsForResults(input.results);
+  const basePoints = normalizedObjectiveBasePoints(input.objective);
   const completionMultiplier = completionMultiplierFor(
     objectiveAcceptedResult,
     input.loot.submittedAt,

@@ -7,7 +7,7 @@ import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
 import type { Result } from "../../../types/orf";
 import { remainingTime } from "../../challenge/model/challengeDates";
 import { BountyBadge } from "../BountyHallSkin";
-import { bountyPointsLabel, currentUserApplication, highestDifficultyLabel, publishedDateLabel, resultCountLabel } from "../model/bountyHallItems";
+import { bountyPointsLabel, currentUserApplication, publishedDateLabel, resultCountLabel } from "../model/bountyHallItems";
 import type { BountyItem, ChallengeAction } from "../model/bountyHallTypes";
 import { BountyRowActions } from "./BountyRowActions";
 import { ParticipationPreview } from "./ParticipationPreview";
@@ -157,7 +157,6 @@ function BountyListRow({
             征召令
           </Chip>
         )}
-        <Chip tone={item.isRecruitment ? "accent" : "neutral"}>{highestDifficultyLabel(item)}</Chip>
         <Chip tone="gold">{bountyPointsLabel(item)}</Chip>
       </div>
       <div className="bounty-row-main" data-label="悬赏目标">
@@ -276,16 +275,6 @@ function BountyMetricDetailPanel({ item, onClose, result }: { item: BountyItem; 
           variant="ghost"
         />
       </header>
-
-      <section className="orf-metric-inspector-section">
-        <div className="orf-metric-inspector-section-head">
-          <div className="orf-metric-inspector-label">难度等级</div>
-        </div>
-        <div className="bounty-metric-detail-difficulty">
-          <Chip tone={result.uncertaintyLevel ? "accent" : "neutral"}>{result.uncertaintyLevel ?? "待校准"}</Chip>
-          <Chip tone="gold">{result.uncertaintyScore > 0 ? `${result.uncertaintyScore} 分` : "待校准"}</Chip>
-        </div>
-      </section>
 
       <section className="orf-metric-inspector-section orf-metric-inspector-detail-section">
         <div className="orf-metric-inspector-section-head">

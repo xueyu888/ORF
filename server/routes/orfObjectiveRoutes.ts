@@ -28,6 +28,7 @@ import {
   settleObjectiveLoot,
   submitObjectiveLoot,
   submitObjectiveTrialReview,
+  updateObjectiveBasePoints,
   updateObjectiveDetails,
   updateObjectiveProject,
   type ObjectiveMutationInvalidReason,
@@ -62,6 +63,9 @@ const objectiveDetailsBodySchema = z.object({
   title: requiredTextSchema.optional(),
   finalDueAt: dateOnlySchema.optional(),
 }).refine((body) => body.title !== undefined || body.finalDueAt !== undefined, { message: "No objective fields to update" });
+const objectiveBasePointsBodySchema = z.object({
+  objectiveBasePoints: z.number().int().min(1),
+});
 const objectiveProjectBodySchema = z.object({
   projectId: optionalNullableTextSchema,
 });
@@ -211,7 +215,7 @@ function sendObjectiveDetailsOutcome(reply: FastifyReply, outcome: Awaited<Retur
   }
 
   if (outcome.status === "locked") {
-    return reply.code(409).send({ error: "Objective deadline is locked for the current lifecycle state" });
+    return reply.code(409).send({ error: "Objective field is locked for the current lifecycle state" });
   }
 
   return { objective: outcome.objective };
@@ -272,8 +276,8 @@ function sendAlignmentRequestOutcome(
 }
 
 function objectiveInvalidErrorMessage(reason: ObjectiveMutationInvalidReason | undefined, fallback: string) {
-  if (reason === "missingResults") return "Objective must have at least one calibrated result before freezing";
-  if (reason === "uncalibratedResults") return "Objective result points must be calibrated before freezing";
+  if (reason === "missingResults") return "Objective must have at least one result before freezing";
+  if (reason === "missingObjectiveBasePoints") return "Objective must have a positive base score before review";
   if (reason === "lifecycleLocked") return "Objective status does not allow this operation";
   if (reason === "missingReestimateDueAt") return "Reestimate due time is required";
   if (reason === "missingReestimateReason") return "Reestimate reason is required";
@@ -347,6 +351,23 @@ export function registerOrfObjectiveRoutes(app: FastifyInstance) {
     }
 
     return sendObjectiveDetailsOutcome(reply, await updateObjectiveDetails(params.objectiveId, body, context.user.id));
+  });
+
+  app.patch("/api/objectives/:objectiveId/base-points", async (request, reply) => {
+    const params = objectiveParamsSchema.parse(request.params);
+    const body = objectiveBasePointsBodySchema.parse(request.body);
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
+      return reply;
+    }
+
+    return sendObjectiveDetailsOutcome(
+      reply,
+      await updateObjectiveBasePoints(params.objectiveId, body.objectiveBasePoints, context.user.id),
+    );
   });
 
   app.patch("/api/objectives/:objectiveId/project", async (request, reply) => {

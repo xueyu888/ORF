@@ -11,8 +11,7 @@ import {
   isObjectiveChallenger,
   uniqueParticipantNames,
 } from "../../src/domain/orfObjectiveParticipants";
-import { objectiveBasePointsForResults } from "../../src/domain/orfSettlement";
-import type { Objective, PointLedgerEntry, Result, UncertaintyLevel, UserRole } from "../../src/types/orf";
+import type { Objective, PointLedgerEntry, Result, UserRole } from "../../src/types/orf";
 import { db } from "../db/client";
 import {
   evidence,
@@ -36,19 +35,6 @@ import {
   mapResultRows,
 } from "./orfReadModelMappers";
 
-const difficultyRanks: Record<UncertaintyLevel, number> = {
-  简易: 1,
-  入门: 2,
-  进阶: 3,
-  破局: 4,
-  渡劫: 5,
-  飞升: 6,
-};
-
-function resultDifficultyRank(result: Result) {
-  return result.uncertaintyLevel ? difficultyRanks[result.uncertaintyLevel] : 0;
-}
-
 function bountySortTitle(item: BountyHallItem) {
   return item.result?.title ?? item.objective.title;
 }
@@ -57,7 +43,7 @@ function compareBountyItems(left: BountyHallItem, right: BountyHallItem) {
   if (left.isRecruitment !== right.isRecruitment) return left.isRecruitment ? -1 : 1;
   const leftDeadline = left.deadline || "9999-12-31";
   const rightDeadline = right.deadline || "9999-12-31";
-  return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || bountySortTitle(left).localeCompare(bountySortTitle(right));
+  return leftDeadline.localeCompare(rightDeadline) || right.objectiveBasePoints - left.objectiveBasePoints || bountySortTitle(left).localeCompare(bountySortTitle(right));
 }
 
 function objectiveVisibleInBountyHall(objective: Objective) {
@@ -125,10 +111,9 @@ function bountyHallItemFromObjective(input: {
     approvedApplicants,
     assignedChallengers,
     challengers,
-    uncertaintyPoints: objectiveBasePointsForResults(input.results),
+    objectiveBasePoints: input.objective.objectiveBasePoints,
     deadline: input.objective.finalDueAt,
     definer: result?.definer ?? "",
-    difficultyRank: input.results.length > 0 ? Math.max(...input.results.map(resultDifficultyRank)) : 0,
     hasCurrentApplication: input.canUseChallengeActions && pendingApplications.some((application) => application.applicantUserId === input.viewerId),
     isCurrentChallenger: input.canUseChallengeActions && isObjectiveChallenger(input.objective, input.viewerId),
     isRecruitment: input.canUseChallengeActions && isObjectiveAssignedChallenger(input.objective, input.viewerId) && canAcceptObjectiveChallengeByFlow(input.objective),

@@ -1,21 +1,17 @@
 import type { Objective, Result } from "../../types/orf";
-import { hasUncalibratedResultPoints } from "../orfSettlement";
 import { canFreezeObjectiveByFlow } from "./guards";
 
 export type ObjectiveFreezeBlockReason =
   | "notFound"
   | "lifecycleLocked"
-  | "missingResults"
-  | "uncalibratedResults";
+  | "missingResults";
 
 export type ObjectiveFreezeReadiness =
   | { status: "ready" }
   | { status: "blocked"; reason: ObjectiveFreezeBlockReason };
 
 type ObjectiveFreezeTarget = Pick<Objective, "id" | "flowStatus"> | null | undefined;
-type ObjectiveFreezeResult = Pick<Result, "objectiveId" | "uncertaintyScore"> & {
-  uncertaintyLevel?: Result["uncertaintyLevel"] | null;
-};
+type ObjectiveFreezeResult = Pick<Result, "objectiveId">;
 
 export function objectiveFreezeReadinessAfterReestimate(
   objective: ObjectiveFreezeTarget,
@@ -26,7 +22,6 @@ export function objectiveFreezeReadinessAfterReestimate(
 
   const objectiveResults = results.filter((result) => result.objectiveId === objective.id);
   if (objectiveResults.length === 0) return { status: "blocked", reason: "missingResults" };
-  if (hasUncalibratedResultPoints(objectiveResults)) return { status: "blocked", reason: "uncalibratedResults" };
 
   return { status: "ready" };
 }

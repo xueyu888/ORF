@@ -44,7 +44,6 @@ export type DragDropController = {
 };
 
 export interface BountyNode {
-  difficulty: string;
   progress: number;
   result: Result;
   status: BountyStatus;

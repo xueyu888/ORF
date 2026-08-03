@@ -1,11 +1,9 @@
 import { canApplyForObjectiveChallenge } from "../../../domain/orfLifecycle";
 import { isObjectiveAssignedChallenger, isObjectiveChallenger } from "../../../domain/orfObjectiveParticipants";
 import { resultDetailText } from "../../../domain/orfResultDetails";
-import { hasUncalibratedResultPoints } from "../../../domain/orfSettlement";
-import type { ChallengeApplication, ObjectiveFlowStatus, UncertaintyLevel } from "../../../types/orf";
-import type { BountyItem, DifficultyFilter, HallTab, SortKey } from "./bountyHallTypes";
+import type { ChallengeApplication, ObjectiveFlowStatus } from "../../../types/orf";
+import type { BountyItem, HallTab, SortKey } from "./bountyHallTypes";
 
-export const difficultyOptions: DifficultyFilter[] = ["all", "简易", "入门", "进阶", "破局", "渡劫", "飞升"];
 export const hallTabs: Array<{ key: HallTab; label: string }> = [
   { key: "all", label: "全部" },
   { key: "open", label: "开放中" },
@@ -28,15 +26,6 @@ const lifecycleTabByFlowStatus: Partial<Record<ObjectiveFlowStatus, HallTab>> = 
   revisionRequired: "revisionRequired",
   accepted: "accepted",
   settled: "settled",
-};
-
-const difficultyLabelsByRank: Record<number, UncertaintyLevel> = {
-  1: "简易",
-  2: "入门",
-  3: "进阶",
-  4: "破局",
-  5: "渡劫",
-  6: "飞升",
 };
 
 export function buildHallItems(input: {
@@ -62,7 +51,7 @@ export function compareHallItems(left: BountyItem, right: BountyItem, sortKey: S
 export function compareByUrgency(left: BountyItem, right: BountyItem) {
   const leftDeadline = left.deadline || "9999-12-31";
   const rightDeadline = right.deadline || "9999-12-31";
-  return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || bountySortTitle(left).localeCompare(bountySortTitle(right));
+  return leftDeadline.localeCompare(rightDeadline) || right.objectiveBasePoints - left.objectiveBasePoints || bountySortTitle(left).localeCompare(bountySortTitle(right));
 }
 
 export function buildHallItemBuckets(items: BountyItem[], currentUserId: string): Record<HallTab, BountyItem[]> {
@@ -140,16 +129,12 @@ export function searchableBountyText(item: BountyItem) {
     .toLowerCase();
 }
 
-export function highestDifficultyLabel(item: BountyItem) {
-  return difficultyLabelsByRank[item.difficultyRank] ?? difficultyLabel(item.result);
-}
-
 export function resultCountLabel(item: BountyItem) {
   return item.results.length > 0 ? `${item.results.length} 个指标` : "待定义指标";
 }
 
 export function bountyPointsLabel(item: BountyItem) {
-  return hasUncalibratedResultPoints(item.results) ? "待校准" : `${item.uncertaintyPoints} 分`;
+  return item.objectiveBasePoints > 0 ? `${item.objectiveBasePoints} 分` : "待定分";
 }
 
 export function bountyTargetElement(objectiveId: string) {
@@ -160,14 +145,9 @@ export function bountyTargetElement(objectiveId: string) {
 }
 
 function compareBounties(left: BountyItem, right: BountyItem, sortKey: SortKey) {
-  if (sortKey === "points") return right.uncertaintyPoints - left.uncertaintyPoints || compareByUrgency(left, right);
-  if (sortKey === "difficulty") return right.difficultyRank - left.difficultyRank || compareByUrgency(left, right);
+  if (sortKey === "points") return right.objectiveBasePoints - left.objectiveBasePoints || compareByUrgency(left, right);
   if (sortKey === "published") return publishedSortValue(right).localeCompare(publishedSortValue(left)) || bountySortTitle(left).localeCompare(bountySortTitle(right));
   return compareByUrgency(left, right);
-}
-
-function difficultyLabel(result: BountyItem["result"]) {
-  return result?.uncertaintyLevel ?? "待校准";
 }
 
 function publishedSortValue(item: BountyItem) {

@@ -29,10 +29,6 @@ export function bountyStatus(result: Result, objective?: Objective): BountyStatu
   return "open";
 }
 
-export function bountyDifficulty(result: Result) {
-  return result.uncertaintyLevel ?? "待校准";
-}
-
 export function objectiveComplete(objective: Objective) {
   return isObjectiveSettledOrClosed(objective) &&
     (objective.acceptedResult === "completed" ||

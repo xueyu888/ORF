@@ -58,9 +58,9 @@
 | 可申请 | 所有已通过用户可见并显示申请操作区；active 普通成员可正常申请，指挥官/管理员点击申请时弹窗阻断 |
 | 申请中 | 所有已通过用户可见；已申请成员显示已申请，并在悬赏大厅 `我的相关` 分组只读追踪；其他用户仍按当前状态显示完整操作区，指挥官/管理员点击挑战动作时弹窗阻断 |
 | 征召中 | 所有已通过用户可见并展示待响应征召成员；被征召普通成员置顶显示 `征召令` 并可接受，指挥官/管理员点击接受或申请类动作时弹窗阻断 |
-| 重估中 | 继续显示在悬赏大厅，展示已通过挑战者头像和未处理申请；未参与 active 普通成员仍可申请挑战，已参与成员显示进入目标；同时显示在我的挑战；指挥官可新增和编辑指标，挑战者可提出和编辑指标；已有至少一个指标且每个指标都已校准积分等级时指挥官可冻结 |
+| 重估中 | 继续显示在悬赏大厅，展示已通过挑战者头像和未处理申请；未参与 active 普通成员仍可申请挑战，已参与成员显示进入目标；同时显示在我的挑战；指挥官可新增和编辑指标、设置目标分数，挑战者可提出和编辑指标；已有至少一个指标时指挥官可冻结 |
 | 已冻结 | 继续显示在悬赏大厅；不再开放公开申请或征召接受；指挥官可在挑战工作台加派 active 普通成员为正式挑战者，正式挑战者可在提交战利品前填写理由申请重新重估，或在我的挑战里提交战利品 |
-| 待验收 | 继续显示在悬赏大厅；不再开放加入，也不再开放重新重估或等级修改；指挥官在挑战页验收 |
+| 待验收 | 继续显示在悬赏大厅；不再开放加入，也不再开放重新重估；指挥官在挑战页验收，进入已验收前仍可修改目标分数 |
 | 已验收 | 继续显示在悬赏大厅的 `待结算` 分组；不再开放加入，等待最终贡献比例和积分结算 |
 | 已结算 | 继续显示在悬赏大厅，展示结算后的公开结果入口和参与状态 |
 
@@ -107,12 +107,12 @@
 | `PATCH /api/objectives/:objectiveId/challenge-applications/:applicationId/approve` | 指挥官通过申请，目标进入重估 |
 | `PATCH /api/objectives/:objectiveId/challenge-applications/:applicationId/reject` | 指挥官拒绝申请 |
 | `PATCH /api/objectives/:objectiveId/publish` | 指挥官发布候选目标 |
+| `PATCH /api/objectives/:objectiveId/base-points` | 指挥官修改目标基础分；进入 `accepted` 前可改，之后锁定 |
 | `PATCH /api/objectives/:objectiveId/freeze` | 指挥官完成重估并冻结 |
 | `POST /api/objectives/:objectiveId/alignment-requests` | 挑战者申请完成重估、重新重估或验收对齐；重新重估只允许 `frozen` 目标且必须提交理由，待验收目标只能申请验收对齐 |
 | `PATCH /api/objectives/:objectiveId/alignment-requests/:alignmentRequestId` | 指挥官处理对齐申请；重新重估审批通过时传新的 `confirmationDueAt` |
 | `POST /api/objectives/:objectiveId/reinforcements` | 指挥官在冻结后、战利品提交前加派正式挑战者 |
 | `PATCH /api/results/:resultId/details` | 指挥官或重估期内挑战者编辑指标详情 |
-| `PATCH /api/results/:resultId/uncertainty` | 指挥官或重估期内挑战者校准指标积分等级；`uncertainty` 是当前实现保留的 API 名 |
 | `POST /api/objectives/:objectiveId/loot` | 挑战者提交结构化战利品 |
 | `POST /api/objectives/:objectiveId/review` | 指挥官验收指标 |
 | `POST /api/objectives/:objectiveId/settle` | 指挥官确认结算 |

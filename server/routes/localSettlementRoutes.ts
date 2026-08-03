@@ -1,9 +1,9 @@
-import { and, asc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { requireAdminContext, requireTargetInScope, requireUserScopeContext } from "../auth/accessPolicy";
 import { db } from "../db/client";
-import { objectiveSettlementEvents, objectives, results } from "../db/schema";
+import { objectiveSettlementEvents, objectives } from "../db/schema";
 import {
   fetchLocalSettlementService,
   LocalSettlementServiceUnavailableError,
@@ -12,9 +12,9 @@ import {
 } from "../localSettlement/localSettlementProxy";
 import { runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 import { canSubmitObjectiveContributionReviewByFlow } from "../../src/domain/orfLifecycle";
-import { calibratedResultPoints, objectiveSettlementReviewWindow } from "../../src/domain/orfSettlement";
+import { objectiveSettlementReviewWindow } from "../../src/domain/orfSettlement";
 import { isObjectiveChallenger, objectiveChallengerTargets, objectiveChallengerUserIds } from "../../src/domain/orfObjectiveParticipants";
-import type { ContributionReviewDraftMetricRow, ContributionReviewMetricRow } from "../../src/types/orf";
+import type { ContributionReviewDraftPercentAllocation, ContributionReviewPercentAllocation } from "../../src/types/orf";
 import { localDateString } from "../../src/utils/date";
 import { getUserMapsForStorageScope } from "../readModels/orfReadModelMappers";
 
@@ -22,28 +22,20 @@ const objectiveParamsSchema = z.object({ objectiveId: z.string().min(1) });
 const settlementSummaryBodySchema = z.object({
   participantUserIds: z.array(z.string().trim().min(1)).optional(),
 });
-const draftMetricAllocationSchema = z.object({
+const draftAllocationSchema = z.object({
   input: z.string(),
   member: z.string().min(1),
   memberUserId: z.string().min(1),
 });
-const draftMetricRowSchema = z.object({
-  allocations: z.array(draftMetricAllocationSchema),
-  metricId: z.string().min(1),
-});
-const submitMetricAllocationSchema = z.object({
+const submitAllocationSchema = z.object({
   member: z.string().min(1),
   memberUserId: z.string().min(1),
   percent: z.number().int().min(0).max(100),
 });
-const submitMetricRowSchema = z.object({
-  allocations: z.array(submitMetricAllocationSchema),
-  metricId: z.string().min(1),
-});
 const reviewDraftBodySchema = z.discriminatedUnion("kind", [
   z.object({
+    allocations: z.array(draftAllocationSchema).min(1),
     kind: z.literal("score"),
-    metricRows: z.array(draftMetricRowSchema).min(1),
   }),
   z.object({
     abstentionReason: z.string(),
@@ -52,8 +44,8 @@ const reviewDraftBodySchema = z.discriminatedUnion("kind", [
 ]);
 const reviewSubmitBodySchema = z.discriminatedUnion("kind", [
   z.object({
+    allocations: z.array(submitAllocationSchema).min(1),
     kind: z.literal("score"),
-    metricRows: z.array(submitMetricRowSchema).min(1),
   }),
   z.object({
     abstentionReason: z.string(),
@@ -68,20 +60,11 @@ type ContributionTarget = {
   member: string;
   memberUserId: string;
 };
-type ReviewMetricSource = {
-  detail: string;
-  id: string;
-  isFallbackObjectiveRow: boolean;
-  points: number;
-  title: string;
-};
 type ReviewRouteContext = {
   challengers: string[];
   objective: SettlementObjective;
   targets: ContributionTarget[];
 };
-
-const objectiveFallbackMetricId = "__objective__";
 
 async function settlementObjectiveInScope(objectiveId: string, scope: RuntimeScope) {
   const [objective] = await db
@@ -166,56 +149,8 @@ async function reviewRouteContext(input: {
   };
 }
 
-async function objectiveReviewMetricSources(objective: SettlementObjective): Promise<ReviewMetricSource[]> {
-  const rows = await db
-    .select({
-      detail: results.detail,
-      id: results.id,
-      sortOrder: results.sortOrder,
-      title: results.title,
-      uncertaintyLevel: results.uncertaintyLevel,
-      uncertaintyScore: results.uncertaintyScore,
-    })
-    .from(results)
-    .where(and(eq(results.objectiveId, objective.id), eq(results.teamId, objective.teamId)))
-    .orderBy(asc(results.sortOrder), asc(results.id));
-
-  if (rows.length === 0) {
-    return [
-      {
-        detail: "",
-        id: objectiveFallbackMetricId,
-        isFallbackObjectiveRow: true,
-        points: 1,
-        title: objective.title || "目标整体",
-      },
-    ];
-  }
-
-  return rows.map((row) => ({
-    detail: row.detail,
-    id: row.id,
-    isFallbackObjectiveRow: false,
-    points: calibratedResultPoints(row),
-    title: row.title,
-  }));
-}
-
 function contributionTargetKey(target: ContributionTarget) {
   return target.memberUserId.trim();
-}
-
-function sourceRowByMetricId<T extends { metricId: string }>(inputRows: T[], sourceRows: ReviewMetricSource[]) {
-  const sourceById = new Map(sourceRows.map((row) => [row.id, row]));
-  const seenInputIds = new Set<string>();
-  for (const row of inputRows) {
-    if (seenInputIds.has(row.metricId) || !sourceById.has(row.metricId)) {
-      return null;
-    }
-    seenInputIds.add(row.metricId);
-  }
-  if (seenInputIds.size !== sourceRows.length) return null;
-  return sourceById;
 }
 
 function inputAllocationByTarget<T extends { member: string; memberUserId: string }>(
@@ -233,64 +168,32 @@ function inputAllocationByTarget<T extends { member: string; memberUserId: strin
   return ordered.every((allocation): allocation is T => allocation !== null) ? ordered : null;
 }
 
-async function buildDraftMetricRows(input: {
-  metricRows: z.infer<typeof draftMetricRowSchema>[];
-  objective: SettlementObjective;
+function buildDraftAllocations(input: {
+  allocations: z.infer<typeof draftAllocationSchema>[];
   targets: ContributionTarget[];
-}): Promise<ContributionReviewDraftMetricRow[] | null> {
-  const sources = await objectiveReviewMetricSources(input.objective);
-  const sourceById = sourceRowByMetricId(input.metricRows, sources);
-  if (!sourceById) return null;
-
-  const rows: ContributionReviewDraftMetricRow[] = [];
-  for (const row of input.metricRows) {
-    const source = sourceById.get(row.metricId)!;
-    const allocations = inputAllocationByTarget(row.allocations, input.targets);
-    if (!allocations) return null;
-    rows.push({
-      allocations: allocations.map((allocation, index) => ({
-        input: allocation.input,
-        member: input.targets[index]!.member,
-        memberUserId: input.targets[index]!.memberUserId,
-      })),
-      isFallbackObjectiveRow: source.isFallbackObjectiveRow,
-      metricDetail: source.detail,
-      metricId: source.id,
-      metricTitle: source.title,
-      points: source.points,
-    });
-  }
-  return rows;
+}): ContributionReviewDraftPercentAllocation[] | null {
+  const allocations = inputAllocationByTarget(input.allocations, input.targets);
+  if (!allocations) return null;
+  return allocations.map((allocation, index) => ({
+    input: allocation.input,
+    member: input.targets[index]!.member,
+    memberUserId: input.targets[index]!.memberUserId,
+  }));
 }
 
-async function buildSubmitMetricRows(input: {
-  metricRows: z.infer<typeof submitMetricRowSchema>[];
-  objective: SettlementObjective;
+function buildSubmitAllocations(input: {
+  allocations: z.infer<typeof submitAllocationSchema>[];
   targets: ContributionTarget[];
-}): Promise<ContributionReviewMetricRow[] | null> {
-  const sources = await objectiveReviewMetricSources(input.objective);
-  const sourceById = sourceRowByMetricId(input.metricRows, sources);
-  if (!sourceById) return null;
-
-  const rows: ContributionReviewMetricRow[] = [];
-  for (const row of input.metricRows) {
-    const source = sourceById.get(row.metricId)!;
-    const allocations = inputAllocationByTarget(row.allocations, input.targets);
-    if (!allocations) return null;
-    rows.push({
-      allocations: allocations.map((allocation, index) => ({
-        member: input.targets[index]!.member,
-        memberUserId: input.targets[index]!.memberUserId,
-        percent: allocation.percent,
-      })),
-      isFallbackObjectiveRow: source.isFallbackObjectiveRow,
-      metricDetail: source.detail,
-      metricId: source.id,
-      metricTitle: source.title,
-      points: source.points,
-    });
-  }
-  return rows;
+}): ContributionReviewPercentAllocation[] | null {
+  const allocations = inputAllocationByTarget(input.allocations, input.targets);
+  if (!allocations) return null;
+  const totalPercent = allocations.reduce((sum, allocation) => sum + allocation.percent, 0);
+  if (totalPercent !== 100) return null;
+  return allocations.map((allocation, index) => ({
+    member: input.targets[index]!.member,
+    memberUserId: input.targets[index]!.memberUserId,
+    percent: allocation.percent,
+  }));
 }
 
 function sendLocalSettlementResponse(reply: FastifyReply, response: LocalSettlementServiceResponse) {
@@ -373,20 +276,19 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
           version: 1 as const,
         }
       : {
-          kind: "score" as const,
-          metricRows: await buildDraftMetricRows({
-            metricRows: body.metricRows,
-            objective: routeContext.objective,
+          allocations: buildDraftAllocations({
+            allocations: body.allocations,
             targets: routeContext.targets,
           }),
+          kind: "score" as const,
           objectiveId: params.objectiveId,
           objectiveTitle: routeContext.objective.title,
           reviewer: context.user.name,
           reviewerUserId: context.user.id,
           version: 1 as const,
         };
-    if (payload.kind === "score" && !payload.metricRows) {
-      return reply.code(400).send({ error: "Invalid contribution review metric rows" });
+    if (payload.kind === "score" && !payload.allocations) {
+      return reply.code(400).send({ error: "Invalid contribution review allocations" });
     }
 
     try {
@@ -457,20 +359,19 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
           version: 1 as const,
         }
       : {
-          kind: "score" as const,
-          metricRows: await buildSubmitMetricRows({
-            metricRows: body.metricRows,
-            objective: routeContext.objective,
+          allocations: buildSubmitAllocations({
+            allocations: body.allocations,
             targets: routeContext.targets,
           }),
+          kind: "score" as const,
           objectiveId: params.objectiveId,
           objectiveTitle: routeContext.objective.title,
           reviewer: context.user.name,
           reviewerUserId: context.user.id,
           version: 1 as const,
         };
-    if (payload.kind === "score" && !payload.metricRows) {
-      return reply.code(400).send({ error: "Invalid contribution review metric rows" });
+    if (payload.kind === "score" && !payload.allocations) {
+      return reply.code(400).send({ error: "Invalid contribution review allocations" });
     }
 
     try {

@@ -13058,6 +13058,68 @@ body[data-dragging-floating="true"] {
   stroke-width: 2.3;
 }
 
+.orf-objective-base-points-editor,
+.orf-objective-base-points-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 248, 232, 0.62),
+      rgba(235, 249, 255, 0.18)
+    ),
+    rgba(255, 255, 255, 0.16);
+  color: #8a5a12;
+  font-size: var(--orf-challenge-meta-size);
+  font-weight: 820;
+  line-height: 1;
+  box-shadow:
+    0 6px 14px rgba(31, 49, 74, 0.045),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.orf-objective-base-points-editor {
+  width: 76px;
+  padding: 0 8px;
+}
+
+.orf-objective-base-points-input {
+  width: 42px;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+}
+
+.orf-objective-base-points-input::-webkit-outer-spin-button,
+.orf-objective-base-points-input::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.orf-objective-base-points-input[type="number"] {
+  appearance: textfield;
+}
+
+.orf-objective-base-points-unit {
+  flex: 0 0 auto;
+  margin-left: 2px;
+}
+
+.orf-objective-base-points-chip {
+  min-width: 58px;
+  padding: 0 9px;
+  cursor: help;
+}
+
 .orf-hierarchy-overlay {
   overflow: visible;
 }

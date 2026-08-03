@@ -94,7 +94,6 @@ import type {
   AppNotification,
   ChatUnreadSummary,
   CommentAttachmentUploadResult,
-  UncertaintyLevel,
   UserRole,
   WorkLogReminderState,
 } from "../types/orf";
@@ -192,9 +191,9 @@ interface OrfContextValue {
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => Promise<boolean>;
   updateObjectiveTitle: (objectiveId: string, title: string) => Promise<boolean>;
   updateObjectiveFinalDueAt: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
+  updateObjectiveBasePoints: (objectiveId: string, objectiveBasePoints: number) => Promise<boolean>;
   updateResultTitle: (resultId: string, title: string) => Promise<boolean>;
   updateResultDetails: (resultId: string, details: ResultDetailsInput) => Promise<boolean>;
-  updateResultUncertaintyLevel: (resultId: string, uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
   updateTaskTitle: (taskId: string, title: string) => Promise<boolean>;
   updateTaskChecklistItemLabel: (taskId: string, itemId: string, label: string) => Promise<boolean>;
   createTaskChecklistItem: (taskId: string, input?: { afterItemId?: string; label?: string }) => Promise<TaskChecklistItem | null>;

@@ -12,7 +12,7 @@ import {
 } from "./orfProviderMutationMessages";
 import type {
   ContributionAllocation,
-  ContributionReviewMetricRow,
+  ContributionReviewPercentAllocation,
   LootResultClaim,
   ObjectiveAcceptedResult,
   Objective,
@@ -54,7 +54,7 @@ export type ReviewObjectiveTrialReviewInput = {
   commanderFeedback: string;
 };
 export type SubmitContributionReviewInput =
-  | { kind: "score"; metricRows: ContributionReviewMetricRow[] }
+  | { allocations: ContributionReviewPercentAllocation[]; kind: "score" }
   | { abstentionReason: string; kind: "abstain" };
 export type RequestObjectiveAlignmentInput = {
   kind: ObjectiveAlignmentRequestKind;
@@ -361,8 +361,8 @@ export function useOrfProviderObjectiveActions({
                 objectiveId,
               }
             : {
+                allocations: input.allocations,
                 kind: "score",
-                metricRows: input.metricRows,
                 objectiveId,
               });
           notify("匿名互评已通过 ORF 提交到共享结算服务");
@@ -398,6 +398,21 @@ export function useOrfProviderObjectiveActions({
           return true;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "截止日期更新失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      updateObjectiveBasePoints: async (objectiveId: string, objectiveBasePoints: number) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/base-points`, {
+            method: "PATCH",
+            body: JSON.stringify({ objectiveBasePoints }),
+          });
+          await refreshTaskManagementData();
+          notify("目标分数已更新");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "目标分数更新失败"));
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }

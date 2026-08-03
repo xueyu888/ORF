@@ -1,6 +1,6 @@
 # ORF 本地匿名互评结算服务 - 后端
 
-匿名互评原始数据不进入 ORF 数据库。前端只提交当前用户填写的整数百分比矩阵或弃权说明；ORF 后端只做认证、目标权限、状态校验和代理，并按服务端目标指标、挑战者快照补齐矩阵元数据，不保存原始互评。共享私有服务是匿名互评草稿、提交历史、逐指标原始行、目标级汇总的唯一事实源；挑战者读模型只暴露本人草稿和本人最新提交，指挥官汇总读模型只投影每个 reviewer 的最新提交。
+匿名互评原始数据不进入 ORF 数据库。前端只提交当前用户填写的目标级整数百分比 `allocations` 或弃权说明；ORF 后端只做认证、目标权限、状态校验和代理，并按服务端目标挑战者快照补齐成员展示名和稳定 `memberUserId`，不保存原始互评。共享私有服务是匿名互评草稿、提交历史、目标级原始分配和汇总的唯一事实源；挑战者读模型只暴露本人草稿和本人最新提交，指挥官汇总读模型只投影每个 reviewer 的最新提交。
 
 ## 服务归属
 
@@ -60,12 +60,12 @@ ORF 前端依赖以下 ORF 同源代理接口；ORF 后端再转发到共享私�
 | `GET /api/local-settlement/objectives/:objectiveId/reviews/me` | `POST /objectives/:objectiveId/reviews/me` | 当前目标挑战者读取本人服务器草稿和本人最新一版提交；私有服务要求 ORF 后端内部 token |
 | `PUT /api/local-settlement/objectives/:objectiveId/reviews/draft` | `PUT /objectives/:objectiveId/reviews/draft` | 当前目标挑战者自动保存一个覆盖式草稿；提交成功后清空 |
 | `DELETE /api/local-settlement/objectives/:objectiveId/reviews/draft` | `DELETE /objectives/:objectiveId/reviews/draft` | 清空当前目标挑战者的服务器草稿 |
-| `POST /api/local-settlement/objectives/:objectiveId/reviews/submit` | `POST /objectives/:objectiveId/reviews/submit` | 当前目标挑战者追加一条提交历史，并由私有服务从矩阵计算目标级贡献比例 |
-| `POST /api/local-settlement/objectives/:objectiveId/summary` | `POST /objectives/:objectiveId/summary` | 指挥官验收时读取提交状态、原始评分、均值、偏离提醒和默认贡献比例；私有服务要求 ORF 后端内部 token |
+| `POST /api/local-settlement/objectives/:objectiveId/reviews/submit` | `POST /objectives/:objectiveId/reviews/submit` | 当前目标挑战者追加一条目标级评分提交历史 |
+| `POST /api/local-settlement/objectives/:objectiveId/summary` | `POST /objectives/:objectiveId/summary` | 指挥官结算时读取提交状态、目标级原始评分、均值、偏离提醒和默认贡献比例；私有服务要求 ORF 后端内部 token |
 
 `/objectives/:objectiveId/summary` 返回：
 
-- `submissions`：每个已提交成员的最新评分或弃权说明；评分包含逐指标 `metricRows`、服务端派生的目标级 `allocations` 和逐指标 `metricScores`。
+- `submissions`：每个已提交成员的最新评分或弃权说明；评分包含目标级 `allocations`。历史逐指标数据可继续以兼容字段展示，但新提交不再产生 `metricRows`。
 - `missingReviewers` / `reviewers` / `abstainedReviewers`：提交状态分组。
 - `averages`：按当前已评分记录计算的成员均值、默认结算比例和相对均分偏离；服务内部使用 `basisPoints=10000` 表达 `100.00%`，避免两位小数汇总丢失。
 - `ratios`：验收页默认填入的贡献比例。

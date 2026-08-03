@@ -6,8 +6,10 @@ import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, Field, actionButtonClassName } from "../components/ui";
 import {
   buildContributionReviewMatrix,
-  contributionReviewMatrixToDraftMetricRows,
-  contributionReviewMatrixToMetricRows,
+  contributionReviewMatrixInputsFromAllocations,
+  contributionReviewMatrixInputsFromDraftAllocations,
+  contributionReviewMatrixToDraftAllocations,
+  contributionReviewMatrixToPercentAllocations,
   contributionReviewTargetKey,
   formatContributionReviewPercent,
   normalizeContributionReviewMatrixInputs,
@@ -47,8 +49,6 @@ import {
 } from "../domain/orfSettlement";
 import type {
   ContributionAllocation,
-  ContributionReviewDraftMetricRow,
-  ContributionReviewMetricRow,
   ContributionReviewMetricScore,
   LootResultClaim,
   LootResultClaimStatus,
@@ -180,63 +180,6 @@ function InactiveLootActionPanel({
   );
 }
 
-function contributionReviewMatrixInputsFromMetricScores(
-  metricScores: ContributionReviewMetricScore[],
-  targets: ContributionAllocationTarget[],
-): ContributionReviewMatrixInputs {
-  const inputs: ContributionReviewMatrixInputs = {};
-  for (const score of metricScores) {
-    const rowInputs: Record<string, string> = {};
-    for (const allocation of score.allocations) {
-      const target = targets.find((item) =>
-        allocation.memberUserId
-          ? item.memberUserId === allocation.memberUserId
-          : item.member === allocation.member,
-      );
-      if (!target) continue;
-      rowInputs[contributionTargetKey(target)] = formatContributionReviewPercent(
-        allocation.ratio * CONTRIBUTION_PERCENT_TOTAL,
-      );
-    }
-    inputs[score.metricId] = rowInputs;
-  }
-  return inputs;
-}
-
-function contributionReviewMatrixInputsFromMetricRows(
-  metricRows: ContributionReviewMetricRow[],
-  targets: ContributionAllocationTarget[],
-): ContributionReviewMatrixInputs {
-  const inputs: ContributionReviewMatrixInputs = {};
-  for (const row of metricRows) {
-    const rowInputs: Record<string, string> = {};
-    for (const allocation of row.allocations) {
-      const target = contributionTargetForAllocation(allocation, targets);
-      if (!target) continue;
-      rowInputs[contributionTargetKey(target)] = String(allocation.percent);
-    }
-    inputs[row.metricId] = rowInputs;
-  }
-  return inputs;
-}
-
-function contributionReviewMatrixInputsFromDraftMetricRows(
-  metricRows: ContributionReviewDraftMetricRow[],
-  targets: ContributionAllocationTarget[],
-): ContributionReviewMatrixInputs {
-  const inputs: ContributionReviewMatrixInputs = {};
-  for (const row of metricRows) {
-    const rowInputs: Record<string, string> = {};
-    for (const allocation of row.allocations) {
-      const target = contributionTargetForAllocation(allocation, targets);
-      if (!target) continue;
-      rowInputs[contributionTargetKey(target)] = allocation.input;
-    }
-    inputs[row.metricId] = rowInputs;
-  }
-  return inputs;
-}
-
 function contributionReviewDraftFromLatestSubmission(input: {
   objectiveTitle: string;
   results: Result[];
@@ -257,34 +200,10 @@ function contributionReviewDraftFromLatestSubmission(input: {
     };
   }
 
-  if (input.review.metricRows && input.review.metricRows.length > 0) {
-    return {
-      abstentionReason: "",
-      matrixInputs: normalizeContributionReviewMatrixInputs({
-        current: contributionReviewMatrixInputsFromMetricRows(
-          input.review.metricRows,
-          input.targets,
-        ),
-        objectiveTitle: input.objectiveTitle,
-        results: input.results,
-        targets: input.targets,
-      }),
-      peerReviewMode: "score",
-      updatedAt: input.review.submittedAt,
-    };
-  }
-
-  if (!input.review.metricScores || input.review.metricScores.length === 0) {
-    return null;
-  }
-
   return {
     abstentionReason: "",
     matrixInputs: normalizeContributionReviewMatrixInputs({
-      current: contributionReviewMatrixInputsFromMetricScores(
-        input.review.metricScores,
-        input.targets,
-      ),
+      current: contributionReviewMatrixInputsFromAllocations(input.review.allocations, input.targets),
       objectiveTitle: input.objectiveTitle,
       results: input.results,
       targets: input.targets,
@@ -317,10 +236,7 @@ function contributionReviewDraftFromServerDraft(input: {
   return {
     abstentionReason: "",
     matrixInputs: normalizeContributionReviewMatrixInputs({
-      current: contributionReviewMatrixInputsFromDraftMetricRows(
-        input.draft.metricRows,
-        input.targets,
-      ),
+      current: contributionReviewMatrixInputsFromDraftAllocations(input.draft.allocations ?? [], input.targets),
       objectiveTitle: input.objectiveTitle,
       results: input.results,
       targets: input.targets,
@@ -752,7 +668,7 @@ export function LootSubmitPage() {
           })
         : saveLocalSettlementReviewDraft({
             kind: "score",
-            metricRows: contributionReviewMatrixToDraftMetricRows(contributionReviewMatrix),
+            allocations: contributionReviewMatrixToDraftAllocations(contributionReviewMatrix),
             objectiveId: objective.id,
           });
 
@@ -1068,7 +984,7 @@ export function LootSubmitPage() {
       return;
     }
 
-    const result = contributionReviewMatrixToMetricRows(
+    const result = contributionReviewMatrixToPercentAllocations(
       contributionReviewMatrix,
     );
     if (result.status === "invalid") {
@@ -1081,8 +997,8 @@ export function LootSubmitPage() {
       const ok = await submitContributionReview(
         objective.id,
         {
+          allocations: result.allocations,
           kind: "score",
-          metricRows: result.metricRows,
         },
       );
       if (ok) {
@@ -1924,23 +1840,9 @@ function LatestContributionReviewNotice({
     );
   }
 
-  if (
-    (review.metricRows && review.metricRows.length > 0) ||
-    (review.metricScores && review.metricScores.length > 0)
-  ) {
-    return (
-      <div className="orf-loot-peer-review-notice">
-        {source === "submittedReview" ? "已回填" : "检测到"}你在 {submittedAt} 提交的服务器最新逐指标评价；再次提交会成为新的最新评价。
-        <span className="orf-loot-peer-review-notice-inline">
-          最新目标比例：{formatAllocationInline(review.allocations)}
-        </span>
-      </div>
-    );
-  }
-
   return (
-    <div className="orf-loot-peer-review-notice orf-loot-peer-review-notice-warning">
-      检测到你在 {submittedAt} 的服务器最新匿名互评，但那次只保存了目标最终比例，不能还原每个指标行；页面不会用本机旧草稿覆盖这条最新记录。
+    <div className="orf-loot-peer-review-notice">
+      {source === "submittedReview" ? "已回填" : "检测到"}你在 {submittedAt} 提交的服务器最新目标贡献评价；再次提交会成为新的最新评价。
       <span className="orf-loot-peer-review-notice-inline">
         最新目标比例：{formatAllocationInline(review.allocations)}
       </span>
@@ -1962,12 +1864,10 @@ function ContributionReviewMatrixTable({
       <div className="orf-loot-panel-heading">
         <div>
           <div className="text-sm font-semibold orf-text-primary">
-            指标贡献分配
+            目标贡献分配
           </div>
           <div className="text-xs orf-text-secondary">
-            {summary.hasMetricRows
-              ? "指标权重来自当前指标分值；这里只填写服务端汇总所需的原始行百分比。"
-              : "当前目标没有指标，页面按目标整体提交贡献比例。"}
+            直接按目标整体填写每位挑战者的贡献比例；合计必须为 100%。
           </div>
         </div>
         <span
@@ -1977,14 +1877,14 @@ function ContributionReviewMatrixTable({
               : "orf-loot-total-pill orf-loot-total-pill-warning"
           }
         >
-          {summary.valid ? "可提交" : "检查行合计"}
+          {summary.valid ? "可提交" : "检查合计"}
         </span>
       </div>
       <div className="orf-loot-table-wrap">
         <table className="orf-loot-table orf-loot-peer-review-table">
           <thead className="orf-surface-muted orf-text-secondary">
             <tr>
-              <th className="px-3 py-2 font-semibold">目标 / 指标</th>
+              <th className="px-3 py-2 font-semibold">目标</th>
               {summary.targetCells.map((target) => (
                 <th
                   key={target.targetKey}
@@ -2003,13 +1903,7 @@ function ContributionReviewMatrixTable({
                 <td className="px-3 py-2">
                   <div className="orf-loot-result-title">{row.title}</div>
                   <div className="orf-loot-result-meta">
-                    {!row.isFallbackObjectiveRow && row.uncertaintyLevel
-                      ? `${row.uncertaintyLevel} · `
-                      : ""}
-                    {!row.isFallbackObjectiveRow
-                      ? `指标分 ${row.points} · `
-                      : ""}
-                    权重 {formatContributionReviewPercent(row.weightRatio * 100)}%
+                    目标整体
                   </div>
                   {row.detail && (
                     <div className="orf-loot-result-detail">{row.detail}</div>

@@ -3,7 +3,7 @@ import { orderObjectiveTasks } from "../../../domain/orfWorkItems";
 import { objectiveHasChallengers } from "../../../domain/orfObjectiveParticipants";
 import { resultProgress } from "../../../utils/format";
 import { addDays, bountyUpdatedAt, latestDate } from "./challengeDates";
-import { bountyDifficulty, bountyStatus } from "./challengeStatus";
+import { bountyStatus } from "./challengeStatus";
 import type { BountyNode, ObjectiveNode } from "./types";
 
 export function buildChallengeTree(
@@ -26,7 +26,6 @@ export function buildChallengeTree(
         status: bountyStatus(result, objective),
         updatedAt: bountyUpdatedAt(result, input.evidence),
         progress: resultProgress(result),
-        difficulty: bountyDifficulty(result),
       }) satisfies BountyNode);
       const actions = orderObjectiveTasks(input.tasks, objective);
 

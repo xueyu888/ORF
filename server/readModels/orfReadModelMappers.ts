@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { objectiveParticipantSnapshot } from "../../src/domain/orfObjectiveParticipants";
 import { objectiveStageForFlowStatus } from "../../src/domain/orfLifecycle";
-import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../../src/domain/orfSettlement";
+import { uncertaintyScoreFor } from "../../src/domain/orfSettlement";
 import { userDisplayProfileFromUser } from "../../src/domain/userDisplayProfile";
 import type { Objective, ObjectiveAcceptanceReview, ObjectiveParticipantProfile, ObjectiveSettlementEvent, OrfUserDisplayProfile, PointLedgerEntry, Result, Task } from "../../src/types/orf";
 import { addCalendarDays } from "../../src/utils/date";
@@ -185,7 +185,7 @@ export function mapObjectiveRows(input: {
       lootSubmittedAt: objective.lootSubmittedAt,
       acceptedResult: objective.acceptedResult,
       completionMultiplier: objective.completionMultiplier,
-      objectiveBasePoints: objectiveBasePointsForResults(objectiveResults),
+      objectiveBasePoints: objective.objectiveBasePoints,
       objectiveSettlementPoints: objective.objectiveSettlementPoints,
       publishedAt: objective.publishedAt,
       createdAt: objective.createdAt,

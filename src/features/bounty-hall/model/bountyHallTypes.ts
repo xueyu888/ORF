@@ -1,8 +1,6 @@
 import type { BountyHallItem } from "../../../state/apiClient";
-import type { UncertaintyLevel } from "../../../types/orf";
 
-export type DifficultyFilter = "all" | UncertaintyLevel;
-export type SortKey = "deadline" | "points" | "difficulty" | "published";
+export type SortKey = "deadline" | "points" | "published";
 export type HallTab = "all" | "open" | "frozen" | "submitted" | "revisionRequired" | "accepted" | "settled" | "related";
 
 export type BountyItem = BountyHallItem;

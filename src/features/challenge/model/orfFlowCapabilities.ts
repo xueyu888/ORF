@@ -162,8 +162,7 @@ export function metricDeleteUnavailableMessage(access: MetricEditAccess) {
 
 export function objectiveFreezeUnavailableMessage(readiness: ObjectiveFreezeReadiness) {
   if (readiness.status === "ready") return "";
-  if (readiness.reason === "missingResults") return "目标至少需要一个已校准指标后才能冻结";
-  if (readiness.reason === "uncalibratedResults") return "请先校准目标下所有指标积分，再完成对齐冻结";
+  if (readiness.reason === "missingResults") return "目标至少需要一个指标后才能冻结";
   if (readiness.reason === "lifecycleLocked") return "目标当前阶段不能冻结";
   return "目标不可用，无法冻结";
 }

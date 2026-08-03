@@ -1,7 +1,7 @@
 import { objectiveParticipantSnapshot, userNameByIdMap } from "../domain/orfObjectiveParticipants";
 import { createDefaultOrfReadModelRules } from "../domain/orfReadModel";
 import { objectiveStageForFlowStatus } from "../domain/orfLifecycle";
-import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
+import { uncertaintyScoreFor } from "../domain/orfSettlement";
 import { userDisplayProfilesFromUsers } from "../domain/userDisplayProfile";
 import { sortFeedbackIssuesByUpdatedAtDescending } from "../features/feedback/model/feedbackIssueOrdering";
 import type { ChallengeApplication, Objective, OrfProject, OrfState, Result, Task } from "../types/orf";
@@ -82,11 +82,7 @@ function normalizeResult(result: Result): Result {
   };
 }
 
-function normalizeObjective(objective: Objective, results: Result[], tasks: Task[], userNameById: Map<string, string>): Objective {
-  const acceptedResults = results
-    .filter((result) => result.objectiveId === objective.id)
-    .map(normalizeResult)
-    .filter((result) => result.acceptedResult === "completed" || result.acceptedResult === "falsified");
+function normalizeObjective(objective: Objective, tasks: Task[], userNameById: Map<string, string>): Objective {
   const participants = objectiveParticipantSnapshot({
     challengerUserIds: objective.challengerUserIds,
     challengers: objective.challengers,
@@ -118,7 +114,7 @@ function normalizeObjective(objective: Objective, results: Result[], tasks: Task
     lootSubmittedAt: objective.lootSubmittedAt ?? null,
     acceptedResult: objective.acceptedResult ?? null,
     completionMultiplier: objective.completionMultiplier ?? null,
-    objectiveBasePoints: objective.objectiveBasePoints ?? objectiveBasePointsForResults(acceptedResults),
+    objectiveBasePoints: objective.objectiveBasePoints ?? 0,
     objectiveSettlementPoints: objective.objectiveSettlementPoints ?? null,
     stage: objectiveStageForFlowStatus(flowStatus),
   };
@@ -146,7 +142,7 @@ export function normalizeState(state: OrfState): OrfState {
       ...thread,
       messages: (thread.messages ?? []).map((message) => ({ ...message, attachments: message.attachments ?? [] })),
     })),
-    objectives: (state.objectives ?? []).map((objective) => normalizeObjective(objective, results, tasks, userNameById)),
+    objectives: (state.objectives ?? []).map((objective) => normalizeObjective(objective, tasks, userNameById)),
     results,
     tasks,
     objectiveLoot: state.objectiveLoot ?? [],

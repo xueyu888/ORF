@@ -32,9 +32,9 @@
 → 发布到悬赏大厅
 → 成员申请挑战 / 指挥官征召
 → 指挥官确认申请，或被征召成员接受
-→ 重估目标下的指标、等级积分、任务和验收口径
+→ 重估目标下的指标、任务和验收口径，并由指挥官设置目标分数
 → 重估完成期限到期自动冻结，或指挥官提前完成并冻结目标
-→ 如冻结后仍需调整指标或等级积分，挑战者填写理由申请重新重估并由指挥官审批回到重估
+→ 如冻结后仍需调整指标口径，挑战者填写理由申请重新重估并由指挥官审批回到重估
 → 挑战者提交目标战利品
 → 指挥官验收目标
 → 目标级积分结算
@@ -50,9 +50,9 @@
 | `open` | 可申请 | 指挥官发布候选目标 | 成员申请挑战、指挥官征召 |
 | `applying` | 申请中 | 至少一名成员提交申请 | 指挥官通过或拒绝申请 |
 | `recruiting` | 征召中 | 指挥官指定待接受成员 | 被征召成员接受 |
-| `reestimating` | 重估中 | 申请被通过或征召被接受；重新重估审批通过 | 其他 active 普通成员继续申请；指挥官改目标和指标；挑战者提出指标、编辑指标与等级积分、维护任务、评论；挑战者申请完成重估后，指挥官完成并冻结或打回重估；重估完成期限到期后后端自动尝试冻结 |
+| `reestimating` | 重估中 | 申请被通过或征召被接受；重新重估审批通过 | 其他 active 普通成员继续申请；指挥官改目标、指标和目标分数；挑战者提出指标、编辑指标、维护任务、评论；挑战者申请完成重估后，指挥官完成并冻结或打回重估；重估完成期限到期后后端自动尝试冻结 |
 | `frozen` | 已冻结 | 重估完成期限到期且冻结校验通过，或指挥官确认重估完成 | 挑战者填写理由申请重新重估；挑战者提交战利品 |
-| `submitted` | 待验收 | 挑战者提交战利品 | 指挥官验收指标；不再允许改等级积分或重新重估 |
+| `submitted` | 待验收 | 挑战者提交战利品 | 指挥官验收指标；进入 accepted 前仍可改目标分数；不再允许重新重估 |
 | `revisionRequired` | 待返工 | 指挥官验收不通过 | 截止日已到且 `deadlinePenalty` 尚未结算时进行匿名互评和逾期惩罚结算；挑战者继续完成并重新提交 |
 | `accepted` | 已验收 | 指挥官确认验收通过 | 挑战者匿名互评；指挥官确认结算 |
 | `settled` | 已结算 | 指挥官确认最终比例并写入积分 | 查看结果和排行榜 |
@@ -77,14 +77,15 @@
 
 - 指挥官可以修改目标标题、边界、截止时间等目标内容。
 - 指挥官可以新增和编辑目标下的指标。
+- 指挥官可以直接设置目标基础分，目标基础分必须是正整数；进入 `accepted` 前仍可修改。
 - 指挥官可以在候选目标内先维护目标行动项；这些任务仍归属于 `Objective`，不归属于指标。
 - 挑战者可以提出指标，也可以编辑该目标下已有指标。
 - 同一目标的正式挑战者可以共同新增、编辑、勾选、移动和删除目标下的任务与子任务，并维护评论，用来拆解执行动作和协作记录；任务不挂到指标下，执行人和创建人不形成私有所有权。
-- 目标至少已有一个指标，且每个指标都已校准积分等级后，指挥官才能冻结目标。
+- 目标至少已有一个指标后，指挥官才能冻结目标；目标基础分不在冻结时锁定。
 
 `Objective.finalDueAt` 是目标截止日期的唯一事实源。只有指挥官可以修改：`candidate/open/applying/recruiting/reestimating` 可正常调整；`frozen` 只允许因延期等异常原因把日期延后；`submitted/revisionRequired/accepted/settled/closed` 不允许修改。目标仍处于 `reestimating` 且最终截止日期实际变更时，`Objective.confirmationDueAt` 按挑战接受时间和新的最终截止日期重新计算：重估完成期限取剩余验收周期的 50%，按半天取整，保留至少半天的最小窗口，不再设置固定最长天数。冻结后延后截止日期不重新重估，也不改变 `confirmationDueAt`。
 
-等级积分只能在正式提交战利品前调整。`reestimating` 期间可按权限直接编辑指标口径和等级积分；挑战者申请完成重估后，指挥官可以提前完成并冻结，也可以打回重估，目标仍保持 `reestimating`。到达 `confirmationDueAt` 后，后端自动尝试冻结；若缺少指标或等级积分未校准，则自动冻结被阻断并保留 `reestimating`，补齐后仍走同一套完成重估与冻结校验。冻结后指标口径和等级积分默认稳定，不允许直接编辑。若挑战者发现冻结后仍需修复，只能带理由发起 `frozenReestimate` 对齐申请；指挥官审批通过时设置新的 `confirmationDueAt`，该时间必须晚于当前时间且不能超过 `Objective.finalDueAt` 当日 23:59。审批通过后目标退回现有 `reestimating/orfReestimate` 链路并清空当前 `confirmedAt`，改完后仍需重新申请完成重估或等到新期限自动冻结。`confirmationDueAt` 到期后停止挑战者指标调整，不提供不经审批的独立续期入口。目标进入 `submitted` 后，正式战利品和 `lootSubmittedAt` 已成为验收与结算事实，不允许再通过重估修改等级积分或口径。
+目标基础分只能由指挥官修改，且在 `accepted` 前都可调整；冻结不锁分。`reestimating` 期间可按权限编辑指标口径；挑战者申请完成重估后，指挥官可以提前完成并冻结，也可以打回重估，目标仍保持 `reestimating`。到达 `confirmationDueAt` 后，后端自动尝试冻结；若缺少指标，则自动冻结被阻断并保留 `reestimating`，补齐后仍走同一套完成重估与冻结校验。冻结后指标口径默认稳定，不允许直接编辑。若挑战者发现冻结后仍需修复，只能带理由发起 `frozenReestimate` 对齐申请；指挥官审批通过时设置新的 `confirmationDueAt`，该时间必须晚于当前时间且不能超过 `Objective.finalDueAt` 当日 23:59。审批通过后目标退回现有 `reestimating/orfReestimate` 链路并清空当前 `confirmedAt`，改完后仍需重新申请完成重估或等到新期限自动冻结。`confirmationDueAt` 到期后停止挑战者指标调整，不提供不经审批的独立续期入口。
 
 ## 征召与申请
 
@@ -122,8 +123,8 @@
 - 写入 `objectiveAcceptanceReviews`，保留每次验收的战利品、指标结论、目标结论、说明和验收人。
 - 写入每个 `Result.acceptedResult`。
 - 按每个指标验收结论汇总 `Objective.acceptedResult`；该字段记录最近一次验收结论，不反向定义生命周期状态。
-- 写入 `completionMultiplier`、`objectiveBasePoints`；`objectiveBasePoints` 从已冻结指标的积分汇总得到，不作为目标初始化字段手填。
-- 验收通过时 `Objective.flowStatus` 从 `submitted` 进入 `accepted`，并提醒挑战者可以重新检查匿名互评。
+- 写入 `completionMultiplier`，并读取当前 `objectiveBasePoints` 作为本次结算基数。
+- 验收通过时 `Objective.flowStatus` 从 `submitted` 进入 `accepted`，锁定目标基础分，并提醒挑战者可以重新检查匿名互评。
 - 验收不通过时 `Objective.flowStatus` 从 `submitted` 进入 `revisionRequired`；如果已到截止日且 `deadlinePenalty` 尚未结算，仍要进行匿名互评和逾期惩罚结算。
 
 指挥官结算 `revisionRequired` 或 `accepted` 目标后：
@@ -137,7 +138,7 @@
 - `accepted` 的 `finalCompletion` 事件在已有惩罚事件时写入 `0` 分，本期扣掉的分不补回；没有惩罚事件时沿用按时/延期完成倍率。最终结算后 `Objective.flowStatus` 从 `accepted` 进入 `settled`。
 - 向目标 `Objective.challengerUserIds` 中的 active 成员发送个人系统通知；通知不包含匿名互评明细。
 
-Result 的等级积分是冻结前必须明确的积分事实源。Objective 不初始化积分，目标基础分由目标下指标积分相加得到；Result 不直接给个人分积分，个人积分按目标级结算事件的贡献比例分配。单人目标也走相同结算事件，默认比例为 `100%`。
+`Objective.objectiveBasePoints` 是目标基础分事实源。Result 不直接给目标或个人计分；个人积分按目标级结算事件的贡献比例分配。单人目标也走相同结算事件，默认比例为 `100%`。
 
 ## TODO
 

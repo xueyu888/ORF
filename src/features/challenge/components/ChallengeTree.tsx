@@ -5,7 +5,6 @@ import type { CSSProperties, FormEvent, MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { FantasyDatePicker } from "../../../components/FantasyDatePicker";
-import { FantasySelectMenu, type FantasySelectOption } from "../../../components/FantasySelectMenu";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
 import { UserAvatar } from "../../../components/UserAvatar";
@@ -29,7 +28,7 @@ import {
   shouldRenderObjectiveAsFrozen,
 } from "../../../domain/orfLifecycle";
 import { objectiveChallengerUserIds } from "../../../domain/orfObjectiveParticipants";
-import { uncertaintyLevelOptions } from "../../../domain/orfSettlement";
+import { canEditObjectiveBasePointsByFlow } from "../../../domain/orfSettlement";
 import type {
   ObjectiveAlignmentRequest,
   ObjectiveAlignmentRequestKind,
@@ -40,7 +39,6 @@ import type {
   OrfUser,
   Task,
   TaskChecklistItem,
-  UncertaintyLevel,
 } from "../../../types/orf";
 import { deadlineRemainingTime, formatDateTimeMinute, reestimateWindowRemainingTime, remainingTime, type RelativeTime } from "../model/challengeDates";
 import {
@@ -55,7 +53,7 @@ import {
   subActionDropTargetForEvent,
 } from "../model/challengeDragDrop";
 import { commentCountFor } from "../model/challengeComments";
-import { metricEditUnavailableMessage, objectiveFreezeUnavailableMessage, workbenchActionForObjective, type MetricEditAccess } from "../model/orfFlowCapabilities";
+import { objectiveFreezeUnavailableMessage, workbenchActionForObjective } from "../model/orfFlowCapabilities";
 import { actionVisualStatus, bountyStatusLabel, objectiveComplete, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../model/challengeStatus";
 import { childCreationDraftId, childCreationTarget, type ChildCreationTemporaryRow } from "../model/childCreationSession";
 import { groupChallengeGroupsByProject, unassignedObjectiveProjectName, type ObjectiveProjectGroup } from "../model/projectGroups";
@@ -88,7 +86,6 @@ type RowHandlers = {
   canCreateObjective: boolean;
   canManageProjects: boolean;
   metricActionLabel: (objective: ObjectiveNode["objective"]) => string | null;
-  metricEditAccess: (objectiveId: string) => MetricEditAccess;
   canPublishObjective: (objective: ObjectiveNode["objective"]) => boolean;
   canRecruitObjective: (objective: ObjectiveNode["objective"]) => boolean;
   canReinforceObjective: (objective: ObjectiveNode["objective"]) => boolean;
@@ -123,9 +120,9 @@ type RowHandlers = {
   onCreateProject: (name: string) => Promise<OrfProject | null>;
   onDeleteProject: (projectId: string) => Promise<boolean>;
   onSaveObjectiveDeadline: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
+  onSaveObjectiveBasePoints: (objectiveId: string, objectiveBasePoints: number) => Promise<boolean>;
   onSetObjectiveProject: (objectiveId: string, projectId: string | null) => Promise<boolean>;
   onUnavailableObjectiveDeadline: (objective: ObjectiveNode["objective"]) => void;
-  onSaveMetricDifficulty: (target: ChallengeTarget, uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
   onSelectMetric: (target: Extract<ChallengeTarget, { type: "bounty" }>) => void;
   onUnavailableMetricEdit: (objectiveId: string) => void;
   onSaveTitle: (target: ChallengeTarget, title: string, context: TitleSubmissionContext) => boolean | void;
@@ -451,6 +448,13 @@ function ObjectivePanel({
             }}
             projectId={group.objective.projectId ?? null}
             projects={projects}
+          />
+          <ObjectiveBasePointsControl
+            canManage={handlers.currentUser?.role === "admin"}
+            draft={isDraftObjective}
+            notify={handlers.notify}
+            objective={group.objective}
+            onSave={handlers.onSaveObjectiveBasePoints}
           />
         </HierarchyRootCell>
         <ObjectiveFlowAction disabled={isDraftObjective} freezeReadiness={freezeReadiness} group={group} handlers={handlers} />
@@ -1095,16 +1099,7 @@ function MetricRow({
           )}
           {bounty && <CommentCountBadge count={commentCountFor(handlers.commentCounts, "result", bounty.result.id)} onClick={() => handlers.onActionRowAction("comment", target)} />}
         </HierarchyCell>
-        {bounty ? (
-          <MetricDifficultyCell
-            access={handlers.metricEditAccess(bounty.result.objectiveId)}
-            bounty={bounty}
-            onSave={(uncertaintyLevel) => handlers.onSaveMetricDifficulty(target, uncertaintyLevel)}
-            onUnavailable={() => handlers.onUnavailableMetricEdit(bounty.result.objectiveId)}
-          />
-        ) : (
-          <EmptySlot />
-        )}
+        <EmptySlot />
         <EmptySlot />
         <StatusChip tone={bounty ? bounty.status : "open"}>{statusLabel}</StatusChip>
         <EmptySlot />
@@ -1504,6 +1499,111 @@ function ProgressValue({ value }: { value: number }) {
   );
 }
 
+function ObjectiveBasePointsControl({
+  canManage,
+  draft,
+  notify,
+  objective,
+  onSave,
+}: {
+  canManage: boolean;
+  draft: boolean;
+  notify: (message: string) => void;
+  objective: ObjectiveNode["objective"];
+  onSave: (objectiveId: string, objectiveBasePoints: number) => Promise<boolean>;
+}) {
+  const persistedValue = objective.objectiveBasePoints > 0 ? String(objective.objectiveBasePoints) : "";
+  const [value, setValue] = useState(persistedValue);
+  const [isSaving, setIsSaving] = useState(false);
+  const lifecycleEditable = canEditObjectiveBasePointsByFlow(objective);
+  const canEdit = canManage && !draft && lifecycleEditable;
+  const label = objective.objectiveBasePoints > 0 ? `${objective.objectiveBasePoints} 分` : "待定分";
+
+  useEffect(() => {
+    setValue(persistedValue);
+    setIsSaving(false);
+  }, [objective.id, persistedValue]);
+
+  const saveValue = async () => {
+    if (!canEdit || isSaving) return;
+
+    const nextValue = Number(value.trim());
+    if (!Number.isInteger(nextValue) || nextValue < 1) {
+      setValue(persistedValue);
+      notify("目标分数必须是正整数");
+      return;
+    }
+    if (nextValue === objective.objectiveBasePoints) return;
+
+    setIsSaving(true);
+    try {
+      const saved = await onSave(objective.id, nextValue);
+      if (!saved) setValue(persistedValue);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (canEdit) {
+    return (
+      <form
+        className="orf-objective-base-points-editor"
+        data-challenge-row-actions="true"
+        data-no-row-edit="true"
+        onSubmit={(event: FormEvent<HTMLFormElement>) => {
+          event.preventDefault();
+          void saveValue();
+        }}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <input
+          aria-label={`目标分数，当前 ${label}`}
+          className="orf-objective-base-points-input"
+          disabled={isSaving}
+          inputMode="numeric"
+          min={1}
+          onBlur={() => void saveValue()}
+          onChange={(event) => setValue(event.target.value)}
+          pattern="[0-9]*"
+          title="目标分数"
+          type="number"
+          value={value}
+        />
+        <span className="orf-objective-base-points-unit">分</span>
+      </form>
+    );
+  }
+
+  return (
+    <button
+      aria-label={`目标分数 ${label}`}
+      className="orf-objective-base-points-chip"
+      data-no-row-edit="true"
+      onClick={() => notify(objectiveBasePointsUnavailableMessage({ canManage, draft, lifecycleEditable }))}
+      onDoubleClick={(event) => event.stopPropagation()}
+      title={objectiveBasePointsUnavailableMessage({ canManage, draft, lifecycleEditable })}
+      type="button"
+    >
+      {label}
+    </button>
+  );
+}
+
+function objectiveBasePointsUnavailableMessage({
+  canManage,
+  draft,
+  lifecycleEditable,
+}: {
+  canManage: boolean;
+  draft: boolean;
+  lifecycleEditable: boolean;
+}) {
+  if (draft) return "请先完成目标标题，再设置目标分数";
+  if (!canManage) return "只有指挥官可以修改目标分数";
+  if (!lifecycleEditable) return "目标进入匿名互评后，目标分数已锁定";
+  return "当前不能修改目标分数";
+}
+
 function ObjectiveDeadlineCell({
   editState,
   objective,
@@ -1569,84 +1669,6 @@ function ObjectiveDeadlineCell({
       <DateStack primary={objective.finalDueAt || "未设置"} />
     </button>
   );
-}
-
-function MetricDifficultyCell({
-  access,
-  bounty,
-  onSave,
-  onUnavailable,
-}: {
-  access: MetricEditAccess;
-  bounty: BountyNode;
-  onSave: (uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
-  onUnavailable: () => void;
-}) {
-  const persistedLevel = bounty.result.uncertaintyLevel ?? "";
-  const [value, setValue] = useState<UncertaintyLevel | "">(persistedLevel);
-  const [isSaving, setIsSaving] = useState(false);
-  const canEdit = access.status === "allowed";
-  const label = bounty.difficulty;
-  const difficultyOptions: Array<FantasySelectOption<UncertaintyLevel | "">> = [
-    { label: "待校准", value: "", disabled: true },
-    ...uncertaintyLevelOptions.map((level) => ({ label: level, value: level })),
-  ];
-
-  useEffect(() => {
-    setValue(persistedLevel);
-  }, [bounty.result.id, persistedLevel]);
-
-  const saveSelectedLevel = async (nextValue: UncertaintyLevel | "") => {
-    if (!nextValue || isSaving) return;
-    setValue(nextValue);
-    if (nextValue === bounty.result.uncertaintyLevel) return;
-
-    setIsSaving(true);
-    try {
-      const saved = await onSave(nextValue);
-      if (!saved) setValue(bounty.result.uncertaintyLevel ?? "");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  if (canEdit) {
-    return (
-      <div className="orf-row-difficulty-cell">
-        <FantasySelectMenu
-          ariaLabel={`编辑指标难度，当前 ${label}`}
-          className="orf-metric-difficulty-select"
-          disabled={isSaving}
-          onChange={(nextValue) => void saveSelectedLevel(nextValue)}
-          options={difficultyOptions}
-          stopPropagation
-          title="编辑指标难度"
-          value={value}
-          variant="chip"
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="orf-row-difficulty-cell">
-      <button
-        aria-label={`指标难度 ${label}`}
-        className="orf-metric-difficulty-display"
-        data-no-row-edit="true"
-        onClick={onUnavailable}
-        onDoubleClick={(event) => event.stopPropagation()}
-        title={metricDifficultyTitle(access)}
-        type="button"
-      >
-        <Badge>{label}</Badge>
-      </button>
-    </div>
-  );
-}
-
-function metricDifficultyTitle(access: MetricEditAccess) {
-  return access.status === "allowed" ? "编辑指标难度" : metricEditUnavailableMessage(access);
 }
 
 function objectiveDeadlineTitle(editState: ObjectiveDeadlineEditState) {

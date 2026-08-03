@@ -32,7 +32,8 @@ import type {
 } from "../../src/types/orf";
 import {
   allocateSettlementPoints,
-  objectiveBasePointsForResults,
+  canEditObjectiveBasePointsByFlow,
+  hasPositiveObjectiveBasePoints,
   planObjectiveAcceptance,
   planObjectiveSettlement,
   planObjectiveSettlementEvent,
@@ -1321,7 +1322,11 @@ export async function applyForObjectiveChallenge(objectiveId: string, actorUserI
   return applied ? { status: "applied", objective: applied } : { status: "notFound" };
 }
 
-export type ObjectiveMutationInvalidReason = ObjectiveFreezeBlockReason | FrozenReestimateReopenBlockReason | "missingReestimateReason";
+export type ObjectiveMutationInvalidReason =
+  | ObjectiveFreezeBlockReason
+  | FrozenReestimateReopenBlockReason
+  | "missingObjectiveBasePoints"
+  | "missingReestimateReason";
 
 export type ObjectiveFlowMutationOutcome =
   | { status: "ok"; objective: Objective }
@@ -1662,7 +1667,7 @@ async function freezeObjectiveAfterReestimateCore(input: FreezeObjectiveAfterRee
     }
 
     const objectiveResults = await tx
-      .select({ objectiveId: results.objectiveId, uncertaintyLevel: results.uncertaintyLevel, uncertaintyScore: results.uncertaintyScore })
+      .select({ objectiveId: results.objectiveId })
       .from(results)
       .where(eq(results.objectiveId, input.objectiveId));
     const freezeReadiness = objectiveFreezeReadinessAfterReestimate(objective, objectiveResults);
@@ -3440,6 +3445,9 @@ export async function reviewObjectiveLoot(
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
   if (!objective) return { status: "notFound" };
   if (!canReviewObjectiveLootByFlow(objective) || !objective.lootSubmittedAt) return { status: "invalid" };
+  if (!hasPositiveObjectiveBasePoints(objective)) {
+    return { status: "invalid", reason: "missingObjectiveBasePoints" };
+  }
 
   const lootRows = await db
     .select()
@@ -3452,11 +3460,7 @@ export async function reviewObjectiveLoot(
   const resultRows = await db.select().from(results).where(eq(results.objectiveId, objectiveId));
   const acceptancePlan = planObjectiveAcceptance({
     objective,
-    results: resultRows.map((result) => ({
-      id: result.id,
-      uncertaintyLevel: result.uncertaintyLevel ?? undefined,
-      uncertaintyScore: result.uncertaintyScore,
-    })),
+    results: resultRows.map((result) => ({ id: result.id })),
     loot,
     resultReviews: input.resultReviews,
     acceptedResult: input.acceptedResult,
@@ -3596,6 +3600,9 @@ export async function settleObjectiveLoot(
   if (!canSettleObjectiveLootByFlow(objective) || !settlementEventKind || !objective.lootSubmittedAt) return { status: "invalid" };
   if (settlementEventKind === "deadlinePenalty" && !isObjectiveDeadlineReached(objective)) return { status: "invalid" };
   if (settlementEventKind === "finalCompletion" && !objective.acceptedResult) return { status: "invalid" };
+  if (!hasPositiveObjectiveBasePoints(objective)) {
+    return { status: "invalid", reason: "missingObjectiveBasePoints" };
+  }
 
   const lootRows = await db
     .select()
@@ -3625,11 +3632,7 @@ export async function settleObjectiveLoot(
   const challengers = participantTargets.map((target) => target.member);
   const settlementPlan = planObjectiveSettlement({
     objective: { ...objective, challengers, challengerUserIds: participantUserIds },
-    results: resultRows.map((result) => ({
-      id: result.id,
-      uncertaintyLevel: result.uncertaintyLevel ?? undefined,
-      uncertaintyScore: result.uncertaintyScore,
-    })),
+    results: resultRows.map((result) => ({ id: result.id })),
     loot,
     resultReviews: resultRows.map((result) => ({
       resultId: result.id,
@@ -4027,8 +4030,49 @@ export async function updateObjectiveDetails(
   });
 
   if (updatedObjective.status === "notFound") return { status: "notFound" };
-  if (updatedObjective.status === "invalid") return { status: "invalid" };
   if (updatedObjective.status === "locked") return { status: "locked" };
+  if (!updatedObjective.teamId) return { status: "notFound" };
+
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.changed",
+    objectiveId,
+    teamId: updatedObjective.teamId,
+  });
+  return objectiveOutcome(objectiveId, runtimeScope(updatedObjective.teamId));
+}
+
+export async function updateObjectiveBasePoints(
+  objectiveId: string,
+  basePoints: number,
+  actorId: string,
+): Promise<ObjectiveDetailsMutationOutcome> {
+  if (!Number.isInteger(basePoints) || basePoints < 1) {
+    return { status: "invalid" };
+  }
+
+  const updatedObjective = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective) return { status: "notFound" as const };
+    if (!canEditObjectiveBasePointsByFlow(objective)) return { status: "locked" as const };
+
+    const [updated] = await tx
+      .update(objectives)
+      .set({
+        objectiveBasePoints: basePoints,
+        updatedAt: today(),
+        updatedBy: actorId,
+      })
+      .where(eq(objectives.id, objectiveId))
+      .returning({ id: objectives.id, teamId: objectives.teamId });
+
+    if (!updated) return { status: "notFound" as const };
+    return { status: "updated" as const, teamId: updated.teamId };
+  });
+
+  if (updatedObjective.status === "notFound") return { status: "notFound" };
+  if (updatedObjective.status === "locked") return { status: "locked" };
+  if (!updatedObjective.teamId) return { status: "notFound" };
 
   publishObjectiveInvalidation({
     actorUserId: actorId,
