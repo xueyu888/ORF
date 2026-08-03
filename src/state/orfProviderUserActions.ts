@@ -111,6 +111,21 @@ export function useOrfProviderUserActions({
           return false;
         }
       },
+      resetUserPassword: async (userId: string, input: { password: string }) => {
+        try {
+          const data = await apiJson<UsersResponse>(`/api/users/${encodeURIComponent(userId)}/password`, {
+            method: "PATCH",
+            body: JSON.stringify(input),
+          });
+          setState((current) => mergeUsers(current, data));
+          notify("密码已重置");
+          return true;
+        } catch (error) {
+          notify(userMutationFailureMessage(error, "密码重置失败"));
+          void refreshUsers().catch(() => undefined);
+          return false;
+        }
+      },
       deleteUser: async (userId: string) => {
         try {
           const data = await apiJson<UsersResponse>(`/api/users/${encodeURIComponent(userId)}`, { method: "DELETE" });

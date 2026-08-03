@@ -25,6 +25,14 @@ type OryIdentity = {
   traits?: Record<string, unknown>;
 };
 
+type OryIdentityCredentialsUpdate = {
+  password?: {
+    config: {
+      password: string;
+    };
+  };
+};
+
 type OrySession = {
   active?: boolean;
   identity?: OryIdentity;
@@ -116,6 +124,53 @@ async function fetchOry(input: string, init: RequestInit = {}) {
     ...init,
     signal: init.signal ?? AbortSignal.timeout(ORY_REQUEST_TIMEOUT_MS),
   });
+}
+
+async function readOryIdentity(identityId: string): Promise<OryIdentity> {
+  const response = await fetchOry(oryAdminUrl(`/admin/identities/${encodeURIComponent(identityId)}`), {
+    headers: {
+      accept: "application/json",
+    },
+  });
+
+  if (response.status === 404) {
+    throw Object.assign(new Error("Ory identity not found"), { statusCode: 404 });
+  }
+
+  if (!response.ok) {
+    throw Object.assign(new Error(`Ory identity read failed with ${response.status}`), { statusCode: 503 });
+  }
+
+  return response.json() as Promise<OryIdentity>;
+}
+
+async function updateOryIdentity(
+  identity: OryIdentity,
+  input: { conflictMessage?: string; credentials?: OryIdentityCredentialsUpdate; traits?: Record<string, unknown> },
+) {
+  const updateResponse = await fetchOry(oryAdminUrl(`/admin/identities/${encodeURIComponent(identity.id)}`), {
+    method: "PUT",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      credentials: input.credentials,
+      metadata_admin: identity.metadata_admin ?? null,
+      metadata_public: identity.metadata_public ?? null,
+      schema_id: identity.schema_id ?? "default",
+      state: identity.state ?? "active",
+      traits: input.traits ?? identity.traits ?? {},
+    }),
+  });
+
+  if (updateResponse.status === 409) {
+    throw Object.assign(new Error(input.conflictMessage ?? "Ory identity update conflict"), { statusCode: 409 });
+  }
+
+  if (!updateResponse.ok) {
+    throw Object.assign(new Error(`Ory identity update failed with ${updateResponse.status}`), { statusCode: 503 });
+  }
 }
 
 function cookieHeader(cookie: string | undefined): Record<string, string> {
@@ -463,48 +518,33 @@ export async function updateOryIdentityEmail(identityId: string | null | undefin
     return;
   }
 
-  const currentResponse = await fetchOry(oryAdminUrl(`/admin/identities/${encodeURIComponent(id)}`), {
-    headers: {
-      accept: "application/json",
-    },
-  });
-
-  if (currentResponse.status === 404) {
-    throw Object.assign(new Error("Ory identity not found"), { statusCode: 404 });
-  }
-
-  if (!currentResponse.ok) {
-    throw Object.assign(new Error(`Ory identity read failed with ${currentResponse.status}`), { statusCode: 503 });
-  }
-
-  const identity = (await currentResponse.json()) as OryIdentity;
+  const identity = await readOryIdentity(id);
   const traits = {
     ...(identity.traits ?? {}),
     email: nextEmail,
   };
 
-  const updateResponse = await fetchOry(oryAdminUrl(`/admin/identities/${encodeURIComponent(id)}`), {
-    method: "PUT",
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
+  await updateOryIdentity(identity, { conflictMessage: "Email already exists", traits });
+}
+
+export async function resetOryIdentityPassword(identityId: string | null | undefined, password: string) {
+  const id = identityId?.trim();
+  if (!id) {
+    throw Object.assign(new Error("User login identity is not linked"), { statusCode: 409 });
+  }
+
+  if (password.length < 8) {
+    throw Object.assign(new Error("Password must be at least 8 characters"), { statusCode: 400 });
+  }
+
+  const identity = await readOryIdentity(id);
+  await updateOryIdentity(identity, {
+    credentials: {
+      password: {
+        config: { password },
+      },
     },
-    body: JSON.stringify({
-      metadata_admin: identity.metadata_admin ?? null,
-      metadata_public: identity.metadata_public ?? null,
-      schema_id: identity.schema_id ?? "default",
-      state: identity.state ?? "active",
-      traits,
-    }),
   });
-
-  if (updateResponse.status === 409) {
-    throw Object.assign(new Error("Email already exists"), { statusCode: 409 });
-  }
-
-  if (!updateResponse.ok) {
-    throw Object.assign(new Error(`Ory identity update failed with ${updateResponse.status}`), { statusCode: 503 });
-  }
 }
 
 export async function registerWithPassword(input: { name: string; email: string; password: string }) {

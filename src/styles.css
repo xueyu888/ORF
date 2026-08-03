@@ -3924,6 +3924,21 @@ button:disabled {
   color: #60758d;
 }
 
+.orf-user-password-reset {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  border-top: 1px solid rgba(183, 139, 72, 0.22);
+  padding-top: 4px;
+}
+
+.orf-user-password-reset .orf-action-button {
+  min-height: 42px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
 .orf-permission-toggle {
   position: relative;
   display: inline-flex;
@@ -4151,6 +4166,14 @@ button:disabled {
   .orf-user-table,
   .orf-role-permission-table {
     min-width: 760px;
+  }
+
+  .orf-user-password-reset {
+    grid-template-columns: 1fr;
+  }
+
+  .orf-user-password-reset .orf-action-button {
+    width: 100%;
   }
 }
 

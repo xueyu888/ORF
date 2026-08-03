@@ -36,10 +36,22 @@ export function userMutationFailureMessage(error: unknown, fallback: string) {
         return "该成员已被 ORF 业务记录引用，不能删除，请改为停用";
       }
 
+      if (error.message === "User login identity is not linked") {
+        return "该成员还没有绑定登录身份，不能重置密码";
+      }
+
       return error.message;
     }
 
+    if (error.status === 400 && error.message === "Password must be at least 8 characters") {
+      return "密码至少 8 位";
+    }
+
     if (error.status === 404) {
+      if (error.message === "Ory identity not found") {
+        return "登录身份不存在，请先重新绑定账号";
+      }
+
       return "用户不存在，已刷新成员列表";
     }
 

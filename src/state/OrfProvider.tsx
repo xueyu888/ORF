@@ -218,6 +218,7 @@ interface OrfContextValue {
   deleteCurrentUserAvatar: () => Promise<boolean>;
   logout: () => void;
   updateUser: (userId: string, input: { name: string; email: string; role: UserRole }) => Promise<boolean>;
+  resetUserPassword: (userId: string, input: { password: string }) => Promise<boolean>;
   deleteUser: (userId: string) => Promise<boolean>;
   disableUser: (userId: string) => Promise<boolean>;
   enableUser: (userId: string) => Promise<boolean>;

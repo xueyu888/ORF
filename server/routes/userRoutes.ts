@@ -11,6 +11,7 @@ import {
   getScopedUsers,
   recordUserOnlineActivity,
   rejectRegistrationRequest,
+  resetScopedUserPassword,
   updateScopedUser,
 } from "../repositories/userRepository";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
@@ -23,6 +24,9 @@ const userBodySchema = z.object({
   name: z.string().trim().min(1),
   email: z.string().trim().email().transform((value) => value.toLowerCase()),
   role: userRoleSchema,
+});
+const userPasswordBodySchema = z.object({
+  password: z.string(),
 });
 const userParamsSchema = z.object({ userId: z.string().min(1) });
 const clientPresenceSourceSchema = z.enum(["android", "browser", "desktop", "unknown"]);
@@ -144,6 +148,18 @@ export function registerUserRoutes(app: FastifyInstance) {
     const params = userParamsSchema.parse(request.params);
     const users = await enableScopedUser(context.scope, params.userId);
     publishUsersInvalidation(context.scope, context.user.id, params.userId);
+    return { users };
+  });
+
+  app.patch("/api/users/:userId/password", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = userParamsSchema.parse(request.params);
+    const body = userPasswordBodySchema.parse(request.body);
+    const users = await resetScopedUserPassword(context.scope, params.userId, body.password);
     return { users };
   });
 

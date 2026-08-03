@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { OrfUser, UserRole } from "../../src/types/orf";
 import { canEnableUserAccount } from "../../src/domain/userAccountLifecycle";
-import { deleteOryIdentity, updateOryIdentityEmail } from "../auth/ory";
+import { deleteOryIdentity, resetOryIdentityPassword, updateOryIdentityEmail } from "../auth/ory";
 import { db } from "../db/client";
 import {
   commentAttachments,
@@ -467,6 +467,12 @@ export async function deleteScopedUser(scope: RuntimeScope, actorUserId: string,
     pendingCommentAttachmentObjectKeys: pendingAttachments.map((attachment) => attachment.objectKey),
     userId,
   });
+  return getScopedUsers(scope);
+}
+
+export async function resetScopedUserPassword(scope: RuntimeScope, userId: string, password: string): Promise<OrfUser[]> {
+  const targetUser = await getScopedUserRecord(scope, userId);
+  await resetOryIdentityPassword(targetUser.oryIdentityId, password);
   return getScopedUsers(scope);
 }
 

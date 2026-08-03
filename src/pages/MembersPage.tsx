@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Ban, CheckCircle2, ChevronDown, Edit3, Plus, Search, Trash2, X, XCircle } from "lucide-react";
+import { Ban, CheckCircle2, ChevronDown, Edit3, KeyRound, Plus, Search, Trash2, X, XCircle } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { Button, IconButton } from "../components/ui";
 import { userAccountLifecycleActions } from "../domain/userAccountLifecycle";
@@ -58,18 +58,22 @@ export function MembersPage() {
     enableUser,
     notify,
     rejectRegistrationRequest,
+    resetUserPassword,
     state,
     updateUser,
   } = useOrf();
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [dialog, setDialog] = useState<UserDialogState>(null);
+  const [passwordDraft, setPasswordDraft] = useState("");
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [processingUserId, setProcessingUserId] = useState<string | null>(null);
   const currentUserId = currentUser?.id ?? state.currentUserId;
   const editingUser = dialog?.userId ? state.users.find((user) => user.id === dialog.userId) : null;
   const isCurrentUser = (user: OrfUser) => user.id === currentUserId;
   const isEditingCurrentAdmin = editingUser?.id === currentUserId && editingUser.role === "admin";
+  const dialogBusy = submitting || passwordSubmitting;
 
   const users = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -81,14 +85,21 @@ export function MembersPage() {
     });
   }, [query, roleFilter, state.users]);
 
-  const openAddDialog = () => setDialog({ mode: "add", name: "", email: "", role: "member" });
-  const openEditDialog = (user: OrfUser) => setDialog({ mode: "edit", userId: user.id, name: user.name, email: user.email, role: user.role });
+  const openAddDialog = () => {
+    setPasswordDraft("");
+    setDialog({ mode: "add", name: "", email: "", role: "member" });
+  };
+  const openEditDialog = (user: OrfUser) => {
+    setPasswordDraft("");
+    setDialog({ mode: "edit", userId: user.id, name: user.name, email: user.email, role: user.role });
+  };
   const closeDialog = () => {
-    if (submitting) {
+    if (dialogBusy) {
       return;
     }
 
     setDialog(null);
+    setPasswordDraft("");
   };
 
   const handleDialogSubmit = async (event: FormEvent) => {
@@ -122,6 +133,35 @@ export function MembersPage() {
 
     if (ok) {
       setDialog(null);
+      setPasswordDraft("");
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!dialog || dialog.mode !== "edit" || !dialog.userId || passwordSubmitting || submitting) {
+      return;
+    }
+
+    if (!editingUser?.authLinked) {
+      notify("该成员还没有绑定登录身份，不能重置密码");
+      return;
+    }
+
+    if (passwordDraft.length < 8) {
+      notify("密码至少 8 位");
+      return;
+    }
+
+    setPasswordSubmitting(true);
+    let ok = false;
+    try {
+      ok = await resetUserPassword(dialog.userId, { password: passwordDraft });
+    } finally {
+      setPasswordSubmitting(false);
+    }
+
+    if (ok) {
+      setPasswordDraft("");
     }
   };
 
@@ -330,34 +370,59 @@ export function MembersPage() {
           >
             <div className="orf-user-dialog-header">
               <h2 id="orf-user-dialog-title">{dialog.mode === "edit" ? "编辑用户" : "新增用户"}</h2>
-              <IconButton disabled={submitting} icon={X} label="关闭" size="sm" type="button" onClick={closeDialog} />
+              <IconButton disabled={dialogBusy} icon={X} label="关闭" size="sm" type="button" onClick={closeDialog} />
             </div>
             <label>
               <span>姓名</span>
-              <input value={dialog.name} disabled={submitting} onChange={(event) => setDialog({ ...dialog, name: event.target.value })} autoFocus required />
+              <input value={dialog.name} disabled={dialogBusy} onChange={(event) => setDialog({ ...dialog, name: event.target.value })} autoFocus required />
             </label>
             <label>
               <span>邮箱</span>
               <input
                 type="email"
                 value={dialog.email}
-                disabled={submitting}
+                disabled={dialogBusy}
                 onChange={(event) => setDialog({ ...dialog, email: event.target.value })}
                 required
               />
             </label>
             <label>
               <span>角色</span>
-              <select value={dialog.role} disabled={submitting || isEditingCurrentAdmin} onChange={(event) => setDialog({ ...dialog, role: event.target.value as UserRole })}>
+              <select value={dialog.role} disabled={dialogBusy || isEditingCurrentAdmin} onChange={(event) => setDialog({ ...dialog, role: event.target.value as UserRole })}>
                 <option value="admin">管理员</option>
                 <option value="member">成员</option>
               </select>
             </label>
+            {dialog.mode === "edit" && (
+              <div className="orf-user-password-reset">
+                <label>
+                  <span>新密码</span>
+                  <input
+                    type="password"
+                    value={passwordDraft}
+                    disabled={dialogBusy || !editingUser?.authLinked}
+                    minLength={8}
+                    onChange={(event) => setPasswordDraft(event.target.value)}
+                    placeholder={editingUser?.authLinked ? "至少 8 位" : "未绑定登录身份"}
+                  />
+                </label>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={dialogBusy || !editingUser?.authLinked || passwordDraft.length < 8}
+                  loading={passwordSubmitting}
+                  onClick={() => void handlePasswordReset()}
+                >
+                  <KeyRound className="h-4 w-4" />
+                  重置密码
+                </Button>
+              </div>
+            )}
             <div className="orf-user-dialog-actions">
-              <Button type="button" variant="secondary" disabled={submitting} onClick={closeDialog}>
+              <Button type="button" variant="secondary" disabled={dialogBusy} onClick={closeDialog}>
                 取消
               </Button>
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" disabled={dialogBusy}>
                 {submitting ? "保存中" : dialog.mode === "edit" ? "保存" : "新增用户"}
               </Button>
             </div>
