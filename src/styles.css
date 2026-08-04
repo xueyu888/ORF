@@ -13733,6 +13733,10 @@ body[data-dragging-floating="true"] {
   text-align: right;
 }
 
+.orf-objective-base-points-input::placeholder {
+  color: rgba(138, 90, 18, 0.68);
+}
+
 .orf-objective-base-points-input::-webkit-outer-spin-button,
 .orf-objective-base-points-input::-webkit-inner-spin-button {
   margin: 0;
@@ -13754,6 +13758,10 @@ body[data-dragging-floating="true"] {
   cursor: help;
 }
 
+.orf-objective-base-points-chip-editable {
+  cursor: pointer;
+}
+
 .orf-hierarchy-overlay {
   overflow: visible;
 }
@@ -13764,6 +13772,8 @@ body[data-dragging-floating="true"] {
 
 .orf-objective-icon,
 .orf-metric-icon {
+  position: relative;
+  overflow: hidden;
   border-radius: 8px;
   box-shadow:
     0 10px 20px rgba(98, 77, 48, 0.12),
@@ -13802,6 +13812,65 @@ body[data-dragging-floating="true"] {
 
 .orf-metric-icon-done {
   background: linear-gradient(135deg, #139c87 0%, #5fd79d 100%);
+}
+
+.orf-metric-icon-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.orf-metric-icon-button:focus-visible {
+  outline: 2px solid rgba(36, 142, 175, 0.46);
+  outline-offset: 2px;
+}
+
+.orf-metric-icon-interactive {
+  transition:
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.orf-metric-icon-button:hover .orf-metric-icon-interactive {
+  transform: translateY(-1px);
+  box-shadow:
+    0 12px 22px rgba(31, 49, 74, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+.orf-metric-icon-check {
+  color: rgba(255, 255, 255, 0.96);
+  filter: drop-shadow(0 1px 1px rgba(31, 49, 74, 0.28));
+  stroke-width: 2.8;
+  transform-origin: center;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.orf-metric-icon-unchecked .orf-metric-icon-check {
+  opacity: 0;
+  transform: scale(0.72);
+}
+
+.orf-metric-icon-button:hover .orf-metric-icon-unchecked .orf-metric-icon-check,
+.orf-metric-icon-button:focus-visible .orf-metric-icon-unchecked .orf-metric-icon-check {
+  opacity: 0.52;
+  transform: scale(0.9);
+}
+
+.orf-metric-icon-checked .orf-metric-icon-check {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .orf-completion-icon {

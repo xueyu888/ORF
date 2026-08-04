@@ -134,6 +134,16 @@ export function hasPositiveObjectiveBasePoints(
   return normalizedObjectiveBasePoints(objective) >= OBJECTIVE_BASE_POINTS_MIN;
 }
 
+export function objectiveBasePointsLabel(
+  objective: ObjectiveBasePointsTarget | number | null | undefined,
+) {
+  const points =
+    typeof objective === "number"
+      ? normalizedObjectiveBasePoints({ objectiveBasePoints: objective })
+      : normalizedObjectiveBasePoints(objective);
+  return points >= OBJECTIVE_BASE_POINTS_MIN ? `${points} 分` : "待定分";
+}
+
 export function canEditObjectiveBasePointsByFlow(
   objective: ObjectiveBasePointsMutationTarget | null | undefined,
 ) {

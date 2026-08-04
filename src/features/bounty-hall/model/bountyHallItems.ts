@@ -1,6 +1,7 @@
 import { canApplyForObjectiveChallenge } from "../../../domain/orfLifecycle";
 import { isObjectiveAssignedChallenger, isObjectiveChallenger } from "../../../domain/orfObjectiveParticipants";
 import { resultDetailText } from "../../../domain/orfResultDetails";
+import { objectiveBasePointsLabel } from "../../../domain/orfSettlement";
 import type { ChallengeApplication, ObjectiveFlowStatus } from "../../../types/orf";
 import type { BountyItem, HallTab, SortKey } from "./bountyHallTypes";
 
@@ -134,7 +135,7 @@ export function resultCountLabel(item: BountyItem) {
 }
 
 export function bountyPointsLabel(item: BountyItem) {
-  return item.objectiveBasePoints > 0 ? `${item.objectiveBasePoints} 分` : "待定分";
+  return objectiveBasePointsLabel(item);
 }
 
 export function bountyTargetElement(objectiveId: string) {

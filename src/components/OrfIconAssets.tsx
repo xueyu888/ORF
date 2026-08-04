@@ -19,8 +19,28 @@ export function ObjectiveFlagIcon({ complete = false }: { complete?: boolean }) 
   );
 }
 
-export function MetricSquareIcon({ tone }: { tone: MetricIconTone }) {
-  return <span className={clsx("orf-metric-icon h-7 w-7 shrink-0", `orf-metric-icon-${tone}`)} aria-hidden="true" />;
+export function MetricSquareIcon({
+  checked = false,
+  interactive = false,
+  tone,
+}: {
+  checked?: boolean;
+  interactive?: boolean;
+  tone: MetricIconTone;
+}) {
+  return (
+    <span
+      className={clsx(
+        "orf-metric-icon flex h-7 w-7 shrink-0 items-center justify-center",
+        `orf-metric-icon-${tone}`,
+        interactive && "orf-metric-icon-interactive",
+        checked ? "orf-metric-icon-checked" : "orf-metric-icon-unchecked",
+      )}
+      aria-hidden="true"
+    >
+      <Check className="orf-metric-icon-check h-4 w-4" />
+    </span>
+  );
 }
 
 export function CompletionCircleIcon({ checked }: { checked: boolean }) {

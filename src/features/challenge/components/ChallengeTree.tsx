@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { FantasyDatePicker } from "../../../components/FantasyDatePicker";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
-import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
+import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon, type MetricIconTone } from "../../../components/OrfIconAssets";
 import { UserAvatar } from "../../../components/UserAvatar";
 import { Button, IconButton, actionButtonClassName } from "../../../components/ui";
 import {
@@ -28,7 +28,7 @@ import {
   shouldRenderObjectiveAsFrozen,
 } from "../../../domain/orfLifecycle";
 import { objectiveChallengerUserIds } from "../../../domain/orfObjectiveParticipants";
-import { canEditObjectiveBasePointsByFlow } from "../../../domain/orfSettlement";
+import { canEditObjectiveBasePointsByFlow, objectiveBasePointsLabel } from "../../../domain/orfSettlement";
 import type {
   ObjectiveAlignmentRequest,
   ObjectiveAlignmentRequestKind,
@@ -68,6 +68,7 @@ type RowHandlers = {
   collapsedActionIds: Set<string>;
   collapsedBountyIds: Set<string>;
   commentCounts: Map<string, number>;
+  completedMetricIds: ReadonlySet<string>;
   temporaryChildRow: ChildCreationTemporaryRow | null;
   dragDrop: DragDropController;
   editingTarget: ChallengeTarget | null;
@@ -102,6 +103,7 @@ type RowHandlers = {
   onDraftTitleChange: (title: string) => void;
   onEditTarget: (target: ChallengeTarget) => void;
   onFreezeObjective: (objectiveId: string) => Promise<boolean>;
+  onMetricCompletionChange: (resultId: string, completed: boolean) => void;
   onRequestAlignment: (objectiveId: string, input: { kind: ObjectiveAlignmentRequestKind; note?: string | null }) => Promise<boolean>;
   onReviewAlignment: (
     objectiveId: string,
@@ -1086,6 +1088,44 @@ type SubActionTreeRow =
   | { item: TaskChecklistItem; itemIndex: number; persistence: "persisted" }
   | { persistence: "temporary"; placeholderTitle: string; temporary: ChildCreationTemporaryRow };
 
+function metricToneForBountyStatus(status: BountyNode["status"]): MetricIconTone {
+  if (status === "settled") return "done";
+  if (status === "review" || status === "accepted") return "review";
+  if (status === "active") return "active";
+  return "todo";
+}
+
+function MetricCompletionToggle({
+  checked,
+  onChange,
+  title,
+  tone,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  title: string;
+  tone: MetricIconTone;
+}) {
+  const label = checked ? `取消标记指标已完成：${title}` : `标记指标已完成：${title}`;
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={checked}
+      className="orf-metric-icon-button"
+      title={label}
+      onClick={(event) => {
+        event.stopPropagation();
+        onChange(!checked);
+      }}
+      onDoubleClick={(event) => event.stopPropagation()}
+    >
+      <MetricSquareIcon checked={checked} interactive tone={tone} />
+    </button>
+  );
+}
+
 function MetricRow({
   row,
   handlers,
@@ -1117,6 +1157,9 @@ function MetricRow({
   const disabled = temporary?.status === "submitting";
   const title = temporary ? temporary.title || placeholderTitle : bounty!.result.title;
   const statusLabel = temporary ? (temporary.status === "submitting" ? "保存中" : "草稿") : bountyStatusLabel[bounty!.status];
+  const metricTone = bounty ? metricToneForBountyStatus(bounty.status) : "todo";
+  const metricChecked = Boolean(complete || (bounty && handlers.completedMetricIds.has(bounty.result.id)));
+  const canToggleMetricCompletion = Boolean(bounty && scope === "mine" && !disabled && !complete);
 
   return (
     <div className="orf-result-row-frame relative">
@@ -1168,7 +1211,16 @@ function MetricRow({
             data-hierarchy-branch-target={anchorId}
             data-hierarchy-parent={parentAnchorId}
           >
-            <MetricSquareIcon tone={bounty ? (bounty.status === "settled" ? "done" : bounty.status === "review" || bounty.status === "accepted" ? "review" : bounty.status === "active" ? "active" : "todo") : "todo"} />
+            {canToggleMetricCompletion && bounty ? (
+              <MetricCompletionToggle
+                checked={metricChecked}
+                onChange={(checked) => handlers.onMetricCompletionChange(bounty.result.id, checked)}
+                title={bounty.result.title}
+                tone={metricTone}
+              />
+            ) : (
+              <MetricSquareIcon checked={metricChecked} tone={metricTone} />
+            )}
           </span>
           {isEditingTarget ? (
             <InlineTitleEditor
@@ -1604,37 +1656,65 @@ function ObjectiveBasePointsControl({
 }) {
   const persistedValue = objective.objectiveBasePoints > 0 ? String(objective.objectiveBasePoints) : "";
   const [value, setValue] = useState(persistedValue);
+  const [editing, setEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const lifecycleEditable = canEditObjectiveBasePointsByFlow(objective);
   const canEdit = canManage && !draft && lifecycleEditable;
-  const label = objective.objectiveBasePoints > 0 ? `${objective.objectiveBasePoints} 分` : "待定分";
+  const label = objectiveBasePointsLabel(objective);
 
   useEffect(() => {
     setValue(persistedValue);
+    setEditing(false);
     setIsSaving(false);
   }, [objective.id, persistedValue]);
+
+  const unavailableMessage = objectiveBasePointsUnavailableMessage({ canManage, draft, lifecycleEditable });
+
+  const startEditing = () => {
+    if (!canEdit) {
+      notify(unavailableMessage);
+      return;
+    }
+    setValue(persistedValue);
+    setEditing(true);
+  };
+
+  const cancelEditing = () => {
+    setValue(persistedValue);
+    setEditing(false);
+  };
 
   const saveValue = async () => {
     if (!canEdit || isSaving) return;
 
-    const nextValue = Number(value.trim());
-    if (!Number.isInteger(nextValue) || nextValue < 1) {
-      setValue(persistedValue);
-      notify("目标分数必须是正整数");
+    const trimmedValue = value.trim();
+    if (!trimmedValue) {
+      cancelEditing();
       return;
     }
-    if (nextValue === objective.objectiveBasePoints) return;
+
+    const nextValue = Number(trimmedValue);
+    if (!Number.isInteger(nextValue) || nextValue < 1) {
+      notify("目标分数必须是正整数");
+      cancelEditing();
+      return;
+    }
+    if (nextValue === objective.objectiveBasePoints) {
+      setEditing(false);
+      return;
+    }
 
     setIsSaving(true);
     try {
       const saved = await onSave(objective.id, nextValue);
       if (!saved) setValue(persistedValue);
+      setEditing(false);
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (canEdit) {
+  if (canEdit && editing) {
     return (
       <form
         className="orf-objective-base-points-editor"
@@ -1648,13 +1728,21 @@ function ObjectiveBasePointsControl({
       >
         <input
           aria-label={`目标分数，当前 ${label}`}
+          autoFocus
           className="orf-objective-base-points-input"
           disabled={isSaving}
           inputMode="numeric"
           min={1}
           onBlur={() => void saveValue()}
           onChange={(event) => setValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              cancelEditing();
+            }
+          }}
           pattern="[0-9]*"
+          placeholder="待定"
           title="目标分数"
           type="number"
           value={value}
@@ -1667,11 +1755,11 @@ function ObjectiveBasePointsControl({
   return (
     <button
       aria-label={`目标分数 ${label}`}
-      className="orf-objective-base-points-chip"
+      className={clsx("orf-objective-base-points-chip", canEdit && "orf-objective-base-points-chip-editable")}
       data-no-row-edit="true"
-      onClick={() => notify(objectiveBasePointsUnavailableMessage({ canManage, draft, lifecycleEditable }))}
+      onClick={startEditing}
       onDoubleClick={(event) => event.stopPropagation()}
-      title={objectiveBasePointsUnavailableMessage({ canManage, draft, lifecycleEditable })}
+      title={canEdit ? "点击编辑目标分数" : unavailableMessage}
       type="button"
     >
       {label}

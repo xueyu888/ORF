@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   canUseFullCompletionSettlementMultiplier,
   canEditObjectiveBasePointsByFlow,
+  objectiveBasePointsLabel,
   objectiveSettlementReviewWindow,
   planObjectiveSettlementEvent,
 } from "../src/domain/orfSettlement";
@@ -177,6 +178,12 @@ test("objective base points stay editable until settlement is confirmed", () => 
 
   assert.equal(canEditObjectiveBasePointsByFlow({ flowStatus: "settled" }), false);
   assert.equal(canEditObjectiveBasePointsByFlow({ flowStatus: "closed" }), false);
+});
+
+test("objective base points label shows pending until positive points exist", () => {
+  assert.equal(objectiveBasePointsLabel({ objectiveBasePoints: 0 }), "待定分");
+  assert.equal(objectiveBasePointsLabel({ objectiveBasePoints: -1 }), "待定分");
+  assert.equal(objectiveBasePointsLabel({ objectiveBasePoints: 120 }), "120 分");
 });
 
 test("member peer review action follows the settlement review window", () => {
