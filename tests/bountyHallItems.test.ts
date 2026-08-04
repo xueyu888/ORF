@@ -8,6 +8,10 @@ import {
   hallTabs,
   isCurrentUserRelatedBounty,
 } from "../src/features/bounty-hall/model/bountyHallItems";
+import {
+  bountyHallFilterPreferenceFromRecord,
+  bountyHallFilterPreferenceToRecord,
+} from "../src/features/bounty-hall/model/bountyHallFilterPreferences";
 import type { BountyItem } from "../src/features/bounty-hall/model/bountyHallTypes";
 import type { ChallengeApplication, ObjectiveFlowStatus } from "../src/types/orf";
 
@@ -58,6 +62,36 @@ test("bounty hall buckets are built in a single lifecycle pass", () => {
   assert.deepEqual(buckets.accepted.map((item) => item.objective.id), ["objective-accepted"]);
   assert.deepEqual(buckets.settled.map((item) => item.objective.id), ["objective-settled"]);
   assert.deepEqual(buckets.related.map((item) => item.objective.id), ["objective-reestimating", "objective-revision-required", "objective-accepted"]);
+});
+
+test("bounty hall filter preference stores only non-default tab and sort choices", () => {
+  assert.deepEqual(
+    bountyHallFilterPreferenceToRecord({ sortKey: "deadline", tab: "all" }),
+    null,
+  );
+  assert.deepEqual(
+    bountyHallFilterPreferenceToRecord({ sortKey: "published", tab: "open" }),
+    {
+      values: {
+        sort: "published",
+        tab: "open",
+      },
+      version: 1,
+    },
+  );
+  assert.deepEqual(
+    bountyHallFilterPreferenceFromRecord({
+      values: {
+        sort: "invalid",
+        tab: "invalid",
+      },
+      version: 1,
+    }),
+    {
+      sortKey: "deadline",
+      tab: "all",
+    },
+  );
 });
 
 test("current user application ignores declined records outside the related view", () => {

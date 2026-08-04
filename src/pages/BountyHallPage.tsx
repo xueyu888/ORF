@@ -10,6 +10,13 @@ import { BountyToolbar } from "../features/bounty-hall/components/BountyToolbar"
 import { ChallengeConfirmModal } from "../features/bounty-hall/components/ChallengeConfirmModal";
 import { useMinuteNow } from "../features/bounty-hall/hooks/useMinuteNow";
 import {
+  bountyHallFilterPreferenceFromRecord,
+  bountyHallFilterPreferenceKey,
+  bountyHallFilterPreferenceToRecord,
+  defaultBountyHallSortKey,
+  type BountyHallFilterPreference,
+} from "../features/bounty-hall/model/bountyHallFilterPreferences";
+import {
   bountyTargetElement,
   buildHallItemBuckets,
   buildHallItems,
@@ -24,7 +31,7 @@ import { bountyCycleLabel } from "../features/bounty-hall/model/bountyHallSummar
 import type { BountyItem, ChallengeConfirmTarget, HallTab, SortKey } from "../features/bounty-hall/model/bountyHallTypes";
 import { challengePathForTarget, parseChallengeTargetHash } from "../features/challenge/model/challengeLinks";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
-import type { BountyHallData } from "../state/apiClient";
+import { getUserPreferences, saveUserPreferences, type BountyHallData } from "../state/apiClient";
 import { bountyHallSnapshot, loadBountyHall } from "../state/readModelQueries";
 import { useOrf } from "../state/OrfProvider";
 
@@ -38,14 +45,16 @@ export function BountyHallPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const bountyDataRequestRef = useRef(0);
+  const filterPreferenceTouchedRef = useRef(false);
   const [bountyData, setBountyData] = useState<BountyHallData | null>(() => bountyHallSnapshot() ?? null);
   const [loadingBounties, setLoadingBounties] = useState(() => bountyHallSnapshot() === undefined);
   const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("deadline");
+  const [sortKey, setSortKey] = useState<SortKey>(defaultBountyHallSortKey);
   const [activeTab, setActiveTab] = useState<HallTab>(defaultHallTab);
   const [confirmTarget, setConfirmTarget] = useState<ChallengeConfirmTarget | null>(null);
   const [processingBountyId, setProcessingBountyId] = useState<string | null>(null);
   const now = useMinuteNow();
+  const currentUserId = currentUser?.id ?? "";
   const challengeActionsBlocked = currentUser?.role !== "member";
   const canOpenChallengeTarget = canShowFrontend(currentUser, "challenge.scope.all");
   const linkedBountyObjectiveId = useMemo(() => {
@@ -75,6 +84,41 @@ export function BountyHallPage() {
     void loadBountyData(false);
   }, [loadBountyData]);
 
+  const applyBountyHallFilterPreference = useCallback((preference: BountyHallFilterPreference) => {
+    setActiveTab(preference.tab);
+    setSortKey(preference.sortKey);
+  }, []);
+
+  const persistBountyHallFilterPreference = useCallback((preference: BountyHallFilterPreference) => {
+    if (!currentUserId) return;
+    void saveUserPreferences({
+      filterPreferences: {
+        [bountyHallFilterPreferenceKey]: bountyHallFilterPreferenceToRecord(preference),
+      },
+    }).catch(() => undefined);
+  }, [currentUserId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentUserId) return () => {
+      cancelled = true;
+    };
+    filterPreferenceTouchedRef.current = false;
+
+    void getUserPreferences({ userId: currentUserId })
+      .then((preferences) => {
+        if (cancelled || filterPreferenceTouchedRef.current || linkedBountyObjectiveId) return;
+        applyBountyHallFilterPreference(
+          bountyHallFilterPreferenceFromRecord(preferences.filterPreferences[bountyHallFilterPreferenceKey]),
+        );
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyBountyHallFilterPreference, currentUserId, linkedBountyObjectiveId]);
+
   const bountyInvalidationKey = useMemo(
     () => readModelInvalidationKey(readModelInvalidations, "bountyHall"),
     [readModelInvalidations],
@@ -90,7 +134,6 @@ export function BountyHallPage() {
     [bountyData],
   );
 
-  const currentUserId = currentUser?.id ?? "";
   const publicBounties = bountyData?.publicItems ?? [];
   const availableBounties = bountyData?.availableItems ?? [];
   const objectiveOptions = bountyData?.objectiveOptions ?? [];
@@ -117,6 +160,23 @@ export function BountyHallPage() {
   }, [query, sortKey, tabbedHallItems]);
 
   const hasFilters = query.trim();
+
+  const updateQuery = (next: string) => {
+    filterPreferenceTouchedRef.current = true;
+    setQuery(next);
+  };
+
+  const updateSortKey = (next: SortKey) => {
+    filterPreferenceTouchedRef.current = true;
+    setSortKey(next);
+    persistBountyHallFilterPreference({ sortKey: next, tab: activeTab });
+  };
+
+  const updateActiveTab = (next: HallTab) => {
+    filterPreferenceTouchedRef.current = true;
+    setActiveTab(next);
+    persistBountyHallFilterPreference({ sortKey, tab: next });
+  };
 
   useEffect(() => {
     if (!linkedBountyObjectiveId) return;
@@ -146,6 +206,7 @@ export function BountyHallPage() {
   }, [filteredHallItems, linkedBountyObjectiveId]);
 
   const clearFilters = () => {
+    filterPreferenceTouchedRef.current = true;
     setQuery("");
   };
 
@@ -201,8 +262,8 @@ export function BountyHallPage() {
           <BountyToolbar
             query={query}
             sortKey={sortKey}
-            onQueryChange={setQuery}
-            onSortChange={setSortKey}
+            onQueryChange={updateQuery}
+            onSortChange={updateSortKey}
           />
         </div>
 
@@ -218,7 +279,7 @@ export function BountyHallPage() {
             settled: hallItemBuckets.settled.length,
             related: hallItemBuckets.related.length,
           }}
-          onChange={setActiveTab}
+          onChange={updateActiveTab}
         />
 
         <div className="bounty-list-summary">
