@@ -21,6 +21,16 @@ export type NotificationContentInput = {
   title: string;
 };
 
+export type NotificationActionInput = NotificationContentInput & {
+  kind: NotificationKind;
+  targetType: NotificationTargetType;
+};
+
+export type NotificationAction = {
+  href: string;
+  label: string;
+} | null;
+
 export type NotificationMetadataInput = NotificationContentInput & {
   actorName: string;
   actorUserId?: string | null;
@@ -54,6 +64,10 @@ const commentNotificationImageMetadataKey = "commentImageAttachmentIds";
 
 function cleanUserIds(userIds: readonly string[]) {
   return Array.from(new Set(userIds.map((id) => id.trim()).filter(Boolean)));
+}
+
+function unreachableNotificationAction(_kind: never): NotificationAction {
+  return null;
 }
 
 function isCommentNotificationImageAttachment(attachment: CommentNotificationAttachmentFact) {
@@ -111,12 +125,66 @@ export function resolveNotificationRecipients(input: {
     }));
 }
 
-export function formatNotificationChatBody(input: NotificationContentInput) {
+export function notificationActionFor(input: NotificationActionInput): NotificationAction {
+  const href = input.targetHref.trim();
+  if (!href) return null;
+
+  switch (input.kind) {
+    case "objective.published":
+      return { href, label: "打开悬赏" };
+    case "challenge.application.created":
+      return { href, label: "处理申请" };
+    case "challenge.application.approved":
+    case "challenge.application.rejected":
+      return { href, label: "打开悬赏" };
+    case "objective.recruitment.created":
+      return { href, label: "响应征召" };
+    case "objective.reinforcement.added":
+      return { href, label: "打开我的挑战" };
+    case "objective.challenge.accepted":
+      return { href, label: "打开挑战" };
+    case "objective.alignment.requested":
+      return { href, label: href.includes("/loot") ? "打开验收页" : "处理对齐" };
+    case "objective.alignment.reviewed":
+      return { href, label: href.includes("/loot") ? "打开验收页" : "查看对齐" };
+    case "objective.loot.submitted":
+      return { href, label: "验收战利品" };
+    case "objective.revision.required":
+      return { href, label: "打开战利品" };
+    case "objective.peerReview.requested":
+      return { href, label: "检查互评" };
+    case "objective.settlement.updated":
+    case "objective.settled":
+      return { href, label: "打开统计" };
+    case "feedback.created":
+    case "feedback.status.changed":
+    case "feedback.assigned":
+      return { href, label: "打开反馈" };
+    case "feedback.commented":
+      return { href, label: "打开评论" };
+    case "feedback.assignee.daily_digest":
+      return { href, label: "打开反馈列表" };
+    case "comment.reply.created":
+    case "comment.thread.status.changed":
+    case "comment.mention.created":
+      return { href, label: "打开评论" };
+    case "data.sync.conflict":
+      return { href, label: "打开通知中心" };
+    case "worklog.submitted":
+      return { href, label: "打开工作日志" };
+    case "worklog.reminder":
+      return { href, label: "去补工作日志" };
+  }
+
+  return unreachableNotificationAction(input.kind);
+}
+
+export function formatNotificationChatBody(input: NotificationActionInput) {
   const title = input.title.trim();
   const body = input.body.trim();
-  const targetHref = input.targetHref.trim();
   const content = body ? `**${title}**\n\n${body}` : `**${title}**`;
-  return targetHref ? `${content}\n\n[打开目标](${targetHref})` : content;
+  const action = notificationActionFor(input);
+  return action ? `${content}\n\n[${action.label}](${action.href})` : content;
 }
 
 export function buildNotificationSystemMetadata(

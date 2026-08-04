@@ -1,5 +1,6 @@
 import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Minus, Target, TrendingDown, TrendingUp, Trophy, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { buildFantasyDateGrid, fantasyMonthLabel } from "../components/FantasyDatePicker";
 import { PageScaffold } from "../components/PageScaffold";
 import { UserAvatar } from "../components/UserAvatar";
@@ -20,7 +21,7 @@ import {
 } from "../domain/reportsLeaderboard";
 import { useOrf } from "../state/OrfProvider";
 import { reportsPageSnapshot } from "../state/readModelQueries";
-import { localDateString } from "../utils/date";
+import { isDateOnlyString, localDateString } from "../utils/date";
 
 const timeRangeOptions: { label: string; value: TimeRange }[] = [
   { label: "月度", value: "month" },
@@ -39,12 +40,16 @@ const emptyReportsData: ReportsPageData = {
 
 export function ReportsPage() {
   const { reportsData } = useOrf();
+  const [searchParams] = useSearchParams();
   const today = useMemo(() => localDateString(new Date()), []);
+  const linkedSettlementDate = useMemo(() => reportsDateFromSearch(searchParams, today), [searchParams, today]);
+  const linkedObjectiveId = useMemo(() => searchParams.get("objective")?.trim() || null, [searchParams]);
   const [timeRange, setTimeRange] = useState<TimeRange>("quarter");
-  const [endDate, setEndDate] = useState(() => localDateString(new Date()));
-  const [customRange, setCustomRange] = useState<LeaderboardDateRange>(() => defaultCustomRange(localDateString(new Date())));
+  const [endDate, setEndDate] = useState(() => linkedSettlementDate);
+  const [customRange, setCustomRange] = useState<LeaderboardDateRange>(() => defaultCustomRange(linkedSettlementDate));
   const [customDateBoundary, setCustomDateBoundary] = useState<CustomDateBoundary>("end");
-  const [calendarDisplayMonth, setCalendarDisplayMonth] = useState(() => monthForDate(localDateString(new Date())));
+  const [calendarDisplayMonth, setCalendarDisplayMonth] = useState(() => monthForDate(linkedSettlementDate));
+  const appliedReportsLinkRef = useRef("");
 
   const reportsProjection = reportsData ?? reportsPageSnapshot() ?? emptyReportsData;
   const leaderboardRangeSelection = useMemo<LeaderboardRangeSelection | string>(
@@ -61,6 +66,10 @@ export function ReportsPage() {
   const settlementDaySummaryByDate = useMemo(
     () => new Map(settlementDaySummaries.map((item) => [item.date, item])),
     [settlementDaySummaries],
+  );
+  const linkedSettlement = useMemo(
+    () => linkedObjectiveId ? reportsLinkedSettlement(reportsProjection, linkedObjectiveId, linkedSettlementDate) : null,
+    [linkedObjectiveId, linkedSettlementDate, reportsProjection],
   );
   const maxPoints = Math.max(1, ...rows.map((row) => row.points));
   const changeEndDate = (nextDate: string) => {
@@ -83,6 +92,16 @@ export function ReportsPage() {
       setCustomDateBoundary("end");
     }
   };
+
+  useEffect(() => {
+    if (!linkedObjectiveId && searchParams.get("date") === null) return;
+    const linkKey = `${linkedObjectiveId ?? ""}:${linkedSettlementDate}`;
+    if (appliedReportsLinkRef.current === linkKey) return;
+    appliedReportsLinkRef.current = linkKey;
+    setTimeRange("quarter");
+    setEndDate(linkedSettlementDate);
+    setCalendarDisplayMonth(monthForDate(linkedSettlementDate));
+  }, [linkedObjectiveId, linkedSettlementDate, searchParams]);
 
   return (
     <PageScaffold
@@ -142,6 +161,21 @@ export function ReportsPage() {
         timeRange={timeRange}
         today={today}
       />
+
+      {linkedSettlement && (
+        <Card className="reports-linked-settlement-card">
+          <div className="reports-linked-settlement-icon">
+            <Target className="h-4 w-4" />
+          </div>
+          <div>
+            <h2>目标结算定位</h2>
+            <p>
+              {linkedSettlement.objectiveTitle} · {linkedSettlementDate}
+              {linkedSettlement.ledgerCount > 0 ? ` · ${formatSignedPoints(linkedSettlement.points)} 分 · ${linkedSettlement.ledgerCount} 条流水` : " · 暂无匹配流水"}
+            </p>
+          </div>
+        </Card>
+      )}
 
       <Card className="reports-leaderboard-card">
         <div className="reports-leaderboard-heading">
@@ -528,6 +562,26 @@ function defaultCustomRange(endDate: string): LeaderboardDateRange {
     end: bounds?.end ?? endDate,
     start: bounds?.start ?? endDate,
   };
+}
+
+function reportsDateFromSearch(searchParams: URLSearchParams, fallback: string) {
+  const value = searchParams.get("date") ?? "";
+  return isDateOnlyString(value) ? value : fallback;
+}
+
+function reportsLinkedSettlement(data: ReportsPageData, objectiveId: string, date: string) {
+  const objective = data.objectives.find((item) => item.id === objectiveId);
+  const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objectiveId && pointLedgerDate(entry) === date);
+  return {
+    ledgerCount: ledger.length,
+    objectiveTitle: objective?.title?.trim() || objectiveId,
+    points: ledger.reduce((total, entry) => total + entry.points, 0),
+  };
+}
+
+function pointLedgerDate(entry: ReportsPageData["pointLedger"][number]) {
+  const value = entry.settlementPeriodAt || entry.createdAt;
+  return /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
 }
 
 function customRangeWithBoundary(current: LeaderboardDateRange, boundary: CustomDateBoundary, value: string): LeaderboardDateRange {

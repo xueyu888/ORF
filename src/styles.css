@@ -9165,6 +9165,51 @@ button:disabled {
   background: var(--orf-accent-soft);
 }
 
+.work-logs-history-entry-linked {
+  border-color: color-mix(in srgb, var(--orf-accent) 72%, var(--orf-border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--orf-accent) 18%, transparent);
+}
+
+.work-logs-activity-entry-linked {
+  border-color: color-mix(in srgb, var(--orf-accent) 72%, var(--orf-border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--orf-accent) 18%, transparent);
+}
+
+.feedback-issue-comment-card-linked {
+  outline: 2px solid color-mix(in srgb, var(--orf-accent) 44%, transparent);
+  outline-offset: 2px;
+}
+
+.reports-linked-settlement-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.reports-linked-settlement-card h2 {
+  margin: 0;
+  color: var(--orf-text-primary);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.reports-linked-settlement-card p {
+  margin: 3px 0 0;
+  color: var(--orf-text-secondary);
+  font-size: 13px;
+}
+
+.reports-linked-settlement-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--orf-accent-soft);
+  color: var(--orf-accent);
+}
+
 .work-logs-entry-related-resources {
   margin-top: 10px;
   --orf-related-resource-surface: color-mix(in srgb, var(--orf-bg-card) 72%, transparent);

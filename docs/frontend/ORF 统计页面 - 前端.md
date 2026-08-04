@@ -2,6 +2,8 @@
 
 `/reports` 展示公开积分排行榜。管理员和普通成员都通过 `/api/reports-page` 读取同一份 `ReportsPageData` 统计页公开读模型，包含公开积分流水、目标状态、最小验收结论和成员展示投影，支持按月度、季度、年度、自定义和全部时间查看。
 
+系统通知可以通过 `/reports?date={settlementDate}&objective={objectiveId}` 打开统计页。`date` 只作为页面导航状态，用于把排行榜结束日期和结算日历切到对应结算日；`objective` 只用于显示目标结算定位摘要。统计事实仍只来自 `ReportsPageData.pointLedger`、目标状态和验收结论，URL 参数不能反向定义积分、完成率或结算归属。
+
 ## 时间范围
 
 | 控件 | 规则 |

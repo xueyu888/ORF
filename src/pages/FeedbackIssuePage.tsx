@@ -1,7 +1,7 @@
 import { ArrowLeft, Bell, BellOff, CheckCircle2, CircleDot, Link as LinkIcon, MessageSquare, Pencil, Reply, RotateCcw, Save, XCircle } from "lucide-react";
-import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import type { FormEvent, MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ImagePreviewDialog, type ImagePreview } from "../components/ImagePreviewDialog";
 import { Button } from "../components/ui";
 import { UserAvatar } from "../components/UserAvatar";
@@ -56,6 +56,7 @@ type FeedbackCommentEntry = {
 
 export function FeedbackIssuePage() {
   const { feedbackId = "" } = useParams();
+  const [searchParams] = useSearchParams();
   const {
     addComment,
     currentUser,
@@ -76,9 +77,16 @@ export function FeedbackIssuePage() {
   const [mentionableUsers, setMentionableUsers] = useState<CommentMentionUser[]>([]);
   const [subscriptionMode, setSubscriptionMode] = useState<FeedbackSubscriptionMode>("none");
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const commentElementRefs = useRef(new Map<string, HTMLElement>());
   const assigneeOptions = useFeedbackAssigneeOptions(state.users, currentUser);
   const threads = useMemo(() => feedback ? feedbackIssueThreads(state.comments, feedback.id) : [], [feedback, state.comments]);
   const entries = useMemo(() => feedbackCommentEntries(threads), [threads]);
+  const linkedCommentId = useMemo(() => searchParams.get("comment")?.trim() || null, [searchParams]);
+  const linkedCommentEntry = useMemo(
+    () => linkedCommentId ? feedbackCommentEntryForFocusId(entries, linkedCommentId) : null,
+    [entries, linkedCommentId],
+  );
+  const linkedCommentMessageId = linkedCommentEntry?.message.id ?? null;
   const originalEntry = entries[0] ?? null;
   const timelineEntries = originalEntry ? entries.slice(1) : entries;
   const activityEntries = useMemo(() => feedback ? feedbackIssueActivityEntries(feedback.activity) : [], [feedback]);
@@ -105,6 +113,17 @@ export function FeedbackIssuePage() {
       setEditState(null);
     }
   }, [editState, entries]);
+
+  useEffect(() => {
+    if (!linkedCommentMessageId) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      const element = commentElementRefs.current.get(linkedCommentMessageId);
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [linkedCommentMessageId]);
 
   useEffect(() => {
     if (!feedback) {
@@ -288,6 +307,8 @@ export function FeedbackIssuePage() {
             feedback={feedback}
             mentionableUsers={mentionableUsers}
             mentionUsersById={mentionUsersById}
+            focused={originalEntry?.message.id === linkedCommentMessageId}
+            onRegisterElement={registerFeedbackCommentElement(commentElementRefs)}
             onCancelEdit={() => setEditState(null)}
             onEditDraftChange={updateEditDraft}
             onOpenImage={setImagePreview}
@@ -301,7 +322,12 @@ export function FeedbackIssuePage() {
 
           <div className="feedback-issue-timeline">
             {timelineEntries.map(({ message, thread }) => (
-              <article key={`${thread.id}:${message.id}`} className="feedback-issue-comment-card">
+              <article
+                className={message.id === linkedCommentMessageId ? "feedback-issue-comment-card feedback-issue-comment-card-linked" : "feedback-issue-comment-card"}
+                data-comment-message-id={message.id}
+                key={`${thread.id}:${message.id}`}
+                ref={(element) => registerFeedbackCommentElement(commentElementRefs)(message.id, element)}
+              >
                 <UserAvatar avatarUrl={message.authorAvatarUrl} className="h-8 w-8 text-[11px] shadow-sm" frame={false} name={message.author} />
                 <div className="feedback-issue-comment-main">
                   <div className="feedback-issue-comment-header">
@@ -398,11 +424,13 @@ function OriginalFeedbackCard({
   editState,
   entry,
   feedback,
+  focused,
   mentionableUsers,
   mentionUsersById,
   onEditDraftChange,
   onCancelEdit,
   onOpenImage,
+  onRegisterElement,
   onReply,
   onStartEdit,
   onSubmitEdit,
@@ -413,11 +441,13 @@ function OriginalFeedbackCard({
   editState: { draft: CommentDraft; messageId: string; threadId: string } | null;
   entry: FeedbackCommentEntry | null;
   feedback: Feedback;
+  focused: boolean;
   mentionableUsers: CommentMentionUser[];
   mentionUsersById: Map<string, CommentMentionUser>;
   onCancelEdit: () => void;
   onEditDraftChange: (messageId: string, draft: CommentDraft) => void;
   onOpenImage: (preview: ImagePreview) => void;
+  onRegisterElement: (messageId: string, element: HTMLElement | null) => void;
   onReply: (message: CommentMessage) => void;
   onStartEdit: (entry: FeedbackCommentEntry) => void;
   onSubmitEdit: (event: FormEvent, messageId: string) => void;
@@ -429,7 +459,13 @@ function OriginalFeedbackCard({
   const authorAvatarUrl = message?.authorAvatarUrl ?? null;
 
   return (
-    <article className="feedback-issue-original-card">
+    <article
+      className={focused ? "feedback-issue-original-card feedback-issue-comment-card-linked" : "feedback-issue-original-card"}
+      data-comment-message-id={message?.id}
+      ref={(element) => {
+        if (message) onRegisterElement(message.id, element);
+      }}
+    >
       <UserAvatar avatarUrl={authorAvatarUrl} className="h-8 w-8 text-[11px] shadow-sm" frame={false} name={authorName} />
       <div className="feedback-issue-original-main">
         <div className="feedback-issue-comment-header">
@@ -804,6 +840,22 @@ function feedbackCommentEntries(threads: readonly CommentThread[]): FeedbackComm
   return threads
     .flatMap((thread) => thread.messages.map((message) => ({ message, thread })))
     .sort((left, right) => left.message.createdAt.localeCompare(right.message.createdAt));
+}
+
+function feedbackCommentEntryForFocusId(entries: readonly FeedbackCommentEntry[], focusedId: string) {
+  return (
+    entries.find((entry) => entry.message.id === focusedId) ??
+    entries.find((entry) => entry.thread.id === focusedId && !entry.message.parentMessageId) ??
+    entries.find((entry) => entry.thread.id === focusedId) ??
+    null
+  );
+}
+
+function registerFeedbackCommentElement(ref: MutableRefObject<Map<string, HTMLElement>>) {
+  return (messageId: string, element: HTMLElement | null) => {
+    if (element) ref.current.set(messageId, element);
+    else ref.current.delete(messageId);
+  };
 }
 
 function feedbackIssueActivityEntries(entries: readonly ActivityItem[]) {

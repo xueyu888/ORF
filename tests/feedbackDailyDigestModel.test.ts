@@ -46,14 +46,11 @@ test("feedback daily digest sorts by impact then oldest update and formats feedb
   assert.deepEqual(items.map((item) => item.id), ["fb-high-old", "fb-high-new", "fb-low"]);
   assert.equal(formatFeedbackDailyDigestBody({
     items,
-    listHref: "/feedback?state=open&assignee=user-1",
   }), [
     "你有 3 条待处理反馈。",
     "1. [High] [高影响旧](/feedback/fb-high-old)",
     "2. [High] [高影响新](/feedback/fb-high-new)",
     "3. [Low] [低影响](/feedback/fb-low)",
-    "",
-    "[打开反馈列表](/feedback?state=open&assignee=user-1)",
   ].join("\n"));
 });
 
@@ -65,7 +62,6 @@ test("feedback daily digest keeps two digit ordered list markers in the markdown
       phenomenon: `反馈标题 ${index + 1}`,
       updatedAt: `2026-08-${String(index + 1).padStart(2, "0")}`,
     })),
-    listHref: "/feedback?state=open&assignee=user-1",
   });
 
   assert.match(body, /^10\. \[Medium\] \[反馈标题 10\]\(\/feedback\/fb-10\)$/m);

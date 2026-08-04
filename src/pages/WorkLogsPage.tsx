@@ -82,6 +82,7 @@ import {
 import {
   createMyWorkLogEntry,
   deleteMyWorkLogEntry,
+  getWorkLogActivity,
   getWorkLogObjectives,
   searchDriveRequest,
   suggestWorkLogClassification,
@@ -206,6 +207,7 @@ export function WorkLogsPage() {
   const navigate = useNavigate();
   const viewDate = dateFromSearch(location.search);
   const viewMode = viewFromSearch(location.search);
+  const linkedWorkLogEntryId = workLogEntryIdFromSearch(location.search);
   const {
     currentUser,
     dismissSystemBroadcast,
@@ -235,6 +237,7 @@ export function WorkLogsPage() {
   const [activityEntries, setActivityEntries] = useState<WorkLogActivityItem[]>(() =>
     workLogActivitySnapshot(workLogActivityCollapsedLimit + 1)?.entries ?? [],
   );
+  const [linkedActivityEntry, setLinkedActivityEntry] = useState<WorkLogActivityItem | null>(null);
   const [activityExpanded, setActivityExpanded] = useState(false);
   const [reportMonth, setReportMonth] = useState(() =>
     monthFromDate(dateFromSearch(location.search)),
@@ -258,6 +261,7 @@ export function WorkLogsPage() {
   const [error, setError] = useState("");
   const [reportError, setReportError] = useState("");
   const [workLogResourceRevision, setWorkLogResourceRevision] = useState(0);
+  const activityEntryElementsRef = useRef(new Map<string, HTMLElement>());
   const handledWorkLogsInvalidationKeyRef = useRef("");
   const editorDraft = editorSession?.draft ?? blankWorkLogEditorDraft();
   const workLogsInvalidationKey = useMemo(
@@ -479,6 +483,30 @@ export function WorkLogsPage() {
   }, [loadMyDay, viewDate]);
 
   useEffect(() => {
+    if (!linkedWorkLogEntryId) {
+      setLinkedActivityEntry(null);
+      return undefined;
+    }
+    if (activityEntries.some((entry) => entry.id === linkedWorkLogEntryId)) {
+      setLinkedActivityEntry(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    void getWorkLogActivity({ entryId: linkedWorkLogEntryId, limit: 1 })
+      .then((response) => {
+        if (!cancelled) setLinkedActivityEntry(response.entries[0] ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setLinkedActivityEntry(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activityEntries, linkedWorkLogEntryId]);
+
+  useEffect(() => {
     void loadActivity(activityExpanded, false);
   }, [activityExpanded, loadActivity]);
 
@@ -500,6 +528,7 @@ export function WorkLogsPage() {
   const changeDate = (date: string) => {
     const query = new URLSearchParams(location.search);
     query.set("date", date);
+    query.delete("entry");
     navigate(
       {
         pathname: "/work-logs",
@@ -879,15 +908,19 @@ export function WorkLogsPage() {
   ) => {
     updateEditorDraft(workLogDraftPatchFromSuggestion(suggestion, { objectives }));
   };
+  const displayedActivityEntries = useMemo(
+    () => linkedActivityEntry ? mergeWorkLogActivityEntries([linkedActivityEntry], activityEntries) : activityEntries,
+    [activityEntries, linkedActivityEntry],
+  );
   const visibleActivityEntries = useMemo(
     () =>
       activityExpanded
-        ? activityEntries
-        : activityEntries.slice(0, workLogActivityCollapsedLimit),
-    [activityEntries, activityExpanded],
+        ? displayedActivityEntries
+        : displayedActivityEntries.slice(0, workLogActivityCollapsedLimit),
+    [activityExpanded, displayedActivityEntries],
   );
   const activityHasMore =
-    !activityExpanded && activityEntries.length > workLogActivityCollapsedLimit;
+    !activityExpanded && displayedActivityEntries.length > workLogActivityCollapsedLimit;
   const refreshWorkLogResources = useCallback(() => {
     setWorkLogResourceRevision((value) => value + 1);
   }, []);
@@ -895,7 +928,22 @@ export function WorkLogsPage() {
     () => groupActivityByDate(visibleActivityEntries),
     [visibleActivityEntries],
   );
+  const linkedActivityEntryVisible = useMemo(
+    () => Boolean(linkedWorkLogEntryId && visibleActivityEntries.some((entry) => entry.id === linkedWorkLogEntryId)),
+    [linkedWorkLogEntryId, visibleActivityEntries],
+  );
   const reportRange = useMemo(() => monthRange(reportMonth), [reportMonth]);
+
+  useEffect(() => {
+    if (!linkedWorkLogEntryId || !linkedActivityEntryVisible) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      const element = activityEntryElementsRef.current.get(linkedWorkLogEntryId);
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [linkedActivityEntryVisible, linkedWorkLogEntryId]);
 
   return (
     <PageScaffold title="工作日志" hideHeader>
@@ -941,6 +989,11 @@ export function WorkLogsPage() {
                           currentUserId={currentUser?.id ?? null}
                           entry={entry}
                           key={entry.id}
+                          linked={entry.id === linkedWorkLogEntryId}
+                          onRegisterElement={(entryId, element) => {
+                            if (element) activityEntryElementsRef.current.set(entryId, element);
+                            else activityEntryElementsRef.current.delete(entryId);
+                          }}
                         />
                       ))}
                     </section>
@@ -1098,6 +1151,7 @@ export function WorkLogsPage() {
                     currentEditingEntryId={editorDraft.editingEntryId}
                     deletingEntryId={deletingEntryId}
                     entries={myEntries}
+                    linkedEntryId={linkedActivityEntryVisible ? null : linkedWorkLogEntryId}
                     notify={notify}
                     onDelete={deleteEntry}
                     onEdit={editExistingEntry}
@@ -1616,6 +1670,7 @@ function WorkLogHistoryList({
   currentEditingEntryId,
   deletingEntryId,
   entries,
+  linkedEntryId,
   notify,
   onDelete,
   onEdit,
@@ -1625,11 +1680,27 @@ function WorkLogHistoryList({
   currentEditingEntryId: string | null;
   deletingEntryId: string | null;
   entries: WorkLogEntry[];
+  linkedEntryId: string | null;
   notify: (message: string) => void;
   onDelete: (entry: WorkLogEntry) => void;
   onEdit: (entry: WorkLogEntry) => void;
   onResourceChanged: () => void;
 }) {
+  const entryElementsRef = useRef(new Map<string, HTMLElement>());
+  const entryIds = useMemo(() => entries.map((entry) => entry.id).join("|"), [entries]);
+
+  useEffect(() => {
+    if (!linkedEntryId) return;
+    if (!entries.some((entry) => entry.id === linkedEntryId)) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      const element = entryElementsRef.current.get(linkedEntryId);
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [entryIds, entries, linkedEntryId]);
+
   return (
     <section className="work-logs-history">
       <div className="work-logs-history-heading">
@@ -1644,8 +1715,15 @@ function WorkLogHistoryList({
                 "work-logs-history-entry",
                 entry.id === currentEditingEntryId &&
                   "work-logs-history-entry-active",
+                entry.id === linkedEntryId &&
+                  "work-logs-history-entry-linked",
               )}
+              data-work-log-entry-id={entry.id}
               key={entry.id}
+              ref={(element) => {
+                if (element) entryElementsRef.current.set(entry.id, element);
+                else entryElementsRef.current.delete(entry.id);
+              }}
             >
               <div className="work-logs-history-entry-header">
                 <div className="work-logs-history-entry-meta">
@@ -1719,14 +1797,22 @@ function WorkLogHistoryList({
 function WorkLogActivityCard({
   currentUserId,
   entry,
+  linked,
+  onRegisterElement,
 }: {
   currentUserId: string | null;
   entry: WorkLogActivityItem;
+  linked: boolean;
+  onRegisterElement: (entryId: string, element: HTMLElement | null) => void;
 }) {
   const authorName = entry.authorCurrentName ?? entry.authorNameSnapshot;
   const classification = workLogEntryClassification(entry);
   return (
-    <article className="work-logs-activity-entry">
+    <article
+      className={clsx("work-logs-activity-entry", linked && "work-logs-activity-entry-linked")}
+      data-work-log-entry-id={entry.id}
+      ref={(element) => onRegisterElement(entry.id, element)}
+    >
       <UserAvatar
         avatarUrl={entry.authorAvatarUrl}
         className="work-logs-activity-avatar"
@@ -2322,6 +2408,11 @@ function dateFromSearch(search: string) {
   return isDateOnlyString(value) ? value : todayValue();
 }
 
+function workLogEntryIdFromSearch(search: string) {
+  const value = new URLSearchParams(search).get("entry")?.trim();
+  return value || null;
+}
+
 function viewFromSearch(search: string): WorkLogViewMode {
   const value = new URLSearchParams(search).get("view");
   return value === "report" ? "report" : "today";
@@ -2448,6 +2539,17 @@ function groupActivityByDate(entries: WorkLogActivityItem[]) {
     date,
     entries: groupEntries,
   }));
+}
+
+function mergeWorkLogActivityEntries(priorityEntries: WorkLogActivityItem[], entries: WorkLogActivityItem[]) {
+  const seen = new Set<string>();
+  const merged: WorkLogActivityItem[] = [];
+  for (const entry of [...priorityEntries, ...entries]) {
+    if (seen.has(entry.id)) continue;
+    seen.add(entry.id);
+    merged.push(entry);
+  }
+  return merged;
 }
 
 function activityDateLabel(date: string) {

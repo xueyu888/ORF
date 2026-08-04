@@ -290,9 +290,10 @@ function challengeObjectiveHref(path: "/bounties" | "/tasks", objectiveId: strin
   return `${path}#objective:${encodeURIComponent(objectiveId)}`;
 }
 
-function commentTargetHref(targetType: CommentTargetType, targetId: string) {
+function commentTargetHref(targetType: CommentTargetType, targetId: string, commentId?: string | null) {
+  const commentQuery = commentId?.trim() ? `?comment=${encodeURIComponent(commentId.trim())}` : "";
   if (targetType === "feedback") {
-    return `/feedback/${encodeURIComponent(targetId)}`;
+    return `/feedback/${encodeURIComponent(targetId)}${commentQuery}`;
   }
 
   const challengeTargetTypeByCommentTarget: Record<Exclude<CommentTargetType, "feedback">, "action" | "bounty" | "objective" | "subAction"> = {
@@ -301,7 +302,18 @@ function commentTargetHref(targetType: CommentTargetType, targetId: string) {
     subtask: "subAction",
     task: "action",
   };
-  return `/tasks#${challengeTargetTypeByCommentTarget[targetType]}:${encodeURIComponent(targetId)}`;
+  return `/tasks${commentQuery}#${challengeTargetTypeByCommentTarget[targetType]}:${encodeURIComponent(targetId)}`;
+}
+
+function reportsSettlementTargetHref(input: {
+  objectiveId: string;
+  settledAt: string;
+}) {
+  const settledDate = /^\d{4}-\d{2}-\d{2}/.test(input.settledAt) ? input.settledAt.slice(0, 10) : "";
+  const query = new URLSearchParams();
+  if (settledDate) query.set("date", settledDate);
+  query.set("objective", input.objectiveId);
+  return `/reports?${query.toString()}`;
 }
 
 async function notifyAdminsOfChallengeApplication(input: {
@@ -607,7 +619,7 @@ async function notifyObjectiveChallengersOfSettlement(input: {
       targetTitle: input.objectiveTitle,
     },
     recipientUserIds: recipients,
-    targetHref: "/reports",
+    targetHref: reportsSettlementTargetHref({ objectiveId: input.objectiveId, settledAt: input.settledAt }),
     targetId: input.objectiveId,
     targetType: "objective",
     teamId: input.teamId,
@@ -739,7 +751,7 @@ async function notifyMentionedUsersOfComment(input: {
       targetType: input.targetType,
     },
     recipientUserIds: await getActiveMemberNotificationRecipientsByIds(input.teamId, mentionedUserIds),
-    targetHref: commentTargetHref(input.targetType, input.targetId),
+    targetHref: commentTargetHref(input.targetType, input.targetId, input.commentMessageId),
     targetId: input.commentMessageId,
     targetType: "comment",
     teamId: input.teamId,
@@ -798,7 +810,7 @@ async function notifyCommentReplyRecipient(input: {
       targetType: input.targetType,
     },
     recipientUserIds,
-    targetHref: commentTargetHref(input.targetType, input.targetId),
+    targetHref: commentTargetHref(input.targetType, input.targetId, input.commentMessageId),
     targetId: input.commentMessageId,
     targetType: "comment",
     teamId: input.teamId,
@@ -892,7 +904,7 @@ async function notifyFeedbackParticipantsOfComment(input: {
       targetType: "feedback",
     },
     recipientUserIds: context.recipientUserIds,
-    targetHref: commentTargetHref("feedback", input.targetId),
+    targetHref: commentTargetHref("feedback", input.targetId, input.commentMessageId),
     targetId: input.targetId,
     targetType: "feedback",
     teamId: input.teamId,
@@ -2960,7 +2972,7 @@ export async function updateCommentThreadStatus(
         targetType: thread.targetType,
       },
       recipientUserIds,
-      targetHref: commentTargetHref(thread.targetType, thread.targetId),
+      targetHref: commentTargetHref(thread.targetType, thread.targetId, threadId),
       targetId: threadId,
       targetType: "comment",
       teamId: target.storageScopeId,

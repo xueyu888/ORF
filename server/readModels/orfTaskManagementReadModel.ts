@@ -487,6 +487,7 @@ export async function getReportsPageData(scope: TaskManagementDataScope): Promis
       createdAt: objectives.createdAt,
       flowStatus: objectives.flowStatus,
       id: objectives.id,
+      title: objectives.title,
       updatedAt: objectives.updatedAt,
     })
     .from(objectives)

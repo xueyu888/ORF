@@ -5,6 +5,7 @@ import {
   buildNotificationSystemMetadata,
   commentNotificationImageAttachmentIdsFromMetadata,
   formatNotificationChatBody,
+  notificationActionFor,
   notificationChatDeliveryId,
   resolveNotificationRecipients,
 } from "../server/notifications/notificationEventModel";
@@ -21,6 +22,7 @@ import {
   selectDataSyncRecipientMembership,
   dataSyncEventMetadata,
 } from "../server/notifications/dataSyncNotificationModel";
+import type { NotificationKind, NotificationTargetType } from "../src/types/orf";
 
 test("personal notifications dedupe recipients and exclude the actor", () => {
   const recipients = resolveNotificationRecipients({
@@ -96,7 +98,85 @@ test("system chat projection metadata points back to the notification event", ()
   assert.equal(metadata.notificationEventId, "nevt-1");
   assert.equal(metadata.recipientUserId, "user-b");
   assert.equal(metadata.targetTitle, "聊天界面内存管理有问题");
-  assert.equal(formatNotificationChatBody({ body: "请补充信息", targetHref: "/feedback/fb-1", title: "反馈有新评论" }), "**反馈有新评论**\n\n请补充信息\n\n[打开目标](/feedback/fb-1)");
+  assert.equal(formatNotificationChatBody({
+    body: "请补充信息",
+    kind: "feedback.commented",
+    targetHref: "/feedback/fb-1?comment=comment-1",
+    targetType: "feedback",
+    title: "反馈有新评论",
+  }), "**反馈有新评论**\n\n请补充信息\n\n[打开评论](/feedback/fb-1?comment=comment-1)");
+});
+
+test("notification actions use the target-specific label", () => {
+  assert.deepEqual(notificationActionFor({
+    body: "张骞 提交了 2026-08-04 的工作日志。",
+    kind: "worklog.submitted",
+    targetHref: "/work-logs?date=2026-08-04&view=today&entry=worklog-1",
+    targetType: "workLog",
+    title: "新的工作日志",
+  }), {
+    href: "/work-logs?date=2026-08-04&view=today&entry=worklog-1",
+    label: "打开工作日志",
+  });
+
+  assert.deepEqual(notificationActionFor({
+    body: "请处理",
+    kind: "objective.settled",
+    targetHref: "/reports?date=2026-08-04&objective=objective-1",
+    targetType: "objective",
+    title: "目标已结算",
+  }), {
+    href: "/reports?date=2026-08-04&objective=objective-1",
+    label: "打开统计",
+  });
+});
+
+test("known notification kinds have explicit action labels", () => {
+  const samples: Array<{
+    kind: NotificationKind;
+    label: string;
+    targetHref: string;
+    targetType: NotificationTargetType;
+  }> = [
+    { kind: "objective.published", label: "打开悬赏", targetHref: "/bounties#objective:objective-1", targetType: "objective" },
+    { kind: "challenge.application.created", label: "处理申请", targetHref: "/tasks#objective:objective-1", targetType: "objective" },
+    { kind: "challenge.application.approved", label: "打开悬赏", targetHref: "/bounties#objective:objective-1", targetType: "objective" },
+    { kind: "challenge.application.rejected", label: "打开悬赏", targetHref: "/bounties#objective:objective-1", targetType: "objective" },
+    { kind: "objective.recruitment.created", label: "响应征召", targetHref: "/bounties#objective:objective-1", targetType: "objective" },
+    { kind: "objective.reinforcement.added", label: "打开我的挑战", targetHref: "/tasks#objective:objective-1", targetType: "objective" },
+    { kind: "objective.challenge.accepted", label: "打开挑战", targetHref: "/tasks#objective:objective-1", targetType: "objective" },
+    { kind: "objective.alignment.requested", label: "处理对齐", targetHref: "/tasks#objective:objective-1", targetType: "objective" },
+    { kind: "objective.alignment.reviewed", label: "查看对齐", targetHref: "/tasks#objective:objective-1", targetType: "objective" },
+    { kind: "objective.loot.submitted", label: "验收战利品", targetHref: "/tasks/objectives/objective-1/loot", targetType: "objectiveLoot" },
+    { kind: "objective.revision.required", label: "打开战利品", targetHref: "/tasks/objectives/objective-1/loot", targetType: "objective" },
+    { kind: "objective.peerReview.requested", label: "检查互评", targetHref: "/tasks/objectives/objective-1/loot", targetType: "objective" },
+    { kind: "objective.settlement.updated", label: "打开统计", targetHref: "/reports?date=2026-08-04&objective=objective-1", targetType: "objective" },
+    { kind: "objective.settled", label: "打开统计", targetHref: "/reports?date=2026-08-04&objective=objective-1", targetType: "objective" },
+    { kind: "feedback.created", label: "打开反馈", targetHref: "/feedback/feedback-1", targetType: "feedback" },
+    { kind: "feedback.commented", label: "打开评论", targetHref: "/feedback/feedback-1?comment=comment-1", targetType: "feedback" },
+    { kind: "feedback.status.changed", label: "打开反馈", targetHref: "/feedback/feedback-1", targetType: "feedback" },
+    { kind: "feedback.assigned", label: "打开反馈", targetHref: "/feedback/feedback-1", targetType: "feedback" },
+    { kind: "feedback.assignee.daily_digest", label: "打开反馈列表", targetHref: "/feedback?state=open&assignee=user-1", targetType: "feedback" },
+    { kind: "comment.reply.created", label: "打开评论", targetHref: "/tasks?comment=comment-1#objective:objective-1", targetType: "comment" },
+    { kind: "comment.thread.status.changed", label: "打开评论", targetHref: "/tasks?comment=thread-1#objective:objective-1", targetType: "comment" },
+    { kind: "comment.mention.created", label: "打开评论", targetHref: "/tasks?comment=comment-1#objective:objective-1", targetType: "comment" },
+    { kind: "data.sync.conflict", label: "打开通知中心", targetHref: "/chat/system/personalNotifications", targetType: "dataSync" },
+    { kind: "worklog.submitted", label: "打开工作日志", targetHref: "/work-logs?date=2026-08-04&view=today&entry=worklog-1", targetType: "workLog" },
+    { kind: "worklog.reminder", label: "去补工作日志", targetHref: "/work-logs?date=2026-08-04&view=today", targetType: "workLog" },
+  ];
+
+  for (const sample of samples) {
+    assert.deepEqual(notificationActionFor({
+      body: "通知正文",
+      kind: sample.kind,
+      targetHref: sample.targetHref,
+      targetType: sample.targetType,
+      title: "通知标题",
+    }), {
+      href: sample.targetHref,
+      label: sample.label,
+    });
+  }
 });
 
 test("comment notification content keeps text and image attachments without file attachment projection", () => {

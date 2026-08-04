@@ -178,12 +178,13 @@ export function attentionToastIntentFromWorkLogReminder(
   input: Pick<BuildAttentionStateInput, "appAttentionState" | "currentPath">,
 ): AttentionToastIntent | null {
   if (reminder.status !== "active" || reminder.missingDates.length === 0 || !reminder.shouldRemindNow) return null;
-  if (isCurrentAttentionTarget(WORK_LOG_TARGET_PATH, input.currentPath) && input.appAttentionState.activelyViewed) return null;
+  const targetPath = workLogReminderTargetPath(reminder);
+  if (isCurrentAttentionTarget(targetPath, input.currentPath) && input.appAttentionState.activelyViewed) return null;
   return {
     body: `${reminder.missingDates.length} 天工作日志待补交`,
     id: `worklog-reminder-${reminder.id}-${reminder.updatedAt}`,
     level: "urgent",
-    targetPath: WORK_LOG_TARGET_PATH,
+    targetPath,
     title: "工作日志待处理",
   };
 }
@@ -294,16 +295,22 @@ function attentionItemFromWorkLogReminder(
   input: BuildAttentionStateInput,
 ): AttentionItem | null {
   if (!reminder || reminder.status !== "active" || reminder.missingDates.length === 0) return null;
+  const targetPath = workLogReminderTargetPath(reminder);
   return {
     body: `${reminder.missingDates.length} 天工作日志待补交`,
     createdAt: reminder.updatedAt,
     eventId: `worklog-reminder-${reminder.id}`,
     kind: "worklog.reminder",
-    level: applyViewedTargetDowngrade("urgent", WORK_LOG_TARGET_PATH, input),
+    level: applyViewedTargetDowngrade("urgent", targetPath, input),
     source: "worklog",
-    targetPath: WORK_LOG_TARGET_PATH,
+    targetPath,
     title: "工作日志待处理",
   };
+}
+
+function workLogReminderTargetPath(reminder: WorkLogReminderState) {
+  const firstMissingDate = reminder.missingDates[0]?.trim();
+  return firstMissingDate ? `${WORK_LOG_TARGET_PATH}?date=${encodeURIComponent(firstMissingDate)}&view=today` : WORK_LOG_TARGET_PATH;
 }
 
 function notificationDisplayLevel(kind: NotificationKind, targetPath: string, input: BuildAttentionStateInput): Exclude<AttentionLevel, "none"> {

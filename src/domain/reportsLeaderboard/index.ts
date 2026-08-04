@@ -4,7 +4,9 @@ import { addCalendarDays, isDateOnlyString, localDateString } from "../../utils/
 
 export type TimeRange = "month" | "quarter" | "year" | "custom" | "all";
 
-export type LeaderboardObjectiveFact = Pick<Objective, "acceptedResult" | "createdAt" | "flowStatus" | "id" | "updatedAt">;
+export type LeaderboardObjectiveFact = Pick<Objective, "acceptedResult" | "createdAt" | "flowStatus" | "id" | "updatedAt"> & {
+  title?: string;
+};
 
 export type LeaderboardAcceptanceReviewFact = Pick<ObjectiveAcceptanceReview, "acceptedResult" | "objectiveId">;
 

@@ -1216,6 +1216,7 @@ export async function deleteMyWorkLogEntry(entryId: string) {
 }
 
 export async function getWorkLogActivity(input: {
+  entryId?: string;
   from?: string;
   limit?: number;
   objectiveId?: string;
@@ -1223,6 +1224,7 @@ export async function getWorkLogActivity(input: {
   userId?: string;
 } = {}) {
   const query = new URLSearchParams();
+  if (input.entryId) query.set("entryId", input.entryId);
   if (input.from) query.set("from", input.from);
   if (input.to) query.set("to", input.to);
   if (input.userId) query.set("userId", input.userId);

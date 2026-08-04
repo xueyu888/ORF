@@ -211,7 +211,6 @@ async function publishDigestForRecipient(input: {
       actorUserId: null,
       body: formatFeedbackDailyDigestBody({
         items,
-        listHref: feedbackDailyDigestListHref(input.recipient.userId),
       }),
       kind: "feedback.assignee.daily_digest",
       metadata: {

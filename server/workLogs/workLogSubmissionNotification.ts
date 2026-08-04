@@ -29,7 +29,7 @@ export async function notifyTeamOfWorkLogSubmission(input: WorkLogSubmissionNoti
       workDate: input.workDate,
     },
     recipientUserIds: await getActiveTeamNotificationRecipients(input.teamId),
-    targetHref: `/work-logs?date=${encodeURIComponent(input.workDate)}&view=today`,
+    targetHref: `/work-logs?date=${encodeURIComponent(input.workDate)}&view=today&entry=${encodeURIComponent(input.entryId)}`,
     targetId: input.entryId,
     targetType: "workLog",
     teamId: input.teamId,

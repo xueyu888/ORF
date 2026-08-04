@@ -67,6 +67,7 @@ export type WorkLogDaySaveOutcome =
     };
 
 export type WorkLogActivityQuery = {
+  entryId?: string;
   from?: string;
   limit?: number;
   objectiveId?: string;
@@ -884,6 +885,9 @@ export async function listWorkLogActivity(scope: RuntimeScope, query: WorkLogAct
   }
   if (query.objectiveId) {
     filters.push(eq(workLogEntries.objectiveIdSnapshot, query.objectiveId));
+  }
+  if (query.entryId) {
+    filters.push(eq(workLogEntries.id, query.entryId));
   }
 
   const rows = await db

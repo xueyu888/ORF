@@ -92,6 +92,7 @@ const classificationSuggestionBodySchema = z.object({
 });
 
 const activityQuerySchema = z.object({
+  entryId: z.string().trim().min(1).optional(),
   from: dateSchema.optional(),
   limit: z.coerce.number().int().positive().max(160).optional(),
   objectiveId: z.string().trim().min(1).optional(),

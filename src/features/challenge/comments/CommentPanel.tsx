@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronRight, Download, ExternalLink, File as FileIcon, FileText, MoreHorizontal, Pencil, Reply, Send, Trash2, X } from "lucide-react";
-import type { FormEvent } from "react";
+import type { FormEvent, MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { Link } from "react-router-dom";
@@ -54,6 +54,7 @@ export function CommentPanel({
   currentMember,
   currentUserAvatarUrl,
   currentUserId,
+  focusedCommentId = null,
   onAddComment,
   onClose,
   onDeleteComment,
@@ -69,6 +70,7 @@ export function CommentPanel({
   currentMember: string;
   currentUserAvatarUrl?: string | null;
   currentUserId: string;
+  focusedCommentId?: string | null;
   onAddComment: (body: string, replyInput?: CommentReplyInput) => void;
   onClose: () => void;
   onDeleteComment: (threadId: string, messageId: string) => void;
@@ -87,6 +89,7 @@ export function CommentPanel({
   const [imagePreview, setImagePreview] = useState<ImagePreview | null>(null);
   const [mentionableUsers, setMentionableUsers] = useState<CommentMentionUser[]>([]);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const messageElementRefs = useRef(new Map<string, HTMLElement>());
   const panelDrag = useDraggableFloating<HTMLElement>({ resetKey: targetTitle });
   const commentEntries = useMemo<CommentEntry[]>(() => {
     const entries = threads.flatMap((thread) => thread.messages.map((message) => ({ threadId: thread.id, message })));
@@ -153,6 +156,29 @@ export function CommentPanel({
       setEditState(null);
     }
   }, [commentEntries, editState]);
+
+  useEffect(() => {
+    const focusedId = focusedCommentId?.trim();
+    if (!focusedId) return;
+    const focusedEntry = commentEntryForFocusId(commentEntries, focusedId);
+    if (!focusedEntry) return;
+
+    const selectedId = focusedEntry.message.id;
+    const rootMessageId = focusedEntry.message.parentMessageId ?? focusedEntry.message.id;
+    const shouldOpenReplyDetail = Boolean(focusedEntry.message.parentMessageId || focusedEntry.threadId === focusedId);
+    setSelectedMessageId(selectedId);
+    setEditState(null);
+    setDraftMode({ type: "default" });
+    setDraft(emptyCommentDraft());
+    setActiveRootMessageId(shouldOpenReplyDetail ? rootMessageId : null);
+
+    const frameId = window.requestAnimationFrame(() => {
+      const element = messageElementRefs.current.get(selectedId);
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [commentEntries, focusedCommentId]);
 
   const resetDraft = () => {
     setDraftMode({ type: "default" });
@@ -261,6 +287,7 @@ export function CommentPanel({
                     onSubmitEdit={(event) => submitEdit(event, activeRootEntry.message.id)}
                     onUploadAttachment={onUploadAttachment}
                     onDelete={handleDelete}
+                    onRegisterElement={registerCommentMessageElement(messageElementRefs)}
                   />
                 </div>
                 {replyEntries.length > 0 ? (
@@ -285,6 +312,7 @@ export function CommentPanel({
                         onSubmitEdit={(event) => submitEdit(event, entry.message.id)}
                         onUploadAttachment={onUploadAttachment}
                         onDelete={handleDelete}
+                        onRegisterElement={registerCommentMessageElement(messageElementRefs)}
                       />
                     ))}
                   </div>
@@ -316,6 +344,7 @@ export function CommentPanel({
                     onSubmitEdit={(event) => submitEdit(event, entry.message.id)}
                     onUploadAttachment={onUploadAttachment}
                     onDelete={handleDelete}
+                    onRegisterElement={registerCommentMessageElement(messageElementRefs)}
                   />
                 ))}
               </div>
@@ -343,6 +372,22 @@ export function CommentPanel({
   );
 }
 
+function commentEntryForFocusId(entries: readonly CommentEntry[], focusedId: string) {
+  return (
+    entries.find((entry) => entry.message.id === focusedId) ??
+    entries.find((entry) => entry.threadId === focusedId && !entry.message.parentMessageId) ??
+    entries.find((entry) => entry.threadId === focusedId) ??
+    null
+  );
+}
+
+function registerCommentMessageElement(ref: MutableRefObject<Map<string, HTMLElement>>) {
+  return (messageId: string, element: HTMLElement | null) => {
+    if (element) ref.current.set(messageId, element);
+    else ref.current.delete(messageId);
+  };
+}
+
 function CommentMessageRow({
   canManageAllComments,
   currentMember,
@@ -357,6 +402,7 @@ function CommentMessageRow({
   onEditDraftChange,
   onEnterReplies,
   onOpenImage,
+  onRegisterElement,
   onReply,
   onSelect,
   onSubmitEdit,
@@ -377,6 +423,7 @@ function CommentMessageRow({
   onEditDraftChange: (draft: CommentDraft) => void;
   onEnterReplies?: () => void;
   onOpenImage: (preview: ImagePreview) => void;
+  onRegisterElement: (messageId: string, element: HTMLElement | null) => void;
   onReply: (message: CommentMessage) => void;
   onSelect: (messageId: string) => void;
   onSubmitEdit: (event: FormEvent) => void;
@@ -419,7 +466,12 @@ function CommentMessageRow({
   }, [moreActionsOpen]);
 
   return (
-    <article className={clsx("orf-comment-message-row", selected && "orf-comment-message-row-selected")} onClick={() => onSelect(message.id)}>
+    <article
+      className={clsx("orf-comment-message-row", selected && "orf-comment-message-row-selected")}
+      data-comment-message-id={message.id}
+      onClick={() => onSelect(message.id)}
+      ref={(element) => onRegisterElement(message.id, element)}
+    >
       <PersonAvatar avatarUrl={message.authorAvatarUrl} name={message.author} />
       <div className="orf-comment-message-main">
         <div className="orf-comment-message-header">

@@ -16,6 +16,7 @@ import {
 } from "../src/features/interaction/appAttentionState";
 import {
   attentionToastIntentFromNotification,
+  attentionToastIntentFromWorkLogReminder,
   buildAttentionState,
 } from "../src/features/attention/attentionModel";
 import { chatPresenceBadgeState, chatPresenceState, formatPresence, isChatUserOnline } from "../src/features/chat/chatPresence";
@@ -26,7 +27,7 @@ import {
   recordRealtimePresenceActivity,
   resolveRealtimeUserPresence,
 } from "../server/realtime/presenceRegistry";
-import type { AppNotification, ChatMessage, ChatUnreadSummary, ChatUser } from "../src/types/orf";
+import type { AppNotification, ChatMessage, ChatUnreadSummary, ChatUser, WorkLogReminderState } from "../src/types/orf";
 import type { ChatRealtimeEvent } from "../src/types/realtime";
 
 const require = createRequire(import.meta.url);
@@ -183,6 +184,24 @@ function attentionInput(overrides: Partial<Parameters<typeof buildAttentionState
     currentUserId,
     notifications: [],
     workLogReminderState: null,
+    ...overrides,
+  };
+}
+
+function workLogReminderState(overrides: Partial<WorkLogReminderState> = {}): WorkLogReminderState {
+  return {
+    id: "worklog-reminder-1",
+    lastRemindedAt: null,
+    missingDates: ["2026-08-03", "2026-08-04"],
+    nextRemindAt: null,
+    requiredDates: ["2026-08-03", "2026-08-04"],
+    resolvedAt: null,
+    shouldRemindNow: true,
+    snoozeCount: 0,
+    status: "active",
+    updatedAt: "2026-08-04T09:30:00.000Z",
+    windowEndDate: "2026-08-04",
+    windowStartDate: "2026-08-03",
     ...overrides,
   };
 }
@@ -588,6 +607,22 @@ test("attention state separates notification work items from ordinary chat badge
   assert.equal(state.level, "urgent");
   assert.equal(state.items.length, 1);
   assert.equal(state.items[0]?.kind, "feedback.assigned");
+});
+
+test("work log reminder attention opens the first missing date", () => {
+  const reminder = workLogReminderState();
+  const state = buildAttentionState(attentionInput({
+    workLogReminderState: reminder,
+  }));
+  const toast = attentionToastIntentFromWorkLogReminder(reminder, {
+    appAttentionState: { activelyViewed: false, source: "browser-document" },
+    currentPath: "/tasks",
+  });
+
+  assert.equal(state.items[0]?.kind, "worklog.reminder");
+  assert.equal(state.items[0]?.targetPath, "/work-logs?date=2026-08-03&view=today");
+  assert.equal(state.latestTargetPath, "/work-logs?date=2026-08-03&view=today");
+  assert.equal(toast?.targetPath, "/work-logs?date=2026-08-03&view=today");
 });
 
 test("attention state keeps badge-only system notifications out of workbar", () => {

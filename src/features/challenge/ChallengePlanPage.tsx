@@ -273,6 +273,7 @@ export function ChallengePlanPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const hasObjectiveCreationEntry = searchParams.get("create") === "objective";
+  const linkedCommentId = useMemo(() => searchParams.get("comment")?.trim() || null, [searchParams]);
   const linkedChallengeTarget = useMemo(() => parseChallengeTargetHash(location.hash), [location.hash]);
   const [scope, setScope] = useState<ChallengeScope>(canShowAllChallenges ? "all" : "mine");
   const [cycleFilter, setCycleFilter] = useState<ChallengeCycleFilter>("all");
@@ -303,6 +304,7 @@ export function ChallengePlanPage() {
   const titleEditOverlaySequenceRef = useRef(0);
   const handledObjectiveCreationEntryRef = useRef(false);
   const appliedLinkedTargetRef = useRef<string | null>(null);
+  const appliedLinkedCommentRef = useRef<string | null>(null);
   const filterPreferenceTouchedRef = useRef(false);
   const now = useMinuteNow();
   const today = localDateString(now);
@@ -790,6 +792,22 @@ export function ChallengePlanPage() {
 
     return () => window.cancelAnimationFrame(frameId);
   }, [challengeState, displayedGroups, linkedChallengeTarget]);
+
+  useEffect(() => {
+    if (!linkedCommentId || !linkedChallengeTarget) {
+      appliedLinkedCommentRef.current = null;
+      return;
+    }
+
+    const linkedCommentKey = `${challengeAnchorIdForLinkedTarget(linkedChallengeTarget)}:${linkedCommentId}`;
+    if (appliedLinkedCommentRef.current === linkedCommentKey) return;
+
+    const target = challengeTargetForLinkedChallengeTarget(linkedChallengeTarget, challengeState) ?? challengeTargetForLinkedChallengeTarget(linkedChallengeTarget, state);
+    if (!target) return;
+
+    appliedLinkedCommentRef.current = linkedCommentKey;
+    setCommentTarget(commentTargetForChallengeTarget(target));
+  }, [challengeState, linkedChallengeTarget, linkedCommentId, state]);
 
   useEffect(() => {
     if (!temporaryChildRow) return;
@@ -1580,6 +1598,7 @@ export function ChallengePlanPage() {
           currentMember={currentMember}
           currentUserAvatarUrl={currentUser?.avatarUrl}
           currentUserId={currentUser?.id ?? ""}
+          focusedCommentId={linkedCommentId}
           onLoadMentionableUsers={loadCommentMentionableUsers}
           targetId={commentTarget.id}
           targetTitle={commentTarget.title}
@@ -1626,6 +1645,32 @@ function objectiveIdForLinkedChallengeTarget(target: ChallengeUrlTarget, state: 
   if (target.type === "bounty") return state.results.find((result) => result.id === target.id)?.objectiveId ?? null;
   if (target.type === "action") return state.tasks.find((task) => task.id === target.id)?.linkedObjectiveId ?? null;
   return state.tasks.find((task) => task.checklist.some((item) => item.id === target.id))?.linkedObjectiveId ?? null;
+}
+
+function challengeTargetForLinkedChallengeTarget(target: ChallengeUrlTarget, state: OrfState): ChallengeTarget | null {
+  if (target.type === "objective") {
+    const objective = state.objectives.find((item) => item.id === target.id);
+    return objective ? { id: objective.id, title: objective.title, type: "objective" } : null;
+  }
+
+  if (target.type === "bounty") {
+    const result = state.results.find((item) => item.id === target.id);
+    return result ? { id: result.id, objectiveId: result.objectiveId, title: result.title, type: "bounty" } : null;
+  }
+
+  if (target.type === "action") {
+    const task = state.tasks.find((item) => item.id === target.id);
+    return task ? { hasSubActions: task.checklist.length > 0, id: task.id, objectiveId: task.linkedObjectiveId, title: task.title, type: "action" } : null;
+  }
+
+  for (const task of state.tasks) {
+    const item = task.checklist.find((checklistItem) => checklistItem.id === target.id);
+    if (item) {
+      return { actionId: task.id, id: item.id, objectiveId: task.linkedObjectiveId, title: item.label, type: "subAction" };
+    }
+  }
+
+  return null;
 }
 
 function parentActionIdForLinkedSubAction(target: ChallengeUrlTarget, state: OrfState) {

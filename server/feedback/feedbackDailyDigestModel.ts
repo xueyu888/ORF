@@ -71,7 +71,6 @@ export function sortFeedbackDailyDigestItems(items: readonly FeedbackDailyDigest
 
 export function formatFeedbackDailyDigestBody(input: {
   items: readonly FeedbackDailyDigestItem[];
-  listHref: string;
 }) {
   const items = sortFeedbackDailyDigestItems(input.items);
   const lines = items.slice(0, 20).map((item, index) => {
@@ -81,6 +80,5 @@ export function formatFeedbackDailyDigestBody(input: {
   const remainingCount = Math.max(items.length - lines.length, 0);
   const sections = [`你有 ${items.length} 条待处理反馈。\n${lines.join("\n")}`.trimEnd()];
   if (remainingCount > 0) sections.push(`还有 ${remainingCount} 条未展开。`);
-  sections.push(`[打开反馈列表](${input.listHref})`);
   return sections.filter(Boolean).join("\n\n");
 }

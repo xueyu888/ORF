@@ -33,7 +33,7 @@
 
 `work_log_classification_decisions` 是 AI 分类判断对比事实源。每次成功创建或更新日志时，如果请求携带一条仍对应当前正文的 AI 建议，仓库层会在同一事务中记录判断时正文快照、建议种类、目标 ID/名称、置信度、理由、用户最终选择及 `is_match`。正文快照保证日志后续修改后仍能复盘当时输入；正确次数从 `is_match` 聚合，不维护第二个计数器。没有建议、建议已过期、请求失败或未提交草稿都不产生明细。明细通过 `entry_id` 回链日志，日志删除时级联删除，不反向定义日志分类、目标或权限。
 
-新增日志保存成功后会创建 `worklog.submitted` 系统公告，通知当前团队 active 成员有人提交了某天某个目标/分类的工作日志。通知只包含摘要和跳转到当天工作日志页的链接，不保存完整日志正文；编辑和删除历史日志不发送这类公告。通知事实源仍是 `notification_events`、`notification_receipts` 和 `notification_deliveries`，不能反向定义日志正文、报表或欠账状态。
+新增日志保存成功后会创建 `worklog.submitted` 系统公告，通知当前团队 active 成员有人提交了某天某个目标/分类的工作日志。通知只包含摘要和跳转到对应日志条目的链接 `/work-logs?date={date}&view=today&entry={entryId}`，不保存完整日志正文；编辑和删除历史日志不发送这类公告。通知事实源仍是 `notification_events`、`notification_receipts` 和 `notification_deliveries`，不能反向定义日志正文、报表或欠账状态。
 
 `work_log_reminder_states` 是工作日志欠账提醒状态事实源。它不记录日志是否完成，只记录某个用户当前欠账窗口、缺失日期、提醒状态和下一次可提醒时间：
 
@@ -61,7 +61,7 @@
 | `POST` | `/api/work-logs/my-day/:date` | 当前用户给某天追加一条日志；成功后派生 `worklog.submitted` 系统公告 |
 | `PATCH` | `/api/work-logs/entries/:entryId` | 当前用户修改自己的一条历史日志 |
 | `DELETE` | `/api/work-logs/entries/:entryId` | 当前用户删除自己的一条历史日志 |
-| `GET` | `/api/work-logs/activity?from=&to=&userId=&objectiveId=&limit=` | 团队日志活动流 |
+| `GET` | `/api/work-logs/activity?from=&to=&userId=&objectiveId=&entryId=&limit=` | 团队日志活动流；`entryId` 用于通知深链接精确读取单条日志 |
 | `GET` | `/api/work-logs/report?from=&to=&scope=mine\|team` | 工作日志报表；最多查询 93 天 |
 
 `POST /api/work-logs/my-day/:date` 和 `PATCH /api/work-logs/entries/:entryId` 请求体：
