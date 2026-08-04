@@ -56,3 +56,20 @@ test("feedback daily digest sorts by impact then oldest update and formats feedb
     "[打开反馈列表](/feedback?state=open&assignee=user-1)",
   ].join("\n"));
 });
+
+test("feedback daily digest keeps two digit ordered list markers in the markdown source", () => {
+  const body = formatFeedbackDailyDigestBody({
+    items: Array.from({ length: 22 }, (_, index) => ({
+      id: `fb-${String(index + 1).padStart(2, "0")}`,
+      impact: "Medium",
+      phenomenon: `反馈标题 ${index + 1}`,
+      updatedAt: `2026-08-${String(index + 1).padStart(2, "0")}`,
+    })),
+    listHref: "/feedback?state=open&assignee=user-1",
+  });
+
+  assert.match(body, /^10\. \[Medium\] \[反馈标题 10\]\(\/feedback\/fb-10\)$/m);
+  assert.match(body, /^20\. \[Medium\] \[反馈标题 20\]\(\/feedback\/fb-20\)$/m);
+  assert.doesNotMatch(body, /^0\. \[Medium\]/m);
+  assert.match(body, /^还有 2 条未展开。$/m);
+});

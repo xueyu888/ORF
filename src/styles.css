@@ -17877,7 +17877,22 @@ a.orf-sidebar-link,
 }
 
 .orf-chat-markdown-list {
-  margin: 4px 0 4px 20px;
+  margin: 4px 0;
+  list-style-position: outside;
+  padding-inline-start: 1.55em;
+}
+
+ol.orf-chat-markdown-list {
+  padding-inline-start: 2.75em;
+}
+
+.orf-chat-markdown-list .orf-chat-markdown-list {
+  margin-top: 3px;
+  margin-bottom: 2px;
+}
+
+.orf-chat-markdown-list > li {
+  padding-inline-start: 0.08em;
 }
 
 .orf-chat-markdown-task-item input {
