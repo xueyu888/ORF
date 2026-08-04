@@ -27,6 +27,11 @@ if (options.help) {
 const releaseNotes = resolveReleaseNotesOption(options);
 
 assertReleaseTag(releaseTag);
+if (options.broadcastOnly) {
+  await broadcastClientUpdateRelease({ tagName: releaseTag }, { force: true });
+  process.exit(0);
+}
+
 const branch = options.branch ?? git(["branch", "--show-current"], { capture: true }).trim();
 if (!branch) {
   fail("当前不在命名分支上，无法安全发布客户端。");
@@ -87,7 +92,8 @@ await broadcastClientUpdateRelease(release);
 function parseArgs(args) {
   const parsed = {
     branch: null,
-    broadcast: true,
+    broadcast: false,
+    broadcastOnly: false,
     broadcastUrl: null,
     help: false,
     notes: null,
@@ -103,6 +109,11 @@ function parseArgs(args) {
     if (arg === "--help" || arg === "-h") parsed.help = true;
     else if (arg === "--watch") parsed.watch = true;
     else if (arg === "--no-watch") parsed.watch = false;
+    else if (arg === "--broadcast") parsed.broadcast = true;
+    else if (arg === "--broadcast-only") {
+      parsed.broadcast = true;
+      parsed.broadcastOnly = true;
+    }
     else if (arg === "--no-broadcast") parsed.broadcast = false;
     else if (arg === "--no-publish-assets") parsed.publishAssets = false;
     else if (arg === "--notes") parsed.notes = readValue(args, ++index, arg);
@@ -128,10 +139,11 @@ function printHelp() {
 
 用法:
   npm run release:clients -- --tag v0.0.3 --notes "修复工作日志入口，并优化客户端更新提示"
-  npm run release:clients -- --tag v0.0.3 --notes-file release-notes/v0.0.3.md --watch
+  npm run release:clients -- --tag v0.0.3 --notes-file release-notes/v0.0.3.md --watch --no-broadcast
+  npm run release:clients -- --tag v0.0.3 --broadcast-only
 
 行为:
-  - 要求工作区干净。
+  - 常规发布要求工作区干净；--broadcast-only 只通知已同步版本，不推送分支或 tag。
   - 使用 package.json 版本作为默认 tag，也可用 --tag 指定。
   - 新发布 tag 必须提供 --notes 或 --notes-file，说明本版本面向用户更新了什么。
   - 发布说明会写入 annotated tag，GitHub Release 和 ORF 主更新源共用这份说明。
@@ -139,9 +151,11 @@ function printHelp() {
   - 默认只触发 .github/workflows/release-clients.yml，不等待 GitHub Actions。
   - 加 --watch 时才等待工作流完成并核对 GitHub Release 镜像资产。
   - --watch 核对 GitHub Release 镜像资产后，会在配置 ORF_CLIENT_UPDATE_PUBLISH_SECRET 时把安装包同步到 ORF 主更新源。
-  - --watch 确认 Release 资产后，会在配置 ORF_CLIENT_UPDATE_BROADCAST_SECRET 时调用 ORF 服务端广播当前 SSE 实时连接客户端。
+  - 发布脚本默认不广播，避免完整发布时在生产后端和 public-gateway 稳定前弹出更新提示。
+  - 只发布客户端且确认后续不会重启生产服务时，可加 --broadcast 在资产同步后立即通知当前 SSE 实时连接客户端。
+  - 完整发布必须等生产入口验证通过后，再运行 --broadcast-only 广播已同步的版本。
   - 可用 --no-publish-assets 跳过 ORF 主更新源同步，或用 --publish-url 覆盖 ORF_CLIENT_UPDATE_PUBLISH_URL / ORF_APP_URL。
-  - 可用 --no-broadcast 跳过发布后广播，或用 --broadcast-url 覆盖 ORF_CLIENT_UPDATE_BROADCAST_URL / ORF_APP_URL。
+  - 可用 --no-broadcast 明确保持不广播，或用 --broadcast-url 覆盖 ORF_CLIENT_UPDATE_BROADCAST_URL / ORF_APP_URL。
 `);
 }
 
@@ -325,16 +339,20 @@ async function publishClientUpdateReleaseToOrf(release) {
   }
 }
 
-async function broadcastClientUpdateRelease(release) {
-  if (!options.broadcast) {
-    console.log("已按 --no-broadcast 跳过发布后在线客户端广播。");
+async function broadcastClientUpdateRelease(release, settings = {}) {
+  if (!settings.force && !options.broadcast) {
+    console.log("当前未请求广播，已跳过发布后在线客户端广播。");
     return;
   }
 
   const secret = process.env.ORF_CLIENT_UPDATE_BROADCAST_SECRET?.trim();
   const targetUrl = options.broadcastUrl ?? process.env.ORF_CLIENT_UPDATE_BROADCAST_URL ?? process.env.ORF_APP_URL;
   if (!secret || !targetUrl) {
-    console.log("未配置 ORF_CLIENT_UPDATE_BROADCAST_SECRET 或 ORF_CLIENT_UPDATE_BROADCAST_URL/ORF_APP_URL，已跳过发布后在线客户端广播。");
+    const message = "未配置 ORF_CLIENT_UPDATE_BROADCAST_SECRET 或 ORF_CLIENT_UPDATE_BROADCAST_URL/ORF_APP_URL";
+    if (settings.force) {
+      fail(`${message}，无法执行单独广播。`);
+    }
+    console.log(`${message}，已跳过发布后在线客户端广播。`);
     return;
   }
 

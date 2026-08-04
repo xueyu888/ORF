@@ -73,7 +73,7 @@ npm run release:clients -- --tag v0.0.1 --notes "说明本版本面向用户更�
 需要等待 GitHub Actions 完成、核对 ORF 主更新源和 GitHub 镜像资产时运行：
 
 ```bash
-npm run release:clients -- --tag v0.0.1 --notes-file release-notes/v0.0.1.md --watch
+npm run release:clients -- --tag v0.0.1 --notes-file release-notes/v0.0.1.md --watch --no-broadcast
 ```
 
 ## 发布须知
@@ -82,11 +82,12 @@ npm run release:clients -- --tag v0.0.1 --notes-file release-notes/v0.0.1.md --w
 
 1. 版本事实：根 `package.json` 更新版本，并运行 `npm run client:sync-versions` 同步 Win11 和 Android 版本。
 2. 提交事实：按明确路径提交并推送本次变更，推送前核对 `origin/<branch>..HEAD` 的完整提交范围。
-3. 客户端资产：运行 `npm run release:clients -- --tag vX.Y.Z --watch`，确认 GitHub Actions、GitHub Release、ORF 主更新源同步和在线客户端广播都完成。
+3. 客户端资产：运行 `npm run release:clients -- --tag vX.Y.Z --watch --no-broadcast`，确认 GitHub Actions、GitHub Release、ORF 主更新源资产同步和发布清单写入都完成，但此时不能广播更新。
 4. 生产 Web 入口：运行 `npm run build:release` 生成不可变生产运行包，把生成的 `.artifacts/releases/<releaseId>` 部署到 `/home/xue/.local/share/orf-production/releases/<releaseId>`，再把 `/home/xue/.local/share/orf-production/releases/current` 切到这个新目录，`previous` 保留为旧目录。
 5. 生产后端：重启 `orf-backend-production.service`，确认进程工作目录已经是新的 `releases/current`。
 6. 生产网关：强制重建 `public-gateway` 容器，让 nginx 重新挂载新的 `ORF_WEB_RELEASE_DIR=/home/xue/.local/share/orf-production/releases/current/web`。
-7. 入口验收：直接用 8443 域名入口验证 HTML 主包 hash、新版页面 chunk、后端健康检查和网关健康检查。
+7. 入口验收：直接用 8443 域名入口验证 HTML 主包 hash、新版页面 chunk、后端健康检查、网关健康检查和新版安装包下载地址。
+8. 更新广播：入口和安装包下载都验证通过后，运行 `npm run release:clients -- --tag vX.Y.Z --broadcast-only`，再向当前 SSE 实时连接客户端广播更新提示。
 
 生产网页入口 `https://orf-xueyu.duckdns.org:8443/` 的静态 HTML 和 JS 不是由 ORF 后端进程直接返回，而是由 Docker 中的 `public-gateway` nginx 容器读取 `ORF_WEB_RELEASE_DIR` bind mount。`releases/current` symlink 切到新目录后，已创建的 nginx 容器可能仍持有旧目录挂载；只重启 `orf-backend-production.service` 只能让后端 API 加载新版 `server.mjs`，不能保证 8443 继续服务的前端包已经换新。因此生产 Web 发布必须同时切换不可变运行目录、重启后端、强制重建 `public-gateway`。
 
@@ -106,6 +107,7 @@ ORF_WEB_RELEASE_DIR=/home/xue/.local/share/orf-production/releases/current/web \
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8787/health
 curl -k -sS -o /dev/null -w '%{http_code}\n' https://orf-xueyu.duckdns.org:8443/
 curl -k -sS https://orf-xueyu.duckdns.org:8443/ | rg -o 'assets/[^" ]+'
+curl -k -sS -o /dev/null -w '%{http_code} %{size_download}\n' https://orf-xueyu.duckdns.org:8443/api/client-updates/assets/<version>/<installer>
 docker inspect orf-public-gateway-1 --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
 ```
 
@@ -134,9 +136,9 @@ ORF 客户端运行时默认使用 ORF 主更新源：
 - 已安装旧版 Win11 或 Android 原生壳如果尚未信任 ORF 主更新源，会在拒绝安装参数后由 Web 运行时自动改用 GitHub 镜像地址重试；这只用于旧壳兼容，不改变新客户端默认走 ORF 主更新源的规则。
 - 如果旧客户端已经打开且仍运行旧 Web 代码，当前版本的客户端清单可以临时把可信 GitHub 镜像设为主下载地址、把 ORF 资产地址保留为镜像；发布脚本后续默认仍写 ORF 主源。
 
-GitHub Actions 在两个平台产物都生成后，只上传 GitHub Release 镜像。发布脚本的 `--watch` 会等待工作流完成、核对镜像资产，再由本机把安装包同步到 ORF 主更新源，并把 ORF 发布清单作为最后一步写入，让客户端只在主源资产和镜像地址都准备好后看到新版本。自动化不会把管理员登录态写进发布流程；服务端和发布环境必须配置同一个 `ORF_CLIENT_UPDATE_PUBLISH_SECRET` 才能同步主更新源，必须配置同一个 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 才会广播当前 SSE 实时连接客户端。
+GitHub Actions 在两个平台产物都生成后，只上传 GitHub Release 镜像。发布脚本的 `--watch` 会等待工作流完成、核对镜像资产，再由本机把安装包同步到 ORF 主更新源，并把 ORF 发布清单作为最后一步写入，让客户端只在主源资产和镜像地址都准备好后看到新版本。完整发布时，`--watch` 阶段不得广播；生产后端、public-gateway、8443 入口和安装包下载验证通过后，才使用 `--broadcast-only` 广播对应 tag。只发布客户端且确认后续不会重启生产服务时，可以显式加 `--broadcast` 在资产同步后立即通知。自动化不会把管理员登录态写进发布流程；服务端和发布环境必须配置同一个 `ORF_CLIENT_UPDATE_PUBLISH_SECRET` 才能同步主更新源，必须配置同一个 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 才会广播当前 SSE 实时连接客户端。
 
-本地发布脚本目标默认取 `ORF_APP_URL`，也可以通过 `ORF_CLIENT_UPDATE_PUBLISH_URL` 或 `--publish-url` 覆盖；在 ORF 服务和发布脚本运行在同一台机器时，建议把 `ORF_CLIENT_UPDATE_PUBLISH_URL` 指向本机 API 地址以避免公网回环上传大包。广播目标默认取 `ORF_APP_URL`，也可以通过 `ORF_CLIENT_UPDATE_BROADCAST_URL` 或 `--broadcast-url` 覆盖。本地脚本未配置对应 secret 或目标地址时会明确提示已跳过主更新源同步或在线广播；需要刻意跳过时分别使用 `--no-publish-assets` 或 `--no-broadcast`。
+本地发布脚本目标默认取 `ORF_APP_URL`，也可以通过 `ORF_CLIENT_UPDATE_PUBLISH_URL` 或 `--publish-url` 覆盖；在 ORF 服务和发布脚本运行在同一台机器时，建议把 `ORF_CLIENT_UPDATE_PUBLISH_URL` 指向本机 API 地址以避免公网回环上传大包。广播目标默认取 `ORF_APP_URL`，也可以通过 `ORF_CLIENT_UPDATE_BROADCAST_URL` 或 `--broadcast-url` 覆盖。本地脚本未配置对应 secret 或目标地址时会明确提示已跳过主更新源同步或在线广播；`--broadcast-only` 缺少广播 secret 或目标地址时会失败，避免发布者误以为更新通知已经发出。需要刻意跳过资产同步时使用 `--no-publish-assets`；发布脚本默认不广播，需要刻意广播时使用 `--broadcast` 或 `--broadcast-only`。
 
 Win11 应用内更新由 Electron 主进程拥有完整生命周期：渲染层只提交一次可信安装资产，并展示下载与校验进度；主进程下载完成后启动独立 WSH 交接进程，先让当前 ORF 完整退出，再以 `--updated --force-run --keep-shortcuts` 打开可见的 NSIS 安装器。交接和安装器进程探测都不依赖 PowerShell，避免系统 PowerShell 卡住时阻塞更新。NSIS 的原生界面是安装阶段的唯一进度事实源，不能再用 `/S` 隐藏；安装器自身也会把 0.0.94 及更早客户端遗留的 `/S` 恢复为可见模式，保证首次修复升级就能看到安装进度和错误，并通过 NSIS 原生进程能力关闭旧 ORF。`--updated` 是安装器内升级状态的唯一事实源：只存在一个既有安装范围时自动沿用当前用户或全用户安装，不再停在安装范围选择页；同时存在两种安装时保留选择页，不能替用户猜测。文件、快捷方式和卸载信息写入完成后，安装器通过标准启动宏重新打开 ORF；`--force-run` 保持与 electron-builder 更新参数契约兼容，`--keep-shortcuts` 保留用户已有快捷方式选择。交接进程启动失败时不能退出当前客户端；同一时间只能存在一个更新安装请求。Android 仍必须进入系统安装界面，系统级安装确认和签名校验不能由 ORF 绕过。
 
@@ -189,7 +191,7 @@ npm run push:diagnose -- --send-test --user-email <email>
 
 ## Win11 在线更新广播
 
-Win11 客户端没有后台系统 Push 通道。运行中的 Win11 客户端通过 `/api/events` SSE 接收实时事件。发布脚本在 `--watch` 确认 ORF 主更新源已同步后，会用 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 调用 `POST /api/client-updates/broadcast-release`，按本次发布版本向当前 SSE 实时连接广播一次 `client.update.available`；新版客户端收到后立即触发已有更新检查，并由 `ClientUpdateNotice` 以应用内持久通知卡展示，直到用户处理或关闭本版本提醒。旧客户端不认识该专用事件，因此服务端同时发送兼容的 `system.broadcast` 横幅，提醒用户打开“版本与更新”检查；新版客户端会忽略这个兼容横幅，不再把客户端更新展示成 18 秒横幅。
+Win11 客户端没有后台系统 Push 通道。运行中的 Win11 客户端通过 `/api/events` SSE 接收实时事件。发布脚本只有在显式 `--broadcast` 或 `--broadcast-only` 时，才会用 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 调用 `POST /api/client-updates/broadcast-release`，按指定版本向当前 SSE 实时连接广播一次 `client.update.available`；新版客户端收到后立即触发已有更新检查，并由 `ClientUpdateNotice` 以应用内持久通知卡展示，直到用户处理或关闭本版本提醒。完整发布必须在生产入口和安装包下载验证通过后再广播，避免用户看到弹窗后撞到后端重启窗口。旧客户端不认识该专用事件，因此服务端同时发送兼容的 `system.broadcast` 横幅，提醒用户打开“版本与更新”检查；新版客户端会忽略这个兼容横幅，不再把客户端更新展示成 18 秒横幅。
 
 - 客户端更新的运行时事实源是 ORF 主更新源；GitHub Release 是外部镜像和兜底来源。实时事件只负责唤醒检查或兼容旧客户端横幅，不写入 `notifications` 表。
 - 发布后广播按 tag 精确读取对应 ORF 发布清单，不依赖 `/api/client-updates/latest` 的短缓存，避免刚发布时误发旧版本。
