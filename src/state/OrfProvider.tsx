@@ -184,6 +184,7 @@ interface OrfContextValue {
   settleObjectiveLoot: (objectiveId: string, input: SettleObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, input: SubmitContributionReviewInput) => Promise<boolean>;
   createFeedback: (input: CreateFeedbackInput) => Promise<Feedback | null>;
+  updateFeedbackAssignee: (feedbackId: string, ownerUserId: string) => Promise<boolean>;
   updateFeedbackMetadata: (feedbackId: string, input: UpdateFeedbackMetadataInput) => Promise<boolean>;
   createTask: (input: Pick<Task, "title" | "description" | "assigneeUserId" | "priority" | "linkedObjectiveId"> & Partial<Pick<Task, "dueDate" | "tags" | "checklist">>) => Promise<Task | null>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;

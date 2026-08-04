@@ -21,7 +21,7 @@ import {
 import { commentTimeDisplay } from "../features/challenge/comments/commentTime";
 import { RelatedResourcesPanel } from "../features/drive/RelatedResourcesPanel";
 import type { OrfRichTextAttachmentUploadResult } from "../features/rich-text/OrfRichTextEditor";
-import { canEditFeedbackMetadata, canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
+import { canAssignFeedbackOwner, canEditFeedbackMetadata, canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
 import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
 import {
   feedbackIssueDisplayId,
@@ -58,6 +58,7 @@ export function FeedbackIssuePage() {
     notify,
     state,
     updateCommentMessage,
+    updateFeedbackAssignee,
     updateFeedbackMetadata,
     updateFeedbackStatus,
     uploadCommentAttachment,
@@ -78,6 +79,7 @@ export function FeedbackIssuePage() {
   const mentionUsersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
   const canChangeState = feedback ? canManageFeedbackStatus(feedback, currentUser) : false;
   const canEditMetadata = feedback ? canEditFeedbackMetadata(feedback, currentUser) : false;
+  const canAssignOwner = feedback ? canAssignFeedbackOwner(feedback, currentUser) : false;
   const canManageAllComments = hasPermission(currentUser, state.permissionRules, "comment.manage");
   const uploadFeedbackCommentAttachment = async (file: File) => {
     if (!feedback) return null;
@@ -365,10 +367,12 @@ export function FeedbackIssuePage() {
             onChange={changeSubscription}
           />
           <IssueSidebar
+            canAssignOwner={canAssignOwner}
             canEdit={canEditMetadata}
             comments={threads}
             feedback={feedback}
             feedbackItems={state.feedback}
+            onSaveAssignee={(ownerUserId) => updateFeedbackAssignee(feedback.id, ownerUserId)}
             onSaveMetadata={(input) => updateFeedbackMetadata(feedback.id, input)}
             projects={state.projects}
             users={state.users}
@@ -496,7 +500,6 @@ function FeedbackSubscriptionControls({
 type FeedbackMetadataDraft = {
   causeCategories: string[];
   impact: Impact;
-  ownerUserId: string;
   phenomenon: string;
   projectId: string;
 };
@@ -505,7 +508,6 @@ function feedbackMetadataDraftFromFeedback(feedback: Feedback): FeedbackMetadata
   return {
     causeCategories: feedback.causeCategories,
     impact: feedback.impact,
-    ownerUserId: feedback.ownerUserId,
     phenomenon: feedback.phenomenon,
     projectId: feedback.projectId ?? "",
   };
@@ -514,7 +516,6 @@ function feedbackMetadataDraftFromFeedback(feedback: Feedback): FeedbackMetadata
 function sameFeedbackMetadataDraft(left: FeedbackMetadataDraft, right: FeedbackMetadataDraft) {
   return (
     left.phenomenon === right.phenomenon &&
-    left.ownerUserId === right.ownerUserId &&
     left.impact === right.impact &&
     left.projectId === right.projectId &&
     left.causeCategories.length === right.causeCategories.length &&
@@ -537,22 +538,25 @@ function subscriptionToast(mode: FeedbackSubscriptionMode) {
 }
 
 function IssueSidebar({
+  canAssignOwner,
   canEdit,
   comments,
   feedback,
   feedbackItems,
+  onSaveAssignee,
   onSaveMetadata,
   projects,
   users,
 }: {
+  canAssignOwner: boolean;
   canEdit: boolean;
   comments: readonly CommentThread[];
   feedback: Feedback;
   feedbackItems: readonly Feedback[];
+  onSaveAssignee: (ownerUserId: string) => Promise<boolean>;
   onSaveMetadata: (input: {
     causeCategories: string[];
     impact: Impact;
-    ownerUserId: string;
     phenomenon: string;
     projectId: string | null;
   }) => Promise<boolean>;
@@ -560,6 +564,7 @@ function IssueSidebar({
   users: readonly OrfUser[];
 }) {
   const [draft, setDraft] = useState(() => feedbackMetadataDraftFromFeedback(feedback));
+  const [assigneeDraft, setAssigneeDraft] = useState(feedback.ownerUserId);
   const assignee = feedbackIssueAssignee(feedback, users);
   const labels = feedbackIssueLabels(feedback);
   const participants = feedbackIssueParticipants({ feedback, threads: comments, users });
@@ -573,11 +578,17 @@ function IssueSidebar({
     [feedback.causeCategories],
   );
   const metadataDirty = !sameFeedbackMetadataDraft(draft, feedbackMetadataDraftFromFeedback(feedback));
-  const canSaveMetadata = Boolean(metadataDirty && draft.phenomenon.trim() && draft.ownerUserId.trim() && draft.causeCategories.length > 0);
+  const assigneeDirty = assigneeDraft !== feedback.ownerUserId;
+  const canSaveAssignee = Boolean(canAssignOwner && assigneeDirty && assigneeDraft.trim());
+  const canSaveMetadata = Boolean(metadataDirty && draft.phenomenon.trim() && draft.causeCategories.length > 0);
 
   useEffect(() => {
     setDraft(feedbackMetadataDraftFromFeedback(feedback));
-  }, [feedback.causeCategories, feedback.id, feedback.impact, feedback.ownerUserId, feedback.phenomenon, feedback.projectId]);
+  }, [feedback.causeCategories, feedback.id, feedback.impact, feedback.phenomenon, feedback.projectId]);
+
+  useEffect(() => {
+    setAssigneeDraft(feedback.ownerUserId);
+  }, [feedback.id, feedback.ownerUserId]);
 
   const toggleCause = (cause: string) => {
     setDraft((current) => {
@@ -594,10 +605,14 @@ function IssueSidebar({
     await onSaveMetadata({
       causeCategories: draft.causeCategories,
       impact: draft.impact,
-      ownerUserId: draft.ownerUserId,
       phenomenon: draft.phenomenon.trim(),
       projectId: draft.projectId || null,
     });
+  };
+
+  const saveAssignee = async () => {
+    if (!canSaveAssignee) return;
+    await onSaveAssignee(assigneeDraft.trim());
   };
 
   return (
@@ -620,10 +635,22 @@ function IssueSidebar({
       </div>
       <div className="feedback-issue-sidebar-block">
         <span>Assignees</span>
-        {canEdit ? (
-          <select className="feedback-issue-sidebar-input" value={draft.ownerUserId} onChange={(event) => setDraft((current) => ({ ...current, ownerUserId: event.target.value }))}>
-            {ownerOptions.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-          </select>
+        {canAssignOwner ? (
+          <>
+            <select className="feedback-issue-sidebar-input" value={assigneeDraft} onChange={(event) => setAssigneeDraft(event.target.value)}>
+              {ownerOptions.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+            </select>
+            <div className="feedback-issue-sidebar-actions">
+              <Button disabled={!canSaveAssignee} size="sm" type="button" onClick={saveAssignee}>
+                <Save aria-hidden="true" />
+                保存处理人
+              </Button>
+              <Button disabled={!assigneeDirty} size="sm" type="button" variant="ghost" onClick={() => setAssigneeDraft(feedback.ownerUserId)}>
+                <RotateCcw aria-hidden="true" />
+                重置
+              </Button>
+            </div>
+          </>
         ) : (
           <div className="feedback-issue-sidebar-person">
             <UserAvatar avatarUrl={assignee.avatarUrl} className="h-7 w-7 text-[10px]" frame={false} name={assignee.name} />

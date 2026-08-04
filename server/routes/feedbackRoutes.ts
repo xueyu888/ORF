@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireFeedbackInScope, requireUserScopeContext } from "../auth/accessPolicy";
 import { env } from "../env";
 import { getFeedbackSubscriptionMode, setFeedbackSubscriptionMode } from "../repositories/feedbackSubscriptionRepository";
-import { createFeedback, getFeedbackReferences, updateFeedbackMetadata, updateFeedbackStatus } from "../repositories/orfFeedbackRepository";
+import { createFeedback, getFeedbackReferences, updateFeedbackAssignee, updateFeedbackMetadata, updateFeedbackStatus } from "../repositories/orfFeedbackRepository";
 
 const impactSchema = z.enum(["Low", "Medium", "High", "Critical"]);
 const feedbackStatusSchema = z.enum(["Open", "Closed"]);
@@ -30,9 +30,11 @@ const updateFeedbackMetadataBodySchema = z.object({
   phenomenon: z.string().trim().min(1).optional(),
   causeCategories: z.array(z.string().trim().min(1)).min(1).optional(),
   impact: impactSchema.optional(),
-  ownerUserId: z.string().trim().min(1).optional(),
   projectId: z.string().trim().min(1).nullable().optional(),
-});
+}).strict();
+const updateFeedbackAssigneeBodySchema = z.object({
+  ownerUserId: z.string().trim().min(1),
+}).strict();
 const updateFeedbackSubscriptionBodySchema = z.object({
   mode: z.enum(["none", "subscribed", "muted"]),
 });
@@ -205,11 +207,40 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
     if (updated.status === "invalid") {
       return reply.code(400).send({ error: "Feedback metadata is invalid" });
     }
-    if (updated.status === "invalidOwner") {
-      return reply.code(409).send({ error: "Feedback owner must be an active member" });
-    }
     if (updated.status === "invalidProject") {
       return reply.code(409).send({ error: "Feedback project not found" });
+    }
+
+    return { ok: true };
+  });
+
+  app.patch("/api/feedback/:feedbackId/assignee", async (request, reply) => {
+    const params = feedbackParamsSchema.parse(request.params);
+    const body = updateFeedbackAssigneeBodySchema.parse(request.body);
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    const { user, scope } = context;
+    if (!(await requireFeedbackInScope(reply, params.feedbackId, scope))) {
+      return reply;
+    }
+
+    const updated = await updateFeedbackAssignee(params.feedbackId, body, {
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      scope,
+    });
+
+    if (updated.status === "notFound") {
+      return reply.code(404).send({ error: "Feedback not found" });
+    }
+    if (updated.status === "forbidden") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+    if (updated.status === "invalidOwner") {
+      return reply.code(409).send({ error: "Feedback owner must be an active member" });
     }
 
     return { ok: true };

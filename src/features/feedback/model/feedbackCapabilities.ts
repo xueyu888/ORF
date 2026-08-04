@@ -21,6 +21,13 @@ export function canEditFeedbackMetadata(feedback: Feedback, currentUser: OrfUser
   return feedback.createdBy === currentUser.id || feedback.ownerUserId === currentUser.id;
 }
 
+export function canAssignFeedbackOwner(feedback: Feedback, currentUser: OrfUser | null) {
+  if (!currentUser || currentUser.status !== "active") {
+    return false;
+  }
+  return currentUser.role === "admin" || feedback.status === "Open";
+}
+
 export function canCreateTeamFeedback(currentUser: OrfUser | null | undefined) {
   return currentUser?.status === "active";
 }

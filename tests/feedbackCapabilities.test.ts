@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canEditFeedbackMetadata } from "../src/features/feedback/model/feedbackCapabilities";
+import { canAssignFeedbackOwner, canEditFeedbackMetadata } from "../src/features/feedback/model/feedbackCapabilities";
 import type { Feedback, OrfUser } from "../src/types/orf";
 
 test("feedback metadata editing separates admin override from open participant edits", () => {
@@ -18,13 +18,30 @@ test("feedback metadata editing separates admin override from open participant e
   assert.equal(canEditFeedbackMetadata(feedback({ status: "Closed" }), admin), true);
 });
 
-function user(input: Pick<OrfUser, "id" | "role">): OrfUser {
+test("feedback assignment is open to active members without opening all metadata fields", () => {
+  const creator = user({ id: "user-creator", role: "member" });
+  const owner = user({ id: "user-owner", role: "member" });
+  const admin = user({ id: "user-admin", role: "admin" });
+  const stranger = user({ id: "user-stranger", role: "member" });
+  const inactiveMember = user({ id: "user-disabled", role: "member", status: "disabled" });
+
+  assert.equal(canEditFeedbackMetadata(feedback({ status: "Open" }), stranger), false);
+  assert.equal(canAssignFeedbackOwner(feedback({ status: "Open" }), creator), true);
+  assert.equal(canAssignFeedbackOwner(feedback({ status: "Open" }), owner), true);
+  assert.equal(canAssignFeedbackOwner(feedback({ status: "Open" }), stranger), true);
+  assert.equal(canAssignFeedbackOwner(feedback({ status: "Open" }), inactiveMember), false);
+
+  assert.equal(canAssignFeedbackOwner(feedback({ status: "Closed" }), stranger), false);
+  assert.equal(canAssignFeedbackOwner(feedback({ status: "Closed" }), admin), true);
+});
+
+function user(input: Pick<OrfUser, "id" | "role"> & Partial<Pick<OrfUser, "status">>): OrfUser {
   return {
     email: `${input.id}@example.com`,
     id: input.id,
     name: input.id,
     role: input.role,
-    status: "active",
+    status: input.status ?? "active",
   };
 }
 

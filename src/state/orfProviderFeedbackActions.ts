@@ -11,7 +11,6 @@ export type CreateFeedbackInput = Pick<Feedback, "phenomenon" | "causeCategories
 export type UpdateFeedbackMetadataInput = {
   causeCategories?: string[];
   impact?: Impact;
-  ownerUserId?: string;
   phenomenon?: string;
   projectId?: string | null;
 };
@@ -73,6 +72,21 @@ export function useOrfProviderFeedbackActions({ notify, refreshTaskManagementDat
           return true;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "反馈属性更新失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      updateFeedbackAssignee: async (feedbackId: string, ownerUserId: string) => {
+        try {
+          await apiRequest(`/api/feedback/${encodeURIComponent(feedbackId)}/assignee`, {
+            method: "PATCH",
+            body: JSON.stringify({ ownerUserId }),
+          });
+          await refreshTaskManagementData();
+          notify("反馈处理人已更新");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "反馈处理人更新失败"));
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }

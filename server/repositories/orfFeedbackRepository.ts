@@ -47,13 +47,18 @@ export type CreateFeedbackOutcome =
   | { status: "tooLarge" };
 export type FeedbackStatusActor = { id: string; name: string; role: "admin" | "member"; scope?: RuntimeScope | null };
 export type FeedbackStatusUpdateResult = { status: "ok" } | { status: "notFound" } | { status: "forbidden" };
-export type UpdateFeedbackMetadataInput = Partial<Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "ownerUserId" | "projectId">>;
+export type UpdateFeedbackAssigneeInput = Pick<Feedback, "ownerUserId">;
+export type FeedbackAssigneeUpdateResult =
+  | { status: "ok" }
+  | { status: "notFound" }
+  | { status: "forbidden" }
+  | { status: "invalidOwner" };
+export type UpdateFeedbackMetadataInput = Partial<Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "projectId">>;
 export type FeedbackMetadataUpdateResult =
   | { status: "ok" }
   | { status: "notFound" }
   | { status: "forbidden" }
   | { status: "invalid" }
-  | { status: "invalidOwner" }
   | { status: "invalidProject" };
 type FeedbackMetadataUpdateError = Exclude<FeedbackMetadataUpdateResult, { status: "ok" }>;
 export type FeedbackReference = Pick<Feedback, "id" | "phenomenon">;
@@ -129,6 +134,10 @@ function canManageFeedbackMetadata(
   return item.createdBy === actor.id || item.ownerUserId === actor.id;
 }
 
+function canAssignFeedbackOwner(item: { status: FeedbackStatus }, actor: FeedbackStatusActor) {
+  return actor.role === "admin" || item.status === "Open";
+}
+
 function uniqueUserIds(userIds: Array<string | null | undefined>) {
   const normalized = userIds.map((userId) => userId?.trim()).filter((userId): userId is string => Boolean(userId));
   return Array.from(new Set(normalized));
@@ -152,7 +161,6 @@ function metadataActivityAction(changedFields: readonly string[]) {
   const labels: Record<string, string> = {
     causeCategories: "标签",
     impact: "影响",
-    ownerUserId: "处理人",
     phenomenon: "标题",
     projectId: "项目",
   };
@@ -461,13 +469,6 @@ export async function updateFeedbackMetadata(
     return { status: "invalid" };
   }
 
-  const nextOwnerUser = input.ownerUserId === undefined
-    ? undefined
-    : await resolveActiveMemberById(storageScopeId, input.ownerUserId);
-  if (input.ownerUserId !== undefined && !nextOwnerUser) {
-    return { status: "invalidOwner" };
-  }
-
   const nextProjectId = input.projectId === undefined ? undefined : input.projectId?.trim() || null;
   if (nextProjectId && !(await resolveProjectById(storageScopeId, nextProjectId))) {
     return { status: "invalidProject" };
@@ -477,13 +478,6 @@ export async function updateFeedbackMetadata(
     | FeedbackMetadataUpdateError
     | {
         status: "ok";
-        assigned: null | {
-          nextOwnerName: string;
-          nextOwnerUserId: string;
-          previousOwnerName: string;
-          previousOwnerUserId: string;
-          title: string;
-        };
         changed: boolean;
         teamId: string;
       }
@@ -493,7 +487,6 @@ export async function updateFeedbackMetadata(
         createdBy: feedback.createdBy,
         id: feedback.id,
         impact: feedback.impact,
-        owner: feedback.owner,
         ownerUserId: feedback.ownerUserId,
         phenomenon: feedback.phenomenon,
         projectId: feedback.projectId,
@@ -538,15 +531,6 @@ export async function updateFeedbackMetadata(
       metadata.previousImpact = target.impact;
       metadata.nextImpact = input.impact;
     }
-    if (nextOwnerUser && nextOwnerUser.id !== target.ownerUserId) {
-      feedbackPatch.owner = nextOwnerUser.name;
-      feedbackPatch.ownerUserId = nextOwnerUser.id;
-      changedFields.push("ownerUserId");
-      metadata.previousOwnerUserId = target.ownerUserId;
-      metadata.previousOwner = target.owner;
-      metadata.nextOwnerUserId = nextOwnerUser.id;
-      metadata.nextOwner = nextOwnerUser.name;
-    }
     if (nextProjectId !== undefined && nextProjectId !== (target.projectId ?? null)) {
       feedbackPatch.projectId = nextProjectId;
       changedFields.push("projectId");
@@ -566,10 +550,9 @@ export async function updateFeedbackMetadata(
     }
 
     if (changedFields.length === 0) {
-      return { status: "ok", assigned: null, changed: false, teamId: target.teamId };
+      return { status: "ok", changed: false, teamId: target.teamId };
     }
 
-    const titleAfterUpdate = nextPhenomenon ?? target.phenomenon;
     await tx
       .update(feedback)
       .set({
@@ -597,15 +580,116 @@ export async function updateFeedbackMetadata(
 
     return {
       status: "ok",
-      assigned: nextOwnerUser && nextOwnerUser.id !== target.ownerUserId
-        ? {
-            nextOwnerName: nextOwnerUser.name,
-            nextOwnerUserId: nextOwnerUser.id,
-            previousOwnerName: target.owner,
-            previousOwnerUserId: target.ownerUserId,
-            title: titleAfterUpdate,
-          }
-        : null,
+      changed: true,
+      teamId: target.teamId,
+    };
+  });
+
+  if (updateResult.status !== "ok") {
+    return updateResult;
+  }
+
+  if (updateResult.changed) {
+    publishOrfDataInvalidation({
+      actorUserId: actor.id,
+      models: ["taskManagement"],
+      reason: "feedback.changed",
+      target: { id: feedbackId, type: "feedback" },
+      teamId: updateResult.teamId,
+    });
+  }
+  return { status: "ok" };
+}
+
+export async function updateFeedbackAssignee(
+  feedbackId: string,
+  input: UpdateFeedbackAssigneeInput,
+  actor: FeedbackStatusActor,
+): Promise<FeedbackAssigneeUpdateResult> {
+  const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
+  if (!storageScopeId) {
+    return { status: "notFound" };
+  }
+
+  const nextOwnerUser = await resolveActiveMemberById(storageScopeId, input.ownerUserId);
+  if (!nextOwnerUser) {
+    return { status: "invalidOwner" };
+  }
+
+  const updateResult = await db.transaction(async (tx): Promise<
+    | Exclude<FeedbackAssigneeUpdateResult, { status: "ok" }>
+    | {
+        status: "ok";
+        assigned: null | {
+          nextOwnerName: string;
+          nextOwnerUserId: string;
+          previousOwnerName: string;
+          previousOwnerUserId: string;
+          title: string;
+        };
+        changed: boolean;
+        teamId: string;
+      }
+  > => {
+    const [target] = await tx
+      .select({
+        id: feedback.id,
+        owner: feedback.owner,
+        ownerUserId: feedback.ownerUserId,
+        phenomenon: feedback.phenomenon,
+        status: feedback.status,
+        teamId: feedback.teamId,
+      })
+      .from(feedback)
+      .where(eq(feedback.id, feedbackId))
+      .limit(1)
+      .for("update");
+
+    if (!target || target.teamId !== storageScopeId) {
+      return { status: "notFound" };
+    }
+    if (!canAssignFeedbackOwner(target, actor)) {
+      return { status: "forbidden" };
+    }
+    if (nextOwnerUser.id === target.ownerUserId) {
+      return { status: "ok", assigned: null, changed: false, teamId: target.teamId };
+    }
+
+    await tx
+      .update(feedback)
+      .set({
+        owner: nextOwnerUser.name,
+        ownerUserId: nextOwnerUser.id,
+        updatedAt: today(),
+        updatedBy: actor.id,
+      })
+      .where(and(eq(feedback.id, feedbackId), eq(feedback.teamId, storageScopeId)));
+
+    await tx.insert(feedbackActivityEvents).values({
+      id: makeActivityId(),
+      teamId: target.teamId,
+      feedbackId,
+      actorUserId: actor.id,
+      actorName: actor.name,
+      action: "更新了反馈处理人",
+      metadata: {
+        previousOwnerUserId: target.ownerUserId,
+        previousOwner: target.owner,
+        nextOwnerUserId: nextOwnerUser.id,
+        nextOwner: nextOwnerUser.name,
+      },
+      createdAt: nowIso(),
+    });
+
+    return {
+      status: "ok",
+      assigned: {
+        nextOwnerName: nextOwnerUser.name,
+        nextOwnerUserId: nextOwnerUser.id,
+        previousOwnerName: target.owner,
+        previousOwnerUserId: target.ownerUserId,
+        title: target.phenomenon,
+      },
       changed: true,
       teamId: target.teamId,
     };

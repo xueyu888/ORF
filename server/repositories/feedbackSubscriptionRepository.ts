@@ -97,10 +97,14 @@ export async function getFeedbackAssignmentNotificationRecipients(input: {
   previousOwnerUserId?: string | null;
   teamId: string;
 }) {
-  return getActiveMemberNotificationRecipientsByIds(
-    input.teamId,
-    uniqueUserIds([input.previousOwnerUserId, input.nextOwnerUserId]),
-  );
+  const [adminUserIds, ownerUserIds] = await Promise.all([
+    getActiveAdminNotificationRecipients(input.teamId),
+    getActiveMemberNotificationRecipientsByIds(
+      input.teamId,
+      uniqueUserIds([input.previousOwnerUserId, input.nextOwnerUserId]),
+    ),
+  ]);
+  return uniqueUserIds([...adminUserIds, ...ownerUserIds]);
 }
 
 export async function getFeedbackSubscriptionMode(
