@@ -652,6 +652,13 @@
       "when": 1784282400000,
       "tag": "0092_chat_sync_deleted_actor_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1785859200000,
+      "tag": "0093_feedback_daily_digest_runs",
+      "breakpoints": true
     }
   ]
 }

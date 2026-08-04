@@ -7,6 +7,7 @@
 ```text
 业务正文 body（ORF Markdown）
   -> token codec 解析业务 token
+  -> 粘贴规范化把外部列表和编号转换为 ORF Markdown
   -> OrfRichTextDraft（用户可见 text + mentions + attachments）
   -> Draft 编辑器按光标和选区派生当前块状态
   -> 工具栏、快捷键、列表 Enter 和上传行为只修改 Draft
@@ -33,6 +34,7 @@
 | `orfRichTextTokens.ts` | ORF 业务 token 的唯一语法源：生成、解析、匹配、替换 `orf-user` / `orf-attachment` / `orf-pending-attachment` | 评论、反馈、聊天的业务权限和上传接口 |
 | `orfRichTextDraft.ts` | 编辑态 Draft 模型：从存储 body 解析、维护引用范围、文本变更 reconcile、序列化回 body、判断有效附件引用 | React 状态、DOM 选区、上传副作用 |
 | `orfRichTextMarkdown.ts` | Markdown 纯文本降级、摘要、提及提取等投影能力；对外兼容 re-export token API | 业务页面直接维护 token 正则 |
+| `orfRichTextClipboard.ts` | 外部剪贴板文本规范化：全角/中文有序编号、符号列表、列表项连续正文统一进入 ORF Markdown | 决定评论、反馈或 Chat 的业务提交 |
 | `orfRichTextEditorModel.ts` | textarea Markdown 编辑模型：行范围、块状态、行级格式转换、列表续列/退出 | React 状态、业务持久化、附件上传 |
 | `OrfRichTextEditor.tsx` | 通用 Markdown 编辑器外壳、工具栏、提及菜单、链接编辑、附件上传插槽、文件插入回调 | 决定附件属于评论还是 Chat |
 | `OrfRichTextDraftEditor.tsx` | Draft 编辑适配：用户只编辑可见文本，提及和附件插入同步写入 Draft 引用 | 业务提交流程、附件文件持久化 |
@@ -60,7 +62,7 @@ Chat：
 - 广播提及插入普通 `@所有人` 文本。
 - 粘贴或拖放文件交给 Chat 附件上传，不插入评论附件 token。
 - Chat 图片查看器只由同一条消息的 `message.attachments` 中 `image/*` 附件派生；桌面和桌面浏览器优先把当前图片组写入 `orf:chat-image-popout:*` 临时展示 payload 并打开 `/chat/image-popout/:popoutId` 独立窗口，弹窗被拦截或移动端视口才回落到 AppShell 下的内嵌浮窗。窗口位置、窗口尺寸、最大化/还原、图片缩放、旋转、适应/原图、缩略图、上一张/下一张和下载都不写入正文 token、附件存储字段或用户设置。
-- Chat 消息展示通过共享 viewer 渲染；Chat 层只注入反馈链接、站内路由和系统广播提及样式。
+- Chat 消息展示通过共享 viewer 渲染；Chat 层只注入反馈链接、站内路由、系统广播提及样式，以及系统反馈评论通知允许展示的评论图片快照。评论图片仍归 `comment_attachments` 所有，不复制为 Chat 附件。
 - Chat 通知、反馈列表和搜索预览只消费共享模型提供的 token 和纯文本投影，不再各自复制 Markdown stripping 或 `orf-user` 正则。
 
 ## Markdown 结构范围
@@ -69,6 +71,8 @@ Chat：
 
 - 段落和硬换行。
 - 标题、无序列表、有序列表、引用。
+- 外部粘贴列表规范化：`1、`、`1)`、`（1）`、全角句点和常见符号列表统一转成 Markdown 列表；列表项后紧跟的说明行归入该列表项，避免展示时拆成多个从 1 开始的新列表。
+- 展示层列表模型支持嵌套列表、列表项连续正文和有序列表起始编号。
 - 列表上下文感知：光标位于列表行时工具栏显示 active，按 Enter 自动续列，空列表项按 Enter 退出列表。
 - 加粗、斜体、删除线、行内代码和链接。
 - 嵌套行内 mark，例如加粗、斜体、删除线同时作用于同一段文本。

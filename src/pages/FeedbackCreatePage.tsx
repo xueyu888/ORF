@@ -2,6 +2,7 @@ import { ArrowLeft, Check, Paperclip } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { Button } from "../components/ui";
 import { UserAvatar } from "../components/UserAvatar";
 import { BountyEmptyState } from "../features/bounty-hall/BountyHallSkin";
@@ -46,6 +47,7 @@ export function FeedbackCreatePage() {
   const [ownerUserId, setOwnerUserId] = useState(initialOwnerUserId);
   const [projectId, setProjectId] = useState(initialProjectId);
   const [pendingAttachments, setPendingAttachments] = useState<PendingFeedbackAttachment[]>([]);
+  const [previewAttachmentId, setPreviewAttachmentId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const attachmentCounterRef = useRef(0);
   const pendingPreviewUrlsRef = useRef(new Set<string>());
@@ -57,6 +59,11 @@ export function FeedbackCreatePage() {
     )),
   );
   const referencedAttachments = pendingAttachments.filter((attachment) => referencedPendingAttachmentIds.has(attachment.id));
+  const referencedImageAttachments = referencedAttachments.filter(isPendingFeedbackImageAttachment);
+  const previewAttachmentIndex = previewAttachmentId
+    ? referencedImageAttachments.findIndex((attachment) => attachment.id === previewAttachmentId)
+    : -1;
+  const previewAttachment = previewAttachmentIndex >= 0 ? referencedImageAttachments[previewAttachmentIndex] ?? null : null;
 
   useEffect(() => () => {
     for (const previewUrl of pendingPreviewUrlsRef.current) {
@@ -70,6 +77,12 @@ export function FeedbackCreatePage() {
       setProjectId("");
     }
   }, [projectId, state.projects]);
+
+  useEffect(() => {
+    if (previewAttachmentId && !referencedImageAttachments.some((attachment) => attachment.id === previewAttachmentId)) {
+      setPreviewAttachmentId(null);
+    }
+  }, [previewAttachmentId, referencedImageAttachments]);
 
   if (!canCreateFeedback) {
     return (
@@ -150,28 +163,41 @@ export function FeedbackCreatePage() {
               <strong>{currentUser?.name ?? "User"}</strong>
             </div>
             <div className="feedback-create-body-field">
-                <CommentDraftFields
-                  currentUserId={currentUser?.id ?? ""}
-                  draft={draft}
-                  idleHint=""
-                  mentionableUsers={[]}
-                  onDraftChange={setDraft}
-                  onUploadAttachment={uploadLocalAttachment}
-                  placeholder="描述反馈..."
-                  showSubmitButton={false}
-                  submitLabel="创建 issue"
-                  submitOnEnter={false}
-                />
-                {referencedAttachments.length > 0 && (
-                  <div className="feedback-create-attachment-strip">
-                    {referencedAttachments.map((attachment) => (
-                      <span key={attachment.id}>
+              <CommentDraftFields
+                currentUserId={currentUser?.id ?? ""}
+                draft={draft}
+                idleHint=""
+                mentionableUsers={[]}
+                onDraftChange={setDraft}
+                onUploadAttachment={uploadLocalAttachment}
+                placeholder="描述反馈..."
+                showSubmitButton={false}
+                submitLabel="创建 issue"
+                submitOnEnter={false}
+              />
+              {referencedAttachments.length > 0 && (
+                <div className="feedback-create-attachment-strip">
+                  {referencedAttachments.map((attachment) => (
+                    isPendingFeedbackImageAttachment(attachment) ? (
+                      <button
+                        type="button"
+                        className="feedback-create-image-preview"
+                        key={attachment.id}
+                        aria-label={`预览图片 ${attachment.file.name || "attachment"}`}
+                        onClick={() => setPreviewAttachmentId(attachment.id)}
+                      >
+                        <img src={attachment.previewUrl} alt={attachment.file.name || "attachment"} />
+                        <span>{attachment.file.name || "attachment"}</span>
+                      </button>
+                    ) : (
+                      <span className="feedback-create-file-preview" key={attachment.id}>
                         <Paperclip aria-hidden="true" />
                         {attachment.file.name || "attachment"}
                       </span>
-                    ))}
-                  </div>
-                )}
+                    )
+                  ))}
+                </div>
+              )}
             </div>
           </article>
 
@@ -212,6 +238,37 @@ export function FeedbackCreatePage() {
           </Button>
         </div>
       </form>
+      {previewAttachment && (
+        <ImagePreviewDialog
+          preview={{
+            alt: previewAttachment.file.name || "attachment",
+            copySourceUrl: previewAttachment.previewUrl,
+            downloadFileName: previewAttachment.file.name || "attachment",
+            downloadUrl: previewAttachment.previewUrl,
+            label: previewAttachment.file.name || "attachment",
+            mimeType: previewAttachment.file.type || null,
+            src: previewAttachment.previewUrl,
+          }}
+          navigation={referencedImageAttachments.length > 1 ? {
+            canGoNext: previewAttachmentIndex < referencedImageAttachments.length - 1,
+            canGoPrevious: previewAttachmentIndex > 0,
+            counterLabel: `${previewAttachmentIndex + 1} / ${referencedImageAttachments.length}`,
+            onGoNext: () => {
+              const next = referencedImageAttachments[Math.min(previewAttachmentIndex + 1, referencedImageAttachments.length - 1)];
+              if (next) setPreviewAttachmentId(next.id);
+            },
+            onGoPrevious: () => {
+              const previous = referencedImageAttachments[Math.max(previewAttachmentIndex - 1, 0)];
+              if (previous) setPreviewAttachmentId(previous.id);
+            },
+          } : undefined}
+          onClose={() => setPreviewAttachmentId(null)}
+        />
+      )}
     </div>
   );
+}
+
+function isPendingFeedbackImageAttachment(attachment: PendingFeedbackAttachment) {
+  return attachment.file.type.startsWith("image/");
 }

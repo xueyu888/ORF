@@ -7,6 +7,7 @@ import {
   type OrfRichTextResolvedLink,
 } from "../rich-text/OrfRichTextMarkdownViewer";
 import {
+  type OrfAttachmentReference,
   orfRichTextMentionLabel,
   type OrfMentionReference,
 } from "../rich-text/orfRichTextMarkdown";
@@ -17,6 +18,7 @@ import { tokenizeChatReactionEmojiText } from "./chatReactions";
 type ChatMarkdownProps = {
   body: string;
   compact?: boolean;
+  commentImageAttachmentIds?: readonly string[];
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
   usersById: Map<string, ChatUser>;
@@ -123,11 +125,56 @@ function renderChatMention(reference: OrfMentionReference, usersById: Map<string
   );
 }
 
-export function ChatMarkdown({ body, compact = false, feedbackItems = [], onDriveResourceLink, usersById }: ChatMarkdownProps) {
+export function commentImageAttachmentIdsFromChatSystemMetadata(system: { metadata?: Record<string, string> | null } | null | undefined) {
+  return (system?.metadata?.commentImageAttachmentIds ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+function commentAttachmentInlineUrl(attachmentId: string) {
+  return `/api/comments/attachments/${encodeURIComponent(attachmentId)}/content?disposition=inline`;
+}
+
+function renderCommentNotificationImageAttachment(
+  reference: OrfAttachmentReference,
+  allowedAttachmentIds: ReadonlySet<string>,
+  compact: boolean,
+  key: string,
+) {
+  if (reference.kind !== "attached" || !allowedAttachmentIds.has(reference.attachmentId)) {
+    return (
+      <span key={key} className="orf-rich-text-viewer-attachment-missing">
+        附件不可用：{reference.alt}
+      </span>
+    );
+  }
+
+  if (compact) {
+    return <span key={key} className="orf-chat-markdown-notification-image-compact">图片：{reference.alt}</span>;
+  }
+
+  const src = commentAttachmentInlineUrl(reference.attachmentId);
+  return (
+    <figure key={key} className="orf-chat-markdown-notification-image">
+      <a href={src} target="_blank" rel="noreferrer noopener" title={`打开图片 ${reference.alt}`}>
+        <img alt={reference.alt} loading="lazy" src={src} />
+      </a>
+      <figcaption>{reference.alt}</figcaption>
+    </figure>
+  );
+}
+
+export function ChatMarkdown({ body, compact = false, commentImageAttachmentIds = [], feedbackItems = [], onDriveResourceLink, usersById }: ChatMarkdownProps) {
   const feedbackById = new Map(feedbackItems.map((feedback) => [feedback.id, feedback]));
+  const allowedCommentImageAttachmentIds = new Set(commentImageAttachmentIds.map((id) => id.trim()).filter(Boolean));
   const renderLink = useCallback(
     (href: string, children: ReactNode, key: string) => renderMarkdownLink(href, children, key, onDriveResourceLink),
     [onDriveResourceLink],
+  );
+  const renderAttachment = useCallback(
+    (reference: OrfAttachmentReference, key: string) => renderCommentNotificationImageAttachment(reference, allowedCommentImageAttachmentIds, compact, key),
+    [allowedCommentImageAttachmentIds, compact],
   );
   const resolveLink = (href: string, label: ReactNode): OrfRichTextResolvedLink => {
     const feedbackLink = feedbackLinkForHref(href, feedbackById);
@@ -142,6 +189,7 @@ export function ChatMarkdown({ body, compact = false, feedbackItems = [], onDriv
       body={body}
       classNamePrefix="orf-chat-markdown"
       compact={compact}
+      renderAttachment={allowedCommentImageAttachmentIds.size > 0 ? renderAttachment : undefined}
       renderLink={renderLink}
       renderMention={(reference, key) => renderChatMention(reference, usersById, key)}
       renderPlainText={renderSystemMentionFragments}

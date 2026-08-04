@@ -539,6 +539,45 @@ export function validateWorkLogReminderStateSchema(snapshot: { columns: RuntimeT
   return errors;
 }
 
+export function validateFeedbackDailyDigestRunSchema(snapshot: {
+  columns: RuntimeTableColumn[];
+  constraints?: RuntimeSchemaConstraint[];
+}) {
+  const errors: string[] = [];
+  const columnsByName = new Map(snapshot.columns.map((column) => [column.columnName, column]));
+  for (const columnName of ["team_id", "assignee_user_id", "local_date", "status", "feedback_count", "attempts", "created_at", "updated_at"]) {
+    const column = columnsByName.get(columnName);
+    if (!column) {
+      errors.push(`feedback_daily_digest_runs.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`feedback_daily_digest_runs.${columnName} must be NOT NULL.`);
+    }
+  }
+
+  for (const columnName of ["last_error", "notification_event_id"]) {
+    if (!columnsByName.has(columnName)) {
+      errors.push(`feedback_daily_digest_runs.${columnName} is missing.`);
+    }
+  }
+
+  const constraintByName = new Map((snapshot.constraints ?? []).map((constraint) => [constraint.constraintName, constraint.definition.toLowerCase()]));
+  const pkDefinition = constraintByName.get("feedback_daily_digest_runs_pk") ?? "";
+  for (const columnName of ["team_id", "assignee_user_id", "local_date"]) {
+    if (!pkDefinition.includes(columnName)) {
+      errors.push(`feedback_daily_digest_runs primary key must include ${columnName}.`);
+    }
+  }
+
+  const statusDefinition = constraintByName.get("feedback_daily_digest_runs_status_check") ?? "";
+  for (const status of ["pending", "sent", "failed"]) {
+    if (!statusDefinition.includes(`'${status}'`)) {
+      errors.push(`feedback_daily_digest_runs status ${status} is missing from the status guard.`);
+    }
+  }
+
+  return errors;
+}
+
 export function validateWorkLogClassificationDecisionSchema(snapshot: { columns: RuntimeTableColumn[] }) {
   const errors: string[] = [];
   const columnsByName = new Map(snapshot.columns.map((column) => [column.columnName, column]));
@@ -710,6 +749,8 @@ export async function assertRuntimeDatabaseSchema() {
     gitLabOrfChatColumnsResult,
     gitHubOrfChatColumnsResult,
     workLogReminderStateColumnsResult,
+    feedbackDailyDigestRunColumnsResult,
+    feedbackDailyDigestRunConstraintsResult,
     workLogClassificationDecisionColumnsResult,
     chatPushDeliveryColumnsResult,
     chatPushDeliveryConstraintsResult,
@@ -916,6 +957,28 @@ export async function assertRuntimeDatabaseSchema() {
           is_nullable as "isNullable"
         from information_schema.columns
         where table_schema = current_schema()
+          and table_name = 'feedback_daily_digest_runs'
+      `,
+    ),
+    pool.query<RuntimeSchemaConstraint>(
+      `
+        select con.conname as "constraintName", pg_get_constraintdef(con.oid) as "definition"
+        from pg_constraint con
+        join pg_class rel on rel.oid = con.conrelid
+        join pg_namespace nsp on nsp.oid = rel.relnamespace
+        where nsp.nspname = current_schema()
+          and rel.relname = 'feedback_daily_digest_runs'
+          and con.contype in ('p', 'c')
+      `,
+    ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
           and table_name = 'work_log_classification_decisions'
       `,
     ),
@@ -1037,6 +1100,10 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateWorkLogReminderStateSchema({
       columns: workLogReminderStateColumnsResult.rows,
+    }),
+    ...validateFeedbackDailyDigestRunSchema({
+      columns: feedbackDailyDigestRunColumnsResult.rows,
+      constraints: feedbackDailyDigestRunConstraintsResult.rows,
     }),
     ...validateWorkLogClassificationDecisionSchema({
       columns: workLogClassificationDecisionColumnsResult.rows,

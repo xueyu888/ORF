@@ -8,7 +8,7 @@ import { formatPastedFeedbackLinks } from "../feedback/model/feedbackIssue";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";
-import { ChatMarkdown } from "./chatMarkdown";
+import { ChatMarkdown, commentImageAttachmentIdsFromChatSystemMetadata } from "./chatMarkdown";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
 import { ChatReactionEmoji } from "./ChatReactionEmoji";
 import { ChatReactionPicker } from "./ChatReactionPicker";
@@ -131,11 +131,13 @@ function MessageAuthorAvatar({
 
 function CollapsibleMessageText({
   body,
+  commentImageAttachmentIds,
   feedbackItems,
   onDriveResourceLink,
   usersById,
 }: {
   body: string;
+  commentImageAttachmentIds?: readonly string[];
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
   usersById: Map<string, ChatUser>;
@@ -190,6 +192,7 @@ function CollapsibleMessageText({
       >
         <ChatMarkdown
           body={body}
+          commentImageAttachmentIds={commentImageAttachmentIds}
           feedbackItems={feedbackItems}
           onDriveResourceLink={onDriveResourceLink}
           usersById={usersById}
@@ -685,6 +688,7 @@ export function ChatMessageItem({
           <>
             <CollapsibleMessageText
               body={message.body}
+              commentImageAttachmentIds={commentImageAttachmentIdsFromChatSystemMetadata(message.system)}
               feedbackItems={feedbackItems}
               onDriveResourceLink={onDriveResourceLink}
               usersById={usersById}

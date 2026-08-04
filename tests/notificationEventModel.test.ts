@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildCommentNotificationContent,
   buildNotificationSystemMetadata,
+  commentNotificationImageAttachmentIdsFromMetadata,
   formatNotificationChatBody,
   notificationChatDeliveryId,
   resolveNotificationRecipients,
@@ -97,6 +99,24 @@ test("system chat projection metadata points back to the notification event", ()
   assert.equal(formatNotificationChatBody({ body: "请补充信息", targetHref: "/feedback/fb-1", title: "反馈有新评论" }), "**反馈有新评论**\n\n请补充信息\n\n[打开目标](/feedback/fb-1)");
 });
 
+test("comment notification content keeps text and image attachments without file attachment projection", () => {
+  const content = buildCommentNotificationContent({
+    attachments: [
+      { fileName: "screen.png", id: "image-1", mimeType: "image/png", previewKind: "image" },
+      { fileName: "report.pdf", id: "file-1", mimeType: "application/pdf", previewKind: "pdf" },
+    ],
+    commentBody: [
+      "请看截图。",
+      "![screen.png](orf-attachment:image-1)",
+      "![report.pdf](orf-attachment:file-1)",
+    ].join("\n"),
+    summary: "邓滨虎 回复了反馈「上传失败」：",
+  });
+
+  assert.equal(content.body, "邓滨虎 回复了反馈「上传失败」：\n\n请看截图。\n![screen.png](orf-attachment:image-1)");
+  assert.deepEqual(commentNotificationImageAttachmentIdsFromMetadata(content.metadata), ["image-1"]);
+});
+
 test("settlement notifications are personal reminders without comment reply target", () => {
   assert.deepEqual(notificationPolicy("objective.settlement.updated"), {
     kind: "objective.settlement.updated",
@@ -185,6 +205,14 @@ test("feedback assignment notifications stay replyable on the feedback target", 
   assert.deepEqual(notificationPolicy("feedback.assigned"), {
     kind: "feedback.assigned",
     replyTarget: "notification-target",
+    stream: "personalNotification",
+  });
+});
+
+test("feedback assignee daily digest is a personal notification without reply target", () => {
+  assert.deepEqual(notificationPolicy("feedback.assignee.daily_digest"), {
+    kind: "feedback.assignee.daily_digest",
+    replyTarget: "none",
     stream: "personalNotification",
   });
 });

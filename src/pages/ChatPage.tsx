@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
-import { RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { GripVertical, RefreshCw } from "lucide-react";
+import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { Button } from "../components/ui";
@@ -85,6 +85,42 @@ import {
 const chatFeedPrefetchDelayMs = 250;
 const chatLocatedMessageHighlightMs = 3_200;
 const chatPresenceRefreshThrottleMs = 15_000;
+const chatSidebarDefaultWidthPx = 286;
+const chatSidebarMinWidthPx = 220;
+const chatSidebarMaxWidthPx = 560;
+const chatSidebarResizeHandleWidthPx = 10;
+const chatRightPanelMinWidthPx = 320;
+const chatRightPanelMaxWidthPx = 760;
+const chatRightPanelMainMinWidthPx = 320;
+const chatRightPanelResizeHandleWidthPx = 10;
+
+function defaultChatRightPanelWidth(panel: string | null) {
+  if (panel === "files") return 440;
+  if (panel === "search" || panel === "thread" || panel === "pins" || panel === "saved") return 400;
+  return 380;
+}
+
+function clampChatSidebarWidth(width: number, pageWidth: number, rightPanelWidth: number) {
+  const maxWidth = Math.max(
+    chatSidebarMinWidthPx,
+    Math.min(
+      chatSidebarMaxWidthPx,
+      pageWidth - chatSidebarResizeHandleWidthPx - rightPanelWidth - chatRightPanelMainMinWidthPx,
+    ),
+  );
+  return Math.round(Math.min(Math.max(width, chatSidebarMinWidthPx), maxWidth));
+}
+
+function clampChatRightPanelWidth(width: number, pageWidth: number, sidebarWidth: number) {
+  const maxWidth = Math.max(
+    chatRightPanelMinWidthPx,
+    Math.min(
+      chatRightPanelMaxWidthPx,
+      pageWidth - sidebarWidth - chatSidebarResizeHandleWidthPx - chatRightPanelResizeHandleWidthPx - chatRightPanelMainMinWidthPx,
+    ),
+  );
+  return Math.round(Math.min(Math.max(width, chatRightPanelMinWidthPx), maxWidth));
+}
 
 function isChatGlobalShortcutEditableTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable]"));
@@ -175,6 +211,10 @@ export function ChatPage() {
   });
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [markingUnreadChannelsRead, setMarkingUnreadChannelsRead] = useState(false);
+  const [sidebarWidthOverride, setSidebarWidthOverride] = useState<number | null>(null);
+  const [resizingSidebar, setResizingSidebar] = useState(false);
+  const [rightPanelWidthOverrides, setRightPanelWidthOverrides] = useState<Record<string, number>>({});
+  const [resizingRightPanel, setResizingRightPanel] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachmentFilePreviewState | null>(null);
   const [driveSelectionRequest, setDriveSelectionRequest] = useState<ChatDriveResourceSelectionRequest | null>(null);
   const [locatedMessageId, setLocatedMessageId] = useState<string | null>(null);
@@ -296,6 +336,102 @@ export function ChatPage() {
     notify,
   });
   const chatMobileView = activePanel ? "panel" : activeChannel ? "channel" : "list";
+  const activeRightPanelWidth = activePanel
+    ? rightPanelWidthOverrides[activePanel] ?? defaultChatRightPanelWidth(activePanel)
+    : defaultChatRightPanelWidth(null);
+  const chatPageStyle = {
+    ...(sidebarWidthOverride !== null ? { "--orf-chat-left-sidebar-width": `${sidebarWidthOverride}px` } : {}),
+    ...(activePanel ? { "--orf-chat-right-panel-width": `${activeRightPanelWidth}px` } : {}),
+  } as CSSProperties;
+
+  const startSidebarResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (mobileViewport || event.button !== 0) return;
+    const pageElement = event.currentTarget.closest<HTMLElement>(".orf-chat-page");
+    const pageWidth = pageElement?.getBoundingClientRect().width ?? window.innerWidth;
+    const rightPanelWidth = activePanel
+      ? (pageElement?.querySelector<HTMLElement>(".orf-chat-right-panel")?.getBoundingClientRect().width ?? activeRightPanelWidth) + chatRightPanelResizeHandleWidthPx
+      : 0;
+    const startWidth = clampChatSidebarWidth(
+      pageElement?.querySelector<HTMLElement>(".orf-chat-sidebar")?.getBoundingClientRect().width ?? sidebarWidthOverride ?? chatSidebarDefaultWidthPx,
+      pageWidth,
+      rightPanelWidth,
+    );
+    const startClientX = event.clientX;
+    const pointerId = event.pointerId;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+
+    const updateWidth = (clientX: number) => {
+      const nextWidth = clampChatSidebarWidth(startWidth + (clientX - startClientX), pageWidth, rightPanelWidth);
+      setSidebarWidthOverride(nextWidth);
+    };
+    const handlePointerMove = (pointerEvent: PointerEvent) => {
+      if (pointerEvent.pointerId !== pointerId) return;
+      pointerEvent.preventDefault();
+      updateWidth(pointerEvent.clientX);
+    };
+    const stopResize = (pointerEvent: PointerEvent) => {
+      if (pointerEvent.pointerId !== pointerId) return;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      setResizingSidebar(false);
+    };
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(pointerId);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    setResizingSidebar(true);
+    updateWidth(event.clientX);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
+  }, [activePanel, activeRightPanelWidth, mobileViewport, sidebarWidthOverride]);
+
+  const startRightPanelResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!activePanel || mobileViewport || event.button !== 0) return;
+    const panel = activePanel;
+    const pageElement = event.currentTarget.closest<HTMLElement>(".orf-chat-page");
+    const pageWidth = pageElement?.getBoundingClientRect().width ?? window.innerWidth;
+    const sidebarWidth = pageElement?.querySelector<HTMLElement>(".orf-chat-sidebar")?.getBoundingClientRect().width ?? chatSidebarDefaultWidthPx;
+    const startWidth = clampChatRightPanelWidth(activeRightPanelWidth, pageWidth, sidebarWidth);
+    const startClientX = event.clientX;
+    const pointerId = event.pointerId;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+
+    const updateWidth = (clientX: number) => {
+      const nextWidth = clampChatRightPanelWidth(startWidth - (clientX - startClientX), pageWidth, sidebarWidth);
+      setRightPanelWidthOverrides((widths) => ({ ...widths, [panel]: nextWidth }));
+    };
+    const handlePointerMove = (pointerEvent: PointerEvent) => {
+      if (pointerEvent.pointerId !== pointerId) return;
+      pointerEvent.preventDefault();
+      updateWidth(pointerEvent.clientX);
+    };
+    const stopResize = (pointerEvent: PointerEvent) => {
+      if (pointerEvent.pointerId !== pointerId) return;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      setResizingRightPanel(false);
+    };
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(pointerId);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    setResizingRightPanel(true);
+    updateWidth(event.clientX);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
+  }, [activePanel, activeRightPanelWidth, mobileViewport]);
 
   const handleOpenDriveResourceLink = useCallback((target: ChatDriveResourceLinkTarget) => {
     if (!activeChannel || activeChannel.systemKind) return;
@@ -1184,7 +1320,13 @@ export function ChatPage() {
   }
 
   return (
-    <div className={clsx("orf-chat-page", activePanel && "orf-chat-page-with-panel")} data-chat-mobile-view={chatMobileView}>
+    <div
+      className={clsx("orf-chat-page", activePanel && "orf-chat-page-with-panel")}
+      data-chat-mobile-view={chatMobileView}
+      data-resizing-sidebar={resizingSidebar ? "true" : "false"}
+      data-resizing-right-panel={resizingRightPanel ? "true" : "false"}
+      style={chatPageStyle}
+    >
       <ChatSidebar
         activeChannelId={activeChannel?.id ?? null}
         channels={channels}
@@ -1200,6 +1342,15 @@ export function ChatPage() {
         setQuery={setChannelQuery}
         users={bootstrap.users}
       />
+      <button
+        type="button"
+        className="orf-chat-sidebar-resize-handle"
+        aria-label="拖动调整左侧栏宽度"
+        title="拖动调整左侧栏宽度"
+        onPointerDown={startSidebarResize}
+      >
+        <GripVertical aria-hidden="true" />
+      </button>
       <section className="orf-chat-main">
         {activeChannel ? (
           <>
@@ -1292,6 +1443,17 @@ export function ChatPage() {
           <div className="orf-chat-empty-channel">选择一个频道、私信或系统会话。</div>
         )}
       </section>
+      {activeChannel && activePanel && (
+        <button
+          type="button"
+          className="orf-chat-right-panel-resize-handle"
+          aria-label="拖动调整右侧面板宽度"
+          title="拖动调整右侧面板宽度"
+          onPointerDown={startRightPanelResize}
+        >
+          <GripVertical aria-hidden="true" />
+        </button>
+      )}
       {activeChannel && activePanel && (
         <ChatRightPanel
           activePanel={activePanel}

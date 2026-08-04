@@ -71,6 +71,7 @@ const toastNotificationKinds = new Set<NotificationKind>([
   "challenge.application.rejected",
   "comment.reply.created",
   "comment.thread.status.changed",
+  "feedback.assignee.daily_digest",
   "feedback.commented",
   "feedback.created",
   "feedback.status.changed",

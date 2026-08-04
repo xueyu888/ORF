@@ -28,6 +28,7 @@ export type NotificationKind =
   | "feedback.commented"
   | "feedback.status.changed"
   | "feedback.assigned"
+  | "feedback.assignee.daily_digest"
   | "comment.reply.created"
   | "comment.thread.status.changed"
   | "comment.mention.created"

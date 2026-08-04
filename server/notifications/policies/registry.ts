@@ -57,6 +57,11 @@ export const notificationPolicyRegistry: Record<NotificationKind, NotificationPo
     replyTarget: "notification-target",
     stream: "personalNotification",
   },
+  "feedback.assignee.daily_digest": {
+    kind: "feedback.assignee.daily_digest",
+    replyTarget: "none",
+    stream: "personalNotification",
+  },
   "objective.alignment.requested": {
     kind: "objective.alignment.requested",
     replyTarget: "notification-target",

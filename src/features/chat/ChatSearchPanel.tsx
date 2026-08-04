@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import type { ChatMessage, ChatSearchResult, ChatUser, Feedback } from "../../types/orf";
 import { chatChannelDisplayLabel } from "./chatChannelPresentation";
 import { formatDateTime, formatDay, formatTime } from "./chatFormat";
-import { ChatMarkdown } from "./chatMarkdown";
+import { ChatMarkdown, commentImageAttachmentIdsFromChatSystemMetadata } from "./chatMarkdown";
 import type { ChatSearchScope, ChatSearchTypeFilter } from "./chatPanelTypes";
 import { chatSearchInputPlaceholder } from "./chatSearchSyntax";
 
@@ -127,7 +127,13 @@ function SearchResultPreview({
     <>
       <div className="orf-chat-search-result-body">
         {message.body.trim() ? (
-          <ChatMarkdown compact body={message.body} feedbackItems={feedbackItems} usersById={usersById} />
+          <ChatMarkdown
+            compact
+            body={message.body}
+            commentImageAttachmentIds={commentImageAttachmentIdsFromChatSystemMetadata(message.system)}
+            feedbackItems={feedbackItems}
+            usersById={usersById}
+          />
         ) : (
           <span className="orf-chat-search-attachment-only">附件消息</span>
         )}

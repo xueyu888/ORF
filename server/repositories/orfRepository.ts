@@ -114,6 +114,7 @@ import {
 } from "./notificationRepository";
 import { getFeedbackOrdinaryNotificationRecipients } from "./feedbackSubscriptionRepository";
 import { publishNotificationEvent } from "../notifications/publisher";
+import { buildCommentNotificationContent } from "../notifications/notificationEventModel";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScope, runtimeScopeStorageId } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
@@ -702,6 +703,7 @@ function uniqueNotificationUserIds(userIds: Array<string | null | undefined>) {
 async function notifyMentionedUsersOfComment(input: {
   actorName: string;
   actorUserId: string;
+  attachments?: CommentAttachment[];
   body: string;
   commentMessageId: string;
   commentThreadId: string;
@@ -716,14 +718,21 @@ async function notifyMentionedUsersOfComment(input: {
     return;
   }
 
+  const content = buildCommentNotificationContent({
+    attachments: input.attachments ?? [],
+    commentBody: input.body,
+    summary: `${input.actorName} 在「${input.targetTitle}」的评论中提到了你：`,
+  });
+
   await publishNotificationEvent({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
-    body: `${input.actorName} 在「${input.targetTitle}」的评论中提到了你。`,
+    body: content.body,
     kind: "comment.mention.created",
     metadata: {
       commentMessageId: input.commentMessageId,
       commentThreadId: input.commentThreadId,
+      ...content.metadata,
       mentionedUserIds: mentionedUserIds.join(","),
       targetId: input.targetId,
       targetTitle: input.targetTitle,
@@ -741,6 +750,8 @@ async function notifyMentionedUsersOfComment(input: {
 async function notifyCommentReplyRecipient(input: {
   actorName: string;
   actorUserId: string;
+  attachments?: CommentAttachment[];
+  body: string;
   commentMessageId: string;
   commentThreadId: string;
   excludedUserIds: string[];
@@ -766,14 +777,21 @@ async function notifyCommentReplyRecipient(input: {
     return;
   }
 
+  const content = buildCommentNotificationContent({
+    attachments: input.attachments ?? [],
+    commentBody: input.body,
+    summary: `${input.actorName} 回复了你在「${input.targetTitle}」的评论：`,
+  });
+
   await publishNotificationEvent({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
-    body: `${input.actorName} 回复了你在「${input.targetTitle}」的评论。`,
+    body: content.body,
     kind: "comment.reply.created",
     metadata: {
       commentMessageId: input.commentMessageId,
       commentThreadId: input.commentThreadId,
+      ...content.metadata,
       replyToMessageId: input.replyToMessageId ?? "",
       targetId: input.targetId,
       targetTitle: input.targetTitle,
@@ -831,6 +849,8 @@ async function getFeedbackCommentNotificationContext(input: {
 async function notifyFeedbackParticipantsOfComment(input: {
   actorName: string;
   actorUserId: string;
+  attachments?: CommentAttachment[];
+  body: string;
   commentMessageId: string;
   commentThreadId: string;
   excludedUserIds: string[];
@@ -850,15 +870,22 @@ async function notifyFeedbackParticipantsOfComment(input: {
   const destinationChannelIds = await getProjectChatNotificationChannelIds(input.teamId, context.project?.id);
   if (context.recipientUserIds.length === 0 && destinationChannelIds.length === 0) return;
 
+  const content = buildCommentNotificationContent({
+    attachments: input.attachments ?? [],
+    commentBody: input.body,
+    summary: `${input.actorName} 回复了反馈「${input.targetTitle}」：`,
+  });
+
   await publishNotificationEvent({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
-    body: `${input.actorName} 回复了反馈「${input.targetTitle}」。`,
+    body: content.body,
     destinationChannelIds,
     kind: "feedback.commented",
     metadata: {
       commentMessageId: input.commentMessageId,
       commentThreadId: input.commentThreadId,
+      ...content.metadata,
       ...feedbackProjectNotificationMetadata(context.project),
       targetId: input.targetId,
       targetTitle: input.targetTitle,
@@ -2832,9 +2859,15 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
     return { status: "notFound" };
   }
 
+  const notificationAttachments =
+    attachmentIds.length > 0
+      ? (await db.select().from(commentAttachments).where(eq(commentAttachments.messageId, createdComment.messageId))).map(commentAttachmentDto)
+      : [];
+
   await notifyMentionedUsersOfComment({
     actorName: actor.name,
     actorUserId: actor.id,
+    attachments: notificationAttachments,
     body,
     commentMessageId: createdComment.messageId,
     commentThreadId: createdComment.threadId,
@@ -2848,6 +2881,8 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
   await notifyCommentReplyRecipient({
     actorName: actor.name,
     actorUserId: actor.id,
+    attachments: notificationAttachments,
+    body,
     commentMessageId: createdComment.messageId,
     commentThreadId: createdComment.threadId,
     excludedUserIds: mentionedUserIds,
@@ -2863,6 +2898,8 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
     await notifyFeedbackParticipantsOfComment({
       actorName: actor.name,
       actorUserId: actor.id,
+      attachments: notificationAttachments,
+      body,
       commentMessageId: createdComment.messageId,
       commentThreadId: createdComment.threadId,
       excludedUserIds: uniqueNotificationUserIds([...mentionedUserIds, createdComment.replyRecipientUserId]),

@@ -32,6 +32,7 @@ import {
   orfRichTextMentionLabel,
   parseOrfAttachmentMarkdownToken,
 } from "./orfRichTextMarkdown";
+import { normalizePastedOrfRichText } from "./orfRichTextClipboard";
 
 export type OrfRichTextMentionUser = {
   avatarUrl?: string | null;
@@ -432,7 +433,7 @@ export function OrfRichTextEditor({
     if (autoFocus && !disabled) focusSelection(markdownRef.current.length);
   }, [autoFocus, disabled, focusSelection]);
 
-  const uploadAttachment = useCallback(async (file: File) => {
+  const uploadAttachment = useCallback(async (file: File, selectionOverride?: OrfRichTextTextRange) => {
     if (disabledRef.current) return;
     const uploadAttachmentHandler = onUploadAttachmentRef.current;
     const uploadImageHandler = onUploadImageRef.current;
@@ -454,7 +455,7 @@ export function OrfRichTextEditor({
         return;
       }
       const attachmentText = formatAttachmentTextRef.current?.(attachment, upload) ?? upload.markdown;
-      const next = nextOrfBlockMarkdownInsert(markdownRef.current, textRangeForTextarea(textareaRef.current), attachmentText);
+      const next = nextOrfBlockMarkdownInsert(markdownRef.current, selectionOverride ?? textRangeForTextarea(textareaRef.current), attachmentText);
       emitMarkdown(next.markdown, next.selection);
       onAttachmentInsertRef.current?.({
         range: next.insertedRange,
@@ -462,6 +463,7 @@ export function OrfRichTextEditor({
         text: attachmentText,
         upload,
       });
+      return { from: next.selection, to: next.selection };
     } finally {
       setUploadingAttachment(false);
       onBusyChangeRef.current?.(false);
@@ -475,8 +477,12 @@ export function OrfRichTextEditor({
   }, [uploadAttachment]);
 
   const uploadAttachments = useCallback(async (files: File[]) => {
+    let selection = textRangeForTextarea(textareaRef.current);
     for (const file of files.filter((item) => item.size > 0)) {
-      await uploadAttachment(file);
+      const nextSelection = await uploadAttachment(file, selection);
+      if (nextSelection) {
+        selection = nextSelection;
+      }
     }
   }, [uploadAttachment]);
 
@@ -608,11 +614,10 @@ export function OrfRichTextEditor({
       uploadAttachmentRef.current(image);
       return;
     }
-    const transform = transformPastedTextRef.current;
-    if (!transform) return;
     const text = event.clipboardData?.getData("text/plain") ?? "";
     if (!text) return;
-    const nextText = transform(text);
+    const transform = transformPastedTextRef.current;
+    const nextText = normalizePastedOrfRichText(transform ? transform(text) : text);
     if (nextText === text) return;
     event.preventDefault();
     insertRawText(nextText);

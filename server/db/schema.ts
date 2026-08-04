@@ -938,6 +938,31 @@ export const feedbackSubscriptions = pgTable(
   }),
 );
 
+export const feedbackDailyDigestRuns = pgTable(
+  "feedback_daily_digest_runs",
+  {
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    assigneeUserId: uuid("assignee_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    localDate: date("local_date", { mode: "string" }).notNull(),
+    status: text("status").$type<"failed" | "pending" | "sent">().notNull().default("pending"),
+    feedbackCount: integer("feedback_count").notNull().default(0),
+    notificationEventId: text("notification_event_id").references(() => notificationEvents.id, { onDelete: "set null" }),
+    lastError: text("last_error"),
+    attempts: integer("attempts").notNull().default(0),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.assigneeUserId, table.localDate] }),
+    notificationEvent: index("feedback_daily_digest_runs_notification_event_idx").on(table.notificationEventId),
+    teamDate: index("feedback_daily_digest_runs_team_date_idx").on(table.teamId, table.localDate),
+  }),
+);
+
 export const feedbackCauseCategories = pgTable(
   "feedback_cause_categories",
   {

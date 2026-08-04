@@ -34,6 +34,7 @@ import { registerClientUpdateRoutes } from "./routes/clientUpdateRoutes";
 import { registerPushRoutes } from "./routes/pushRoutes";
 import { registerWorkLogRoutes } from "./routes/workLogRoutes";
 import { registerLocalSettlementRoutes } from "./routes/localSettlementRoutes";
+import { startFeedbackDailyDigestScheduler } from "./feedback/feedbackDailyDigestScheduler";
 import { startReestimateAutoFreezeScheduler } from "./orf/reestimateAutoFreezeScheduler";
 import { startWorkLogReminderScheduler } from "./workLogs/workLogReminderScheduler";
 import { ensurePrivateSettingsStorage } from "./settings/settingsStorage";
@@ -133,6 +134,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   const stopLegacyRealtimeDeliveryRetention = startLegacyRealtimeDeliveryRetention(app.log);
   const stopChatSyncEventRetentionScheduler = startChatSyncEventRetentionScheduler(app.log);
   const stopNotificationDeliveryScheduler = startNotificationDeliveryScheduler(app.log);
+  const stopFeedbackDailyDigestScheduler = startFeedbackDailyDigestScheduler(app.log);
   const stopReestimateAutoFreezeScheduler = startReestimateAutoFreezeScheduler(app.log);
   const stopWorkLogReminderScheduler = startWorkLogReminderScheduler(app.log);
   app.addHook("onClose", async () => {
@@ -141,6 +143,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     stopLegacyRealtimeDeliveryRetention();
     stopChatSyncEventRetentionScheduler();
     stopNotificationDeliveryScheduler();
+    stopFeedbackDailyDigestScheduler();
     stopReestimateAutoFreezeScheduler();
     stopWorkLogReminderScheduler();
   });

@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
 import type {
+  CommentAttachmentPreviewKind,
   ChatMessageSystemMetadata,
   CommentTargetType,
   NotificationKind,
   NotificationStream,
   NotificationTargetType,
 } from "../../src/types/orf";
+import {
+  replaceOrfAttachmentMarkdownTokens,
+} from "../../src/features/rich-text/orfRichTextMarkdown";
 
 export type NotificationDeliveryChannel = "chat";
 
@@ -34,8 +38,62 @@ export type NotificationRecipientFact = {
   userId: string;
 };
 
+export type CommentNotificationAttachmentFact = {
+  fileName: string;
+  id: string;
+  mimeType: string;
+  previewKind?: CommentAttachmentPreviewKind | null;
+};
+
+export type CommentNotificationContent = {
+  body: string;
+  metadata: Record<string, string>;
+};
+
+const commentNotificationImageMetadataKey = "commentImageAttachmentIds";
+
 function cleanUserIds(userIds: readonly string[]) {
   return Array.from(new Set(userIds.map((id) => id.trim()).filter(Boolean)));
+}
+
+function isCommentNotificationImageAttachment(attachment: CommentNotificationAttachmentFact) {
+  return attachment.previewKind === "image" || attachment.mimeType.trim().toLowerCase().startsWith("image/");
+}
+
+function commentNotificationImageAttachmentIds(attachments: readonly CommentNotificationAttachmentFact[]) {
+  return Array.from(new Set(attachments.filter(isCommentNotificationImageAttachment).map((attachment) => attachment.id.trim()).filter(Boolean)));
+}
+
+function markdownWithOnlyCommentImages(markdown: string, imageAttachmentIds: readonly string[]) {
+  const imageIds = new Set(imageAttachmentIds);
+  return replaceOrfAttachmentMarkdownTokens(markdown, (reference, token) => {
+    return reference.kind === "attached" && imageIds.has(reference.attachmentId) ? token : "";
+  })
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export function buildCommentNotificationContent(input: {
+  attachments?: readonly CommentNotificationAttachmentFact[];
+  commentBody: string;
+  summary: string;
+}): CommentNotificationContent {
+  const imageAttachmentIds = commentNotificationImageAttachmentIds(input.attachments ?? []);
+  const commentBody = markdownWithOnlyCommentImages(input.commentBody, imageAttachmentIds);
+  const summary = input.summary.trim();
+  const metadata: Record<string, string> = imageAttachmentIds.length > 0 ? { [commentNotificationImageMetadataKey]: imageAttachmentIds.join(",") } : {};
+  return {
+    body: commentBody ? `${summary}\n\n${commentBody}` : summary,
+    metadata,
+  };
+}
+
+export function commentNotificationImageAttachmentIdsFromMetadata(metadata?: Record<string, string> | null) {
+  return (metadata?.[commentNotificationImageMetadataKey] ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
 }
 
 export function resolveNotificationRecipients(input: {

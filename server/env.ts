@@ -79,6 +79,11 @@ const envSchema = z.object({
   ORF_WORK_LOG_REMINDER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(60 * 1000),
   ORF_WORK_LOG_REMINDER_SNOOZE_MINUTES: z.coerce.number().int().positive().default(10),
   ORF_WORK_LOG_REMINDER_WINDOW_DAYS: z.coerce.number().int().positive().max(31).default(7),
+  ORF_FEEDBACK_DAILY_DIGEST_ENABLED: booleanString("true"),
+  ORF_FEEDBACK_DAILY_DIGEST_TIME_ZONE: z.string().trim().min(1).default("Asia/Shanghai"),
+  ORF_FEEDBACK_DAILY_DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(8),
+  ORF_FEEDBACK_DAILY_DIGEST_MINUTE: z.coerce.number().int().min(0).max(59).default(0),
+  ORF_FEEDBACK_DAILY_DIGEST_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(60 * 1000),
 }).transform((value, context) => {
   const databaseUrl = value.DATABASE_URL ?? value.REMOTE_DATABASE_URL;
 

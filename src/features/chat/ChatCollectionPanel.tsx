@@ -3,7 +3,7 @@ import { IconButton } from "../../components/ui";
 import type { ChatMessage, ChatSearchResult, ChatUser, Feedback } from "../../types/orf";
 import { chatChannelDisplayLabel } from "./chatChannelPresentation";
 import { formatDateTime, formatDay, formatTime } from "./chatFormat";
-import { ChatMarkdown } from "./chatMarkdown";
+import { ChatMarkdown, commentImageAttachmentIdsFromChatSystemMetadata } from "./chatMarkdown";
 
 type ChatCollectionPanelProps = {
   currentUserId?: string;
@@ -34,7 +34,15 @@ export function ChatCollectionPanel({ currentUserId, feedbackItems, kind, loadin
                 <span>{chatChannelDisplayLabel(result.channel, currentUserId, usersById)}</span>
                 <strong>{result.message.authorName}</strong>
                 <small title={formatDateTime(result.message.createdAt)}>{formatDay(result.message.createdAt)} {formatTime(result.message.createdAt)}</small>
-                <div className="orf-chat-collection-body"><ChatMarkdown compact body={result.message.body} feedbackItems={feedbackItems} usersById={usersById} /></div>
+                <div className="orf-chat-collection-body">
+                  <ChatMarkdown
+                    compact
+                    body={result.message.body}
+                    commentImageAttachmentIds={commentImageAttachmentIdsFromChatSystemMetadata(result.message.system)}
+                    feedbackItems={feedbackItems}
+                    usersById={usersById}
+                  />
+                </div>
               </button>
               <IconButton
                 className={result.message.savedByCurrentUser ? "orf-chat-message-action-active" : ""}

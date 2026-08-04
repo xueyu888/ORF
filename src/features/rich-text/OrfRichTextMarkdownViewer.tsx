@@ -8,7 +8,18 @@ import {
   unescapeOrfMarkdownPlainText,
 } from "./orfRichTextMarkdown";
 
-type MarkdownListItem = { checked: boolean | null; text: string };
+type MarkdownListItem = {
+  checked: boolean | null;
+  children: MarkdownList[];
+  continuationLines: string[];
+  text: string;
+};
+type MarkdownList = {
+  items: MarkdownListItem[];
+  ordered: boolean;
+  start?: number;
+};
+type ParsedMarkdownListText = Pick<MarkdownListItem, "checked" | "text">;
 type MarkdownTableAlignment = "center" | "left" | "right" | null;
 type MarkdownTable = {
   alignments: MarkdownTableAlignment[];
@@ -21,7 +32,7 @@ type MarkdownBlock =
   | { kind: "code"; content: string; key: string; language: string | null }
   | { kind: "divider"; key: string }
   | { kind: "heading"; key: string; level: 1 | 2 | 3 | 4 | 5 | 6; text: string }
-  | { kind: "list"; items: MarkdownListItem[]; key: string; ordered: boolean }
+  | { kind: "list"; key: string; list: MarkdownList }
   | { kind: "paragraph"; lines: string[]; key: string }
   | { kind: "quote"; lines: string[]; key: string }
   | { kind: "table"; key: string; table: MarkdownTable };
@@ -79,18 +90,105 @@ function isDividerLine(line: string) {
   return /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line);
 }
 
-function parseTaskListText(text: string): MarkdownListItem {
+function parseTaskListText(text: string): ParsedMarkdownListText {
   const task = text.match(/^\[( |x|X)\]\s+(.+)$/);
   if (!task) return { checked: null, text };
   return { checked: (task[1] ?? " ").toLowerCase() === "x", text: task[2] ?? "" };
 }
 
+function leadingIndentColumns(line: string) {
+  let columns = 0;
+  for (const character of line) {
+    if (character === " ") {
+      columns += 1;
+      continue;
+    }
+    if (character === "\t") {
+      columns += 4;
+      continue;
+    }
+    break;
+  }
+  return columns;
+}
+
+function stripContinuationIndent(line: string, parentIndent: number) {
+  const normalized = line.replace(/\t/g, "    ");
+  return normalized.slice(Math.min(normalized.length - normalized.trimStart().length, parentIndent + 4)).trimEnd();
+}
+
 function parseListItem(line: string) {
+  const indent = leadingIndentColumns(line);
   const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
-  if (unordered) return { ordered: false, ...parseTaskListText(unordered[1] ?? "") };
-  const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
-  if (ordered) return { ordered: true, ...parseTaskListText(ordered[1] ?? "") };
+  if (unordered) return { indent, ordered: false, start: undefined, ...parseTaskListText(unordered[1] ?? "") };
+
+  const parenthesized = line.match(/^\s*[（(](\d{1,9})[）)]\s+(.+)$/);
+  if (parenthesized) {
+    return { indent, ordered: true, start: Number(parenthesized[1]), ...parseTaskListText(parenthesized[2] ?? "") };
+  }
+
+  const ordered = line.match(/^\s*(\d{1,9})[.)、．。]\s+(.+)$/);
+  if (ordered) return { indent, ordered: true, start: Number(ordered[1]), ...parseTaskListText(ordered[2] ?? "") };
   return null;
+}
+
+function parseListBlock(lines: string[], startIndex: number): { list: MarkdownList; nextIndex: number } | null {
+  const first = parseListItem(lines[startIndex] ?? "");
+  if (!first) return null;
+
+  const indent = first.indent;
+  const ordered = first.ordered;
+  const items: MarkdownListItem[] = [];
+  let index = startIndex;
+
+  while (index < lines.length) {
+    const current = parseListItem(lines[index] ?? "");
+    if (!current || current.indent !== indent || current.ordered !== ordered) break;
+
+    const item: MarkdownListItem = {
+      checked: current.checked,
+      children: [],
+      continuationLines: [],
+      text: current.text,
+    };
+    index += 1;
+
+    while (index < lines.length) {
+      const line = lines[index] ?? "";
+      if (!line.trim()) break;
+
+      const nested = parseListItem(line);
+      if (nested) {
+        if (nested.indent > indent) {
+          const nestedBlock = parseListBlock(lines, index);
+          if (!nestedBlock) break;
+          item.children.push(nestedBlock.list);
+          index = nestedBlock.nextIndex;
+          continue;
+        }
+        break;
+      }
+
+      if (leadingIndentColumns(line) > indent) {
+        item.continuationLines.push(stripContinuationIndent(line, indent));
+        index += 1;
+        continue;
+      }
+
+      break;
+    }
+
+    items.push(item);
+  }
+
+  return {
+    list: {
+      items,
+      ordered,
+      start: ordered ? first.start : undefined,
+    },
+    nextIndex: index,
+  };
 }
 
 function parseIndentedCodeLine(line: string) {
@@ -204,6 +302,14 @@ function parseMarkdownBlocks(body: string): MarkdownBlock[] {
       continue;
     }
 
+    const list = parseListBlock(lines, index);
+    if (list) {
+      blocks.push({ kind: "list", key: `list:${keyIndex}`, list: list.list });
+      keyIndex += 1;
+      index = list.nextIndex;
+      continue;
+    }
+
     const indentedCodeLine = parseIndentedCodeLine(line);
     if (indentedCodeLine !== null) {
       const content = [indentedCodeLine];
@@ -244,21 +350,6 @@ function parseMarkdownBlocks(body: string): MarkdownBlock[] {
       continue;
     }
 
-    const listItem = parseListItem(line);
-    if (listItem) {
-      const ordered = listItem.ordered;
-      const items: MarkdownListItem[] = [];
-      while (index < lines.length) {
-        const nextItem = parseListItem(lines[index] ?? "");
-        if (!nextItem || nextItem.ordered !== ordered) break;
-        items.push({ checked: nextItem.checked, text: nextItem.text });
-        index += 1;
-      }
-      blocks.push({ kind: "list", items, key: `list:${keyIndex}`, ordered });
-      keyIndex += 1;
-      continue;
-    }
-
     const table = parseMarkdownTable(lines, index);
     if (table) {
       blocks.push({ kind: "table", key: `table:${keyIndex}`, table: table.table });
@@ -275,7 +366,7 @@ function parseMarkdownBlocks(body: string): MarkdownBlock[] {
         parseOrfAttachmentMarkdownToken(nextLine) ||
         isFenceLine(nextLine) ||
         nextLine.trimStart().startsWith(">") ||
-        parseListItem(nextLine) ||
+        parseListBlock(lines, index) ||
         parseHeading(nextLine) ||
         isDividerLine(nextLine) ||
         parseMarkdownTable(lines, index) ||
@@ -513,6 +604,47 @@ function MarkdownCodeBlock({
   );
 }
 
+function MarkdownListBlock({
+  classNamePrefix,
+  context,
+  list,
+  nodeKey,
+}: {
+  classNamePrefix: string;
+  context: InlineRenderContext;
+  list: MarkdownList;
+  nodeKey: string;
+}) {
+  const ListTag = list.ordered ? "ol" : "ul";
+  return (
+    <ListTag className={`${classNamePrefix}-list orf-rich-text-markdown-list`} start={list.start && list.start !== 1 ? list.start : undefined}>
+      {list.items.map((item, index) => (
+        <li
+          className={item.checked === null ? undefined : `${classNamePrefix}-task-item orf-rich-text-markdown-task-item`}
+          key={`${nodeKey}:item:${index}`}
+        >
+          {item.checked !== null && <input checked={item.checked} readOnly type="checkbox" />}
+          {renderInlineFragments(item.text, context, `${nodeKey}:item:${index}`)}
+          {item.continuationLines.length > 0 && (
+            <span className={`${classNamePrefix}-list-continuation orf-rich-text-markdown-list-continuation`}>
+              {renderLineBreakJoined(item.continuationLines, context, `${nodeKey}:item:${index}:continuation`)}
+            </span>
+          )}
+          {item.children.map((childList, childIndex) => (
+            <MarkdownListBlock
+              classNamePrefix={classNamePrefix}
+              context={context}
+              key={`${nodeKey}:item:${index}:child:${childIndex}`}
+              list={childList}
+              nodeKey={`${nodeKey}:item:${index}:child:${childIndex}`}
+            />
+          ))}
+        </li>
+      ))}
+    </ListTag>
+  );
+}
+
 export function OrfRichTextMarkdownViewer({
   body,
   classNamePrefix = "orf-rich-text-viewer",
@@ -571,20 +703,7 @@ export function OrfRichTextMarkdownViewer({
           );
         }
         if (block.kind === "list") {
-          const ListTag = block.ordered ? "ol" : "ul";
-          return (
-            <ListTag className={`${classNamePrefix}-list orf-rich-text-markdown-list`} key={block.key}>
-              {block.items.map((item, index) => (
-                <li
-                  className={item.checked === null ? undefined : `${classNamePrefix}-task-item orf-rich-text-markdown-task-item`}
-                  key={`${block.key}:item:${index}`}
-                >
-                  {item.checked !== null && <input checked={item.checked} readOnly type="checkbox" />}
-                  {renderInlineFragments(item.text, context, `${block.key}:item:${index}`)}
-                </li>
-              ))}
-            </ListTag>
-          );
+          return <MarkdownListBlock classNamePrefix={classNamePrefix} context={context} key={block.key} list={block.list} nodeKey={block.key} />;
         }
         if (block.kind === "table") {
           return (

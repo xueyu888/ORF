@@ -2,7 +2,7 @@ import { Loader2, Reply } from "lucide-react";
 import type { ChatThreadSummary, ChatUser, Feedback } from "../../types/orf";
 import { chatChannelDisplayLabel } from "./chatChannelPresentation";
 import { formatDateTime, formatTime } from "./chatFormat";
-import { ChatMarkdown } from "./chatMarkdown";
+import { ChatMarkdown, commentImageAttachmentIdsFromChatSystemMetadata } from "./chatMarkdown";
 
 type ChatThreadInboxPanelProps = {
   currentUserId?: string;
@@ -44,7 +44,15 @@ export function ChatThreadInboxPanel({ currentUserId, feedbackItems, loading, on
           {summary.unreadCount > 0 && <strong>{summary.unreadCount}</strong>}
           <b>{summary.rootMessage.authorName}</b>
           <div className="orf-chat-thread-inbox-body">
-            {summary.rootMessage.body.trim() ? <ChatMarkdown compact body={summary.rootMessage.body} feedbackItems={feedbackItems} usersById={usersById} /> : "附件话题"}
+            {summary.rootMessage.body.trim() ? (
+              <ChatMarkdown
+                compact
+                body={summary.rootMessage.body}
+                commentImageAttachmentIds={commentImageAttachmentIdsFromChatSystemMetadata(summary.rootMessage.system)}
+                feedbackItems={feedbackItems}
+                usersById={usersById}
+              />
+            ) : "附件话题"}
           </div>
           <small>
             {summary.rootMessage.replyCount} 条回复
