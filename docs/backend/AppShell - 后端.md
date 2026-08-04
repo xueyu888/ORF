@@ -24,7 +24,7 @@ AppShell 没有独立业务模型，也不拥有页面数据计算规则。
 | 聊天系统会话 | `/api/chat/system-conversations`、`/api/chat/system-conversations/:conversationId/messages` |
 | 成员管理数据 | `/api/users` |
 | 当前用户权限 | `/api/me/access` |
-| 当前用户个人偏好 | `/api/settings/personal/preferences` |
+| 当前用户个人偏好 | `/api/settings/personal/preferences`；`sidebarWidth` 保存桌面展开态全局侧边栏宽度，服务端统一限制为 `220px～560px` |
 | 客户端最新发布 | `GET /api/client-updates/latest`、`GET /api/client-updates/releases/:version` |
 | 当前用户更新收据 | `POST /api/client-updates/releases/:version/receipt` |
 | 管理员发布覆盖 | `GET /api/client-updates/releases/:version/coverage` |

@@ -47,6 +47,7 @@ function userPreferences(userId: string, overrides: Partial<UserPreferences> = {
       toastEnabled: true,
     },
     sidebarCollapsed: false,
+    sidebarWidth: 260,
     userId,
     workspaceLayout: {
       secondaryPanel: null,

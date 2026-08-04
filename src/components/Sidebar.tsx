@@ -109,7 +109,7 @@ export function Sidebar({
   return (
     <aside
       className={[
-        "orf-sidebar sticky top-0 flex h-screen shrink-0 flex-col border-r",
+        "orf-sidebar sticky top-0 flex h-screen shrink-0 flex-col",
         collapsed ? "orf-sidebar-collapsed" : "orf-sidebar-expanded",
       ].join(" ")}
       style={sidebarStyle}

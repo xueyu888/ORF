@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
-import { GripVertical, RefreshCw } from "lucide-react";
-import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { Button } from "../components/ui";
@@ -47,6 +47,7 @@ import { useChatRealtimeEvents } from "../features/chat/useChatRealtimeEvents";
 import { useChatThreadState } from "../features/chat/useChatThreadState";
 import { useChatTypingState } from "../features/chat/useChatTypingState";
 import { useChatUnreadNavigation } from "../features/chat/useChatUnreadNavigation";
+import { useHorizontalPanelResize } from "../hooks/useHorizontalPanelResize";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { chatMessageTargetPath } from "../domain/chatNavigation";
 import { useRealtimeReconciliation } from "../features/realtime/useRealtimeReconciliation";
@@ -88,11 +89,11 @@ const chatPresenceRefreshThrottleMs = 15_000;
 const chatSidebarDefaultWidthPx = 286;
 const chatSidebarMinWidthPx = 220;
 const chatSidebarMaxWidthPx = 560;
-const chatSidebarResizeHandleWidthPx = 10;
+const chatSidebarResizeHandleWidthPx = 1;
 const chatRightPanelMinWidthPx = 320;
 const chatRightPanelMaxWidthPx = 760;
 const chatRightPanelMainMinWidthPx = 320;
-const chatRightPanelResizeHandleWidthPx = 10;
+const chatRightPanelResizeHandleWidthPx = 1;
 
 function defaultChatRightPanelWidth(panel: string | null) {
   if (panel === "files") return 440;
@@ -212,9 +213,7 @@ export function ChatPage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [markingUnreadChannelsRead, setMarkingUnreadChannelsRead] = useState(false);
   const [sidebarWidthOverride, setSidebarWidthOverride] = useState<number | null>(null);
-  const [resizingSidebar, setResizingSidebar] = useState(false);
   const [rightPanelWidthOverrides, setRightPanelWidthOverrides] = useState<Record<string, number>>({});
-  const [resizingRightPanel, setResizingRightPanel] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachmentFilePreviewState | null>(null);
   const [driveSelectionRequest, setDriveSelectionRequest] = useState<ChatDriveResourceSelectionRequest | null>(null);
   const [locatedMessageId, setLocatedMessageId] = useState<string | null>(null);
@@ -344,9 +343,9 @@ export function ChatPage() {
     ...(activePanel ? { "--orf-chat-right-panel-width": `${activeRightPanelWidth}px` } : {}),
   } as CSSProperties;
 
-  const startSidebarResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (mobileViewport || event.button !== 0) return;
-    const pageElement = event.currentTarget.closest<HTMLElement>(".orf-chat-page");
+  const createSidebarWidthResolver = useCallback((element: HTMLButtonElement) => {
+    if (mobileViewport) return null;
+    const pageElement = element.closest<HTMLElement>(".orf-chat-page");
     const pageWidth = pageElement?.getBoundingClientRect().width ?? window.innerWidth;
     const rightPanelWidth = activePanel
       ? (pageElement?.querySelector<HTMLElement>(".orf-chat-right-panel")?.getBoundingClientRect().width ?? activeRightPanelWidth) + chatRightPanelResizeHandleWidthPx
@@ -356,82 +355,33 @@ export function ChatPage() {
       pageWidth,
       rightPanelWidth,
     );
-    const startClientX = event.clientX;
-    const pointerId = event.pointerId;
-    const previousCursor = document.body.style.cursor;
-    const previousUserSelect = document.body.style.userSelect;
-
-    const updateWidth = (clientX: number) => {
-      const nextWidth = clampChatSidebarWidth(startWidth + (clientX - startClientX), pageWidth, rightPanelWidth);
-      setSidebarWidthOverride(nextWidth);
-    };
-    const handlePointerMove = (pointerEvent: PointerEvent) => {
-      if (pointerEvent.pointerId !== pointerId) return;
-      pointerEvent.preventDefault();
-      updateWidth(pointerEvent.clientX);
-    };
-    const stopResize = (pointerEvent: PointerEvent) => {
-      if (pointerEvent.pointerId !== pointerId) return;
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stopResize);
-      window.removeEventListener("pointercancel", stopResize);
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousUserSelect;
-      setResizingSidebar(false);
-    };
-
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(pointerId);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    setResizingSidebar(true);
-    updateWidth(event.clientX);
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stopResize);
-    window.addEventListener("pointercancel", stopResize);
+    return (deltaX: number) => clampChatSidebarWidth(startWidth + deltaX, pageWidth, rightPanelWidth);
   }, [activePanel, activeRightPanelWidth, mobileViewport, sidebarWidthOverride]);
 
-  const startRightPanelResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (!activePanel || mobileViewport || event.button !== 0) return;
-    const panel = activePanel;
-    const pageElement = event.currentTarget.closest<HTMLElement>(".orf-chat-page");
+  const createRightPanelWidthResolver = useCallback((element: HTMLButtonElement) => {
+    if (!activePanel || mobileViewport) return null;
+    const pageElement = element.closest<HTMLElement>(".orf-chat-page");
     const pageWidth = pageElement?.getBoundingClientRect().width ?? window.innerWidth;
     const sidebarWidth = pageElement?.querySelector<HTMLElement>(".orf-chat-sidebar")?.getBoundingClientRect().width ?? chatSidebarDefaultWidthPx;
     const startWidth = clampChatRightPanelWidth(activeRightPanelWidth, pageWidth, sidebarWidth);
-    const startClientX = event.clientX;
-    const pointerId = event.pointerId;
-    const previousCursor = document.body.style.cursor;
-    const previousUserSelect = document.body.style.userSelect;
-
-    const updateWidth = (clientX: number) => {
-      const nextWidth = clampChatRightPanelWidth(startWidth - (clientX - startClientX), pageWidth, sidebarWidth);
-      setRightPanelWidthOverrides((widths) => ({ ...widths, [panel]: nextWidth }));
-    };
-    const handlePointerMove = (pointerEvent: PointerEvent) => {
-      if (pointerEvent.pointerId !== pointerId) return;
-      pointerEvent.preventDefault();
-      updateWidth(pointerEvent.clientX);
-    };
-    const stopResize = (pointerEvent: PointerEvent) => {
-      if (pointerEvent.pointerId !== pointerId) return;
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stopResize);
-      window.removeEventListener("pointercancel", stopResize);
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousUserSelect;
-      setResizingRightPanel(false);
-    };
-
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(pointerId);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    setResizingRightPanel(true);
-    updateWidth(event.clientX);
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stopResize);
-    window.addEventListener("pointercancel", stopResize);
+    return (deltaX: number) => clampChatRightPanelWidth(startWidth - deltaX, pageWidth, sidebarWidth);
   }, [activePanel, activeRightPanelWidth, mobileViewport]);
+
+  const applyRightPanelWidth = useCallback((width: number) => {
+    if (!activePanel) return;
+    setRightPanelWidthOverrides((widths) => ({ ...widths, [activePanel]: width }));
+  }, [activePanel]);
+
+  const sidebarResize = useHorizontalPanelResize<HTMLButtonElement>({
+    createValueResolver: createSidebarWidthResolver,
+    disabled: mobileViewport,
+    onChange: setSidebarWidthOverride,
+  });
+  const rightPanelResize = useHorizontalPanelResize<HTMLButtonElement>({
+    createValueResolver: createRightPanelWidthResolver,
+    disabled: mobileViewport || !activePanel,
+    onChange: applyRightPanelWidth,
+  });
 
   const handleOpenDriveResourceLink = useCallback((target: ChatDriveResourceLinkTarget) => {
     if (!activeChannel || activeChannel.systemKind) return;
@@ -1323,8 +1273,8 @@ export function ChatPage() {
     <div
       className={clsx("orf-chat-page", activePanel && "orf-chat-page-with-panel")}
       data-chat-mobile-view={chatMobileView}
-      data-resizing-sidebar={resizingSidebar ? "true" : "false"}
-      data-resizing-right-panel={resizingRightPanel ? "true" : "false"}
+      data-resizing-sidebar={sidebarResize.resizing ? "true" : "false"}
+      data-resizing-right-panel={rightPanelResize.resizing ? "true" : "false"}
       style={chatPageStyle}
     >
       <ChatSidebar
@@ -1344,13 +1294,12 @@ export function ChatPage() {
       />
       <button
         type="button"
-        className="orf-chat-sidebar-resize-handle"
+        className="orf-panel-resize-handle orf-chat-sidebar-resize-handle"
         aria-label="拖动调整左侧栏宽度"
+        aria-orientation="vertical"
         title="拖动调整左侧栏宽度"
-        onPointerDown={startSidebarResize}
-      >
-        <GripVertical aria-hidden="true" />
-      </button>
+        {...sidebarResize.handleProps}
+      />
       <section className="orf-chat-main">
         {activeChannel ? (
           <>
@@ -1446,13 +1395,12 @@ export function ChatPage() {
       {activeChannel && activePanel && (
         <button
           type="button"
-          className="orf-chat-right-panel-resize-handle"
+          className="orf-panel-resize-handle orf-chat-right-panel-resize-handle"
           aria-label="拖动调整右侧面板宽度"
+          aria-orientation="vertical"
           title="拖动调整右侧面板宽度"
-          onPointerDown={startRightPanelResize}
-        >
-          <GripVertical aria-hidden="true" />
-        </button>
+          {...rightPanelResize.handleProps}
+        />
       )}
       {activeChannel && activePanel && (
         <ChatRightPanel

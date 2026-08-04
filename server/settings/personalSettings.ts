@@ -7,7 +7,9 @@ import {
   chatThemeSchema,
   defaultChatTheme,
   normalizeUserDisplayPreferences,
+  normalizeSidebarWidth,
   normalizeWorkspaceLayoutPreferences,
+  sidebarWidthSchema,
   type ChatTheme,
   type UserDisplayPreferences,
   type WorkspaceLayoutPreferences,
@@ -50,6 +52,7 @@ export type UserPreferences = {
   userId: string;
   defaultLandingPath: string | null;
   sidebarCollapsed: boolean | null;
+  sidebarWidth: number;
   chatTheme: ChatTheme;
   display: UserDisplayPreferences;
   workspaceLayout: WorkspaceLayoutPreferences;
@@ -70,6 +73,7 @@ type StoredUserPreferences = Omit<UserPreferences, "appBackground">;
 export const userPreferencesPatchSchema = z.object({
   defaultLandingPath: z.string().nullable().optional(),
   sidebarCollapsed: z.boolean().nullable().optional(),
+  sidebarWidth: sidebarWidthSchema.optional(),
   chatTheme: chatThemeSchema.optional(),
   display: userDisplayPreferencesPatchSchema.optional(),
   filterPreferences: userFilterPreferencesPatchSchema.optional(),
@@ -108,6 +112,7 @@ function defaultUserPreferences(userId: string): UserPreferences {
     userId,
     defaultLandingPath: null,
     sidebarCollapsed: null,
+    sidebarWidth: normalizeSidebarWidth(null),
     chatTheme: defaultChatTheme,
     display: normalizeUserDisplayPreferences(null),
     filterPreferences: {},
@@ -167,6 +172,7 @@ function normalizeUserPreferences(userId: string, input: Partial<UserPreferences
     userId,
     defaultLandingPath,
     sidebarCollapsed: typeof input?.sidebarCollapsed === "boolean" ? input.sidebarCollapsed : input?.sidebarCollapsed === null ? null : fallback.sidebarCollapsed,
+    sidebarWidth: normalizeSidebarWidth(input?.sidebarWidth),
     chatTheme: normalizeChatTheme(input?.chatTheme),
     display: normalizeUserDisplayPreferences(input?.display),
     filterPreferences: normalizeUserFilterPreferences(input?.filterPreferences),
@@ -436,6 +442,9 @@ export async function saveUserPreferences(userId: string, patch: z.infer<typeof 
     }
     if (input.sidebarCollapsed !== undefined) {
       preferences.sidebarCollapsed = input.sidebarCollapsed;
+    }
+    if (input.sidebarWidth !== undefined) {
+      preferences.sidebarWidth = input.sidebarWidth;
     }
     if (input.chatTheme !== undefined) {
       preferences.chatTheme = input.chatTheme;

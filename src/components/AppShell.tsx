@@ -22,8 +22,16 @@ import { DesktopWindowControls } from "../features/desktop/DesktopWindowControls
 import { ChatFloatingImagePreviewProvider } from "../features/chat/ChatFloatingImagePreview";
 import { isDesktopShellAvailable, setDesktopWorkbenchZoomLevel } from "../features/desktop/desktopShellRuntime";
 import { applyDisplayPreferencesToDocument, nextWorkbenchZoomLevel } from "../features/display/displayPreferences";
+import { useHorizontalPanelResize } from "../hooks/useHorizontalPanelResize";
 import { useVisualBackground } from "../hooks/useVisualBackground";
-import { defaultChatTheme, defaultUserDisplayPreferences, type ChatTheme, type UserDisplayPreferences } from "../domain/settings/personalPreferences";
+import {
+  defaultChatTheme,
+  defaultUserDisplayPreferences,
+  normalizeSidebarWidth,
+  sidebarLayoutLimits,
+  type ChatTheme,
+  type UserDisplayPreferences,
+} from "../domain/settings/personalPreferences";
 import {
   defaultVisualBackgroundCrop,
   defaultVisualBackgroundOverlayOpacity,
@@ -34,14 +42,24 @@ import { dispatchPersonalPreferencesChanged, subscribePersonalPreferencesChanged
 import type { VisualBackgroundSelection } from "../utils/visualBackgrounds";
 import { preloadProductionRouteExperience, preloadRouteExperience } from "../routing/routePreload";
 
+const shellMainMinimumWidthPx = 640;
+
+function clampShellSidebarWidth(width: number, viewportWidth: number) {
+  const { min, max } = sidebarLayoutLimits.expandedWidthPx;
+  const availableMax = Math.max(min, Math.min(max, viewportWidth - shellMainMinimumWidthPx));
+  return Math.round(Math.min(Math.max(width, min), availableMax));
+}
+
 export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser, dismissSystemBroadcast, state, systemBroadcasts } = useOrf();
+  const { currentUser, dismissSystemBroadcast, notify, state, systemBroadcasts } = useOrf();
   const currentUserId = currentUser?.id ?? null;
   const [commandOpen, setCommandOpen] = useState(false);
   const [desktopChromeEnabled, setDesktopChromeEnabled] = useState(() => isDesktopShellAvailable());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(sidebarLayoutLimits.expandedWidthPx.default);
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const [chatTheme, setChatTheme] = useState<ChatTheme>(defaultChatTheme);
   const [displayPreferences, setDisplayPreferences] = useState<UserDisplayPreferences>(defaultUserDisplayPreferences);
   const [clientUpdateCenter, setClientUpdateCenter] = useState<{ notice?: string; open: boolean }>({ open: false });
@@ -71,6 +89,7 @@ export function AppShell() {
     let cancelled = false;
     if (!currentUser) {
       setSidebarCollapsed(false);
+      setSidebarWidth(sidebarLayoutLimits.expandedWidthPx.default);
       setChatTheme(defaultChatTheme);
       setDisplayPreferences(defaultUserDisplayPreferences);
       return undefined;
@@ -81,6 +100,7 @@ export function AppShell() {
         .then((preferences) => {
           if (!cancelled) {
             setSidebarCollapsed(preferences.sidebarCollapsed ?? false);
+            setSidebarWidth(normalizeSidebarWidth(preferences.sidebarWidth));
             setChatTheme(preferences.chatTheme);
             setDisplayPreferences(preferences.display ?? defaultUserDisplayPreferences);
           }
@@ -105,10 +125,36 @@ export function AppShell() {
     return cleanup;
   }, [desktopChromeEnabled, displayPreferences]);
 
+  useEffect(() => {
+    const updateViewportWidth = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", updateViewportWidth);
+    return () => window.removeEventListener("resize", updateViewportWidth);
+  }, []);
+
   const handleSidebarCollapsedChange = useCallback((collapsed: boolean) => {
     setSidebarCollapsed(collapsed);
     void saveUserPreferences({ sidebarCollapsed: collapsed }).catch(() => undefined);
   }, []);
+
+  const visibleSidebarWidth = clampShellSidebarWidth(sidebarWidth, viewportWidth);
+  const createSidebarWidthResolver = useCallback(() => {
+    const startWidth = visibleSidebarWidth;
+    return (deltaX: number) => clampShellSidebarWidth(startWidth + deltaX, viewportWidth);
+  }, [viewportWidth, visibleSidebarWidth]);
+
+  const commitSidebarWidth = useCallback((width: number) => {
+    if (!currentUser) return;
+    void saveUserPreferences({ sidebarWidth: width }).catch(() => {
+      notify("侧边栏宽度保存失败，请稍后重试。");
+    });
+  }, [currentUser, notify]);
+
+  const shellSidebarResize = useHorizontalPanelResize<HTMLButtonElement>({
+    createValueResolver: createSidebarWidthResolver,
+    disabled: sidebarCollapsed,
+    onChange: setSidebarWidth,
+    onCommit: commitSidebarWidth,
+  });
 
   const handleShellNavigationIntent = useCallback((path: string) => {
     void preloadRouteExperience(path);
@@ -178,6 +224,9 @@ export function AppShell() {
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
   const isBountyHall = !isChatPage && shellDisplayPath.startsWith("/bounties");
+  const shellStyle = {
+    "--orf-sidebar-width": `${visibleSidebarWidth}px`,
+  } as CSSProperties;
 
   return (
     <ChatFloatingImagePreviewProvider>
@@ -190,6 +239,8 @@ export function AppShell() {
         data-display-contrast={displayPreferences.contrast}
         data-display-density={displayPreferences.density}
         data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
+        data-resizing-shell-sidebar={shellSidebarResize.resizing ? "true" : "false"}
+        style={shellStyle}
       >
         <Sidebar
           backgroundUrl={sidebarBackgroundUrl}
@@ -199,6 +250,15 @@ export function AppShell() {
           onCollapsedChange={handleSidebarCollapsedChange}
           onNavigateIntent={handleShellNavigationIntent}
           onOpenClientUpdateCenter={() => setClientUpdateCenter({ open: true })}
+        />
+        <button
+          type="button"
+          className="orf-panel-resize-handle orf-shell-sidebar-resize-handle"
+          aria-label="拖动调整全局侧边栏宽度"
+          aria-orientation="vertical"
+          disabled={sidebarCollapsed}
+          title="拖动调整全局侧边栏宽度"
+          {...shellSidebarResize.handleProps}
         />
         <div className="orf-shell-body min-w-0 flex-1">
           <header

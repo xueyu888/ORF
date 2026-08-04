@@ -313,6 +313,7 @@ export type UserPreferences = {
   userId: string;
   defaultLandingPath: string | null;
   sidebarCollapsed: boolean | null;
+  sidebarWidth: number;
   chatTheme: ChatTheme;
   display: UserDisplayPreferences;
   filterPreferences: UserFilterPreferences;
@@ -324,7 +325,7 @@ export type UserPreferences = {
     toastEnabled: boolean;
   };
 };
-export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "workspaceLayout" | "backgrounds">> & {
+export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "sidebarWidth" | "chatTheme" | "display" | "workspaceLayout" | "backgrounds">> & {
   filterPreferences?: Record<string, FilterPreferenceRecord | null>;
   notificationDisplay?: Partial<UserPreferences["notificationDisplay"]>;
 };

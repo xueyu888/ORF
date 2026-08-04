@@ -11,6 +11,9 @@ export const displayPreferenceLimits = {
 export const workspaceLayoutLimits = {
   secondaryWidthPx: { default: 420, max: 720, min: 320 },
 } as const;
+export const sidebarLayoutLimits = {
+  expandedWidthPx: { default: 260, max: 560, min: 220 },
+} as const;
 export const workbenchZoomLevelSchema = z.coerce.number().finite()
   .min(displayPreferenceLimits.workbenchZoomLevel.min)
   .max(displayPreferenceLimits.workbenchZoomLevel.max)
@@ -21,6 +24,9 @@ export const interfaceFontSizeSchema = z.coerce.number().int()
 export const contentFontSizeSchema = z.coerce.number().int()
   .min(displayPreferenceLimits.contentFontSize.min)
   .max(displayPreferenceLimits.contentFontSize.max);
+export const sidebarWidthSchema = z.coerce.number().int()
+  .min(sidebarLayoutLimits.expandedWidthPx.min)
+  .max(sidebarLayoutLimits.expandedWidthPx.max);
 
 export type ChatTheme = z.infer<typeof chatThemeSchema>;
 export type DisplayDensity = z.infer<typeof displayDensitySchema>;
@@ -92,6 +98,11 @@ export function normalizeWorkspaceLayoutPreferences(input: unknown): WorkspaceLa
     ...parsed.data,
     version: 1,
   };
+}
+
+export function normalizeSidebarWidth(input: unknown) {
+  const parsed = sidebarWidthSchema.safeParse(input);
+  return parsed.success ? parsed.data : sidebarLayoutLimits.expandedWidthPx.default;
 }
 
 export function quantizeWorkbenchZoomLevel(value: number) {
