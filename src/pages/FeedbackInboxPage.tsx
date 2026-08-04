@@ -11,8 +11,9 @@ import {
   feedbackIssueAssigneeOptions,
   feedbackIssueAuthorOptions,
   feedbackIssueLabelOptions,
-  feedbackIssueListCounts,
+  feedbackIssueListCountsForFilters,
   filterFeedbackIssueListItems,
+  type FeedbackIssueListFilters,
   type FeedbackIssueListItem,
 } from "../features/feedback/model/feedbackIssueList";
 import {
@@ -57,7 +58,14 @@ export function FeedbackInboxPage() {
     () => buildFeedbackIssueListItems({ comments: state.comments, feedback: visibleFeedback, projects: state.projects, users: state.users }),
     [state.comments, state.projects, state.users, visibleFeedback],
   );
-  const issueCounts = useMemo(() => feedbackIssueListCounts(issueItems), [issueItems]);
+  const issueFilters = useMemo<FeedbackIssueListFilters>(
+    () => ({ assigneeUserId, authorUserId, cause, impact, listState, projectId, query, sort }),
+    [assigneeUserId, authorUserId, cause, impact, listState, projectId, query, sort],
+  );
+  const issueCounts = useMemo(
+    () => feedbackIssueListCountsForFilters(issueItems, issueFilters),
+    [issueFilters, issueItems],
+  );
   const labelOptions = useMemo(() => feedbackIssueLabelOptions(issueItems), [issueItems]);
   const assigneeOptions = useMemo(() => feedbackIssueAssigneeOptions(issueItems), [issueItems]);
   const authorOptions = useMemo(() => feedbackIssueAuthorOptions(issueItems), [issueItems]);
@@ -163,8 +171,8 @@ export function FeedbackInboxPage() {
   }, [selectedProject]);
 
   const filteredFeedback = useMemo(
-    () => filterFeedbackIssueListItems(issueItems, { assigneeUserId, authorUserId, cause, impact, listState, projectId, query, sort }),
-    [assigneeUserId, authorUserId, cause, impact, issueItems, listState, projectId, query, sort],
+    () => filterFeedbackIssueListItems(issueItems, issueFilters),
+    [issueFilters, issueItems],
   );
 
   const hasActiveFilters =

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildFeedbackIssueListItems,
+  feedbackIssueListCountsForFilters,
   filterFeedbackIssueListItems,
   type FeedbackIssueListFilters,
 } from "../src/features/feedback/model/feedbackIssueList";
@@ -64,6 +65,28 @@ test("feedback query supports project qualifier by project name and unassigned a
     filterFeedbackIssueListItems(items, filters({ query: "project:unassigned" })).map((item) => item.feedback.id),
     ["fb-unassigned"],
   );
+});
+
+test("feedback issue state counts follow active filters without swallowing other state tabs", () => {
+  const items = buildFeedbackIssueListItems({
+    comments: [],
+    feedback: [
+      feedback({ id: "fb-client-open", projectId: "project-client", phenomenon: "客户端崩溃", status: "Open" }),
+      feedback({ id: "fb-client-closed", projectId: "project-client", phenomenon: "客户端已修复", status: "Closed" }),
+      feedback({ id: "fb-backend-open", projectId: "project-backend", phenomenon: "接口超时", status: "Open" }),
+    ],
+    projects,
+    users,
+  });
+
+  const projectOpenFilters = filters({ listState: "open", projectId: "project-client" });
+
+  assert.deepEqual(
+    filterFeedbackIssueListItems(items, projectOpenFilters).map((item) => item.feedback.id),
+    ["fb-client-open"],
+  );
+  assert.deepEqual(feedbackIssueListCountsForFilters(items, projectOpenFilters), { all: 2, closed: 1, open: 1 });
+  assert.deepEqual(feedbackIssueListCountsForFilters(items, { ...projectOpenFilters, query: "is:open" }), { all: 1, closed: 0, open: 1 });
 });
 
 test("feedback list filter preference stores project first and skips default filters", () => {

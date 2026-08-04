@@ -89,26 +89,18 @@ export function filterFeedbackIssueListItems(items: readonly FeedbackIssueListIt
   const parsedQuery = parseFeedbackIssueQuery(filters.query);
   const nextSort = parsedQuery.sort ?? filters.sort;
 
-  return [...items]
-    .filter((item) => itemMatchesListState(item, filters.listState))
-    .filter((item) => filters.cause === "All" || labelMatches(item, filters.cause))
-    .filter((item) => filters.impact === "All" || item.feedback.impact === filters.impact)
-    .filter((item) => projectFilterMatches(item, filters.projectId))
-    .filter((item) => filters.assigneeUserId === "All" || item.feedback.ownerUserId === filters.assigneeUserId)
-    .filter((item) => filters.authorUserId === "All" || item.feedback.createdBy === filters.authorUserId)
-    .filter((item) => parsedQuery.stateTerms.length === 0 || parsedQuery.stateTerms.some((state) => itemMatchesListState(item, state)))
-    .filter((item) => parsedQuery.assigneeTerms.every((term) => personMatches(item.feedback.ownerUserId, item.assigneeName, term)))
-    .filter((item) => parsedQuery.authorTerms.every((term) => personMatches(item.feedback.createdBy ?? "", item.authorName, term)))
-    .filter((item) => parsedQuery.labelTerms.every((term) => labelMatches(item, term)))
-    .filter((item) => parsedQuery.impactTerms.every((term) => impactMatches(item.feedback.impact, term)))
-    .filter((item) => parsedQuery.projectTerms.every((term) => projectMatches(item, term)))
-    .filter((item) => textMatches(item, parsedQuery.text))
+  return filterFeedbackIssueListMatches(items, filters, parsedQuery, filters.listState)
     .sort((left, right) => compareFeedbackIssueListItems(left, right, nextSort));
 }
 
 export function feedbackIssueListCounts(items: readonly FeedbackIssueListItem[]) {
   const open = items.filter((item) => isFeedbackIssueOpen(item.feedback)).length;
   return { all: items.length, closed: items.length - open, open };
+}
+
+export function feedbackIssueListCountsForFilters(items: readonly FeedbackIssueListItem[], filters: FeedbackIssueListFilters) {
+  const parsedQuery = parseFeedbackIssueQuery(filters.query);
+  return feedbackIssueListCounts(filterFeedbackIssueListMatches(items, filters, parsedQuery, "all"));
 }
 
 export function feedbackIssueAssigneeOptions(items: readonly FeedbackIssueListItem[]) {
@@ -133,6 +125,28 @@ export function feedbackIssueAuthorOptions(items: readonly FeedbackIssueListItem
 
 export function feedbackIssueLabelOptions(items: readonly FeedbackIssueListItem[]) {
   return uniqueOptions(items.flatMap((item) => item.labels.map((label) => ({ label: label.name, value: label.name }))));
+}
+
+function filterFeedbackIssueListMatches(
+  items: readonly FeedbackIssueListItem[],
+  filters: FeedbackIssueListFilters,
+  parsedQuery: ParsedFeedbackIssueQuery,
+  listState: FeedbackIssueListState,
+) {
+  return [...items]
+    .filter((item) => itemMatchesListState(item, listState))
+    .filter((item) => filters.cause === "All" || labelMatches(item, filters.cause))
+    .filter((item) => filters.impact === "All" || item.feedback.impact === filters.impact)
+    .filter((item) => projectFilterMatches(item, filters.projectId))
+    .filter((item) => filters.assigneeUserId === "All" || item.feedback.ownerUserId === filters.assigneeUserId)
+    .filter((item) => filters.authorUserId === "All" || item.feedback.createdBy === filters.authorUserId)
+    .filter((item) => parsedQuery.stateTerms.length === 0 || parsedQuery.stateTerms.some((state) => itemMatchesListState(item, state)))
+    .filter((item) => parsedQuery.assigneeTerms.every((term) => personMatches(item.feedback.ownerUserId, item.assigneeName, term)))
+    .filter((item) => parsedQuery.authorTerms.every((term) => personMatches(item.feedback.createdBy ?? "", item.authorName, term)))
+    .filter((item) => parsedQuery.labelTerms.every((term) => labelMatches(item, term)))
+    .filter((item) => parsedQuery.impactTerms.every((term) => impactMatches(item.feedback.impact, term)))
+    .filter((item) => parsedQuery.projectTerms.every((term) => projectMatches(item, term)))
+    .filter((item) => textMatches(item, parsedQuery.text));
 }
 
 function parseFeedbackIssueQuery(query: string): ParsedFeedbackIssueQuery {
