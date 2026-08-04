@@ -42,6 +42,7 @@
 | `PATCH`  | `/api/results/:resultId/uncertainty`                                         | 更新指标等级和积分映射；仅未锁定目标可写，`submitted` 后不得修改。`uncertainty` 是当前实现保留的 API 名 |
 | `PATCH`  | `/api/results/:resultId/confidence`                                          | 更新指标信心 |
 | `PATCH`  | `/api/results/:resultId/order`                                               | 更新指标在同目标内的排序 |
+| `GET`    | `/api/feedback/assignees`                                                    | 返回当前作用域内可作为反馈处理人的 active 成员最小展示资料：`id`、`name`、`avatarUrl`；不返回邮箱、角色或成员管理字段                 |
 | `POST`   | `/api/feedback`                                                              | 创建团队级内部反馈 issue，记录 `createdBy`、处理人、可空 `projectId`，并同步创建首条评论正文和可选附件；新反馈不接收目标或指标绑定                 |
 | `PATCH`  | `/api/feedback/:feedbackId/metadata`                                         | 更新反馈标题、分类、影响和可空项目；Open 反馈允许管理员、创建人、处理人编辑，Closed 反馈只有管理员可编辑                                          |
 | `PATCH`  | `/api/feedback/:feedbackId/assignee`                                         | 更新反馈处理人；Open 反馈允许当前作用域内 active 成员改派，Closed 反馈只有管理员可改派，处理人必须是当前作用域内 active 成员                       |
@@ -224,6 +225,7 @@ type ObjectiveFlowStatus =
 - 挑战者只能在未过期 `reestimating` 状态提出、编辑或删除自己参与目标下的指标；超过 `confirmationDueAt` 或目标冻结后均不可调整。该指标维护能力不授予 `objective.delete`，挑战者不能删除目标。
 - 反馈状态只能由管理员、反馈创建人或 `ownerUserId` 指定处理人更新；普通成员不能关闭或改写他人反馈状态。
 - 反馈创建以当前默认团队作用域为边界；active 团队成员可以创建不绑定目标或指标的内部反馈，反馈事实只写入团队反馈 issue。
+- 反馈处理人候选读模型来自 `/api/feedback/assignees`，只暴露当前作用域 active 成员的最小展示资料，供新建反馈和反馈详情改派共用；管理员成员管理列表 `/api/users` 不作为普通成员页面的数据源。
 - 反馈处理人只能通过 `/api/feedback/:feedbackId/assignee` 写入 `Feedback.ownerUserId`；Open 反馈允许当前作用域内 active 成员自由改派，Closed 反馈只有管理员可改派。
 - 反馈 `ownerUserId` 必须是当前默认作用域内 `active` 成员；停用、待审核、拒绝或不存在的用户不能成为反馈处理人。
 - 指标更新提案不接受 `feedbackId`，不会改写反馈状态；指标更新只影响结果和结果评论审计。

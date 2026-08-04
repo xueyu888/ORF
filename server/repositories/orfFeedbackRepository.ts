@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { replaceOrfAttachmentMarkdownTokens } from "../../src/features/rich-text/orfRichTextTokens";
-import type { Feedback, FeedbackStatus, Impact } from "../../src/types/orf";
+import type { Feedback, FeedbackStatus, Impact, OrfUserDisplayProfile } from "../../src/types/orf";
 import { localDateString } from "../../src/utils/date";
 import { db } from "../db/client";
 import { commentAttachments, commentMessages, commentThreads, feedback, feedbackActivityEvents, feedbackCauseCategories, projects } from "../db/schema";
@@ -61,6 +61,7 @@ export type FeedbackMetadataUpdateResult =
   | { status: "invalid" }
   | { status: "invalidProject" };
 type FeedbackMetadataUpdateError = Exclude<FeedbackMetadataUpdateResult, { status: "ok" }>;
+export type FeedbackAssigneeOption = Pick<OrfUserDisplayProfile, "avatarUrl" | "id" | "name">;
 export type FeedbackReference = Pick<Feedback, "id" | "phenomenon">;
 
 const today = () => localDateString(new Date());
@@ -105,6 +106,17 @@ async function resolveActiveMemberById(storageScopeId: string, userId: string) {
   const scopedUsers = await getScopedUsers(runtimeScope(storageScopeId));
   const member = scopedUsers.find((user) => user.status === "active" && user.id === normalizedUserId);
   return member ? { id: member.id, name: member.name } : null;
+}
+
+export async function listFeedbackAssigneeOptions(scope: RuntimeScope): Promise<FeedbackAssigneeOption[]> {
+  const scopedUsers = await getScopedUsers(scope);
+  return scopedUsers
+    .filter((user) => user.status === "active")
+    .map((user) => ({
+      avatarUrl: user.avatarUrl ?? null,
+      id: user.id,
+      name: user.name,
+    }));
 }
 
 async function resolveProjectById(storageScopeId: string, projectId: string | null | undefined) {

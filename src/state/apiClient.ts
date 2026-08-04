@@ -29,6 +29,7 @@ import type {
   CommentAttachmentUploadResult,
   CommentTargetType,
   OrfState,
+  OrfUserDisplayProfile,
   DriveBootstrap,
   DriveNode,
   OrfUser,
@@ -143,6 +144,9 @@ export type PushDeviceRegistrationResponse = {
   pushEnabled: boolean;
 };
 export type CommentMentionableUsersResponse = Pick<OrfState, "users">;
+export type FeedbackAssigneesResponse = {
+  users: Array<Pick<OrfUserDisplayProfile, "avatarUrl" | "id" | "name">>;
+};
 export type FeedbackReferencesResponse = {
   feedback: Array<Pick<OrfState["feedback"][number], "id" | "phenomenon">>;
 };
@@ -641,6 +645,10 @@ export async function uploadCommentAttachment(input: { file: File; targetId: str
 export async function getCommentMentionableUsers(input: { targetId: string; targetType: CommentTargetType }) {
   const query = new URLSearchParams({ targetId: input.targetId, targetType: input.targetType });
   return apiJson<CommentMentionableUsersResponse>(`/api/comments/mentionable-users?${query.toString()}`);
+}
+
+export async function getFeedbackAssignees() {
+  return apiJson<FeedbackAssigneesResponse>("/api/feedback/assignees");
 }
 
 export async function getFeedbackReferences(feedbackIds: string[]) {

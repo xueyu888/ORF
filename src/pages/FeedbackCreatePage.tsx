@@ -15,6 +15,7 @@ import {
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
 import { feedbackIssueHref } from "../features/feedback/model/feedbackIssue";
+import { useFeedbackAssigneeOptions } from "../features/feedback/useFeedbackAssigneeOptions";
 import { validOrfRichTextDraftAttachments } from "../features/rich-text/orfRichTextDraft";
 import { useOrf } from "../state/OrfProvider";
 import type { Impact } from "../types/orf";
@@ -33,10 +34,9 @@ export function FeedbackCreatePage() {
   const [searchParams] = useSearchParams();
   const { createFeedback, currentUser, notify, state } = useOrf();
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
-  const defaultOwnerUserId = currentUser?.id ?? state.currentUserId ?? state.users[0]?.id ?? "";
   const causeOptions = teamFeedbackCauseOptions();
-  const activeOwnerOptions = state.users.filter((user) => user.status === "active");
-  const ownerOptions = activeOwnerOptions.length > 0 ? activeOwnerOptions : state.users;
+  const ownerOptions = useFeedbackAssigneeOptions(state.users, currentUser);
+  const defaultOwnerUserId = currentUser?.id ?? state.currentUserId ?? ownerOptions[0]?.id ?? "";
   const initialOwnerUserId = ownerOptions.some((user) => user.id === defaultOwnerUserId) ? defaultOwnerUserId : ownerOptions[0]?.id ?? defaultOwnerUserId;
   const projectParam = searchParams.get("project") ?? "";
   const initialProjectId = state.projects.some((project) => project.id === projectParam) ? projectParam : "";
@@ -77,6 +77,18 @@ export function FeedbackCreatePage() {
       setProjectId("");
     }
   }, [projectId, state.projects]);
+
+  useEffect(() => {
+    if (ownerUserId && ownerOptions.some((user) => user.id === ownerUserId)) {
+      return;
+    }
+    const nextOwnerUserId = ownerOptions.some((user) => user.id === defaultOwnerUserId)
+      ? defaultOwnerUserId
+      : ownerOptions[0]?.id ?? "";
+    if (nextOwnerUserId && nextOwnerUserId !== ownerUserId) {
+      setOwnerUserId(nextOwnerUserId);
+    }
+  }, [defaultOwnerUserId, ownerOptions, ownerUserId]);
 
   useEffect(() => {
     if (previewAttachmentId && !referencedImageAttachments.some((attachment) => attachment.id === previewAttachmentId)) {

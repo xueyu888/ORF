@@ -3,7 +3,14 @@ import { z } from "zod";
 import { requireFeedbackInScope, requireUserScopeContext } from "../auth/accessPolicy";
 import { env } from "../env";
 import { getFeedbackSubscriptionMode, setFeedbackSubscriptionMode } from "../repositories/feedbackSubscriptionRepository";
-import { createFeedback, getFeedbackReferences, updateFeedbackAssignee, updateFeedbackMetadata, updateFeedbackStatus } from "../repositories/orfFeedbackRepository";
+import {
+  createFeedback,
+  getFeedbackReferences,
+  listFeedbackAssigneeOptions,
+  updateFeedbackAssignee,
+  updateFeedbackMetadata,
+  updateFeedbackStatus,
+} from "../repositories/orfFeedbackRepository";
 
 const impactSchema = z.enum(["Low", "Medium", "High", "Critical"]);
 const feedbackStatusSchema = z.enum(["Open", "Closed"]);
@@ -110,6 +117,16 @@ async function readCreateFeedbackBody(request: FastifyRequest) {
 }
 
 export function registerFeedbackRoutes(app: FastifyInstance) {
+  app.get("/api/feedback/assignees", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const users = await listFeedbackAssigneeOptions(context.scope);
+    return { users };
+  });
+
   app.get("/api/feedback/references", async (request, reply) => {
     const context = await requireUserScopeContext(request, reply);
     if (!context) {

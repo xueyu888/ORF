@@ -34,11 +34,16 @@ import {
   nextFeedbackIssueStatus,
 } from "../features/feedback/model/feedbackIssue";
 import {
+  ensureFeedbackAssigneeOption,
+  type FeedbackAssigneeOption,
+} from "../features/feedback/model/feedbackAssigneeOptions";
+import {
   feedbackIssueAssignee,
   feedbackIssueLabels,
   feedbackIssueLinkedFeedback,
   feedbackIssueParticipants,
 } from "../features/feedback/model/feedbackIssueMetadata";
+import { useFeedbackAssigneeOptions } from "../features/feedback/useFeedbackAssigneeOptions";
 import { useOrf } from "../state/OrfProvider";
 import { getFeedbackSubscription, updateFeedbackSubscription } from "../state/apiClient";
 import type { ActivityItem, CommentMessage, CommentThread, Feedback, FeedbackSubscriptionMode, Impact, OrfProject, OrfUser } from "../types/orf";
@@ -71,6 +76,7 @@ export function FeedbackIssuePage() {
   const [mentionableUsers, setMentionableUsers] = useState<CommentMentionUser[]>([]);
   const [subscriptionMode, setSubscriptionMode] = useState<FeedbackSubscriptionMode>("none");
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const assigneeOptions = useFeedbackAssigneeOptions(state.users, currentUser);
   const threads = useMemo(() => feedback ? feedbackIssueThreads(state.comments, feedback.id) : [], [feedback, state.comments]);
   const entries = useMemo(() => feedbackCommentEntries(threads), [threads]);
   const originalEntry = entries[0] ?? null;
@@ -367,6 +373,7 @@ export function FeedbackIssuePage() {
             onChange={changeSubscription}
           />
           <IssueSidebar
+            assigneeOptions={assigneeOptions}
             canAssignOwner={canAssignOwner}
             canEdit={canEditMetadata}
             comments={threads}
@@ -538,6 +545,7 @@ function subscriptionToast(mode: FeedbackSubscriptionMode) {
 }
 
 function IssueSidebar({
+  assigneeOptions,
   canAssignOwner,
   canEdit,
   comments,
@@ -548,6 +556,7 @@ function IssueSidebar({
   projects,
   users,
 }: {
+  assigneeOptions: readonly FeedbackAssigneeOption[];
   canAssignOwner: boolean;
   canEdit: boolean;
   comments: readonly CommentThread[];
@@ -569,8 +578,14 @@ function IssueSidebar({
   const labels = feedbackIssueLabels(feedback);
   const participants = feedbackIssueParticipants({ feedback, threads: comments, users });
   const linkedFeedback = feedbackIssueLinkedFeedback({ feedback, feedbackItems, threads: comments });
-  const activeOwnerOptions = users.filter((user) => user.status === "active");
-  const ownerOptions = activeOwnerOptions.length > 0 ? activeOwnerOptions : users;
+  const ownerOptions = useMemo(
+    () => ensureFeedbackAssigneeOption(assigneeOptions, {
+      avatarUrl: assignee.avatarUrl,
+      id: feedback.ownerUserId,
+      name: assignee.name,
+    }),
+    [assignee.avatarUrl, assignee.name, assigneeOptions, feedback.ownerUserId],
+  );
   const projectById = new Map(projects.map((project) => [project.id, project]));
   const project = feedback.projectId ? projectById.get(feedback.projectId) ?? null : null;
   const causeOptions = useMemo(
