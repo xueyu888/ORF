@@ -65,13 +65,15 @@ export function normalizePastedOrfRichText(text: string) {
       continue;
     }
 
-    if (shouldTreatAsListContinuation(line, activeListIndent, sawListItem)) {
-      output.push(`${" ".repeat((activeListIndent ?? 0) + 4)}${line.trimStart()}`);
+    if (!line.trim()) {
+      activeListIndent = null;
+      sawListItem = false;
+      output.push(line);
       continue;
     }
 
-    if (!line.trim()) {
-      output.push(line);
+    if (shouldTreatAsListContinuation(line, activeListIndent, sawListItem)) {
+      output.push(`${" ".repeat((activeListIndent ?? 0) + 4)}${line.trimStart()}`);
       continue;
     }
 

@@ -25,6 +25,39 @@ test("rich text paste normalizes external ordered list markers and continuations
   ].join("\n"));
 });
 
+test("rich text paste keeps blank-line-separated bold sections outside list continuations", () => {
+  const normalized = normalizePastedOrfRichText([
+    "**今日完成： **",
+    "",
+    "- 把反馈处理人体系重新理顺了。",
+    "- 评论通知能带上正文和图片。",
+    "",
+    "**当前问题： **",
+    "",
+    "- 无。",
+  ].join("\n"));
+
+  assert.equal(normalized, [
+    "**今日完成： **",
+    "",
+    "- 把反馈处理人体系重新理顺了。",
+    "- 评论通知能带上正文和图片。",
+    "",
+    "**当前问题： **",
+    "",
+    "- 无。",
+  ].join("\n"));
+
+  const html = renderToStaticMarkup(React.createElement(OrfRichTextMarkdownViewer, {
+    body: normalized,
+    classNamePrefix: "orf-work-log-markdown",
+    compact: true,
+  }));
+
+  assert.doesNotMatch(html, /orf-work-log-markdown-code-block/);
+  assert.match(html, /<strong><span>当前问题： <\/span><\/strong>/);
+});
+
 test("rich text viewer keeps list continuations and nested lists inside one ordered list", () => {
   const body = [
     "1. A 端问题确认",
