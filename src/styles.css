@@ -10263,6 +10263,150 @@ button.work-logs-team-cell:focus-visible {
   gap: 12px;
 }
 
+.orf-loot-metric-checklist {
+  display: grid;
+  gap: 10px;
+}
+
+.orf-loot-metric-checklist-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.orf-loot-metric-items,
+.orf-loot-submitted-claims {
+  display: grid;
+  gap: 10px;
+}
+
+.orf-loot-metric-card,
+.orf-loot-submitted-claim {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--orf-loot-border);
+  border-radius: 8px;
+  background: var(--orf-loot-panel-strong-bg);
+  padding: 12px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-bg-elevated) 78%, transparent);
+}
+
+.orf-loot-metric-card[data-claim="completed"],
+.orf-loot-submitted-claim[data-claim="completed"] {
+  border-color: color-mix(in srgb, var(--orf-success-border) 72%, var(--orf-loot-border));
+  background: color-mix(in srgb, var(--orf-success-bg) 38%, var(--orf-loot-panel-strong-bg));
+}
+
+.orf-loot-metric-card[data-claim="falsified"],
+.orf-loot-submitted-claim[data-claim="falsified"] {
+  border-color: color-mix(in srgb, var(--orf-accent-border) 72%, var(--orf-loot-border));
+  background: color-mix(in srgb, var(--orf-accent-soft) 40%, var(--orf-loot-panel-strong-bg));
+}
+
+.orf-loot-metric-main {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.orf-loot-metric-check-button {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--orf-loot-border);
+  border-radius: 999px;
+  background: var(--orf-bg-elevated);
+  color: var(--orf-text-muted);
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.orf-loot-metric-check-button:hover {
+  border-color: var(--orf-accent-border);
+  color: var(--orf-accent-text);
+  transform: translateY(-1px);
+}
+
+.orf-loot-metric-check-button[data-active="true"] {
+  border-color: var(--orf-success-border);
+  background: var(--orf-success-bg);
+  color: var(--orf-success-text);
+}
+
+.orf-loot-metric-content {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.orf-loot-metric-title-row,
+.orf-loot-submitted-claim-heading {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.orf-loot-submitted-claim-heading {
+  color: var(--orf-text-primary);
+  font-size: 13px;
+  font-weight: 820;
+}
+
+.orf-loot-metric-actions,
+.orf-loot-metric-evidence {
+  margin-left: 46px;
+}
+
+.orf-loot-metric-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.orf-loot-metric-status-action {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--orf-loot-border);
+  border-radius: 999px;
+  background: var(--orf-bg-elevated);
+  color: var(--orf-text-secondary);
+  font-size: 12px;
+  font-weight: 780;
+  line-height: 1;
+  padding: 0 10px;
+}
+
+.orf-loot-metric-status-action:hover,
+.orf-loot-metric-status-action[aria-pressed="true"] {
+  border-color: var(--orf-accent-border);
+  background: var(--orf-accent-soft);
+  color: var(--orf-accent-text);
+}
+
+.orf-loot-metric-evidence {
+  display: grid;
+  gap: 6px;
+}
+
+.orf-loot-metric-evidence-label {
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 820;
+}
+
 .orf-loot-select {
   width: 100%;
 }
@@ -10724,6 +10868,11 @@ button.work-logs-team-cell:focus-visible {
 
   .orf-loot-review-card {
     backdrop-filter: blur(10px);
+  }
+
+  .orf-loot-metric-actions,
+  .orf-loot-metric-evidence {
+    margin-left: 0;
   }
 }
 

@@ -1,4 +1,4 @@
-import { ArrowLeft, ClipboardCheck, Send } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Circle, ClipboardCheck, Send, XCircle } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { FantasySelectMenu, type FantasySelectOption } from "../components/FantasySelectMenu";
@@ -37,6 +37,14 @@ import {
   objectiveTrialReviewStatusLabel,
 } from "../domain/orfTrialReview";
 import {
+  buildLootMetricClaims,
+  defaultLootMetricClaimDraft,
+  firstLootMetricClaimMissingEvidence,
+  reconcileLootMetricClaimDrafts,
+  summarizeLootMetricChecklist,
+  type LootMetricClaimDrafts,
+} from "../domain/lootMetricChecklist";
+import {
   isObjectiveChallenger,
   objectiveChallengerTargets,
   type ContributionMemberTarget,
@@ -65,12 +73,6 @@ import type {
 } from "../types/orf";
 import { localDateString } from "../utils/date";
 import { canSubmitObjectivePeerReview } from "../features/challenge/model/orfFlowCapabilities";
-
-const lootClaimOptions: Array<FantasySelectOption<LootResultClaimStatus>> = [
-  { label: "完成", value: "completed" },
-  { label: "证伪", value: "falsified" },
-  { label: "未完成", value: "notClaimed" },
-];
 
 const resultReviewOptions: Array<FantasySelectOption<ResultAcceptedResult>> = [
   { label: "完成", value: "completed" },
@@ -365,9 +367,7 @@ export function LootSubmitPage() {
   );
   const [body, setBody] = useState("");
   const [selfTestReportBody, setSelfTestReportBody] = useState("");
-  const [claims, setClaims] = useState<
-    Record<string, { claim: LootResultClaimStatus; evidenceText: string }>
-  >({});
+  const [claims, setClaims] = useState<LootMetricClaimDrafts>({});
   const [resultReviews, setResultReviews] = useState<
     Record<string, ResultAcceptedResult>
   >({});
@@ -415,14 +415,7 @@ export function LootSubmitPage() {
 
   useEffect(() => {
     setClaims((current) => {
-      const next: typeof current = {};
-      for (const result of results) {
-        next[result.id] = current[result.id] ?? {
-          claim: "completed",
-          evidenceText: "",
-        };
-      }
-      return next;
+      return reconcileLootMetricClaimDrafts(results, current);
     });
   }, [results]);
 
@@ -861,16 +854,10 @@ export function LootSubmitPage() {
       return null;
     }
 
-    const resultClaims = results.map((result) => ({
-      resultId: result.id,
-      claim: claims[result.id]?.claim ?? "completed",
-      evidenceText: claims[result.id]?.evidenceText?.trim() ?? "",
-    }));
-    const missingEvidence = resultClaims.find(
-      (claim) => claim.claim !== "notClaimed" && !claim.evidenceText,
-    );
+    const resultClaims = buildLootMetricClaims(results, claims);
+    const missingEvidence = firstLootMetricClaimMissingEvidence(resultClaims);
     if (missingEvidence) {
-      setError("请填写每个已声明指标的证据、数据或链接");
+      setError("请填写每个已勾选完成或证伪指标的证据、数据或链接");
       return null;
     }
 
@@ -1158,6 +1145,10 @@ export function LootSubmitPage() {
               <div className="orf-text-secondary whitespace-pre-wrap">
                 {latestLoot.body}
               </div>
+              <SubmittedMetricClaimsList
+                claims={latestLoot.resultClaims}
+                results={results}
+              />
               {latestLoot.selfTestReportBody && (
                 <div className="rounded-md border orf-border p-3 text-xs orf-text-secondary whitespace-pre-wrap">
                   {latestLoot.selfTestReportBody}
@@ -1179,6 +1170,10 @@ export function LootSubmitPage() {
               <div className="orf-text-secondary whitespace-pre-wrap">
                 {latestTrialReview.body}
               </div>
+              <SubmittedMetricClaimsList
+                claims={latestTrialReview.resultClaims}
+                results={results}
+              />
               {latestTrialReview.selfTestReportBody && (
                 <div className="rounded-md border orf-border p-3 text-xs orf-text-secondary whitespace-pre-wrap">
                   {latestTrialReview.selfTestReportBody}
@@ -1389,27 +1384,6 @@ export function LootSubmitPage() {
                 void respondTrialReview();
               }}
             >
-              <div className="grid gap-3">
-                {latestTrialReview.resultClaims.map((claim) => (
-                  <div
-                    key={claim.resultId}
-                    className="grid gap-2 rounded-md border orf-border p-3"
-                  >
-                    <div className="text-sm font-semibold orf-text-primary">
-                      {results.find((result) => result.id === claim.resultId)
-                        ?.title ?? claim.resultId}
-                    </div>
-                    <div className="text-xs font-semibold orf-text-secondary">
-                      {lootClaimLabel(claim.claim)}
-                    </div>
-                    {claim.evidenceText && (
-                      <div className="text-sm orf-text-secondary whitespace-pre-wrap">
-                        {claim.evidenceText}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
               <Field label="试验收结论">
                 <FantasySelectMenu
                   ariaLabel="试验收结论"
@@ -1568,49 +1542,30 @@ export function LootSubmitPage() {
                   autoFocus
                 />
               </Field>
-              <div className="grid gap-3">
-                {results.map((result) => (
-                  <div
-                    key={result.id}
-                    className="grid gap-2 rounded-md border orf-border p-3"
-                  >
-                    <div className="text-sm font-semibold orf-text-primary">
-                      {result.title}
-                    </div>
-                    <ResultDetailsSummary result={result} />
-                    <FantasySelectMenu
-                      ariaLabel={`${result.title} 完成主张`}
-                      className="orf-loot-select"
-                      onChange={(value) =>
-                        setClaims((items) => ({
-                          ...items,
-                          [result.id]: {
-                            ...(items[result.id] ?? { evidenceText: "" }),
-                            claim: value,
-                          },
-                        }))
-                      }
-                      options={lootClaimOptions}
-                      value={claims[result.id]?.claim ?? "completed"}
-                      variant="filter"
-                    />
-                    <textarea
-                      className="orf-input min-h-20 px-3 py-2 text-sm"
-                      placeholder="证据、数据或链接"
-                      value={claims[result.id]?.evidenceText ?? ""}
-                      onChange={(event) =>
-                        setClaims((items) => ({
-                          ...items,
-                          [result.id]: {
-                            ...(items[result.id] ?? { claim: "completed" }),
-                            evidenceText: event.target.value,
-                          },
-                        }))
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
+              <MetricClaimChecklist
+                claims={claims}
+                results={results}
+                onClaimChange={(resultId, claim) => {
+                  setClaims((items) => ({
+                    ...items,
+                    [resultId]: {
+                      ...(items[resultId] ?? defaultLootMetricClaimDraft()),
+                      claim,
+                    },
+                  }));
+                  if (error) setError("");
+                }}
+                onEvidenceChange={(resultId, evidenceText) => {
+                  setClaims((items) => ({
+                    ...items,
+                    [resultId]: {
+                      ...(items[resultId] ?? defaultLootMetricClaimDraft()),
+                      evidenceText,
+                    },
+                  }));
+                  if (error) setError("");
+                }}
+              />
               <Field label="自测报告">
                 <textarea
                   className="orf-input min-h-24 px-3 py-2 text-sm"
@@ -1662,6 +1617,165 @@ export function LootSubmitPage() {
         )}
       </div>
     </PageScaffold>
+  );
+}
+
+function MetricClaimChecklist({
+  claims,
+  results,
+  onClaimChange,
+  onEvidenceChange,
+}: {
+  claims: LootMetricClaimDrafts;
+  results: Result[];
+  onClaimChange: (resultId: string, claim: LootResultClaimStatus) => void;
+  onEvidenceChange: (resultId: string, evidenceText: string) => void;
+}) {
+  const summary = summarizeLootMetricChecklist(results, claims);
+
+  if (results.length === 0) {
+    return (
+      <div className="rounded-md border orf-border p-3 text-xs orf-text-secondary">
+        这个目标没有可验收的指标。
+      </div>
+    );
+  }
+
+  return (
+    <div className="orf-loot-metric-checklist">
+      <div className="orf-loot-metric-checklist-header">
+        <div>
+          <div className="text-sm font-semibold orf-text-primary">
+            指标完成清单
+          </div>
+          <div className="text-xs orf-text-secondary">
+            {summary.falsified > 0
+              ? `已勾选完成 ${summary.completed} 项，证伪 ${summary.falsified} 项`
+              : `已勾选完成 ${summary.completed} / ${summary.total}`}
+          </div>
+        </div>
+        <span className="orf-loot-total-pill">
+          剩余 {summary.notClaimed}
+        </span>
+      </div>
+      <div className="orf-loot-metric-items">
+        {results.map((result) => {
+          const draft = claims[result.id] ?? defaultLootMetricClaimDraft();
+          const isCompleted = draft.claim === "completed";
+          const isFalsified = draft.claim === "falsified";
+          return (
+            <div
+              className="orf-loot-metric-card"
+              data-claim={draft.claim}
+              key={result.id}
+            >
+              <div className="orf-loot-metric-main">
+                <button
+                  aria-label={`${result.title} 标记为完成`}
+                  aria-pressed={isCompleted}
+                  className="orf-loot-metric-check-button"
+                  data-active={isCompleted ? "true" : "false"}
+                  onClick={() =>
+                    onClaimChange(
+                      result.id,
+                      isCompleted ? "notClaimed" : "completed",
+                    )
+                  }
+                  type="button"
+                >
+                  {isCompleted ? (
+                    <CheckCircle2 className="h-5 w-5" />
+                  ) : (
+                    <Circle className="h-5 w-5" />
+                  )}
+                </button>
+                <div className="orf-loot-metric-content">
+                  <div className="orf-loot-metric-title-row">
+                    <div className="orf-loot-result-title">
+                      {result.title}
+                    </div>
+                    <span className={lootClaimBadgeClass(draft.claim)}>
+                      {lootClaimLabel(draft.claim)}
+                    </span>
+                  </div>
+                  <ResultDetailsSummary result={result} />
+                </div>
+              </div>
+              <div className="orf-loot-metric-actions">
+                <button
+                  aria-pressed={isFalsified}
+                  className="orf-loot-metric-status-action"
+                  onClick={() =>
+                    onClaimChange(
+                      result.id,
+                      isFalsified ? "notClaimed" : "falsified",
+                    )
+                  }
+                  type="button"
+                >
+                  <XCircle className="h-4 w-4" />
+                  有效证伪
+                </button>
+              </div>
+              {draft.claim !== "notClaimed" && (
+                <label className="orf-loot-metric-evidence">
+                  <span className="orf-loot-metric-evidence-label">
+                    {isFalsified ? "证伪证据" : "完成证据"}
+                  </span>
+                  <textarea
+                    className="orf-input min-h-20 px-3 py-2 text-sm"
+                    placeholder="证据、数据或链接"
+                    value={draft.evidenceText}
+                    onChange={(event) =>
+                      onEvidenceChange(result.id, event.target.value)
+                    }
+                  />
+                </label>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SubmittedMetricClaimsList({
+  claims,
+  results,
+}: {
+  claims: LootResultClaim[];
+  results: Result[];
+}) {
+  if (claims.length === 0) return null;
+
+  const resultById = new Map(results.map((result) => [result.id, result]));
+
+  return (
+    <div className="orf-loot-submitted-claims">
+      {claims.map((claim) => {
+        const result = resultById.get(claim.resultId);
+        return (
+          <div
+            className="orf-loot-submitted-claim"
+            data-claim={claim.claim}
+            key={claim.resultId}
+          >
+            <div className="orf-loot-submitted-claim-heading">
+              <span className={lootClaimBadgeClass(claim.claim)}>
+                {lootClaimLabel(claim.claim)}
+              </span>
+              <span>{result?.title ?? claim.resultId}</span>
+            </div>
+            {claim.evidenceText && (
+              <div className="orf-loot-claim-evidence">
+                <LinkifiedText text={claim.evidenceText} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -2690,9 +2804,9 @@ function lootClaimBadgeClass(value: LootResultClaimStatus | undefined) {
 }
 
 function lootClaimLabel(value: LootResultClaimStatus) {
-  return (
-    lootClaimOptions.find((option) => option.value === value)?.label ?? value
-  );
+  if (value === "completed") return "完成";
+  if (value === "falsified") return "证伪";
+  return "未完成";
 }
 
 function formatInputPercent(value: number) {
