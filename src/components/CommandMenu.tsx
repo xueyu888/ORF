@@ -1,12 +1,12 @@
 import { Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { canShowFrontendPath } from "../config/frontendVisibility";
 import { quickCommands } from "../config/navigation";
 import { hasPermission } from "../config/permissions";
 import type { PermissionKey } from "../config/permissions";
 import { challengePathForTarget } from "../features/challenge/model/challengeLinks";
 import { feedbackIssueHref } from "../features/feedback/model/feedbackIssue";
+import { useWorkbenchNavigation } from "../features/workbench-navigation";
 import {
   filterResultsForVisibleObjectives,
   filterTasksForVisibleObjectives,
@@ -22,7 +22,7 @@ type CommandMenuItem =
   | { label: string; path: string; searchText: string; type: "Feedback" | "Metric" | "Objective" | "Page" | "Subtask" | "Task" };
 
 export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const navigate = useNavigate();
+  const workbenchNavigation = useWorkbenchNavigation();
   const { currentUser, state } = useOrf();
   const [query, setQuery] = useState("");
   const drag = useDraggableFloating<HTMLDivElement>({ disabled: !open, resetKey: open ? "open" : "closed" });
@@ -147,9 +147,9 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
               key={`${item.type}-${"path" in item ? item.path : item.action}-${item.label}`}
               onClick={() => {
                 if ("action" in item) {
-                  if (item.action === "createObjective") navigate("/tasks?create=objective");
+                  if (item.action === "createObjective") workbenchNavigation.open("/tasks?create=objective", { source: "command" });
                 } else {
-                  navigate(item.path);
+                  workbenchNavigation.open(item.path, { source: "command" });
                 }
                 onClose();
               }}

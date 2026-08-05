@@ -3,7 +3,6 @@ import {
   ApiError,
   getChatMessageContext,
   getChatMessages,
-  getChatUnreadContext,
   getChatUnreadTarget,
   markChatChannelReadRequest,
   setChatChannelUnreadRequest,
@@ -25,9 +24,9 @@ import {
   chatMessagePageSize,
   createFeedSnapshot,
   currentMembership,
+  hasMainFeedUnread,
   markPendingChatMessageFailed,
   markPendingChatMessageSending,
-  hasMainFeedUnread,
   isFreshFeedSnapshot,
   prependOlderFeedMessages,
   promoteReconciledLatestWindow,
@@ -44,6 +43,12 @@ import { chatReadReceiptStableMs, selectChatReadThroughCandidate } from "./chatR
 import { useChatLatestScrollStickiness } from "./useChatLatestScrollStickiness";
 import type { AppAttentionState } from "../interaction/appAttentionState";
 import { chatFeedSessionPrefetchRequests, chatFeedSessionSnapshots } from "./chatFeedSessionCache";
+import {
+  clearChatFeedReadingPosition,
+  type ChatFeedReadingPosition,
+  readChatFeedReadingPosition,
+  rememberChatFeedReadingPosition,
+} from "./chatFeedReadingPosition";
 
 export type ChatFeedThreadTarget = {
   focusMessageId: string;
@@ -127,6 +132,7 @@ export function useChatFeedState({
   const messagesRef = useRef<ChatMessage[]>([]);
   const olderLoadInFlightRef = useRef(false);
   const pendingReadReceiptRef = useRef<{ channelId: string; messageId: string; timer: number } | null>(null);
+  const pendingReadingPositionScrollRef = useRef<ChatFeedReadingPosition | null>(null);
   const pendingUnreadScrollRef = useRef(false);
   const prefetchRequestsRef = useRef(chatFeedSessionPrefetchRequests());
   const readMarkInFlightRef = useRef<string | null>(null);
@@ -140,7 +146,14 @@ export function useChatFeedState({
   const rememberActiveFeedScroll = useCallback((channelId = activeChannelIdRef.current) => {
     const element = messageScrollRef.current;
     if (!channelId || !element) return;
-    feedCacheRef.current.set(channelId, rememberFeedScroll(feedCacheRef.current.get(channelId), element.scrollTop));
+    const scrollAnchor = readChatFeedScrollAnchor(element);
+    feedCacheRef.current.set(channelId, rememberFeedScroll(feedCacheRef.current.get(channelId), element.scrollTop, scrollAnchor));
+    rememberChatFeedReadingPosition({
+      channelId,
+      scrollAnchor,
+      scrollTop: element.scrollTop,
+      userId: currentUserIdRef.current,
+    });
   }, []);
 
   const rememberLatestFeedScroll = useCallback(() => {
@@ -343,7 +356,14 @@ export function useChatFeedState({
       if (currentViewport.mode !== "browsingHistory" || currentViewport.revision !== viewport.revision) return;
       const element = messageScrollRef.current;
       if (!restoreChatFeedScrollAnchor(element, scrollAnchor)) return;
-      feedCacheRef.current.set(channelId, rememberFeedScroll(feedCacheRef.current.get(channelId), element?.scrollTop ?? 0));
+      const nextAnchor = readChatFeedScrollAnchor(element);
+      feedCacheRef.current.set(channelId, rememberFeedScroll(feedCacheRef.current.get(channelId), element?.scrollTop ?? 0, nextAnchor));
+      rememberChatFeedReadingPosition({
+        channelId,
+        scrollAnchor: nextAnchor,
+        scrollTop: element?.scrollTop ?? 0,
+        userId: currentUserIdRef.current,
+      });
     });
   }, [applySnapshotToActiveFeed, readViewportSnapshot, requestScrollToLatest]);
 
@@ -494,30 +514,53 @@ export function useChatFeedState({
     const channelId = activeChannel.id;
     const anchor = buildUnreadAnchor(activeChannel, currentUserId);
     const cachedFeed = feedCacheRef.current.get(channelId);
-    const shouldOpenMainUnread = hasMainFeedUnread(anchor) && !requestedMessageId;
+    const storedPosition = readChatFeedReadingPosition(currentUserId, channelId);
+    const cachedPosition = cachedFeed?.scrollAnchor
+      ? {
+          capturedAt: cachedFeed.syncedAt ?? new Date(0).toISOString(),
+          channelId,
+          messageId: cachedFeed.scrollAnchor.messageId,
+          offsetTop: cachedFeed.scrollAnchor.offsetTop,
+          scrollTop: cachedFeed.scrollTop,
+        }
+      : null;
+    const readingPosition = requestedMessageId ? null : cachedPosition ?? storedPosition;
     const cachedHasRequestedMessage = Boolean(
       requestedMessageId &&
       cachedFeed?.messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId),
     );
+    const cachedHasReadingPositionMessage = Boolean(
+      readingPosition &&
+      cachedFeed?.messages.some((message) => message.id === readingPosition.messageId),
+    );
     const shouldPreserveCachedWindow = !requestedMessageId && shouldPreserveFeedWindow(cachedFeed);
     manualUnreadAutoReadSuppressedRef.current = false;
     cancelPendingReadReceipt();
-    setFollowingLatest(!shouldOpenMainUnread && !requestedMessageId && !shouldPreserveCachedWindow);
+    pendingReadingPositionScrollRef.current = null;
+    setFollowingLatest(!readingPosition && !requestedMessageId && !shouldPreserveCachedWindow);
     setUnreadAnchor(anchor);
     setPendingNewMessageCount(0);
     olderLoadInFlightRef.current = false;
+    rememberChatFeedReadingPosition({
+      channelId,
+      scrollAnchor: null,
+      scrollTop: cachedFeed?.scrollTop ?? 0,
+      userId: currentUserId,
+    });
     setFeedChannelId(channelId);
     setMessages(cachedFeed?.messages ?? []);
     setHasNewerMessages(cachedFeed?.hasNewerMessages ?? false);
     setHasOlderMessages(cachedFeed?.hasOlderMessages ?? false);
     setMessagesLoading(
-      shouldOpenMainUnread ||
+      Boolean(readingPosition && !cachedHasReadingPositionMessage) ||
       !cachedFeed ||
       Boolean(requestedMessageId && !cachedHasRequestedMessage),
     );
-    if (shouldOpenMainUnread) {
-      if (cachedFeed) pendingUnreadScrollRef.current = true;
-      void getChatUnreadContext({ anchor, channelId, limit: chatMessagePageSize })
+    if (readingPosition && cachedHasReadingPositionMessage) {
+      pendingReadingPositionScrollRef.current = readingPosition;
+      setMessagesLoading(false);
+    } else if (readingPosition) {
+      void getChatMessageContext({ channelId, messageId: readingPosition.messageId, limit: chatMessagePageSize })
         .then((response) => {
           if (cancelled) return;
           const snapshot = replaceFeedMessages(
@@ -527,7 +570,7 @@ export function useChatFeedState({
             {
               hasNewerMessages: response.hasNewerMessages,
               hasOlderMessages: response.hasOlderMessages,
-              windowKind: "unread",
+              windowKind: "context",
             },
           );
           feedCacheRef.current.set(channelId, snapshot);
@@ -535,11 +578,11 @@ export function useChatFeedState({
           setMessages(snapshot.messages);
           setHasNewerMessages(snapshot.hasNewerMessages);
           setHasOlderMessages(snapshot.hasOlderMessages);
-          pendingUnreadScrollRef.current = true;
+          pendingReadingPositionScrollRef.current = readingPosition;
         })
         .catch(() => {
           if (cancelled) return;
-          if (cachedFeed) return;
+          clearChatFeedReadingPosition(currentUserId, channelId);
           return getChatMessages({ channelId, limit: chatMessagePageSize })
             .then((response) => {
               if (cancelled) return;
@@ -549,6 +592,7 @@ export function useChatFeedState({
               setMessages(snapshot.messages);
               setHasNewerMessages(snapshot.hasNewerMessages);
               setHasOlderMessages(snapshot.hasOlderMessages);
+              setFollowingLatest(true);
               requestScrollToLatest("auto");
             })
             .catch((latestError) => {
@@ -690,28 +734,52 @@ export function useChatFeedState({
 
   useLayoutEffect(() => {
     if (!requestedMessageId || !messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId)) return undefined;
+    pendingReadingPositionScrollRef.current = null;
     setFollowingLatest(false);
     return runChatFeedScrollIntent(
       () => scrollChatFeedToMessage(messageScrollRef.current, requestedMessageId, { behavior: "auto", block: "center" }),
       () => {
+        rememberActiveFeedScroll(activeChannelId);
         onRequestedMessageLocated(requestedMessageId);
         onRequestedMessageConsumed();
       },
       8,
       () => isChatFeedMessageVisible(messageScrollRef.current, requestedMessageId),
     );
-  }, [messages, onRequestedMessageConsumed, onRequestedMessageLocated, requestedMessageId, setFollowingLatest]);
+  }, [activeChannelId, messages, onRequestedMessageConsumed, onRequestedMessageLocated, rememberActiveFeedScroll, requestedMessageId, setFollowingLatest]);
+
+  useLayoutEffect(() => {
+    const position = pendingReadingPositionScrollRef.current;
+    if (!position || messagesLoading) return undefined;
+    setFollowingLatest(false);
+    return runChatFeedScrollIntent(
+      () => {
+        const element = messageScrollRef.current;
+        if (!element) return false;
+        if (restoreChatFeedScrollAnchor(element, position)) return true;
+        element.scrollTop = position.scrollTop;
+        return true;
+      },
+      () => {
+        pendingReadingPositionScrollRef.current = null;
+        rememberActiveFeedScroll(position.channelId);
+      },
+      8,
+    );
+  }, [messages, messagesLoading, rememberActiveFeedScroll, setFollowingLatest]);
 
   useLayoutEffect(() => {
     if (!pendingUnreadScrollRef.current || messagesLoading) return undefined;
+    pendingReadingPositionScrollRef.current = null;
     setFollowingLatest(false);
     return runChatFeedScrollIntent(
       () => scrollChatFeedToUnread(messageScrollRef.current, { behavior: "auto" }),
       () => {
         pendingUnreadScrollRef.current = false;
+        rememberActiveFeedScroll();
       },
     );
-  }, [messages, messagesLoading, setFollowingLatest]);
+  }, [messages, messagesLoading, rememberActiveFeedScroll, setFollowingLatest]);
 
   useLayoutEffect(() => {
     scheduleVisibleReadReceipt();
@@ -744,12 +812,12 @@ export function useChatFeedState({
         const element = messageScrollRef.current;
         if (!element) return;
         if (restoreChatFeedScrollAnchor(element, scrollAnchor)) {
-          feedCacheRef.current.set(activeChannelId, rememberFeedScroll(feedCacheRef.current.get(activeChannelId), element.scrollTop));
+          rememberActiveFeedScroll(activeChannelId);
           return;
         }
         const nextTop = element.scrollHeight - previousScrollHeight + previousScrollTop;
         element.scrollTop = Math.max(0, nextTop);
-        feedCacheRef.current.set(activeChannelId, rememberFeedScroll(feedCacheRef.current.get(activeChannelId), element.scrollTop));
+        rememberActiveFeedScroll(activeChannelId);
       });
     } catch (error) {
       notify(error instanceof Error ? error.message : "加载更早消息失败");
@@ -757,7 +825,7 @@ export function useChatFeedState({
       olderLoadInFlightRef.current = false;
       setOlderMessagesLoading(false);
     }
-  }, [activeChannelId, hasOlderMessages, isLatestScrollPending, messages, notify, setFollowingLatest]);
+  }, [activeChannelId, hasOlderMessages, isLatestScrollPending, messages, notify, rememberActiveFeedScroll, setFollowingLatest]);
 
   const handleMessageScroll = useCallback(() => {
     rememberActiveFeedScroll();
@@ -832,11 +900,15 @@ export function useChatFeedState({
     if (!channelId) return;
     setFollowingLatest(false);
     if (target.surface === "main" && !target.contextRequired) {
-      if (scrollChatFeedToUnread(messageScrollRef.current, { behavior: "auto" })) return;
+      if (scrollChatFeedToUnread(messageScrollRef.current, { behavior: "auto" })) {
+        rememberActiveFeedScroll(channelId);
+        return;
+      }
       if (
         target.messageId &&
         scrollChatFeedToMessage(messageScrollRef.current, target.messageId, { behavior: "auto", block: "start", offset: 48 })
       ) {
+        rememberActiveFeedScroll(channelId);
         return;
       }
     }
@@ -879,7 +951,7 @@ export function useChatFeedState({
     } finally {
       if (target.surface === "main" && activeChannelIdRef.current === channelId) setMessagesLoading(false);
     }
-  }, [applySnapshotToActiveFeed, notify, onThreadTarget, setFollowingLatest, unreadAnchor]);
+  }, [applySnapshotToActiveFeed, notify, onThreadTarget, rememberActiveFeedScroll, setFollowingLatest, unreadAnchor]);
 
   const loadLatestOrScroll = useCallback(() => {
     if (hasNewerMessages) {

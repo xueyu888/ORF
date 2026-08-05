@@ -4493,6 +4493,49 @@ button:disabled {
   line-height: 1.1;
 }
 
+.orf-workbench-history-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  padding: 2px;
+  border: 1px solid var(--orf-topbar-control-border);
+  border-radius: 999px;
+  background: var(--orf-topbar-control-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.orf-workbench-history-button {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--orf-topbar-control-text);
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.orf-workbench-history-button:not(:disabled):hover {
+  background: var(--orf-topbar-control-hover-bg);
+  color: #18283d;
+  transform: translateY(-1px);
+}
+
+.orf-workbench-history-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.orf-workbench-history-button:focus-visible {
+  outline: 2px solid rgba(22, 133, 169, 0.32);
+  outline-offset: 2px;
+}
+
 .orf-topbar-title-icon {
   display: grid;
   width: 32px;
@@ -7732,12 +7775,23 @@ button:disabled {
   }
 
   .orf-topbar-title.orf-text-primary {
+    order: 2;
     min-width: 0;
     flex: 1 1 100%;
     font-size: 20px;
   }
 
+  .orf-workbench-history-controls {
+    order: 1;
+  }
+
+  .orf-workbench-history-button {
+    width: 28px;
+    height: 28px;
+  }
+
   .orf-topbar > .relative {
+    order: 3;
     min-width: 0;
     flex: 1 1 220px;
   }
@@ -7747,6 +7801,7 @@ button:disabled {
   }
 
   .orf-topbar-actions {
+    order: 4;
     margin-left: 0;
     flex: 1 1 auto;
     justify-content: flex-end;

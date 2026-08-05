@@ -55,35 +55,6 @@ export const SystemManagementPage = system.Component;
 export const SystemSettingsPage = systemSettings.Component;
 export const WorkLogsPage = workLogs.Component;
 
-function routeModulePreloads(pathname: string) {
-  if (pathname.startsWith("/tasks/objectives/") && pathname.endsWith("/loot")) return [loot.preload];
-  if (pathname.startsWith("/bounties")) return [bounties.preload];
-  if (pathname.startsWith("/tasks")) return [tasks.preload];
-  if (pathname.startsWith("/work-logs")) return [workLogs.preload];
-  if (pathname.startsWith("/chat")) return [chat.preload];
-  if (pathname.startsWith("/resources") || pathname.startsWith("/drive")) return [drive.preload];
-  if (pathname === "/feedback/new") return [feedbackCreate.preload];
-  if (pathname === "/feedback/labels") return [feedbackLabels.preload];
-  if (pathname === "/feedback/milestones") return [feedbackMilestones.preload];
-  if (pathname.startsWith("/feedback/")) return [feedbackIssue.preload];
-  if (pathname.startsWith("/feedback")) return [feedbackInbox.preload];
-  if (pathname.startsWith("/reports")) return [reports.preload];
-  if (pathname.startsWith("/settings")) return [personalSettings.preload];
-  if (pathname.startsWith("/system/members")) return [system.preload, members.preload];
-  if (pathname.startsWith("/system/permissions")) return [system.preload, permissions.preload];
-  if (pathname.startsWith("/system/settings")) return [system.preload, systemSettings.preload];
-  if (pathname === "/system" || pathname === "/system/") {
-    return [system.preload, members.preload, permissions.preload, systemSettings.preload];
-  }
-  if (pathname.startsWith("/system")) return [system.preload];
-  if (pathname.startsWith("/auth")) return [auth.preload];
-  return [bounties.preload];
-}
-
-export function preloadRouteModules(pathname: string) {
-  return Promise.allSettled(routeModulePreloads(pathname).map((preload) => preload()));
-}
-
 export function preloadProductionRouteModules() {
   return Promise.allSettled([
     bounties.preload(),

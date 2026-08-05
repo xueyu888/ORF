@@ -1,5 +1,6 @@
 import type { ChatAttachment, ChatChannel, ChatMessage, ChatThreadSummary, ChatUser } from "../../types/orf";
 import { isChatConversation } from "../../domain/chatConversation";
+import type { ChatFeedScrollAnchor } from "./chatFeedScroll";
 import {
   matchOrfMentionMarkdownTokens,
   orfMentionMarkdown,
@@ -70,6 +71,7 @@ export type ChatFeedSnapshot = {
   hasScrollPosition: boolean;
   latestWindowMessages: ChatMessage[];
   messages: ChatMessage[];
+  scrollAnchor: ChatFeedScrollAnchor | null;
   scrollTop: number;
   syncedAt?: string;
   windowKind: ChatFeedWindowKind;
@@ -373,6 +375,7 @@ export function createFeedSnapshot(input?: Partial<ChatFeedSnapshot>): ChatFeedS
     hasScrollPosition: input?.hasScrollPosition ?? false,
     latestWindowMessages: input?.latestWindowMessages ?? [],
     messages: input?.messages ?? [],
+    scrollAnchor: input?.scrollAnchor ?? null,
     scrollTop: input?.scrollTop ?? 0,
     syncedAt: input?.syncedAt,
     windowKind: input?.windowKind ?? "latest",
@@ -391,6 +394,7 @@ export function replaceFeedMessages(
     hasScrollPosition: snapshot?.hasScrollPosition ?? false,
     latestWindowMessages: [],
     messages,
+    scrollAnchor: snapshot?.scrollAnchor ?? null,
     scrollTop: snapshot?.scrollTop ?? 0,
     syncedAt: new Date().toISOString(),
     windowKind: flags?.windowKind ?? "latest",
@@ -404,7 +408,7 @@ export function isFreshFeedSnapshot(snapshot: ChatFeedSnapshot | undefined, now 
 }
 
 export function shouldPreserveFeedWindow(snapshot: ChatFeedSnapshot | undefined) {
-  return Boolean(snapshot && snapshot.windowKind !== "latest");
+  return Boolean(snapshot && (snapshot.windowKind !== "latest" || snapshot.hasScrollPosition));
 }
 
 export function applyFeedMessage(snapshot: ChatFeedSnapshot | undefined, message: ChatMessage) {
@@ -562,10 +566,15 @@ export function prependOlderFeedMessages(snapshot: ChatFeedSnapshot | undefined,
   };
 }
 
-export function rememberFeedScroll(snapshot: ChatFeedSnapshot | undefined, scrollTop: number) {
+export function rememberFeedScroll(
+  snapshot: ChatFeedSnapshot | undefined,
+  scrollTop: number,
+  scrollAnchor = snapshot?.scrollAnchor ?? null,
+) {
   return createFeedSnapshot({
     ...snapshot,
     hasScrollPosition: true,
+    scrollAnchor,
     scrollTop: Math.max(0, scrollTop),
   });
 }
