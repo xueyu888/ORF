@@ -29,6 +29,7 @@ import {
   UserRound,
   type LucideIcon,
 } from "lucide-react";
+import { ImageCopyButton } from "../../components/ImageCopyButton";
 import { Button, IconButton } from "../../components/ui";
 import { DriveFilePreviewSurface } from "./DriveFilePreview";
 import {
@@ -1289,6 +1290,7 @@ function DrivePreview({
   uploadTarget: DriveNode | null;
 }) {
   const file = node?.file ?? null;
+  const imagePreviewUrl = file && file.previewKind === "image" && file.previewUrl ? drivePreviewUrl(file) : null;
 
   if (!node) {
     return <div className="orf-drive-preview-empty">选择文件</div>;
@@ -1328,6 +1330,14 @@ function DrivePreview({
                 复制链接
               </button>
             )}
+            {imagePreviewUrl ? (
+              <ImageCopyButton
+                className="orf-drive-copy-link"
+                fallbackMimeType={file.mimeType}
+                showLabel
+                sourceUrl={imagePreviewUrl}
+              />
+            ) : null}
             <a className="orf-drive-download-link" href={file.downloadUrl}>
               <Download className="h-4 w-4" />
               下载

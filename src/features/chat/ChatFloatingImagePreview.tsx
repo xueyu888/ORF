@@ -1,8 +1,6 @@
 import {
-  Check,
   ChevronLeft,
   ChevronRight,
-  Copy,
   Download,
   Grid3X3,
   Maximize2,
@@ -28,6 +26,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useParams } from "react-router-dom";
+import { ImageCopyButton } from "../../components/ImageCopyButton";
 import type { ChatAttachment } from "../../types/orf";
 import { toggleMaximizeDesktopWindow } from "../desktop/desktopShellRuntime";
 import {
@@ -88,7 +87,6 @@ type ChatImageViewerState = {
   thumbnailsOpen: boolean;
   zoom: number;
 };
-type ChatImageCopyStatus = "idle" | "copying" | "copied" | "failed";
 type ChatImagePopoutPayload = {
   createdAt: number;
   currentIndex: number;
@@ -189,10 +187,8 @@ function ChatFloatingImagePreviewWindow({
 }) {
   const attachment = currentChatAttachmentPreviewImage(preview);
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const copyResetTimerRef = useRef<number | null>(null);
   const imageDragRef = useRef<ChatImageViewerDrag | null>(null);
   const windowInteractionRef = useRef<ChatImageWindowInteraction | null>(null);
-  const [copyStatus, setCopyStatus] = useState<ChatImageCopyStatus>("idle");
   const [draggingImage, setDraggingImage] = useState(false);
   const [naturalSize, setNaturalSize] = useState<{ height: number; width: number } | null>(null);
   const [fitSize, setFitSize] = useState<{ height: number; width: number } | null>(null);
@@ -245,20 +241,6 @@ function ChatFloatingImagePreviewWindow({
       rotation: (current.rotation + 90) % 360,
       zoom: 1,
     }));
-  };
-  const copyImage = async () => {
-    if (!attachment || copyStatus === "copying") return;
-    setCopyStatus("copying");
-    try {
-      await copyChatAttachmentImage(attachment);
-      setCopyStatus("copied");
-    } catch {
-      setCopyStatus("failed");
-    }
-    if (copyResetTimerRef.current !== null) {
-      window.clearTimeout(copyResetTimerRef.current);
-    }
-    copyResetTimerRef.current = window.setTimeout(() => setCopyStatus("idle"), 1800);
   };
   const toggleWindowMaximized = () => {
     setWindowGeometry((current) => {
@@ -453,22 +435,9 @@ function ChatFloatingImagePreviewWindow({
     }));
     setNaturalSize(chatAttachmentNaturalSize(attachment));
     setFitSize(null);
-    setCopyStatus("idle");
     imageDragRef.current = null;
     setDraggingImage(false);
-    if (copyResetTimerRef.current !== null) {
-      window.clearTimeout(copyResetTimerRef.current);
-      copyResetTimerRef.current = null;
-    }
   }, [attachment, preview.images.length]);
-
-  useEffect(() => {
-    return () => {
-      if (copyResetTimerRef.current !== null) {
-        window.clearTimeout(copyResetTimerRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (!naturalSize) return;
@@ -622,15 +591,7 @@ function ChatFloatingImagePreviewWindow({
             </button>
           </div>
           <div className="orf-chat-floating-image-preview-tool-group">
-            <button
-              type="button"
-              onClick={() => void copyImage()}
-              disabled={copyStatus === "copying"}
-              title={chatImageCopyTitle(copyStatus)}
-              aria-label={chatImageCopyTitle(copyStatus)}
-            >
-              {copyStatus === "copied" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            </button>
+            <ImageCopyButton fallbackMimeType={attachment.mimeType} sourceUrl={attachment.contentUrl} />
             <a
               aria-label="下载图片"
               download={attachment.fileName}
@@ -1042,75 +1003,6 @@ function imageDimension(value?: number | null) {
 
 function clampChatImageZoom(value: number) {
   return Math.min(chatImageZoomMax, Math.max(chatImageZoomMin, Math.round(value * 100) / 100));
-}
-
-function chatImageCopyTitle(status: ChatImageCopyStatus) {
-  if (status === "copying") return "正在复制图片";
-  if (status === "copied") return "图片已复制";
-  if (status === "failed") return "复制失败";
-  return "复制图片";
-}
-
-async function copyChatAttachmentImage(attachment: ChatAttachment) {
-  if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
-    throw new Error("Clipboard image copy is not supported");
-  }
-  const response = await fetch(attachment.contentUrl, { credentials: "include" });
-  if (!response.ok) {
-    throw new Error("Image content request failed");
-  }
-  const blob = await response.blob();
-  const clipboardBlob = await clipboardWritableImageBlob(blob, attachment.mimeType);
-  const mimeType = clipboardBlob.type || "image/png";
-  await navigator.clipboard.write([new ClipboardItem({ [mimeType]: clipboardBlob })]);
-}
-
-async function clipboardWritableImageBlob(blob: Blob, fallbackMimeType?: string | null) {
-  const mimeType = blob.type || fallbackMimeType || "image/png";
-  if (isClipboardImageMimeTypeSupported(mimeType)) {
-    return blob.type ? blob : blob.slice(0, blob.size, mimeType);
-  }
-  return convertImageBlobToPng(blob);
-}
-
-function isClipboardImageMimeTypeSupported(mimeType: string) {
-  if (!mimeType.startsWith("image/")) return false;
-  const clipboardItemWithSupports = ClipboardItem as unknown as { supports?: (type: string) => boolean };
-  if (typeof clipboardItemWithSupports.supports === "function") {
-    return clipboardItemWithSupports.supports(mimeType);
-  }
-  return mimeType === "image/png";
-}
-
-async function convertImageBlobToPng(blob: Blob) {
-  const image = new Image();
-  const objectUrl = URL.createObjectURL(blob);
-  try {
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error("Image decode failed"));
-      image.src = objectUrl;
-    });
-    const canvas = document.createElement("canvas");
-    canvas.width = image.naturalWidth || image.width;
-    canvas.height = image.naturalHeight || image.height;
-    const context = canvas.getContext("2d");
-    if (!context || canvas.width <= 0 || canvas.height <= 0) {
-      throw new Error("Canvas image copy failed");
-    }
-    context.drawImage(image, 0, 0);
-    return await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((nextBlob) => {
-        if (nextBlob) {
-          resolve(nextBlob);
-        } else {
-          reject(new Error("Canvas image copy failed"));
-        }
-      }, "image/png");
-    });
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
 }
 
 function isChatImageViewerShortcutEditableTarget(target: EventTarget | null) {

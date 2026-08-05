@@ -22352,7 +22352,8 @@ button.orf-chat-image-attachment {
   text-align: center;
 }
 
-.orf-drive-file-preview-actions a {
+.orf-drive-file-preview-actions a,
+.orf-drive-file-preview-actions .orf-drive-file-preview-copy-image {
   display: inline-flex;
   height: 32px;
   align-items: center;
