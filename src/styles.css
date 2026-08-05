@@ -9667,7 +9667,7 @@ button:disabled {
 }
 
 .work-logs-team-matrix {
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--orf-border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--orf-bg-card) 82%, transparent);
@@ -9693,6 +9693,9 @@ button:disabled {
 }
 
 .work-logs-team-matrix-corner {
+  position: sticky;
+  left: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   padding: 0 12px;
@@ -9732,12 +9735,16 @@ button:disabled {
 }
 
 .work-logs-team-user {
+  position: sticky;
+  left: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 9px;
   min-height: 52px;
   padding: 8px 10px;
-  background: color-mix(in srgb, var(--orf-bg-card) 90%, transparent);
+  background: var(--orf-bg-card);
+  box-shadow: 10px 0 14px -14px rgba(15, 23, 42, 0.52);
 }
 
 .work-logs-team-user div {
@@ -9816,6 +9823,7 @@ button.work-logs-team-cell:focus-visible {
 
 .work-logs-report-popover {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid var(--orf-border-strong);
   border-radius: 8px;
@@ -9878,6 +9886,7 @@ button.work-logs-team-cell:focus-visible {
 .work-logs-report-popover-list {
   display: grid;
   gap: 8px;
+  min-height: 0;
   overflow-y: auto;
   padding: 10px;
 }
@@ -22398,7 +22407,8 @@ button.orf-chat-image-attachment {
   text-align: center;
 }
 
-.orf-drive-file-preview-actions a {
+.orf-drive-file-preview-actions a,
+.orf-drive-file-preview-actions .orf-drive-file-preview-copy-image {
   display: inline-flex;
   height: 32px;
   align-items: center;

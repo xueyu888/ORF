@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Mous
 import { clsx } from "clsx";
 import { Download, File as FileIcon, FileText, Image as ImageIcon, Loader2, Minus, Plus, RotateCcw, Type, X } from "lucide-react";
 import { useParams } from "react-router-dom";
+import { ImageCopyButton } from "../../components/ImageCopyButton";
 import { IconButton } from "../../components/ui";
 import type { Drive, DrivePreviewKind } from "../../types/orf";
 import { OrfRichTextMarkdownViewer } from "../rich-text/OrfRichTextMarkdownViewer";
@@ -283,6 +284,7 @@ function DriveFilePreviewChrome({
   const PreviewIcon = driveFilePreviewIcon(file.previewKind);
   const [fontSizePx, setFontSizePx] = useState(readStoredDrivePreviewFontSize);
   const adjustableFontSize = canAdjustDriveFilePreviewFontSize(file.previewKind);
+  const imagePreviewUrl = file.previewKind === "image" && file.previewUrl ? drivePreviewUrl(file) : null;
   const shellRef = useRef<HTMLElement | null>(null);
 
   const updateFontSizePx = useCallback((nextValue: number) => {
@@ -348,6 +350,14 @@ function DriveFilePreviewChrome({
         <div className="orf-drive-file-preview-actions">
           {adjustableFontSize ? (
             <DrivePreviewFontSizeControls value={fontSizePx} onChange={updateFontSizePx} />
+          ) : null}
+          {imagePreviewUrl ? (
+            <ImageCopyButton
+              className="orf-drive-file-preview-copy-image"
+              fallbackMimeType={file.mimeType}
+              showLabel
+              sourceUrl={imagePreviewUrl}
+            />
           ) : null}
           <a href={file.downloadUrl}>
             <Download className="h-4 w-4" />

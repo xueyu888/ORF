@@ -2,6 +2,7 @@ import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 import { clsx } from "clsx";
 import { Download, ExternalLink, File as FileIcon, FileText, Folder, Image, Link2, Loader2, Maximize2, MoreHorizontal, Plus, Search, Unlink, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
+import { ImageCopyButton } from "../../components/ImageCopyButton";
 import { Button, IconButton } from "../../components/ui";
 import {
   addChatDriveLinkRequest,
@@ -781,6 +782,15 @@ function ChatResourceItemMenu({
               <Maximize2 className="h-4 w-4" />
               大窗口预览
             </button>
+          )}
+          {file?.previewKind === "image" && file.previewUrl && (
+            <ImageCopyButton
+              fallbackMimeType={file.mimeType}
+              role="menuitem"
+              showLabel
+              sourceUrl={drivePreviewUrl(file)}
+              onBeforeCopy={() => setMenuOpen(false)}
+            />
           )}
           {canManage && !linked && !node.deletedAt && (
             <button type="button" role="menuitem" onClick={() => {
