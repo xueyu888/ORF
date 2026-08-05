@@ -5,6 +5,8 @@ import { useNavigate } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
 import { VisualBackgroundSlot } from "../components/VisualBackgroundSlot";
 import { Button, IconButton } from "../components/ui";
+import { DesktopWindowControls } from "../features/desktop/DesktopWindowControls";
+import { isDesktopShellAvailable } from "../features/desktop/desktopShellRuntime";
 import {
   findSavedCredentialAccountByEmail,
   forgetSavedCredentialByEmail,
@@ -59,6 +61,7 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function AuthPage() {
   const navigate = useNavigate();
   const { authReady, currentUser, isApproved, isAuthenticated, loginWithPassword, notify, registerWithPassword } = useOrf();
+  const [desktopChromeEnabled, setDesktopChromeEnabled] = useState(() => isDesktopShellAvailable());
   const [cachedHero] = useState<AuthHeroOption | null>(() => {
     const cached = readCachedLoginBackgroundPreview();
     return cached
@@ -106,6 +109,10 @@ export function AuthPage() {
       setPassword("");
     }
   };
+
+  useEffect(() => {
+    setDesktopChromeEnabled(isDesktopShellAvailable());
+  }, []);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
@@ -287,6 +294,11 @@ export function AuthPage() {
         crop={selectedHero?.crop ?? defaultVisualBackgroundCrop}
       />
       {heroOptions.length > 1 && <span className="orf-auth-top-gradient" aria-hidden="true" />}
+      {desktopChromeEnabled && (
+        <div className="orf-auth-desktop-chrome" aria-label="窗口标题栏">
+          <DesktopWindowControls enabled />
+        </div>
+      )}
       {heroOptions.length > 1 && (
         <div className="orf-auth-hero-switch-zone" aria-label="选择登录页背景">
           <div className="orf-auth-hero-dots" role="radiogroup" aria-label="登录页背景">

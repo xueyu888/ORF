@@ -1587,6 +1587,44 @@ button:disabled {
   user-select: none;
 }
 
+.orf-auth-desktop-chrome {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  height: 48px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 6px 12px;
+  -webkit-app-region: drag;
+}
+
+.orf-auth-desktop-chrome .orf-desktop-window-controls,
+.orf-auth-desktop-chrome .orf-desktop-window-control {
+  -webkit-app-region: no-drag;
+}
+
+.orf-auth-desktop-chrome .orf-desktop-window-controls {
+  margin-left: 0;
+  border-color: rgba(255, 255, 255, 0.36);
+  background: rgba(12, 48, 84, 0.28);
+  box-shadow:
+    0 8px 18px rgba(7, 37, 70, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(12px);
+}
+
+.orf-auth-desktop-chrome .orf-desktop-window-control {
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.orf-auth-desktop-chrome .orf-desktop-window-control:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
 .orf-auth-hero-frame {
   z-index: -3;
 }
