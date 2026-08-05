@@ -4,7 +4,6 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
 import { useOrf } from "../state/OrfProvider";
-import { useChatUnreadNavigation } from "../features/chat/useChatUnreadNavigation";
 
 const mobileBottomNavLabels = ["悬赏大厅", "我的挑战", "工作日志", "聊天"];
 
@@ -15,7 +14,6 @@ const mobileBottomNavItems = mobileBottomNavLabels
 export function MobileBottomNav({ onNavigateIntent }: { onNavigateIntent?: (path: string) => void }) {
   const { attentionState, chatUnreadSummary, currentUser, markNotificationRead, notify } = useOrf();
   const navigate = useNavigate();
-  const openChatUnreadTarget = useChatUnreadNavigation(onNavigateIntent);
   const visibleItems = mobileBottomNavItems.filter((item) => canShowFrontendPath(currentUser, item.path));
 
   if (visibleItems.length === 0) {
@@ -51,21 +49,12 @@ export function MobileBottomNav({ onNavigateIntent }: { onNavigateIntent?: (path
           if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
           onNavigateIntent?.(item.path);
         };
-        const handleClick = (event: ReactMouseEvent<HTMLAnchorElement>) => {
-          if (item.path !== "/chat" || badgeCount === 0) {
-            handleNavigateIntent(event);
-            return;
-          }
-          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-          event.preventDefault();
-          void openChatUnreadTarget();
-        };
         return (
           <NavLink
             key={item.path}
             to={item.path}
             aria-label={ariaLabel}
-            onClick={handleClick}
+            onClick={handleNavigateIntent}
             onPointerDown={handleNavigateIntent}
             onFocus={() => onNavigateIntent?.(item.path)}
             className={({ isActive }) => [

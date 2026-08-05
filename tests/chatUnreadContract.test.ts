@@ -300,9 +300,16 @@ test("global unread target uses the shared read cursor, visibility and fixed pri
   assert.match(pageSource, /const requestedThreadRootMessageId = searchParams\.get\("thread"\)/);
   assert.match(pageSource, /requestedMessageId: requestedThreadRootMessageId \? null : focusMessageId/);
   assert.match(pageSource, /openThread\(requestedThreadRootMessageId, \{ focusMessageId \}\)/);
+  assert.match(pageSource, /readChatLastChannelId/);
 
+  const apiClientSource = readFileSync(new URL("../src/state/apiClient.ts", import.meta.url), "utf8");
+  const feedStateSource = readFileSync(new URL("../src/features/chat/useChatFeedState.ts", import.meta.url), "utf8");
   const sidebarSource = readFileSync(new URL("../src/components/Sidebar.tsx", import.meta.url), "utf8");
   const mobileSource = readFileSync(new URL("../src/components/MobileBottomNav.tsx", import.meta.url), "utf8");
-  assert.match(sidebarSource, /useChatUnreadNavigation/);
-  assert.match(mobileSource, /useChatUnreadNavigation/);
+  assert.match(feedStateSource, /readChatFeedReadingPosition/);
+  assert.match(feedStateSource, /pendingReadingPositionScrollRef/);
+  assert.doesNotMatch(feedStateSource, /getChatUnreadContext/);
+  assert.doesNotMatch(apiClientSource, /getChatUnreadContext/);
+  assert.doesNotMatch(sidebarSource, /useChatUnreadNavigation/);
+  assert.doesNotMatch(mobileSource, /useChatUnreadNavigation/);
 });

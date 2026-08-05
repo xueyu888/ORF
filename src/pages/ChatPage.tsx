@@ -46,7 +46,7 @@ import { useChatPanelState } from "../features/chat/useChatPanelState";
 import { useChatRealtimeEvents } from "../features/chat/useChatRealtimeEvents";
 import { useChatThreadState } from "../features/chat/useChatThreadState";
 import { useChatTypingState } from "../features/chat/useChatTypingState";
-import { useChatUnreadNavigation } from "../features/chat/useChatUnreadNavigation";
+import { readChatLastChannelId } from "../features/chat/chatFeedReadingPosition";
 import { useHorizontalPanelResize } from "../hooks/useHorizontalPanelResize";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { chatMessageTargetPath } from "../domain/chatNavigation";
@@ -193,7 +193,6 @@ export function ChatPage() {
     refreshNotifications,
     state,
   } = useOrf();
-  const openNextChatUnreadTarget = useChatUnreadNavigation();
   const initialBootstrapRef = useRef<ChatBootstrap | undefined>(chatBootstrapSnapshot());
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(() => initialBootstrapRef.current ?? null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
@@ -436,8 +435,8 @@ export function ChatPage() {
     ]);
   }, [refreshChatUnreadSummary, refreshNotifications]);
   const handleRequestedMessageUnavailable = useCallback(() => {
-    void openNextChatUnreadTarget();
-  }, [openNextChatUnreadTarget]);
+    notify("目标消息不可用");
+  }, [notify]);
 
   const {
     appendThreadReply,
@@ -890,17 +889,21 @@ export function ChatPage() {
       return;
     }
     const routeChannelExists = routeChannelId ? channels.some((channel) => channel.id === routeChannelId) : false;
+    const rememberedChannelId = readChatLastChannelId(currentUser?.id, channels.map((channel) => channel.id));
     if (mobileViewport) {
       if (routeChannelId && !routeChannelExists) {
-        navigate("/chat", { replace: true });
+        navigate(rememberedChannelId ? `/chat/${encodeURIComponent(rememberedChannelId)}` : "/chat", { replace: true });
+      } else if (!routeChannelId && rememberedChannelId) {
+        navigate(`/chat/${encodeURIComponent(rememberedChannelId)}`, { replace: true });
       }
       return;
     }
     if (!routeChannelId || !routeChannelExists) {
-      navigate(`/chat/${encodeURIComponent(channels[0].id)}`, { replace: true });
+      navigate(`/chat/${encodeURIComponent(rememberedChannelId ?? channels[0].id)}`, { replace: true });
     }
   }, [
     channels,
+    currentUser?.id,
     loading,
     mobileViewport,
     navigate,
