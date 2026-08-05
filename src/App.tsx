@@ -9,6 +9,7 @@ import { systemManagementPages } from "./config/navigation";
 import developmentRoutes from "./config/developmentRoutes.json";
 import { ChatImagePopoutPage } from "./features/chat/ChatFloatingImagePreview";
 import { DriveFilePreviewPopoutPage } from "./features/drive/DriveFilePreview";
+import { readLastWorkbenchLocationHref } from "./features/workbench-navigation";
 import { useOrf } from "./state/OrfProvider";
 import {
   AuthPage,
@@ -133,11 +134,12 @@ export function App() {
 }
 
 function AuthRoute() {
-  const { authConnectionError, authReady, isAuthenticated, isApproved } = useOrf();
+  const { authConnectionError, authReady, currentUser, isAuthenticated, isApproved } = useOrf();
   if (authReady && !isAuthenticated && authConnectionError) {
     return <BackendUnavailableScreen detail={authConnectionError} />;
   }
-  return authReady && isAuthenticated && isApproved ? <Navigate to="/bounties" replace /> : <LazyRoute><AuthPage /></LazyRoute>;
+  const lastWorkbenchHref = readLastWorkbenchLocationHref(currentUser?.id);
+  return authReady && isAuthenticated && isApproved ? <Navigate to={lastWorkbenchHref ?? "/bounties"} replace /> : <LazyRoute><AuthPage /></LazyRoute>;
 }
 
 function RequireAuth() {

@@ -6,7 +6,7 @@ import type { OrfState, OrfUser } from "../types/orf";
 const AUTH_SESSION_TIMEOUT_MS = 8000;
 const AUTH_PASSWORD_TIMEOUT_MS = 2000;
 
-export type AuthResult = { ok: true } | { ok: false; message: string };
+export type AuthResult = { ok: true; user: OrfUser } | { ok: false; message: string };
 export type ApiAuthenticationExpiryConfirmation = "authenticated" | "expired" | "unavailable";
 export type ConfirmApiAuthenticationExpiredInput = {
   loadSession: () => Promise<AuthSession>;
@@ -129,7 +129,7 @@ export function useAuthSessionState(setState: Dispatch<SetStateAction<OrfState>>
       setAuthUserId(session.user.id);
       setAuthConnectionError(null);
       persistAuthenticatedUser(session.user, setState);
-      return { ok: true } satisfies AuthResult;
+      return { ok: true, user: session.user } satisfies AuthResult;
     },
     [setState],
   );

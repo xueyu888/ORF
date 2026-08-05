@@ -10,21 +10,15 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useWorkbenchNavigation } from "../workbench-navigation";
 import { useOrf } from "../../state/OrfProvider";
 import type { AttentionItem, AttentionLevel } from "./attentionTypes";
 
 const fallbackAttentionTargetPath = "/chat/system/personalNotifications";
 
-export function AttentionWorkbar({
-  collapsed,
-  onNavigateIntent,
-}: {
-  collapsed: boolean;
-  onNavigateIntent?: (path: string) => void;
-}) {
+export function AttentionWorkbar({ collapsed }: { collapsed: boolean }) {
   const { attentionState, markAllNotificationsRead, markNotificationRead, notify } = useOrf();
-  const navigate = useNavigate();
+  const workbenchNavigation = useWorkbenchNavigation();
   const [open, setOpen] = useState(false);
   const [markingAllRead, setMarkingAllRead] = useState(false);
   const [openingItemId, setOpeningItemId] = useState<string | null>(null);
@@ -61,8 +55,7 @@ export function AttentionWorkbar({
   }
 
   const openTarget = (targetPath: string) => {
-    onNavigateIntent?.(targetPath);
-    navigate(targetPath);
+    workbenchNavigation.open(targetPath, { source: "notification" });
     setOpen(false);
   };
 

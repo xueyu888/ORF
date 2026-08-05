@@ -14,6 +14,7 @@ import {
   savedCredentialAccountInitial,
   type SavedCredentialAccount,
 } from "../features/auth/credentialMemory";
+import { readLastWorkbenchLocationHref } from "../features/workbench-navigation";
 import { getUserPreferences, getVisualBackgrounds } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import {
@@ -108,20 +109,21 @@ export function AuthPage() {
   };
 
   useEffect(() => {
-    if (!authReady || !isAuthenticated || !isApproved) {
+    const authenticatedUserId = currentUser?.id;
+    if (!authReady || !isAuthenticated || !isApproved || !authenticatedUserId) {
       return;
     }
 
     let cancelled = false;
-    void getUserPreferences({ userId: currentUser?.id })
+    void getUserPreferences({ userId: authenticatedUserId })
       .then((preferences) => {
         if (!cancelled) {
-          navigate(preferences.defaultLandingPath ?? "/tasks");
+          navigate(readLastWorkbenchLocationHref(authenticatedUserId) ?? preferences.defaultLandingPath ?? "/tasks");
         }
       })
       .catch(() => {
         if (!cancelled) {
-          navigate("/tasks");
+          navigate(readLastWorkbenchLocationHref(authenticatedUserId) ?? "/tasks");
         }
       });
 
@@ -264,9 +266,10 @@ export function AuthPage() {
       setSelectedSavedAccountId("");
     }
 
-    const landingPath = await getUserPreferences({ force: true })
-      .then((preferences) => preferences.defaultLandingPath ?? "/tasks")
-      .catch(() => "/tasks");
+    const authenticatedUserId = result.user.id;
+    const landingPath = await getUserPreferences({ force: true, userId: authenticatedUserId })
+      .then((preferences) => readLastWorkbenchLocationHref(authenticatedUserId) ?? preferences.defaultLandingPath ?? "/tasks")
+      .catch(() => readLastWorkbenchLocationHref(authenticatedUserId) ?? "/tasks");
     navigate(landingPath);
   };
 

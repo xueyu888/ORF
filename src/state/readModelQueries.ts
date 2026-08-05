@@ -112,21 +112,6 @@ function localToday() {
   return `${year}-${month}-${day}`;
 }
 
-export function preloadReadModelsForPath(pathname: string) {
-  if (pathname.startsWith("/bounties")) return Promise.allSettled([loadBountyHall()]);
-  if (pathname.startsWith("/chat")) return Promise.allSettled([loadChatBootstrap(), loadChatUsers()]);
-  if (pathname.startsWith("/resources") || pathname.startsWith("/drive")) return Promise.allSettled([loadDriveBootstrap()]);
-  if (pathname.startsWith("/work-logs")) {
-    return Promise.allSettled([
-      loadWorkLogObjectives(),
-      loadWorkLogDay(localToday()),
-      loadWorkLogActivity(workLogActivityCollapsedLimit + 1),
-    ]);
-  }
-  if (pathname.startsWith("/reports")) return Promise.allSettled([loadReportsPage()]);
-  return Promise.resolve([]);
-}
-
 export async function preloadProductionReadModels() {
   const batches: Array<Array<() => Promise<unknown>>> = [
     [loadBountyHall, loadChatBootstrap],

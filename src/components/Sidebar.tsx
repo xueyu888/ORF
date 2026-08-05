@@ -1,8 +1,6 @@
 import { Eye, Info, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import {
   type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
   useEffect,
   useRef,
   useState,
@@ -35,7 +33,6 @@ export function Sidebar({
   backgroundUrl,
   collapsed,
   onCollapsedChange,
-  onNavigateIntent,
   onOpenClientUpdateCenter,
 }: {
   backgroundCrop: VisualBackgroundCrop;
@@ -43,7 +40,6 @@ export function Sidebar({
   backgroundUrl: string;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
-  onNavigateIntent?: (path: string) => void;
   onOpenClientUpdateCenter: () => void;
 }) {
   const { chatUnreadSummary, currentUser, logout } = useOrf();
@@ -148,7 +144,6 @@ export function Sidebar({
                 <SidebarLink
                   key={item.path}
                   item={item}
-                  onNavigateIntent={onNavigateIntent}
                   unreadCount={item.path === "/chat" ? chatUnreadSummary.totalUnreadCount : 0}
                 />
               ))}
@@ -157,7 +152,7 @@ export function Sidebar({
         ))}
       </nav>
 
-      <AttentionWorkbar collapsed={collapsed} onNavigateIntent={onNavigateIntent} />
+      <AttentionWorkbar collapsed={collapsed} />
 
       <div className="orf-sidebar-footer border-t p-4">
         <div ref={userMenuRef} className="orf-sidebar-user-wrap relative">
@@ -239,30 +234,20 @@ export function Sidebar({
 function SidebarLink({
   item,
   label = item.label,
-  onNavigateIntent,
   unreadCount = 0,
 }: {
   item: (typeof navItems)[number];
   label?: string;
-  onNavigateIntent?: (path: string) => void;
   unreadCount?: number;
 }) {
   const visibleUnreadCount = Math.max(0, unreadCount);
   const unreadBadgeText = visibleUnreadCount > 99 ? "99+" : String(visibleUnreadCount);
   const ariaLabel = visibleUnreadCount > 0 ? `${label}，${visibleUnreadCount} 条未读聊天消息` : label;
-  const handleNavigateIntent = (event: ReactMouseEvent<HTMLAnchorElement> | ReactPointerEvent<HTMLAnchorElement>) => {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    onNavigateIntent?.(item.path);
-  };
   return (
     <NavLink
       to={item.path}
       title={ariaLabel}
       aria-label={ariaLabel}
-      onClick={handleNavigateIntent}
-      onPointerDown={handleNavigateIntent}
-      onPointerEnter={() => onNavigateIntent?.(item.path)}
-      onFocus={() => onNavigateIntent?.(item.path)}
       className={({ isActive }) =>
         [
           "orf-sidebar-link flex items-center transition",

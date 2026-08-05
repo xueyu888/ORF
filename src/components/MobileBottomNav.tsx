@@ -1,8 +1,8 @@
 import { BellRing } from "lucide-react";
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
+import { useWorkbenchNavigation } from "../features/workbench-navigation";
 import { useOrf } from "../state/OrfProvider";
 
 const mobileBottomNavLabels = ["悬赏大厅", "我的挑战", "工作日志", "聊天"];
@@ -11,9 +11,9 @@ const mobileBottomNavItems = mobileBottomNavLabels
   .map((label) => navItems.find((item) => item.label === label))
   .filter((item) => item !== undefined);
 
-export function MobileBottomNav({ onNavigateIntent }: { onNavigateIntent?: (path: string) => void }) {
+export function MobileBottomNav() {
   const { attentionState, chatUnreadSummary, currentUser, markNotificationRead, notify } = useOrf();
-  const navigate = useNavigate();
+  const workbenchNavigation = useWorkbenchNavigation();
   const visibleItems = mobileBottomNavItems.filter((item) => canShowFrontendPath(currentUser, item.path));
 
   if (visibleItems.length === 0) {
@@ -33,8 +33,7 @@ export function MobileBottomNav({ onNavigateIntent }: { onNavigateIntent?: (path
         notify(error instanceof Error ? error.message : "标记通知已读失败");
       }
     }
-    onNavigateIntent?.(attentionTargetPath);
-    navigate(attentionTargetPath);
+    workbenchNavigation.open(attentionTargetPath, { source: "notification" });
   };
 
   return (
@@ -45,18 +44,11 @@ export function MobileBottomNav({ onNavigateIntent }: { onNavigateIntent?: (path
           : 0;
         const badgeText = badgeCount > 99 ? "99+" : String(badgeCount);
         const ariaLabel = badgeCount > 0 ? `${item.label}，${badgeCount} 条未读` : item.label;
-        const handleNavigateIntent = (event: ReactMouseEvent<HTMLAnchorElement> | ReactPointerEvent<HTMLAnchorElement>) => {
-          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-          onNavigateIntent?.(item.path);
-        };
         return (
           <NavLink
             key={item.path}
             to={item.path}
             aria-label={ariaLabel}
-            onClick={handleNavigateIntent}
-            onPointerDown={handleNavigateIntent}
-            onFocus={() => onNavigateIntent?.(item.path)}
             className={({ isActive }) => [
               "orf-mobile-bottom-nav-item",
               isActive ? "is-active" : "",
