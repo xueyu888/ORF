@@ -2173,7 +2173,16 @@ function WorkLogTeamMatrix({
         setOpenCell(null);
       }
     };
-    const closeOnViewportChange = () => setOpenCell(null);
+    const closeOnViewportChange = (event: Event) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("[data-work-log-report-popover-root='true']")
+      ) {
+        return;
+      }
+      setOpenCell(null);
+    };
 
     document.addEventListener("pointerdown", closeOnPointerDown);
     document.addEventListener("keydown", closeOnEscape);
