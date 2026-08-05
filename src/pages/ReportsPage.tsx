@@ -107,8 +107,26 @@ export function ReportsPage() {
     <PageScaffold
       title="统计"
       subtitle="成员积分、完成率和排名变化。"
-      action={<TimeRangeControl timeRange={timeRange} onChange={changeTimeRange} />}
     >
+      <ReportsPeriodCard
+        customDateBoundary={customDateBoundary}
+        customRange={customRange}
+        dailySummaryByDate={settlementDaySummaryByDate}
+        displayMonth={calendarDisplayMonth}
+        endDate={endDate}
+        onCustomDateBoundaryChange={(boundary) => {
+          setCustomDateBoundary(boundary);
+          setCalendarDisplayMonth(monthForDate(customRange[boundary]));
+        }}
+        onDisplayMonthChange={setCalendarDisplayMonth}
+        onSelectDate={timeRange === "custom" ? changeCustomDate : changeEndDate}
+        onShiftEndDate={(amount) => changeEndDate(shiftLeaderboardEndDate(endDate, timeRange, amount))}
+        onTimeRangeChange={changeTimeRange}
+        rangeBounds={rangeBounds}
+        timeRange={timeRange}
+        today={today}
+      />
+
       <div className="orf-stat-grid">
         <Card className="orf-stat-card">
           <div className="orf-stat-icon orf-stat-icon-accent">
@@ -143,24 +161,6 @@ export function ReportsPage() {
           <div className="orf-stat-note">{rankChangeSummary(summary, timeRange)}</div>
         </Card>
       </div>
-
-      <ReportsPeriodCard
-        customDateBoundary={customDateBoundary}
-        customRange={customRange}
-        dailySummaryByDate={settlementDaySummaryByDate}
-        displayMonth={calendarDisplayMonth}
-        endDate={endDate}
-        onCustomDateBoundaryChange={(boundary) => {
-          setCustomDateBoundary(boundary);
-          setCalendarDisplayMonth(monthForDate(customRange[boundary]));
-        }}
-        onDisplayMonthChange={setCalendarDisplayMonth}
-        onSelectDate={timeRange === "custom" ? changeCustomDate : changeEndDate}
-        onShiftEndDate={(amount) => changeEndDate(shiftLeaderboardEndDate(endDate, timeRange, amount))}
-        rangeBounds={rangeBounds}
-        timeRange={timeRange}
-        today={today}
-      />
 
       {linkedSettlement && (
         <Card className="reports-linked-settlement-card">
@@ -231,6 +231,7 @@ function ReportsPeriodCard({
   onDisplayMonthChange,
   onSelectDate,
   onShiftEndDate,
+  onTimeRangeChange,
   rangeBounds,
   timeRange,
   today,
@@ -244,18 +245,38 @@ function ReportsPeriodCard({
   onDisplayMonthChange: (date: Date) => void;
   onSelectDate: (date: string) => void;
   onShiftEndDate: (amount: number) => void;
+  onTimeRangeChange: (value: TimeRange) => void;
   rangeBounds: LeaderboardRangeBounds | null;
   timeRange: TimeRange;
   today: string;
 }) {
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const monthTotal = settlementMonthTotal(dailySummaryByDate, displayMonth);
   const selectedCalendarDate = timeRange === "custom" ? customRange[customDateBoundary] : endDate;
+  const changeCustomBoundary = (boundary: CustomDateBoundary) => {
+    onCustomDateBoundaryChange(boundary);
+    setCalendarOpen(true);
+  };
+  const openCalendarForEndDate = () => {
+    onDisplayMonthChange(monthForDate(endDate));
+    setCalendarOpen(true);
+  };
+  const selectDate = (date: string) => {
+    onSelectDate(date);
+    setCalendarOpen(true);
+  };
+  const changeTimeRange = (value: TimeRange) => {
+    onTimeRangeChange(value);
+    setCalendarOpen(false);
+  };
   return (
     <Card className="reports-period-card">
-      <div className="reports-period-heading">
-        <div>
-          <h2>结算日历</h2>
-          <p>{periodRangeDescription(timeRange, rangeBounds)}</p>
+      <div className="reports-period-main-control">
+        <TimeRangeControl timeRange={timeRange} onChange={changeTimeRange} />
+        <div className="reports-period-summary" aria-live="polite">
+          <span>积分归属日</span>
+          <strong>{periodRangeSummary(timeRange, rangeBounds)}</strong>
+          {timeRange !== "all" && <small>含结束日</small>}
         </div>
         <div className="reports-period-actions">
           {timeRange === "custom" ? (
@@ -264,7 +285,7 @@ function ReportsPeriodCard({
                 aria-pressed={customDateBoundary === "start"}
                 className="reports-custom-boundary-button"
                 data-active={customDateBoundary === "start"}
-                onClick={() => onCustomDateBoundaryChange("start")}
+                onClick={() => changeCustomBoundary("start")}
                 size="sm"
                 type="button"
                 variant="secondary"
@@ -277,7 +298,7 @@ function ReportsPeriodCard({
                 aria-pressed={customDateBoundary === "end"}
                 className="reports-custom-boundary-button"
                 data-active={customDateBoundary === "end"}
-                onClick={() => onCustomDateBoundaryChange("end")}
+                onClick={() => changeCustomBoundary("end")}
                 size="sm"
                 type="button"
                 variant="secondary"
@@ -295,7 +316,7 @@ function ReportsPeriodCard({
                 onClick={() => onShiftEndDate(-1)}
                 size="sm"
               />
-              <Button className="reports-period-date-button" onClick={() => onDisplayMonthChange(monthForDate(endDate))} size="sm" type="button" variant="secondary">
+              <Button aria-expanded={calendarOpen} className="reports-period-date-button" onClick={openCalendarForEndDate} size="sm" type="button" variant="secondary">
                 <CalendarDays className="h-4 w-4" />
                 {endDate}
               </Button>
@@ -307,43 +328,50 @@ function ReportsPeriodCard({
               />
             </div>
           )}
-          <Button disabled={selectedCalendarDate === today} onClick={() => onSelectDate(today)} size="sm" type="button" variant="secondary">
-            今天
-          </Button>
+          {timeRange !== "all" && (
+            <Button disabled={selectedCalendarDate === today} onClick={() => selectDate(today)} size="sm" type="button" variant="secondary">
+              今天
+            </Button>
+          )}
         </div>
       </div>
 
-      <div className="reports-calendar-shell">
-        <div className="reports-calendar-header">
-          <IconButton
-            icon={ChevronLeft}
-            label="上个月"
-            onClick={() => onDisplayMonthChange(addDisplayMonths(displayMonth, -1))}
-            size="sm"
-          />
-          <div className="reports-calendar-title">
-            <CalendarDays className="h-4 w-4" />
-            <span>{fantasyMonthLabel(displayMonth)}</span>
+      {calendarOpen && timeRange !== "all" && (
+        <div className="reports-calendar-shell">
+          <div className="reports-calendar-header">
+            <IconButton
+              icon={ChevronLeft}
+              label="上个月"
+              onClick={() => onDisplayMonthChange(addDisplayMonths(displayMonth, -1))}
+              size="sm"
+            />
+            <div className="reports-calendar-title">
+              <CalendarDays className="h-4 w-4" />
+              <span>{fantasyMonthLabel(displayMonth)}</span>
+            </div>
+            <IconButton
+              icon={ChevronRight}
+              label="下个月"
+              onClick={() => onDisplayMonthChange(addDisplayMonths(displayMonth, 1))}
+              size="sm"
+            />
+            <div className="reports-calendar-month-total">
+              <span>本月结算</span>
+              <strong>{formatSignedPoints(monthTotal)} 分</strong>
+            </div>
+            <Button onClick={() => setCalendarOpen(false)} size="sm" type="button" variant="secondary">
+              收起
+            </Button>
           </div>
-          <IconButton
-            icon={ChevronRight}
-            label="下个月"
-            onClick={() => onDisplayMonthChange(addDisplayMonths(displayMonth, 1))}
-            size="sm"
+          <SettlementCalendar
+            dailySummaryByDate={dailySummaryByDate}
+            displayMonth={displayMonth}
+            onSelectDate={selectDate}
+            rangeBounds={rangeBounds}
+            selectedDate={selectedCalendarDate}
           />
-          <div className="reports-calendar-month-total">
-            <span>本月结算</span>
-            <strong>{formatSignedPoints(monthTotal)} 分</strong>
-          </div>
         </div>
-        <SettlementCalendar
-          dailySummaryByDate={dailySummaryByDate}
-          displayMonth={displayMonth}
-          onSelectDate={onSelectDate}
-          rangeBounds={rangeBounds}
-          selectedDate={selectedCalendarDate}
-        />
-      </div>
+      )}
     </Card>
   );
 }
@@ -537,14 +565,11 @@ function rankChangeSummary(summary: ReturnType<typeof buildReportSummary>, timeR
   return parts.length > 0 ? `较${previousRangeLabel(timeRange)}：${parts.join("，")}` : `较${previousRangeLabel(timeRange)}暂无变化`;
 }
 
-function periodRangeDescription(timeRange: TimeRange, rangeBounds: LeaderboardRangeBounds | null) {
+function periodRangeSummary(timeRange: TimeRange, rangeBounds: LeaderboardRangeBounds | null) {
   if (timeRange === "all") {
-    return "全部公开积分流水；日历展示每天按结算日期汇总的积分。";
+    return "全部时间";
   }
-  if (timeRange === "custom") {
-    return `统计范围：${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}，结束日期包含当天。`;
-  }
-  return `统计范围：${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}，结束日期包含当天。`;
+  return `${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}`;
 }
 
 function periodWindowName(timeRange: TimeRange) {

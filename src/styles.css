@@ -7793,30 +7793,57 @@ button:disabled {
 
 .reports-period-card {
   display: grid;
-  gap: 14px;
-  padding: 18px;
+  gap: 12px;
+  padding: 12px;
 }
 
-.reports-period-heading {
+.reports-period-main-control {
   display: flex;
-  align-items: flex-start;
+  min-width: 0;
+  align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
 }
 
-.reports-period-heading h2 {
-  margin: 0;
-  color: var(--orf-text-primary);
-  font-size: 17px;
-  font-weight: 760;
-  line-height: 1.25;
+.reports-period-main-control .orf-segmented-control {
+  flex: 0 0 auto;
 }
 
-.reports-period-heading p {
-  margin: 4px 0 0;
+.reports-period-main-control .orf-segmented-option {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.reports-period-summary {
+  display: inline-flex;
+  min-height: 38px;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--orf-border);
+  border-radius: var(--orf-radius-control);
+  background: color-mix(in srgb, var(--orf-bg-card) 82%, var(--orf-bg-muted));
+  padding: 0 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reports-period-summary span,
+.reports-period-summary small {
+  flex: 0 0 auto;
   color: var(--orf-text-secondary);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.reports-period-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--orf-text-primary);
   font-size: 13px;
-  line-height: 1.45;
+  font-weight: 840;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reports-period-actions {
@@ -7876,6 +7903,8 @@ button:disabled {
   display: grid;
   gap: 10px;
   min-width: 0;
+  border-top: 1px solid var(--orf-border);
+  padding-top: 12px;
 }
 
 .reports-calendar-header {
@@ -8220,8 +8249,36 @@ button:disabled {
     padding: 14px;
   }
 
-  .reports-period-heading {
+  .reports-period-main-control {
+    align-items: stretch;
     flex-direction: column;
+  }
+
+  .reports-period-main-control .orf-segmented-control {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .reports-period-summary {
+    flex-wrap: wrap;
+    align-content: center;
+    width: 100%;
+    min-height: 58px;
+    padding-block: 7px;
+  }
+
+  .reports-period-summary span,
+  .reports-period-summary small {
+    order: 1;
+  }
+
+  .reports-period-summary small {
+    margin-left: auto;
+  }
+
+  .reports-period-summary strong {
+    order: 2;
+    flex-basis: 100%;
   }
 
   .reports-period-actions,
