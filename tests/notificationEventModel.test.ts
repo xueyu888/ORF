@@ -193,7 +193,27 @@ test("comment notification content keeps text and image attachments without file
     summary: "邓滨虎 回复了反馈「上传失败」：",
   });
 
-  assert.equal(content.body, "邓滨虎 回复了反馈「上传失败」：\n\n请看截图。\n![screen.png](orf-attachment:image-1)");
+  assert.equal(content.body, "邓滨虎 回复了反馈「上传失败」：\n\n> 请看截图。\n\n![screen.png](orf-attachment:image-1)");
+  assert.deepEqual(commentNotificationImageAttachmentIdsFromMetadata(content.metadata), ["image-1"]);
+});
+
+test("comment notification content quotes text around image previews", () => {
+  const content = buildCommentNotificationContent({
+    attachments: [
+      { fileName: "screen.png", id: "image-1", mimeType: "image/png", previewKind: "image" },
+    ],
+    commentBody: [
+      "前面说明。",
+      "![screen.png](orf-attachment:image-1)",
+      "后面补充。",
+    ].join("\n"),
+    summary: "朱锐轩 回复了反馈「反馈中心应该有草稿」：",
+  });
+
+  assert.equal(
+    content.body,
+    "朱锐轩 回复了反馈「反馈中心应该有草稿」：\n\n> 前面说明。\n\n![screen.png](orf-attachment:image-1)\n\n> 后面补充。",
+  );
   assert.deepEqual(commentNotificationImageAttachmentIdsFromMetadata(content.metadata), ["image-1"]);
 });
 

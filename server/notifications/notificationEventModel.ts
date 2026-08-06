@@ -8,6 +8,7 @@ import type {
   NotificationTargetType,
 } from "../../src/types/orf";
 import {
+  matchOrfAttachmentMarkdownTokens,
   replaceOrfAttachmentMarkdownTokens,
 } from "../../src/features/rich-text/orfRichTextMarkdown";
 
@@ -88,13 +89,40 @@ function markdownWithOnlyCommentImages(markdown: string, imageAttachmentIds: rea
     .trim();
 }
 
+function commentNotificationQuoteBlock(markdown: string) {
+  const text = markdown
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (!text) return null;
+  return text.split("\n").map((line) => (line.trim() ? `> ${line}` : ">")).join("\n");
+}
+
+function commentNotificationQuotedMarkdown(markdown: string) {
+  const source = markdown.trim();
+  if (!source) return "";
+
+  const blocks: string[] = [];
+  let cursor = 0;
+  for (const match of matchOrfAttachmentMarkdownTokens(source)) {
+    const quote = commentNotificationQuoteBlock(source.slice(cursor, match.index));
+    if (quote) blocks.push(quote);
+    blocks.push(match.token);
+    cursor = match.index + match.token.length;
+  }
+
+  const quote = commentNotificationQuoteBlock(source.slice(cursor));
+  if (quote) blocks.push(quote);
+  return blocks.join("\n\n").trim();
+}
+
 export function buildCommentNotificationContent(input: {
   attachments?: readonly CommentNotificationAttachmentFact[];
   commentBody: string;
   summary: string;
 }): CommentNotificationContent {
   const imageAttachmentIds = commentNotificationImageAttachmentIds(input.attachments ?? []);
-  const commentBody = markdownWithOnlyCommentImages(input.commentBody, imageAttachmentIds);
+  const commentBody = commentNotificationQuotedMarkdown(markdownWithOnlyCommentImages(input.commentBody, imageAttachmentIds));
   const summary = input.summary.trim();
   const metadata: Record<string, string> = imageAttachmentIds.length > 0 ? { [commentNotificationImageMetadataKey]: imageAttachmentIds.join(",") } : {};
   return {
