@@ -196,6 +196,7 @@ interface OrfContextValue {
   updateObjectiveBasePoints: (objectiveId: string, objectiveBasePoints: number) => Promise<boolean>;
   updateResultTitle: (resultId: string, title: string) => Promise<boolean>;
   updateResultDetails: (resultId: string, details: ResultDetailsInput) => Promise<boolean>;
+  updateResultExecutionCompletion: (resultId: string, completed: boolean) => Promise<boolean>;
   updateTaskTitle: (taskId: string, title: string) => Promise<boolean>;
   updateTaskChecklistItemLabel: (taskId: string, itemId: string, label: string) => Promise<boolean>;
   createTaskChecklistItem: (taskId: string, input?: { afterItemId?: string; label?: string }) => Promise<TaskChecklistItem | null>;

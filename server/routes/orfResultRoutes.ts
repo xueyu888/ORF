@@ -18,6 +18,7 @@ import {
   deleteResult,
   moveResult,
   proposeResultUpdate,
+  setResultExecutionCompleted,
   updateResultConfidence,
   updateResultDetails,
   updateResultTitle,
@@ -47,6 +48,7 @@ const createResultBodySchema = z.object({
   definerUserId: z.string().trim().min(1).optional(),
 });
 const updateResultConfidenceBodySchema = z.object({ confidence: z.number().int().min(0).max(100) });
+const updateResultExecutionCompletionBodySchema = z.object({ completed: z.boolean() });
 const updateResultUncertaintyBodySchema = z.object({ uncertaintyLevel: uncertaintyLevelSchema });
 const updateResultDetailsBodySchema = z.object({
   detail: detailTextSchema,
@@ -143,6 +145,25 @@ export function registerOrfResultRoutes(app: FastifyInstance) {
 
     const updated = await updateResultTitle(params.resultId, body.title, context.user.id);
 
+    if (!updated) {
+      return reply.code(404).send({ error: "Result not found" });
+    }
+
+    return { ok: true };
+  });
+
+  app.patch("/api/results/:resultId/execution-completion", async (request, reply) => {
+    const params = resultParamsSchema.parse(request.params);
+    const body = updateResultExecutionCompletionBodySchema.parse(request.body);
+    const context = await requireResultEditContext(request, reply, params.resultId);
+    if (!context) {
+      return reply;
+    }
+    if (!(await requireResultUnlocked(reply, params.resultId))) {
+      return reply;
+    }
+
+    const updated = await setResultExecutionCompleted(params.resultId, body.completed, context.user.id);
     if (!updated) {
       return reply.code(404).send({ error: "Result not found" });
     }

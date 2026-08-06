@@ -821,6 +821,7 @@ export const results = pgTable("results", {
   definer: text("definer").notNull().default(""),
   definerUserId: uuid("definer_user_id").notNull().references(() => users.id),
   uncertaintyScore: integer("uncertainty_score").notNull().default(0),
+  executionCompleted: boolean("execution_completed").notNull().default(false),
   acceptedResult: text("accepted_result").$type<ResultAcceptedResult>().notNull().default("unreviewed"),
   reviewCadence: text("review_cadence").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),

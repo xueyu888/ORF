@@ -51,12 +51,6 @@ import {
   type TaskCompletionOverlayInput,
 } from "./model/taskCompletionOverlay";
 import {
-  completedMetricIdsFromDrafts,
-  pruneMetricCompletionDrafts,
-  setMetricCompletionDraft,
-  type MetricCompletionDrafts,
-} from "./model/metricCompletionDrafts";
-import {
   applyTitleEditOverlays,
   titleEditOverlayForTarget,
   titleEditOverlayResolved,
@@ -266,6 +260,7 @@ export function ChallengePlanPage() {
     setObjectiveProject,
     updateObjectiveTitle,
     updateResultDetails,
+    updateResultExecutionCompletion,
     updateResultTitle,
     updateTaskChecklistItem,
     updateTaskChecklistItemLabel,
@@ -301,7 +296,6 @@ export function ChallengePlanPage() {
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const [completionOverlays, setCompletionOverlays] = useState<TaskCompletionOverlay[]>([]);
-  const [metricCompletionDrafts, setMetricCompletionDrafts] = useState<MetricCompletionDrafts>({});
   const [titleEditOverlays, setTitleEditOverlays] = useState<TitleEditOverlay[]>([]);
   const [objectiveInteractionAnchor, setObjectiveInteractionAnchor] = useState<ListItemAnchor | null>(null);
   const [peerReviewActionStatuses, setPeerReviewActionStatuses] = useState<PeerReviewActionStatusByObjectiveId>({});
@@ -401,16 +395,10 @@ export function ChallengePlanPage() {
     () => applyTaskCompletionOverlays(applyTitleEditOverlays(applyChildCreationOverlay(baseChallengeState, childOverlay), titleEditOverlays), completionOverlays),
     [baseChallengeState, childOverlay, completionOverlays, titleEditOverlays],
   );
-  const completedMetricIds = useMemo(() => completedMetricIdsFromDrafts(metricCompletionDrafts), [metricCompletionDrafts]);
-
-  useEffect(() => {
-    const resultIds = new Set(challengeState.results.map((result) => result.id));
-    setMetricCompletionDrafts((current) => pruneMetricCompletionDrafts(current, resultIds));
-  }, [challengeState.results]);
 
   const setMetricCompletion = useCallback((resultId: string, completed: boolean) => {
-    setMetricCompletionDrafts((current) => setMetricCompletionDraft(current, resultId, completed));
-  }, []);
+    void updateResultExecutionCompletion(resultId, completed);
+  }, [updateResultExecutionCompletion]);
 
   const clearChildCreation = () => setChildCreationSession(clearChildCreationSession);
   const applyTitleEditOverlay = (overlay: TitleEditOverlayInput) => {
@@ -1513,7 +1501,6 @@ export function ChallengePlanPage() {
               collapsedActionIds,
               collapsedBountyIds,
               commentCounts,
-              completedMetricIds,
               temporaryChildRow,
               dragDrop,
               editingTarget: effectiveEditingTarget,

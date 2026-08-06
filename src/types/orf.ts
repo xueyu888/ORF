@@ -677,6 +677,7 @@ export interface Result {
   definer?: string;
   definerUserId: string;
   uncertaintyScore: number;
+  executionCompleted: boolean;
   acceptedResult: ResultAcceptedResult;
   evidenceIds: string[];
   trend: TrendPoint[];
