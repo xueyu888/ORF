@@ -1540,22 +1540,6 @@ async function findFirstUnreadThreadMention(channelId: string, actor: ChatActor)
   return rows[0] ?? null;
 }
 
-export async function getChatUnreadContext(
-  input: { anchor?: { lastReadAt?: string | null; manuallyUnread: boolean }; channelId: string; limit?: number },
-  actor: ChatActor,
-): Promise<Outcome<ChatMessageContext>> {
-  const mainOutcome = await getChatMainUnreadContext(input, actor);
-  if (mainOutcome.status !== "notFound") return mainOutcome;
-  if (!(await hasReadableChannel(actor, input.channelId))) return mainOutcome;
-  const threadTarget = await findFirstUnreadThreadMention(input.channelId, actor);
-  if (!threadTarget) return mainOutcome;
-  return getChatMessageContext({
-    channelId: input.channelId,
-    limit: input.limit,
-    messageId: threadTarget.root_message_id,
-  }, actor);
-}
-
 export async function getChatUnreadTarget(
   input: {
     anchor?: { lastReadAt?: string | null; manuallyUnread: boolean };

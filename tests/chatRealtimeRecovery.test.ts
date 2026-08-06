@@ -11,6 +11,7 @@ import {
   chatFeedViewportModeAfterScroll,
   isChatFeedAtLatest,
   isChatFeedNearLatest,
+  restoreChatFeedScrollAnchor,
 } from "../src/features/chat/chatFeedScroll";
 import {
   buildChatRealtimeRecoveryState,
@@ -50,6 +51,28 @@ function message(id: string, createdAt: string): ChatMessage {
     source: "user",
     updatedAt: createdAt,
   };
+}
+
+function withRequestAnimationFrame(run: () => void) {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      requestAnimationFrame: (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      },
+    },
+  });
+  try {
+    run();
+  } finally {
+    if (previousWindow) {
+      Object.defineProperty(globalThis, "window", previousWindow);
+    } else {
+      delete (globalThis as { window?: unknown }).window;
+    }
+  }
 }
 
 test("first realtime open creates an epoch and every reconnect creates a newer epoch", () => {
@@ -205,6 +228,35 @@ test("programmatic scrolling does not redefine user viewport intent", () => {
     programmatic: false,
     scrollTop: 1_000,
   }), "followingLatest");
+});
+
+test("chat feed anchor restore bypasses smooth scrolling", () => {
+  withRequestAnimationFrame(() => {
+    const scrollCalls: ScrollToOptions[] = [];
+    const messageElement = {
+      dataset: { chatMessageId: "message-2" },
+      getBoundingClientRect: () => ({ bottom: 320, top: 260 }),
+    };
+    const container = {
+      scrollHeight: 2_000,
+      scrollTop: 100,
+      style: { scrollBehavior: "smooth" },
+      getBoundingClientRect: () => ({ bottom: 510, top: 10 }),
+      querySelectorAll: () => [messageElement],
+      scrollTo: (options: ScrollToOptions) => {
+        scrollCalls.push(options);
+        container.scrollTop = Number(options.top ?? 0);
+      },
+    };
+
+    assert.equal(
+      restoreChatFeedScrollAnchor(container as unknown as HTMLElement, { messageId: "message-2", offsetTop: 30 }),
+      true,
+    );
+    assert.deepEqual(scrollCalls, [{ behavior: "auto", top: 320 }]);
+    assert.equal(container.scrollTop, 320);
+    assert.equal(container.style.scrollBehavior, "smooth");
+  });
 });
 
 test("history feed reconciles latest data without replacing the visible reading window", () => {

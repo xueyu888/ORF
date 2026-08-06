@@ -29,7 +29,9 @@ import {
   chatMessagePendingSend,
   createPendingChatMessage,
   type ChatSendInput,
+  buildUnreadAnchor,
   currentMembership,
+  hasMainFeedUnread,
   hasStoredDraftForChannel,
   optimisticSetChatMessagePinned,
   optimisticSetChatMessageSaved,
@@ -223,7 +225,6 @@ export function ChatPage() {
   const handledPresenceInvalidationKeyRef = useRef("");
   const lastPresenceRefreshAtRef = useRef(0);
   const locatedMessageTimerRef = useRef<number | null>(null);
-  const openChannelRequestIdRef = useRef(0);
   const presenceRefreshTimerRef = useRef<number | null>(null);
   const { openImagePreview } = useChatFloatingImagePreview();
   const openAttachmentPreview = useCallback<ChatAttachmentPreviewHandler>((attachment, messageAttachments) => {
@@ -732,17 +733,15 @@ export function ChatPage() {
 
   const handleOpenChannel = useCallback((channelId: string) => {
     setLocatedMessageId(null);
-    if (channelId === activeChannel?.id) {
-      openChannelRequestIdRef.current += 1;
-      return;
-    }
-    const requestId = openChannelRequestIdRef.current + 1;
-    openChannelRequestIdRef.current = requestId;
-    void prefetchChannelMessages(channelId).finally(() => {
-      if (openChannelRequestIdRef.current !== requestId) return;
-      navigate(`/chat/${encodeURIComponent(channelId)}`);
-    });
-  }, [activeChannel?.id, navigate, prefetchChannelMessages]);
+    if (channelId === activeChannel?.id) return;
+    navigate(`/chat/${encodeURIComponent(channelId)}`);
+  }, [activeChannel?.id, navigate]);
+
+  const handlePreviewChannel = useCallback((channelId: string) => {
+    const channel = channels.find((item) => item.id === channelId);
+    if (channel && hasMainFeedUnread(buildUnreadAnchor(channel, currentUser?.id))) return;
+    void prefetchChannelMessages(channelId);
+  }, [channels, currentUser?.id, prefetchChannelMessages]);
 
   const handleOpenChatResult = useCallback((result: ChatSearchResult) => {
     applyChannel(result.channel);
@@ -756,7 +755,6 @@ export function ChatPage() {
   }, [applyChannel, closePanel, mobileViewport, navigate]);
 
   const handleBackToChatList = useCallback(() => {
-    openChannelRequestIdRef.current += 1;
     closePanel();
     navigate("/chat");
   }, [closePanel, navigate]);
@@ -1309,7 +1307,7 @@ export function ChatPage() {
         onMarkUnreadChannelsRead={handleMarkUnreadChannelsRead}
         onOpenChannel={handleOpenChannel}
         onOpenConversationWithUser={(userId) => void handleOpenConversation([userId])}
-        onPreviewChannel={(channelId) => void prefetchChannelMessages(channelId)}
+        onPreviewChannel={handlePreviewChannel}
         query={channelQuery}
         setQuery={setChannelQuery}
         users={bootstrap.users}
@@ -1429,6 +1427,7 @@ export function ChatPage() {
         <ChatRightPanel
           activePanel={activePanel}
           allUsers={bootstrap.users}
+          appAttentionState={appAttentionState}
           attachmentMaxBytes={bootstrap.settings.attachmentMaxBytes}
           canDeleteAnyMessage={canManageRightPanelChannel}
           canManage={canManageRightPanelChannel}

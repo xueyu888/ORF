@@ -99,7 +99,7 @@ export function restoreChatFeedScrollAnchor(element: HTMLElement | null, anchor:
   const elementRect = element.getBoundingClientRect();
   const targetRect = target.getBoundingClientRect();
   const targetTop = element.scrollTop + targetRect.top - elementRect.top;
-  element.scrollTop = Math.max(0, targetTop - anchor.offsetTop);
+  setChatFeedScrollTopInstant(element, Math.max(0, targetTop - anchor.offsetTop));
   return true;
 }
 
@@ -127,15 +127,19 @@ function findChatFeedMessageElement(element: HTMLElement, messageId: string) {
     .find((item) => item.dataset.chatMessageId === messageId) ?? null;
 }
 
+export function setChatFeedScrollTopInstant(element: HTMLElement, top: number) {
+  const previousScrollBehavior = element.style.scrollBehavior;
+  element.style.scrollBehavior = "auto";
+  element.scrollTop = top;
+  element.scrollTo({ top, behavior: "auto" });
+  window.requestAnimationFrame(() => {
+    element.style.scrollBehavior = previousScrollBehavior;
+  });
+}
+
 function setChatFeedScrollTop(element: HTMLElement, top: number, behavior: ScrollBehavior) {
   if (behavior === "auto") {
-    const previousScrollBehavior = element.style.scrollBehavior;
-    element.style.scrollBehavior = "auto";
-    element.scrollTop = top;
-    element.scrollTo({ top, behavior: "auto" });
-    window.requestAnimationFrame(() => {
-      element.style.scrollBehavior = previousScrollBehavior;
-    });
+    setChatFeedScrollTopInstant(element, top);
     return;
   }
   element.scrollTo({ top, behavior });

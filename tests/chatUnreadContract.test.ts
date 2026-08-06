@@ -10,8 +10,10 @@ import {
   chatUnreadControlKind,
   hasMainFeedUnread,
   resolveUnreadJumpTarget,
+  selectChatFeedPrefetchChannelIds,
   upsertChannel,
 } from "../src/features/chat/chatModels";
+import { resolveChatFeedOpenIntent } from "../src/features/chat/chatFeedOpenIntent";
 import { getChatUnreadTarget } from "../src/state/apiClient";
 import { chatMessageTargetPath } from "../src/domain/chatNavigation";
 import type { ChatChannel, ChatMessage } from "../src/types/orf";
@@ -159,6 +161,51 @@ test("main feed unread resolves only to a named main-surface jump target", () =>
   });
 });
 
+test("chat feed open intent prioritizes message links, main unread, local restore and latest", () => {
+  const readingPosition = {
+    capturedAt: "2026-07-11T00:02:00.000Z",
+    channelId: "channel-1",
+    messageId: "message-restore",
+    offsetTop: 24,
+    scrollTop: 480,
+  };
+  const anchor = buildUnreadAnchor(channel({ unreadCount: 2 }), currentUserId);
+
+  assert.deepEqual(resolveChatFeedOpenIntent({
+    readingPosition,
+    requestedMessageId: "message-linked",
+    unreadAnchor: anchor,
+  }), { kind: "message", messageId: "message-linked" });
+  assert.equal(resolveChatFeedOpenIntent({
+    readingPosition,
+    requestedMessageId: null,
+    unreadAnchor: anchor,
+  }).kind, "unread");
+  assert.deepEqual(resolveChatFeedOpenIntent({
+    readingPosition,
+    requestedMessageId: null,
+    unreadAnchor: null,
+  }), { kind: "restore", position: readingPosition });
+  assert.deepEqual(resolveChatFeedOpenIntent({
+    readingPosition: null,
+    requestedMessageId: null,
+    unreadAnchor: null,
+  }), { kind: "latest" });
+});
+
+test("chat feed latest prefetch skips channels whose opening target is first main unread", () => {
+  const channelRead = channel({ id: "channel-read", unreadCount: 0 });
+  const channelMainUnread = channel({ id: "channel-main-unread", unreadCount: 3 });
+  const channelThreadUnread = channel({ id: "channel-thread-unread", threadUnreadCount: 2 });
+
+  assert.deepEqual(selectChatFeedPrefetchChannelIds({
+    activeChannelId: null,
+    channels: [channelMainUnread, channelThreadUnread, channelRead],
+    currentUserId,
+    limit: 4,
+  }), ["channel-thread-unread", "channel-read"]);
+});
+
 test("late realtime snapshots cannot resurrect unread counts behind newer read-state versions", () => {
   const read = channel({
     mainMentionCount: 0,
@@ -261,7 +308,7 @@ test("thread mention target request uses the explicit surface contract", async (
   });
 });
 
-test("repository guard keeps thread read, delivery and legacy fallback contracts", () => {
+test("repository guard keeps thread read, delivery and named unread target contracts", () => {
   const repositorySource = readFileSync(new URL("../server/repositories/chatRepository.ts", import.meta.url), "utf8");
   assert.match(repositorySource, /SELECT DISTINCT m\.root_message_id, \$2::uuid, true, \$3::timestamptz, \$3::timestamptz/);
   assert.match(repositorySource, /FROM unnest\(\$2::uuid\[\]\) AS mentioned\(mentioned_user_id\)/);
@@ -272,7 +319,8 @@ test("repository guard keeps thread read, delivery and legacy fallback contracts
   assert.match(repositorySource, /WHERE chat_thread_follows\.last_viewed_at IS NULL\s+OR chat_thread_follows\.last_viewed_at < EXCLUDED\.last_viewed_at/);
   assert.match(repositorySource, /RETURNING following, true AS read_state_changed/);
   assert.match(repositorySource, /if \(followRows\[0\]\?\.read_state_changed\) \{\s+publishChatChannelRealtime/);
-  assert.match(repositorySource, /const threadTarget = await findFirstUnreadThreadMention\(input\.channelId, actor\)/);
+  assert.match(repositorySource, /if \(input\.surface === "main"\)/);
+  assert.match(repositorySource, /const target = await findFirstUnreadThreadMention\(input\.channelId, actor\)/);
 
   const sendStart = repositorySource.indexOf("export async function sendChatMessage(");
   const followWrite = repositorySource.indexOf("await followMentionedThreadRecipients(client", sendStart);
@@ -304,12 +352,17 @@ test("global unread target uses the shared read cursor, visibility and fixed pri
 
   const apiClientSource = readFileSync(new URL("../src/state/apiClient.ts", import.meta.url), "utf8");
   const feedStateSource = readFileSync(new URL("../src/features/chat/useChatFeedState.ts", import.meta.url), "utf8");
+  const routeSource = readFileSync(new URL("../server/routes/chatRoutes.ts", import.meta.url), "utf8");
+  const repositorySourceForLegacy = readFileSync(new URL("../server/repositories/chatRepository.ts", import.meta.url), "utf8");
   const sidebarSource = readFileSync(new URL("../src/components/Sidebar.tsx", import.meta.url), "utf8");
   const mobileSource = readFileSync(new URL("../src/components/MobileBottomNav.tsx", import.meta.url), "utf8");
+  assert.match(feedStateSource, /resolveChatFeedOpenIntent/);
   assert.match(feedStateSource, /readChatFeedReadingPosition/);
   assert.match(feedStateSource, /pendingReadingPositionScrollRef/);
   assert.doesNotMatch(feedStateSource, /getChatUnreadContext/);
   assert.doesNotMatch(apiClientSource, /getChatUnreadContext/);
+  assert.doesNotMatch(routeSource, /unread-context/);
+  assert.doesNotMatch(repositorySourceForLegacy, /export async function getChatUnreadContext/);
   assert.doesNotMatch(sidebarSource, /useChatUnreadNavigation/);
   assert.doesNotMatch(mobileSource, /useChatUnreadNavigation/);
 });

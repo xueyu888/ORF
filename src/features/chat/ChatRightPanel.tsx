@@ -12,10 +12,12 @@ import { ChatThreadInboxPanel } from "./ChatThreadInboxPanel";
 import { ChatThreadPanel } from "./ChatThreadPanel";
 import { ChatDrivePanel } from "./ChatDrivePanel";
 import type { ChatDriveResourceLinkTarget, ChatDriveResourceSelectionRequest } from "./chatDriveResourceLinks";
+import type { AppAttentionState } from "../interaction/appAttentionState";
 
 type ChatRightPanelProps = {
   activePanel: ActivePanel;
   allUsers: ChatUser[];
+  appAttentionState: AppAttentionState;
   attachmentMaxBytes: number;
   canManage: boolean;
   canWrite: boolean;
@@ -98,6 +100,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
       {props.activePanel === "thread" && (
         props.thread ? (
           <ChatThreadPanel
+            appAttentionState={props.appAttentionState}
             attachmentMaxBytes={props.attachmentMaxBytes}
             canDeleteAnyMessage={props.canDeleteAnyMessage}
             canPin={props.canManage}

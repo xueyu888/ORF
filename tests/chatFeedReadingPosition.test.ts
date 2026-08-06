@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   clearChatFeedReadingPosition,
   readChatFeedReadingPosition,
   readChatLastChannelId,
+  rememberChatLastChannel,
   rememberChatFeedReadingPosition,
 } from "../src/features/chat/chatFeedReadingPosition";
 
@@ -12,10 +12,8 @@ test("chat feed reading position records the last channel without requiring a me
   const userId = "user-reading-position-channel";
   clearChatFeedReadingPosition(userId);
 
-  rememberChatFeedReadingPosition({
+  rememberChatLastChannel({
     channelId: "channel-a",
-    scrollAnchor: null,
-    scrollTop: 0,
     userId,
   });
 
@@ -40,6 +38,7 @@ test("chat feed reading position stores per-user message anchors as optional loc
     scrollTop: -50,
     userId,
   });
+  rememberChatLastChannel({ channelId: "channel-b", userId });
 
   const channelAPosition = readChatFeedReadingPosition(userId, "channel-a");
   assert.ok(channelAPosition?.capturedAt);
@@ -74,15 +73,4 @@ test("chat feed reading position preserves deep offsets inside long messages", (
   assert.equal(position?.messageId, "message-long");
   assert.equal(position?.offsetTop, -2450);
   assert.equal(position?.scrollTop, 3200);
-});
-
-test("chat feed reading position restore keeps correcting while layout changes settle", () => {
-  const feedStateSource = readFileSync(new URL("../src/features/chat/useChatFeedState.ts", import.meta.url), "utf8");
-
-  assert.match(feedStateSource, /runChatFeedReadingPositionRestoreIntent/);
-  assert.match(feedStateSource, /observeChatFeedLayout/);
-  assert.match(feedStateSource, /ResizeObserver/);
-  assert.match(feedStateSource, /MutationObserver/);
-  assert.match(feedStateSource, /addEventListener\("load", onLayoutChanged\)/);
-  assert.match(feedStateSource, /anchorStillInFeed/);
 });

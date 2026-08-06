@@ -88,28 +88,39 @@ export function readChatLastChannelId(userId: string | undefined, validChannelId
   return lastChannelId && valid.has(lastChannelId) ? lastChannelId : null;
 }
 
+export function rememberChatLastChannel(input: {
+  channelId: string;
+  userId?: string;
+}) {
+  if (!input.userId) return;
+  const store = readStore(input.userId);
+  writeStore(input.userId, {
+    channels: store.channels,
+    lastChannelId: input.channelId,
+  });
+}
+
 export function rememberChatFeedReadingPosition(input: {
   channelId: string;
-  scrollAnchor: ChatFeedScrollAnchor | null;
+  scrollAnchor: ChatFeedScrollAnchor;
   scrollTop: number;
   userId?: string;
 }) {
   if (!input.userId) return;
   const store = readStore(input.userId);
-  const next: ChatFeedReadingPositionStore = {
-    channels: { ...store.channels },
-    lastChannelId: input.channelId,
-  };
-  if (input.scrollAnchor) {
-    next.channels[input.channelId] = {
-      capturedAt: new Date().toISOString(),
-      channelId: input.channelId,
-      messageId: input.scrollAnchor.messageId,
-      offsetTop: input.scrollAnchor.offsetTop,
-      scrollTop: Math.max(0, input.scrollTop),
-    };
-  }
-  writeStore(input.userId, next);
+  writeStore(input.userId, {
+    channels: {
+      ...store.channels,
+      [input.channelId]: {
+        capturedAt: new Date().toISOString(),
+        channelId: input.channelId,
+        messageId: input.scrollAnchor.messageId,
+        offsetTop: input.scrollAnchor.offsetTop,
+        scrollTop: Math.max(0, input.scrollTop),
+      },
+    },
+    lastChannelId: store.lastChannelId,
+  });
 }
 
 export function clearChatFeedReadingPosition(userId: string | undefined, channelId?: string) {

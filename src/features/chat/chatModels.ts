@@ -195,7 +195,10 @@ export function selectChatFeedPrefetchChannelIds({
   limit?: number;
 }) {
   return [...channels]
-    .filter((channel) => channel.id !== activeChannelId)
+    .filter((channel) => (
+      channel.id !== activeChannelId &&
+      !hasMainFeedUnread(buildUnreadAnchor(channel, currentUserId))
+    ))
     .sort((left, right) => {
       if (isUnreadChannel(left, currentUserId) !== isUnreadChannel(right, currentUserId)) {
         return isUnreadChannel(left, currentUserId) ? -1 : 1;

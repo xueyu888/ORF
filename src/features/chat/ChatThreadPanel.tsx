@@ -3,6 +3,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { ChatMessage, ChatThread, ChatUser, Feedback } from "../../types/orf";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessageItem } from "./ChatMessageItem";
+import type { AppAttentionState } from "../interaction/appAttentionState";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { scrollChatFeedToMessage } from "./chatFeedScroll";
@@ -11,6 +12,7 @@ import { chatMessageSendStatus, type ChatSendHandler } from "./chatModels";
 import { useChatLatestScrollStickiness } from "./useChatLatestScrollStickiness";
 
 type ChatThreadPanelProps = {
+  appAttentionState: AppAttentionState;
   attachmentMaxBytes: number;
   canDeleteAnyMessage: boolean;
   canPin: boolean;
@@ -44,6 +46,7 @@ type ChatThreadPanelProps = {
 };
 
 export function ChatThreadPanel({
+  appAttentionState,
   attachmentMaxBytes,
   onAttachmentPreview,
   canDeleteAnyMessage,
@@ -86,8 +89,10 @@ export function ChatThreadPanel({
     handleScroll: handleThreadStickinessScroll,
     isFollowingLatest,
     requestScrollToLatest,
+    runProgrammaticScroll,
     setFollowingLatest,
   } = useChatLatestScrollStickiness({
+    appAttentionState,
     contentSelector: "[data-chat-message-id], .orf-chat-thread-replies",
     scrollKey: `${thread.rootMessage.id}:${thread.replies.length}:${focusMessageId ?? ""}`,
     scrollRef: threadPanelRef,
@@ -109,14 +114,18 @@ export function ChatThreadPanel({
       .reverse()
       .find((message) => !message.deletedAt && !chatMessageSendStatus(message));
     if (!latestMessage) return;
-    scrollChatFeedToMessage(threadPanelRef.current, latestMessage.id, { behavior: "auto", block: "center" });
+    runProgrammaticScroll(
+      "reaction-target",
+      () => scrollChatFeedToMessage(threadPanelRef.current, latestMessage.id, { behavior: "auto", block: "center" }),
+      "auto",
+    );
     window.requestAnimationFrame(() => {
       setReactionPickerRequest((current) => ({
         messageId: latestMessage.id,
         signal: current.signal + 1,
       }));
     });
-  }, [thread.replies, thread.rootMessage]);
+  }, [runProgrammaticScroll, thread.replies, thread.rootMessage]);
 
   useLayoutEffect(() => {
     const previousThreadId = previousThreadIdRef.current;
@@ -138,8 +147,16 @@ export function ChatThreadPanel({
       window.requestAnimationFrame(() => {
         const element = threadPanelRef.current;
         if (!element) return;
-        if (scrollChatFeedToMessage(element, focusMessageId, { behavior: "smooth", offset: 20 })) return;
-        requestScrollToLatest(isNewThread ? "auto" : "smooth");
+        if (
+          runProgrammaticScroll(
+            "message",
+            () => scrollChatFeedToMessage(element, focusMessageId, { behavior: "auto", offset: 20 }),
+            "auto",
+          )
+        ) {
+          return;
+        }
+        requestScrollToLatest("auto");
       });
       return;
     }
@@ -150,6 +167,7 @@ export function ChatThreadPanel({
     focusMessageId,
     isFollowingLatest,
     requestScrollToLatest,
+    runProgrammaticScroll,
     setFollowingLatest,
     thread.replies,
     thread.replies.length,
