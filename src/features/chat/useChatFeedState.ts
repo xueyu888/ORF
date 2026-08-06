@@ -99,6 +99,160 @@ function runChatFeedScrollIntent(
   };
 }
 
+const chatFeedReadingPositionRestoreStableMs = 240;
+const chatFeedReadingPositionRestoreMaxMs = 4_000;
+
+function observeChatFeedLayout(element: HTMLElement, onLayoutChanged: () => void) {
+  const observedElements = new Set<Element>();
+  const observedImages = new Set<HTMLImageElement>();
+  const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(onLayoutChanged);
+
+  const observeElements = () => {
+    const nextElements = new Set<Element>();
+    const messageList = element.querySelector(".orf-chat-message-list");
+    if (messageList) nextElements.add(messageList);
+    for (const message of Array.from(element.querySelectorAll("[data-chat-message-id]"))) {
+      nextElements.add(message);
+    }
+
+    for (const observed of observedElements) {
+      if (!nextElements.has(observed)) {
+        resizeObserver?.unobserve(observed);
+        observedElements.delete(observed);
+      }
+    }
+    for (const next of nextElements) {
+      if (!observedElements.has(next)) {
+        observedElements.add(next);
+        resizeObserver?.observe(next);
+      }
+    }
+
+    const nextImages = new Set(Array.from(element.querySelectorAll<HTMLImageElement>("img")));
+    for (const image of observedImages) {
+      if (!nextImages.has(image)) {
+        image.removeEventListener("load", onLayoutChanged);
+        image.removeEventListener("error", onLayoutChanged);
+        observedImages.delete(image);
+      }
+    }
+    for (const image of nextImages) {
+      if (!observedImages.has(image)) {
+        observedImages.add(image);
+        image.addEventListener("load", onLayoutChanged);
+        image.addEventListener("error", onLayoutChanged);
+      }
+    }
+  };
+
+  observeElements();
+  const mutationObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => {
+    observeElements();
+    onLayoutChanged();
+  });
+  mutationObserver?.observe(element, { childList: true, subtree: true });
+  window.addEventListener("resize", onLayoutChanged);
+
+  return {
+    cleanup: () => {
+      mutationObserver?.disconnect();
+      resizeObserver?.disconnect();
+      for (const image of observedImages) {
+        image.removeEventListener("load", onLayoutChanged);
+        image.removeEventListener("error", onLayoutChanged);
+      }
+      observedElements.clear();
+      observedImages.clear();
+      window.removeEventListener("resize", onLayoutChanged);
+    },
+    hasPendingImage: () => Array.from(observedImages).some((image) => !image.complete),
+  };
+}
+
+function runChatFeedReadingPositionRestoreIntent(input: {
+  element: HTMLElement | null;
+  onDone: () => void;
+  restore: () => boolean;
+}) {
+  let cancelled = false;
+  let frame: number | null = null;
+  let stableTimer: number | null = null;
+  let maxTimer: number | null = null;
+  let restoredOnce = false;
+  let cleanupLayoutObserver: () => void = () => undefined;
+  let hasPendingImage = () => false;
+
+  const clearFrame = () => {
+    if (frame !== null) window.cancelAnimationFrame(frame);
+    frame = null;
+  };
+  const clearStableTimer = () => {
+    if (stableTimer !== null) window.clearTimeout(stableTimer);
+    stableTimer = null;
+  };
+  const clearMaxTimer = () => {
+    if (maxTimer !== null) window.clearTimeout(maxTimer);
+    maxTimer = null;
+  };
+  const cleanup = () => {
+    clearFrame();
+    clearStableTimer();
+    clearMaxTimer();
+    cleanupLayoutObserver();
+  };
+  const finish = () => {
+    if (cancelled) return;
+    cancelled = true;
+    cleanup();
+    input.onDone();
+  };
+  const scheduleStableFinish = () => {
+    clearStableTimer();
+    stableTimer = window.setTimeout(() => {
+      stableTimer = null;
+      if (cancelled) return;
+      if (restoredOnce && !hasPendingImage()) {
+        finish();
+        return;
+      }
+      if (!restoredOnce) scheduleRestore();
+      scheduleStableFinish();
+    }, chatFeedReadingPositionRestoreStableMs);
+  };
+  const runRestore = () => {
+    frame = null;
+    if (cancelled) return;
+    restoredOnce = input.restore() || restoredOnce;
+    scheduleStableFinish();
+  };
+  const scheduleRestore = () => {
+    if (cancelled) return;
+    clearFrame();
+    frame = window.requestAnimationFrame(runRestore);
+  };
+  const handleLayoutChanged = () => {
+    scheduleRestore();
+    scheduleStableFinish();
+  };
+
+  if (input.element) {
+    const layoutObserver = observeChatFeedLayout(input.element, handleLayoutChanged);
+    cleanupLayoutObserver = layoutObserver.cleanup;
+    hasPendingImage = layoutObserver.hasPendingImage;
+  }
+  scheduleRestore();
+  maxTimer = window.setTimeout(() => {
+    if (cancelled) return;
+    input.restore();
+    finish();
+  }, chatFeedReadingPositionRestoreMaxMs);
+
+  return () => {
+    cancelled = true;
+    cleanup();
+  };
+}
+
 export function useChatFeedState({
   activeChannel,
   appAttentionState,
@@ -752,20 +906,22 @@ export function useChatFeedState({
     const position = pendingReadingPositionScrollRef.current;
     if (!position || messagesLoading) return undefined;
     setFollowingLatest(false);
-    return runChatFeedScrollIntent(
-      () => {
+    return runChatFeedReadingPositionRestoreIntent({
+      element: messageScrollRef.current,
+      restore: () => {
         const element = messageScrollRef.current;
         if (!element) return false;
         if (restoreChatFeedScrollAnchor(element, position)) return true;
+        const anchorStillInFeed = messagesRef.current.some((message) => message.id === position.messageId);
+        if (anchorStillInFeed) return false;
         element.scrollTop = position.scrollTop;
         return true;
       },
-      () => {
+      onDone: () => {
         pendingReadingPositionScrollRef.current = null;
         rememberActiveFeedScroll(position.channelId);
       },
-      8,
-    );
+    });
   }, [messages, messagesLoading, rememberActiveFeedScroll, setFollowingLatest]);
 
   useLayoutEffect(() => {

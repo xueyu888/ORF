@@ -14,6 +14,7 @@ type ChatFeedReadingPositionStore = {
 };
 
 const memoryStores = new Map<string, ChatFeedReadingPositionStore>();
+const chatFeedReadingOffsetLimitPx = 1_000_000;
 
 function emptyStore(): ChatFeedReadingPositionStore {
   return { channels: {}, lastChannelId: null };
@@ -39,11 +40,12 @@ function normalizeStore(raw: unknown): ChatFeedReadingPositionStore {
         typeof item.scrollTop === "number" &&
         item.channelId === channelId
       ) {
+        if (!Number.isFinite(item.offsetTop) || !Number.isFinite(item.scrollTop)) continue;
         channels[channelId] = {
           capturedAt: item.capturedAt,
           channelId,
           messageId: item.messageId,
-          offsetTop: Math.max(-1000, Math.min(1000, item.offsetTop)),
+          offsetTop: Math.max(-chatFeedReadingOffsetLimitPx, Math.min(chatFeedReadingOffsetLimitPx, item.offsetTop)),
           scrollTop: Math.max(0, item.scrollTop),
         };
       }

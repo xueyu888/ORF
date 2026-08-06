@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   clearChatFeedReadingPosition,
@@ -56,4 +57,32 @@ test("chat feed reading position stores per-user message anchors as optional loc
   assert.equal(readChatFeedReadingPosition(userId, "channel-b"), null);
   assert.equal(readChatLastChannelId(userId, ["channel-a", "channel-b"]), null);
   assert.equal(readChatFeedReadingPosition("another-user", "channel-a"), null);
+});
+
+test("chat feed reading position preserves deep offsets inside long messages", () => {
+  const userId = "user-reading-position-long-message";
+  clearChatFeedReadingPosition(userId);
+
+  rememberChatFeedReadingPosition({
+    channelId: "channel-long",
+    scrollAnchor: { messageId: "message-long", offsetTop: -2450 },
+    scrollTop: 3200,
+    userId,
+  });
+
+  const position = readChatFeedReadingPosition(userId, "channel-long");
+  assert.equal(position?.messageId, "message-long");
+  assert.equal(position?.offsetTop, -2450);
+  assert.equal(position?.scrollTop, 3200);
+});
+
+test("chat feed reading position restore keeps correcting while layout changes settle", () => {
+  const feedStateSource = readFileSync(new URL("../src/features/chat/useChatFeedState.ts", import.meta.url), "utf8");
+
+  assert.match(feedStateSource, /runChatFeedReadingPositionRestoreIntent/);
+  assert.match(feedStateSource, /observeChatFeedLayout/);
+  assert.match(feedStateSource, /ResizeObserver/);
+  assert.match(feedStateSource, /MutationObserver/);
+  assert.match(feedStateSource, /addEventListener\("load", onLayoutChanged\)/);
+  assert.match(feedStateSource, /anchorStillInFeed/);
 });
