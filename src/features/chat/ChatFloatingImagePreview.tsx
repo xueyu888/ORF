@@ -113,7 +113,6 @@ const chatImagePanOverflowTolerance = 1;
 const chatImageZoomNeutralTolerance = 0.001;
 const chatImagePopoutPayloadPrefix = "orf:chat-image-popout:";
 const chatImagePopoutPayloadMaxAgeMs = 12 * 60 * 60 * 1000;
-const chatImagePopoutWindowName = "orf-chat-image-popout";
 
 export function ChatFloatingImagePreviewProvider({ children }: { children: ReactNode }) {
   const sessionIdRef = useRef(0);
@@ -1020,7 +1019,7 @@ function openChatImagePopoutWindow(preview: ChatAttachmentImagePreviewState) {
     window.localStorage.setItem(chatImagePopoutPayloadKey(popoutId), JSON.stringify(payload));
     const popout = window.open(
       `/chat/image-popout/${encodeURIComponent(popoutId)}`,
-      chatImagePopoutWindowName,
+      chatImagePopoutWindowName(popoutId),
       chatImagePopoutWindowFeatures(payload),
     );
     if (!popout) {
@@ -1142,30 +1141,26 @@ function cleanupStaleChatImagePopoutPayloads() {
 
 function chatImagePopoutWindowFeatures(payload: ChatImagePopoutPayload) {
   const image = payload.images[clampPreviewIndex(payload.currentIndex, payload.images.length - 1)];
-  const screenWidth = typeof window.screen?.availWidth === "number" ? window.screen.availWidth : window.innerWidth;
-  const screenHeight = typeof window.screen?.availHeight === "number" ? window.screen.availHeight : window.innerHeight;
   const hasThumbnails = payload.images.length > 1;
-  const width = clamp(
-    Math.round((image?.width ?? chatImageWindowFallbackWidth) + chatImageWindowBodyPaddingX),
+  const width = Math.max(
     chatImageWindowMinWidth,
-    Math.max(chatImageWindowMinWidth, Math.round(screenWidth * 0.88)),
+    Math.round((image?.width ?? chatImageWindowFallbackWidth) + chatImageWindowBodyPaddingX),
   );
-  const height = clamp(
-    Math.round((image?.height ?? chatImageWindowFallbackHeight) + chatImageWindowChromeHeight + chatImageWindowBodyPaddingY + (hasThumbnails ? chatImageWindowThumbnailHeight : 0)),
+  const height = Math.max(
     chatImageWindowMinHeight,
-    Math.max(chatImageWindowMinHeight, Math.round(screenHeight * 0.88)),
+    Math.round((image?.height ?? chatImageWindowFallbackHeight) + chatImageWindowChromeHeight + chatImageWindowBodyPaddingY + (hasThumbnails ? chatImageWindowThumbnailHeight : 0)),
   );
-  const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - width) / 2));
-  const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - height) / 2));
   return [
     "popup=yes",
     "resizable=yes",
     "scrollbars=no",
     `width=${width}`,
     `height=${height}`,
-    `left=${left}`,
-    `top=${top}`,
   ].join(",");
+}
+
+function chatImagePopoutWindowName(popoutId: string) {
+  return `orf-chat-image-popout-${popoutId}`;
 }
 
 function toggleBrowserPopoutMaximize() {
