@@ -68,7 +68,6 @@ type RowHandlers = {
   collapsedActionIds: Set<string>;
   collapsedBountyIds: Set<string>;
   commentCounts: Map<string, number>;
-  completedMetricIds: ReadonlySet<string>;
   temporaryChildRow: ChildCreationTemporaryRow | null;
   dragDrop: DragDropController;
   editingTarget: ChallengeTarget | null;
@@ -1158,8 +1157,8 @@ function MetricRow({
   const title = temporary ? temporary.title || placeholderTitle : bounty!.result.title;
   const statusLabel = temporary ? (temporary.status === "submitting" ? "保存中" : "草稿") : bountyStatusLabel[bounty!.status];
   const metricTone = bounty ? metricToneForBountyStatus(bounty.status) : "todo";
-  const metricChecked = Boolean(complete || (bounty && handlers.completedMetricIds.has(bounty.result.id)));
-  const canToggleMetricCompletion = Boolean(bounty && scope === "mine" && !disabled && !complete);
+  const metricChecked = Boolean(complete || bounty?.result.executionCompleted);
+  const canToggleMetricCompletion = Boolean(bounty && handlers.canMutateMetrics(bounty.result.objectiveId) && !disabled && !complete);
 
   return (
     <div className="orf-result-row-frame relative">

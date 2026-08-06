@@ -36,8 +36,8 @@ type SeedObjectiveChallengeFields = Omit<ObjectiveChallengeFields, "challengeApp
   challengeApplications: ChallengeApplication[];
 };
 type SeedObjective = Omit<Objective, keyof ObjectiveChallengeFields> & Partial<SeedObjectiveChallengeFields>;
-type SeedResult = Omit<Result, "uncertaintyScore" | "acceptedResult" | "evidenceIds" | "createdAt" | "updatedAt"> &
-  Partial<Pick<Result, "uncertaintyScore" | "acceptedResult" | "evidenceIds" | "createdAt" | "updatedAt">> & {
+type SeedResult = Omit<Result, "uncertaintyScore" | "executionCompleted" | "acceptedResult" | "evidenceIds" | "createdAt" | "updatedAt"> &
+  Partial<Pick<Result, "uncertaintyScore" | "executionCompleted" | "acceptedResult" | "evidenceIds" | "createdAt" | "updatedAt">> & {
     owner?: string;
     finalDueAt?: string;
     assignedChallenger?: string | null;
@@ -121,6 +121,7 @@ function normalizeInitialState(state: SeedInitialState): OrfState {
       definer: userNameById.get(definerUserId) ?? item.definer,
       definerUserId,
       uncertaintyScore: item.uncertaintyScore ?? uncertaintyScore(item.uncertaintyLevel),
+      executionCompleted: item.executionCompleted ?? false,
       acceptedResult: item.acceptedResult ?? "unreviewed",
       evidenceIds: item.evidenceIds ?? evidenceIdsByResult.get(item.id) ?? [],
       createdAt: item.createdAt ?? updatedAt,

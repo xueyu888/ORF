@@ -76,6 +76,7 @@ function normalizeResult(result: Result): Result {
     definer: result.definer ?? "",
     definerUserId: result.definerUserId,
     uncertaintyScore: typeof result.uncertaintyScore === "number" ? result.uncertaintyScore : uncertaintyScoreFor(result.uncertaintyLevel),
+    executionCompleted: result.executionCompleted ?? false,
     acceptedResult: result.acceptedResult ?? "unreviewed",
     createdAt: result.createdAt ?? updatedAt,
     updatedAt,

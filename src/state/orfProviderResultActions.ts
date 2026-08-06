@@ -92,6 +92,21 @@ export function useOrfProviderResultActions({
           return false;
         }
       },
+      updateResultExecutionCompletion: async (resultId: string, completed: boolean) => {
+        try {
+          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/execution-completion`, {
+            method: "PATCH",
+            body: JSON.stringify({ completed }),
+          });
+          await refreshTaskManagementData();
+          notify(completed ? "指标已标记为执行完成" : "已取消指标执行完成标记");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "指标执行完成状态更新失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
       updateResultUncertaintyLevel: async (resultId: string, uncertaintyLevel: UncertaintyLevel) => {
         try {
           await apiRequest(`/api/results/${encodeURIComponent(resultId)}/uncertainty`, {

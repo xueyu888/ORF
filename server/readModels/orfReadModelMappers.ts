@@ -98,6 +98,7 @@ export function mapResultRows(input: {
     definer: nameForUserId(input.userNameById, result.definerUserId, result.definer),
     definerUserId: result.definerUserId,
     uncertaintyScore: result.uncertaintyScore ?? uncertaintyScoreFor(result.uncertaintyLevel),
+    executionCompleted: result.executionCompleted,
     acceptedResult: result.acceptedResult ?? "unreviewed",
     evidenceIds: input.evidenceIdsByResult.get(result.id) ?? [],
     trend: input.trendByResult.get(result.id) ?? [],

@@ -2219,6 +2219,41 @@ export async function updateResultConfidence(resultId: string, confidence: numbe
   return true;
 }
 
+export async function setResultExecutionCompleted(resultId: string, executionCompleted: boolean, actorId: string): Promise<boolean> {
+  const updatedResult = await db.transaction(async (tx) => {
+    const [target] = await tx
+      .select({ flowStatus: objectives.flowStatus, teamId: results.teamId })
+      .from(results)
+      .innerJoin(objectives, eq(objectives.id, results.objectiveId))
+      .where(eq(results.id, resultId))
+      .limit(1)
+      .for("update");
+    if (!target || !canMutateObjectiveResultsByFlow(target)) {
+      return false;
+    }
+
+    const updated = await tx
+      .update(results)
+      .set({ executionCompleted, updatedAt: today(), updatedBy: actorId })
+      .where(eq(results.id, resultId))
+      .returning({ id: results.id });
+    return updated.length > 0 ? { teamId: target.teamId } : null;
+  });
+
+  if (!updatedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: resultId, type: "result" },
+    teamId: updatedResult.teamId,
+  });
+  return true;
+}
+
 export async function updateResultUncertaintyLevel(resultId: string, uncertaintyLevel: UncertaintyLevel, actorId: string): Promise<boolean> {
   const updatedResult = await db.transaction(async (tx) => {
     const [target] = await tx
