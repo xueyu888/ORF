@@ -313,3 +313,11 @@ test("global unread target uses the shared read cursor, visibility and fixed pri
   assert.doesNotMatch(sidebarSource, /useChatUnreadNavigation/);
   assert.doesNotMatch(mobileSource, /useChatUnreadNavigation/);
 });
+
+test("main feed read receipts reschedule after message layout changes", () => {
+  const feedStateSource = readFileSync(new URL("../src/features/chat/useChatFeedState.ts", import.meta.url), "utf8");
+  assert.match(feedStateSource, /ResizeObserver/);
+  assert.match(feedStateSource, /MutationObserver/);
+  assert.match(feedStateSource, /\[data-chat-message-id\]/);
+  assert.match(feedStateSource, /scheduleVisibleReadReceipt/);
+});

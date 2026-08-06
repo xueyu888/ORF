@@ -785,6 +785,52 @@ export function useChatFeedState({
     scheduleVisibleReadReceipt();
   }, [messages, messagesLoading, scheduleVisibleReadReceipt, unreadAnchor]);
 
+  useEffect(() => {
+    if (!hasMainFeedUnread(unreadAnchor)) return undefined;
+    const element = messageScrollRef.current;
+    if (!element) return undefined;
+
+    const observedMessages = new Set<Element>();
+    let frame: number | null = null;
+    const scheduleAfterLayout = () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        scheduleVisibleReadReceipt();
+      });
+    };
+
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleAfterLayout);
+    const observeMessages = () => {
+      const nextMessages = new Set(Array.from(element.querySelectorAll("[data-chat-message-id]")));
+      for (const message of observedMessages) {
+        if (!nextMessages.has(message)) {
+          resizeObserver?.unobserve(message);
+          observedMessages.delete(message);
+        }
+      }
+      for (const message of nextMessages) {
+        if (!observedMessages.has(message)) {
+          observedMessages.add(message);
+          resizeObserver?.observe(message);
+        }
+      }
+      scheduleAfterLayout();
+    };
+
+    observeMessages();
+    const mutationObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(observeMessages);
+    mutationObserver?.observe(element, { childList: true, subtree: true });
+    window.addEventListener("resize", scheduleAfterLayout);
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      mutationObserver?.disconnect();
+      resizeObserver?.disconnect();
+      observedMessages.clear();
+      window.removeEventListener("resize", scheduleAfterLayout);
+    };
+  }, [scheduleVisibleReadReceipt, unreadAnchor]);
+
   const loadOlderMessages = useCallback(async () => {
     if (!activeChannelId || messages.length === 0 || olderLoadInFlightRef.current || isLatestScrollPending() || !hasOlderMessages) return;
     setFollowingLatest(false);
