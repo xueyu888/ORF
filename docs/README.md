@@ -60,6 +60,6 @@ docs/
 | [设计原则.md](./design/设计原则.md) | ORF 业务原则、基础流程和积分规则 |
 | [environment.md](./project/environment.md) | uv 和 npm 环境说明 |
 | [public-ip-infra.md](./project/public-ip-infra.md) | 无域名公网 IP 共享 PG/Ory/MinIO 的部署约定 |
-| [client-release.md](./project/client-release.md) | Win11 和 Android 客户端打包、发布和签名边界 |
+| [生产发布执行手册.md](./project/%E7%94%9F%E4%BA%A7%E5%8F%91%E5%B8%83%E6%89%A7%E8%A1%8C%E6%89%8B%E5%86%8C.md) | 完整发布的通用决策路径、执行步骤、验收与回滚 |
 | [code-standards.md](./project/code-standards.md) | 代码原则 |
 | [testing/README.md](./testing/README.md) | Playwright 测试脚本、配置入口和 UI 随机探索启动方式 |

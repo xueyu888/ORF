@@ -4,7 +4,7 @@ const path = require("node:path");
 const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const { pathToFileURL } = require("node:url");
-const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, net, powerMonitor, safeStorage, shell } = require("electron");
+const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, net, powerMonitor, safeStorage, screen, shell } = require("electron");
 const { createTrayIconRgba } = require("./icon-renderer.cjs");
 const { windowsNotificationToastXml } = require("./notification-renderer.cjs");
 const { launchDesktopUpdateInstallerAfterExit } = require("./update-installer.cjs");
@@ -51,6 +51,10 @@ const DESKTOP_MAIN_WINDOW_SIZE = Object.freeze({
   minHeight: 680,
   minWidth: 820,
   width: 1360,
+});
+const CHAT_IMAGE_POPOUT_MINIMUM_SIZE = Object.freeze({
+  height: 360,
+  width: 520,
 });
 const DESKTOP_WORKBENCH_ZOOM_MIN = -2;
 const DESKTOP_WORKBENCH_ZOOM_MAX = 4;
@@ -148,7 +152,7 @@ function createMainWindow(clientUrl, options = {}) {
       if (isChatImagePopoutUrl(targetUrl)) {
         return {
           action: "allow",
-          overrideBrowserWindowOptions: chatImagePopoutBrowserWindowOptions(),
+          overrideBrowserWindowOptions: chatImagePopoutBrowserWindowOptions(mainWindow),
         };
       }
       if (isDriveFilePreviewPopoutUrl(targetUrl)) {
@@ -161,6 +165,12 @@ function createMainWindow(clientUrl, options = {}) {
     }
     void shell.openExternal(url);
     return { action: "deny" };
+  });
+
+  mainWindow.webContents.on("did-create-window", (childWindow, details) => {
+    const childUrl = new URL(details.url);
+    if (!isChatImagePopoutUrl(childUrl)) return;
+    centerAndRevealChatImagePopoutWindow(childWindow, mainWindow);
   });
 
   mainWindow.webContents.on("will-navigate", (event, url) => {
@@ -225,18 +235,48 @@ function isDriveFilePreviewPopoutUrl(url) {
   return url.pathname.startsWith("/drive/file-preview-popout/");
 }
 
-function chatImagePopoutBrowserWindowOptions() {
+function chatImagePopoutBrowserWindowOptions(parentWindow) {
   return {
     autoHideMenuBar: true,
     backgroundColor: "#f7f8fb",
     frame: false,
-    minHeight: 360,
-    minWidth: 520,
+    minHeight: CHAT_IMAGE_POPOUT_MINIMUM_SIZE.height,
+    minWidth: CHAT_IMAGE_POPOUT_MINIMUM_SIZE.width,
+    parent: parentWindow,
     resizable: true,
-    show: true,
+    show: false,
     title: "ORF 图片窗口",
     webPreferences: desktopBrowserWindowWebPreferences(),
   };
+}
+
+function centerAndRevealChatImagePopoutWindow(popoutWindow, parentWindow) {
+  if (popoutWindow.isDestroyed() || parentWindow.isDestroyed()) return;
+
+  const parentBounds = parentWindow.getBounds();
+  const workArea = screen.getDisplayMatching(parentBounds).workArea;
+  const [requestedWidth, requestedHeight] = popoutWindow.getSize();
+  const width = clampWindowDimension(requestedWidth, CHAT_IMAGE_POPOUT_MINIMUM_SIZE.width, workArea.width);
+  const height = clampWindowDimension(requestedHeight, CHAT_IMAGE_POPOUT_MINIMUM_SIZE.height, workArea.height);
+  popoutWindow.setBounds({
+    height,
+    width,
+    x: workArea.x + Math.round((workArea.width - width) / 2),
+    y: workArea.y + Math.round((workArea.height - height) / 2),
+  });
+
+  popoutWindow.once("ready-to-show", () => {
+    if (popoutWindow.isDestroyed()) return;
+    if (popoutWindow.isMinimized()) popoutWindow.restore();
+    popoutWindow.show();
+    popoutWindow.focus();
+  });
+}
+
+function clampWindowDimension(value, minimum, available) {
+  const maximum = Math.max(1, available);
+  const effectiveMinimum = Math.min(minimum, maximum);
+  return Math.min(Math.max(Math.round(value), effectiveMinimum), maximum);
 }
 
 function driveFilePreviewPopoutBrowserWindowOptions() {

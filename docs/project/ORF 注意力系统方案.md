@@ -306,4 +306,4 @@ type AttentionState = {
 | [消息系统开发.md](./消息系统开发.md) | 通知事实源、投递链、系统会话和已实现事件 |
 | [AppShell - 前端.md](../frontend/AppShell%20-%20前端.md) | 侧边栏“待我处理”入口、全局浮层和移动端避让 |
 | [AppShell - 后端.md](../backend/AppShell%20-%20后端.md) | AppShell 后端依赖边界；注意力系统第一阶段不新增后端事实源 |
-| [client-release.md](./client-release.md) | Win11 客户端发布、安装和原生桌面能力验证 |
+| [生产发布执行手册.md](./生产发布执行手册.md) | 客户端发布和更新广播的操作流程 |
