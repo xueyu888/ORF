@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { MessageSquare, Pencil, Save, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, IconButton } from "../../../components/ui";
 import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
 import {
@@ -50,6 +50,7 @@ export function MetricInspectorPanel({
   const [editing, setEditing] = useState(false);
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
+  const detailInputRef = useRef<HTMLTextAreaElement | null>(null);
   const canEdit = access.status === "allowed";
   const normalizedDraft = useMemo(() => normalizeResultDetailsInput(draft), [draft]);
   const detailsDirty = editing && !resultDetailsEqual(normalizedDraft, persistedDetails);
@@ -64,6 +65,10 @@ export function MetricInspectorPanel({
   useEffect(() => {
     if (!editing) setDraft(persistedDetails);
   }, [editing, persistedDetails]);
+
+  useEffect(() => {
+    if (editing && !savingDetails) detailInputRef.current?.focus();
+  }, [editing, savingDetails]);
 
   useEffect(() => {
     onDirtyChange(detailsDirty);
@@ -179,6 +184,7 @@ export function MetricInspectorPanel({
             }}
           >
             <textarea
+              ref={detailInputRef}
               aria-label="编辑指标详情"
               className="orf-metric-inspector-textarea"
               disabled={savingDetails}
