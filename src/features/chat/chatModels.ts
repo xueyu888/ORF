@@ -25,6 +25,7 @@ export type ChatSendInput = {
   channelId: string;
   draft: ChatDraft;
   parentMessageId?: string | null;
+  requireAcknowledgement?: boolean;
   rootMessageId?: string | null;
 };
 
@@ -35,6 +36,7 @@ export type ChatPendingSendPayload = {
   body: string;
   channelId: string;
   parentMessageId?: string | null;
+  requireAcknowledgement?: boolean;
   rootMessageId?: string | null;
 };
 export type ChatOptimisticMessage = ChatMessage & {

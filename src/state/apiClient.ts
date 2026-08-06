@@ -814,6 +814,7 @@ export async function sendChatMessageRequest(input: {
   body: string;
   channelId: string;
   parentMessageId?: string | null;
+  requireAcknowledgement?: boolean;
   rootMessageId?: string | null;
 }) {
   return apiJson<ChatMessageResponse & ChatChannelResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/messages`, {
@@ -822,6 +823,7 @@ export async function sendChatMessageRequest(input: {
       body: input.body,
       attachmentIds: input.attachmentIds ?? [],
       parentMessageId: input.parentMessageId ?? null,
+      requireAcknowledgement: input.requireAcknowledgement ?? false,
       rootMessageId: input.rootMessageId ?? null,
     }),
   });
@@ -841,6 +843,13 @@ export async function deleteChatMessageRequest(input: { channelId: string; messa
   return apiJson<ChatMessageResponse>(
     `/api/chat/channels/${encodeURIComponent(input.channelId)}/messages/${encodeURIComponent(input.messageId)}`,
     { method: "DELETE" },
+  );
+}
+
+export async function requestChatMessageAcknowledgementRequest(input: { channelId: string; messageId: string }) {
+  return apiJson<ChatMessageResponse & ChatChannelResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/messages/${encodeURIComponent(input.messageId)}/acknowledgement`,
+    { method: "POST" },
   );
 }
 

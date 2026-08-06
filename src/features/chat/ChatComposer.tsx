@@ -1,5 +1,6 @@
 import { clsx } from "clsx";
 import {
+  CheckCheck,
   FileText,
   Image as ImageIcon,
   Loader2,
@@ -73,6 +74,7 @@ export function ChatComposer({
   const [attachmentItems, setAttachmentItems] = useState<ChatAttachmentDraftItem[]>([]);
   const [draggingFiles, setDraggingFiles] = useState(false);
   const [error, setError] = useState("");
+  const [requireAcknowledgement, setRequireAcknowledgement] = useState(false);
   const uploading = hasUploadingDraftAttachments(attachmentItems);
   const failedUploads = failedDraftAttachmentCount(attachmentItems);
   const uploadedAttachments = uploadedDraftAttachments(attachmentItems);
@@ -135,6 +137,10 @@ export function ChatComposer({
     if (item.status !== "uploading") return "";
     return `${item.fileName} 上传进度：${uploadedByteLabel(item)}，${uploadSpeedLabel(item.progress.bytesPerSecond)}`;
   };
+
+  useEffect(() => {
+    if (rootMessageId) setRequireAcknowledgement(false);
+  }, [rootMessageId]);
 
   useEffect(() => {
     attachmentItemsRef.current = attachmentItems;
@@ -262,9 +268,11 @@ export function ChatComposer({
         channelId,
         draft: nextDraft,
         parentMessageId,
+        requireAcknowledgement,
         rootMessageId,
       });
       setDraft(emptyDraft);
+      setRequireAcknowledgement(false);
       setAttachmentItems([]);
       attachmentDraftCacheRef.current.set(draftStorageKey, []);
       return true;
@@ -348,16 +356,31 @@ export function ChatComposer({
         submitDisabled={uploading || failedUploads > 0 || !hasSendableDraft}
         transformPastedText={transformPastedText}
         toolbarControls={(
-          <button
-            type="button"
-            className="orf-rich-text-tool-button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => fileRef.current?.click()}
-            title="附件"
-            aria-label="附件"
-          >
-            <Paperclip className="h-4 w-4" />
-          </button>
+          <>
+            {!rootMessageId && (
+              <button
+                type="button"
+                className={clsx("orf-rich-text-tool-button", requireAcknowledgement && "orf-rich-text-tool-button-active")}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => setRequireAcknowledgement((value) => !value)}
+                title={requireAcknowledgement ? "取消要求回执" : "要求回执"}
+                aria-label={requireAcknowledgement ? "取消要求回执" : "要求回执"}
+                aria-pressed={requireAcknowledgement}
+              >
+                <CheckCheck className="h-4 w-4" />
+              </button>
+            )}
+            <button
+              type="button"
+              className="orf-rich-text-tool-button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => fileRef.current?.click()}
+              title="附件"
+              aria-label="附件"
+            >
+              <Paperclip className="h-4 w-4" />
+            </button>
+          </>
         )}
         toolbarEnd={({ submit: submitDraft, submitting }) => (
           <>

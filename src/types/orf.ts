@@ -925,6 +925,16 @@ export interface ChatReaction {
   userIds: string[];
 }
 
+export interface ChatMessageAcknowledgement {
+  acknowledgedUserIds: string[];
+  currentUserAcknowledged: boolean;
+  currentUserPending: boolean;
+  pendingUserIds: string[];
+  recipientUserIds: string[];
+  requestedAt: string;
+  requestedByUserId: string;
+}
+
 export interface ChatAttachment {
   id: string;
   fileName: string;
@@ -959,6 +969,7 @@ export interface ChatMessage {
   savedByCurrentUser: boolean;
   attachments: ChatAttachment[];
   reactions: ChatReaction[];
+  acknowledgement?: ChatMessageAcknowledgement | null;
 }
 
 export interface ChatThread {
@@ -1017,6 +1028,7 @@ export interface ChatBootstrap {
 
 export interface ChatUnreadSummary {
   actionableMessageUnreadCount: number;
+  ackRequiredCount: number;
   directMessageUnreadCount: number;
   mainMentionCount: number;
   mentionCount: number;
@@ -1028,7 +1040,7 @@ export interface ChatUnreadSummary {
   unreadChannelCount: number;
 }
 
-export type ChatUnreadTargetReason = "direct" | "mention_me" | "mention_all" | "system" | "normal";
+export type ChatUnreadTargetReason = "ack_required" | "direct" | "mention_me" | "mention_all" | "system" | "normal";
 
 export interface ChatUnreadSummaryNextTarget {
   channelId: string;

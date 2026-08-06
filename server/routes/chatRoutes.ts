@@ -30,6 +30,7 @@ import {
   setChatChannelUnread,
   publishChatTyping,
   removeChatChannelMember,
+  requestChatMessageAcknowledgement,
   searchChatMessages,
   sendChatMessage,
   setChatReaction,
@@ -102,6 +103,7 @@ const sendMessageBodySchema = z.object({
   rootMessageId: z.string().min(1).nullable().optional(),
   parentMessageId: z.string().min(1).nullable().optional(),
   attachmentIds: z.array(z.string().min(1)).max(20).optional(),
+  requireAcknowledgement: z.boolean().optional(),
 });
 
 const updateMessageBodySchema = z.object({
@@ -390,6 +392,13 @@ export function registerChatRoutes(app: FastifyInstance) {
     const params = messageParamsSchema.parse(request.params);
     const body = updateMessageBodySchema.parse(request.body);
     return sendOutcome(reply, await updateChatMessage({ ...params, body: body.body }, actor));
+  });
+
+  app.post("/api/chat/channels/:channelId/messages/:messageId/acknowledgement", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const params = messageParamsSchema.parse(request.params);
+    return sendOutcome(reply, await requestChatMessageAcknowledgement(params, actor));
   });
 
   app.delete("/api/chat/channels/:channelId/messages/:messageId", async (request, reply) => {

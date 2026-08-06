@@ -1305,6 +1305,46 @@ export const chatMessageReactions = pgTable(
   }),
 );
 
+export const chatMessageAckRequests = pgTable(
+  "chat_message_ack_requests",
+  {
+    messageId: text("message_id")
+      .primaryKey()
+      .references(() => chatMessages.id, { onDelete: "cascade" }),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    channelId: text("channel_id")
+      .notNull()
+      .references(() => chatChannels.id, { onDelete: "cascade" }),
+    requestedByUserId: uuid("requested_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    requestedAt: timestamp("requested_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    teamChannel: index("chat_message_ack_requests_team_channel_idx").on(table.teamId, table.channelId, table.requestedAt),
+  }),
+);
+
+export const chatMessageAckRecipients = pgTable(
+  "chat_message_ack_recipients",
+  {
+    messageId: text("message_id")
+      .notNull()
+      .references(() => chatMessageAckRequests.messageId, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    assignedAt: timestamp("assigned_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.messageId, table.userId] }),
+    user: index("chat_message_ack_recipients_user_idx").on(table.userId),
+  }),
+);
+
 export const chatMessagePins = pgTable(
   "chat_message_pins",
   {

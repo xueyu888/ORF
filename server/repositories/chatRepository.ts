@@ -8,6 +8,7 @@ import type {
   ChatChannelType,
   ChatMessageContext,
   ChatMessage,
+  ChatMessageAcknowledgement,
   ChatMessageSource,
   ChatMessageSystemMetadata,
   ChatReaction,
@@ -97,6 +98,14 @@ function visibleChatMessageSql(messageSql: string, recipientUserIdParam: string,
     viewerEmailsParam,
   });
 }
+
+type AcknowledgementRecipientRow = {
+  acknowledged: boolean;
+  message_id: string;
+  requested_at: Date | string;
+  requested_by_user_id: string;
+  user_id: string;
+};
 
 async function ensureDefaultPublicChannel(teamId: string) {
   const now = nowIso();
@@ -771,6 +780,65 @@ async function loadReactions(messageIds: string[], actor: ChatActor) {
   return result;
 }
 
+async function loadAcknowledgements(messageIds: string[], actor: ChatActor) {
+  if (messageIds.length === 0) return new Map<string, ChatMessageAcknowledgement>();
+  const { rows } = await pool.query<AcknowledgementRecipientRow>(
+    `
+      SELECT
+        request.message_id,
+        request.requested_by_user_id,
+        request.requested_at,
+        recipient.user_id,
+        (
+          EXISTS (
+            SELECT 1
+            FROM chat_message_reactions reaction
+            WHERE reaction.message_id = request.message_id
+              AND reaction.user_id = recipient.user_id
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM chat_messages reply
+            WHERE reply.team_id = request.team_id
+              AND reply.channel_id = request.channel_id
+              AND reply.root_message_id = request.message_id
+              AND reply.author_user_id = recipient.user_id
+              AND reply.deleted_at IS NULL
+          )
+        ) AS acknowledged
+      FROM chat_message_ack_requests request
+      INNER JOIN chat_message_ack_recipients recipient
+        ON recipient.message_id = request.message_id
+      WHERE request.message_id = ANY($1::text[])
+      ORDER BY request.requested_at ASC, recipient.assigned_at ASC, recipient.user_id ASC
+    `,
+    [messageIds],
+  );
+
+  const result = new Map<string, ChatMessageAcknowledgement>();
+  for (const row of rows) {
+    const acknowledgement = result.get(row.message_id) ?? {
+      acknowledgedUserIds: [],
+      currentUserAcknowledged: false,
+      currentUserPending: false,
+      pendingUserIds: [],
+      recipientUserIds: [],
+      requestedAt: iso(row.requested_at) ?? nowIso(),
+      requestedByUserId: row.requested_by_user_id,
+    };
+    acknowledgement.recipientUserIds.push(row.user_id);
+    if (row.acknowledged) {
+      acknowledgement.acknowledgedUserIds.push(row.user_id);
+      if (row.user_id === actor.id) acknowledgement.currentUserAcknowledged = true;
+    } else {
+      acknowledgement.pendingUserIds.push(row.user_id);
+      if (row.user_id === actor.id) acknowledgement.currentUserPending = true;
+    }
+    result.set(row.message_id, acknowledgement);
+  }
+  return result;
+}
+
 async function loadReplySummaries(rootMessageIds: string[]) {
   const summaries = new Map<string, { count: number; lastReplyAt: string | null }>();
   if (rootMessageIds.length === 0) return summaries;
@@ -810,9 +878,10 @@ async function loadMessageCollections(messageIds: string[], actor: ChatActor) {
 async function buildMessages(rows: MessageRow[], actor: ChatActor): Promise<ChatMessage[]> {
   const messageIds = rows.map((row) => row.id);
   const rootIds = rows.filter((row) => row.root_message_id === null).map((row) => row.id);
-  const [attachmentsByMessage, reactionsByMessage, replySummaries, collectionsByMessage] = await Promise.all([
+  const [attachmentsByMessage, reactionsByMessage, acknowledgementByMessage, replySummaries, collectionsByMessage] = await Promise.all([
     loadAttachments(messageIds),
     loadReactions(messageIds, actor),
+    loadAcknowledgements(messageIds, actor),
     loadReplySummaries(rootIds),
     loadMessageCollections(messageIds, actor),
   ]);
@@ -848,6 +917,7 @@ async function buildMessages(rows: MessageRow[], actor: ChatActor): Promise<Chat
       savedByCurrentUser: Boolean(collections?.saved_at),
       attachments: deleted ? [] : attachmentsByMessage.get(row.id) ?? [],
       reactions: deleted ? [] : reactionsByMessage.get(row.id) ?? [],
+      acknowledgement: deleted ? null : acknowledgementByMessage.get(row.id) ?? null,
     };
   });
 }
@@ -996,6 +1066,7 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
   if (!actor.canRead) {
     return {
       actionableMessageUnreadCount: 0,
+      ackRequiredCount: 0,
       directMessageUnreadCount: 0,
       mainMentionCount: 0,
       mentionCount: 0,
@@ -1012,6 +1083,7 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
   await preparePublicChannels(teamId);
   const { rows } = await pool.query<{
     actionable_message_unread_count: number | string | null;
+    ack_required_count: number | string | null;
     direct_message_unread_count: number | string | null;
     main_mention_count: number | string | null;
     mention_count: number | string | null;
@@ -1021,7 +1093,7 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
     unread_channel_count: number | string | null;
     target_channel_id: string | null;
     target_message_id: string | null;
-    target_reason: "direct" | "mention_me" | "mention_all" | "system" | "normal" | null;
+    target_reason: "ack_required" | "direct" | "mention_me" | "mention_all" | "system" | "normal" | null;
     target_root_message_id: string | null;
   }>(
     `
@@ -1112,6 +1184,47 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
         FROM unread_message_facts
         GROUP BY channel_id
       ),
+      pending_ack_facts AS (
+        SELECT
+          m.channel_id,
+          m.id AS message_id,
+          NULL::text AS root_message_id,
+          request.requested_at AS created_at,
+          0 AS priority,
+          'ack_required' AS reason
+        FROM chat_message_ack_recipients recipient
+        INNER JOIN chat_message_ack_requests request
+          ON request.message_id = recipient.message_id
+        INNER JOIN chat_messages m
+          ON m.id = request.message_id
+         AND m.team_id = request.team_id
+         AND m.channel_id = request.channel_id
+        INNER JOIN displayable_channels dc ON dc.id = m.channel_id
+        WHERE recipient.user_id = $2
+          AND m.root_message_id IS NULL
+          AND m.deleted_at IS NULL
+          AND ${visibleChatMessageSql("m", "$2", "$5", "$6")}
+          AND NOT EXISTS (
+            SELECT 1
+            FROM chat_message_reactions reaction
+            WHERE reaction.message_id = request.message_id
+              AND reaction.user_id = recipient.user_id
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM chat_messages reply
+            WHERE reply.team_id = request.team_id
+              AND reply.channel_id = request.channel_id
+              AND reply.root_message_id = request.message_id
+              AND reply.author_user_id = recipient.user_id
+              AND reply.deleted_at IS NULL
+          )
+      ),
+      ack_by_channel AS (
+        SELECT channel_id, count(*)::int AS ack_required_count
+        FROM pending_ack_facts
+        GROUP BY channel_id
+      ),
       manual_unread_target_candidates AS (
         SELECT
           dc.id AS channel_id,
@@ -1151,6 +1264,9 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
           FROM unread_message_facts
           UNION ALL
           SELECT channel_id, message_id, root_message_id, created_at, priority, reason
+          FROM pending_ack_facts
+          UNION ALL
+          SELECT channel_id, message_id, root_message_id, created_at, priority, reason
           FROM manual_unread_target_candidates
         ) candidates
         ORDER BY priority ASC, created_at ASC, message_id ASC
@@ -1176,12 +1292,15 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
           COALESCE(unread.main_mention_count, 0) AS main_mention_count,
           COALESCE(unread.mention_count, 0) AS mention_count,
           COALESCE(unread.thread_mention_count, 0) AS thread_mention_count,
-          COALESCE(unread.thread_count, 0) AS thread_count
+          COALESCE(unread.thread_count, 0) AS thread_count,
+          COALESCE(ack.ack_required_count, 0) AS ack_required_count
         FROM displayable_channels dc
         LEFT JOIN unread_by_channel unread ON unread.channel_id = dc.id
+        LEFT JOIN ack_by_channel ack ON ack.channel_id = dc.id
       )
       SELECT
         COALESCE(sum(actionable_message_count), 0)::int AS actionable_message_unread_count,
+        COALESCE(sum(ack_required_count), 0)::int AS ack_required_count,
         COALESCE(sum(direct_message_count), 0)::int AS direct_message_unread_count,
         COALESCE(sum(message_count), 0)::int AS message_unread_count,
         COALESCE(sum(main_mention_count), 0)::int AS main_mention_count,
@@ -1223,6 +1342,7 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
     : null;
   return {
     actionableMessageUnreadCount: Number(row?.actionable_message_unread_count ?? 0),
+    ackRequiredCount: Number(row?.ack_required_count ?? 0),
     directMessageUnreadCount: Number(row?.direct_message_unread_count ?? 0),
     mainMentionCount: Number(row?.main_mention_count ?? 0),
     mentionCount: Number(row?.mention_count ?? 0),
@@ -2058,6 +2178,41 @@ async function followMentionedThreadRecipients(
   );
 }
 
+async function createChatMessageAcknowledgementRequestRows(
+  client: Pick<PoolClient, "query">,
+  input: { channelId: string; messageId: string; requestedAt: string; requestedByUserId: string; teamId: string },
+) {
+  const created = await client.query<{ message_id: string }>(
+    `
+      INSERT INTO chat_message_ack_requests (
+        message_id, team_id, channel_id, requested_by_user_id, requested_at, updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $5)
+      ON CONFLICT (message_id) DO NOTHING
+      RETURNING message_id
+    `,
+    [input.messageId, input.teamId, input.channelId, input.requestedByUserId, input.requestedAt],
+  );
+  if (created.rows.length === 0) return;
+  await client.query(
+    `
+      INSERT INTO chat_message_ack_recipients (message_id, user_id, assigned_at)
+      SELECT $1, member.user_id, $4::timestamptz
+      FROM chat_channel_members member
+      INNER JOIN users recipient
+        ON recipient.id = member.user_id
+       AND COALESCE(recipient.status, 'active') = 'active'
+      INNER JOIN chat_channels channel
+        ON channel.id = member.channel_id
+       AND channel.team_id = $3
+      WHERE member.channel_id = $2
+        AND member.user_id <> $5
+      ON CONFLICT (message_id, user_id) DO NOTHING
+    `,
+    [input.messageId, input.channelId, input.teamId, input.requestedAt, input.requestedByUserId],
+  );
+}
+
 export async function sendChatMessage(
   input: {
     attachmentIds?: string[];
@@ -2065,6 +2220,7 @@ export async function sendChatMessage(
     channelId: string;
     createdAt?: string;
     parentMessageId?: string | null;
+    requireAcknowledgement?: boolean;
     rootMessageId?: string | null;
     source?: ChatMessageSource;
     systemMetadata?: ChatMessageSystemMetadata;
@@ -2081,10 +2237,12 @@ export async function sendChatMessage(
   const source = input.source ?? "user";
   if (channel.systemKind && source !== "system") return { status: "forbidden" };
   const systemMetadata = source === "system" ? input.systemMetadata ?? {} : {};
+  const requireAcknowledgement = Boolean(input.requireAcknowledgement);
 
   const teamId = storageTeamId(actor);
   let rootMessageId = input.rootMessageId?.trim() || null;
   let parentMessageId = input.parentMessageId?.trim() || null;
+  if (requireAcknowledgement && (rootMessageId || source !== "user")) return { status: "invalid" };
   if (rootMessageId) {
     const root = await getRawMessage(actor, rootMessageId);
     if (!root || root.channel_id !== input.channelId || root.root_message_id !== null || root.deleted_at) return { status: "notFound" };
@@ -2170,6 +2328,15 @@ export async function sendChatMessage(
       rootMessageId,
       updatedAt: now,
     });
+    if (requireAcknowledgement) {
+      await createChatMessageAcknowledgementRequestRows(client, {
+        channelId: input.channelId,
+        messageId,
+        requestedAt: now,
+        requestedByUserId: actor.id,
+        teamId,
+      });
+    }
     await enqueueChatPushDeliveries(client, {
       authorUserId: actor.id,
       channelId: input.channelId,
@@ -2194,6 +2361,55 @@ export async function sendChatMessage(
   void publishChatMessageCreatedRealtime({ channel: updatedChannel, message, teamId }).catch(() => undefined);
   wakeChatPushDeliveryWorker();
   return ok({ channel: updatedChannel, message });
+}
+
+export async function requestChatMessageAcknowledgement(
+  input: { channelId: string; messageId: string },
+  actor: ChatActor,
+): Promise<Outcome<{ channel: ChatChannel; message: ChatMessage }>> {
+  if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
+  const channel = await getVisibleChannel(actor, input.channelId);
+  if (!channel) return { status: "notFound" };
+  if (channel.archivedAt || channel.systemKind) return { status: "forbidden" };
+  const message = await getRawMessage(actor, input.messageId);
+  if (!message || message.channel_id !== input.channelId || message.deleted_at) return { status: "notFound" };
+  if (message.source === "system" || message.root_message_id !== null) return { status: "invalid" };
+  if (message.author_user_id !== actor.id) return { status: "forbidden" };
+
+  const teamId = storageTeamId(actor);
+  const now = nowIso();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await createChatMessageAcknowledgementRequestRows(client, {
+      channelId: input.channelId,
+      messageId: input.messageId,
+      requestedAt: now,
+      requestedByUserId: actor.id,
+      teamId,
+    });
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const updated = await getMessageById(actor, input.messageId);
+  const updatedChannel = await getVisibleChannel(actor, input.channelId);
+  if (!updated || !updatedChannel) return { status: "notFound" };
+  const recipients = await getChannelRecipientIds(teamId, input.channelId);
+  publishChatMessageMutationRealtime({
+    eventType: "message.updated",
+    teamId,
+    channelId: input.channelId,
+    actorUserId: actor.id,
+    messageId: input.messageId,
+    rootMessageId: null,
+    recipientUserIds: recipients,
+  });
+  return ok({ channel: updatedChannel, message: updated });
 }
 
 export async function updateChatMessage(

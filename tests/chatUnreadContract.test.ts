@@ -314,6 +314,18 @@ test("global unread target uses the shared read cursor, visibility and fixed pri
   assert.doesNotMatch(mobileSource, /useChatUnreadNavigation/);
 });
 
+test("required acknowledgement is derived only from explicit reaction or thread reply facts", () => {
+  const repositorySource = readFileSync(new URL("../server/repositories/chatRepository.ts", import.meta.url), "utf8");
+  const migrationSource = readFileSync(new URL("../drizzle/0094_chat_message_acknowledgements.sql", import.meta.url), "utf8");
+
+  assert.match(repositorySource, /chat_message_ack_requests/);
+  assert.match(repositorySource, /chat_message_ack_recipients/);
+  assert.doesNotMatch(migrationSource, /acknowledged_at/);
+  assert.match(repositorySource, /FROM chat_message_reactions reaction[\s\S]+reaction\.message_id = request\.message_id[\s\S]+reaction\.user_id = recipient\.user_id/);
+  assert.match(repositorySource, /FROM chat_messages reply[\s\S]+reply\.root_message_id = request\.message_id[\s\S]+reply\.author_user_id = recipient\.user_id/);
+  assert.match(repositorySource, /if \(message\.source === "system" \|\| message\.root_message_id !== null\) return \{ status: "invalid" \}/);
+});
+
 test("main feed read receipts reschedule after message layout changes", () => {
   const feedStateSource = readFileSync(new URL("../src/features/chat/useChatFeedState.ts", import.meta.url), "utf8");
   assert.match(feedStateSource, /ResizeObserver/);

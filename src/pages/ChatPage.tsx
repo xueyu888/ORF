@@ -60,6 +60,7 @@ import {
   markChatChannelReadRequest,
   openChatConversation,
   removeChatChannelMemberRequest,
+  requestChatMessageAcknowledgementRequest,
   sendChatMessageRequest,
   setChatReactionRequest,
   setChatMessagePinRequest,
@@ -995,7 +996,7 @@ export function ChatPage() {
   );
 
   const handleSendMessage = useCallback(
-    async ({ attachments, channelId, draft, parentMessageId, rootMessageId }: ChatSendInput) => {
+    async ({ attachments, channelId, draft, parentMessageId, requireAcknowledgement, rootMessageId }: ChatSendInput) => {
       if (!currentUser) {
         notify("当前用户不可用，无法发送消息");
         return;
@@ -1010,6 +1011,7 @@ export function ChatPage() {
         channelId,
         body,
         attachmentIds: attachments.map((attachment) => attachment.id),
+        requireAcknowledgement: Boolean(requireAcknowledgement),
         rootMessageId,
         parentMessageId,
       };
@@ -1201,6 +1203,23 @@ export function ChatPage() {
     [applyMessage, currentUser?.id, notify],
   );
 
+  const handleRequestAcknowledgement = useCallback(
+    async (message: ChatMessage) => {
+      try {
+        const response = await requestChatMessageAcknowledgementRequest({
+          channelId: message.channelId,
+          messageId: message.id,
+        });
+        if (response.channel) applyChannel(response.channel);
+        applyMessage(response.message);
+        await refreshChatUnreadSummary();
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "开启回执失败");
+      }
+    },
+    [applyChannel, applyMessage, notify, refreshChatUnreadSummary],
+  );
+
   const handlePinMessage = useCallback(
     async (message: ChatMessage) => {
       const pinned = !message.pinnedAt;
@@ -1364,6 +1383,7 @@ export function ChatPage() {
               onPin={handlePinMessage}
               onReaction={handleReaction}
               onRemovePending={handleRemovePendingMessage}
+              onRequestAcknowledgement={handleRequestAcknowledgement}
               onRetryPending={handleRetryPendingMessage}
               onSave={handleSaveMessage}
               onSaveEdit={handleEditMessage}
@@ -1496,6 +1516,7 @@ export function ChatPage() {
           onAttachmentPreview={openAttachmentPreview}
           onReaction={handleReaction}
           onRemovePending={handleRemovePendingMessage}
+          onRequestAcknowledgement={handleRequestAcknowledgement}
           onRetryPending={handleRetryPendingMessage}
           onEdit={setEditingMessage}
           onMarkUnread={markMessageUnread}

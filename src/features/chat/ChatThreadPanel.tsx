@@ -31,6 +31,7 @@ type ChatThreadPanelProps = {
   onPin: (message: ChatMessage) => void;
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onRemovePending: (message: ChatMessage) => void;
+  onRequestAcknowledgement: (message: ChatMessage) => void;
   onRetryPending: (message: ChatMessage) => void;
   onSave: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
@@ -63,6 +64,7 @@ export function ChatThreadPanel({
   onPin,
   onReaction,
   onRemovePending,
+  onRequestAcknowledgement,
   onRetryPending,
   onSave,
   onSaveEdit,
@@ -181,6 +183,7 @@ export function ChatThreadPanel({
           onPin={onPin}
           onReaction={onReaction}
           onRemovePending={onRemovePending}
+          onRequestAcknowledgement={onRequestAcknowledgement}
           onRetryPending={onRetryPending}
           onSave={onSave}
           onSaveEdit={onSaveEdit}
@@ -217,6 +220,7 @@ export function ChatThreadPanel({
                 onPin={onPin}
                 onReaction={onReaction}
                 onRemovePending={onRemovePending}
+                onRequestAcknowledgement={onRequestAcknowledgement}
                 onRetryPending={onRetryPending}
                 onSave={onSave}
                 onSaveEdit={onSaveEdit}

@@ -113,6 +113,7 @@ interface ToastMessage {
 
 const emptyChatUnreadSummary: ChatUnreadSummary = {
   actionableMessageUnreadCount: 0,
+  ackRequiredCount: 0,
   directMessageUnreadCount: 0,
   mainMentionCount: 0,
   mentionCount: 0,

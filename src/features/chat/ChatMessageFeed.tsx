@@ -43,6 +43,7 @@ type ChatMessageFeedProps = {
   onPin: (message: ChatMessage) => void;
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onRemovePending: (message: ChatMessage) => void;
+  onRequestAcknowledgement: (message: ChatMessage) => void;
   onRetryPending: (message: ChatMessage) => void;
   onSave: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
@@ -90,6 +91,7 @@ export function ChatMessageFeed({
   onPin,
   onReaction,
   onRemovePending,
+  onRequestAcknowledgement,
   onRetryPending,
   onSave,
   onSaveEdit,
@@ -139,6 +141,7 @@ export function ChatMessageFeed({
           onPin={onPin}
           onReaction={onReaction}
           onRemovePending={onRemovePending}
+          onRequestAcknowledgement={onRequestAcknowledgement}
           onRetryPending={onRetryPending}
           onSave={onSave}
           onSaveEdit={onSaveEdit}
@@ -191,6 +194,7 @@ function MessageList({
   onPin,
   onReaction,
   onRemovePending,
+  onRequestAcknowledgement,
   onRetryPending,
   onSave,
   onSaveEdit,
@@ -297,6 +301,7 @@ function MessageList({
               onPin={onPin}
               onReaction={onReaction}
               onRemovePending={onRemovePending}
+              onRequestAcknowledgement={onRequestAcknowledgement}
               onRetryPending={onRetryPending}
               onSave={onSave}
               onSaveEdit={onSaveEdit}

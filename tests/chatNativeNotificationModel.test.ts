@@ -138,6 +138,7 @@ function chatUser(overrides: Partial<ChatUser> = {}): ChatUser {
 function chatUnreadSummary(overrides: Partial<ChatUnreadSummary> = {}): ChatUnreadSummary {
   return {
     actionableMessageUnreadCount: 0,
+    ackRequiredCount: 0,
     directMessageUnreadCount: 0,
     mainMentionCount: 0,
     mentionCount: 0,
@@ -314,6 +315,27 @@ test("chat realtime intent hands over to durable unread without double counting"
   assert.equal(state.count, 1);
   assert.equal(state.badgeCount, 1);
   assert.equal(state.items.filter((item) => item.kind === "chat.direct").length, 1);
+});
+
+test("required chat acknowledgement keeps ORF flashing until explicitly answered", () => {
+  const state = buildAttentionState(attentionInput({
+    chatUnreadSummary: chatUnreadSummary({
+      ackRequiredCount: 1,
+      nextTarget: {
+        channelId: "channel-1",
+        messageId: "message-1",
+        reason: "ack_required",
+        surface: "main",
+        targetPath: "/chat/channel-1?message=message-1",
+      },
+    }),
+  }));
+
+  assert.equal(state.level, "flash");
+  assert.equal(state.count, 1);
+  assert.equal(state.badgeCount, 1);
+  assert.equal(state.items[0]?.kind, "chat.ack");
+  assert.equal(state.latestTargetPath, "/chat/channel-1?message=message-1");
 });
 
 test("chat realtime strong attention respects an actively viewed direct conversation", () => {

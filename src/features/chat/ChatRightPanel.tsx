@@ -46,6 +46,7 @@ type ChatRightPanelProps = {
   onPin: (message: ChatMessage) => void;
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onRemovePending: (message: ChatMessage) => void;
+  onRequestAcknowledgement: (message: ChatMessage) => void;
   onRetryPending: (message: ChatMessage) => void;
   onRemoveMember: (userId: string) => Promise<void>;
   onDriveSelectionRequestHandled?: (requestId: number) => void;
@@ -117,6 +118,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
             onPin={props.onPin}
             onReaction={props.onReaction}
             onRemovePending={props.onRemovePending}
+            onRequestAcknowledgement={props.onRequestAcknowledgement}
             onRetryPending={props.onRetryPending}
             onSave={props.onSave}
             onSaveEdit={props.onSaveEdit}

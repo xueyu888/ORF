@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Bookmark, ChevronDown, ChevronUp, Copy, Edit3, EyeOff, FileText, Link as LinkIcon, type LucideIcon, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
+import { Bookmark, CheckCheck, ChevronDown, ChevronUp, Copy, Edit3, EyeOff, FileText, Link as LinkIcon, type LucideIcon, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
 import { type CSSProperties, type KeyboardEvent, type MouseEvent, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, IconButton } from "../../components/ui";
@@ -39,6 +39,7 @@ type ChatMessageItemProps = {
   onPin?: (message: ChatMessage) => void;
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onRemovePending?: (message: ChatMessage) => void;
+  onRequestAcknowledgement?: (message: ChatMessage) => void;
   onRetryPending?: (message: ChatMessage) => void;
   onSave?: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
@@ -106,6 +107,23 @@ function reactionSummaryLabel(
   return overflowCount > 0
     ? `${reactionLabel}，${reaction.count} 人：${visibleNames} 等 ${overflowCount} 人`
     : `${reactionLabel}，${reaction.count} 人：${visibleNames}`;
+}
+
+function acknowledgementSummaryLabel(
+  acknowledgement: NonNullable<ChatMessage["acknowledgement"]>,
+  usersById: Map<string, ChatUser>,
+) {
+  const acknowledgedCount = acknowledgement.acknowledgedUserIds.length;
+  const totalCount = acknowledgement.recipientUserIds.length;
+  const pendingNames = acknowledgement.pendingUserIds
+    .map((userId) => usersById.get(userId)?.name)
+    .filter((name): name is string => Boolean(name));
+  if (pendingNames.length === 0) return `回执 ${acknowledgedCount}/${totalCount}，全部已回应`;
+  const visibleNames = pendingNames.slice(0, 5).join("、");
+  const overflowCount = Math.max(0, pendingNames.length - 5);
+  return overflowCount > 0
+    ? `回执 ${acknowledgedCount}/${totalCount}，待回应：${visibleNames} 等 ${overflowCount} 人`
+    : `回执 ${acknowledgedCount}/${totalCount}，待回应：${visibleNames}`;
 }
 
 function MessageAuthorAvatar({
@@ -440,6 +458,7 @@ export function ChatMessageItem({
   onPin,
   onReaction,
   onRemovePending,
+  onRequestAcknowledgement,
   onRetryPending,
   onSave,
   onSaveEdit,
@@ -461,6 +480,7 @@ export function ChatMessageItem({
   const canUseServerActions = !sendStatus && !message.deletedAt;
   const canDeleteMessage = !isSystemMessage && (canMutate || (canDeleteAnyMessage && canUseServerActions));
   const visibleReactions = message.reactions.filter((reaction) => isVisibleChatReactionEmoji(reaction.emojiName));
+  const acknowledgement = message.acknowledgement ?? null;
   const transformPastedFeedbackText = useCallback(
     (text: string) => formatPastedFeedbackLinks(text, feedbackItems ?? []),
     [feedbackItems],
@@ -593,7 +613,16 @@ export function ChatMessageItem({
     label: "删除消息",
     onSelect: () => onDelete(message),
   } : null;
+  const acknowledgementAction: ChatMessageMoreAction | null = (
+    canMutate && !message.rootMessageId && !acknowledgement && onRequestAcknowledgement
+  ) ? {
+      icon: CheckCheck,
+      id: "requestAcknowledgement",
+      label: "要求回执",
+      onSelect: () => onRequestAcknowledgement(message),
+    } : null;
   const moreActions: ChatMessageMoreAction[] = [
+    ...(acknowledgementAction ? [acknowledgementAction] : []),
     {
       icon: LinkIcon,
       id: "copyLink",
@@ -709,6 +738,28 @@ export function ChatMessageItem({
               </div>
             )}
             <div className="orf-chat-reaction-row">
+              {acknowledgement && (
+                <span
+                  className={clsx("orf-chat-ack-summary", acknowledgement.currentUserPending && "orf-chat-ack-summary-pending")}
+                  title={acknowledgementSummaryLabel(acknowledgement, usersById)}
+                  aria-label={acknowledgementSummaryLabel(acknowledgement, usersById)}
+                >
+                  <CheckCheck className="h-3.5 w-3.5" />
+                  回执 {acknowledgement.acknowledgedUserIds.length}/{acknowledgement.recipientUserIds.length}
+                </span>
+              )}
+              {acknowledgement?.currentUserPending && (
+                <>
+                  <button type="button" className="orf-chat-ack-action" onClick={() => onReaction(message, "thumbsup")}>
+                    <ChatReactionEmoji decorative emojiName="thumbsup" size="reaction" />
+                    已收到
+                  </button>
+                  <button type="button" className="orf-chat-ack-action" onClick={() => onReaction(message, "one")}>
+                    <ChatReactionEmoji decorative emojiName="one" size="reaction" />
+                    扣1
+                  </button>
+                </>
+              )}
               {visibleReactions.map((reaction) => {
                 const reactionLabel = labelChatReactionEmoji(reaction.emojiName);
                 const summaryLabel = reactionSummaryLabel(reaction, reactionLabel, usersById);

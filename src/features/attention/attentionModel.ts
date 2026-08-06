@@ -229,6 +229,18 @@ function attentionItemsFromActionableChatUnread(summary: ChatUnreadSummary): Att
   const createdAt = new Date(0).toISOString();
   const targetPath = summary.nextTarget?.targetPath ?? "/chat";
   const targetReason = summary.nextTarget?.reason;
+  if (targetReason === "ack_required" || (!targetReason && summary.ackRequiredCount > 0)) {
+    return [{
+      body: `${summary.ackRequiredCount} 条聊天回执待回应`,
+      createdAt,
+      eventId: "chat-ack-required",
+      kind: "chat.ack",
+      level: "flash",
+      source: "chat",
+      targetPath,
+      title: "聊天回执待处理",
+    }];
+  }
   if (targetReason === "mention_me" || targetReason === "mention_all" || (!targetReason && summary.mentionCount > 0)) {
     return [{
       body: `${summary.mentionCount} 条 @ 你的聊天消息`,
@@ -364,7 +376,7 @@ function attentionBadgeCount(unreadAttentionCount: number, summary: ChatUnreadSu
 }
 
 function chatActionableUnreadCount(summary: ChatUnreadSummary) {
-  return chatActionableMessageUnreadCount(summary) + Math.max(
+  return nonNegativeCount(summary.ackRequiredCount) + chatActionableMessageUnreadCount(summary) + Math.max(
     nonNegativeCount(summary.threadMentionCount),
     nonNegativeCount(summary.threadUnreadCount),
   );

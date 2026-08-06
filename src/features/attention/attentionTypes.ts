@@ -8,7 +8,7 @@ export type AttentionItem = {
   body: string;
   createdAt: string;
   eventId: string;
-  kind?: NotificationKind | "chat.direct" | "chat.mention" | "chat.thread" | "chat.unread" | "worklog.reminder";
+  kind?: NotificationKind | "chat.ack" | "chat.direct" | "chat.mention" | "chat.thread" | "chat.unread" | "worklog.reminder";
   level: Exclude<AttentionLevel, "none">;
   source: AttentionSource;
   targetPath: string;
