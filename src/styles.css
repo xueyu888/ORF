@@ -9104,6 +9104,15 @@ button:disabled {
   text-shadow: none;
 }
 
+.work-logs-editor-save-hint {
+  padding-top: 8px;
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1.45;
+  text-align: right;
+}
+
 .work-logs-editor-actions .orf-action-button-primary:hover:not(:disabled),
 .work-logs-editor-actions .orf-action-button-blue:hover:not(:disabled) {
   background: var(--orf-accent-hover);

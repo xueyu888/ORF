@@ -87,6 +87,11 @@ const entryBodySchema = z.object({
   remainingEstimatePercent: z.number().int().min(0).max(100).nullish(),
 });
 
+const entryUpdateBodySchema = entryBodySchema.extend({
+  preserveExistingClassification: z.boolean().optional(),
+  workDate: dateSchema.optional(),
+});
+
 const classificationSuggestionBodySchema = z.object({
   bodyMarkdown: z.string().trim().min(1).max(12000),
 });
@@ -246,7 +251,7 @@ export function registerWorkLogRoutes(app: FastifyInstance) {
     }
 
     const params = entryParamsSchema.parse(request.params);
-    const body = entryBodySchema.parse(request.body);
+    const body = entryUpdateBodySchema.parse(request.body);
     const outcome = await updateMyWorkLogEntry(context.user, context.scope, params.entryId, body);
     if (outcome.status === "forbidden") {
       return reply.code(403).send({ error: "当前账号不能填写自己的工作日志" });

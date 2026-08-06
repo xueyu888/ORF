@@ -87,6 +87,7 @@ export const invalidateWorkLogObjectives = () => invalidateReadModel(keys.workLo
 export const workLogDaySnapshot = (date: string) => readModelSnapshot<WorkLogDayResponse>(keys.workLogDay(date));
 export const loadWorkLogDay = (date: string, options?: ReadModelLoadOptions) =>
   loadReadModel(keys.workLogDay(date), () => getMyWorkLogDay(date), { maxAgeMs: 20_000, ...options });
+export const invalidateWorkLogDay = (date: string) => invalidateReadModel(keys.workLogDay(date));
 export const setWorkLogDaySnapshot = (date: string, value: WorkLogDayResponse) => setReadModelSnapshot(keys.workLogDay(date), value);
 
 export const workLogActivitySnapshot = (limit: number) => readModelSnapshot<WorkLogActivityResponse>(keys.workLogActivity(limit));

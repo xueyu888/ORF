@@ -84,6 +84,10 @@
 
 `objectiveId`、`categoryId`、`categoryName` 只能三选一。普通非 FAE 成员默认必须提供 `objectiveId` 和 `remainingEstimatePercent`；所有 active 成员都可以用内置 `请假` 分类提交免目标日志；管理员和当前临时 FAE 例外成员可以不提供目标。只有管理员可以提供管理分类 `categoryId` 或新分类 `categoryName`，普通成员不能选择 `管理事务` 等管理分类。`remainingEstimatePercent` 对管理员、当前临时 FAE 例外成员、内置 `请假` 或未指定目标日志可为空；未指定目标时后端会归空；前端“目标进度估计”输入会在保存边界换算成这个兼容剩余字段。当前前端不发送 `durationMinutes`；后端继续接受兼容输入，创建时缺省为空，更新时缺省则保留旧值。`classificationSuggestion` 只作为管理员 AI 判断证据，不能绕过最终分类校验。
 
+`PATCH /api/work-logs/entries/:entryId` 额外接受 `workDate: "YYYY-MM-DD"`，用于把同一条历史日志移动到其他填写日期；后端会更新 `work_log_entries.work_date`，移动到新日期时重新追加该日期下的 `sort_order`，并同时失效旧日期和新日期读模型。
+
+`PATCH /api/work-logs/entries/:entryId` 额外接受 `preserveExistingClassification: true`，只用于编辑旧日志时保留该日志已有的目标/分类快照。它不能和 `objectiveId`、`categoryId`、`categoryName` 同时出现，也不适用于新增日志；后端只在该日志本来就有历史目标或分类快照时才按原快照保存，否则仍按普通保存规则校验。
+
 `POST /api/work-logs/classification-suggestion` 请求体：
 
 ```json

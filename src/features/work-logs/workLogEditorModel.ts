@@ -17,6 +17,7 @@ export type WorkLogEditorDraft = {
   editingEntryId: string | null;
   objectiveId: string;
   objectiveTitleSnapshot?: string | null;
+  preserveExistingClassification?: boolean;
   progressEstimatePercent: number | null;
 };
 
@@ -28,6 +29,7 @@ export type WorkLogEditorDraftPatch = Partial<
     | "categoryName"
     | "classificationKind"
     | "objectiveId"
+    | "preserveExistingClassification"
     | "progressEstimatePercent"
   >
 >;
@@ -41,6 +43,8 @@ export type WorkLogEditorSession = {
 
 export type WorkLogClassificationSelectValue =
   | "category:new"
+  | "historical:category"
+  | "historical:objective"
   | "uncategorized"
   | `category:${string}`
   | `objective:${string}`;
@@ -146,13 +150,36 @@ export function applyWorkLogEditorDraftPatch(
   draft: WorkLogEditorDraft,
   patch: WorkLogEditorDraftPatch,
 ): WorkLogEditorDraft {
-  const next = { ...draft, ...patch };
+  const changesClassification =
+    patch.categoryId !== undefined ||
+    patch.categoryName !== undefined ||
+    patch.classificationKind !== undefined ||
+    patch.objectiveId !== undefined;
+  const next = {
+    ...draft,
+    ...patch,
+    preserveExistingClassification:
+      patch.preserveExistingClassification === true
+        ? true
+        : changesClassification
+          ? false
+          : draft.preserveExistingClassification,
+  };
   if (patch.classificationKind === "objective") {
     return {
       ...next,
       categoryId: "",
       categoryName: "",
       classificationKind: "objective",
+    };
+  }
+  if (patch.classificationKind === "uncategorized") {
+    return {
+      ...next,
+      categoryId: "",
+      categoryName: "",
+      objectiveId: "",
+      progressEstimatePercent: null,
     };
   }
   if (
@@ -163,15 +190,6 @@ export function applyWorkLogEditorDraftPatch(
     return {
       ...next,
       classificationKind: "category",
-      objectiveId: "",
-      progressEstimatePercent: null,
-    };
-  }
-  if (patch.classificationKind === "uncategorized") {
-    return {
-      ...next,
-      categoryId: "",
-      categoryName: "",
       objectiveId: "",
       progressEstimatePercent: null,
     };
@@ -191,6 +209,12 @@ export function applyWorkLogEditorDraftPatch(
 
 export function workLogEditorDraftFromEntry(entry: WorkLogEntry): WorkLogEditorDraft {
   const classification = workLogEntryClassification(entry);
+  const preserveExistingClassification =
+    classification.kind === "objective"
+      ? !entry.objectiveIdSnapshot && Boolean(entry.objectiveTitleSnapshot)
+      : classification.kind === "category"
+        ? !entry.categoryIdSnapshot && Boolean(entry.categoryNameSnapshot)
+        : false;
   return {
     bodyMarkdown: entry.bodyMarkdown,
     categoryId: classification.kind === "category" ? entry.categoryIdSnapshot ?? "" : "",
@@ -200,6 +224,7 @@ export function workLogEditorDraftFromEntry(entry: WorkLogEntry): WorkLogEditorD
     editingEntryId: entry.id,
     objectiveId: classification.kind === "objective" ? entry.objectiveIdSnapshot ?? "" : "",
     objectiveTitleSnapshot: entry.objectiveTitleSnapshot,
+    preserveExistingClassification,
     progressEstimatePercent: workLogProgressEstimatePercentFromRemaining(entry.remainingEstimatePercent),
   };
 }
@@ -212,6 +237,7 @@ export function parseWorkLogProgressEstimateInput(value: string) {
 }
 
 export function canonicalWorkLogEditorDraft(draft: WorkLogEditorDraft) {
+  const preservesExistingClassification = workLogEditorDraftPreservesExistingClassification(draft);
   return {
     bodyMarkdown: draft.bodyMarkdown.trim(),
     categoryId:
@@ -227,7 +253,8 @@ export function canonicalWorkLogEditorDraft(draft: WorkLogEditorDraft) {
         ? draft.objectiveId.trim() || null
         : null,
     remainingEstimatePercent:
-      draft.classificationKind === "objective" && draft.objectiveId.trim()
+      draft.classificationKind === "objective" &&
+        (draft.objectiveId.trim() || preservesExistingClassification)
         ? workLogRemainingEstimatePercentFromProgress(draft.progressEstimatePercent)
         : null,
   };
@@ -256,27 +283,43 @@ export function validateWorkLogEditorDraft(
   },
 ) {
   const entry = canonicalWorkLogEditorDraft(draft);
-  if (draft.classificationKind === "objective" && !entry.objectiveId) {
+  const preservesExistingClassification = workLogEditorDraftPreservesExistingClassification(draft);
+  if (
+    draft.classificationKind === "objective" &&
+    !entry.objectiveId &&
+    !preservesExistingClassification
+  ) {
     return "请选择目标";
   }
   if (draft.classificationKind === "uncategorized" && !options.allowUncategorized) {
     return "请选择目标";
   }
-  if (draft.classificationKind === "category" && !options.allowCategories) {
+  if (
+    draft.classificationKind === "category" &&
+    !preservesExistingClassification &&
+    !options.allowCategories
+  ) {
     return "当前账号不能使用工作日志分类";
   }
   if (
     draft.classificationKind === "category" &&
+    !preservesExistingClassification &&
     !draft.categoryId &&
     !options.allowNewCategory
   ) {
     return "当前账号不能新建工作日志分类";
   }
-  if (draft.classificationKind === "category" && !entry.categoryId && !entry.categoryName) {
+  if (
+    draft.classificationKind === "category" &&
+    !preservesExistingClassification &&
+    !entry.categoryId &&
+    !entry.categoryName
+  ) {
     return "请填写分类名称";
   }
   if (
     draft.classificationKind === "objective" &&
+    !preservesExistingClassification &&
     options.requireObjectiveProgressEstimate &&
     draft.progressEstimatePercent === null
   ) {
@@ -291,6 +334,11 @@ export function validateWorkLogEditorDraft(
 export function classificationSelectValueFromDraft(
   draft: WorkLogEditorDraft,
 ): WorkLogClassificationSelectValue {
+  if (workLogEditorDraftPreservesExistingClassification(draft)) {
+    return draft.classificationKind === "category"
+      ? "historical:category"
+      : "historical:objective";
+  }
   if (draft.classificationKind === "objective" && draft.objectiveId) {
     return `objective:${draft.objectiveId}`;
   }
@@ -304,6 +352,25 @@ export function workLogDraftPatchFromClassificationSelect(
   value: WorkLogClassificationSelectValue,
   options: WorkLogObjectiveOptionLookup = {},
 ): WorkLogEditorDraftPatch {
+  if (value === "historical:objective") {
+    return {
+      categoryId: "",
+      categoryName: "",
+      classificationKind: "objective",
+      objectiveId: "",
+      preserveExistingClassification: true,
+    };
+  }
+  if (value === "historical:category") {
+    return {
+      categoryId: "",
+      categoryName: "",
+      classificationKind: "category",
+      objectiveId: "",
+      preserveExistingClassification: true,
+      progressEstimatePercent: null,
+    };
+  }
   if (value.startsWith("objective:")) {
     const objectiveId = value.slice("objective:".length);
     const objective = options.objectives?.find((item) => item.id === objectiveId);
@@ -312,6 +379,7 @@ export function workLogDraftPatchFromClassificationSelect(
       categoryName: "",
       classificationKind: "objective",
       objectiveId,
+      preserveExistingClassification: false,
       progressEstimatePercent: workLogProgressEstimatePercentFromRemaining(objective?.latestRemainingEstimatePercent),
     };
   }
@@ -321,6 +389,7 @@ export function workLogDraftPatchFromClassificationSelect(
       categoryName: "",
       classificationKind: "category",
       objectiveId: "",
+      preserveExistingClassification: false,
       progressEstimatePercent: null,
     };
   }
@@ -329,6 +398,7 @@ export function workLogDraftPatchFromClassificationSelect(
       categoryId: "",
       classificationKind: "category",
       objectiveId: "",
+      preserveExistingClassification: false,
       progressEstimatePercent: null,
     };
   }
@@ -337,6 +407,7 @@ export function workLogDraftPatchFromClassificationSelect(
     categoryName: "",
     classificationKind: "uncategorized",
     objectiveId: "",
+    preserveExistingClassification: false,
     progressEstimatePercent: null,
   };
 }
@@ -476,6 +547,17 @@ export function buildWorkLogClassificationChoices(
           alwaysVisible: true,
         },
   ];
+  if (
+    workLogEditorDraftPreservesExistingClassification(draft) &&
+    draft.classificationKind === "category"
+  ) {
+    choices.push({
+      value: "historical:category",
+      label: draft.categoryNameSnapshot ?? "历史分类",
+      description: "保留历史分类快照",
+      alwaysVisible: true,
+    });
+  }
   if (options.allowCategories) {
     if (options.allowNewCategory) {
       choices.push({
@@ -492,6 +574,17 @@ export function buildWorkLogClassificationChoices(
         description: category.source === "builtIn" ? "内置归类" : "日志分类",
       })),
     );
+  }
+  if (
+    workLogEditorDraftPreservesExistingClassification(draft) &&
+    draft.classificationKind === "objective"
+  ) {
+    choices.push({
+      value: "historical:objective",
+      label: draft.objectiveTitleSnapshot ?? "历史目标",
+      description: "保留历史目标快照",
+      alwaysVisible: true,
+    });
   }
   choices.push(
     ...objectives.map((objective) => ({
@@ -521,6 +614,21 @@ export function buildWorkLogClassificationChoices(
     });
   }
   return choices;
+}
+
+export function workLogEditorDraftPreservesExistingClassification(draft: WorkLogEditorDraft) {
+  if (!draft.editingEntryId || draft.preserveExistingClassification !== true) return false;
+  if (draft.classificationKind === "objective") {
+    return Boolean(draft.objectiveTitleSnapshot && !draft.objectiveId.trim());
+  }
+  if (draft.classificationKind === "category") {
+    return Boolean(
+      draft.categoryNameSnapshot &&
+        !draft.categoryId.trim() &&
+        !draft.categoryName.trim(),
+    );
+  }
+  return false;
 }
 
 export function workLogEntryTargetLabel(entry: WorkLogEntry) {

@@ -25,12 +25,22 @@ import {
   workLogEditorDraftStorageKey,
 } from "../src/features/work-logs/workLogDraftStorage";
 import {
+  applyWorkLogEditorDraftPatch,
   applyWorkLogEditorSessionDraftPatch,
   blankWorkLogEditorDraft,
+  buildWorkLogClassificationChoices,
+  canonicalWorkLogEditorDraft,
+  canonicalWorkLogEntryForEdit,
+  classificationSelectValueFromDraft,
   createWorkLogEditorSession,
   moveWorkLogEditorSession,
+  validateWorkLogEditorDraft,
+  workLogDraftPatchFromClassificationSelect,
+  workLogEditorDraftFromEntry,
+  workLogEditorDraftPreservesExistingClassification,
   workLogEditorSessionShouldFollowViewDate,
 } from "../src/features/work-logs/workLogEditorModel";
+import type { WorkLogEntry } from "../src/types/orf";
 
 test("work log default target list only includes ongoing objectives", () => {
   assert.equal(canShowObjectiveInDefaultWorkLogList("accepted"), false);
@@ -179,6 +189,11 @@ test("work log editor session keeps draft ownership across refresh and resets fo
     userId: "user-1",
     workDate: "2026-07-14",
   });
+  const movedHistoricalEdit = moveWorkLogEditorSession(historicalEdit, "2026-07-13");
+  assert.equal(movedHistoricalEdit.draft.editingEntryId, "entry-1");
+  assert.equal(movedHistoricalEdit.workDate, "2026-07-13");
+  assert.equal(movedHistoricalEdit.revision, historicalEdit.revision);
+
   const cancelledEdit = createWorkLogEditorSession({
     previousRevision: historicalEdit.revision,
     userId: historicalEdit.userId,
@@ -187,6 +202,126 @@ test("work log editor session keeps draft ownership across refresh and resets fo
   assert.equal(cancelledEdit.draft.editingEntryId, null);
   assert.equal(cancelledEdit.draft.bodyMarkdown, "");
   assert.equal(cancelledEdit.revision, historicalEdit.revision + 1);
+});
+
+test("work log editor preserves id-less historical classification while editing", () => {
+  const historicalObjectiveEntry: WorkLogEntry = {
+    id: "entry-legacy-objective",
+    authorUserId: "user-1",
+    authorNameSnapshot: "成员",
+    workDate: "2026-07-15",
+    objectiveId: null,
+    objectiveIdSnapshot: null,
+    objectiveTitleSnapshot: "Jira 历史目标",
+    categoryId: null,
+    categoryIdSnapshot: null,
+    categoryNameSnapshot: null,
+    bodyMarkdown: "历史目标日志",
+    remainingEstimatePercent: 40,
+    durationMinutes: null,
+    sortOrder: 0,
+    createdAt: "2026-07-15T08:00:00.000Z",
+    updatedAt: "2026-07-15T08:00:00.000Z",
+  };
+  const draft = workLogEditorDraftFromEntry(historicalObjectiveEntry);
+
+  assert.equal(workLogEditorDraftPreservesExistingClassification(draft), true);
+  assert.equal(classificationSelectValueFromDraft(draft), "historical:objective");
+  assert.equal(validateWorkLogEditorDraft(draft, {
+    allowCategories: false,
+    allowUncategorized: false,
+    requireObjectiveProgressEstimate: true,
+  }), "");
+  assert.deepEqual(canonicalWorkLogEditorDraft(draft), {
+    bodyMarkdown: "历史目标日志",
+    categoryId: null,
+    categoryName: null,
+    objectiveId: null,
+    remainingEstimatePercent: 40,
+  });
+  assert.ok(buildWorkLogClassificationChoices(draft, [], {
+    allowCategories: false,
+    allowUncategorized: false,
+  }, []).some((choice) => choice.value === "historical:objective"));
+
+  const changedBody = applyWorkLogEditorDraftPatch(draft, {
+    bodyMarkdown: "第二次修改历史目标日志",
+  });
+  assert.equal(workLogEditorDraftPreservesExistingClassification(changedBody), true);
+
+  const changedClassification = applyWorkLogEditorDraftPatch(
+    draft,
+    workLogDraftPatchFromClassificationSelect("uncategorized"),
+  );
+  assert.equal(workLogEditorDraftPreservesExistingClassification(changedClassification), false);
+  assert.equal(classificationSelectValueFromDraft(changedClassification), "uncategorized");
+
+  const historicalCategoryEntry: WorkLogEntry = {
+    ...historicalObjectiveEntry,
+    id: "entry-legacy-category",
+    objectiveTitleSnapshot: null,
+    categoryNameSnapshot: "Tempo 历史分类",
+    remainingEstimatePercent: null,
+  };
+  const categoryDraft = workLogEditorDraftFromEntry(historicalCategoryEntry);
+  assert.equal(workLogEditorDraftPreservesExistingClassification(categoryDraft), true);
+  assert.equal(classificationSelectValueFromDraft(categoryDraft), "historical:category");
+  assert.equal(validateWorkLogEditorDraft(categoryDraft, {
+    allowCategories: false,
+    allowUncategorized: false,
+    requireObjectiveProgressEstimate: true,
+  }), "");
+  assert.ok(buildWorkLogClassificationChoices(categoryDraft, [], {
+    allowCategories: false,
+    allowUncategorized: false,
+  }, []).some((choice) => choice.value === "historical:category"));
+});
+
+test("work log edit save returns to the same entry baseline for continued editing", () => {
+  const entry: WorkLogEntry = {
+    id: "entry-1",
+    authorUserId: "user-1",
+    authorNameSnapshot: "成员",
+    workDate: "2026-07-16",
+    objectiveId: "obj-1",
+    objectiveIdSnapshot: "obj-1",
+    objectiveTitleSnapshot: "目标一",
+    categoryId: null,
+    categoryIdSnapshot: null,
+    categoryNameSnapshot: null,
+    bodyMarkdown: "第一次内容",
+    remainingEstimatePercent: 50,
+    durationMinutes: null,
+    sortOrder: 0,
+    createdAt: "2026-07-16T08:00:00.000Z",
+    updatedAt: "2026-07-16T08:00:00.000Z",
+  };
+  const editingSession = createWorkLogEditorSession({
+    draft: workLogEditorDraftFromEntry(entry),
+    userId: "user-1",
+    workDate: entry.workDate,
+  });
+  const savedEntry: WorkLogEntry = {
+    ...entry,
+    bodyMarkdown: "第一次内容，已更新",
+    remainingEstimatePercent: 35,
+    updatedAt: "2026-07-15T09:00:00.000Z",
+    workDate: "2026-07-15",
+  };
+  const afterSave = createWorkLogEditorSession({
+    draft: workLogEditorDraftFromEntry(savedEntry),
+    previousRevision: editingSession.revision,
+    userId: editingSession.userId,
+    workDate: savedEntry.workDate,
+  });
+
+  assert.equal(afterSave.draft.editingEntryId, entry.id);
+  assert.equal(afterSave.revision, editingSession.revision + 1);
+  assert.equal(afterSave.workDate, savedEntry.workDate);
+  assert.deepEqual(
+    canonicalWorkLogEditorDraft(afterSave.draft),
+    canonicalWorkLogEntryForEdit(savedEntry),
+  );
 });
 
 test("work log AI classification correctness compares canonical user selection", () => {

@@ -287,7 +287,9 @@ export type WorkLogEntrySaveInput = {
   categoryName?: string | null;
   classificationSuggestion?: WorkLogClassificationSuggestion | null;
   objectiveId?: string | null;
+  preserveExistingClassification?: boolean;
   remainingEstimatePercent?: number | null;
+  workDate?: string;
 };
 export type VisualBackgroundImage = {
   id: string;

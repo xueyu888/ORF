@@ -58,6 +58,7 @@ function parseStoredDraft(value: unknown): WorkLogEditorDraft {
     editingEntryId: cleanNullableString(value.editingEntryId, 200),
     objectiveId: cleanString(value.objectiveId, 200).trim(),
     objectiveTitleSnapshot: cleanNullableString(value.objectiveTitleSnapshot, 200),
+    preserveExistingClassification: value.preserveExistingClassification === true,
     progressEstimatePercent: cleanNullableInteger(value.progressEstimatePercent, 0, 100),
   };
   if (draft.classificationKind === "objective") {

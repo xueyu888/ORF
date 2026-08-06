@@ -45,7 +45,9 @@ export type WorkLogDayEntryInput = {
   classificationSuggestion?: WorkLogClassificationSuggestion | null;
   durationMinutes?: number | null;
   objectiveId?: string | null;
+  preserveExistingClassification?: boolean;
   remainingEstimatePercent?: number | null;
+  workDate?: string | null;
 };
 
 export type WorkLogDaySaveOutcome =
@@ -129,6 +131,17 @@ function toWorkLogEntry(row: typeof workLogEntries.$inferSelect): WorkLogEntry {
   };
 }
 
+function existingWorkLogClassificationKind(row: {
+  categoryIdSnapshot?: string | null;
+  categoryNameSnapshot?: string | null;
+  objectiveIdSnapshot?: string | null;
+  objectiveTitleSnapshot?: string | null;
+}): "category" | "objective" | null {
+  if (row.objectiveIdSnapshot || row.objectiveTitleSnapshot) return "objective";
+  if (row.categoryIdSnapshot || row.categoryNameSnapshot) return "category";
+  return null;
+}
+
 function reconcileReminderAfterWorkLogChange(teamId: string, userId: string) {
   void reconcileWorkLogReminderState({
     publishRealtime: true,
@@ -142,11 +155,15 @@ function reconcileReminderAfterWorkLogChange(teamId: string, userId: string) {
 function normalizeWorkLogEntryInput(
   user: AuthenticatedOrfUser,
   input: WorkLogDayEntryInput,
-  options: { existingDurationMinutes?: number | null } = {},
+  options: {
+    existingDurationMinutes?: number | null;
+    preserveExistingClassificationKind?: "category" | "objective" | null;
+  } = {},
 ) {
   const objectiveId = input.objectiveId?.trim() || null;
   const categoryId = input.categoryId?.trim() || null;
   const categoryName = normalizeWorkLogCategoryDisplayName(input.categoryName ?? "");
+  const preserveExistingClassificationKind = options.preserveExistingClassificationKind ?? null;
   const bodyMarkdown = input.bodyMarkdown.trim();
   const remainingEstimatePercent = input.remainingEstimatePercent ?? null;
   const durationMinutes = input.durationMinutes === undefined
@@ -155,10 +172,19 @@ function normalizeWorkLogEntryInput(
   if (!bodyMarkdown) {
     return { status: "invalid" as const, reason: "emptyBody" as const };
   }
+  if (preserveExistingClassificationKind && (objectiveId || categoryId || categoryName)) {
+    return { status: "invalid" as const, reason: "classificationConflict" as const };
+  }
   if ((objectiveId && (categoryId || categoryName)) || (categoryId && categoryName)) {
     return { status: "invalid" as const, reason: "classificationConflict" as const };
   }
-  if (!objectiveId && !categoryId && !categoryName && !canSaveUnscopedWorkLog(user)) {
+  if (
+    !objectiveId &&
+    !categoryId &&
+    !categoryName &&
+    !preserveExistingClassificationKind &&
+    !canSaveUnscopedWorkLog(user)
+  ) {
     return { status: "invalid" as const, reason: "objectiveRequired" as const };
   }
   if ((categoryId || categoryName) && !canUseWorkLogCategoryInput(user, { categoryId, categoryName })) {
@@ -187,7 +213,11 @@ function normalizeWorkLogEntryInput(
       categoryName,
       objectiveId,
       bodyMarkdown,
-      remainingEstimatePercent: objectiveId ? remainingEstimatePercent : null,
+      preserveExistingClassificationKind,
+      remainingEstimatePercent:
+        objectiveId || preserveExistingClassificationKind === "objective"
+          ? remainingEstimatePercent
+          : null,
       durationMinutes,
     },
   };
@@ -369,11 +399,11 @@ function selectedWorkLogClassificationSnapshot(input: {
   objectiveId?: string | null;
   objectiveTitle?: string | null;
 }): WorkLogClassificationSelection {
-  if (input.objectiveId) {
+  if (input.objectiveId || input.objectiveTitle) {
     return {
       kind: "objective",
-      targetId: input.objectiveId,
-      targetName: input.objectiveTitle ?? input.objectiveId,
+      targetId: input.objectiveId ?? null,
+      targetName: input.objectiveTitle ?? input.objectiveId ?? "历史目标",
     };
   }
   if (input.categoryId || input.categoryName) {
@@ -745,62 +775,82 @@ export async function updateMyWorkLogEntry(
 
   const normalized = normalizeWorkLogEntryInput(user, input, {
     existingDurationMinutes: existing.durationMinutes,
+    preserveExistingClassificationKind: input.preserveExistingClassification === true
+      ? existingWorkLogClassificationKind(existing)
+      : null,
   });
   if (normalized.status !== "ok") {
     return normalized;
   }
 
-  const objectiveResult = await resolveWorkLogObjectiveForInput({
-    existingObjectiveIdSnapshot: existing.objectiveIdSnapshot ?? null,
-    objectiveId: normalized.entry.objectiveId ?? null,
-    scope,
-    user,
-  });
-  if (objectiveResult.status !== "ok") {
-    return objectiveResult;
-  }
-  const categoryResult = await resolveWorkLogCategoryForInput({
-    existingCategoryIdSnapshot: existing.categoryIdSnapshot ?? null,
-    categoryId: normalized.entry.categoryId,
-    categoryName: normalized.entry.categoryName,
-    scope,
-    user,
-  });
-  if (categoryResult.status !== "ok") {
-    return categoryResult;
-  }
-
   const updatedAt = nowIso();
-  const targetPatch = objectiveResult.preserveExistingSnapshot
-    ? {}
-    : {
-        objectiveId: objectiveResult.objective?.id ?? null,
-        objectiveIdSnapshot: objectiveResult.objective?.id ?? null,
-        objectiveTitleSnapshot: objectiveResult.objective?.title ?? null,
-      };
-  const categoryPatch = categoryResult.preserveExistingSnapshot
-    ? {}
-    : {
-        categoryId: categoryResult.category?.storageCategoryId ?? null,
-        categoryIdSnapshot: categoryResult.category?.snapshotCategoryId ?? null,
-        categoryNameSnapshot: categoryResult.category?.name ?? null,
-      };
-  const selectedClassification = selectedWorkLogClassificationSnapshot({
-    objectiveId: normalized.entry.objectiveId,
-    objectiveTitle: objectiveResult.preserveExistingSnapshot
-      ? existing.objectiveTitleSnapshot
-      : objectiveResult.objective?.title,
-    categoryId: normalized.entry.categoryId || normalized.entry.categoryName
-      ? (categoryResult.preserveExistingSnapshot
-          ? existing.categoryIdSnapshot
-          : categoryResult.category?.snapshotCategoryId)
-      : null,
-    categoryName: normalized.entry.categoryId || normalized.entry.categoryName
-      ? (categoryResult.preserveExistingSnapshot
-          ? existing.categoryNameSnapshot
-          : categoryResult.category?.name)
-      : null,
-  });
+  const savedWorkDate = input.workDate?.trim() || existing.workDate;
+  const savedSortOrder = savedWorkDate === existing.workDate
+    ? existing.sortOrder
+    : await getNextWorkLogSortOrder(scope, user.id, savedWorkDate);
+  let targetPatch: Partial<typeof workLogEntries.$inferInsert> = {};
+  let categoryPatch: Partial<typeof workLogEntries.$inferInsert> = {};
+  let selectedClassification: WorkLogClassificationSelection;
+
+  if (normalized.entry.preserveExistingClassificationKind) {
+    selectedClassification = selectedWorkLogClassificationSnapshot({
+      objectiveId: existing.objectiveIdSnapshot,
+      objectiveTitle: existing.objectiveTitleSnapshot,
+      categoryId: existing.categoryIdSnapshot,
+      categoryName: existing.categoryNameSnapshot,
+    });
+  } else {
+    const objectiveResult = await resolveWorkLogObjectiveForInput({
+      existingObjectiveIdSnapshot: existing.objectiveIdSnapshot ?? null,
+      objectiveId: normalized.entry.objectiveId ?? null,
+      scope,
+      user,
+    });
+    if (objectiveResult.status !== "ok") {
+      return objectiveResult;
+    }
+    const categoryResult = await resolveWorkLogCategoryForInput({
+      existingCategoryIdSnapshot: existing.categoryIdSnapshot ?? null,
+      categoryId: normalized.entry.categoryId,
+      categoryName: normalized.entry.categoryName,
+      scope,
+      user,
+    });
+    if (categoryResult.status !== "ok") {
+      return categoryResult;
+    }
+
+    targetPatch = objectiveResult.preserveExistingSnapshot
+      ? {}
+      : {
+          objectiveId: objectiveResult.objective?.id ?? null,
+          objectiveIdSnapshot: objectiveResult.objective?.id ?? null,
+          objectiveTitleSnapshot: objectiveResult.objective?.title ?? null,
+        };
+    categoryPatch = categoryResult.preserveExistingSnapshot
+      ? {}
+      : {
+          categoryId: categoryResult.category?.storageCategoryId ?? null,
+          categoryIdSnapshot: categoryResult.category?.snapshotCategoryId ?? null,
+          categoryNameSnapshot: categoryResult.category?.name ?? null,
+        };
+    selectedClassification = selectedWorkLogClassificationSnapshot({
+      objectiveId: normalized.entry.objectiveId,
+      objectiveTitle: objectiveResult.preserveExistingSnapshot
+        ? existing.objectiveTitleSnapshot
+        : objectiveResult.objective?.title,
+      categoryId: normalized.entry.categoryId || normalized.entry.categoryName
+        ? (categoryResult.preserveExistingSnapshot
+            ? existing.categoryIdSnapshot
+            : categoryResult.category?.snapshotCategoryId)
+        : null,
+      categoryName: normalized.entry.categoryId || normalized.entry.categoryName
+        ? (categoryResult.preserveExistingSnapshot
+            ? existing.categoryNameSnapshot
+            : categoryResult.category?.name)
+        : null,
+    });
+  }
   const classificationDecision = await buildWorkLogClassificationDecision({
     bodyMarkdownSnapshot: normalized.entry.bodyMarkdown,
     createdAt: updatedAt,
@@ -820,7 +870,9 @@ export async function updateMyWorkLogEntry(
         bodyMarkdown: normalized.entry.bodyMarkdown,
         remainingEstimatePercent: normalized.entry.remainingEstimatePercent,
         durationMinutes: normalized.entry.durationMinutes,
+        sortOrder: savedSortOrder,
         updatedAt,
+        workDate: savedWorkDate,
       })
       .where(eq(workLogEntries.id, existing.id));
     if (classificationDecision) {
@@ -828,15 +880,18 @@ export async function updateMyWorkLogEntry(
     }
   });
 
-  publishRealtimeReadModelInvalidation(storageScopeId, {
-    actorUserId: user.id,
-    models: ["workLogs"],
-    reason: "workLog.changed",
-    target: { id: `${user.id}:${existing.workDate}`, type: "workLog" },
-  });
+  const invalidationDates = new Set([existing.workDate, savedWorkDate]);
+  for (const invalidationDate of invalidationDates) {
+    publishRealtimeReadModelInvalidation(storageScopeId, {
+      actorUserId: user.id,
+      models: ["workLogs"],
+      reason: "workLog.changed",
+      target: { id: `${user.id}:${invalidationDate}`, type: "workLog" },
+    });
+  }
   reconcileReminderAfterWorkLogChange(storageScopeId, user.id);
 
-  return { status: "ok", entries: await listMyWorkLogDay(user.id, scope, existing.workDate) };
+  return { status: "ok", entries: await listMyWorkLogDay(user.id, scope, savedWorkDate) };
 }
 
 export async function deleteMyWorkLogEntry(
