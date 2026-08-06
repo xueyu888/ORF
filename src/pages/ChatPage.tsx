@@ -238,7 +238,7 @@ export function ChatPage() {
     ? channels.find((channel) => channel.systemKind === SYSTEM_CONVERSATION_DEFINITIONS[routeSystemConversationId].stream) ?? null
     : null;
   const routeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : null;
-  const activeChannel = routeSystemConversationId ? routeSystemChannel : routeChannel ?? (!mobileViewport && !routeChannelId ? channels[0] ?? null : null);
+  const activeChannel = routeSystemConversationId ? routeSystemChannel : routeChannel;
   const focusMessageId = searchParams.get("message");
   const requestedThreadRootMessageId = searchParams.get("thread");
   const usersById = useMemo(() => new Map((bootstrap?.users ?? []).map((user) => [user.id, user])), [bootstrap?.users]);
