@@ -20,6 +20,17 @@ export {
   type FeedbackDailyDigestRecipient,
   type FeedbackDailyDigestRuntime,
 } from "../server/dailyDigestScheduler";
+export {
+  findFeedbackTeamId,
+  getFeedbackCommentNotificationFacts,
+  hasFeedbackLinkedToProject,
+  hasFeedbackUserReference,
+  lockFeedbackCommentTarget,
+  resolveFeedbackCommentTarget,
+  type FeedbackCommentNotificationFacts,
+  type FeedbackCommentTargetReference,
+  type FeedbackReferenceDatabase,
+} from "../server/references";
 
 export interface FeedbackServerHost {
   readonly protocolVersion: 1;

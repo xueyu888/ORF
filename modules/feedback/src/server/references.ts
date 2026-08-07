@@ -1,9 +1,8 @@
 import { and, eq, or } from "drizzle-orm";
-import { feedback } from "../../modules/feedback/src/infrastructure/database/schema";
-import { db } from "../db/client";
-import { runtimeScope, type RuntimeScope } from "./runtimeScope";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { feedback } from "../infrastructure/database/schema";
 
-type FeedbackReferenceSelectClient = Pick<typeof db, "select">;
+export type FeedbackReferenceDatabase = Pick<NodePgDatabase<any>, "select">;
 
 export type FeedbackCommentTargetReference = {
   readonly feedbackId: string;
@@ -18,21 +17,19 @@ export type FeedbackCommentNotificationFacts = {
   readonly teamId: string;
 };
 
-function storageScope(id: string | null | undefined): RuntimeScope | null {
-  const storageId = id?.trim();
-  return storageId ? runtimeScope(storageId) : null;
-}
-
-export async function resolveRuntimeScopeForFeedback(feedbackId: string): Promise<RuntimeScope | null> {
-  const [target] = await db.select({ teamId: feedback.teamId }).from(feedback).where(eq(feedback.id, feedbackId)).limit(1);
-  return storageScope(target?.teamId);
+export async function findFeedbackTeamId(
+  database: FeedbackReferenceDatabase,
+  feedbackId: string,
+): Promise<string | null> {
+  const [target] = await database.select({ teamId: feedback.teamId }).from(feedback).where(eq(feedback.id, feedbackId)).limit(1);
+  return target?.teamId ?? null;
 }
 
 export async function hasFeedbackLinkedToProject(
+  database: FeedbackReferenceDatabase,
   input: { readonly projectId: string; readonly storageScopeId: string },
-  client: FeedbackReferenceSelectClient = db,
 ) {
-  const [target] = await client
+  const [target] = await database
     .select({ id: feedback.id })
     .from(feedback)
     .where(and(eq(feedback.teamId, input.storageScopeId), eq(feedback.projectId, input.projectId)))
@@ -40,11 +37,14 @@ export async function hasFeedbackLinkedToProject(
   return Boolean(target);
 }
 
-export async function hasFeedbackUserReference(input: {
-  readonly storageScopeId: string;
-  readonly userId: string;
-}) {
-  const [target] = await db
+export async function hasFeedbackUserReference(
+  database: FeedbackReferenceDatabase,
+  input: {
+    readonly storageScopeId: string;
+    readonly userId: string;
+  },
+) {
+  const [target] = await database
     .select({ id: feedback.id })
     .from(feedback)
     .where(and(
@@ -60,10 +60,10 @@ export async function hasFeedbackUserReference(input: {
 }
 
 export async function resolveFeedbackCommentTarget(
+  database: FeedbackReferenceDatabase,
   feedbackId: string,
-  client: FeedbackReferenceSelectClient = db,
 ): Promise<FeedbackCommentTargetReference | null> {
-  const [target] = await client
+  const [target] = await database
     .select({ feedbackId: feedback.id, teamId: feedback.teamId, title: feedback.title })
     .from(feedback)
     .where(eq(feedback.id, feedbackId))
@@ -72,10 +72,10 @@ export async function resolveFeedbackCommentTarget(
 }
 
 export async function lockFeedbackCommentTarget(
+  database: FeedbackReferenceDatabase,
   feedbackId: string,
-  client: FeedbackReferenceSelectClient,
 ) {
-  const [target] = await client
+  const [target] = await database
     .select({ id: feedback.id })
     .from(feedback)
     .where(eq(feedback.id, feedbackId))
@@ -85,9 +85,10 @@ export async function lockFeedbackCommentTarget(
 }
 
 export async function getFeedbackCommentNotificationFacts(
+  database: FeedbackReferenceDatabase,
   feedbackId: string,
 ): Promise<FeedbackCommentNotificationFacts | null> {
-  const [target] = await db
+  const [target] = await database
     .select({
       assigneeUserId: feedback.assigneeUserId,
       createdBy: feedback.createdBy,

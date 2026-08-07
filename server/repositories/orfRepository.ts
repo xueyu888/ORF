@@ -2,6 +2,12 @@ import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 import { feedbackCommentPath, feedbackIssuePath, planFeedbackCommentCreatedNotification } from "@orf/feedback-module/contracts";
+import {
+  getFeedbackCommentNotificationFacts,
+  hasFeedbackLinkedToProject,
+  lockFeedbackCommentTarget,
+  resolveFeedbackCommentTarget,
+} from "@orf/feedback-module/server";
 import type {
   CommentAttachment,
   BountySource,
@@ -112,12 +118,6 @@ import {
   getProjectChatNotificationChannelIds,
   getUserNameById,
 } from "./notificationRepository";
-import {
-  getFeedbackCommentNotificationFacts,
-  hasFeedbackLinkedToProject,
-  lockFeedbackCommentTarget,
-  resolveFeedbackCommentTarget,
-} from "./feedbackReferenceRepository";
 import { getFeedbackOrdinaryNotificationRecipients } from "./feedbackSubscriptionRepository";
 import { recordFeedbackCommentCreated } from "./feedbackRepository";
 import { publishNotificationEvent } from "../notifications/publisher";
@@ -834,7 +834,7 @@ async function getFeedbackCommentNotificationContext(input: {
   feedbackId: string;
   teamId: string;
 }) {
-  const target = await getFeedbackCommentNotificationFacts(input.feedbackId);
+  const target = await getFeedbackCommentNotificationFacts(db, input.feedbackId);
   if (!target || target.teamId !== input.teamId) {
     return null;
   }
@@ -995,7 +995,7 @@ export async function deleteProject(projectId: string, context: { scope: Runtime
       .for("update");
     if (!project) return null;
 
-    if (await hasFeedbackLinkedToProject({ projectId: nextProjectId, storageScopeId }, tx)) {
+    if (await hasFeedbackLinkedToProject(tx, { projectId: nextProjectId, storageScopeId })) {
       return { status: "hasFeedback" as const, project };
     }
 
@@ -2500,7 +2500,7 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
   }
 
   if (targetType === "feedback") {
-    const target = await resolveFeedbackCommentTarget(targetId);
+    const target = await resolveFeedbackCommentTarget(db, targetId);
     return target ? { ...target, kind: "feedback" } : null;
   }
 
@@ -2720,7 +2720,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
         return null;
       }
     } else {
-      if (!(await lockFeedbackCommentTarget(target.feedbackId, tx))) {
+      if (!(await lockFeedbackCommentTarget(tx, target.feedbackId))) {
         return null;
       }
     }

@@ -1,10 +1,10 @@
 import { and, eq } from "drizzle-orm";
+import { findFeedbackTeamId } from "@orf/feedback-module/server";
 import { isObjectiveReestimateWindowOpen } from "../../src/domain/orfLifecycle";
 import { isObjectiveChallenger } from "../../src/domain/orfObjectiveParticipants";
 import { objectiveWorkItemMutationAccess } from "../../src/domain/orfWorkItems";
 import { db } from "../db/client";
 import { objectives, results, taskChecklistItems, tasks } from "../db/schema";
-export { resolveRuntimeScopeForFeedback } from "../repositories/feedbackReferenceRepository";
 import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 
 export type ObjectiveWorkItemTarget =
@@ -102,6 +102,10 @@ export async function resolveRuntimeScopeForWorkItem(target: ObjectiveWorkItemTa
     .where(subtaskTargetCondition(target))
     .limit(1);
   return storageScope(item?.teamId);
+}
+
+export async function resolveRuntimeScopeForFeedback(feedbackId: string): Promise<RuntimeScope | null> {
+  return storageScope(await findFeedbackTeamId(db, feedbackId));
 }
 
 export async function canMutateObjectiveWorkItem(

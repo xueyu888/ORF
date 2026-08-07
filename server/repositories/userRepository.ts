@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { hasFeedbackUserReference } from "@orf/feedback-module/server";
 import type { OrfUser, UserRole } from "../../src/types/orf";
 import { canEnableUserAccount } from "../../src/domain/userAccountLifecycle";
 import { deleteOryIdentity, resetOryIdentityPassword, updateOryIdentityEmail } from "../auth/ory";
@@ -26,7 +27,6 @@ import { objectStorage } from "../storage/objectStorage";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScopeStorageId } from "./runtimeScope";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
-import { hasFeedbackUserReference } from "./feedbackReferenceRepository";
 
 export type UserInput = {
   name: string;
@@ -179,7 +179,7 @@ async function isUserIdReferencedByOrfRecords(scope: RuntimeScope, userId: strin
       .from(tasks)
       .where(and(eq(tasks.teamId, storageScopeId), or(eq(tasks.createdBy, userId), eq(tasks.updatedBy, userId), eq(tasks.assigneeUserId, userId))))
       .limit(1),
-    hasFeedbackUserReference({ storageScopeId, userId }),
+    hasFeedbackUserReference(db, { storageScopeId, userId }),
     db
       .select({ id: evidence.id })
       .from(evidence)
