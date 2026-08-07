@@ -86,7 +86,6 @@ import {
   objectiveAlignmentReviewStatusText,
 } from "../../src/domain/orfAlignment";
 import { validateObjectiveDeadlineChange } from "../../src/domain/orfDeadline";
-import { feedback } from "../../modules/feedback/src/infrastructure/database/schema";
 import { db } from "../db/client";
 import {
   commentAttachments,
@@ -113,6 +112,12 @@ import {
   getProjectChatNotificationChannelIds,
   getUserNameById,
 } from "./notificationRepository";
+import {
+  getFeedbackCommentNotificationFacts,
+  hasFeedbackLinkedToProject,
+  lockFeedbackCommentTarget,
+  resolveFeedbackCommentTarget,
+} from "./feedbackReferenceRepository";
 import { getFeedbackOrdinaryNotificationRecipients } from "./feedbackSubscriptionRepository";
 import { recordFeedbackCommentCreated } from "./feedbackRepository";
 import { publishNotificationEvent } from "../notifications/publisher";
@@ -829,21 +834,17 @@ async function getFeedbackCommentNotificationContext(input: {
   feedbackId: string;
   teamId: string;
 }) {
-  const [target] = await db
-    .select({
-      createdBy: feedback.createdBy,
-      assigneeUserId: feedback.assigneeUserId,
-      projectId: feedback.projectId,
-      projectName: projects.name,
-      teamId: feedback.teamId,
-    })
-    .from(feedback)
-    .leftJoin(projects, eq(projects.id, feedback.projectId))
-    .where(eq(feedback.id, input.feedbackId))
-    .limit(1);
+  const target = await getFeedbackCommentNotificationFacts(input.feedbackId);
   if (!target || target.teamId !== input.teamId) {
     return null;
   }
+  const [project] = target.projectId
+    ? await db
+      .select({ id: projects.id, name: projects.name })
+      .from(projects)
+      .where(and(eq(projects.id, target.projectId), eq(projects.teamId, input.teamId)))
+      .limit(1)
+    : [];
 
   const excludedUserIds = new Set(uniqueNotificationUserIds([input.actorUserId, ...input.excludedUserIds]));
   const recipientUserIds = await getFeedbackOrdinaryNotificationRecipients({
@@ -854,7 +855,7 @@ async function getFeedbackCommentNotificationContext(input: {
     teamId: input.teamId,
   });
   return {
-    project: target.projectId && target.projectName ? { id: target.projectId, name: target.projectName } : null,
+    project: project ?? null,
     recipientUserIds: recipientUserIds.filter((userId) => !excludedUserIds.has(userId)),
   };
 }
@@ -994,12 +995,7 @@ export async function deleteProject(projectId: string, context: { scope: Runtime
       .for("update");
     if (!project) return null;
 
-    const [linkedFeedback] = await tx
-      .select({ id: feedback.id })
-      .from(feedback)
-      .where(and(eq(feedback.teamId, storageScopeId), eq(feedback.projectId, nextProjectId)))
-      .limit(1);
-    if (linkedFeedback) {
+    if (await hasFeedbackLinkedToProject({ projectId: nextProjectId, storageScopeId }, tx)) {
       return { status: "hasFeedback" as const, project };
     }
 
@@ -2504,12 +2500,8 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
   }
 
   if (targetType === "feedback") {
-    const [target] = await db
-      .select({ feedbackId: feedback.id, teamId: feedback.teamId, title: feedback.title })
-      .from(feedback)
-      .where(eq(feedback.id, targetId))
-      .limit(1);
-    return target ? { feedbackId: target.feedbackId, kind: "feedback", storageScopeId: target.teamId, title: target.title } : null;
+    const target = await resolveFeedbackCommentTarget(targetId);
+    return target ? { ...target, kind: "feedback" } : null;
   }
 
   const [target] = await db
@@ -2728,13 +2720,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
         return null;
       }
     } else {
-      const [lockedFeedback] = await tx
-        .select({ id: feedback.id })
-        .from(feedback)
-        .where(eq(feedback.id, target.feedbackId))
-        .limit(1)
-        .for("update");
-      if (!lockedFeedback) {
+      if (!(await lockFeedbackCommentTarget(target.feedbackId, tx))) {
         return null;
       }
     }
