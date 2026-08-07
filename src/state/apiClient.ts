@@ -149,8 +149,12 @@ export type CommentMentionableUsersResponse = Pick<OrfState, "users">;
 export type FeedbackAssigneesResponse = {
   users: Array<Pick<OrfUserDisplayProfile, "avatarUrl" | "id" | "name">>;
 };
+export type FeedbackReferenceSummary = {
+  id: string;
+  title: string;
+};
 export type FeedbackReferencesResponse = {
-  feedback: Array<Pick<OrfState["feedback"][number], "id" | "title">>;
+  feedback: FeedbackReferenceSummary[];
 };
 export type FeedbackSubscriptionResponse = {
   subscription: {
@@ -656,13 +660,21 @@ export async function getFeedbackAssignees() {
   return apiJson<FeedbackAssigneesResponse>("/api/feedback/assignees");
 }
 
-export async function getFeedbackReferences(feedbackIds: string[]) {
+export async function getFeedbackReferences(feedbackIds: string[], init?: RequestInit) {
   const query = new URLSearchParams();
   for (const feedbackId of feedbackIds.slice(0, 100)) {
     query.append("id", feedbackId);
   }
   const suffix = query.toString() ? `?${query.toString()}` : "";
-  return apiJson<FeedbackReferencesResponse>(`/api/feedback/references${suffix}`);
+  return apiJson<FeedbackReferencesResponse>(`/api/feedback/references${suffix}`, init);
+}
+
+export async function searchFeedbackReferences(queryText: string, options: { limit?: number; signal?: AbortSignal } = {}) {
+  const query = new URLSearchParams({ q: queryText });
+  if (options.limit) {
+    query.set("limit", String(options.limit));
+  }
+  return apiJson<FeedbackReferencesResponse>(`/api/feedback/references?${query.toString()}`, { signal: options.signal });
 }
 
 export async function getFeedbackIssueReadModel() {

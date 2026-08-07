@@ -17,6 +17,7 @@ import {
   addFeedbackRelation,
   createFeedback,
   getFeedbackReferences,
+  searchFeedbackReferences,
   getFeedbackReportAttachmentContent,
   listFeedbackAssigneeOptions,
   markFeedbackViewed,
@@ -82,6 +83,8 @@ const updateFeedbackSubscriptionBodySchema = z.object({
 const feedbackReferencesQuerySchema = z.object({
   id: z.union([z.string(), z.array(z.string())]).optional(),
   ids: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(50).optional(),
+  q: z.string().trim().optional(),
 });
 
 function parseCauseCategories(value: string) {
@@ -98,11 +101,15 @@ function parsePriority(value: string | null | undefined) {
   return normalized ? feedbackPrioritySchema.parse(normalized) : null;
 }
 
-function parseFeedbackReferenceIds(query: unknown) {
+function parseFeedbackReferenceQuery(query: unknown) {
   const parsed = feedbackReferencesQuerySchema.parse(query);
   const repeatedIds = Array.isArray(parsed.id) ? parsed.id : parsed.id ? [parsed.id] : [];
   const commaSeparatedIds = parsed.ids?.split(",") ?? [];
-  return [...repeatedIds, ...commaSeparatedIds].map((value) => value.trim()).filter(Boolean).slice(0, 100);
+  return {
+    ids: [...repeatedIds, ...commaSeparatedIds].map((value) => value.trim()).filter(Boolean).slice(0, 100),
+    limit: parsed.limit ?? 20,
+    q: parsed.q?.trim() ?? "",
+  };
 }
 
 function normalizeOptionalId(value: string | null | undefined) {
@@ -229,9 +236,17 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       return reply;
     }
 
-    const feedbackIds = parseFeedbackReferenceIds(request.query);
-    const feedback = await getFeedbackReferences(feedbackIds, context.scope);
-    return { feedback };
+    const query = parseFeedbackReferenceQuery(request.query);
+    const byId = await getFeedbackReferences(query.ids, context.scope);
+    const bySearch = query.q ? await searchFeedbackReferences(query.q, context.scope, query.limit) : [];
+    const seen = new Set<string>();
+    return {
+      feedback: [...byId, ...bySearch].filter((item) => {
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      }),
+    };
   });
 
   app.get("/api/feedback/report-attachments/:attachmentId/content", async (request, reply) => {

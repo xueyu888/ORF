@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import {
   planFeedbackAssigneeChangedNotification,
   planFeedbackCreatedNotification,
@@ -160,6 +160,10 @@ function uniqueStrings(values: readonly string[]) {
 
 function uniqueFeedbackIds(feedbackIds: readonly string[]) {
   return uniqueStrings(feedbackIds).slice(0, 100);
+}
+
+function likePatternForSearch(value: string) {
+  return `%${value.trim().replace(/[\\%_]/g, "\\$&")}%`;
 }
 
 function normalizeCauseCategories(categories: readonly string[] | undefined) {
@@ -1164,6 +1168,30 @@ export async function getFeedbackReferences(feedbackIds: readonly string[], scop
 
   const sortOrder = new Map(ids.map((id, index) => [id, index]));
   return rows.sort((left, right) => (sortOrder.get(left.id) ?? 0) - (sortOrder.get(right.id) ?? 0));
+}
+
+export async function searchFeedbackReferences(query: string, scope: RuntimeScope, limit = 20): Promise<FeedbackReference[]> {
+  const teamId = runtimeScopeStorageId(scope);
+  const normalizedQuery = query.trim();
+  if (!teamId || !normalizedQuery) return [];
+
+  const pattern = likePatternForSearch(normalizedQuery);
+  return db
+    .select({
+      id: feedback.id,
+      title: feedback.title,
+    })
+    .from(feedback)
+    .where(and(
+      eq(feedback.teamId, teamId),
+      or(
+        sql`${feedback.id} ILIKE ${pattern} ESCAPE '\\'`,
+        sql`${feedback.title} ILIKE ${pattern} ESCAPE '\\'`,
+        sql`${feedback.description} ILIKE ${pattern} ESCAPE '\\'`,
+      ),
+    ))
+    .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), feedback.id)
+    .limit(Math.max(1, Math.min(50, limit)));
 }
 
 export async function getFeedbackReportAttachmentContent(

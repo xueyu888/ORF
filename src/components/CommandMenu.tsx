@@ -1,5 +1,5 @@
 import { Search, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { canShowFrontendPath } from "../config/frontendVisibility";
 import { quickCommands } from "../config/navigation";
 import { hasPermission } from "../config/permissions";
@@ -15,7 +15,8 @@ import {
 } from "../features/challenge/model/objectiveVisibility";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
-import { commandTypeLabel, feedbackImpactLabel, feedbackLifecycleLabel } from "../utils/labels";
+import { searchFeedbackReferences, type FeedbackReferenceSummary } from "../state/apiClient";
+import { commandTypeLabel } from "../utils/labels";
 
 type CommandMenuItem =
   | { action: "createObjective"; label: string; searchText: string; type: "Action" }
@@ -25,14 +26,39 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
   const workbenchNavigation = useWorkbenchNavigation();
   const { currentUser, state } = useOrf();
   const [query, setQuery] = useState("");
+  const [feedbackReferences, setFeedbackReferences] = useState<FeedbackReferenceSummary[]>([]);
   const drag = useDraggableFloating<HTMLDivElement>({ disabled: !open, resetKey: open ? "open" : "closed" });
+  const canSearchFeedback = currentUser?.status === "active" || currentUser?.role === "admin";
+
+  useEffect(() => {
+    const normalizedQuery = query.trim();
+    if (!open || !canSearchFeedback || normalizedQuery.length < 2) {
+      setFeedbackReferences([]);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void searchFeedbackReferences(normalizedQuery, { limit: 8, signal: controller.signal })
+        .then((response) => setFeedbackReferences(response.feedback))
+        .catch((error) => {
+          if (!controller.signal.aborted) {
+            setFeedbackReferences([]);
+          }
+        });
+    }, 160);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [canSearchFeedback, open, query]);
 
   const items = useMemo(() => {
     const visibleObjectives = visibleObjectivesForUser(state.objectives, currentUser);
     const visibleObjectiveIds = visibleObjectiveIdsForUser(state.objectives, currentUser);
     const visibleResults = filterResultsForVisibleObjectives(state.results, visibleObjectiveIds, currentUser);
     const visibleTasks = filterTasksForVisibleObjectives(state.tasks, visibleObjectiveIds, currentUser);
-    const visibleFeedback = currentUser?.status === "active" || currentUser?.role === "admin" ? state.feedback : [];
     const commandItems = quickCommands
       .filter((item) =>
         item.kind === "action"
@@ -96,19 +122,10 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
         type: "Subtask" as const,
       })),
     );
-    const feedbackItems = visibleFeedback.map((item) => ({
+    const feedbackItems = feedbackReferences.map((item) => ({
       label: item.title,
       path: feedbackIssueHref(item.id),
-      searchText: [
-        item.id,
-        item.title,
-        item.description,
-        state.users.find((user) => user.id === item.assigneeUserId)?.name ?? "",
-        feedbackLifecycleLabel(item),
-        item.impact,
-        feedbackImpactLabel[item.impact],
-        ...item.causeCategories,
-      ].join(" "),
+      searchText: `${item.id} ${item.title}`,
       type: "Feedback" as const,
     }));
     const allItems: CommandMenuItem[] = [
@@ -124,7 +141,7 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
     return allItems.filter((item) =>
       !normalizedQuery || `${item.label} ${item.searchText} ${item.type}`.toLowerCase().includes(normalizedQuery),
     );
-  }, [currentUser, query, state]);
+  }, [currentUser, feedbackReferences, query, state]);
 
   if (!open) {
     return null;
