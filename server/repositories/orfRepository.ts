@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
+import { planFeedbackCommentCreatedNotification } from "@orf/feedback-module/contracts";
 import type {
   CommentAttachment,
   BountySource,
@@ -819,10 +820,6 @@ async function notifyCommentReplyRecipient(input: {
   });
 }
 
-function feedbackProjectNotificationMetadata(project: { id: string; name: string } | null): Record<string, string> {
-  return project ? { projectId: project.id, projectName: project.name } : {};
-}
-
 async function getFeedbackCommentNotificationContext(input: {
   actorUserId: string;
   excludedUserIds: string[];
@@ -880,8 +877,7 @@ async function notifyFeedbackParticipantsOfComment(input: {
   if (!context) {
     return;
   }
-  const destinationChannelIds = await getProjectChatNotificationChannelIds(input.teamId, context.project?.id);
-  if (context.recipientUserIds.length === 0 && destinationChannelIds.length === 0) return;
+  if (context.recipientUserIds.length === 0) return;
 
   const content = buildCommentNotificationContent({
     attachments: input.attachments ?? [],
@@ -889,28 +885,19 @@ async function notifyFeedbackParticipantsOfComment(input: {
     summary: `${input.actorName} 回复了反馈「${input.targetTitle}」：`,
   });
 
-  await publishNotificationEvent({
+  await publishNotificationEvent(planFeedbackCommentCreatedNotification({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: content.body,
-    destinationChannelIds,
-    kind: "feedback.commented",
-    metadata: {
-      commentMessageId: input.commentMessageId,
-      commentThreadId: input.commentThreadId,
-      ...content.metadata,
-      ...feedbackProjectNotificationMetadata(context.project),
-      targetId: input.targetId,
-      targetTitle: input.targetTitle,
-      targetType: "feedback",
-    },
+    commentMessageId: input.commentMessageId,
+    commentMetadata: content.metadata,
+    commentThreadId: input.commentThreadId,
+    feedbackId: input.targetId,
+    project: context.project,
     recipientUserIds: context.recipientUserIds,
-    targetHref: commentTargetHref("feedback", input.targetId, input.commentMessageId),
-    targetId: input.targetId,
-    targetType: "feedback",
+    targetTitle: input.targetTitle,
     teamId: input.teamId,
-    title: "反馈有新回复",
-  });
+  }));
 }
 
 export interface CreateResultInput {

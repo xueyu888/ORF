@@ -3,6 +3,10 @@ import { describe, it } from "node:test";
 
 import {
   feedbackTransitionInputSchema,
+  planFeedbackAssigneeChangedNotification,
+  planFeedbackCommentCreatedNotification,
+  planFeedbackCreatedNotification,
+  planFeedbackLifecycleChangedNotification,
 } from "../modules/feedback/src/public/contracts";
 import {
   applyFeedbackTransition,
@@ -346,5 +350,69 @@ describe("feedback module domain", () => {
 
     assert.equal(result.ok, false);
     assert.equal(result.error.code, "invalid_transition_source");
+  });
+
+  it("plans feedback notifications as personal-only events without project channel destinations", () => {
+    const project = { id: "project-1", name: "客户端" };
+    const recipients = ["admin-1", "assignee-1"];
+    const plans = [
+      planFeedbackCreatedNotification({
+        actorName: "薛雨",
+        actorUserId: "actor-1",
+        assigneeName: "处理人",
+        feedbackId: "feedback-1",
+        project,
+        recipientUserIds: recipients,
+        teamId: "team-1",
+        title: "页面滚动位置异常",
+      }),
+      planFeedbackLifecycleChangedNotification({
+        actorName: "薛雨",
+        actorUserId: "actor-1",
+        feedbackId: "feedback-1",
+        project,
+        recipientUserIds: recipients,
+        resolution: "resolved",
+        stage: "pending_verification",
+        teamId: "team-1",
+        title: "页面滚动位置异常",
+      }),
+      planFeedbackAssigneeChangedNotification({
+        actorName: "薛雨",
+        actorUserId: "actor-1",
+        feedbackId: "feedback-1",
+        nextAssigneeName: "新处理人",
+        previousAssigneeName: "旧处理人",
+        recipientUserIds: recipients,
+        teamId: "team-1",
+        title: "页面滚动位置异常",
+      }),
+      planFeedbackCommentCreatedNotification({
+        actorName: "薛雨",
+        actorUserId: "actor-1",
+        body: "薛雨 回复了反馈「页面滚动位置异常」：",
+        commentMessageId: "comment-1",
+        commentMetadata: { commentImageAttachmentIds: "att-1" },
+        commentThreadId: "thread-1",
+        feedbackId: "feedback-1",
+        project,
+        recipientUserIds: recipients,
+        targetTitle: "页面滚动位置异常",
+        teamId: "team-1",
+      }),
+    ];
+
+    for (const plan of plans) {
+      assert.deepEqual(plan.destinationChannelIds, []);
+      assert.deepEqual(plan.recipientUserIds, recipients);
+      assert.equal(plan.targetType, "feedback");
+    }
+    assert.deepEqual(plans[0]?.metadata, {
+      assignee: "处理人",
+      feedbackTitle: "页面滚动位置异常",
+      projectId: "project-1",
+      projectName: "客户端",
+    });
+    assert.equal(plans[3]?.targetHref, "/feedback/feedback-1?comment=comment-1");
   });
 });

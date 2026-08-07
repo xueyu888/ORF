@@ -1,12 +1,15 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { and, eq, inArray, or } from "drizzle-orm";
-import type {
-  FeedbackActivityType,
-  FeedbackImpact,
-  FeedbackPriority,
-  FeedbackRelationType,
-  FeedbackTransitionInput,
+import {
+  planFeedbackAssigneeChangedNotification,
+  planFeedbackCreatedNotification,
+  planFeedbackLifecycleChangedNotification,
+  type FeedbackActivityType,
+  type FeedbackImpact,
+  type FeedbackPriority,
+  type FeedbackRelationType,
+  type FeedbackTransitionInput,
 } from "@orf/feedback-module/contracts";
 import {
   applyFeedbackTransition,
@@ -41,7 +44,6 @@ import {
   getFeedbackAssignmentNotificationRecipients,
   getFeedbackOrdinaryNotificationRecipients,
 } from "./feedbackSubscriptionRepository";
-import { getProjectChatNotificationChannelIds } from "./notificationRepository";
 import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
 
@@ -261,14 +263,6 @@ function buildReportDescription(input: { description: string; uploads: Array<{ c
   return description ? { status: "ok" as const, description } : { status: "invalid" as const };
 }
 
-function feedbackTargetHref(feedbackId: string) {
-  return `/feedback/${encodeURIComponent(feedbackId)}`;
-}
-
-function feedbackProjectMetadata(project: ProjectRow): Record<string, string> {
-  return project ? { projectId: project.id, projectName: project.name } : {};
-}
-
 async function notifyFeedbackCreated(input: {
   actorName: string;
   actorUserId: string;
@@ -279,13 +273,12 @@ async function notifyFeedbackCreated(input: {
   teamId: string;
   title: string;
 }) {
-  await publishNotificationEvent({
+  await publishNotificationEvent(planFeedbackCreatedNotification({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
-    body: `${input.actorName} 创建了反馈「${input.title}」${input.assigneeName ? `，处理人：${input.assigneeName}` : ""}。`,
-    destinationChannelIds: await getProjectChatNotificationChannelIds(input.teamId, input.project?.id),
-    kind: "feedback.created",
-    metadata: { feedbackTitle: input.title, assignee: input.assigneeName ?? "", ...feedbackProjectMetadata(input.project) },
+    assigneeName: input.assigneeName,
+    feedbackId: input.feedbackId,
+    project: input.project,
     recipientUserIds: await getFeedbackOrdinaryNotificationRecipients({
       assigneeUserId: input.assigneeUserId,
       createdBy: input.actorUserId,
@@ -293,12 +286,9 @@ async function notifyFeedbackCreated(input: {
       includeCommentParticipants: false,
       teamId: input.teamId,
     }),
-    targetHref: feedbackTargetHref(input.feedbackId),
-    targetId: input.feedbackId,
-    targetType: "feedback",
     teamId: input.teamId,
-    title: "新的反馈 issue",
-  });
+    title: input.title,
+  }));
 }
 
 async function notifyFeedbackLifecycleChanged(input: {
@@ -313,18 +303,11 @@ async function notifyFeedbackLifecycleChanged(input: {
   teamId: string;
   title: string;
 }) {
-  await publishNotificationEvent({
+  await publishNotificationEvent(planFeedbackLifecycleChangedNotification({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
-    body: `${input.actorName} 更新了反馈「${input.title}」的生命周期。`,
-    destinationChannelIds: await getProjectChatNotificationChannelIds(input.teamId, input.project?.id),
-    kind: "feedback.status.changed",
-    metadata: {
-      feedbackStage: input.stage,
-      feedbackResolution: input.resolution ?? "",
-      feedbackTitle: input.title,
-      ...feedbackProjectMetadata(input.project),
-    },
+    feedbackId: input.feedbackId,
+    project: input.project,
     recipientUserIds: await getFeedbackOrdinaryNotificationRecipients({
       assigneeUserId: input.assigneeUserId,
       createdBy: input.createdBy,
@@ -332,12 +315,11 @@ async function notifyFeedbackLifecycleChanged(input: {
       includeCommentParticipants: true,
       teamId: input.teamId,
     }),
-    targetHref: feedbackTargetHref(input.feedbackId),
-    targetId: input.feedbackId,
-    targetType: "feedback",
+    resolution: input.resolution,
+    stage: input.stage,
     teamId: input.teamId,
-    title: "反馈生命周期已更新",
-  });
+    title: input.title,
+  }));
 }
 
 async function notifyFeedbackAssigned(input: {
@@ -351,27 +333,20 @@ async function notifyFeedbackAssigned(input: {
   teamId: string;
   title: string;
 }) {
-  await publishNotificationEvent({
+  await publishNotificationEvent(planFeedbackAssigneeChangedNotification({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
-    body: `${input.actorName} 将反馈「${input.title}」的处理人从 ${input.previousAssigneeName ?? "未指派"} 调整为 ${input.nextAssigneeName ?? "未指派"}。`,
-    kind: "feedback.assigned",
-    metadata: {
-      feedbackTitle: input.title,
-      nextAssignee: input.nextAssigneeName ?? "",
-      previousAssignee: input.previousAssigneeName ?? "",
-    },
+    feedbackId: input.feedbackId,
+    nextAssigneeName: input.nextAssigneeName,
+    previousAssigneeName: input.previousAssigneeName,
     recipientUserIds: await getFeedbackAssignmentNotificationRecipients({
       nextAssigneeUserId: input.nextAssigneeUserId,
       previousAssigneeUserId: input.previousAssigneeUserId,
       teamId: input.teamId,
     }),
-    targetHref: feedbackTargetHref(input.feedbackId),
-    targetId: input.feedbackId,
-    targetType: "feedback",
     teamId: input.teamId,
-    title: "反馈处理人已更新",
-  });
+    title: input.title,
+  }));
 }
 
 async function getFeedbackFromReadModel(feedbackId: string, scope: RuntimeScope) {
