@@ -1,7 +1,24 @@
 import type { FastifyInstance } from "fastify";
-import type { FeedbackServerHost } from "@orf/feedback-module/server";
+import { startFeedbackDailyDigestScheduler, type FeedbackServerHost } from "@orf/feedback-module/server";
+import { asc, eq } from "drizzle-orm";
+import { db } from "../db/client";
+import { teamMembers, users } from "../db/schema";
+import { env } from "../env";
+import { publishNotificationEvent } from "../notifications/publisher";
 import { registerFeedbackRoutes } from "../routes/feedbackRoutes";
-import { startFeedbackDailyDigestScheduler } from "./feedbackDailyDigestScheduler";
+
+async function listActiveFeedbackDigestRecipients() {
+  return db
+    .select({
+      name: users.name,
+      teamId: teamMembers.teamId,
+      userId: users.id,
+    })
+    .from(teamMembers)
+    .innerJoin(users, eq(users.id, teamMembers.userId))
+    .where(eq(users.status, "active"))
+    .orderBy(asc(teamMembers.teamId), asc(users.name), asc(users.id));
+}
 
 export function createOrfFeedbackServerHost(app: FastifyInstance): FeedbackServerHost {
   return {
@@ -10,7 +27,19 @@ export function createOrfFeedbackServerHost(app: FastifyInstance): FeedbackServe
       registerFeedbackRoutes(app);
     },
     startDailyDigestScheduler() {
-      return startFeedbackDailyDigestScheduler(app.log);
+      return startFeedbackDailyDigestScheduler({
+        config: {
+          enabled: env.ORF_FEEDBACK_DAILY_DIGEST_ENABLED,
+          hour: env.ORF_FEEDBACK_DAILY_DIGEST_HOUR,
+          minute: env.ORF_FEEDBACK_DAILY_DIGEST_MINUTE,
+          pollIntervalMs: env.ORF_FEEDBACK_DAILY_DIGEST_POLL_INTERVAL_MS,
+          timeZone: env.ORF_FEEDBACK_DAILY_DIGEST_TIME_ZONE,
+        },
+        database: db,
+        listActiveRecipients: listActiveFeedbackDigestRecipients,
+        log: app.log,
+        publishNotification: publishNotificationEvent,
+      });
     },
   };
 }

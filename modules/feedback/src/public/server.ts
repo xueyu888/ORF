@@ -10,6 +10,16 @@ export {
   type FeedbackDailyDigestClock,
   type FeedbackDailyDigestItem,
 } from "../server/dailyDigest";
+export {
+  runFeedbackDailyDigestSweep,
+  startFeedbackDailyDigestScheduler,
+  type FeedbackDailyDigestConfig,
+  type FeedbackDailyDigestDatabase,
+  type FeedbackDailyDigestLogger,
+  type FeedbackDailyDigestNotificationInput,
+  type FeedbackDailyDigestRecipient,
+  type FeedbackDailyDigestRuntime,
+} from "../server/dailyDigestScheduler";
 
 export interface FeedbackServerHost {
   readonly protocolVersion: 1;

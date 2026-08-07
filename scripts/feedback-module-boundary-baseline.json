@@ -5,10 +5,6 @@
       "specifier": "../../modules/feedback/src/infrastructure/database/schema"
     },
     {
-      "file": "server/feedback/feedbackDailyDigestScheduler.ts",
-      "specifier": "../../modules/feedback/src/infrastructure/database/schema"
-    },
-    {
       "file": "server/repositories/feedbackReferenceRepository.ts",
       "specifier": "../../modules/feedback/src/infrastructure/database/schema"
     },

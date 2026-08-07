@@ -1,5 +1,6 @@
-import type { FastifyBaseLogger } from "fastify";
-import { and, asc, eq, lt, or, sql } from "drizzle-orm";
+import { and, eq, lt, or, sql } from "drizzle-orm";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { feedback, feedbackDailyDigestRuns } from "../infrastructure/database/schema";
 import {
   feedbackDailyDigestListHref,
   feedbackDailyDigestTargetId,
@@ -7,17 +8,49 @@ import {
   shouldRunFeedbackDailyDigest,
   sortFeedbackDailyDigestItems,
   type FeedbackDailyDigestItem,
-} from "@orf/feedback-module/server";
-import { feedback, feedbackDailyDigestRuns } from "../../modules/feedback/src/infrastructure/database/schema";
-import { db } from "../db/client";
-import { teamMembers, users } from "../db/schema";
-import { env } from "../env";
-import { publishNotificationEvent } from "../notifications/publisher";
+} from "./dailyDigest";
 
-type FeedbackDailyDigestRecipient = {
-  name: string;
-  teamId: string;
-  userId: string;
+export type FeedbackDailyDigestDatabase = Pick<NodePgDatabase<any>, "insert" | "select" | "update">;
+
+export type FeedbackDailyDigestRecipient = {
+  readonly name: string;
+  readonly teamId: string;
+  readonly userId: string;
+};
+
+export type FeedbackDailyDigestConfig = {
+  readonly enabled: boolean;
+  readonly hour: number;
+  readonly minute: number;
+  readonly pollIntervalMs: number;
+  readonly timeZone: string;
+};
+
+export type FeedbackDailyDigestLogger = {
+  info(data: Record<string, unknown>, message: string): void;
+  warn(data: Record<string, unknown>, message: string): void;
+};
+
+export type FeedbackDailyDigestNotificationInput = {
+  readonly actorName: string;
+  readonly actorUserId: string | null;
+  readonly body: string;
+  readonly kind: "feedback.assignee.daily_digest";
+  readonly metadata: Record<string, string>;
+  readonly recipientUserIds: string[];
+  readonly targetHref: string;
+  readonly targetId: string;
+  readonly targetType: "feedback";
+  readonly teamId: string;
+  readonly title: string;
+};
+
+export type FeedbackDailyDigestRuntime = {
+  readonly config: FeedbackDailyDigestConfig;
+  readonly database: FeedbackDailyDigestDatabase;
+  readonly listActiveRecipients: () => Promise<readonly FeedbackDailyDigestRecipient[]>;
+  readonly log: FeedbackDailyDigestLogger;
+  readonly publishNotification: (input: FeedbackDailyDigestNotificationInput) => Promise<readonly { id: string }[]>;
 };
 
 type FeedbackDailyDigestItemRow = FeedbackDailyDigestItem & {
@@ -33,21 +66,8 @@ function errorText(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function listActiveFeedbackDigestRecipients() {
-  return db
-    .select({
-      name: users.name,
-      teamId: teamMembers.teamId,
-      userId: users.id,
-    })
-    .from(teamMembers)
-    .innerJoin(users, eq(users.id, teamMembers.userId))
-    .where(eq(users.status, "active"))
-    .orderBy(asc(teamMembers.teamId), asc(users.name), asc(users.id));
-}
-
-async function listOpenFeedbackDigestItems() {
-  return db
+async function listOpenFeedbackDigestItems(database: FeedbackDailyDigestDatabase) {
+  return database
     .select({
       id: feedback.id,
       impact: feedback.impact,
@@ -57,9 +77,7 @@ async function listOpenFeedbackDigestItems() {
       updatedAt: feedback.updatedAt,
     })
     .from(feedback)
-    .innerJoin(teamMembers, and(eq(teamMembers.teamId, feedback.teamId), eq(teamMembers.userId, feedback.assigneeUserId)))
-    .innerJoin(users, eq(users.id, feedback.assigneeUserId))
-    .where(and(or(eq(feedback.stage, "open"), eq(feedback.stage, "in_progress")), eq(users.status, "active")));
+    .where(or(eq(feedback.stage, "open"), eq(feedback.stage, "in_progress")));
 }
 
 function groupDigestItemsByRecipient(items: readonly FeedbackDailyDigestItemRow[]) {
@@ -78,12 +96,13 @@ function groupDigestItemsByRecipient(items: readonly FeedbackDailyDigestItemRow[
 }
 
 async function claimPendingDigestRun(input: {
+  database: FeedbackDailyDigestDatabase;
   feedbackCount: number;
   localDate: string;
   now: string;
   recipient: FeedbackDailyDigestRecipient;
 }): Promise<FeedbackDailyDigestClaimStatus> {
-  const inserted = await db
+  const inserted = await input.database
     .insert(feedbackDailyDigestRuns)
     .values({
       attempts: 0,
@@ -104,7 +123,7 @@ async function claimPendingDigestRun(input: {
   if (inserted.length > 0) return "claimed";
 
   const stalePendingBefore = new Date(new Date(input.now).getTime() - feedbackDailyDigestPendingRetryMs).toISOString();
-  const claimed = await db
+  const claimed = await input.database
     .update(feedbackDailyDigestRuns)
     .set({
       feedbackCount: input.feedbackCount,
@@ -126,13 +145,14 @@ async function claimPendingDigestRun(input: {
 }
 
 async function markDigestRunSent(input: {
+  database: FeedbackDailyDigestDatabase;
   eventId: string | null;
   feedbackCount: number;
   localDate: string;
   now: string;
   recipient: FeedbackDailyDigestRecipient;
 }) {
-  await db
+  await input.database
     .update(feedbackDailyDigestRuns)
     .set({
       attempts: sql`${feedbackDailyDigestRuns.attempts} + 1`,
@@ -150,13 +170,14 @@ async function markDigestRunSent(input: {
 }
 
 async function markDigestRunFailed(input: {
+  database: FeedbackDailyDigestDatabase;
   error: unknown;
   feedbackCount: number;
   localDate: string;
   now: string;
   recipient: FeedbackDailyDigestRecipient;
 }) {
-  await db
+  await input.database
     .update(feedbackDailyDigestRuns)
     .set({
       attempts: sql`${feedbackDailyDigestRuns.attempts} + 1`,
@@ -177,9 +198,11 @@ async function publishDigestForRecipient(input: {
   localDate: string;
   now: string;
   recipient: FeedbackDailyDigestRecipient;
+  runtime: FeedbackDailyDigestRuntime;
 }) {
   const items = sortFeedbackDailyDigestItems(input.items);
   const claim = await claimPendingDigestRun({
+    database: input.runtime.database,
     feedbackCount: items.length,
     localDate: input.localDate,
     now: input.now,
@@ -189,6 +212,7 @@ async function publishDigestForRecipient(input: {
 
   if (items.length === 0) {
     await markDigestRunSent({
+      database: input.runtime.database,
       eventId: null,
       feedbackCount: 0,
       localDate: input.localDate,
@@ -199,7 +223,7 @@ async function publishDigestForRecipient(input: {
   }
 
   try {
-    const events = await publishNotificationEvent({
+    const events = await input.runtime.publishNotification({
       actorName: "ORF",
       actorUserId: null,
       body: formatFeedbackDailyDigestBody({
@@ -220,6 +244,7 @@ async function publishDigestForRecipient(input: {
       title: "今日待处理反馈汇总",
     });
     await markDigestRunSent({
+      database: input.runtime.database,
       eventId: events[0]?.id ?? null,
       feedbackCount: items.length,
       localDate: input.localDate,
@@ -229,6 +254,7 @@ async function publishDigestForRecipient(input: {
     return { status: "sent" as const };
   } catch (error) {
     await markDigestRunFailed({
+      database: input.runtime.database,
       error,
       feedbackCount: items.length,
       localDate: input.localDate,
@@ -239,20 +265,20 @@ async function publishDigestForRecipient(input: {
   }
 }
 
-export async function runFeedbackDailyDigestSweep(log: FastifyBaseLogger, now = new Date()) {
-  if (!env.ORF_FEEDBACK_DAILY_DIGEST_ENABLED) return;
+export async function runFeedbackDailyDigestSweep(runtime: FeedbackDailyDigestRuntime, now = new Date()) {
+  if (!runtime.config.enabled) return;
 
   const schedule = shouldRunFeedbackDailyDigest({
-    hour: env.ORF_FEEDBACK_DAILY_DIGEST_HOUR,
-    minute: env.ORF_FEEDBACK_DAILY_DIGEST_MINUTE,
+    hour: runtime.config.hour,
+    minute: runtime.config.minute,
     now,
-    timeZone: env.ORF_FEEDBACK_DAILY_DIGEST_TIME_ZONE,
+    timeZone: runtime.config.timeZone,
   });
   if (!schedule.due) return;
 
   const [recipients, feedbackItems] = await Promise.all([
-    listActiveFeedbackDigestRecipients(),
-    listOpenFeedbackDigestItems(),
+    runtime.listActiveRecipients(),
+    listOpenFeedbackDigestItems(runtime.database),
   ]);
   const itemsByRecipient = groupDigestItemsByRecipient(feedbackItems);
   const nowValue = now.toISOString();
@@ -268,22 +294,23 @@ export async function runFeedbackDailyDigestSweep(log: FastifyBaseLogger, now = 
         localDate: schedule.localDate,
         now: nowValue,
         recipient,
+        runtime,
       });
       if (result.status === "sent") sentCount += 1;
       if (result.status === "empty") emptyCount += 1;
     } catch (error) {
       failedCount += 1;
-      log.warn({ error, localDate: schedule.localDate, teamId: recipient.teamId, userId: recipient.userId }, "ORF feedback daily digest failed");
+      runtime.log.warn({ error, localDate: schedule.localDate, teamId: recipient.teamId, userId: recipient.userId }, "ORF feedback daily digest failed");
     }
   }
 
   if (sentCount > 0 || emptyCount > 0 || failedCount > 0) {
-    log.info({ emptyCount, failedCount, localDate: schedule.localDate, sentCount }, "Completed ORF feedback daily digest sweep");
+    runtime.log.info({ emptyCount, failedCount, localDate: schedule.localDate, sentCount }, "Completed ORF feedback daily digest sweep");
   }
 }
 
-export function startFeedbackDailyDigestScheduler(log: FastifyBaseLogger) {
-  if (schedulerStarted || !env.ORF_FEEDBACK_DAILY_DIGEST_ENABLED) {
+export function startFeedbackDailyDigestScheduler(runtime: FeedbackDailyDigestRuntime) {
+  if (schedulerStarted || !runtime.config.enabled) {
     return () => undefined;
   }
 
@@ -293,16 +320,16 @@ export function startFeedbackDailyDigestScheduler(log: FastifyBaseLogger) {
     if (running) return;
     running = true;
     try {
-      await runFeedbackDailyDigestSweep(log);
+      await runFeedbackDailyDigestSweep(runtime);
     } catch (error) {
-      log.warn({ error }, "ORF feedback daily digest scheduler failed");
+      runtime.log.warn({ error }, "ORF feedback daily digest scheduler failed");
     } finally {
       running = false;
     }
   };
 
   void tick();
-  const timer = setInterval(() => void tick(), env.ORF_FEEDBACK_DAILY_DIGEST_POLL_INTERVAL_MS);
+  const timer = setInterval(() => void tick(), runtime.config.pollIntervalMs);
   return () => {
     clearInterval(timer);
     schedulerStarted = false;
