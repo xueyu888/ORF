@@ -198,27 +198,13 @@ function sendFeedbackCommandOutcome(reply: FastifyReply, outcome: FeedbackComman
 }
 
 export function registerFeedbackRoutes(app: FastifyInstance) {
-  app.get("/api/feedback/issues", async (request, reply) => {
+  app.get("/api/feedback", async (request, reply) => {
     const context = await requireUserScopeContext(request, reply);
     if (!context) {
       return reply;
     }
 
     return getFeedbackIssueReadModelData({ scope: context.scope, viewerUserId: context.user.id });
-  });
-
-  app.get("/api/feedback/:feedbackId/read-model", async (request, reply) => {
-    const params = feedbackParamsSchema.parse(request.params);
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    const data = await getFeedbackIssueDetailReadModelData(params.feedbackId, { scope: context.scope, viewerUserId: context.user.id });
-    if (!data) {
-      return reply.code(404).send({ error: "Feedback not found" });
-    }
-    return data;
   });
 
   app.get("/api/feedback/assignees", async (request, reply) => {
@@ -275,6 +261,20 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       reply.header("Content-Length", outcome.contentLength);
     }
     return reply.send(outcome.body);
+  });
+
+  app.get("/api/feedback/:feedbackId", async (request, reply) => {
+    const params = feedbackParamsSchema.parse(request.params);
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const data = await getFeedbackIssueDetailReadModelData(params.feedbackId, { scope: context.scope, viewerUserId: context.user.id });
+    if (!data) {
+      return reply.code(404).send({ error: "Feedback not found" });
+    }
+    return data;
   });
 
   app.post("/api/feedback", async (request, reply) => {

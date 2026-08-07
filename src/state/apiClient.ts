@@ -687,11 +687,11 @@ export async function listFeedbackReferences(options: { limit?: number; signal?:
 }
 
 export async function getFeedbackIssueReadModel() {
-  return apiJson<FeedbackIssueReadModelData>("/api/feedback/issues");
+  return apiJson<FeedbackIssueReadModelData>("/api/feedback");
 }
 
 export async function getFeedbackIssueDetailReadModel(feedbackId: string) {
-  return apiJson<FeedbackIssueReadModelData>(`/api/feedback/${encodeURIComponent(feedbackId)}/read-model`);
+  return apiJson<FeedbackIssueReadModelData>(`/api/feedback/${encodeURIComponent(feedbackId)}`);
 }
 
 export async function getFeedbackSubscription(feedbackId: string) {
