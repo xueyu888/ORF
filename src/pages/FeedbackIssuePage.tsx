@@ -37,11 +37,6 @@ import {
 } from "../features/challenge/comments/CommentPanel";
 import { commentTimeDisplay } from "../features/challenge/comments/commentTime";
 import { RelatedResourcesPanel } from "../features/drive/RelatedResourcesPanel";
-import {
-  canChangeFeedbackAssignee,
-  canEditFeedbackMetadata,
-  canManageFeedbackLifecycle,
-} from "../features/feedback/model/feedbackCapabilities";
 import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
 import {
   feedbackIssueDisplayId,
@@ -130,9 +125,8 @@ export function FeedbackIssuePage() {
   );
   const linkedCommentMessageId = linkedCommentEntry?.message.id ?? null;
   const mentionUsersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
-  const canChangeLifecycle = feedback ? canManageFeedbackLifecycle(feedback, currentUser) : false;
-  const canEditMetadata = feedback ? canEditFeedbackMetadata(feedback, currentUser) : false;
-  const canChangeAssignee = feedback ? canChangeFeedbackAssignee(feedback, currentUser) : false;
+  const canEditMetadata = Boolean(feedback?.capabilities.canEditReport);
+  const canChangeAssignee = Boolean(feedback?.capabilities.canChangeAssignee);
   const canManageAllComments = hasPermission(currentUser, state.permissionRules, "comment.manage");
   const refreshFeedbackIssueData = useCallback(() => feedbackReadModel.reload(), [feedbackReadModel.reload]);
   const refreshAfterFeedbackMutation = useCallback(async (operation: Promise<boolean>) => {
@@ -468,7 +462,6 @@ export function FeedbackIssuePage() {
             onChange={changeSubscription}
           />
           <FeedbackLifecyclePanel
-            canChangeLifecycle={canChangeLifecycle}
             currentUser={currentUser}
             feedback={feedback}
             feedbackItems={feedbackItems}
@@ -533,14 +526,12 @@ function OriginalFeedbackCard({
 }
 
 function FeedbackLifecyclePanel({
-  canChangeLifecycle,
   currentUser,
   feedback,
   feedbackItems,
   notify,
   onTransition,
 }: {
-  canChangeLifecycle: boolean;
   currentUser: OrfUser | null;
   feedback: Feedback;
   feedbackItems: readonly Feedback[];
@@ -552,6 +543,10 @@ function FeedbackLifecyclePanel({
   const [adminReason, setAdminReason] = useState("");
   const [duplicateTargetFeedbackId, setDuplicateTargetFeedbackId] = useState("");
   const adminTakeoverRequired = currentUser?.role === "admin" && currentUser.id !== feedback.createdBy;
+  const capabilities = feedback.capabilities;
+  const canRunActiveCommand = capabilities.canSubmitVerification || capabilities.canWithdraw;
+  const canRunVerificationCommand = capabilities.canAcceptVerification || capabilities.canRejectVerification;
+  const hasLifecycleAction = capabilities.canStart || canRunActiveCommand || canRunVerificationCommand || capabilities.canReopen;
   const noteValue = note.trim();
   const adminReasonValue = adminReason.trim();
   const feedbackTitleById = useMemo(() => new Map(feedbackItems.map((item) => [item.id, item.title])), [feedbackItems]);
@@ -617,62 +612,84 @@ function FeedbackLifecyclePanel({
 
   return (
     <div className="feedback-issue-sidebar-block">
-      <span>Lifecycle</span>
+      <span>生命周期</span>
       <IssueStateBadge feedback={feedback} />
-      {canChangeLifecycle ? (
+      {hasLifecycleAction ? (
         <>
-          {feedback.stage === "open" && (
+          {feedback.stage === "open" && capabilities.canStart && (
             <Button size="sm" type="button" onClick={() => runTransition("start")}>
               <CircleDot aria-hidden="true" />
               开始处理
             </Button>
           )}
-          {(feedback.stage === "open" || feedback.stage === "in_progress") && (
+          {(feedback.stage === "open" || feedback.stage === "in_progress") && canRunActiveCommand && (
             <>
-              <select className="feedback-issue-sidebar-input" value={resolution} onChange={(event) => setResolution(event.target.value as FeedbackCommandResolution)}>
-                {lifecycleResolutionOptions.map((item) => <option key={item} value={item}>{feedbackResolutionLabel[item]}</option>)}
-              </select>
-              {resolution === "duplicate" && (
-                duplicateTargets.length > 0 ? (
-                  <select className="feedback-issue-sidebar-input" value={duplicateTargetFeedbackId} onChange={(event) => setDuplicateTargetFeedbackId(event.target.value)}>
-                    {duplicateTargets.map((item) => <option key={item.id} value={item.id}>#{feedbackIssueDisplayId(item.id)} {item.title}</option>)}
+              {capabilities.canSubmitVerification && (
+                <>
+                  <select className="feedback-issue-sidebar-input" value={resolution} onChange={(event) => setResolution(event.target.value as FeedbackCommandResolution)}>
+                    {lifecycleResolutionOptions.map((item) => <option key={item} value={item}>{feedbackResolutionLabel[item]}</option>)}
                   </select>
-                ) : (
-                  <p className="feedback-issue-sidebar-empty">先在关系中添加“重复”目标</p>
-                )
+                  {resolution === "duplicate" && (
+                    duplicateTargets.length > 0 ? (
+                      <select className="feedback-issue-sidebar-input" value={duplicateTargetFeedbackId} onChange={(event) => setDuplicateTargetFeedbackId(event.target.value)}>
+                        {duplicateTargets.map((item) => <option key={item.id} value={item.id}>#{feedbackIssueDisplayId(item.id)} {item.title}</option>)}
+                      </select>
+                    ) : (
+                      <p className="feedback-issue-sidebar-empty">先在关系中添加“重复”目标</p>
+                    )
+                  )}
+                </>
               )}
-              <textarea className="feedback-issue-sidebar-input" rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="处理说明" />
+              {(capabilities.canSubmitVerification || capabilities.canWithdraw) && (
+                <textarea
+                  className="feedback-issue-sidebar-input"
+                  rows={3}
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder={capabilities.canSubmitVerification ? "处理说明" : "撤回原因"}
+                />
+              )}
               <div className="feedback-issue-sidebar-actions">
-                <Button size="sm" type="button" onClick={() => runTransition("submit_verification")}>
-                  <Send aria-hidden="true" />
-                  提交验证
-                </Button>
-                <Button size="sm" type="button" variant="ghost" onClick={() => runTransition("withdraw")}>
-                  <XCircle aria-hidden="true" />
-                  撤回
-                </Button>
+                {capabilities.canSubmitVerification && (
+                  <Button size="sm" type="button" onClick={() => runTransition("submit_verification")}>
+                    <Send aria-hidden="true" />
+                    提交验证
+                  </Button>
+                )}
+                {capabilities.canWithdraw && (
+                  <Button size="sm" type="button" variant="ghost" onClick={() => runTransition("withdraw")}>
+                    <XCircle aria-hidden="true" />
+                    撤回
+                  </Button>
+                )}
               </div>
             </>
           )}
-          {feedback.stage === "pending_verification" && (
+          {feedback.stage === "pending_verification" && canRunVerificationCommand && (
             <>
-              <textarea className="feedback-issue-sidebar-input" rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="拒绝验证说明" />
+              {capabilities.canRejectVerification && (
+                <textarea className="feedback-issue-sidebar-input" rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="退回原因" />
+              )}
               {adminTakeoverRequired && (
                 <textarea className="feedback-issue-sidebar-input" rows={2} value={adminReason} onChange={(event) => setAdminReason(event.target.value)} placeholder="管理员代操作原因" />
               )}
               <div className="feedback-issue-sidebar-actions">
-                <Button size="sm" type="button" onClick={() => runTransition("accept_verification")}>
-                  <CheckCircle2 aria-hidden="true" />
-                  接受验证
-                </Button>
-                <Button size="sm" type="button" variant="ghost" onClick={() => runTransition("reject_verification")}>
-                  <RotateCcw aria-hidden="true" />
-                  退回处理
-                </Button>
+                {capabilities.canAcceptVerification && (
+                  <Button size="sm" type="button" onClick={() => runTransition("accept_verification")}>
+                    <CheckCircle2 aria-hidden="true" />
+                    确认关闭
+                  </Button>
+                )}
+                {capabilities.canRejectVerification && (
+                  <Button size="sm" type="button" variant="ghost" onClick={() => runTransition("reject_verification")}>
+                    <RotateCcw aria-hidden="true" />
+                    退回处理
+                  </Button>
+                )}
               </div>
             </>
           )}
-          {feedback.stage === "closed" && (
+          {feedback.stage === "closed" && capabilities.canReopen && (
             <>
               <textarea className="feedback-issue-sidebar-input" rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="重新打开原因" />
               {adminTakeoverRequired && (
@@ -706,7 +723,7 @@ function FeedbackSubscriptionControls({
 
   return (
     <div className="feedback-issue-sidebar-block">
-      <span>Notifications</span>
+      <span>通知</span>
       <div className="feedback-issue-subscription-state">
         <strong>{feedbackSubscriptionLabel(mode)}</strong>
       </div>
@@ -875,7 +892,7 @@ function IssueSidebar({
   return (
     <>
       <div className="feedback-issue-sidebar-block">
-        <span>Title</span>
+        <span>标题</span>
         {canEdit ? (
           <input
             className="feedback-issue-sidebar-input"
@@ -887,7 +904,7 @@ function IssueSidebar({
         )}
       </div>
       <div className="feedback-issue-sidebar-block">
-        <span>Assignee</span>
+        <span>处理人</span>
         {canChangeAssignee ? (
           <>
             <select className="feedback-issue-sidebar-input" value={assigneeDraft} onChange={(event) => setAssigneeDraft(event.target.value)}>
@@ -913,7 +930,7 @@ function IssueSidebar({
         )}
       </div>
       <div className="feedback-issue-sidebar-block">
-        <span>Labels</span>
+        <span>分类</span>
         {canEdit ? (
           <div className="feedback-issue-sidebar-choice-list">
             {causeOptions.map((cause) => (
@@ -930,7 +947,7 @@ function IssueSidebar({
         )}
       </div>
       <div className="feedback-issue-sidebar-block">
-        <span>Impact</span>
+        <span>影响</span>
         {canEdit ? (
           <select className="feedback-issue-sidebar-input" value={metadataDraft.impact} onChange={(event) => setMetadataDraft((current) => ({ ...current, impact: event.target.value as FeedbackImpact }))}>
             {feedbackImpactOptions.map((item) => <option key={item} value={item}>{feedbackImpactLabel[item]}</option>)}
@@ -940,7 +957,7 @@ function IssueSidebar({
         )}
       </div>
       <div className="feedback-issue-sidebar-block">
-        <span>Priority</span>
+        <span>优先级</span>
         {canEdit ? (
           <select className="feedback-issue-sidebar-input" value={metadataDraft.priority} onChange={(event) => setMetadataDraft((current) => ({ ...current, priority: event.target.value as "" | FeedbackPriority }))}>
             <option value="">未设定</option>
@@ -953,7 +970,7 @@ function IssueSidebar({
         )}
       </div>
       <div className="feedback-issue-sidebar-block">
-        <span>Projects</span>
+        <span>项目</span>
         {canEdit ? (
           <select className="feedback-issue-sidebar-input" value={metadataDraft.projectId} onChange={(event) => setMetadataDraft((current) => ({ ...current, projectId: event.target.value }))}>
             <option value="">不归属项目</option>
@@ -967,7 +984,7 @@ function IssueSidebar({
       </div>
       {canEdit && (
         <div className="feedback-issue-sidebar-block">
-          <span>Metadata</span>
+          <span>属性</span>
           <div className="feedback-issue-sidebar-actions">
             <Button disabled={!canSaveMetadata} size="sm" type="button" onClick={saveMetadata}>
               <Save aria-hidden="true" />
@@ -981,7 +998,7 @@ function IssueSidebar({
         </div>
       )}
       <div className="feedback-issue-sidebar-block">
-        <span>Relationships</span>
+        <span>关系</span>
         {linkedFeedback.length > 0 ? (
           <div className="feedback-issue-sidebar-links">
             {linkedFeedback.map((item) => (
@@ -1018,7 +1035,7 @@ function IssueSidebar({
         )}
       </div>
       <div className="feedback-issue-sidebar-block">
-        <span>Participants</span>
+        <span>参与者</span>
         <div className="feedback-issue-sidebar-participants">
           {participants.map((participant) => (
             <UserAvatar
@@ -1032,7 +1049,7 @@ function IssueSidebar({
         </div>
       </div>
       <div className="feedback-issue-sidebar-block">
-        <span>Timeline</span>
+        <span>时间线</span>
         <strong>{formatIssueDate(feedback.createdAt)} 创建</strong>
         <strong>{formatIssueDate(feedback.updatedAt)} 更新</strong>
       </div>

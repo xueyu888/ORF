@@ -29,7 +29,7 @@ export function breadcrumb(pathname: string) {
   }
 
   if (/^\/feedback\/[^/]+\/?$/.test(pathname)) {
-    return "反馈 / Issue";
+    return "反馈 / 详情";
   }
 
   if (/^\/resources\/[^/]+\/preview\/?$/.test(pathname)) {

@@ -1,5 +1,6 @@
 import type {
   FeedbackActivityType,
+  FeedbackCapabilities,
   FeedbackImpact,
   FeedbackPriority,
   FeedbackRelationType,
@@ -706,6 +707,7 @@ export interface Result {
 
 export interface Feedback {
   id: string;
+  capabilities: FeedbackCapabilities;
   projectId?: string | null;
   title: string;
   description: string;

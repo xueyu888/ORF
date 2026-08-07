@@ -1,6 +1,8 @@
 import { and, desc, eq, inArray, or } from "drizzle-orm";
+import type { FeedbackActorSnapshot } from "@orf/feedback-module/contracts";
+import { deriveFeedbackCapabilities } from "../../modules/feedback/src/domain";
 import type { FeedbackIssueReadModelData } from "../../src/domain/feedbackReadModel";
-import type { CommentThread, Feedback, OrfProject } from "../../src/types/orf";
+import type { CommentThread, Feedback, OrfProject, OrfUser } from "../../src/types/orf";
 import {
   feedback,
   feedbackActivityEvents,
@@ -124,6 +126,7 @@ export function mapFeedbackIssueRows(input: {
   relationRows: readonly FeedbackRelationRow[];
   reportAttachmentRows: readonly FeedbackReportAttachmentRow[];
   userViewRows: readonly FeedbackUserViewRow[];
+  viewer: OrfUser | null;
   viewerUserId?: string | null;
 }): Feedback[] {
   const causeCategoriesByFeedback = new Map<string, string[]>();
@@ -189,6 +192,7 @@ export function mapFeedbackIssueRows(input: {
 
   return input.feedbackRows.map((item) => ({
     id: item.id,
+    capabilities: deriveReadModelFeedbackCapabilities(item, input.viewer),
     projectId: item.projectId,
     title: item.title,
     description: item.description,
@@ -253,6 +257,7 @@ export async function getFeedbackIssueReadModelData(scope: FeedbackIssueReadMode
       relationRows,
       reportAttachmentRows,
       userViewRows,
+      viewer: feedbackReadModelViewer(users, scope.viewerUserId),
       viewerUserId: scope.viewerUserId,
     }),
     projects: mapProjectRows(projectRows),
@@ -301,6 +306,7 @@ export async function getFeedbackIssueDetailReadModelData(feedbackId: string, sc
       relationRows,
       reportAttachmentRows,
       userViewRows,
+      viewer: feedbackReadModelViewer(users, scope.viewerUserId),
       viewerUserId: scope.viewerUserId,
     }),
     projects: mapProjectRows(projectRows),
@@ -386,4 +392,56 @@ function feedbackRequiresAction(item: FeedbackRow, viewerUserId: string | null) 
   if ((item.stage === "open" || item.stage === "in_progress") && item.assigneeUserId === viewerUserId) return true;
   if (item.stage === "pending_verification" && item.createdBy === viewerUserId) return true;
   return false;
+}
+
+function feedbackReadModelViewer(users: readonly OrfUser[], viewerUserId: string | null | undefined) {
+  const normalizedViewerUserId = viewerUserId?.trim();
+  if (!normalizedViewerUserId) return null;
+  return users.find((user) => user.id === normalizedViewerUserId) ?? null;
+}
+
+function deriveReadModelFeedbackCapabilities(item: FeedbackRow, viewer: OrfUser | null): Feedback["capabilities"] {
+  if (!viewer) return emptyFeedbackCapabilities();
+  return deriveFeedbackCapabilities({
+    actor: feedbackReadModelActor(viewer, item.teamId),
+    feedback: {
+      id: item.id,
+      assigneeUserId: item.assigneeUserId,
+      closedAt: item.closedAt,
+      closedByUserId: item.closedByUserId,
+      createdByUserId: item.createdBy,
+      impact: item.impact,
+      priority: item.priority,
+      projectId: item.projectId,
+      resolution: item.resolution,
+      stage: item.stage,
+      teamId: item.teamId,
+      version: item.version,
+    },
+  });
+}
+
+function feedbackReadModelActor(user: OrfUser, teamId: string): FeedbackActorSnapshot {
+  return {
+    id: user.id,
+    role: user.role,
+    status: user.status === "active" ? "active" : "inactive",
+    teamId,
+  };
+}
+
+function emptyFeedbackCapabilities(): Feedback["capabilities"] {
+  return {
+    canAcceptVerification: false,
+    canChangeAssignee: false,
+    canEditReport: false,
+    canImportExport: false,
+    canRejectVerification: false,
+    canReopen: false,
+    canSetPriority: false,
+    canStart: false,
+    canSubmitVerification: false,
+    canView: false,
+    canWithdraw: false,
+  };
 }
