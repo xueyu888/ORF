@@ -1,4 +1,4 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { feedback } from "../infrastructure/database/schema";
 
@@ -17,12 +17,90 @@ export type FeedbackCommentNotificationFacts = {
   readonly teamId: string;
 };
 
+export type FeedbackReferenceSummary = {
+  readonly id: string;
+  readonly title: string;
+};
+
+function uniqueFeedbackIds(feedbackIds: readonly string[]) {
+  return Array.from(new Set(feedbackIds.map((value) => value.trim()).filter(Boolean))).slice(0, 100);
+}
+
+function likePatternForSearch(value: string) {
+  return `%${value.trim().replace(/[\\%_]/g, "\\$&")}%`;
+}
+
 export async function findFeedbackTeamId(
   database: FeedbackReferenceDatabase,
   feedbackId: string,
 ): Promise<string | null> {
   const [target] = await database.select({ teamId: feedback.teamId }).from(feedback).where(eq(feedback.id, feedbackId)).limit(1);
   return target?.teamId ?? null;
+}
+
+export async function getFeedbackReferences(
+  database: FeedbackReferenceDatabase,
+  input: { readonly feedbackIds: readonly string[]; readonly teamId: string },
+): Promise<FeedbackReferenceSummary[]> {
+  const teamId = input.teamId.trim();
+  const ids = uniqueFeedbackIds(input.feedbackIds);
+  if (!teamId || ids.length === 0) return [];
+
+  const rows = await database
+    .select({
+      id: feedback.id,
+      title: feedback.title,
+    })
+    .from(feedback)
+    .where(and(eq(feedback.teamId, teamId), inArray(feedback.id, ids)));
+
+  const sortOrder = new Map(ids.map((id, index) => [id, index]));
+  return rows.sort((left, right) => (sortOrder.get(left.id) ?? 0) - (sortOrder.get(right.id) ?? 0));
+}
+
+export async function listFeedbackReferences(
+  database: FeedbackReferenceDatabase,
+  input: { readonly limit?: number; readonly teamId: string },
+): Promise<FeedbackReferenceSummary[]> {
+  const teamId = input.teamId.trim();
+  if (!teamId) return [];
+
+  return database
+    .select({
+      id: feedback.id,
+      title: feedback.title,
+    })
+    .from(feedback)
+    .where(eq(feedback.teamId, teamId))
+    .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), feedback.id)
+    .limit(Math.max(1, Math.min(120, input.limit ?? 20)));
+}
+
+export async function searchFeedbackReferences(
+  database: FeedbackReferenceDatabase,
+  input: { readonly limit?: number; readonly query: string; readonly teamId: string },
+): Promise<FeedbackReferenceSummary[]> {
+  const teamId = input.teamId.trim();
+  const normalizedQuery = input.query.trim();
+  if (!teamId || !normalizedQuery) return [];
+
+  const pattern = likePatternForSearch(normalizedQuery);
+  return database
+    .select({
+      id: feedback.id,
+      title: feedback.title,
+    })
+    .from(feedback)
+    .where(and(
+      eq(feedback.teamId, teamId),
+      or(
+        sql`${feedback.id} ILIKE ${pattern} ESCAPE '\\'`,
+        sql`${feedback.title} ILIKE ${pattern} ESCAPE '\\'`,
+        sql`${feedback.description} ILIKE ${pattern} ESCAPE '\\'`,
+      ),
+    ))
+    .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), feedback.id)
+    .limit(Math.max(1, Math.min(120, input.limit ?? 20)));
 }
 
 export async function hasFeedbackLinkedToProject(

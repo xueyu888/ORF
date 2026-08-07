@@ -31,13 +31,17 @@ export {
 export {
   findFeedbackTeamId,
   getFeedbackCommentNotificationFacts,
+  getFeedbackReferences,
   hasFeedbackLinkedToProject,
   hasFeedbackUserReference,
   lockFeedbackCommentTarget,
+  listFeedbackReferences,
   resolveFeedbackCommentTarget,
+  searchFeedbackReferences,
   type FeedbackCommentNotificationFacts,
   type FeedbackCommentTargetReference,
   type FeedbackReferenceDatabase,
+  type FeedbackReferenceSummary,
 } from "../server/references";
 export {
   getFeedbackReadModelIssues,

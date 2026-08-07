@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import {
   canPreviewFeedbackReportAttachment,
   feedbackReportAttachmentPreviewKind,
@@ -16,8 +16,11 @@ import {
 import {
   getFeedbackAssignmentNotificationRecipients,
   getFeedbackOrdinaryNotificationRecipients,
+  getFeedbackReferences as getFeedbackReferenceSummaries,
+  listFeedbackReferences as listFeedbackReferenceSummaries,
   markFeedbackViewed as markFeedbackViewedInModule,
   recordFeedbackCommentCreatedActivity,
+  searchFeedbackReferences as searchFeedbackReferenceSummaries,
   type FeedbackActivityDatabase,
   type FeedbackNotificationRecipientDirectory,
 } from "@orf/feedback-module/server";
@@ -168,14 +171,6 @@ function nowIso() {
 
 function uniqueStrings(values: readonly string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
-}
-
-function uniqueFeedbackIds(feedbackIds: readonly string[]) {
-  return uniqueStrings(feedbackIds).slice(0, 100);
-}
-
-function likePatternForSearch(value: string) {
-  return `%${value.trim().replace(/[\\%_]/g, "\\$&")}%`;
 }
 
 function normalizeCauseCategories(categories: readonly string[] | undefined) {
@@ -1073,58 +1068,17 @@ export async function markFeedbackViewed(
 
 export async function getFeedbackReferences(feedbackIds: readonly string[], scope: RuntimeScope): Promise<FeedbackReference[]> {
   const teamId = runtimeScopeStorageId(scope);
-  const ids = uniqueFeedbackIds(feedbackIds);
-  if (!teamId || ids.length === 0) return [];
-
-  const rows = await db
-    .select({
-      id: feedback.id,
-      title: feedback.title,
-    })
-    .from(feedback)
-    .where(and(eq(feedback.teamId, teamId), inArray(feedback.id, ids)));
-
-  const sortOrder = new Map(ids.map((id, index) => [id, index]));
-  return rows.sort((left, right) => (sortOrder.get(left.id) ?? 0) - (sortOrder.get(right.id) ?? 0));
+  return getFeedbackReferenceSummaries(db, { feedbackIds, teamId });
 }
 
 export async function listFeedbackReferences(scope: RuntimeScope, limit = 20): Promise<FeedbackReference[]> {
   const teamId = runtimeScopeStorageId(scope);
-  if (!teamId) return [];
-
-  return db
-    .select({
-      id: feedback.id,
-      title: feedback.title,
-    })
-    .from(feedback)
-    .where(eq(feedback.teamId, teamId))
-    .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), feedback.id)
-    .limit(Math.max(1, Math.min(120, limit)));
+  return listFeedbackReferenceSummaries(db, { limit, teamId });
 }
 
 export async function searchFeedbackReferences(query: string, scope: RuntimeScope, limit = 20): Promise<FeedbackReference[]> {
   const teamId = runtimeScopeStorageId(scope);
-  const normalizedQuery = query.trim();
-  if (!teamId || !normalizedQuery) return [];
-
-  const pattern = likePatternForSearch(normalizedQuery);
-  return db
-    .select({
-      id: feedback.id,
-      title: feedback.title,
-    })
-    .from(feedback)
-    .where(and(
-      eq(feedback.teamId, teamId),
-      or(
-        sql`${feedback.id} ILIKE ${pattern} ESCAPE '\\'`,
-        sql`${feedback.title} ILIKE ${pattern} ESCAPE '\\'`,
-        sql`${feedback.description} ILIKE ${pattern} ESCAPE '\\'`,
-      ),
-    ))
-    .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), feedback.id)
-    .limit(Math.max(1, Math.min(120, limit)));
+  return searchFeedbackReferenceSummaries(db, { limit, query, teamId });
 }
 
 export async function getFeedbackReportAttachmentContent(
