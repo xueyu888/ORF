@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
-import { planFeedbackCommentCreatedNotification } from "@orf/feedback-module/contracts";
+import { feedbackCommentPath, feedbackIssuePath, planFeedbackCommentCreatedNotification } from "@orf/feedback-module/contracts";
 import type {
   CommentAttachment,
   BountySource,
@@ -295,7 +295,10 @@ function challengeObjectiveHref(path: "/bounties" | "/tasks", objectiveId: strin
 function commentTargetHref(targetType: CommentTargetType, targetId: string, commentId?: string | null) {
   const commentQuery = commentId?.trim() ? `?comment=${encodeURIComponent(commentId.trim())}` : "";
   if (targetType === "feedback") {
-    return `/feedback/${encodeURIComponent(targetId)}${commentQuery}`;
+    const feedbackId = targetId.trim();
+    return commentId?.trim()
+      ? feedbackCommentPath({ commentMessageId: commentId.trim(), feedbackId })
+      : feedbackIssuePath(feedbackId);
   }
 
   const challengeTargetTypeByCommentTarget: Record<Exclude<CommentTargetType, "feedback">, "action" | "bounty" | "objective" | "subAction"> = {
