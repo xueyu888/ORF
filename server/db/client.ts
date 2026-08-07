@@ -1,8 +1,8 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
+import { feedbackDatabaseSchema } from "@orf/feedback-module/server";
 import { env } from "../env";
 import { createPgPoolConfig } from "./connectionOptions";
-import * as feedbackSchema from "../../modules/feedback/src/infrastructure/database/schema";
 import * as hostSchema from "./schema";
 
 const { Pool } = pg;
@@ -16,7 +16,7 @@ export const pool = new Pool(
   }),
 );
 
-export const db = drizzle(pool, { schema: { ...hostSchema, ...feedbackSchema } });
+export const db = drizzle(pool, { schema: { ...hostSchema, ...feedbackDatabaseSchema } });
 
 export async function closeDb() {
   await pool.end();
