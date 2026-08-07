@@ -16,6 +16,6 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "server", "scripts", "drizzle.config.ts"],
+  "include": ["src", "modules", "server", "scripts", "drizzle.config.ts"],
   "references": []
 }

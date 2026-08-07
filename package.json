@@ -8,6 +8,9 @@
   },
   "type": "module",
   "packageManager": "npm@10.9.2",
+  "workspaces": [
+    "modules/*"
+  ],
   "scripts": {
     "orf": "node scripts/with-public-ca.mjs node bin/orf.mjs",
     "cli:link": "node scripts/link-orf-cli.mjs",

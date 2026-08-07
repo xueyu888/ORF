@@ -1,0 +1,14 @@
+{
+  "name": "@orf/feedback-module",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./contracts": "./src/public/contracts.ts",
+    "./testing": "./src/public/testing.ts"
+  },
+  "dependencies": {
+    "zod": "^4.4.1"
+  }
+}
