@@ -7,13 +7,18 @@ import {
   type FeedbackIssueLabelIndexItem,
   type FeedbackIssueLabelIndexSortKey,
 } from "../features/feedback/model/feedbackIssueMetadata";
+import { useFeedbackIssueReadModel } from "../features/feedback/useFeedbackIssueReadModel";
 import { useOrf } from "../state/OrfProvider";
 
 export function FeedbackLabelsPage() {
-  const { currentUser, state } = useOrf();
+  const { currentUser } = useOrf();
+  const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser));
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<FeedbackIssueLabelIndexSortKey>("name-asc");
-  const visibleFeedback = useMemo(() => currentUser?.status === "active" || currentUser?.role === "admin" ? state.feedback : [], [currentUser, state.feedback]);
+  const visibleFeedback = useMemo(
+    () => currentUser?.status === "active" || currentUser?.role === "admin" ? feedbackReadModel.data.feedback : [],
+    [currentUser, feedbackReadModel.data.feedback],
+  );
   const labels = useMemo(() => feedbackIssueLabelIndexItems(visibleFeedback, sort), [sort, visibleFeedback]);
   const filteredLabels = useMemo(() => filterFeedbackIssueLabels(labels, query), [labels, query]);
 

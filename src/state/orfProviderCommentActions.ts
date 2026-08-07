@@ -24,7 +24,7 @@ export function useOrfProviderCommentActions({
 }: CommentActionOptions) {
   return useMemo(
     () => ({
-      addComment: (input: {
+      addComment: async (input: {
         targetType: CommentTargetType;
         targetId: string;
         targetTitle: string;
@@ -33,29 +33,30 @@ export function useOrfProviderCommentActions({
         parentMessageId?: string;
         replyToMessageId?: string;
         replyToAuthor?: string;
-      }) => {
-        void apiJson<CommentMutationResponse>("/api/comments", {
-          method: "POST",
-          body: JSON.stringify({
-            targetType: input.targetType,
-            targetId: input.targetId,
-            targetTitle: input.targetTitle,
-            body: input.body,
-            parentMessageId: input.parentMessageId,
-            replyToMessageId: input.replyToMessageId,
-            replyToAuthor: input.replyToAuthor,
-          }),
-        })
-          .then((response) => {
-            if (response.commentThread) {
-              applyCommentThread(response.commentThread);
-            }
-            notify("评论已添加");
-          })
-          .catch((error) => {
-            notify(commentMutationFailureMessage(error, "评论添加失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+      }): Promise<boolean> => {
+        try {
+          const response = await apiJson<CommentMutationResponse>("/api/comments", {
+            method: "POST",
+            body: JSON.stringify({
+              targetType: input.targetType,
+              targetId: input.targetId,
+              targetTitle: input.targetTitle,
+              body: input.body,
+              parentMessageId: input.parentMessageId,
+              replyToMessageId: input.replyToMessageId,
+              replyToAuthor: input.replyToAuthor,
+            }),
           });
+          if (response.commentThread) {
+            applyCommentThread(response.commentThread);
+          }
+          notify("评论已添加");
+          return true;
+        } catch (error) {
+          notify(commentMutationFailureMessage(error, "评论添加失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
       loadCommentMentionableUsers: async (input: { targetId: string; targetType: CommentTargetType }): Promise<OrfUser[]> => {
         const response = await getCommentMentionableUsers(input);
@@ -86,21 +87,22 @@ export function useOrfProviderCommentActions({
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
-      updateCommentMessage: (threadId: string, messageId: string, body: string) => {
-        void apiJson<CommentMutationResponse>(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, {
-          method: "PATCH",
-          body: JSON.stringify({ body }),
-        })
-          .then((response) => {
-            if (response.commentThread) {
-              applyCommentThread(response.commentThread);
-            }
-            notify("评论已更新");
-          })
-          .catch((error) => {
-            notify(commentMutationFailureMessage(error, "评论更新失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+      updateCommentMessage: async (threadId: string, messageId: string, body: string): Promise<boolean> => {
+        try {
+          const response = await apiJson<CommentMutationResponse>(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ body }),
           });
+          if (response.commentThread) {
+            applyCommentThread(response.commentThread);
+          }
+          notify("评论已更新");
+          return true;
+        } catch (error) {
+          notify(commentMutationFailureMessage(error, "评论更新失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
       deleteCommentMessage: (threadId: string, messageId: string) => {
         void apiJson<CommentMutationResponse>(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" })

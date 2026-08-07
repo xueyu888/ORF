@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import type { FeedbackCommandResolution, FeedbackImpact, FeedbackPriority, FeedbackRelationType, FeedbackTransitionInput } from "@orf/feedback-module/contracts";
 import type { FormEvent, MutableRefObject } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ImagePreviewDialog, type ImagePreview } from "../components/ImagePreviewDialog";
 import { Button } from "../components/ui";
@@ -62,6 +62,7 @@ import {
   feedbackIssueParticipants,
 } from "../features/feedback/model/feedbackIssueMetadata";
 import { useFeedbackAssigneeOptions } from "../features/feedback/useFeedbackAssigneeOptions";
+import { useFeedbackIssueDetailReadModel } from "../features/feedback/useFeedbackIssueReadModel";
 import type { OrfRichTextAttachmentUploadResult } from "../features/rich-text/OrfRichTextEditor";
 import { getFeedbackSubscription, updateFeedbackSubscription } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
@@ -104,7 +105,12 @@ export function FeedbackIssuePage() {
     updateFeedbackMetadata,
     uploadCommentAttachment,
   } = useOrf();
-  const feedback = state.feedback.find((item) => item.id === feedbackId) ?? null;
+  const feedbackReadModel = useFeedbackIssueDetailReadModel(feedbackId, Boolean(currentUser && feedbackId));
+  const feedbackData = feedbackReadModel.data;
+  const feedbackItems = feedbackData.feedback;
+  const users = feedbackData.users;
+  const projects = feedbackData.projects;
+  const feedback = feedbackItems.find((item) => item.id === feedbackId) ?? null;
   const [draft, setDraft] = useState<CommentDraft>(() => emptyCommentDraft());
   const [draftMode, setDraftMode] = useState<CommentDraftMode>({ type: "default" });
   const [editState, setEditState] = useState<{ draft: CommentDraft; messageId: string; threadId: string } | null>(null);
@@ -114,8 +120,8 @@ export function FeedbackIssuePage() {
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const commentElementRefs = useRef(new Map<string, HTMLElement>());
   const markedViewSequenceRef = useRef<string | null>(null);
-  const assigneeOptions = useFeedbackAssigneeOptions(state.users, currentUser);
-  const threads = useMemo(() => feedback ? feedbackIssueThreads(state.comments, feedback.id) : [], [feedback, state.comments]);
+  const assigneeOptions = useFeedbackAssigneeOptions(users, currentUser);
+  const threads = useMemo(() => feedback ? feedbackIssueThreads(feedbackData.comments, feedback.id) : [], [feedback, feedbackData.comments]);
   const entries = useMemo(() => feedbackCommentEntries(threads), [threads]);
   const linkedCommentId = useMemo(() => searchParams.get("comment")?.trim() || null, [searchParams]);
   const linkedCommentEntry = useMemo(
@@ -128,6 +134,14 @@ export function FeedbackIssuePage() {
   const canEditMetadata = feedback ? canEditFeedbackMetadata(feedback, currentUser) : false;
   const canChangeAssignee = feedback ? canChangeFeedbackAssignee(feedback, currentUser) : false;
   const canManageAllComments = hasPermission(currentUser, state.permissionRules, "comment.manage");
+  const refreshFeedbackIssueData = useCallback(() => feedbackReadModel.reload(), [feedbackReadModel.reload]);
+  const refreshAfterFeedbackMutation = useCallback(async (operation: Promise<boolean>) => {
+    const ok = await operation;
+    if (ok) {
+      await refreshFeedbackIssueData();
+    }
+    return ok;
+  }, [refreshFeedbackIssueData]);
 
   useEffect(() => {
     if (!feedback || feedback.lastActivitySequence <= feedback.lastSeenSequence) return;
@@ -141,6 +155,7 @@ export function FeedbackIssuePage() {
         if (markedViewSequenceRef.current === viewKey) return;
         markedViewSequenceRef.current = viewKey;
         void markFeedbackViewed(feedback.id, feedback.lastActivitySequence).then((ok) => {
+          if (ok) void refreshFeedbackIssueData();
           if (!ok && markedViewSequenceRef.current === viewKey) markedViewSequenceRef.current = null;
         });
       }, 250);
@@ -156,7 +171,7 @@ export function FeedbackIssuePage() {
       document.removeEventListener("visibilitychange", markVisibleFeedback);
       if (timeoutId !== null) window.clearTimeout(timeoutId);
     };
-  }, [feedback, markFeedbackViewed]);
+  }, [feedback, markFeedbackViewed, refreshFeedbackIssueData]);
 
   const uploadFeedbackCommentAttachment = async (file: File) => {
     if (!feedback) return null;
@@ -233,9 +248,16 @@ export function FeedbackIssuePage() {
   }, [currentUser, feedback]);
 
   if (!feedback) {
+    const title = !currentUser || feedbackReadModel.loading
+      ? "反馈加载中"
+      : feedbackReadModel.error
+        ? "反馈读取失败"
+        : "没有找到这个反馈";
+    const description = feedbackReadModel.error ?? "它可能已经被删除，或者当前账号没有访问权限。";
+
     return (
       <div className="bounty-hall-page feedback-issue-detail-page">
-        <BountyEmptyState title="没有找到这个反馈" description="它可能已经被删除，或者当前账号没有访问权限。" />
+        <BountyEmptyState title={title} description={description} />
         <Link className="feedback-issue-back-link" to="/feedback">
           <ArrowLeft aria-hidden="true" />
           返回反馈列表
@@ -244,7 +266,7 @@ export function FeedbackIssuePage() {
     );
   }
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const body = serializeCommentDraft(draft).trim();
     if (!body) return;
@@ -258,13 +280,15 @@ export function FeedbackIssuePage() {
           }
         : undefined;
 
-    addComment({
+    const ok = await addComment({
       targetType: "feedback",
       targetId: feedback.id,
       targetTitle: feedback.title,
       body,
       ...replyInput,
     });
+    if (!ok) return;
+    await refreshFeedbackIssueData();
     setDraft(emptyCommentDraft());
     setDraftMode({ type: "default" });
   };
@@ -291,12 +315,14 @@ export function FeedbackIssuePage() {
   const updateEditDraft = (messageId: string, nextDraft: CommentDraft) => {
     setEditState((current) => (current?.messageId === messageId ? { ...current, draft: nextDraft } : current));
   };
-  const submitEdit = (event: FormEvent, messageId: string) => {
+  const submitEdit = async (event: FormEvent, messageId: string) => {
     event.preventDefault();
     if (!editState || editState.messageId !== messageId) return;
     const body = serializeCommentDraft(editState.draft).trim();
     if (!body) return;
-    updateCommentMessage(editState.threadId, editState.messageId, body);
+    const ok = await updateCommentMessage(editState.threadId, editState.messageId, body);
+    if (!ok) return;
+    await refreshFeedbackIssueData();
     setEditState(null);
   };
 
@@ -358,10 +384,10 @@ export function FeedbackIssuePage() {
             feedback={feedback}
             mentionUsersById={mentionUsersById}
             onOpenImage={setImagePreview}
-            users={state.users}
+            users={users}
           />
 
-          <FeedbackActivityTimeline entries={feedback.activity} users={state.users} />
+          <FeedbackActivityTimeline entries={feedback.activity} users={users} />
 
           <div className="feedback-issue-timeline">
             {entries.map(({ message, thread }) => (
@@ -445,9 +471,9 @@ export function FeedbackIssuePage() {
             canChangeLifecycle={canChangeLifecycle}
             currentUser={currentUser}
             feedback={feedback}
-            feedbackItems={state.feedback}
+            feedbackItems={feedbackItems}
             notify={notify}
-            onTransition={(command) => transitionFeedback(feedback.id, command)}
+            onTransition={(command) => refreshAfterFeedbackMutation(transitionFeedback(feedback.id, command))}
           />
           <IssueSidebar
             assigneeOptions={assigneeOptions}
@@ -455,13 +481,13 @@ export function FeedbackIssuePage() {
             canEdit={canEditMetadata}
             comments={threads}
             feedback={feedback}
-            feedbackItems={state.feedback}
-            onAddRelation={(input) => addFeedbackRelation(feedback.id, { ...input, expectedVersion: feedback.version })}
-            onRemoveRelation={(relationId) => removeFeedbackRelation(feedback.id, relationId, feedback.version)}
-            onSaveAssignee={(assigneeUserId) => updateFeedbackAssignee(feedback.id, assigneeUserId, feedback.version)}
-            onSaveMetadata={(input) => updateFeedbackMetadata(feedback.id, { ...input, expectedVersion: feedback.version })}
-            projects={state.projects}
-            users={state.users}
+            feedbackItems={feedbackItems}
+            onAddRelation={(input) => refreshAfterFeedbackMutation(addFeedbackRelation(feedback.id, { ...input, expectedVersion: feedback.version }))}
+            onRemoveRelation={(relationId) => refreshAfterFeedbackMutation(removeFeedbackRelation(feedback.id, relationId, feedback.version))}
+            onSaveAssignee={(assigneeUserId) => refreshAfterFeedbackMutation(updateFeedbackAssignee(feedback.id, assigneeUserId, feedback.version))}
+            onSaveMetadata={(input) => refreshAfterFeedbackMutation(updateFeedbackMetadata(feedback.id, { ...input, expectedVersion: feedback.version }))}
+            projects={projects}
+            users={users}
           />
         </aside>
       </main>

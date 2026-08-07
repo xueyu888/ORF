@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { UserAvatar } from "../components/UserAvatar";
 import { BountyBadge, BountyButton, BountyEmptyState, BountySelect, BountyTextInput } from "../features/bounty-hall/BountyHallSkin";
-import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
+import { canCreateTeamFeedback } from "../features/feedback/model/feedbackCapabilities";
 import { feedbackIssueHref, feedbackIssueStateLabel, isFeedbackIssueOpen } from "../features/feedback/model/feedbackIssue";
 import {
   buildFeedbackIssueListItems,
@@ -24,6 +24,7 @@ import {
   feedbackIssueListUrlStateFromSearchParams,
   readStoredFeedbackIssueListFilterParams,
 } from "../features/feedback/model/feedbackIssueListViewState";
+import { useFeedbackIssueReadModel } from "../features/feedback/useFeedbackIssueReadModel";
 import { getProjectChatChannels, getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import type { ProjectChatChannel } from "../types/orf";
@@ -32,7 +33,9 @@ import { feedbackImpactLabel } from "../utils/labels";
 export function FeedbackInboxPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { currentUser, state } = useOrf();
+  const { currentUser } = useOrf();
+  const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser));
+  const feedbackData = feedbackReadModel.data;
   const currentUserId = currentUser?.id ?? null;
   const suppressNextPreferenceRestoreRef = useRef(false);
   const searchParamSignature = searchParams.toString();
@@ -49,14 +52,14 @@ export function FeedbackInboxPage() {
   const [projectChannels, setProjectChannels] = useState<ProjectChatChannel[]>([]);
   const [projectChannelsLoading, setProjectChannelsLoading] = useState(false);
   const selectedProject = useMemo(
-    () => state.projects.find((project) => project.id === projectId) ?? null,
-    [projectId, state.projects],
+    () => feedbackData.projects.find((project) => project.id === projectId) ?? null,
+    [feedbackData.projects, projectId],
   );
-  const visibleFeedback = useMemo(() => currentUser?.status === "active" || currentUser?.role === "admin" ? state.feedback : [], [currentUser, state.feedback]);
-  const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
+  const visibleFeedback = useMemo(() => currentUser?.status === "active" || currentUser?.role === "admin" ? feedbackData.feedback : [], [currentUser, feedbackData.feedback]);
+  const canCreateFeedback = canCreateTeamFeedback(currentUser);
   const issueItems = useMemo(
-    () => buildFeedbackIssueListItems({ comments: state.comments, feedback: visibleFeedback, projects: state.projects, users: state.users }),
-    [state.comments, state.projects, state.users, visibleFeedback],
+    () => buildFeedbackIssueListItems({ comments: feedbackData.comments, feedback: visibleFeedback, projects: feedbackData.projects, users: feedbackData.users }),
+    [feedbackData.comments, feedbackData.projects, feedbackData.users, visibleFeedback],
   );
   const issueFilters = useMemo<FeedbackIssueListFilters>(
     () => ({ assigneeUserId, authorUserId, cause, impact, listState, projectId, query, sort }),
@@ -70,8 +73,8 @@ export function FeedbackInboxPage() {
   const assigneeOptions = useMemo(() => feedbackIssueAssigneeOptions(issueItems), [issueItems]);
   const authorOptions = useMemo(() => feedbackIssueAuthorOptions(issueItems), [issueItems]);
   const projectOptions = useMemo(
-    () => [...state.projects].sort((left, right) => left.name.localeCompare(right.name, "zh-Hans-CN")),
-    [state.projects],
+    () => [...feedbackData.projects].sort((left, right) => left.name.localeCompare(right.name, "zh-Hans-CN")),
+    [feedbackData.projects],
   );
 
   const persistFilterPreference = useCallback((nextSearchParams: URLSearchParams) => {
@@ -334,6 +337,10 @@ export function FeedbackInboxPage() {
               <FeedbackIssueRow key={item.feedback.id} item={item} />
             ))}
           </div>
+        ) : feedbackReadModel.loading ? (
+          <BountyEmptyState title="反馈加载中" description="正在读取反馈列表。" />
+        ) : feedbackReadModel.error ? (
+          <BountyEmptyState title="反馈读取失败" description={feedbackReadModel.error} />
         ) : (
           <BountyEmptyState title="没有匹配的反馈" description="调整搜索或筛选条件后再看。" />
         )}

@@ -240,11 +240,11 @@ interface OrfContextValue {
     parentMessageId?: string;
     replyToMessageId?: string;
     replyToAuthor?: string;
-  }) => void;
+  }) => Promise<boolean>;
   loadCommentMentionableUsers: (input: { targetId: string; targetType: CommentTargetType }) => Promise<OrfUser[]>;
   uploadCommentAttachment: (input: { file: File; targetId: string; targetType: CommentTargetType }) => Promise<CommentAttachmentUploadResult | null>;
   updateCommentThreadStatus: (threadId: string, status: CommentStatus) => void;
-  updateCommentMessage: (threadId: string, messageId: string, body: string) => void;
+  updateCommentMessage: (threadId: string, messageId: string, body: string) => Promise<boolean>;
   deleteCommentMessage: (threadId: string, messageId: string) => void;
 }
 

@@ -46,6 +46,7 @@ import type {
   WorkLogReportScope,
 } from "../types/orf";
 import type { ChatSyncResponse } from "../domain/chatSync";
+import type { FeedbackIssueReadModelData } from "../domain/feedbackReadModel";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
 import type { ChatTheme, UserDisplayPreferences, WorkspaceLayoutPreferences } from "../domain/settings/personalPreferences";
 import type { FilterPreferenceRecord, UserFilterPreferences } from "../domain/settings/filterPreferences";
@@ -73,6 +74,7 @@ export type {
   VisualBackgroundSwitchTrigger,
 } from "../domain/settings/visualBackgrounds";
 export type { BountyHallData, BountyHallItem, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
+export type { FeedbackIssueReadModelData } from "../domain/feedbackReadModel";
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
 export type UsersResponse = Pick<OrfState, "users">;
@@ -661,6 +663,14 @@ export async function getFeedbackReferences(feedbackIds: string[]) {
   }
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return apiJson<FeedbackReferencesResponse>(`/api/feedback/references${suffix}`);
+}
+
+export async function getFeedbackIssueReadModel() {
+  return apiJson<FeedbackIssueReadModelData>("/api/feedback/issues");
+}
+
+export async function getFeedbackIssueDetailReadModel(feedbackId: string) {
+  return apiJson<FeedbackIssueReadModelData>(`/api/feedback/${encodeURIComponent(feedbackId)}/read-model`);
 }
 
 export async function getFeedbackSubscription(feedbackId: string) {

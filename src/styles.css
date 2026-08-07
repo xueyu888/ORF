@@ -7664,11 +7664,13 @@ button:disabled {
     padding-bottom: var(--orf-mobile-bottom-nav-height);
   }
 
-  .orf-app-shell:has(.feedback-create-page) .orf-shell-body {
+  .orf-app-shell:has(.feedback-create-page) .orf-shell-body,
+  .orf-app-shell:has(.feedback-issue-detail-page) .orf-shell-body {
     padding-bottom: 0;
   }
 
-  .orf-app-shell:has(.feedback-create-page) {
+  .orf-app-shell:has(.feedback-create-page),
+  .orf-app-shell:has(.feedback-issue-detail-page) {
     --orf-content-bg-bottom: 0px;
   }
 
@@ -7697,7 +7699,8 @@ button:disabled {
     box-shadow: 0 -14px 34px rgba(15, 35, 58, 0.13);
   }
 
-  .orf-app-shell:has(.feedback-create-page) .orf-mobile-bottom-nav {
+  .orf-app-shell:has(.feedback-create-page) .orf-mobile-bottom-nav,
+  .orf-app-shell:has(.feedback-issue-detail-page) .orf-mobile-bottom-nav {
     display: none;
   }
 

@@ -12,10 +12,11 @@ import {
   serializeCommentDraft,
   type CommentDraft,
 } from "../features/challenge/comments/CommentPanel";
-import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
+import { canCreateTeamFeedback } from "../features/feedback/model/feedbackCapabilities";
 import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
 import { feedbackIssueHref } from "../features/feedback/model/feedbackIssue";
 import { useFeedbackAssigneeOptions } from "../features/feedback/useFeedbackAssigneeOptions";
+import { useFeedbackIssueReadModel } from "../features/feedback/useFeedbackIssueReadModel";
 import { validOrfRichTextDraftAttachments } from "../features/rich-text/orfRichTextDraft";
 import { useOrf } from "../state/OrfProvider";
 import type { FeedbackImpact } from "@orf/feedback-module/contracts";
@@ -32,14 +33,16 @@ type PendingFeedbackAttachment = {
 export function FeedbackCreatePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { createFeedback, currentUser, notify, state } = useOrf();
-  const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
+  const { createFeedback, currentUser, notify } = useOrf();
+  const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser));
+  const feedbackData = feedbackReadModel.data;
+  const canCreateFeedback = canCreateTeamFeedback(currentUser);
   const causeOptions = teamFeedbackCauseOptions();
-  const assigneeOptions = useFeedbackAssigneeOptions(state.users, currentUser);
-  const defaultAssigneeUserId = currentUser?.id ?? state.currentUserId ?? assigneeOptions[0]?.id ?? "";
+  const assigneeOptions = useFeedbackAssigneeOptions(feedbackData.users, currentUser);
+  const defaultAssigneeUserId = currentUser?.id ?? assigneeOptions[0]?.id ?? "";
   const initialAssigneeUserId = assigneeOptions.some((user) => user.id === defaultAssigneeUserId) ? defaultAssigneeUserId : assigneeOptions[0]?.id ?? defaultAssigneeUserId;
   const projectParam = searchParams.get("project") ?? "";
-  const initialProjectId = state.projects.some((project) => project.id === projectParam) ? projectParam : "";
+  const initialProjectId = feedbackData.projects.some((project) => project.id === projectParam) ? projectParam : "";
   const [title, setTitle] = useState("");
   const [draft, setDraft] = useState<CommentDraft>(() => emptyCommentDraft());
   const [cause, setCause] = useState<string>(causeOptions[0] ?? "技术问题");
@@ -73,10 +76,17 @@ export function FeedbackCreatePage() {
   }, []);
 
   useEffect(() => {
-    if (projectId && !state.projects.some((project) => project.id === projectId)) {
+    if (projectId && !feedbackData.projects.some((project) => project.id === projectId)) {
       setProjectId("");
     }
-  }, [projectId, state.projects]);
+  }, [feedbackData.projects, projectId]);
+
+  useEffect(() => {
+    if (projectId || !projectParam) return;
+    if (feedbackData.projects.some((project) => project.id === projectParam)) {
+      setProjectId(projectParam);
+    }
+  }, [feedbackData.projects, projectId, projectParam]);
 
   useEffect(() => {
     if (assigneeUserId && assigneeOptions.some((user) => user.id === assigneeUserId)) {
@@ -226,7 +236,7 @@ export function FeedbackCreatePage() {
             <span>项目</span>
             <select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
               <option value="">不归属项目</option>
-              {state.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+              {feedbackData.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
           </label>
           <label className="feedback-create-sidebar-field">
