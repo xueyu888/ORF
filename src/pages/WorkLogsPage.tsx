@@ -1540,6 +1540,7 @@ function WorkLogBodyMarkdownEditor({
   value: string;
 }) {
   const templateBody = useMemo(() => parseWorkLogStatusUpdateMarkdown(value), [value]);
+  const canApplyTemplate = value !== workLogStatusUpdateTemplateMarkdown;
 
   return (
     <OrfRichTextEditor
@@ -1550,7 +1551,19 @@ function WorkLogBodyMarkdownEditor({
       idleHint="Markdown"
       mentionableUsers={[]}
       onChange={onChange}
-      placeholder="用 Markdown 记录状态说明、风险阻塞和下一步"
+      placeholder="用 Markdown 记录当前目标、状态说明、风险阻塞和下一步"
+      footer={
+        <button
+          type="button"
+          className="work-logs-editor-template-action"
+          disabled={disabled || !canApplyTemplate}
+          onClick={() => onChange(workLogStatusUpdateTemplateMarkdown)}
+          title={canApplyTemplate ? "把正文替换为预设模板" : "模板已应用"}
+        >
+          <FileText className="h-3.5 w-3.5" />
+          应用模板
+        </button>
+      }
       submitOnEnter={false}
       templateOverlay={
         templateBody ? (
@@ -1571,12 +1584,12 @@ function WorkLogBodyTemplateOverlay({
     <div className="work-logs-body-template-overlay">
       {workLogStatusUpdateTemplateSections.map((section, index) => (
         <span key={section.key}>
-          <span className="work-logs-body-template-hidden-line">
-            ## {section.heading}
+          <span className="work-logs-body-template-text">
+            **{section.label}**
           </span>
           {"\n"}
           {templateBody[section.key].trim() ? (
-            <span className="work-logs-body-template-hidden-line">
+            <span className="work-logs-body-template-text">
               {templateBody[section.key]}
             </span>
           ) : (

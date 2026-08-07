@@ -70,18 +70,23 @@ type WorkLogObjectiveOptionLookup = {
 
 export const workLogStatusUpdateTemplateSections = [
   {
-    heading: "状态说明",
+    key: "target",
+    label: "当前目标",
+    placeholder: "写当前正在推进的目标",
+  },
+  {
     key: "status",
+    label: "状态说明",
     placeholder: "写目标状态和可验证结果",
   },
   {
-    heading: "偏差 / 风险 / 阻塞",
     key: "risk",
+    label: "偏差 / 风险 / 阻塞",
     placeholder: "无则写“无”；有则写风险或阻塞",
   },
   {
-    heading: "下一步",
     key: "next",
+    label: "下一步",
     placeholder: "写接下来最重要的一件事",
   },
 ] as const;
@@ -94,16 +99,23 @@ export type WorkLogStatusUpdateTemplateBody = Record<
   string
 >;
 
+function workLogStatusUpdateTemplateLabelMarkdown(
+  section: (typeof workLogStatusUpdateTemplateSections)[number],
+) {
+  return `**${section.label}**`;
+}
+
 const blankWorkLogStatusUpdateTemplateBody = (): WorkLogStatusUpdateTemplateBody => ({
   next: "",
   risk: "",
   status: "",
+  target: "",
 });
 
 export const workLogStatusUpdateTemplateMarkdown =
   `${workLogStatusUpdateTemplateSections
-    .map((section) => `## ${section.heading}`)
-    .join("\n\n")}\n`;
+    .map((section) => `${workLogStatusUpdateTemplateLabelMarkdown(section)}\n`)
+    .join("\n")}`;
 
 function normalizeWorkLogEstimatePercent(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
@@ -129,10 +141,10 @@ export const blankWorkLogEditorDraft = (): WorkLogEditorDraft => ({
   progressEstimatePercent: null,
 });
 
-function workLogStatusUpdateHeadingKey(line: string): WorkLogStatusUpdateTemplateKey | null {
+function workLogStatusUpdateSectionKey(line: string): WorkLogStatusUpdateTemplateKey | null {
   const trimmed = line.trim();
   for (const section of workLogStatusUpdateTemplateSections) {
-    if (trimmed === `## ${section.heading}`) return section.key;
+    if (trimmed === workLogStatusUpdateTemplateLabelMarkdown(section)) return section.key;
   }
   return null;
 }
@@ -145,18 +157,18 @@ export function parseWorkLogStatusUpdateMarkdown(
   const sections = blankWorkLogStatusUpdateTemplateBody();
   const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
   let activeKey: WorkLogStatusUpdateTemplateKey | null = null;
-  let expectedHeadingIndex = 0;
+  let expectedSectionIndex = 0;
   const bodyLinesByKey = new Map<WorkLogStatusUpdateTemplateKey, string[]>(
     workLogStatusUpdateTemplateSections.map((section) => [section.key, []]),
   );
 
   for (const line of lines) {
-    const headingKey = workLogStatusUpdateHeadingKey(line);
-    if (headingKey) {
-      const expectedSection = workLogStatusUpdateTemplateSections[expectedHeadingIndex];
-      if (!expectedSection || headingKey !== expectedSection.key) return null;
-      activeKey = headingKey;
-      expectedHeadingIndex += 1;
+    const sectionKey = workLogStatusUpdateSectionKey(line);
+    if (sectionKey) {
+      const expectedSection = workLogStatusUpdateTemplateSections[expectedSectionIndex];
+      if (!expectedSection || sectionKey !== expectedSection.key) return null;
+      activeKey = sectionKey;
+      expectedSectionIndex += 1;
       continue;
     }
 
@@ -167,7 +179,7 @@ export function parseWorkLogStatusUpdateMarkdown(
     bodyLinesByKey.get(activeKey)?.push(line);
   }
 
-  if (expectedHeadingIndex !== workLogStatusUpdateTemplateSections.length) {
+  if (expectedSectionIndex !== workLogStatusUpdateTemplateSections.length) {
     return null;
   }
 
@@ -193,10 +205,10 @@ export function buildWorkLogStatusUpdateMarkdown(
   return normalizedBody
     .map((section) =>
       section.bodyMarkdown
-        ? `## ${section.heading}\n\n${section.bodyMarkdown}`
-        : `## ${section.heading}`,
+        ? `${workLogStatusUpdateTemplateLabelMarkdown(section)}\n${section.bodyMarkdown}`
+        : `${workLogStatusUpdateTemplateLabelMarkdown(section)}\n`,
     )
-    .join("\n\n");
+    .join("\n");
 }
 
 export function workLogBodyMarkdownHasUserContent(markdown: string) {

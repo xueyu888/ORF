@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -76,12 +77,19 @@ test("rich text viewer keeps list continuations and nested lists inside one orde
 
 test("rich text viewer renders headings with shared markdown classes", () => {
   const html = renderToStaticMarkup(React.createElement(OrfRichTextMarkdownViewer, {
-    body: "## 是的\n\n- 是的",
+    body: "## 二级\n\n#### 四级",
     compact: true,
   }));
 
   assert.match(html, /<h4 class="orf-rich-text-markdown-heading orf-rich-text-markdown-heading-2 orf-rich-text-markdown-heading-compact">/);
+  assert.match(html, /<h4 class="orf-rich-text-markdown-heading orf-rich-text-markdown-heading-4 orf-rich-text-markdown-heading-compact">/);
   for (const prefix of ["chat", "work-log", "comment", "drive"]) {
     assert.doesNotMatch(html, new RegExp(`orf-${prefix}-markdown`));
   }
+});
+
+test("rich text compact heading styles preserve markdown heading levels", () => {
+  const css = readFileSync("src/styles.css", "utf8");
+  assert.match(css, /\.orf-rich-text-markdown-heading-2\.orf-rich-text-markdown-heading-compact\s*\{[^}]*font-size:\s*1\.28em;/s);
+  assert.match(css, /\.orf-rich-text-markdown-heading-4\.orf-rich-text-markdown-heading-compact,[^}]*\{[^}]*font-size:\s*1\.08em;/s);
 });

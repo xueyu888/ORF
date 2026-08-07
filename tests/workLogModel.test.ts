@@ -144,11 +144,12 @@ test("work log local draft storage parses only the editor draft contract", () =>
   assert.equal(parseStoredWorkLogEditorDraft("{bad json"), null);
 });
 
-test("work log status update template owns markdown headings and user body", () => {
+test("work log status update template owns bold markdown labels and user body", () => {
   assert.deepEqual(parseWorkLogStatusUpdateMarkdown(""), {
     next: "",
     risk: "",
     status: "",
+    target: "",
   });
   assert.equal(workLogStatusUpdateTemplateMarkdown.endsWith("\n"), true);
   assert.equal(blankWorkLogEditorDraft().bodyMarkdown, workLogStatusUpdateTemplateMarkdown);
@@ -157,44 +158,46 @@ test("work log status update template owns markdown headings and user body", () 
     next: "",
     risk: "",
     status: "",
+    target: "",
   }), workLogStatusUpdateTemplateMarkdown);
 
   const markdown = buildWorkLogStatusUpdateMarkdown({
     next: "明天先验证演示路径的数据初始化。",
     risk: "无",
     status: "核心流程已完成第一轮验证。",
+    target: "完成竞标演示版本的测试闭环。",
   });
 
   assert.equal(markdown, [
-    "## 状态说明",
-    "",
+    "**当前目标**",
+    "完成竞标演示版本的测试闭环。",
+    "**状态说明**",
     "核心流程已完成第一轮验证。",
-    "",
-    "## 偏差 / 风险 / 阻塞",
-    "",
+    "**偏差 / 风险 / 阻塞**",
     "无",
-    "",
-    "## 下一步",
-    "",
+    "**下一步**",
     "明天先验证演示路径的数据初始化。",
   ].join("\n"));
   assert.deepEqual(parseWorkLogStatusUpdateMarkdown(markdown), {
     next: "明天先验证演示路径的数据初始化。",
     risk: "无",
     status: "核心流程已完成第一轮验证。",
+    target: "完成竞标演示版本的测试闭环。",
   });
   assert.equal(workLogBodyMarkdownHasUserContent(markdown), true);
   assert.equal(
     workLogBodyMarkdownUserContent(markdown),
-    "核心流程已完成第一轮验证。\n\n无\n\n明天先验证演示路径的数据初始化。",
+    "完成竞标演示版本的测试闭环。\n\n核心流程已完成第一轮验证。\n\n无\n\n明天先验证演示路径的数据初始化。",
   );
   assert.equal(
     workLogBodyMarkdownHasUserContent([
-      "## 状态说明",
+      "**当前目标**",
       "",
-      "## 偏差 / 风险 / 阻塞",
+      "**状态说明**",
       "",
-      "## 下一步",
+      "**偏差 / 风险 / 阻塞**",
+      "",
+      "**下一步**",
     ].join("\n")),
     false,
   );

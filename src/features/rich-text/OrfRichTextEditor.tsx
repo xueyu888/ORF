@@ -713,7 +713,15 @@ export function OrfRichTextEditor({
   };
 
   return (
-    <div className={clsx("orf-rich-text-editor", `orf-rich-text-editor-block-${activeBlockKind}`, className, disabled && "orf-rich-text-editor-disabled")}>
+    <div
+      className={clsx(
+        "orf-rich-text-editor",
+        `orf-rich-text-editor-block-${activeBlockKind}`,
+        templateOverlay && "orf-rich-text-editor-with-template-overlay",
+        className,
+        disabled && "orf-rich-text-editor-disabled",
+      )}
+    >
       <div className="orf-rich-text-toolbar" aria-label="Markdown 编辑工具">
         <ToolbarButton disabled={disabled} label="加粗" onClick={() => wrapInlineMarkdown("**")}>
           <Bold className="h-4 w-4" />

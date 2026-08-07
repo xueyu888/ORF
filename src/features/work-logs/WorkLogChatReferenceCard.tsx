@@ -204,7 +204,7 @@ function WorkLogReferenceBody({ entry }: { entry: WorkLogActivityItem }) {
     return (
       <>
         {visibleSections.map((section) => (
-          <ChatReferenceCardSection key={section.key} title={section.heading}>
+          <ChatReferenceCardSection key={section.key} title={section.label}>
             <WorkLogReferenceMarkdown body={section.bodyMarkdown} />
           </ChatReferenceCardSection>
         ))}
