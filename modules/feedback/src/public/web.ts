@@ -1,3 +1,13 @@
+import {
+  feedbackCreateBasePath,
+  feedbackCreatePath,
+  feedbackDetailPathTemplate,
+  feedbackIssuePath,
+  feedbackLabelsPath,
+  feedbackListPath,
+  feedbackRootPath,
+} from "../contracts/links";
+
 export interface FeedbackWebRouteContribution {
   readonly id: string;
   readonly path: string;
@@ -24,11 +34,6 @@ export interface FeedbackWebContribution {
   };
   breadcrumb(pathname: string): string | null;
 }
-
-const feedbackRootPath = "/feedback" as const;
-const feedbackCreateBasePath = "/feedback/new" as const;
-const feedbackLabelsPath = "/feedback/labels" as const;
-const feedbackDetailPathTemplate = "/feedback/:feedbackId" as const;
 
 export const feedbackWebContribution: FeedbackWebContribution = {
   id: "feedback",
@@ -86,15 +91,4 @@ export function isFeedbackPath(pathname: string) {
   return pathname === feedbackRootPath || pathname.startsWith(`${feedbackRootPath}/`);
 }
 
-export function feedbackCreatePath(input?: { projectId?: string | null }) {
-  const projectId = input?.projectId?.trim();
-  if (!projectId) {
-    return feedbackCreateBasePath;
-  }
-
-  return `${feedbackCreateBasePath}?project=${encodeURIComponent(projectId)}`;
-}
-
-export function feedbackIssuePath(feedbackId: string) {
-  return `${feedbackRootPath}/${encodeURIComponent(feedbackId)}`;
-}
+export { feedbackCreatePath, feedbackIssuePath, feedbackListPath };

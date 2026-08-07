@@ -1,17 +1,18 @@
 import type { FastifyBaseLogger } from "fastify";
 import { and, asc, eq, lt, or, sql } from "drizzle-orm";
-import { feedback, feedbackDailyDigestRuns } from "../../modules/feedback/src/infrastructure/database/schema";
-import { db } from "../db/client";
-import { teamMembers, users } from "../db/schema";
-import { env } from "../env";
-import { publishNotificationEvent } from "../notifications/publisher";
 import {
+  feedbackDailyDigestListHref,
   feedbackDailyDigestTargetId,
   formatFeedbackDailyDigestBody,
   shouldRunFeedbackDailyDigest,
   sortFeedbackDailyDigestItems,
   type FeedbackDailyDigestItem,
-} from "./feedbackDailyDigestModel";
+} from "@orf/feedback-module/server";
+import { feedback, feedbackDailyDigestRuns } from "../../modules/feedback/src/infrastructure/database/schema";
+import { db } from "../db/client";
+import { teamMembers, users } from "../db/schema";
+import { env } from "../env";
+import { publishNotificationEvent } from "../notifications/publisher";
 
 type FeedbackDailyDigestRecipient = {
   name: string;
@@ -27,15 +28,6 @@ type FeedbackDailyDigestClaimStatus = "claimed" | "skipped";
 
 const feedbackDailyDigestPendingRetryMs = 15 * 60 * 1000;
 let schedulerStarted = false;
-
-function feedbackDailyDigestListHref(assigneeUserId: string) {
-  const query = new URLSearchParams({
-    assignee: assigneeUserId,
-    sort: "updated-asc",
-    view: "assigned",
-  });
-  return `/feedback?${query.toString()}`;
-}
 
 function errorText(error: unknown) {
   return error instanceof Error ? error.message : String(error);

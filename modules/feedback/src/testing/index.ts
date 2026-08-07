@@ -8,6 +8,14 @@ export {
   deriveFeedbackCapabilities,
   validateFeedbackLifecycle,
 } from "../domain/index";
+export {
+  feedbackDailyDigestListHref,
+  feedbackDailyDigestTargetId,
+  formatFeedbackDailyDigestBody,
+  localFeedbackDailyDigestClock,
+  shouldRunFeedbackDailyDigest,
+  sortFeedbackDailyDigestItems,
+} from "../server/dailyDigest";
 
 export function feedbackEntityFixture(
   overrides: Partial<FeedbackEntitySnapshot> = {},

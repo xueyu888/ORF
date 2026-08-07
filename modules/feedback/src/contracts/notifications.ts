@@ -1,3 +1,5 @@
+import { feedbackCommentPath, feedbackIssuePath } from "./links";
+
 export type FeedbackNotificationEventKind =
   | "feedback.assigned"
   | "feedback.commented"
@@ -145,7 +147,10 @@ export function planFeedbackCommentCreatedNotification(input: {
       targetType: "feedback",
     },
     recipientUserIds: [...input.recipientUserIds],
-    targetHref: `${feedbackNotificationTargetHref(input.feedbackId)}?comment=${encodeURIComponent(input.commentMessageId)}`,
+    targetHref: feedbackCommentPath({
+      commentMessageId: input.commentMessageId,
+      feedbackId: input.feedbackId,
+    }),
     targetId: input.feedbackId,
     targetType: "feedback",
     teamId: input.teamId,
@@ -154,7 +159,7 @@ export function planFeedbackCommentCreatedNotification(input: {
 }
 
 export function feedbackNotificationTargetHref(feedbackId: string) {
-  return `/feedback/${encodeURIComponent(feedbackId)}`;
+  return feedbackIssuePath(feedbackId);
 }
 
 export function feedbackProjectNotificationMetadata(project: FeedbackNotificationProjectSnapshot): Record<string, string> {

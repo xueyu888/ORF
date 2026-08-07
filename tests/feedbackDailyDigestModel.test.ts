@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  feedbackDailyDigestListHref,
   feedbackDailyDigestTargetId,
   formatFeedbackDailyDigestBody,
   shouldRunFeedbackDailyDigest,
   sortFeedbackDailyDigestItems,
-} from "../server/feedback/feedbackDailyDigestModel";
+} from "@orf/feedback-module/server";
 
 test("feedback daily digest becomes due at the configured local 08:00 boundary", () => {
   assert.deepEqual(shouldRunFeedbackDailyDigest({
@@ -33,6 +34,13 @@ test("feedback daily digest target id is unique by team date and assignee", () =
   assert.equal(
     feedbackDailyDigestTargetId("team-1", "user-1", "2026-08-05"),
     "feedback-daily-digest:team-1:user-1:2026-08-05",
+  );
+});
+
+test("feedback daily digest list href uses the feedback route contribution link contract", () => {
+  assert.equal(
+    feedbackDailyDigestListHref("user 1"),
+    "/feedback?assignee=user+1&sort=updated-asc&view=assigned",
   );
 });
 

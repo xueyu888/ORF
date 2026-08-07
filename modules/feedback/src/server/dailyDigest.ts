@@ -1,4 +1,5 @@
-import type { FeedbackImpact } from "@orf/feedback-module/contracts";
+import type { FeedbackImpact } from "../contracts/index";
+import { feedbackIssuePath, feedbackListPath } from "../contracts/links";
 
 export type FeedbackDailyDigestClock = {
   date: string;
@@ -14,6 +15,14 @@ export type FeedbackDailyDigestItem = {
 
 export const feedbackDailyDigestTargetId = (teamId: string, assigneeUserId: string, localDate: string) =>
   `feedback-daily-digest:${teamId}:${assigneeUserId}:${localDate}`;
+
+export function feedbackDailyDigestListHref(assigneeUserId: string) {
+  return feedbackListPath({
+    assigneeUserId,
+    sort: "updated-asc",
+    view: "assigned",
+  });
+}
 
 export function localFeedbackDailyDigestClock(now: Date, timeZone: string): FeedbackDailyDigestClock {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -75,7 +84,7 @@ export function formatFeedbackDailyDigestBody(input: {
   const items = sortFeedbackDailyDigestItems(input.items);
   const lines = items.slice(0, 20).map((item, index) => {
     const title = item.title.replace(/\s+/g, " ").trim() || "未命名反馈";
-    return `${index + 1}. [${impactLabel(item.impact)}] [${title}](/feedback/${encodeURIComponent(item.id)})`;
+    return `${index + 1}. [${impactLabel(item.impact)}] [${title}](${feedbackIssuePath(item.id)})`;
   });
   const remainingCount = Math.max(items.length - lines.length, 0);
   const sections = [`你有 ${items.length} 条待处理反馈。\n${lines.join("\n")}`.trimEnd()];
