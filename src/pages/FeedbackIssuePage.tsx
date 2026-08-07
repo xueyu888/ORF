@@ -50,6 +50,14 @@ import {
   type FeedbackAssigneeOption,
 } from "../features/feedback/model/feedbackAssigneeOptions";
 import {
+  addFeedbackRelation,
+  markFeedbackViewed,
+  removeFeedbackRelation,
+  transitionFeedback,
+  updateFeedbackAssignee,
+  updateFeedbackMetadata,
+} from "../features/feedback/feedbackApi";
+import {
   feedbackIssueAssignee,
   feedbackIssueAuthor,
   feedbackIssueLabels,
@@ -61,6 +69,7 @@ import { useFeedbackIssueDetailReadModel } from "../features/feedback/useFeedbac
 import type { OrfRichTextAttachmentUploadResult } from "../features/rich-text/OrfRichTextEditor";
 import { getFeedbackSubscription, updateFeedbackSubscription } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
+import { businessMutationFailureMessage } from "../state/orfProviderMutationMessages";
 import type { ActivityItem, CommentMessage, CommentThread, Feedback, FeedbackSubscriptionMode, OrfProject, OrfUser } from "../types/orf";
 import { feedbackImpactLabel, feedbackLifecycleLabel, feedbackPriorityLabel, feedbackRelationTypeLabel, feedbackResolutionLabel } from "../utils/labels";
 
@@ -89,15 +98,9 @@ export function FeedbackIssuePage() {
     addComment,
     currentUser,
     loadCommentMentionableUsers,
-    markFeedbackViewed,
     notify,
-    addFeedbackRelation,
     state,
-    removeFeedbackRelation,
-    transitionFeedback,
     updateCommentMessage,
-    updateFeedbackAssignee,
-    updateFeedbackMetadata,
     uploadCommentAttachment,
   } = useOrf();
   const feedbackReadModel = useFeedbackIssueDetailReadModel(feedbackId, Boolean(currentUser && feedbackId));
@@ -148,10 +151,11 @@ export function FeedbackIssuePage() {
       timeoutId = window.setTimeout(() => {
         if (markedViewSequenceRef.current === viewKey) return;
         markedViewSequenceRef.current = viewKey;
-        void markFeedbackViewed(feedback.id, feedback.lastActivitySequence).then((ok) => {
-          if (ok) void refreshFeedbackIssueData();
-          if (!ok && markedViewSequenceRef.current === viewKey) markedViewSequenceRef.current = null;
-        });
+        void markFeedbackViewed(feedback.id, feedback.lastActivitySequence)
+          .then(refreshFeedbackIssueData)
+          .catch(() => {
+            if (markedViewSequenceRef.current === viewKey) markedViewSequenceRef.current = null;
+          });
       }, 250);
     };
 
@@ -344,6 +348,18 @@ export function FeedbackIssuePage() {
     }
   };
 
+  const runFeedbackMutation = async (operation: () => Promise<void>, successMessage: string, failureMessage: string) => {
+    try {
+      await operation();
+      await refreshFeedbackIssueData();
+      notify(successMessage);
+      return true;
+    } catch (error) {
+      notify(businessMutationFailureMessage(error, failureMessage));
+      return false;
+    }
+  };
+
   return (
     <div className="bounty-hall-page feedback-issue-detail-page">
       <header className="feedback-issue-detail-header">
@@ -466,7 +482,11 @@ export function FeedbackIssuePage() {
             feedback={feedback}
             feedbackItems={feedbackItems}
             notify={notify}
-            onTransition={(command) => refreshAfterFeedbackMutation(transitionFeedback(feedback.id, command))}
+            onTransition={(command) => runFeedbackMutation(
+              () => transitionFeedback(feedback.id, command),
+              "反馈状态已更新",
+              "反馈状态更新失败",
+            )}
           />
           <IssueSidebar
             assigneeOptions={assigneeOptions}
@@ -475,10 +495,26 @@ export function FeedbackIssuePage() {
             comments={threads}
             feedback={feedback}
             feedbackItems={feedbackItems}
-            onAddRelation={(input) => refreshAfterFeedbackMutation(addFeedbackRelation(feedback.id, { ...input, expectedVersion: feedback.version }))}
-            onRemoveRelation={(relationId) => refreshAfterFeedbackMutation(removeFeedbackRelation(feedback.id, relationId, feedback.version))}
-            onSaveAssignee={(assigneeUserId) => refreshAfterFeedbackMutation(updateFeedbackAssignee(feedback.id, assigneeUserId, feedback.version))}
-            onSaveMetadata={(input) => refreshAfterFeedbackMutation(updateFeedbackMetadata(feedback.id, { ...input, expectedVersion: feedback.version }))}
+            onAddRelation={(input) => runFeedbackMutation(
+              () => addFeedbackRelation(feedback.id, { ...input, expectedVersion: feedback.version }),
+              "反馈关系已更新",
+              "反馈关系更新失败",
+            )}
+            onRemoveRelation={(relationId) => runFeedbackMutation(
+              () => removeFeedbackRelation(feedback.id, relationId, feedback.version),
+              "反馈关系已移除",
+              "反馈关系移除失败",
+            )}
+            onSaveAssignee={(assigneeUserId) => runFeedbackMutation(
+              () => updateFeedbackAssignee(feedback.id, assigneeUserId, feedback.version),
+              "反馈处理人已更新",
+              "反馈处理人更新失败",
+            )}
+            onSaveMetadata={(input) => runFeedbackMutation(
+              () => updateFeedbackMetadata(feedback.id, { ...input, expectedVersion: feedback.version }),
+              "反馈属性已更新",
+              "反馈属性更新失败",
+            )}
             projects={projects}
             users={users}
           />

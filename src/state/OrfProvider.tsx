@@ -13,7 +13,6 @@ import { loadEmptyOrfStateSnapshot } from "./orfStateSnapshot";
 import { useOrfDataState } from "./orfProviderData";
 import { type AuthResult, useAuthSessionState } from "./orfProviderAuth";
 import { useOrfProviderCommentActions } from "./orfProviderCommentActions";
-import { type AddFeedbackRelationInput, type CreateFeedbackInput, type UpdateFeedbackMetadataInput, useOrfProviderFeedbackActions } from "./orfProviderFeedbackActions";
 import { useNotificationState } from "./orfProviderNotifications";
 import { businessMutationFailureMessage } from "./orfProviderMutationMessages";
 import {
@@ -184,13 +183,6 @@ interface OrfContextValue {
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
   settleObjectiveLoot: (objectiveId: string, input: SettleObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, input: SubmitContributionReviewInput) => Promise<boolean>;
-  createFeedback: (input: CreateFeedbackInput) => Promise<Feedback | null>;
-  addFeedbackRelation: (feedbackId: string, input: AddFeedbackRelationInput) => Promise<boolean>;
-  markFeedbackViewed: (feedbackId: string, seenThroughSequence: number) => Promise<boolean>;
-  removeFeedbackRelation: (feedbackId: string, relationId: string, expectedVersion: number) => Promise<boolean>;
-  transitionFeedback: (feedbackId: string, command: FeedbackTransitionInput) => Promise<boolean>;
-  updateFeedbackAssignee: (feedbackId: string, assigneeUserId: string | null, expectedVersion: number) => Promise<boolean>;
-  updateFeedbackMetadata: (feedbackId: string, input: UpdateFeedbackMetadataInput) => Promise<boolean>;
   createTask: (input: Pick<Task, "title" | "description" | "assigneeUserId" | "priority" | "linkedObjectiveId"> & Partial<Pick<Task, "dueDate" | "tags" | "checklist">>) => Promise<Task | null>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   setTaskCompletion: (taskId: string, done: boolean) => Promise<boolean>;
@@ -741,11 +733,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     refreshTaskManagementData,
     refreshTaskManagementDataAfterCreate,
   });
-  const feedbackActions = useOrfProviderFeedbackActions({
-    notify,
-    refreshTaskManagementData,
-  });
-
   const value = useMemo<OrfContextValue>(
     () => ({
       state,
@@ -787,7 +774,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       ...objectiveActions,
       ...resultActions,
       ...taskActions,
-      ...feedbackActions,
       ...userActions,
       ...commentActions,
     }),
@@ -813,7 +799,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       readModelInvalidations,
       reportsData,
       resultActions,
-      feedbackActions,
       refreshChatUnreadSummary,
       refreshWorkLogReminderState,
       refreshNotifications,

@@ -13,12 +13,14 @@ import {
   type CommentDraft,
 } from "../features/challenge/comments/CommentPanel";
 import { canCreateTeamFeedback } from "../features/feedback/model/feedbackCapabilities";
+import { createFeedback } from "../features/feedback/feedbackApi";
 import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
 import { feedbackIssueHref } from "../features/feedback/model/feedbackIssue";
 import { useFeedbackAssigneeOptions } from "../features/feedback/useFeedbackAssigneeOptions";
 import { useFeedbackIssueReadModel } from "../features/feedback/useFeedbackIssueReadModel";
 import { validOrfRichTextDraftAttachments } from "../features/rich-text/orfRichTextDraft";
 import { useOrf } from "../state/OrfProvider";
+import { businessMutationFailureMessage } from "../state/orfProviderMutationMessages";
 import type { FeedbackImpact } from "@orf/feedback-module/contracts";
 import { feedbackImpactLabel } from "../utils/labels";
 
@@ -33,7 +35,7 @@ type PendingFeedbackAttachment = {
 export function FeedbackCreatePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { createFeedback, currentUser, notify } = useOrf();
+  const { currentUser, notify } = useOrf();
   const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser));
   const feedbackData = feedbackReadModel.data;
   const canCreateFeedback = canCreateTeamFeedback(currentUser);
@@ -147,9 +149,10 @@ export function FeedbackCreatePage() {
         projectId: projectId || null,
         attachments: referencedAttachments,
       });
-      if (feedback) {
-        navigate(feedbackIssueHref(feedback.id));
-      }
+      notify("反馈已捕获");
+      navigate(feedbackIssueHref(feedback.id));
+    } catch (error) {
+      notify(businessMutationFailureMessage(error, "反馈保存失败"));
     } finally {
       setSubmitting(false);
     }
