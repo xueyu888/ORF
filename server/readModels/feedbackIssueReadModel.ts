@@ -1,16 +1,7 @@
-import { and, desc, eq, inArray, or } from "drizzle-orm";
-import { feedbackReportAttachmentDto, type FeedbackActorSnapshot } from "@orf/feedback-module/contracts";
-import { deriveFeedbackCapabilities } from "../../modules/feedback/src/domain";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { getFeedbackReadModelIssues, type FeedbackReadModelViewer } from "@orf/feedback-module/server";
 import type { FeedbackIssueReadModelData } from "../../src/domain/feedbackReadModel";
-import type { CommentThread, Feedback, OrfProject, OrfUser } from "../../src/types/orf";
-import {
-  feedback,
-  feedbackActivityEvents,
-  feedbackCauseCategories,
-  feedbackRelations,
-  feedbackReportAttachments,
-  feedbackUserViews,
-} from "../../modules/feedback/src/infrastructure/database/schema";
+import type { CommentThread, OrfProject, OrfUser } from "../../src/types/orf";
 import { db } from "../db/client";
 import {
   commentAttachments,
@@ -29,15 +20,6 @@ export type FeedbackIssueReadModelScope = {
   viewerUserId?: string | null;
 };
 
-type FeedbackRow = typeof feedback.$inferSelect;
-type FeedbackCauseRow = typeof feedbackCauseCategories.$inferSelect;
-type FeedbackActivityRow = typeof feedbackActivityEvents.$inferSelect;
-type FeedbackRelationRow = typeof feedbackRelations.$inferSelect;
-type FeedbackReportAttachmentRow = typeof feedbackReportAttachments.$inferSelect;
-type FeedbackUserViewRow = {
-  feedbackId: string;
-  lastSeenSequence: number;
-};
 type ProjectRow = typeof projects.$inferSelect;
 type CommentThreadRow = typeof commentThreads.$inferSelect;
 type CommentMessageRow = typeof commentMessages.$inferSelect;
@@ -60,55 +42,6 @@ function isMissingCommentStorageError(error: unknown) {
   return cause.code === "42P01" || cause.code === "42704";
 }
 
-export async function getFeedbackRows(storageScopeId: string) {
-  return db
-    .select()
-    .from(feedback)
-    .where(eq(feedback.teamId, storageScopeId))
-    .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id));
-}
-
-export async function getFeedbackCauseRows(feedbackIssueIds: string[]) {
-  if (feedbackIssueIds.length === 0) return [];
-  return db.select().from(feedbackCauseCategories).where(inArray(feedbackCauseCategories.feedbackId, feedbackIssueIds));
-}
-
-export async function getFeedbackActivityRows(feedbackIssueIds: string[]) {
-  if (feedbackIssueIds.length === 0) return [];
-  return db.select().from(feedbackActivityEvents).where(inArray(feedbackActivityEvents.feedbackId, feedbackIssueIds));
-}
-
-export async function getFeedbackReportAttachmentRows(feedbackIssueIds: string[]) {
-  if (feedbackIssueIds.length === 0) return [];
-  return db.select().from(feedbackReportAttachments).where(inArray(feedbackReportAttachments.feedbackId, feedbackIssueIds));
-}
-
-export async function getFeedbackRelationRows(feedbackIssueIds: string[]) {
-  if (feedbackIssueIds.length === 0) return [];
-  return db
-    .select()
-    .from(feedbackRelations)
-    .where(or(inArray(feedbackRelations.sourceFeedbackId, feedbackIssueIds), inArray(feedbackRelations.targetFeedbackId, feedbackIssueIds)));
-}
-
-export async function getFeedbackUserViewRows(teamId: string, feedbackIssueIds: string[], viewerUserId: string | null | undefined) {
-  const normalizedViewerUserId = viewerUserId?.trim();
-  if (!normalizedViewerUserId || feedbackIssueIds.length === 0) return [];
-  return db
-    .select({
-      feedbackId: feedbackUserViews.feedbackId,
-      lastSeenSequence: feedbackUserViews.lastSeenSequence,
-    })
-    .from(feedbackUserViews)
-    .where(
-      and(
-        eq(feedbackUserViews.teamId, teamId),
-        eq(feedbackUserViews.userId, normalizedViewerUserId),
-        inArray(feedbackUserViews.feedbackId, feedbackIssueIds),
-      ),
-    );
-}
-
 export function mapProjectRows(projectRows: readonly ProjectRow[]): OrfProject[] {
   return projectRows.map((project) => ({
     id: project.id,
@@ -118,130 +51,20 @@ export function mapProjectRows(projectRows: readonly ProjectRow[]): OrfProject[]
   }));
 }
 
-export function mapFeedbackIssueRows(input: {
-  activityRows: readonly FeedbackActivityRow[];
-  causeRows: readonly FeedbackCauseRow[];
-  feedbackRows: readonly FeedbackRow[];
-  relationRows: readonly FeedbackRelationRow[];
-  reportAttachmentRows: readonly FeedbackReportAttachmentRow[];
-  userViewRows: readonly FeedbackUserViewRow[];
-  viewer: OrfUser | null;
-  viewerUserId?: string | null;
-}): Feedback[] {
-  const causeCategoriesByFeedback = new Map<string, string[]>();
-  for (const item of [...input.causeRows].sort((left, right) => left.sortOrder - right.sortOrder)) {
-    const list = causeCategoriesByFeedback.get(item.feedbackId) ?? [];
-    list.push(item.category);
-    causeCategoriesByFeedback.set(item.feedbackId, list);
-  }
-
-  const activityByFeedback = new Map<string, Feedback["activity"]>();
-  const lastActivitySequenceByFeedback = new Map<string, number>();
-  const lastActivityActorByFeedback = new Map<string, string | null>();
-  const lastOtherActivitySequenceByFeedback = new Map<string, number>();
-  const viewerUserId = input.viewerUserId?.trim() || null;
-  for (const item of [...input.activityRows].sort((left, right) => left.sequence - right.sequence || left.createdAt.localeCompare(right.createdAt))) {
-    const list = activityByFeedback.get(item.feedbackId) ?? [];
-    list.push({
-      id: item.id,
-      actorUserId: item.actorUserId,
-      activityType: item.activityType,
-      payload: item.payload,
-      sequence: item.sequence,
-      at: item.createdAt,
-    });
-    activityByFeedback.set(item.feedbackId, list);
-    const currentLastSequence = lastActivitySequenceByFeedback.get(item.feedbackId) ?? 0;
-    if (item.sequence >= currentLastSequence) {
-      lastActivitySequenceByFeedback.set(item.feedbackId, item.sequence);
-      lastActivityActorByFeedback.set(item.feedbackId, item.actorUserId ?? null);
-    }
-    if (viewerUserId && item.actorUserId !== viewerUserId) {
-      lastOtherActivitySequenceByFeedback.set(
-        item.feedbackId,
-        Math.max(lastOtherActivitySequenceByFeedback.get(item.feedbackId) ?? 0, item.sequence),
-      );
-    }
-  }
-
-  const lastSeenSequenceByFeedback = new Map(input.userViewRows.map((row) => [row.feedbackId, row.lastSeenSequence]));
-  const reportAttachmentsByFeedback = new Map<string, Feedback["reportAttachments"]>();
-  for (const item of [...input.reportAttachmentRows].sort((left, right) => left.sortOrder - right.sortOrder || left.createdAt.localeCompare(right.createdAt))) {
-    const list = reportAttachmentsByFeedback.get(item.feedbackId) ?? [];
-    list.push(feedbackReportAttachmentDto(item));
-    reportAttachmentsByFeedback.set(item.feedbackId, list);
-  }
-
-  const relationsByFeedback = new Map<string, Feedback["relations"]>();
-  for (const item of [...input.relationRows].sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
-    const relation = {
-      id: item.id,
-      type: item.type,
-      sourceFeedbackId: item.sourceFeedbackId,
-      targetFeedbackId: item.targetFeedbackId,
-      createdBy: optional(item.createdBy),
-      createdAt: item.createdAt,
-    };
-    for (const feedbackId of [item.sourceFeedbackId, item.targetFeedbackId]) {
-      const list = relationsByFeedback.get(feedbackId) ?? [];
-      list.push(relation);
-      relationsByFeedback.set(feedbackId, list);
-    }
-  }
-
-  return input.feedbackRows.map((item) => ({
-    id: item.id,
-    capabilities: deriveReadModelFeedbackCapabilities(item, input.viewer),
-    projectId: item.projectId,
-    title: item.title,
-    description: item.description,
-    reportAttachments: reportAttachmentsByFeedback.get(item.id) ?? [],
-    causeCategories: causeCategoriesByFeedback.get(item.id) ?? [],
-    impact: item.impact,
-    priority: item.priority,
-    stage: item.stage,
-    resolution: item.resolution,
-    assigneeUserId: item.assigneeUserId,
-    createdBy: item.createdBy,
-    updatedBy: item.updatedBy,
-    version: item.version,
-    closedAt: item.closedAt,
-    closedByUserId: item.closedByUserId,
-    lastActivityByUserId: lastActivityActorByFeedback.get(item.id) ?? null,
-    lastActivitySequence: lastActivitySequenceByFeedback.get(item.id) ?? 0,
-    lastSeenSequence: lastSeenSequenceByFeedback.get(item.id) ?? 0,
-    requiresAction: feedbackRequiresAction(item, viewerUserId),
-    unread: viewerUserId ? (lastOtherActivitySequenceByFeedback.get(item.id) ?? 0) > (lastSeenSequenceByFeedback.get(item.id) ?? 0) : false,
-    createdAt: item.createdAt,
-    updatedAt: item.updatedAt,
-    activity: activityByFeedback.get(item.id) ?? [],
-    relations: relationsByFeedback.get(item.id) ?? [],
-  }));
-}
-
 export async function getFeedbackIssueReadModelData(scope: FeedbackIssueReadModelScope): Promise<FeedbackIssueReadModelData> {
   const storageScopeId = feedbackReadModelStorageId(scope);
-  const [feedbackRows, projectRows, users] = await Promise.all([
-    getFeedbackRows(storageScopeId),
+  const [projectRows, users] = await Promise.all([
     db.select().from(projects).where(eq(projects.teamId, storageScopeId)).orderBy(desc(projects.createdAt), desc(projects.id)),
     getScopedUsers(scope.scope),
   ]);
-  const feedbackIds = feedbackRows.map((item) => item.id);
-  const [
-    causeRows,
-    activityRows,
-    relationRows,
-    reportAttachmentRows,
-    userViewRows,
-    [commentThreadRows, commentMessageRows, commentAttachmentRows],
-  ] = await Promise.all([
-    getFeedbackCauseRows(feedbackIds),
-    getFeedbackActivityRows(feedbackIds),
-    getFeedbackRelationRows(feedbackIds),
-    getFeedbackReportAttachmentRows(feedbackIds),
-    getFeedbackUserViewRows(storageScopeId, feedbackIds, scope.viewerUserId),
-    getFeedbackCommentRows(storageScopeId, feedbackIds),
-  ]);
+  const feedback = await getFeedbackReadModelIssues(db, {
+    teamId: storageScopeId,
+    viewer: feedbackReadModelViewer(users, scope.viewerUserId),
+  });
+  const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getFeedbackCommentRows(
+    storageScopeId,
+    feedback.map((item) => item.id),
+  );
 
   return {
     comments: await mapCommentThreadRows({
@@ -249,16 +72,7 @@ export async function getFeedbackIssueReadModelData(scope: FeedbackIssueReadMode
       messageRows: commentMessageRows,
       threadRows: commentThreadRows,
     }),
-    feedback: mapFeedbackIssueRows({
-      activityRows,
-      causeRows,
-      feedbackRows,
-      relationRows,
-      reportAttachmentRows,
-      userViewRows,
-      viewer: feedbackReadModelViewer(users, scope.viewerUserId),
-      viewerUserId: scope.viewerUserId,
-    }),
+    feedback,
     projects: mapProjectRows(projectRows),
     users,
   };
@@ -266,31 +80,19 @@ export async function getFeedbackIssueReadModelData(scope: FeedbackIssueReadMode
 
 export async function getFeedbackIssueDetailReadModelData(feedbackId: string, scope: FeedbackIssueReadModelScope): Promise<FeedbackIssueReadModelData | null> {
   const storageScopeId = feedbackReadModelStorageId(scope);
-  const [feedbackRows, projectRows, users] = await Promise.all([
-    getFeedbackRows(storageScopeId),
+  const [projectRows, users] = await Promise.all([
     db.select().from(projects).where(eq(projects.teamId, storageScopeId)).orderBy(desc(projects.createdAt), desc(projects.id)),
     getScopedUsers(scope.scope),
   ]);
-  if (!feedbackRows.some((item) => item.id === feedbackId)) {
+  const feedback = await getFeedbackReadModelIssues(db, {
+    teamId: storageScopeId,
+    viewer: feedbackReadModelViewer(users, scope.viewerUserId),
+  });
+  if (!feedback.some((item) => item.id === feedbackId)) {
     return null;
   }
 
-  const feedbackIds = feedbackRows.map((item) => item.id);
-  const [
-    causeRows,
-    activityRows,
-    relationRows,
-    reportAttachmentRows,
-    userViewRows,
-    [commentThreadRows, commentMessageRows, commentAttachmentRows],
-  ] = await Promise.all([
-    getFeedbackCauseRows(feedbackIds),
-    getFeedbackActivityRows(feedbackIds),
-    getFeedbackRelationRows(feedbackIds),
-    getFeedbackReportAttachmentRows(feedbackIds),
-    getFeedbackUserViewRows(storageScopeId, feedbackIds, scope.viewerUserId),
-    getFeedbackCommentRows(storageScopeId, [feedbackId]),
-  ]);
+  const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getFeedbackCommentRows(storageScopeId, [feedbackId]);
 
   return {
     comments: await mapCommentThreadRows({
@@ -298,16 +100,7 @@ export async function getFeedbackIssueDetailReadModelData(feedbackId: string, sc
       messageRows: commentMessageRows,
       threadRows: commentThreadRows,
     }),
-    feedback: mapFeedbackIssueRows({
-      activityRows,
-      causeRows,
-      feedbackRows,
-      relationRows,
-      reportAttachmentRows,
-      userViewRows,
-      viewer: feedbackReadModelViewer(users, scope.viewerUserId),
-      viewerUserId: scope.viewerUserId,
-    }),
+    feedback,
     projects: mapProjectRows(projectRows),
     users,
   };
@@ -386,61 +179,13 @@ async function mapCommentThreadRows(input: {
     }));
 }
 
-function feedbackRequiresAction(item: FeedbackRow, viewerUserId: string | null) {
-  if (!viewerUserId) return false;
-  if ((item.stage === "open" || item.stage === "in_progress") && item.assigneeUserId === viewerUserId) return true;
-  if (item.stage === "pending_verification" && item.createdBy === viewerUserId) return true;
-  return false;
-}
-
-function feedbackReadModelViewer(users: readonly OrfUser[], viewerUserId: string | null | undefined) {
+function feedbackReadModelViewer(users: readonly OrfUser[], viewerUserId: string | null | undefined): FeedbackReadModelViewer | null {
   const normalizedViewerUserId = viewerUserId?.trim();
   if (!normalizedViewerUserId) return null;
-  return users.find((user) => user.id === normalizedViewerUserId) ?? null;
-}
-
-function deriveReadModelFeedbackCapabilities(item: FeedbackRow, viewer: OrfUser | null): Feedback["capabilities"] {
-  if (!viewer) return emptyFeedbackCapabilities();
-  return deriveFeedbackCapabilities({
-    actor: feedbackReadModelActor(viewer, item.teamId),
-    feedback: {
-      id: item.id,
-      assigneeUserId: item.assigneeUserId,
-      closedAt: item.closedAt,
-      closedByUserId: item.closedByUserId,
-      createdByUserId: item.createdBy,
-      impact: item.impact,
-      priority: item.priority,
-      projectId: item.projectId,
-      resolution: item.resolution,
-      stage: item.stage,
-      teamId: item.teamId,
-      version: item.version,
-    },
-  });
-}
-
-function feedbackReadModelActor(user: OrfUser, teamId: string): FeedbackActorSnapshot {
-  return {
+  const user = users.find((item) => item.id === normalizedViewerUserId);
+  return user ? {
     id: user.id,
     role: user.role,
     status: user.status === "active" ? "active" : "inactive",
-    teamId,
-  };
-}
-
-function emptyFeedbackCapabilities(): Feedback["capabilities"] {
-  return {
-    canAcceptVerification: false,
-    canChangeAssignee: false,
-    canEditReport: false,
-    canImportExport: false,
-    canRejectVerification: false,
-    canReopen: false,
-    canSetPriority: false,
-    canStart: false,
-    canSubmitVerification: false,
-    canView: false,
-    canWithdraw: false,
-  };
+  } : null;
 }

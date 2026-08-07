@@ -32,6 +32,15 @@ export {
   type FeedbackReferenceDatabase,
 } from "../server/references";
 export {
+  getFeedbackReadModelIssues,
+  type FeedbackReadModelActivityItem,
+  type FeedbackReadModelDatabase,
+  type FeedbackReadModelIssue,
+  type FeedbackReadModelRelation,
+  type FeedbackReadModelReportAttachment,
+  type FeedbackReadModelViewer,
+} from "../server/readModel";
+export {
   getFeedbackAssignmentNotificationRecipients,
   getFeedbackOrdinaryNotificationRecipients,
   getFeedbackSubscriptionMode,
