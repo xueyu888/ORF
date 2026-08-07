@@ -54,13 +54,6 @@ import {
   optional,
 } from "./orfReadModelMappers";
 import {
-  getFeedbackActivityRows,
-  getFeedbackCauseRows,
-  getFeedbackRelationRows,
-  getFeedbackReportAttachmentRows,
-  getFeedbackRows,
-  getFeedbackUserViewRows,
-  mapFeedbackIssueRows,
   mapProjectRows,
 } from "./feedbackIssueReadModel";
 
@@ -171,11 +164,6 @@ export function userProfilesForTaskManagementData(
   for (const item of data.evidence) {
     addUserId(ids, item.ownerUserId);
   }
-  for (const item of data.feedback) {
-    addUserId(ids, item.assigneeUserId);
-    addUserId(ids, item.createdBy);
-    addUserId(ids, item.updatedBy);
-  }
   for (const item of data.objectiveLoot) {
     addUserId(ids, item.submittedByUserId);
   }
@@ -225,7 +213,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope): Pro
   const resultRows = await db.select().from(results).where(eq(results.teamId, storageScopeId));
   const taskRows = await db.select().from(tasks).where(eq(tasks.teamId, storageScopeId));
   const evidenceRows = await db.select().from(evidence).where(eq(evidence.teamId, storageScopeId));
-  const feedbackRows = await getFeedbackRows(storageScopeId);
   const objectiveLootRows = await db.select().from(objectiveLoot).where(eq(objectiveLoot.teamId, storageScopeId));
   const objectiveTrialReviewRows = await db.select().from(objectiveTrialReviews).where(eq(objectiveTrialReviews.teamId, storageScopeId));
   const objectiveAcceptanceReviewRows = await db.select().from(objectiveAcceptanceReviews).where(eq(objectiveAcceptanceReviews.teamId, storageScopeId));
@@ -234,14 +221,8 @@ export async function getTaskManagementData(scope: TaskManagementDataScope): Pro
   const pointLedgerRows = await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId));
   const resultIds = resultRows.map((result) => result.id);
   const taskIds = taskRows.map((task) => task.id);
-  const feedbackIssueIds = feedbackRows.map((item) => item.id);
   const trendRows = await getResultTrendRows(resultIds);
   const checklistRows = await getChecklistRows(taskIds);
-  const causeRows = await getFeedbackCauseRows(feedbackIssueIds);
-  const feedbackActivityRows = await getFeedbackActivityRows(feedbackIssueIds);
-  const feedbackRelationRows = await getFeedbackRelationRows(feedbackIssueIds);
-  const feedbackReportAttachmentRows = await getFeedbackReportAttachmentRows(feedbackIssueIds);
-  const feedbackUserViewRows = await getFeedbackUserViewRows(storageScopeId, feedbackIssueIds, scope.viewerUserId);
   const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows(scope);
   const { userNameById, userProfiles: scopeUserProfiles } = await getUserMapsForStorageScope(storageScopeId);
   const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
@@ -323,16 +304,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope): Pro
     linkedResultId: item.linkedResultId,
   }));
 
-  const feedbackItems = mapFeedbackIssueRows({
-    activityRows: feedbackActivityRows,
-    causeRows,
-    feedbackRows,
-    relationRows: feedbackRelationRows,
-    reportAttachmentRows: feedbackReportAttachmentRows,
-    userViewRows: feedbackUserViewRows,
-    viewerUserId: scope.viewerUserId,
-  });
-
   const resultItems: Result[] = mapResultRows({
     evidenceIdsByResult: groupEvidenceIdsByResult(evidenceRows),
     resultRows: orderedResultRows,
@@ -400,6 +371,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope): Pro
   const objectiveSettlementEventItems = mapObjectiveSettlementEventRows(objectiveSettlementEventRows);
   const pointLedgerItems = mapPointLedgerRows({ pointLedgerRows, userNameById });
   const commentItems: CommentThread[] = [...commentThreadRows]
+    .filter((thread) => thread.targetType !== "feedback")
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .map((thread) => ({
       id: thread.id,
@@ -419,7 +391,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope): Pro
     results: resultItems,
     tasks: taskItems,
     evidence: evidenceItems,
-    feedback: feedbackItems,
     comments: commentItems,
     objectiveLoot: objectiveLootItems,
     objectiveTrialReviews: objectiveTrialReviewItems,
@@ -491,7 +462,6 @@ export async function getOrfStateSnapshot(scope: TaskManagementDataScope): Promi
     scenarios: [],
     failureSamples: [],
     comments: data.comments,
-    causeCategories: Array.from(new Set(data.feedback.flatMap((item) => item.causeCategories))),
     rules: createDefaultOrfReadModelRules(),
   };
 }

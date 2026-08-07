@@ -3,7 +3,6 @@ import { createDefaultOrfReadModelRules } from "../domain/orfReadModel";
 import { objectiveStageForFlowStatus } from "../domain/orfLifecycle";
 import { uncertaintyScoreFor } from "../domain/orfSettlement";
 import { userDisplayProfilesFromUsers } from "../domain/userDisplayProfile";
-import { sortFeedbackIssuesByUpdatedAtDescending } from "../features/feedback/model/feedbackIssueOrdering";
 import type { ChallengeApplication, Objective, OrfProject, OrfState, Result, Task } from "../types/orf";
 import { addCalendarDays, localDateString } from "../utils/date";
 
@@ -19,7 +18,6 @@ export function loadEmptyOrfStateSnapshot(): OrfState {
     projects: [],
     objectives: [],
     results: [],
-    feedback: [],
     tasks: [],
     evidence: [],
     decisions: [],
@@ -33,7 +31,6 @@ export function loadEmptyOrfStateSnapshot(): OrfState {
     objectiveAlignmentRequests: [],
     objectiveSettlementEvents: [],
     pointLedger: [],
-    causeCategories: [],
     rules: createDefaultOrfReadModelRules(),
   };
 }
@@ -152,7 +149,6 @@ export function normalizeState(state: OrfState): OrfState {
     objectiveAlignmentRequests: state.objectiveAlignmentRequests ?? [],
     objectiveSettlementEvents: state.objectiveSettlementEvents ?? [],
     pointLedger: state.pointLedger ?? [],
-    feedback: sortFeedbackIssuesByUpdatedAtDescending(state.feedback ?? []),
     rules: { ...createDefaultOrfReadModelRules(), ...(state.rules ?? {}) },
   };
 }

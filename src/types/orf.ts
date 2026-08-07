@@ -1089,7 +1089,6 @@ export interface OrfState {
   projects: OrfProject[];
   objectives: Objective[];
   results: Result[];
-  feedback: Feedback[];
   tasks: Task[];
   evidence: Evidence[];
   decisions: Decision[];
@@ -1103,6 +1102,5 @@ export interface OrfState {
   objectiveAlignmentRequests: ObjectiveAlignmentRequest[];
   objectiveSettlementEvents: ObjectiveSettlementEvent[];
   pointLedger: PointLedgerEntry[];
-  causeCategories: string[];
   rules: OrfRules;
 }

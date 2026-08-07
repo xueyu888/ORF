@@ -31,7 +31,7 @@ import type { OrfUserDisplayProfile } from "../../src/types/orf";
 import { db } from "../db/client";
 import { publishNotificationEvent } from "../notifications/publisher";
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
-import { getOrfStateSnapshot } from "../readModels/orfTaskManagementReadModel";
+import { getFeedbackIssueDetailReadModelData } from "../readModels/feedbackIssueReadModel";
 import { commentThreads, projects } from "../db/schema";
 import { objectStorage } from "../storage/objectStorage";
 import {
@@ -357,8 +357,9 @@ async function notifyFeedbackAssigned(input: {
   }));
 }
 
-async function getFeedbackFromReadModel(feedbackId: string, scope: RuntimeScope) {
-  const data = await getOrfStateSnapshot({ scope });
+async function getFeedbackFromReadModel(feedbackId: string, scope: RuntimeScope, viewerUserId?: string | null) {
+  const data = await getFeedbackIssueDetailReadModelData(feedbackId, { scope, viewerUserId });
+  if (!data) return null;
   return data.feedback.find((entry) => entry.id === feedbackId) ?? null;
 }
 
@@ -531,7 +532,7 @@ export async function createFeedback(input: CreateFeedbackInput, actor: Feedback
     teamId,
   });
 
-  const item = await getFeedbackFromReadModel(id, runtimeScope(teamId));
+  const item = await getFeedbackFromReadModel(id, runtimeScope(teamId), actor.id);
   return item ? { status: "ok", feedback: item } : { status: "notFound" };
 }
 

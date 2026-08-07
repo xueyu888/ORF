@@ -17,7 +17,6 @@ export type TaskManagementData = Pick<
   | "results"
   | "tasks"
   | "evidence"
-  | "feedback"
   | "comments"
   | "objectiveLoot"
   | "objectiveTrialReviews"

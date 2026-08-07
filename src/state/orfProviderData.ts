@@ -65,7 +65,6 @@ export function mergeTaskManagementData(state: OrfState, data: TaskManagementDat
     results: data.results,
     tasks: data.tasks,
     evidence: data.evidence,
-    feedback: data.feedback,
     comments: data.comments ?? state.comments ?? [],
     objectiveLoot: data.objectiveLoot ?? state.objectiveLoot ?? [],
     objectiveTrialReviews: data.objectiveTrialReviews ?? state.objectiveTrialReviews ?? [],

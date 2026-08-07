@@ -190,7 +190,6 @@ export async function getBountyHallData(viewer: { id: string; name: string; role
 }
 
 function filterComments(data: TaskManagementData, ids: {
-  feedbackIssueIds: Set<string>;
   objectiveIds: Set<string>;
   resultIds: Set<string>;
   taskIds: Set<string>;
@@ -201,7 +200,6 @@ function filterComments(data: TaskManagementData, ids: {
     if (thread.targetType === "result") return ids.resultIds.has(thread.targetId);
     if (thread.targetType === "task") return ids.taskIds.has(thread.targetId);
     if (thread.targetType === "subtask") return ids.checklistItemIds.has(thread.targetId);
-    if (thread.targetType === "feedback") return ids.feedbackIssueIds.has(thread.targetId);
     return false;
   });
 }
@@ -238,10 +236,8 @@ export async function getMyChallengesData(memberUserId: string, includeAll: bool
   const tasksForMember = data.tasks.filter((task) => objectiveIds.has(task.linkedObjectiveId));
   const taskIds = new Set(tasksForMember.map((task) => task.id));
   const checklistItemIds = new Set(tasksForMember.flatMap((task) => task.checklist.map((item) => item.id)));
-  const feedbackIssueIds = new Set(data.feedback.map((item) => item.id));
   const projectIdsForMember = new Set([
     ...objectivesForMember.flatMap((objective) => objective.projectId ? [objective.projectId] : []),
-    ...data.feedback.flatMap((item) => item.projectId ? [item.projectId] : []),
   ]);
 
   const scopedData: TaskManagementData = {
@@ -251,8 +247,7 @@ export async function getMyChallengesData(memberUserId: string, includeAll: bool
     results: resultsForMember,
     tasks: tasksForMember,
     evidence: data.evidence.filter((item) => resultIds.has(item.linkedResultId)),
-    feedback: data.feedback,
-    comments: filterComments(data, { feedbackIssueIds, objectiveIds, resultIds, taskIds, checklistItemIds }),
+    comments: filterComments(data, { objectiveIds, resultIds, taskIds, checklistItemIds }),
     objectiveLoot: data.objectiveLoot.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveTrialReviews: data.objectiveTrialReviews.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveAcceptanceReviews: data.objectiveAcceptanceReviews.filter((item) => objectiveIds.has(item.objectiveId)),

@@ -4,7 +4,7 @@ import {
   objectiveParticipantSnapshot,
   userNameByIdMap,
 } from "../../domain/orfObjectiveParticipants";
-import type { ChallengeApplication, Evidence, Feedback, Objective, ObjectiveLoot, OrfProject, OrfState, Result, Task } from "../../types/orf";
+import type { ChallengeApplication, Evidence, Objective, ObjectiveLoot, OrfProject, OrfState, Result, Task } from "../../types/orf";
 import { addCalendarDays } from "../../utils/date";
 
 const USER_ALEX = "00000000-0000-4000-8000-000000000201";
@@ -48,11 +48,8 @@ type SeedResult = Omit<Result, "uncertaintyScore" | "executionCompleted" | "acce
     priorityDeclinedBy?: string[];
     challengeApplications?: ChallengeApplication[];
   };
-type FeedbackViewerProjectionFields = Pick<Feedback, "lastActivityByUserId" | "lastActivitySequence" | "lastSeenSequence" | "requiresAction" | "unread">;
-type SeedFeedback = Omit<Feedback, keyof FeedbackViewerProjectionFields> & Partial<FeedbackViewerProjectionFields>;
-type SeedInitialState = Omit<OrfState, "evidence" | "feedback" | "objectiveAcceptanceReviews" | "objectiveLoot" | "objectiveSettlementEvents" | "objectives" | "results" | "tasks" | "userProfiles"> & {
+type SeedInitialState = Omit<OrfState, "evidence" | "objectiveAcceptanceReviews" | "objectiveLoot" | "objectiveSettlementEvents" | "objectives" | "results" | "tasks" | "userProfiles"> & {
   evidence: Evidence[];
-  feedback: SeedFeedback[];
   objectiveAcceptanceReviews?: OrfState["objectiveAcceptanceReviews"];
   objectiveLoot: ObjectiveLoot[];
   objectiveSettlementEvents?: OrfState["objectiveSettlementEvents"];
@@ -186,26 +183,6 @@ function normalizeInitialState(state: SeedInitialState): OrfState {
       const ownerUserId = requiredSeedUserId(item.ownerUserId, `evidence ${item.id} owner`);
       return { ...item, owner: userNameById.get(ownerUserId) ?? item.owner, ownerUserId };
     }),
-    feedback: state.feedback.map((item) => {
-      const assigneeUserId = item.assigneeUserId ? requiredSeedUserId(item.assigneeUserId, `feedback ${item.id} assignee`) : null;
-      const normalizedItem = { ...item, assigneeUserId };
-      const latestActivity = latestFeedbackActivity(normalizedItem.activity);
-      const lastActivitySequence = normalizedItem.lastActivitySequence ?? latestActivity?.sequence ?? 0;
-      const lastActivityByUserId = normalizedItem.lastActivityByUserId ?? latestActivity?.actorUserId ?? normalizedItem.updatedBy ?? normalizedItem.createdBy ?? null;
-      const lastSeenSequence = normalizedItem.lastSeenSequence ?? 0;
-      const lastOtherActivitySequence = normalizedItem.activity.reduce((latest, activity) => {
-        if (activity.actorUserId === state.currentUserId) return latest;
-        return Math.max(latest, activity.sequence);
-      }, 0);
-      return {
-        ...normalizedItem,
-        lastActivityByUserId,
-        lastActivitySequence,
-        lastSeenSequence,
-        requiresAction: normalizedItem.requiresAction ?? seedFeedbackRequiresAction(normalizedItem, state.currentUserId),
-        unread: normalizedItem.unread ?? lastOtherActivitySequence > lastSeenSequence,
-      };
-    }),
     tasks: state.tasks.map((item) => {
       const assigneeUserId = requiredSeedUserId(item.assigneeUserId, `task ${item.id} assignee`);
       return { ...item, assignee: userNameById.get(assigneeUserId) ?? item.assignee, assigneeUserId };
@@ -220,19 +197,6 @@ function normalizeInitialState(state: SeedInitialState): OrfState {
     objectiveSettlementEvents: state.objectiveSettlementEvents ?? [],
     pointLedger: state.pointLedger ?? [],
   };
-}
-
-function latestFeedbackActivity(activity: Feedback["activity"]) {
-  return [...activity].sort((left, right) => {
-    if (left.sequence !== right.sequence) return left.sequence - right.sequence;
-    return left.at.localeCompare(right.at);
-  }).at(-1) ?? null;
-}
-
-function seedFeedbackRequiresAction(feedback: Pick<Feedback, "assigneeUserId" | "createdBy" | "stage">, viewerUserId: string | null) {
-  if (!viewerUserId) return false;
-  if (feedback.assigneeUserId === viewerUserId && (feedback.stage === "open" || feedback.stage === "in_progress")) return true;
-  return feedback.createdBy === viewerUserId && feedback.stage === "pending_verification";
 }
 
 const defaultPermissionRules: OrfState["permissionRules"] = [
@@ -262,20 +226,6 @@ const initialOrfStateSeed: SeedInitialState = {
     { id: "project-feedback-eval", name: "反馈与评估", createdAt: "2026-04-24", updatedAt: "2026-04-24" },
     { id: "project-cost-routing", name: "成本与路由", createdAt: "2026-04-24", updatedAt: "2026-04-24" },
     { id: "project-acceptance-demo", name: "验收演示", createdAt: "2026-04-24", updatedAt: "2026-04-24" },
-  ],
-  causeCategories: [
-    "需求缺口",
-    "Prompt 问题",
-    "检索问题",
-    "重排问题",
-    "知识缺口",
-    "模型能力边界",
-    "工具调用失败",
-    "权限问题",
-    "时延问题",
-    "成本问题",
-    "体验问题",
-    "评估缺口",
   ],
   objectives: [
     {
@@ -1313,82 +1263,6 @@ const initialOrfStateSeed: SeedInitialState = {
       owner: "Nora Patel",
       ownerUserId: USER_NORA,
       linkedResultId: "res-latency",
-    },
-  ],
-  feedback: [
-    {
-      id: "fb-permission-old-doc",
-      projectId: "project-feedback-eval",
-      title: "权限策略继承规则回答引用旧版本",
-      description: "用户问“权限策略继承规则”时，系统给出了旧版本答案。\n\n更新知识库元数据，增加文档版本过滤，补充回归用例。",
-      reportAttachments: [],
-      relations: [],
-      causeCategories: ["知识缺口", "检索问题"],
-      impact: "high",
-      priority: null,
-      stage: "open",
-      resolution: null,
-      assigneeUserId: USER_ALEX,
-      createdBy: USER_ALEX,
-      updatedBy: USER_MIA,
-      version: 2,
-      closedAt: null,
-      closedByUserId: null,
-      createdAt: "2026-04-23",
-      updatedAt: "2026-04-24",
-      activity: [
-        { id: "act-1", actorUserId: USER_ALEX, activityType: "feedback.created", payload: {}, sequence: 1, at: "2026-04-23T10:12:00.000Z" },
-        { id: "act-2", actorUserId: USER_MIA, activityType: "feedback.metadata.changed", payload: { changedFields: ["causeCategories"] }, sequence: 2, at: "2026-04-24T09:30:00.000Z" },
-      ],
-    },
-    {
-      id: "fb-ticket-duplicate",
-      projectId: "project-ai-delivery",
-      title: "Agent 重复提交工单系统 API",
-      description: "Agent 在调用工单系统 API 时经常重复提交。\n\n增加幂等键，工具调用前增加状态确认步骤。",
-      reportAttachments: [],
-      relations: [],
-      causeCategories: ["工具调用失败", "Prompt 问题"],
-      impact: "high",
-      priority: null,
-      stage: "in_progress",
-      resolution: null,
-      assigneeUserId: USER_ETHAN,
-      createdBy: USER_ETHAN,
-      updatedBy: USER_ALEX,
-      version: 2,
-      closedAt: null,
-      closedByUserId: null,
-      createdAt: "2026-04-22",
-      updatedAt: "2026-04-24",
-      activity: [
-        { id: "act-3", actorUserId: USER_ETHAN, activityType: "feedback.created", payload: {}, sequence: 3, at: "2026-04-22T16:50:00.000Z" },
-        { id: "act-4", actorUserId: USER_ALEX, activityType: "feedback.lifecycle.changed", payload: { nextStage: "in_progress" }, sequence: 4, at: "2026-04-23T11:15:00.000Z" },
-      ],
-    },
-    {
-      id: "fb-cost-latency",
-      projectId: "project-cost-routing",
-      title: "模型部署成本追问延迟超过 8 秒",
-      description: "用户对“模型部署成本”追问时，回答延迟超过 8 秒。\n\n引入缓存，拆分长上下文，增加成本感知路由。",
-      reportAttachments: [],
-      relations: [],
-      causeCategories: ["时延问题", "成本问题"],
-      impact: "medium",
-      priority: null,
-      stage: "open",
-      resolution: null,
-      assigneeUserId: USER_NORA,
-      createdBy: USER_NORA,
-      updatedBy: USER_NORA,
-      version: 1,
-      closedAt: null,
-      closedByUserId: null,
-      createdAt: "2026-04-20",
-      updatedAt: "2026-04-20",
-      activity: [
-        { id: "act-5", actorUserId: USER_NORA, activityType: "feedback.created", payload: {}, sequence: 5, at: "2026-04-20T17:20:00.000Z" },
-      ],
     },
   ],
   tasks: [
