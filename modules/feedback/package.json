@@ -6,6 +6,7 @@
   "sideEffects": false,
   "exports": {
     "./contracts": "./src/public/contracts.ts",
+    "./server": "./src/public/server.ts",
     "./testing": "./src/public/testing.ts"
   },
   "dependencies": {
