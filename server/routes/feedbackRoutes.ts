@@ -17,6 +17,7 @@ import {
   addFeedbackRelation,
   createFeedback,
   getFeedbackReferences,
+  listFeedbackReferences,
   searchFeedbackReferences,
   getFeedbackReportAttachmentContent,
   listFeedbackAssigneeOptions,
@@ -83,7 +84,7 @@ const updateFeedbackSubscriptionBodySchema = z.object({
 const feedbackReferencesQuerySchema = z.object({
   id: z.union([z.string(), z.array(z.string())]).optional(),
   ids: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(50).optional(),
+  limit: z.coerce.number().int().min(1).max(120).optional(),
   q: z.string().trim().optional(),
 });
 
@@ -239,9 +240,10 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
     const query = parseFeedbackReferenceQuery(request.query);
     const byId = await getFeedbackReferences(query.ids, context.scope);
     const bySearch = query.q ? await searchFeedbackReferences(query.q, context.scope, query.limit) : [];
+    const byRecent = query.ids.length === 0 && !query.q ? await listFeedbackReferences(context.scope, query.limit) : [];
     const seen = new Set<string>();
     return {
-      feedback: [...byId, ...bySearch].filter((item) => {
+      feedback: [...byId, ...bySearch, ...byRecent].filter((item) => {
         if (seen.has(item.id)) return false;
         seen.add(item.id);
         return true;

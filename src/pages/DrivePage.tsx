@@ -16,6 +16,8 @@ import {
   uploadDriveRequest,
   uploadDriveFileVersionRequest,
   type ApiUploadProgress,
+  type FeedbackReferenceSummary,
+  listFeedbackReferences,
 } from "../state/apiClient";
 import { driveBootstrapSnapshot, invalidateDriveBootstrap, loadDriveBootstrap } from "../state/readModelQueries";
 import { useOrf } from "../state/OrfProvider";
@@ -27,6 +29,7 @@ export function DrivePage() {
   const location = useLocation();
   const { nodeId } = useParams<{ nodeId?: string }>();
   const [bootstrap, setBootstrap] = useState<DriveBootstrap | null>(() => driveBootstrapSnapshot()?.drive ?? null);
+  const [feedbackReferences, setFeedbackReferences] = useState<FeedbackReferenceSummary[]>([]);
   const [loading, setLoading] = useState(() => driveBootstrapSnapshot() === undefined);
   const requestIdRef = useRef(0);
   const previewRoute = /^\/resources\/[^/]+\/preview\/?$/.test(location.pathname);
@@ -35,8 +38,8 @@ export function DrivePage() {
     ...state.objectives.slice(0, 120).map((objective) => ({ id: objective.id, title: objective.title, type: "objective" as const })),
     ...state.results.slice(0, 120).map((result) => ({ id: result.id, title: result.title, type: "result" as const })),
     ...state.tasks.slice(0, 120).map((task) => ({ id: task.id, title: task.title, type: "task" as const })),
-    ...state.feedback.slice(0, 120).map((feedback) => ({ id: feedback.id, title: feedback.title, type: "feedback" as const })),
-  ], [state.feedback, state.objectives, state.projects, state.results, state.tasks]);
+    ...feedbackReferences.map((feedback) => ({ id: feedback.id, title: feedback.title, type: "feedback" as const })),
+  ], [feedbackReferences, state.objectives, state.projects, state.results, state.tasks]);
   const resourceHref = useCallback((resourceNodeId: string) => {
     const suffix = previewRoute ? "/preview" : "";
     return `${window.location.origin}/resources/${encodeURIComponent(resourceNodeId)}${suffix}`;
@@ -73,6 +76,26 @@ export function DrivePage() {
   useEffect(() => {
     void loadDrive(false);
   }, [loadDrive]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setFeedbackReferences([]);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    void listFeedbackReferences({ limit: 120, signal: controller.signal })
+      .then((response) => setFeedbackReferences(response.feedback))
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setFeedbackReferences([]);
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [currentUser]);
 
   return (
     <PageScaffold title="资源" subtitle="团队文件、文件夹、搜索和预览。">

@@ -1170,6 +1170,21 @@ export async function getFeedbackReferences(feedbackIds: readonly string[], scop
   return rows.sort((left, right) => (sortOrder.get(left.id) ?? 0) - (sortOrder.get(right.id) ?? 0));
 }
 
+export async function listFeedbackReferences(scope: RuntimeScope, limit = 20): Promise<FeedbackReference[]> {
+  const teamId = runtimeScopeStorageId(scope);
+  if (!teamId) return [];
+
+  return db
+    .select({
+      id: feedback.id,
+      title: feedback.title,
+    })
+    .from(feedback)
+    .where(eq(feedback.teamId, teamId))
+    .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), feedback.id)
+    .limit(Math.max(1, Math.min(120, limit)));
+}
+
 export async function searchFeedbackReferences(query: string, scope: RuntimeScope, limit = 20): Promise<FeedbackReference[]> {
   const teamId = runtimeScopeStorageId(scope);
   const normalizedQuery = query.trim();
@@ -1191,7 +1206,7 @@ export async function searchFeedbackReferences(query: string, scope: RuntimeScop
       ),
     ))
     .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), feedback.id)
-    .limit(Math.max(1, Math.min(50, limit)));
+    .limit(Math.max(1, Math.min(120, limit)));
 }
 
 export async function getFeedbackReportAttachmentContent(

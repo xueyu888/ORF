@@ -677,6 +677,15 @@ export async function searchFeedbackReferences(queryText: string, options: { lim
   return apiJson<FeedbackReferencesResponse>(`/api/feedback/references?${query.toString()}`, { signal: options.signal });
 }
 
+export async function listFeedbackReferences(options: { limit?: number; signal?: AbortSignal } = {}) {
+  const query = new URLSearchParams();
+  if (options.limit) {
+    query.set("limit", String(options.limit));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiJson<FeedbackReferencesResponse>(`/api/feedback/references${suffix}`, { signal: options.signal });
+}
+
 export async function getFeedbackIssueReadModel() {
   return apiJson<FeedbackIssueReadModelData>("/api/feedback/issues");
 }
