@@ -59,6 +59,7 @@ import {
   archiveChatChannelRequest,
   createChatChannel,
   deleteChatMessageRequest,
+  type FeedbackReferenceSummary,
   getFeedbackReferences,
   markChatChannelReadRequest,
   openChatConversation,
@@ -84,7 +85,6 @@ import {
   type ChatThread,
   type ChatThreadSummary,
   type ChatUser,
-  type Feedback,
 } from "../types/orf";
 
 const chatFeedPrefetchDelayMs = 250;
@@ -140,7 +140,7 @@ function mentionableUsersForChannel(channel: ChatChannel | null, users: ChatUser
   return allUsers.filter((user) => memberIds.has(user.id));
 }
 
-type FeedbackReference = Pick<Feedback, "id" | "title">;
+type FeedbackReference = FeedbackReferenceSummary;
 
 function addFeedbackIdsFromMessage(ids: Set<string>, message: ChatMessage | null | undefined) {
   if (!message?.body) return;
@@ -596,8 +596,8 @@ export function ChatPage() {
   }, [collectionResults, messages, searchResults, thread, threadSummaries]);
   const visibleFeedbackReferenceKey = visibleFeedbackReferenceIds.join("\n");
   const feedbackLinkItems = useMemo(
-    () => mergeFeedbackReferences(feedbackReferences, state.feedback),
-    [feedbackReferences, state.feedback],
+    () => mergeFeedbackReferences(feedbackReferences),
+    [feedbackReferences],
   );
   const feedbackLinkItemsById = useMemo(
     () => new Map(feedbackLinkItems.map((item) => [item.id, item])),
