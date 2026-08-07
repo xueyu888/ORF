@@ -10,7 +10,7 @@ export type RealtimeEventKind =
   | "worklog.reminder.resolved";
 
 export type SystemBroadcastTone = "bounty" | "clientUpdate";
-export type OrfReadModel = "taskManagement" | "bountyHall" | "users" | "permissions" | "notifications" | "settings" | "workLogs";
+export type OrfReadModel = "taskManagement" | "bountyHall" | "feedback" | "users" | "permissions" | "notifications" | "settings" | "workLogs";
 export type OrfReadModelInvalidationReason =
   | "objective.created"
   | "objective.changed"

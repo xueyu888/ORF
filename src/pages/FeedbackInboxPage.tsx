@@ -25,6 +25,7 @@ import {
   readStoredFeedbackIssueListFilterParams,
 } from "../features/feedback/model/feedbackIssueListViewState";
 import { useFeedbackIssueReadModel } from "../features/feedback/useFeedbackIssueReadModel";
+import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { getProjectChatChannels, getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import type { ProjectChatChannel } from "../types/orf";
@@ -33,8 +34,12 @@ import { feedbackImpactLabel } from "../utils/labels";
 export function FeedbackInboxPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { currentUser } = useOrf();
-  const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser));
+  const { currentUser, readModelInvalidations } = useOrf();
+  const feedbackInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "feedback"),
+    [readModelInvalidations],
+  );
+  const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser), feedbackInvalidationKey);
   const feedbackData = feedbackReadModel.data;
   const currentUserId = currentUser?.id ?? null;
   const suppressNextPreferenceRestoreRef = useRef(false);

@@ -18,6 +18,7 @@ import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCat
 import { feedbackIssueHref } from "../features/feedback/model/feedbackIssue";
 import { useFeedbackAssigneeOptions } from "../features/feedback/useFeedbackAssigneeOptions";
 import { useFeedbackIssueReadModel } from "../features/feedback/useFeedbackIssueReadModel";
+import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { validOrfRichTextDraftAttachments } from "../features/rich-text/orfRichTextDraft";
 import { useOrf } from "../state/OrfProvider";
 import { businessMutationFailureMessage } from "../state/orfProviderMutationMessages";
@@ -35,8 +36,9 @@ type PendingFeedbackAttachment = {
 export function FeedbackCreatePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { currentUser, notify } = useOrf();
-  const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser));
+  const { currentUser, notify, readModelInvalidations } = useOrf();
+  const feedbackInvalidationKey = readModelInvalidationKey(readModelInvalidations, "feedback");
+  const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser), feedbackInvalidationKey);
   const feedbackData = feedbackReadModel.data;
   const canCreateFeedback = canCreateTeamFeedback(currentUser);
   const causeOptions = teamFeedbackCauseOptions();

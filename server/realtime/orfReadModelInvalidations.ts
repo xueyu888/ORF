@@ -1,6 +1,6 @@
 import { publishRealtimeReadModelInvalidation } from "./realtimeEventBus";
 
-export type OrfReadModelName = "taskManagement" | "bountyHall";
+export type OrfReadModelName = "taskManagement" | "bountyHall" | "feedback";
 export type OrfDataInvalidationReason =
   | "objective.created"
   | "objective.changed"

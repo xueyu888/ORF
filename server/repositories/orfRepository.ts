@@ -2962,7 +2962,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
 
   publishOrfDataInvalidation({
     actorUserId: actor.id,
-    models: ["taskManagement"],
+    models: [input.targetType === "feedback" ? "feedback" : "taskManagement"],
     reason: "comment.changed",
     target: { id: createdComment.threadId, type: "comment" },
     teamId: target.storageScopeId,

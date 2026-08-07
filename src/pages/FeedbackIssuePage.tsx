@@ -66,6 +66,7 @@ import {
 } from "../features/feedback/model/feedbackIssueMetadata";
 import { useFeedbackAssigneeOptions } from "../features/feedback/useFeedbackAssigneeOptions";
 import { useFeedbackIssueDetailReadModel } from "../features/feedback/useFeedbackIssueReadModel";
+import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import type { OrfRichTextAttachmentUploadResult } from "../features/rich-text/OrfRichTextEditor";
 import { getFeedbackSubscription, updateFeedbackSubscription } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
@@ -99,11 +100,16 @@ export function FeedbackIssuePage() {
     currentUser,
     loadCommentMentionableUsers,
     notify,
+    readModelInvalidations,
     state,
     updateCommentMessage,
     uploadCommentAttachment,
   } = useOrf();
-  const feedbackReadModel = useFeedbackIssueDetailReadModel(feedbackId, Boolean(currentUser && feedbackId));
+  const feedbackInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "feedback"),
+    [readModelInvalidations],
+  );
+  const feedbackReadModel = useFeedbackIssueDetailReadModel(feedbackId, Boolean(currentUser && feedbackId), feedbackInvalidationKey);
   const feedbackData = feedbackReadModel.data;
   const feedbackItems = feedbackData.feedback;
   const users = feedbackData.users;

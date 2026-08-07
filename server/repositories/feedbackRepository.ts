@@ -363,6 +363,20 @@ async function getFeedbackFromReadModel(feedbackId: string, scope: RuntimeScope,
   return data.feedback.find((entry) => entry.id === feedbackId) ?? null;
 }
 
+function publishFeedbackReadModelInvalidation(input: {
+  actorUserId?: string | null;
+  feedbackId: string;
+  teamId: string;
+}) {
+  publishOrfDataInvalidation({
+    actorUserId: input.actorUserId,
+    models: ["feedback"],
+    reason: "feedback.changed",
+    target: { id: input.feedbackId, type: "feedback" },
+    teamId: input.teamId,
+  });
+}
+
 type FeedbackWriteClient = Pick<typeof db, "insert">;
 
 async function insertFeedbackParticipants(input: {
@@ -524,13 +538,7 @@ export async function createFeedback(input: CreateFeedbackInput, actor: Feedback
     title,
   });
 
-  publishOrfDataInvalidation({
-    actorUserId: actor.id,
-    models: ["taskManagement"],
-    reason: "feedback.changed",
-    target: { id, type: "feedback" },
-    teamId,
-  });
+  publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId: id, teamId });
 
   const item = await getFeedbackFromReadModel(id, runtimeScope(teamId), actor.id);
   return item ? { status: "ok", feedback: item } : { status: "notFound" };
@@ -659,13 +667,7 @@ export async function updateFeedbackMetadata(
   });
 
   if (result.status === "ok" && result.changed) {
-    publishOrfDataInvalidation({
-      actorUserId: actor.id,
-      models: ["taskManagement"],
-      reason: "feedback.changed",
-      target: { id: feedbackId, type: "feedback" },
-      teamId,
-    });
+    publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
   }
   return result;
 }
@@ -750,13 +752,7 @@ export async function updateFeedbackAssignee(
       teamId,
       title: result.title ?? "",
     });
-    publishOrfDataInvalidation({
-      actorUserId: actor.id,
-      models: ["taskManagement"],
-      reason: "feedback.changed",
-      target: { id: feedbackId, type: "feedback" },
-      teamId,
-    });
+    publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
   }
   return { status: "ok", changed: result.changed };
 }
@@ -874,13 +870,7 @@ export async function transitionFeedback(
       teamId,
       title: result.title ?? "",
     });
-    publishOrfDataInvalidation({
-      actorUserId: actor.id,
-      models: ["taskManagement"],
-      reason: "feedback.changed",
-      target: { id: feedbackId, type: "feedback" },
-      teamId,
-    });
+    publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
   }
   return { status: "ok", changed: result.changed };
 }
@@ -978,13 +968,7 @@ export async function addFeedbackRelation(
   });
 
   if (result.status === "ok" && result.changed) {
-    publishOrfDataInvalidation({
-      actorUserId: actor.id,
-      models: ["taskManagement"],
-      reason: "feedback.changed",
-      target: { id: feedbackId, type: "feedback" },
-      teamId,
-    });
+    publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
   }
   return result;
 }
@@ -1075,13 +1059,7 @@ export async function removeFeedbackRelation(
   });
 
   if (result.status === "ok" && result.changed) {
-    publishOrfDataInvalidation({
-      actorUserId: actor.id,
-      models: ["taskManagement"],
-      reason: "feedback.changed",
-      target: { id: feedbackId, type: "feedback" },
-      teamId,
-    });
+    publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
   }
   return result;
 }
@@ -1144,13 +1122,7 @@ export async function markFeedbackViewed(
       },
     });
 
-  publishOrfDataInvalidation({
-    actorUserId: actor.id,
-    models: ["taskManagement"],
-    reason: "feedback.changed",
-    target: { id: feedbackId, type: "feedback" },
-    teamId,
-  });
+  publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
   return { status: "ok", changed: true };
 }
 

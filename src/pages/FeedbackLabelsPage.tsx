@@ -8,11 +8,16 @@ import {
   type FeedbackIssueLabelIndexSortKey,
 } from "../features/feedback/model/feedbackIssueMetadata";
 import { useFeedbackIssueReadModel } from "../features/feedback/useFeedbackIssueReadModel";
+import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useOrf } from "../state/OrfProvider";
 
 export function FeedbackLabelsPage() {
-  const { currentUser } = useOrf();
-  const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser));
+  const { currentUser, readModelInvalidations } = useOrf();
+  const feedbackInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "feedback"),
+    [readModelInvalidations],
+  );
+  const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser), feedbackInvalidationKey);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<FeedbackIssueLabelIndexSortKey>("name-asc");
   const visibleFeedback = useMemo(

@@ -12,19 +12,20 @@ type FeedbackIssueReadModelHookState = {
   reload: () => Promise<void>;
 };
 
-export function useFeedbackIssueReadModel(enabled = true): FeedbackIssueReadModelHookState {
+export function useFeedbackIssueReadModel(enabled = true, reloadKey = ""): FeedbackIssueReadModelHookState {
   const load = useCallback(() => getFeedbackIssueReadModel(), []);
-  return useFeedbackIssueReadModelLoader(load, enabled);
+  return useFeedbackIssueReadModelLoader(load, enabled, reloadKey);
 }
 
-export function useFeedbackIssueDetailReadModel(feedbackId: string, enabled = true): FeedbackIssueReadModelHookState {
+export function useFeedbackIssueDetailReadModel(feedbackId: string, enabled = true, reloadKey = ""): FeedbackIssueReadModelHookState {
   const load = useCallback(() => getFeedbackIssueDetailReadModel(feedbackId), [feedbackId]);
-  return useFeedbackIssueReadModelLoader(load, enabled && Boolean(feedbackId.trim()));
+  return useFeedbackIssueReadModelLoader(load, enabled && Boolean(feedbackId.trim()), reloadKey);
 }
 
 function useFeedbackIssueReadModelLoader(
   load: () => Promise<FeedbackIssueReadModelData>,
   enabled: boolean,
+  reloadKey: string,
 ): FeedbackIssueReadModelHookState {
   const [data, setData] = useState<FeedbackIssueReadModelData>(emptyFeedbackIssueReadModelData);
   const [loading, setLoading] = useState(false);
@@ -60,7 +61,7 @@ function useFeedbackIssueReadModelLoader(
 
   useEffect(() => {
     void reload();
-  }, [reload]);
+  }, [reload, reloadKey]);
 
   return { data, error, loading, reload };
 }
