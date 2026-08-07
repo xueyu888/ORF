@@ -3,14 +3,6 @@
     {
       "file": "server/db/client.ts",
       "specifier": "../../modules/feedback/src/infrastructure/database/schema"
-    },
-    {
-      "file": "server/repositories/feedbackRepository.ts",
-      "specifier": "../../modules/feedback/src/domain"
-    },
-    {
-      "file": "server/repositories/feedbackRepository.ts",
-      "specifier": "../../modules/feedback/src/infrastructure/database/schema"
     }
   ]
 }

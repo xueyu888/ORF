@@ -1,17 +1,18 @@
-import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   planFeedbackAssigneeChangedNotification,
   planFeedbackCreatedNotification,
   planFeedbackLifecycleChangedNotification,
-  type FeedbackActivityType,
   type FeedbackImpact,
   type FeedbackPriority,
   type FeedbackRelationType,
   type FeedbackTransitionInput,
 } from "@orf/feedback-module/contracts";
 import {
+  addFeedbackIssueRelation,
+  createFeedbackDraft,
+  createFeedbackIssue,
   feedbackReportAttachmentResponseContentType,
   getFeedbackAssignmentNotificationRecipients,
   getFeedbackOrdinaryNotificationRecipients,
@@ -20,24 +21,16 @@ import {
   listFeedbackReferences as listFeedbackReferenceSummaries,
   markFeedbackViewed as markFeedbackViewedInModule,
   recordFeedbackCommentCreatedActivity,
+  removeFeedbackIssueRelation,
   searchFeedbackReferences as searchFeedbackReferenceSummaries,
+  transitionFeedbackIssue,
+  updateFeedbackIssueAssignee,
+  updateFeedbackIssueMetadata,
   type FeedbackActivityDatabase,
+  type FeedbackCommandResult,
   type FeedbackNotificationRecipientDirectory,
+  type FeedbackTargetTitleSync,
 } from "@orf/feedback-module/server";
-import {
-  applyFeedbackTransition,
-  canonicalizeFeedbackRelation,
-  deriveFeedbackCapabilities,
-  type FeedbackDomainErrorCode,
-} from "../../modules/feedback/src/domain";
-import {
-  feedback,
-  feedbackActivityEvents,
-  feedbackCauseCategories,
-  feedbackParticipants,
-  feedbackRelations,
-  feedbackReportAttachments,
-} from "../../modules/feedback/src/infrastructure/database/schema";
 import { replaceOrfAttachmentMarkdownTokens } from "../../src/features/rich-text/orfRichTextTokens";
 import type { OrfUserDisplayProfile } from "../../src/types/orf";
 import { db } from "../db/client";
@@ -57,6 +50,8 @@ import {
 } from "./commentAttachmentRepository";
 import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
+
+export type { FeedbackCommandResult } from "@orf/feedback-module/server";
 
 export type CreateFeedbackAttachmentInput = {
   body: Buffer;
@@ -91,15 +86,6 @@ export type CreateFeedbackOutcome =
   | { status: "invalidAssignee" }
   | { status: "invalidProject" }
   | { status: "tooLarge" };
-
-export type FeedbackCommandResult =
-  | { status: "ok"; changed: boolean }
-  | { status: "notFound" }
-  | { status: "invalid" }
-  | { status: "invalidAssignee" }
-  | { status: "invalidProject" }
-  | { status: "conflict" }
-  | { status: "forbidden" };
 
 export type UpdateFeedbackMetadataInput = {
   causeCategories?: string[];
@@ -138,50 +124,12 @@ export type FeedbackReportAttachmentContentOutcome =
   | { status: "notFound" }
   | { status: "forbidden" };
 
-type FeedbackRow = typeof feedback.$inferSelect;
 type ProjectRow = { id: string; name: string } | null;
 
 const feedbackNotificationRecipientDirectory: FeedbackNotificationRecipientDirectory = {
   getActiveAdminUserIds: getActiveAdminNotificationRecipients,
   getActiveMemberUserIdsByIds: getActiveMemberNotificationRecipientsByIds,
 };
-
-let idCounter = 0;
-
-function nextCounter() {
-  idCounter = (idCounter + 1) % Number.MAX_SAFE_INTEGER;
-  return idCounter.toString(36);
-}
-
-function makeFeedbackId() {
-  return `fb-${Date.now()}-${nextCounter()}-${randomUUID()}`;
-}
-
-function makeActivityId() {
-  return `fact-${Date.now()}-${nextCounter()}-${randomUUID()}`;
-}
-
-function makeRelationId() {
-  return `frel-${Date.now()}-${nextCounter()}-${randomUUID()}`;
-}
-
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function uniqueStrings(values: readonly string[]) {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
-}
-
-function normalizeCauseCategories(categories: readonly string[] | undefined) {
-  if (!categories) return undefined;
-  return uniqueStrings(categories);
-}
-
-function sameStringList(left: readonly string[], right: readonly string[]) {
-  if (left.length !== right.length) return false;
-  return left.every((value, index) => value === right[index]);
-}
 
 function storageScopeId(scope: RuntimeScope | null | undefined) {
   return scope ? runtimeScopeStorageId(scope).trim() : "";
@@ -220,7 +168,7 @@ async function resolveProjectById(teamId: string, projectId: string | null | und
   return project ?? null;
 }
 
-function actorSnapshot(actor: FeedbackCommandActor, teamId: string) {
+function feedbackWriteActor(actor: FeedbackCommandActor, teamId: string) {
   return {
     id: actor.id,
     role: actor.role,
@@ -229,28 +177,12 @@ function actorSnapshot(actor: FeedbackCommandActor, teamId: string) {
   };
 }
 
-function entitySnapshot(row: FeedbackRow) {
-  return {
-    id: row.id,
-    assigneeUserId: row.assigneeUserId,
-    closedAt: row.closedAt,
-    closedByUserId: row.closedByUserId,
-    createdByUserId: row.createdBy,
-    impact: row.impact,
-    priority: row.priority,
-    projectId: row.projectId,
-    resolution: row.resolution,
-    stage: row.stage,
-    teamId: row.teamId,
-    version: row.version,
-  };
-}
-
-function domainErrorToCommandStatus(code: FeedbackDomainErrorCode): FeedbackCommandResult["status"] {
-  if (code === "expected_version_mismatch") return "conflict";
-  if (code === "forbidden" || code === "actor_inactive" || code === "actor_out_of_scope" || code === "administrative_takeover_reason_required") return "forbidden";
-  return "invalid";
-}
+const syncFeedbackTargetTitle: FeedbackTargetTitleSync = async (client, input) => {
+  await client
+    .update(commentThreads)
+    .set({ targetTitle: input.title, updatedAt: input.updatedAt })
+    .where(and(eq(commentThreads.teamId, input.teamId), eq(commentThreads.targetType, "feedback"), eq(commentThreads.targetId, input.feedbackId)));
+};
 
 function buildReportDescription(input: { description: string; uploads: Array<{ clientId: string; prepared: PreparedCommentAttachment }> }) {
   const uploadsByClientId = new Map(input.uploads.map((upload) => [upload.clientId, upload.prepared]));
@@ -390,13 +322,6 @@ export async function createFeedback(input: CreateFeedbackInput, actor: Feedback
     return { status: "notFound" };
   }
 
-  const title = input.title.trim();
-  const descriptionInput = input.description.trim();
-  const causeCategories = normalizeCauseCategories(input.causeCategories);
-  if (!title || !descriptionInput || !causeCategories?.length) {
-    return { status: "invalid" };
-  }
-
   const assigneeUser = input.assigneeUserId ? await resolveActiveMemberById(teamId, input.assigneeUserId) : null;
   if (input.assigneeUserId && !assigneeUser) {
     return { status: "invalidAssignee" };
@@ -407,20 +332,22 @@ export async function createFeedback(input: CreateFeedbackInput, actor: Feedback
     return { status: "invalidProject" };
   }
 
-  const id = makeFeedbackId();
-  const createdAt = nowIso();
+  const draft = createFeedbackDraft();
   const preparedUploads: Array<{ clientId: string; prepared: PreparedCommentAttachment }> = [];
+  let createdFeedbackId = "";
+  let createdTitle = "";
+  let createdAssigneeUserId: string | null = null;
   try {
     for (const attachment of input.attachments ?? []) {
       const prepared = await prepareCommentAttachment({
         body: attachment.body,
-        createdAt,
+        createdAt: draft.createdAt,
         createdBy: actor.id,
         fileName: attachment.fileName,
         messageId: null,
         mimeType: attachment.mimeType,
         storageScopeId: teamId,
-        targetId: id,
+        targetId: draft.id,
         targetType: "feedback",
       });
       if (prepared.status !== "ok") {
@@ -430,80 +357,40 @@ export async function createFeedback(input: CreateFeedbackInput, actor: Feedback
       preparedUploads.push({ clientId: attachment.clientId, prepared: prepared.prepared });
     }
 
-    const report = buildReportDescription({ description: descriptionInput, uploads: preparedUploads });
+    const report = buildReportDescription({ description: input.description.trim(), uploads: preparedUploads });
     if (report.status !== "ok") {
       await deleteStoredCommentAttachmentObjects(preparedUploads.map((upload) => upload.prepared.row));
       return { status: "invalid" };
     }
 
-    await db.transaction(async (tx) => {
-      await tx.insert(feedback).values({
-        id,
-        teamId,
-        projectId,
-        title,
-        description: report.description,
-        stage: "open",
-        resolution: null,
-        impact: input.impact,
-        priority: input.priority ?? null,
-        assigneeUserId: assigneeUser?.id ?? null,
-        createdBy: actor.id,
-        updatedBy: actor.id,
-        version: 0,
-        createdAt,
-        updatedAt: createdAt,
-        closedAt: null,
-        closedByUserId: null,
-      });
+    const created = await createFeedbackIssue(db, {
+      assigneeUserId: assigneeUser?.id ?? null,
+      causeCategories: input.causeCategories,
+      description: report.description,
+      draft,
+      impact: input.impact,
+      priority: input.priority ?? null,
+      projectId,
+      reportAttachments: preparedUploads.map((upload) => ({
+        id: upload.prepared.row.id,
+        objectKey: upload.prepared.row.objectKey,
+        fileName: upload.prepared.row.fileName,
+        mimeType: upload.prepared.row.mimeType,
+        fileSize: upload.prepared.row.fileSize,
+        width: upload.prepared.row.width ?? null,
+        height: upload.prepared.row.height ?? null,
+        sourceCommentAttachmentId: null,
+      })),
+      title: input.title,
+    }, feedbackWriteActor(actor, teamId));
+    if (created.status !== "ok") {
+      await deleteStoredCommentAttachmentObjects(preparedUploads.map((upload) => upload.prepared.row));
+      return created;
+    }
 
-      await tx.insert(feedbackCauseCategories).values(
-        causeCategories.map((category, index) => ({
-          teamId,
-          feedbackId: id,
-          category,
-          sortOrder: index,
-        })),
-      );
-
-      if (preparedUploads.length > 0) {
-        await tx.insert(feedbackReportAttachments).values(
-          preparedUploads.map((upload, index) => ({
-            id: upload.prepared.row.id,
-            teamId,
-            feedbackId: id,
-            objectKey: upload.prepared.row.objectKey,
-            fileName: upload.prepared.row.fileName,
-            mimeType: upload.prepared.row.mimeType,
-            fileSize: upload.prepared.row.fileSize,
-            width: upload.prepared.row.width ?? null,
-            height: upload.prepared.row.height ?? null,
-            sortOrder: index,
-            createdBy: actor.id,
-            createdAt,
-            sourceCommentAttachmentId: null,
-          })),
-        );
-      }
-
-      await tx.insert(feedbackParticipants).values({
-        teamId,
-        feedbackId: id,
-        userId: actor.id,
-        firstParticipatedAt: createdAt,
-        lastParticipatedAt: createdAt,
-      });
-
-      await tx.insert(feedbackActivityEvents).values({
-        id: makeActivityId(),
-        teamId,
-        feedbackId: id,
-        actorUserId: actor.id,
-        activityType: "feedback.created",
-        payload: { title, assigneeUserId: assigneeUser?.id ?? null, projectId, priority: input.priority ?? null },
-        createdAt,
-      });
-    });
+    createdFeedbackId = created.feedbackId;
+    createdTitle = created.title;
+    createdAssigneeUserId = created.assigneeUserId ?? null;
   } catch (error) {
     await deleteStoredCommentAttachmentObjects(preparedUploads.map((upload) => upload.prepared.row));
     throw error;
@@ -513,16 +400,16 @@ export async function createFeedback(input: CreateFeedbackInput, actor: Feedback
     actorName: actor.name,
     actorUserId: actor.id,
     assigneeName: assigneeUser?.name ?? null,
-    assigneeUserId: assigneeUser?.id ?? null,
-    feedbackId: id,
+    assigneeUserId: createdAssigneeUserId,
+    feedbackId: createdFeedbackId,
     project,
     teamId,
-    title,
+    title: createdTitle,
   });
 
-  publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId: id, teamId });
+  publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId: createdFeedbackId, teamId });
 
-  const item = await getFeedbackFromReadModel(id, runtimeScope(teamId), actor.id);
+  const item = await getFeedbackFromReadModel(createdFeedbackId, runtimeScope(teamId), actor.id);
   return item ? { status: "ok", feedback: item } : { status: "notFound" };
 }
 
@@ -534,119 +421,21 @@ export async function updateFeedbackMetadata(
   const teamId = storageScopeId(actor.scope);
   if (!teamId) return { status: "notFound" };
 
-  const nextTitle = input.title === undefined ? undefined : input.title.trim();
-  const nextDescription = input.description === undefined ? undefined : input.description.trim();
-  const nextCauseCategories = normalizeCauseCategories(input.causeCategories);
-  if (nextTitle === "" || nextDescription === "" || (nextCauseCategories && nextCauseCategories.length === 0)) {
-    return { status: "invalid" };
-  }
   const nextProjectId = input.projectId === undefined ? undefined : input.projectId?.trim() || null;
   if (nextProjectId && !(await resolveProjectById(teamId, nextProjectId))) {
     return { status: "invalidProject" };
   }
 
-  const result = await db.transaction(async (tx): Promise<FeedbackCommandResult> => {
-    const [target] = await tx.select().from(feedback).where(eq(feedback.id, feedbackId)).limit(1).for("update");
-    if (!target || target.teamId !== teamId) return { status: "notFound" };
-    if (target.version !== input.expectedVersion) return { status: "conflict" };
-
-    const capabilities = deriveFeedbackCapabilities({
-      actor: actorSnapshot(actor, teamId),
-      feedback: entitySnapshot(target),
-    });
-    if (!capabilities.canEditReport) return { status: "forbidden" };
-
-    const causeRows = await tx
-      .select({ category: feedbackCauseCategories.category, sortOrder: feedbackCauseCategories.sortOrder })
-      .from(feedbackCauseCategories)
-      .where(eq(feedbackCauseCategories.feedbackId, feedbackId));
-    const currentCauseCategories = causeRows
-      .sort((left, right) => left.sortOrder - right.sortOrder)
-      .map((row) => row.category);
-    const changedFields: string[] = [];
-    const patch: Partial<typeof feedback.$inferInsert> = {};
-    const payload: Record<string, unknown> = {};
-
-    if (nextTitle !== undefined && nextTitle !== target.title) {
-      patch.title = nextTitle;
-      changedFields.push("title");
-      payload.previousTitle = target.title;
-      payload.nextTitle = nextTitle;
-    }
-    if (nextDescription !== undefined && nextDescription !== target.description) {
-      patch.description = nextDescription;
-      changedFields.push("description");
-    }
-    if (input.impact !== undefined && input.impact !== target.impact) {
-      patch.impact = input.impact;
-      changedFields.push("impact");
-      payload.previousImpact = target.impact;
-      payload.nextImpact = input.impact;
-    }
-    if (input.priority !== undefined && input.priority !== target.priority) {
-      patch.priority = input.priority;
-      changedFields.push("priority");
-      payload.previousPriority = target.priority;
-      payload.nextPriority = input.priority;
-    }
-    if (nextProjectId !== undefined && nextProjectId !== (target.projectId ?? null)) {
-      patch.projectId = nextProjectId;
-      changedFields.push("projectId");
-      payload.previousProjectId = target.projectId ?? null;
-      payload.nextProjectId = nextProjectId;
-    }
-
-    const causeCategoriesChanged = Boolean(nextCauseCategories && !sameStringList(currentCauseCategories, nextCauseCategories));
-    if (causeCategoriesChanged && nextCauseCategories) {
-      changedFields.push("causeCategories");
-      payload.previousCauseCategories = currentCauseCategories;
-      payload.nextCauseCategories = nextCauseCategories;
-      await tx.delete(feedbackCauseCategories).where(eq(feedbackCauseCategories.feedbackId, feedbackId));
-      await tx.insert(feedbackCauseCategories).values(
-        nextCauseCategories.map((category, index) => ({
-          teamId,
-          feedbackId,
-          category,
-          sortOrder: index,
-        })),
-      );
-    }
-
-    if (changedFields.length === 0) {
-      return { status: "ok", changed: false };
-    }
-
-    const updatedAt = nowIso();
-    await tx
-      .update(feedback)
-      .set({
-        ...patch,
-        updatedAt,
-        updatedBy: actor.id,
-        version: target.version + 1,
-      })
-      .where(and(eq(feedback.id, feedbackId), eq(feedback.teamId, teamId), eq(feedback.version, input.expectedVersion)));
-    if (nextTitle !== undefined) {
-      await tx
-        .update(commentThreads)
-        .set({ targetTitle: nextTitle, updatedAt })
-        .where(and(eq(commentThreads.teamId, teamId), eq(commentThreads.targetType, "feedback"), eq(commentThreads.targetId, feedbackId)));
-    }
-
-    const activityType: FeedbackActivityType = changedFields.some((field) => field === "title" || field === "description")
-      ? "feedback.report.changed"
-      : "feedback.metadata.changed";
-    await tx.insert(feedbackActivityEvents).values({
-      id: makeActivityId(),
-      teamId,
-      feedbackId,
-      actorUserId: actor.id,
-      activityType,
-      payload: { ...payload, changedFields },
-      createdAt: updatedAt,
-    });
-    return { status: "ok", changed: true };
-  });
+  const result = await updateFeedbackIssueMetadata(db, {
+    causeCategories: input.causeCategories,
+    description: input.description,
+    expectedVersion: input.expectedVersion,
+    feedbackId,
+    impact: input.impact,
+    priority: input.priority,
+    projectId: nextProjectId,
+    title: input.title,
+  }, feedbackWriteActor(actor, teamId), { syncFeedbackTargetTitle });
 
   if (result.status === "ok" && result.changed) {
     publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
@@ -667,90 +456,30 @@ export async function updateFeedbackAssignee(
     return { status: "invalidAssignee" };
   }
 
-  const result = await db.transaction(async (tx): Promise<FeedbackCommandResult & {
-    nextAssigneeName?: string | null;
-    nextAssigneeUserId?: string | null;
-    previousAssigneeName?: string | null;
-    previousAssigneeUserId?: string | null;
-    title?: string;
-  }> => {
-    const [target] = await tx.select().from(feedback).where(eq(feedback.id, feedbackId)).limit(1).for("update");
-    if (!target || target.teamId !== teamId) return { status: "notFound" };
-    if (target.version !== input.expectedVersion) return { status: "conflict" };
-
-    const capabilities = deriveFeedbackCapabilities({
-      actor: actorSnapshot(actor, teamId),
-      feedback: entitySnapshot(target),
-    });
-    if (!capabilities.canChangeAssignee) return { status: "forbidden" };
-    if ((target.assigneeUserId ?? null) === (nextAssignee?.id ?? null)) return { status: "ok", changed: false };
-
-    const previousAssignee = target.assigneeUserId ? await resolveActiveMemberById(teamId, target.assigneeUserId) : null;
-    const updatedAt = nowIso();
-    await tx
-      .update(feedback)
-      .set({
-        assigneeUserId: nextAssignee?.id ?? null,
-        updatedAt,
-        updatedBy: actor.id,
-        version: target.version + 1,
-      })
-      .where(and(eq(feedback.id, feedbackId), eq(feedback.teamId, teamId), eq(feedback.version, input.expectedVersion)));
-    await tx.insert(feedbackActivityEvents).values({
-      id: makeActivityId(),
-      teamId,
-      feedbackId,
-      actorUserId: actor.id,
-      activityType: "feedback.assignee.changed",
-      payload: {
-        previousAssigneeUserId: target.assigneeUserId,
-        nextAssigneeUserId: nextAssignee?.id ?? null,
-      },
-      createdAt: updatedAt,
-    });
-
-    return {
-      status: "ok",
-      changed: true,
-      nextAssigneeName: nextAssignee?.name ?? null,
-      nextAssigneeUserId: nextAssignee?.id ?? null,
-      previousAssigneeName: previousAssignee?.name ?? null,
-      previousAssigneeUserId: target.assigneeUserId,
-      title: target.title,
-    };
-  });
+  const result = await updateFeedbackIssueAssignee(db, {
+    assigneeUserId: nextAssignee?.id ?? null,
+    expectedVersion: input.expectedVersion,
+    feedbackId,
+  }, feedbackWriteActor(actor, teamId));
 
   if (result.status !== "ok") return result;
 
   if (result.changed) {
+    const previousAssignee = result.previousAssigneeUserId ? await resolveActiveMemberById(teamId, result.previousAssigneeUserId) : null;
     await notifyFeedbackAssigned({
       actorName: actor.name,
       actorUserId: actor.id,
       feedbackId,
-      nextAssigneeName: result.nextAssigneeName ?? null,
+      nextAssigneeName: nextAssignee?.name ?? null,
       nextAssigneeUserId: result.nextAssigneeUserId ?? null,
-      previousAssigneeName: result.previousAssigneeName ?? null,
+      previousAssigneeName: previousAssignee?.name ?? null,
       previousAssigneeUserId: result.previousAssigneeUserId ?? null,
       teamId,
-      title: result.title ?? "",
+      title: result.title,
     });
     publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
   }
   return { status: "ok", changed: result.changed };
-}
-
-async function duplicateTargetFeedbackIds(teamId: string, feedbackId: string) {
-  const rows = await db
-    .select({ targetFeedbackId: feedbackRelations.targetFeedbackId })
-    .from(feedbackRelations)
-    .where(
-      and(
-        eq(feedbackRelations.teamId, teamId),
-        eq(feedbackRelations.sourceFeedbackId, feedbackId),
-        eq(feedbackRelations.type, "duplicates"),
-      ),
-    );
-  return rows.map((row) => row.targetFeedbackId);
 }
 
 export async function transitionFeedback(
@@ -761,96 +490,25 @@ export async function transitionFeedback(
   const teamId = storageScopeId(actor.scope);
   if (!teamId) return { status: "notFound" };
 
-  const result = await db.transaction(async (tx): Promise<FeedbackCommandResult & {
-    assigneeUserId?: string | null;
-    createdBy?: string | null;
-    project?: ProjectRow;
-    stage?: string;
-    resolution?: string | null;
-    title?: string;
-  }> => {
-    const [target] = await tx
-      .select({
-        feedback,
-        projectId: projects.id,
-        projectName: projects.name,
-      })
-      .from(feedback)
-      .leftJoin(projects, eq(projects.id, feedback.projectId))
-      .where(eq(feedback.id, feedbackId))
-      .limit(1)
-      .for("update");
-    if (!target || target.feedback.teamId !== teamId) return { status: "notFound" };
-
-    const duplicateIds = await duplicateTargetFeedbackIds(teamId, feedbackId);
-    const outcome = applyFeedbackTransition({
-      actor: actorSnapshot(actor, teamId),
-      command,
-      duplicateRelations: { duplicateTargetFeedbackIds: duplicateIds },
-      feedback: entitySnapshot(target.feedback),
-      occurredAt: nowIso(),
-    });
-    if (!outcome.ok) {
-      const status = domainErrorToCommandStatus(outcome.error.code);
-      if (status === "conflict") return { status: "conflict" };
-      if (status === "forbidden") return { status: "forbidden" };
-      return { status: "invalid" };
-    }
-
-    const updatedAt = nowIso();
-    await tx
-      .update(feedback)
-      .set({
-        stage: outcome.value.feedback.stage,
-        resolution: outcome.value.feedback.resolution,
-        closedAt: outcome.value.feedback.closedAt ?? null,
-        closedByUserId: outcome.value.feedback.closedByUserId ?? null,
-        updatedAt,
-        updatedBy: actor.id,
-        version: outcome.value.feedback.version,
-      })
-      .where(and(eq(feedback.id, feedbackId), eq(feedback.teamId, teamId), eq(feedback.version, command.expectedVersion)));
-    await tx.insert(feedbackActivityEvents).values({
-      id: makeActivityId(),
-      teamId,
-      feedbackId,
-      actorUserId: actor.id,
-      activityType: outcome.value.activityType,
-      payload: {
-        command,
-        previousStage: target.feedback.stage,
-        previousResolution: target.feedback.resolution,
-        nextStage: outcome.value.feedback.stage,
-        nextResolution: outcome.value.feedback.resolution,
-      },
-      createdAt: updatedAt,
-    });
-
-    return {
-      status: "ok",
-      changed: true,
-      assigneeUserId: target.feedback.assigneeUserId,
-      createdBy: target.feedback.createdBy,
-      project: target.projectId && target.projectName ? { id: target.projectId, name: target.projectName } : null,
-      stage: outcome.value.feedback.stage,
-      resolution: outcome.value.feedback.resolution,
-      title: target.feedback.title,
-    };
-  });
+  const result = await transitionFeedbackIssue(db, {
+    command,
+    feedbackId,
+  }, feedbackWriteActor(actor, teamId));
 
   if (result.status !== "ok") return result;
   if (result.changed) {
+    const project = result.projectId ? await resolveProjectById(teamId, result.projectId) : null;
     await notifyFeedbackLifecycleChanged({
       actorName: actor.name,
       actorUserId: actor.id,
       assigneeUserId: result.assigneeUserId ?? null,
       createdBy: result.createdBy ?? null,
       feedbackId,
-      project: result.project ?? null,
+      project,
       resolution: result.resolution ?? null,
-      stage: result.stage ?? "",
+      stage: result.stage,
       teamId,
-      title: result.title ?? "",
+      title: result.title,
     });
     publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
   }
@@ -865,89 +523,12 @@ export async function addFeedbackRelation(
   const teamId = storageScopeId(actor.scope);
   if (!teamId) return { status: "notFound" };
 
-  const targetFeedbackId = input.targetFeedbackId.trim();
-  if (!targetFeedbackId || targetFeedbackId === feedbackId) {
-    return { status: "invalid" };
-  }
-
-  const result = await db.transaction(async (tx): Promise<FeedbackCommandResult> => {
-    const [source] = await tx.select().from(feedback).where(eq(feedback.id, feedbackId)).limit(1).for("update");
-    if (!source || source.teamId !== teamId) return { status: "notFound" };
-    if (source.version !== input.expectedVersion) return { status: "conflict" };
-
-    const capabilities = deriveFeedbackCapabilities({
-      actor: actorSnapshot(actor, teamId),
-      feedback: entitySnapshot(source),
-    });
-    if (!capabilities.canEditReport) return { status: "forbidden" };
-
-    const [target] = await tx
-      .select({ id: feedback.id, teamId: feedback.teamId })
-      .from(feedback)
-      .where(eq(feedback.id, targetFeedbackId))
-      .limit(1);
-    if (!target || target.teamId !== teamId) return { status: "notFound" };
-
-    const canonical = canonicalizeFeedbackRelation({
-      sourceFeedbackId: feedbackId,
-      targetFeedbackId,
-      type: input.type,
-    });
-    if (!canonical.ok) return { status: "invalid" };
-
-    const relationId = makeRelationId();
-    const occurredAt = nowIso();
-    const inserted = await tx
-      .insert(feedbackRelations)
-      .values({
-        id: relationId,
-        teamId,
-        sourceFeedbackId: canonical.value.sourceFeedbackId,
-        targetFeedbackId: canonical.value.targetFeedbackId,
-        type: canonical.value.type,
-        createdBy: actor.id,
-        createdAt: occurredAt,
-      })
-      .onConflictDoNothing({
-        target: [
-          feedbackRelations.teamId,
-          feedbackRelations.type,
-          feedbackRelations.sourceFeedbackId,
-          feedbackRelations.targetFeedbackId,
-        ],
-      })
-      .returning({ id: feedbackRelations.id });
-
-    if (inserted.length === 0) {
-      return { status: "ok", changed: false };
-    }
-
-    await tx
-      .update(feedback)
-      .set({
-        updatedAt: occurredAt,
-        updatedBy: actor.id,
-        version: source.version + 1,
-      })
-      .where(and(eq(feedback.id, feedbackId), eq(feedback.teamId, teamId), eq(feedback.version, input.expectedVersion)));
-
-    await tx.insert(feedbackActivityEvents).values({
-      id: makeActivityId(),
-      teamId,
-      feedbackId,
-      actorUserId: actor.id,
-      activityType: "feedback.relation.added",
-      payload: {
-        relationId,
-        type: canonical.value.type,
-        sourceFeedbackId: canonical.value.sourceFeedbackId,
-        targetFeedbackId: canonical.value.targetFeedbackId,
-      },
-      createdAt: occurredAt,
-    });
-
-    return { status: "ok", changed: true };
-  });
+  const result = await addFeedbackIssueRelation(db, {
+    expectedVersion: input.expectedVersion,
+    feedbackId,
+    targetFeedbackId: input.targetFeedbackId,
+    type: input.type,
+  }, feedbackWriteActor(actor, teamId));
 
   if (result.status === "ok" && result.changed) {
     publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
@@ -964,81 +545,11 @@ export async function removeFeedbackRelation(
   const teamId = storageScopeId(actor.scope);
   if (!teamId) return { status: "notFound" };
 
-  const normalizedRelationId = relationId.trim();
-  if (!normalizedRelationId) return { status: "invalid" };
-
-  const result = await db.transaction(async (tx): Promise<FeedbackCommandResult> => {
-    const [targetFeedback] = await tx.select().from(feedback).where(eq(feedback.id, feedbackId)).limit(1).for("update");
-    if (!targetFeedback || targetFeedback.teamId !== teamId) return { status: "notFound" };
-    if (targetFeedback.version !== input.expectedVersion) return { status: "conflict" };
-
-    const capabilities = deriveFeedbackCapabilities({
-      actor: actorSnapshot(actor, teamId),
-      feedback: entitySnapshot(targetFeedback),
-    });
-    if (!capabilities.canEditReport) return { status: "forbidden" };
-
-    const [relation] = await tx
-      .select()
-      .from(feedbackRelations)
-      .where(
-        and(
-          eq(feedbackRelations.id, normalizedRelationId),
-          eq(feedbackRelations.teamId, teamId),
-          or(eq(feedbackRelations.sourceFeedbackId, feedbackId), eq(feedbackRelations.targetFeedbackId, feedbackId)),
-        ),
-      )
-      .limit(1);
-    if (!relation) return { status: "notFound" };
-
-    if (relation.type === "duplicates") {
-      const [duplicateSource] = await tx
-        .select({
-          id: feedback.id,
-          resolution: feedback.resolution,
-          stage: feedback.stage,
-          teamId: feedback.teamId,
-        })
-        .from(feedback)
-        .where(eq(feedback.id, relation.sourceFeedbackId))
-        .limit(1)
-        .for("update");
-      if (
-        duplicateSource?.teamId === teamId &&
-        duplicateSource.resolution === "duplicate" &&
-        (duplicateSource.stage === "pending_verification" || duplicateSource.stage === "closed")
-      ) {
-        return { status: "invalid" };
-      }
-    }
-
-    const occurredAt = nowIso();
-    await tx.delete(feedbackRelations).where(and(eq(feedbackRelations.id, normalizedRelationId), eq(feedbackRelations.teamId, teamId)));
-    await tx
-      .update(feedback)
-      .set({
-        updatedAt: occurredAt,
-        updatedBy: actor.id,
-        version: targetFeedback.version + 1,
-      })
-      .where(and(eq(feedback.id, feedbackId), eq(feedback.teamId, teamId), eq(feedback.version, input.expectedVersion)));
-    await tx.insert(feedbackActivityEvents).values({
-      id: makeActivityId(),
-      teamId,
-      feedbackId,
-      actorUserId: actor.id,
-      activityType: "feedback.relation.removed",
-      payload: {
-        relationId: relation.id,
-        type: relation.type,
-        sourceFeedbackId: relation.sourceFeedbackId,
-        targetFeedbackId: relation.targetFeedbackId,
-      },
-      createdAt: occurredAt,
-    });
-
-    return { status: "ok", changed: true };
-  });
+  const result = await removeFeedbackIssueRelation(db, {
+    expectedVersion: input.expectedVersion,
+    feedbackId,
+    relationId,
+  }, feedbackWriteActor(actor, teamId));
 
   if (result.status === "ok" && result.changed) {
     publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });

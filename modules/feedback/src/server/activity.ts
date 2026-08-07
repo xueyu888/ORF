@@ -1,12 +1,12 @@
-import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import {
   feedback,
   feedbackActivityEvents,
-  feedbackParticipants,
   feedbackUserViews,
 } from "../infrastructure/database/schema";
+import { feedbackNowIso, makeFeedbackActivityId } from "./ids";
+import { upsertFeedbackParticipants } from "./participants";
 
 export type FeedbackActivityDatabase = Pick<NodePgDatabase<any>, "insert" | "select">;
 
@@ -31,64 +31,19 @@ export type FeedbackCommentCreatedActivityInput = {
   readonly teamId: string;
 };
 
-let idCounter = 0;
-
-function nextCounter() {
-  idCounter = (idCounter + 1) % Number.MAX_SAFE_INTEGER;
-  return idCounter.toString(36);
-}
-
-function makeActivityId() {
-  return `fact-${Date.now()}-${nextCounter()}-${randomUUID()}`;
-}
-
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function uniqueStrings(values: readonly string[]) {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
-}
-
-async function insertFeedbackParticipants(
-  database: FeedbackActivityDatabase,
-  input: {
-    readonly feedbackId: string;
-    readonly participatedAt: string;
-    readonly teamId: string;
-    readonly userIds: Array<string | null | undefined>;
-  },
-) {
-  const rows = uniqueStrings(input.userIds.map((userId) => userId ?? "")).map((userId) => ({
-    teamId: input.teamId,
-    feedbackId: input.feedbackId,
-    userId,
-    firstParticipatedAt: input.participatedAt,
-    lastParticipatedAt: input.participatedAt,
-  }));
-  if (rows.length === 0) return;
-  await database
-    .insert(feedbackParticipants)
-    .values(rows)
-    .onConflictDoUpdate({
-      target: [feedbackParticipants.teamId, feedbackParticipants.feedbackId, feedbackParticipants.userId],
-      set: { lastParticipatedAt: input.participatedAt },
-    });
-}
-
 export async function recordFeedbackCommentCreatedActivity(
   database: FeedbackActivityDatabase,
   input: FeedbackCommentCreatedActivityInput,
 ) {
-  const occurredAt = nowIso();
-  await insertFeedbackParticipants(database, {
+  const occurredAt = feedbackNowIso();
+  await upsertFeedbackParticipants(database, {
     feedbackId: input.feedbackId,
     participatedAt: occurredAt,
     teamId: input.teamId,
     userIds: [input.actorUserId],
   });
   await database.insert(feedbackActivityEvents).values({
-    id: makeActivityId(),
+    id: makeFeedbackActivityId(),
     teamId: input.teamId,
     feedbackId: input.feedbackId,
     actorUserId: input.actorUserId,
@@ -138,7 +93,7 @@ export async function markFeedbackViewed(
     return { status: "ok", changed: false };
   }
 
-  const updatedAt = nowIso();
+  const updatedAt = feedbackNowIso();
   await database
     .insert(feedbackUserViews)
     .values({

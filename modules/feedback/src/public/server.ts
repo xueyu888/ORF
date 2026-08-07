@@ -71,6 +71,32 @@ export {
   type FeedbackSubscriptionDatabase,
   type FeedbackSubscriptionResult,
 } from "../server/subscriptions";
+export {
+  addFeedbackIssueRelation,
+  createFeedbackDraft,
+  createFeedbackIssue,
+  removeFeedbackIssueRelation,
+  transitionFeedbackIssue,
+  updateFeedbackIssueAssignee,
+  updateFeedbackIssueMetadata,
+  type AddFeedbackRelationWriteInput,
+  type CreateFeedbackIssueWriteInput,
+  type CreateFeedbackIssueWriteResult,
+  type FeedbackCommandResult,
+  type FeedbackCreateDraft,
+  type FeedbackCreateReportAttachmentInput,
+  type FeedbackTargetTitleSync,
+  type FeedbackWriteActor,
+  type FeedbackWriteClient,
+  type FeedbackWriteDatabase,
+  type FeedbackWriteHost,
+  type RemoveFeedbackRelationWriteInput,
+  type TransitionFeedbackIssueWriteInput,
+  type TransitionFeedbackIssueWriteResult,
+  type UpdateFeedbackAssigneeWriteInput,
+  type UpdateFeedbackAssigneeWriteResult,
+  type UpdateFeedbackMetadataWriteInput,
+} from "../server/writeModel";
 
 export interface FeedbackServerHost {
   readonly protocolVersion: 1;
