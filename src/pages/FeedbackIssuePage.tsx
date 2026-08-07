@@ -16,6 +16,7 @@ import {
   XCircle,
 } from "lucide-react";
 import type { FeedbackCommandResolution, FeedbackImpact, FeedbackPriority, FeedbackRelationType, FeedbackTransitionInput } from "@orf/feedback-module/contracts";
+import { feedbackWebContribution } from "@orf/feedback-module/web";
 import type { FormEvent, MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -262,7 +263,7 @@ export function FeedbackIssuePage() {
     return (
       <div className="bounty-hall-page feedback-issue-detail-page">
         <BountyEmptyState title={title} description={description} />
-        <Link className="feedback-issue-back-link" to="/feedback">
+        <Link className="feedback-issue-back-link" to={feedbackWebContribution.routes.inbox.path}>
           <ArrowLeft aria-hidden="true" />
           返回反馈列表
         </Link>
@@ -370,7 +371,7 @@ export function FeedbackIssuePage() {
     <div className="bounty-hall-page feedback-issue-detail-page">
       <header className="feedback-issue-detail-header">
         <div className="feedback-issue-detail-title-block">
-          <Link className="feedback-issue-back-link" to="/feedback">
+          <Link className="feedback-issue-back-link" to={feedbackWebContribution.routes.inbox.path}>
             <ArrowLeft aria-hidden="true" />
             反馈
           </Link>

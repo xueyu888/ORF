@@ -11,6 +11,7 @@ import {
   Trophy,
   UsersRound,
 } from "lucide-react";
+import { feedbackWebContribution } from "@orf/feedback-module/web";
 import type { PermissionKey } from "./permissions";
 
 export const navItems = [
@@ -19,7 +20,7 @@ export const navItems = [
   { label: "工作日志", path: "/work-logs", icon: NotebookPen },
   { label: "聊天", path: "/chat", icon: MessagesSquare },
   { label: "资源", path: "/resources", icon: HardDrive },
-  { label: "反馈", path: "/feedback", icon: Inbox },
+  { label: feedbackWebContribution.navigation.label, path: feedbackWebContribution.navigation.path, icon: Inbox },
   { label: "统计", path: "/reports", icon: BarChart3 },
   { label: "系统管理", path: "/system", icon: Settings },
 ];

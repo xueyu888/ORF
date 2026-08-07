@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { feedbackCreatePath } from "@orf/feedback-module/web";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, StatusBadge } from "../components/ui";
 import { evaluationMetricCards, summarizeEvalRuns } from "../features/evaluation/model/evaluationSummary";
@@ -38,7 +39,7 @@ export function AIEvaluationPage() {
         <div className="grid gap-3">{state.failureSamples.map((sample) => {
           const canCreateFeedback = canCreateTeamFeedback(currentUser);
 
-          return <div key={sample.id} className="rounded-lg border orf-border orf-surface-muted p-4"><div className="text-sm font-semibold orf-text-primary">{sample.question}</div><div className="mt-3 grid gap-3 lg:grid-cols-3"><p className="text-sm orf-text-secondary"><span className="orf-text-primary">模型回答：</span>{sample.modelAnswer}</p><p className="text-sm orf-text-secondary"><span className="orf-text-primary">期望答案：</span>{sample.expectedAnswer}</p><p className="text-sm orf-text-secondary"><span className="orf-text-primary">判定原因：</span>{sample.reason}</p></div>{canCreateFeedback && <Button className="mt-4" variant="secondary" onClick={() => navigate("/feedback/new")}>创建反馈</Button>}</div>;
+          return <div key={sample.id} className="rounded-lg border orf-border orf-surface-muted p-4"><div className="text-sm font-semibold orf-text-primary">{sample.question}</div><div className="mt-3 grid gap-3 lg:grid-cols-3"><p className="text-sm orf-text-secondary"><span className="orf-text-primary">模型回答：</span>{sample.modelAnswer}</p><p className="text-sm orf-text-secondary"><span className="orf-text-primary">期望答案：</span>{sample.expectedAnswer}</p><p className="text-sm orf-text-secondary"><span className="orf-text-primary">判定原因：</span>{sample.reason}</p></div>{canCreateFeedback && <Button className="mt-4" variant="secondary" onClick={() => navigate(feedbackCreatePath())}>创建反馈</Button>}</div>;
         })}{state.failureSamples.length === 0 && <div className="rounded-lg border orf-border orf-surface-muted p-4 text-sm orf-text-muted">暂无失败样本。</div>}</div>
       </Card>
     </PageScaffold>

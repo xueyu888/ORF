@@ -1,3 +1,4 @@
+import { feedbackWebContribution } from "@orf/feedback-module/web";
 import type { OrfUser, UserRole } from "../types/orf";
 import frontendVisibilityConfig from "./frontendVisibility.config.json";
 
@@ -25,7 +26,7 @@ export const frontendVisibilityByPath: Record<string, FrontendVisibilityKey> = {
   "/drive": "nav.drive",
   "/resources": "nav.drive",
   "/chat": "nav.chat",
-  "/feedback": "nav.feedback",
+  [feedbackWebContribution.navigation.path]: "nav.feedback",
   "/reports": "nav.reports",
   "/settings": "page.personalSettings",
   "/system": "page.systemManagement",

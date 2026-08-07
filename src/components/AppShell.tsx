@@ -1,6 +1,7 @@
 import { Flag, MessageSquarePlus, Search, Shield } from "lucide-react";
 import { Outlet, useLocation } from "react-router-dom";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
+import { feedbackWebContribution } from "@orf/feedback-module/web";
 import { Sidebar } from "./Sidebar";
 import { VisualBackgroundSlot } from "./VisualBackgroundSlot";
 import { Button } from "./ui";
@@ -297,7 +298,7 @@ function AppShellFrame() {
                 </button>
               </div>
               {!isBountyHall && canCreateFeedback && (
-                <Button className="orf-topbar-action-button" size="sm" variant="secondary" onClick={() => workbenchNavigation.open("/feedback/new", { source: "user" })}>
+                <Button className="orf-topbar-action-button" size="sm" variant="secondary" onClick={() => workbenchNavigation.open(feedbackWebContribution.actions.createPath, { source: "user" })}>
                   <MessageSquarePlus className="h-4 w-4" />
                   新建反馈
                 </Button>

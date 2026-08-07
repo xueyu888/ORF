@@ -14,6 +14,7 @@
     "paths": {
       "@orf/feedback-module/contracts": ["modules/feedback/src/public/contracts.ts"],
       "@orf/feedback-module/server": ["modules/feedback/src/public/server.ts"],
+      "@orf/feedback-module/web": ["modules/feedback/src/public/web.ts"],
       "@orf/feedback-module/testing": ["modules/feedback/src/public/testing.ts"]
     },
     "module": "ESNext",

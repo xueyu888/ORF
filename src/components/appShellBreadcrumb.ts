@@ -1,3 +1,5 @@
+import { feedbackWebContribution } from "@orf/feedback-module/web";
+
 const titleMap: Record<string, string> = {
   dashboard: "ORF 仪表盘",
   bounties: "悬赏大厅",
@@ -8,7 +10,7 @@ const titleMap: Record<string, string> = {
   chat: "聊天",
   "fantasy-ui": "Fantasy UI",
   "genshin-ui-kit": "Genshin UI Kit",
-  feedback: "反馈",
+  feedback: feedbackWebContribution.navigation.label,
   notifications: "聊天",
   "strategy-map": "策略地图",
   "ai-evaluation": "AI 评估",
@@ -20,16 +22,13 @@ const titleMap: Record<string, string> = {
 };
 
 export function breadcrumb(pathname: string) {
+  const feedbackBreadcrumb = feedbackWebContribution.breadcrumb(pathname);
+  if (feedbackBreadcrumb) {
+    return feedbackBreadcrumb;
+  }
+
   if (/^\/chat(?:\/.*)?\/?$/.test(pathname)) {
     return "聊天";
-  }
-
-  if (/^\/feedback\/new\/?$/.test(pathname)) {
-    return "反馈 / 新建反馈";
-  }
-
-  if (/^\/feedback\/[^/]+\/?$/.test(pathname)) {
-    return "反馈 / 详情";
   }
 
   if (/^\/resources\/[^/]+\/preview\/?$/.test(pathname)) {

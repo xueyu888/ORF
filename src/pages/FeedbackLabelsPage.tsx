@@ -1,4 +1,5 @@
 import { ArrowLeft, CheckCircle2, CircleDot, Tag } from "lucide-react";
+import { feedbackWebContribution } from "@orf/feedback-module/web";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { BountyBadge, BountyEmptyState, BountySelect, BountyTextInput } from "../features/bounty-hall/BountyHallSkin";
@@ -31,7 +32,7 @@ export function FeedbackLabelsPage() {
     <div className="bounty-hall-page orf-workbench-surface feedback-index-page">
       <header className="feedback-index-header">
         <div className="feedback-index-title-block">
-          <Link className="feedback-issue-back-link" to="/feedback">
+          <Link className="feedback-issue-back-link" to={feedbackWebContribution.routes.inbox.path}>
             <ArrowLeft aria-hidden="true" />
             反馈
           </Link>

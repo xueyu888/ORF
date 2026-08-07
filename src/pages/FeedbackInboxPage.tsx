@@ -12,6 +12,7 @@ import {
   Tag,
   UserCheck,
 } from "lucide-react";
+import { feedbackCreatePath, feedbackWebContribution } from "@orf/feedback-module/web";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -246,7 +247,7 @@ export function FeedbackInboxPage() {
         </div>
         <div className="feedback-issue-header-actions">
           <div className="feedback-issue-index-links" aria-label="反馈索引">
-            <Link className="feedback-issue-index-link" to="/feedback/labels"><Tag aria-hidden="true" /> 标签 <strong>{labelOptions.length}</strong></Link>
+            <Link className="feedback-issue-index-link" to={feedbackWebContribution.routes.labels.path}><Tag aria-hidden="true" /> 标签 <strong>{labelOptions.length}</strong></Link>
           </div>
           {canCreateFeedback && (
             <BountyButton onClick={() => navigate(newFeedbackHref(projectId))}>
@@ -468,6 +469,8 @@ function formatFeedbackDate(value: string) {
 }
 
 function newFeedbackHref(projectId: string) {
-  if (!projectId || projectId === "All" || projectId === "unassigned") return "/feedback/new";
-  return `/feedback/new?project=${encodeURIComponent(projectId)}`;
+  const selectedProjectId = !projectId || projectId === "All" || projectId === "unassigned"
+    ? null
+    : projectId;
+  return feedbackCreatePath({ projectId: selectedProjectId });
 }

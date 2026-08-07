@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { feedbackWebContribution } from "@orf/feedback-module/web";
 import { AppShell } from "./components/AppShell";
 import { AppFallbackPage } from "./components/AppFallback";
 import { Button } from "./components/ui";
@@ -74,10 +75,10 @@ export function App() {
         <Route path="chat" element={<LazyRoute><ChatPage /></LazyRoute>} />
         <Route path="chat/system/:systemConversationId" element={<LazyRoute><ChatPage /></LazyRoute>} />
         <Route path="chat/:channelId" element={<LazyRoute><ChatPage /></LazyRoute>} />
-        <Route path="feedback" element={<LazyRoute><FeedbackInboxPage /></LazyRoute>} />
-        <Route path="feedback/new" element={<LazyRoute><FeedbackCreatePage /></LazyRoute>} />
-        <Route path="feedback/labels" element={<LazyRoute><FeedbackLabelsPage /></LazyRoute>} />
-        <Route path="feedback/:feedbackId" element={<LazyRoute><FeedbackIssuePage /></LazyRoute>} />
+        <Route path={feedbackWebContribution.routes.inbox.routePath} element={<LazyRoute><FeedbackInboxPage /></LazyRoute>} />
+        <Route path={feedbackWebContribution.routes.create.routePath} element={<LazyRoute><FeedbackCreatePage /></LazyRoute>} />
+        <Route path={feedbackWebContribution.routes.labels.routePath} element={<LazyRoute><FeedbackLabelsPage /></LazyRoute>} />
+        <Route path={feedbackWebContribution.routes.detail.routePath} element={<LazyRoute><FeedbackIssuePage /></LazyRoute>} />
         <Route path="notifications" element={<Navigate to="/chat/system/personalNotifications" replace />} />
         <Route path="reports" element={<LazyRoute><ReportsPage /></LazyRoute>} />
         <Route path="members" element={<Navigate to="/system/members" replace />} />

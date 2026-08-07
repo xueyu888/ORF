@@ -1,8 +1,13 @@
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, loadEnv } from "vite";
 
 const packageJson = JSON.parse(fs.readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string };
+const feedbackModulePackageJson = JSON.parse(fs.readFileSync(new URL("./modules/feedback/package.json", import.meta.url), "utf8")) as {
+  exports: Record<string, string>;
+  name: string;
+};
 
 function normalizedModuleId(id: string) {
   return id.replace(/\\/g, "/");
@@ -79,6 +84,24 @@ function privateSettingsStaticGuard() {
   };
 }
 
+function workspacePackageExportAliases(packageName: string, packageRootUrl: URL, exportsMap: Record<string, string>) {
+  return Object.entries(exportsMap).map(([subpath, target]) => {
+    const publicSubpath = subpath === "." ? "" : `/${subpath.replace(/^\.\//, "")}`;
+    return {
+      find: `${packageName}${publicSubpath}`,
+      replacement: fileURLToPath(new URL(target, packageRootUrl)),
+    };
+  });
+}
+
+const workspacePackageAliases = [
+  ...workspacePackageExportAliases(
+    feedbackModulePackageJson.name,
+    new URL("./modules/feedback/", import.meta.url),
+    feedbackModulePackageJson.exports,
+  ),
+];
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const allowedHost = publicFrontendHost(env);
@@ -96,6 +119,9 @@ export default defineConfig(({ mode }) => {
     plugins: [privateSettingsStaticGuard(), tailwindcss()],
     define: {
       __ORF_CLIENT_VERSION__: JSON.stringify(packageJson.version),
+    },
+    resolve: {
+      alias: workspacePackageAliases,
     },
     server: {
       allowedHosts: allowedHost ? [allowedHost] : [],

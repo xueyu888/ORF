@@ -2,6 +2,7 @@ import { ArrowLeft, Check, Paperclip } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { feedbackWebContribution } from "@orf/feedback-module/web";
 import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { Button } from "../components/ui";
 import { UserAvatar } from "../components/UserAvatar";
@@ -114,7 +115,7 @@ export function FeedbackCreatePage() {
     return (
       <div className="bounty-hall-page feedback-issue-detail-page">
         <BountyEmptyState title="当前账号不能创建反馈" description="反馈创建需要 active 成员身份。" />
-        <Link className="feedback-issue-back-link" to="/feedback">
+        <Link className="feedback-issue-back-link" to={feedbackWebContribution.routes.inbox.path}>
           <ArrowLeft aria-hidden="true" />
           返回反馈列表
         </Link>
@@ -164,7 +165,7 @@ export function FeedbackCreatePage() {
     <div className="bounty-hall-page feedback-issue-detail-page feedback-create-page">
       <header className="feedback-create-header">
         <div className="feedback-create-heading">
-          <Link className="feedback-create-back-link" to="/feedback">
+          <Link className="feedback-create-back-link" to={feedbackWebContribution.routes.inbox.path}>
             <ArrowLeft aria-hidden="true" />
             反馈
           </Link>

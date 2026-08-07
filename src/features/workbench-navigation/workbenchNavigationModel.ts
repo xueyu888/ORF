@@ -1,3 +1,5 @@
+import { isFeedbackPath } from "@orf/feedback-module/web";
+
 export const workbenchNavigationSources = ["command", "deepLink", "notification", "route", "search", "user"] as const;
 
 export type WorkbenchNavigationSource = (typeof workbenchNavigationSources)[number];
@@ -77,7 +79,7 @@ export function workbenchRouteKeyFromHref(href: string): WorkbenchRouteKey | nul
   const pathname = normalized.split(/[?#]/, 1)[0] || "/";
   if (pathname === "/bounties" || pathname.startsWith("/bounties/")) return "bounties";
   if (pathname === "/chat" || pathname.startsWith("/chat/")) return "chat";
-  if (pathname === "/feedback" || pathname.startsWith("/feedback/")) return "feedback";
+  if (isFeedbackPath(pathname)) return "feedback";
   if (pathname === "/reports" || pathname.startsWith("/reports/")) return "reports";
   if (pathname === "/resources" || pathname.startsWith("/resources/")) return "resources";
   if (pathname === "/settings" || pathname.startsWith("/settings/")) return "settings";

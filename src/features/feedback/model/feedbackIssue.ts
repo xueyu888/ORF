@@ -1,4 +1,5 @@
 import type { FeedbackTransitionType } from "@orf/feedback-module/contracts";
+import { feedbackIssuePath } from "@orf/feedback-module/web";
 import type { CommentThread, Feedback } from "../../../types/orf";
 import { feedbackLifecycleLabel } from "../../../utils/labels";
 import { orfRichTextMarkdownToPlainText } from "../../rich-text/orfRichTextMarkdown";
@@ -41,7 +42,7 @@ export function feedbackIssueDisplayId(value: string) {
 }
 
 export function feedbackIssueHref(feedbackId: string) {
-  return `/feedback/${encodeURIComponent(feedbackId)}`;
+  return feedbackIssuePath(feedbackId);
 }
 
 function normalizeMarkdownLinkText(value: string) {

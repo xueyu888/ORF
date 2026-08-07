@@ -1,3 +1,4 @@
+import { isFeedbackPath } from "@orf/feedback-module/web";
 import type { PageVisualBackgroundScene, VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
 
 export type VisualSkinSlotKind = "login" | "chrome" | "page";
@@ -40,7 +41,7 @@ export function pageVisualBackgroundSceneForPath(pathname: string): PageVisualBa
   if (pathname.startsWith("/bounties")) return "page_bounties_background";
   if (pathname.startsWith("/tasks")) return "page_tasks_background";
   if (pathname.startsWith("/work-logs")) return "page_work_logs_background";
-  if (pathname.startsWith("/feedback")) return "page_feedback_background";
+  if (isFeedbackPath(pathname)) return "page_feedback_background";
   if (pathname.startsWith("/reports")) return "page_reports_background";
   if (pathname.startsWith("/system")) return "page_system_background";
   if (pathname.startsWith("/dashboard")) return "page_dashboard_background";
