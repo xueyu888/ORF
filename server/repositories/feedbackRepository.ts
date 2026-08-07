@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import {
+  canPreviewFeedbackReportAttachment,
+  feedbackReportAttachmentPreviewKind,
   planFeedbackAssigneeChangedNotification,
   planFeedbackCreatedNotification,
   planFeedbackLifecycleChangedNotification,
@@ -35,8 +37,6 @@ import { getFeedbackIssueDetailReadModelData } from "../readModels/feedbackIssue
 import { commentThreads, projects } from "../db/schema";
 import { objectStorage } from "../storage/objectStorage";
 import {
-  canPreviewCommentAttachment,
-  commentAttachmentPreviewKind,
   deleteStoredCommentAttachmentObjects,
   prepareCommentAttachment,
   type PreparedCommentAttachment,
@@ -1203,8 +1203,8 @@ export async function getFeedbackReportAttachmentContent(
     return { status: "notFound" };
   }
 
-  const canPreview = canPreviewCommentAttachment(attachment);
-  const previewKind = commentAttachmentPreviewKind(attachment);
+  const canPreview = canPreviewFeedbackReportAttachment(attachment);
+  const previewKind = feedbackReportAttachmentPreviewKind(attachment);
   const contentDisposition = options.disposition === "attachment" ? "attachment" : canPreview ? "inline" : "attachment";
 
   return {

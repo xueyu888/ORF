@@ -13,10 +13,6 @@
       "specifier": "../../modules/feedback/src/infrastructure/database/schema"
     },
     {
-      "file": "server/feedback/feedbackReportAttachments.ts",
-      "specifier": "../../modules/feedback/src/infrastructure/database/schema"
-    },
-    {
       "file": "server/readModels/feedbackIssueReadModel.ts",
       "specifier": "../../modules/feedback/src/domain"
     },

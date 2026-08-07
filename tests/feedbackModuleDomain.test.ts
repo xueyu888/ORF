@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  canPreviewFeedbackReportAttachment,
+  feedbackReportAttachmentDto,
+  feedbackReportAttachmentPreviewKind,
   feedbackTransitionInputSchema,
   planFeedbackAssigneeChangedNotification,
   planFeedbackCommentCreatedNotification,
@@ -412,5 +415,31 @@ describe("feedback module domain", () => {
       projectName: "客户端",
     });
     assert.equal(plans[3]?.targetHref, "/feedback/feedback-1?comment=comment-1");
+  });
+
+  it("maps feedback report attachments through the module-owned attachment contract", () => {
+    assert.equal(feedbackReportAttachmentPreviewKind({ fileName: "report.md", mimeType: "text/plain" }), "markdown");
+    assert.equal(feedbackReportAttachmentPreviewKind({ fileName: "raw.svg", mimeType: "text/plain" }), "download");
+    assert.equal(canPreviewFeedbackReportAttachment({ fileName: "capture.png", mimeType: "image/png" }), true);
+
+    assert.deepEqual(feedbackReportAttachmentDto({
+      fileName: "capture.png",
+      fileSize: 1234,
+      height: 720,
+      id: "ratt-1",
+      mimeType: "image/png",
+      width: 1280,
+    }), {
+      contentUrl: "/api/feedback/report-attachments/ratt-1/content",
+      downloadUrl: "/api/feedback/report-attachments/ratt-1/content?disposition=attachment",
+      fileName: "capture.png",
+      fileSize: 1234,
+      height: 720,
+      id: "ratt-1",
+      mimeType: "image/png",
+      previewKind: "image",
+      previewUrl: "/api/feedback/report-attachments/ratt-1/content?disposition=inline",
+      width: 1280,
+    });
   });
 });

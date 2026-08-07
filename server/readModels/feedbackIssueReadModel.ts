@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, or } from "drizzle-orm";
-import type { FeedbackActorSnapshot } from "@orf/feedback-module/contracts";
+import { feedbackReportAttachmentDto, type FeedbackActorSnapshot } from "@orf/feedback-module/contracts";
 import { deriveFeedbackCapabilities } from "../../modules/feedback/src/domain";
 import type { FeedbackIssueReadModelData } from "../../src/domain/feedbackReadModel";
 import type { CommentThread, Feedback, OrfProject, OrfUser } from "../../src/types/orf";
@@ -18,7 +18,6 @@ import {
   commentThreads,
   projects,
 } from "../db/schema";
-import { feedbackReportAttachmentDto } from "../feedback/feedbackReportAttachments";
 import { groupCommentAttachmentsByMessage } from "../repositories/commentAttachmentRepository";
 import { runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 import { getScopedUsers } from "../repositories/userRepository";
