@@ -7,17 +7,15 @@ import {
   planFeedbackCommentCreatedNotification,
   planFeedbackCreatedNotification,
   planFeedbackLifecycleChangedNotification,
-} from "../modules/feedback/src/public/contracts";
+} from "@orf/feedback-module/contracts";
 import {
   applyFeedbackTransition,
   canonicalizeFeedbackRelation,
   deriveFeedbackCapabilities,
-  validateFeedbackLifecycle,
-} from "../modules/feedback/src/domain";
-import {
   feedbackActorFixture,
   feedbackEntityFixture,
-} from "../modules/feedback/src/public/testing";
+  validateFeedbackLifecycle,
+} from "@orf/feedback-module/testing";
 
 const occurredAt = "2026-08-07T09:00:00.000Z";
 

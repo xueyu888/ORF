@@ -2,6 +2,12 @@ import type {
   FeedbackActorSnapshot,
   FeedbackEntitySnapshot,
 } from "../contracts/index";
+export {
+  applyFeedbackTransition,
+  canonicalizeFeedbackRelation,
+  deriveFeedbackCapabilities,
+  validateFeedbackLifecycle,
+} from "../domain/index";
 
 export function feedbackEntityFixture(
   overrides: Partial<FeedbackEntitySnapshot> = {},

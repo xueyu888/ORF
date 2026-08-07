@@ -1,0 +1,48 @@
+{
+  "legacyDeepImports": [
+    {
+      "file": "server/access/orfTargetAccess.ts",
+      "specifier": "../../modules/feedback/src/infrastructure/database/schema"
+    },
+    {
+      "file": "server/db/client.ts",
+      "specifier": "../../modules/feedback/src/infrastructure/database/schema"
+    },
+    {
+      "file": "server/feedback/feedbackDailyDigestScheduler.ts",
+      "specifier": "../../modules/feedback/src/infrastructure/database/schema"
+    },
+    {
+      "file": "server/feedback/feedbackReportAttachments.ts",
+      "specifier": "../../modules/feedback/src/infrastructure/database/schema"
+    },
+    {
+      "file": "server/readModels/feedbackIssueReadModel.ts",
+      "specifier": "../../modules/feedback/src/domain"
+    },
+    {
+      "file": "server/readModels/feedbackIssueReadModel.ts",
+      "specifier": "../../modules/feedback/src/infrastructure/database/schema"
+    },
+    {
+      "file": "server/repositories/feedbackRepository.ts",
+      "specifier": "../../modules/feedback/src/domain"
+    },
+    {
+      "file": "server/repositories/feedbackRepository.ts",
+      "specifier": "../../modules/feedback/src/infrastructure/database/schema"
+    },
+    {
+      "file": "server/repositories/feedbackSubscriptionRepository.ts",
+      "specifier": "../../modules/feedback/src/infrastructure/database/schema"
+    },
+    {
+      "file": "server/repositories/orfRepository.ts",
+      "specifier": "../../modules/feedback/src/infrastructure/database/schema"
+    },
+    {
+      "file": "server/repositories/userRepository.ts",
+      "specifier": "../../modules/feedback/src/infrastructure/database/schema"
+    }
+  ]
+}
