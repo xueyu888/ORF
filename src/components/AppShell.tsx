@@ -12,7 +12,7 @@ import { breadcrumb } from "./appShellBreadcrumb";
 import { orfAssetLibrary } from "../config/assetLibrary";
 import { hasPermission } from "../config/permissions";
 import { pageVisualBackgroundSceneForPath } from "../config/visualSkinSlots";
-import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
+import { canCreateTeamFeedback } from "../features/feedback/model/feedbackCapabilities";
 import { SystemBroadcastBanner } from "../features/notifications/components/SystemBroadcastBanner";
 import { ClientUpdateCenterDialog } from "../features/client-updates/ClientUpdateCenterDialog";
 import { ClientUpdateNotice } from "../features/client-updates/ClientUpdateNotice";
@@ -228,7 +228,7 @@ function AppShellFrame() {
   const topbarSelection = topbarBackground.status === "ready" ? topbarBackground.selection : null;
   const pageSelection = pageBackgroundScene && pageBackground.status === "ready" ? pageBackground.selection : null;
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
-  const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
+  const canCreateFeedback = canCreateTeamFeedback(currentUser);
   const isBountyHall = !isChatPage && shellDisplayPath.startsWith("/bounties");
   const shellStyle = {
     "--orf-sidebar-width": `${visibleSidebarWidth}px`,
