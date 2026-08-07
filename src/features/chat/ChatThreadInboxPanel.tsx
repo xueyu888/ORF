@@ -6,7 +6,7 @@ import { ChatMarkdown, commentImageAttachmentIdsFromChatSystemMetadata } from ".
 
 type ChatThreadInboxPanelProps = {
   currentUserId?: string;
-  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
   loading: boolean;
   onOpenThread: (summary: ChatThreadSummary) => void;
   summaries: ChatThreadSummary[];

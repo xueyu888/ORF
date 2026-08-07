@@ -18,7 +18,7 @@ type ChatThreadPanelProps = {
   canPin: boolean;
   currentUserId?: string;
   editingMessageId?: string | null;
-  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
   focusMessageId: string | null;
   composerFocusSignal?: number;
   onAttachmentPreview: ChatAttachmentPreviewHandler;

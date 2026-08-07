@@ -1,5 +1,6 @@
-import type { CommentThread, Feedback, Impact, OrfProject, OrfUser } from "../../../types/orf";
-import { impactLabel } from "../../../utils/labels";
+import type { FeedbackImpact } from "@orf/feedback-module/contracts";
+import type { CommentThread, Feedback, OrfProject, OrfUser } from "../../../types/orf";
+import { feedbackImpactLabel } from "../../../utils/labels";
 import { feedbackIssueBodyPreview, feedbackIssueCommentCount, feedbackIssueDisplayId, feedbackIssueStateLabel, isFeedbackIssueOpen } from "./feedbackIssue";
 import { feedbackIssueAssignee, feedbackIssueAuthor, feedbackIssueLabels, type FeedbackIssueLabel } from "./feedbackIssueMetadata";
 
@@ -10,7 +11,7 @@ export type FeedbackIssueListFilters = {
   assigneeUserId: string;
   authorUserId: string;
   cause: string;
-  impact: "All" | Impact;
+  impact: "All" | FeedbackImpact;
   listState: FeedbackIssueListState;
   projectId: string;
   query: string;
@@ -45,7 +46,7 @@ type ParsedFeedbackIssueQuery = {
 };
 
 const queryQualifierPattern = /(?:^|\s)(is|status|assignee|owner|author|label|impact|project|sort):("[^"]+"|\S+)/gi;
-const impactValues = new Set<Impact>(["Low", "Medium", "High", "Critical"]);
+const impactValues = new Set<FeedbackImpact>(["low", "medium", "high", "critical"]);
 
 export function buildFeedbackIssueListItems(input: {
   comments: readonly CommentThread[];
@@ -79,7 +80,7 @@ export function buildFeedbackIssueListItems(input: {
       issueNumber: feedbackIssueDisplayId(feedback.id),
       labels: feedbackIssueLabels(feedback),
       lastActivityAt: latestText([feedback.updatedAt, threadActivityAt]) || feedback.updatedAt,
-      preview: feedbackIssueBodyPreview(feedback.suggestedAdjustment),
+      preview: feedbackIssueBodyPreview(feedback.description),
       projectName: feedback.projectId ? projectById.get(feedback.projectId)?.name ?? null : null,
     };
   });
@@ -107,7 +108,7 @@ export function feedbackIssueAssigneeOptions(items: readonly FeedbackIssueListIt
   return uniqueOptions(
     items.map((item) => ({
       label: item.assigneeName,
-      value: item.feedback.ownerUserId,
+      value: item.feedback.assigneeUserId ?? "",
     })),
   );
 }
@@ -138,10 +139,10 @@ function filterFeedbackIssueListMatches(
     .filter((item) => filters.cause === "All" || labelMatches(item, filters.cause))
     .filter((item) => filters.impact === "All" || item.feedback.impact === filters.impact)
     .filter((item) => projectFilterMatches(item, filters.projectId))
-    .filter((item) => filters.assigneeUserId === "All" || item.feedback.ownerUserId === filters.assigneeUserId)
+    .filter((item) => filters.assigneeUserId === "All" || item.feedback.assigneeUserId === filters.assigneeUserId)
     .filter((item) => filters.authorUserId === "All" || item.feedback.createdBy === filters.authorUserId)
     .filter((item) => parsedQuery.stateTerms.length === 0 || parsedQuery.stateTerms.some((state) => itemMatchesListState(item, state)))
-    .filter((item) => parsedQuery.assigneeTerms.every((term) => personMatches(item.feedback.ownerUserId, item.assigneeName, term)))
+    .filter((item) => parsedQuery.assigneeTerms.every((term) => personMatches(item.feedback.assigneeUserId ?? "", item.assigneeName, term)))
     .filter((item) => parsedQuery.authorTerms.every((term) => personMatches(item.feedback.createdBy ?? "", item.authorName, term)))
     .filter((item) => parsedQuery.labelTerms.every((term) => labelMatches(item, term)))
     .filter((item) => parsedQuery.impactTerms.every((term) => impactMatches(item.feedback.impact, term)))
@@ -231,13 +232,13 @@ function textMatches(item: FeedbackIssueListItem, text: string) {
   const searchable = normalizeSearchText([
     item.feedback.id,
     item.issueNumber,
-    item.feedback.phenomenon,
-    item.feedback.suggestedAdjustment,
+    item.feedback.title,
+    item.feedback.description,
     item.assigneeName,
     item.authorName,
     item.projectName ?? (item.feedback.projectId ? item.feedback.projectId : "未归属"),
     feedbackIssueStateLabel(item.feedback),
-    impactLabel[item.feedback.impact],
+    feedbackImpactLabel[item.feedback.impact],
     ...item.labels.map((label) => label.name),
   ].join(" "));
   return normalizedText.split(" ").every((token) => searchable.includes(token));
@@ -269,9 +270,9 @@ function personMatches(userId: string, name: string, term: string) {
   return normalizeSearchText(userId).includes(normalizedTerm) || normalizeSearchText(name).includes(normalizedTerm);
 }
 
-function impactMatches(impact: Impact, term: string) {
+function impactMatches(impact: FeedbackImpact, term: string) {
   const normalizedTerm = normalizeSearchText(term);
-  return normalizeSearchText(impact).includes(normalizedTerm) || normalizeSearchText(impactLabel[impact]).includes(normalizedTerm);
+  return normalizeSearchText(impact).includes(normalizedTerm) || normalizeSearchText(feedbackImpactLabel[impact]).includes(normalizedTerm);
 }
 
 function feedbackIssueListStateForQueryValue(value: string): FeedbackIssueListState | null {

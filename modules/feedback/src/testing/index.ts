@@ -12,7 +12,7 @@ export function feedbackEntityFixture(
     projectId: "project-1",
     createdByUserId: "reporter-1",
     assigneeUserId: "assignee-1",
-    priority: "normal",
+    priority: null,
     impact: "medium",
     stage: "open",
     resolution: null,

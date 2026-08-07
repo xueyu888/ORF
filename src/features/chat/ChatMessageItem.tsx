@@ -23,7 +23,7 @@ type ChatMessageItemProps = {
   compact?: boolean;
   currentUserId?: string;
   editing?: boolean;
-  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
   firstUnread?: boolean;
   focused?: boolean;
   mentionableUsers: ChatUser[];
@@ -159,7 +159,7 @@ function CollapsibleMessageText({
 }: {
   body: string;
   commentImageAttachmentIds?: readonly string[];
-  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
   onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
   usersById: Map<string, ChatUser>;
 }) {

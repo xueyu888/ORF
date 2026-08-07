@@ -1,8 +1,8 @@
 import type { FastifyBaseLogger } from "fastify";
 import { and, asc, eq, lt, or, sql } from "drizzle-orm";
-import type { Impact } from "../../src/types/orf";
+import { feedback, feedbackDailyDigestRuns } from "../../modules/feedback/src/infrastructure/database/schema";
 import { db } from "../db/client";
-import { feedback, feedbackDailyDigestRuns, teamMembers, users } from "../db/schema";
+import { teamMembers, users } from "../db/schema";
 import { env } from "../env";
 import { publishNotificationEvent } from "../notifications/publisher";
 import {
@@ -20,7 +20,7 @@ type FeedbackDailyDigestRecipient = {
 };
 
 type FeedbackDailyDigestItemRow = FeedbackDailyDigestItem & {
-  ownerUserId: string;
+  assigneeUserId: string | null;
   teamId: string;
 };
 type FeedbackDailyDigestClaimStatus = "claimed" | "skipped";
@@ -32,7 +32,7 @@ function feedbackDailyDigestListHref(assigneeUserId: string) {
   const query = new URLSearchParams({
     assignee: assigneeUserId,
     sort: "updated-asc",
-    state: "open",
+    view: "assigned",
   });
   return `/feedback?${query.toString()}`;
 }
@@ -59,25 +59,26 @@ async function listOpenFeedbackDigestItems() {
     .select({
       id: feedback.id,
       impact: feedback.impact,
-      ownerUserId: feedback.ownerUserId,
-      phenomenon: feedback.phenomenon,
+      assigneeUserId: feedback.assigneeUserId,
+      title: feedback.title,
       teamId: feedback.teamId,
       updatedAt: feedback.updatedAt,
     })
     .from(feedback)
-    .innerJoin(teamMembers, and(eq(teamMembers.teamId, feedback.teamId), eq(teamMembers.userId, feedback.ownerUserId)))
-    .innerJoin(users, eq(users.id, feedback.ownerUserId))
-    .where(and(eq(feedback.status, "Open"), eq(users.status, "active")));
+    .innerJoin(teamMembers, and(eq(teamMembers.teamId, feedback.teamId), eq(teamMembers.userId, feedback.assigneeUserId)))
+    .innerJoin(users, eq(users.id, feedback.assigneeUserId))
+    .where(and(or(eq(feedback.stage, "open"), eq(feedback.stage, "in_progress")), eq(users.status, "active")));
 }
 
 function groupDigestItemsByRecipient(items: readonly FeedbackDailyDigestItemRow[]) {
   const grouped = new Map<string, FeedbackDailyDigestItem[]>();
   for (const item of items) {
-    const key = `${item.teamId}:${item.ownerUserId}`;
+    if (!item.assigneeUserId) continue;
+    const key = `${item.teamId}:${item.assigneeUserId}`;
     grouped.set(key, [...(grouped.get(key) ?? []), {
       id: item.id,
-      impact: item.impact as Impact,
-      phenomenon: item.phenomenon,
+      impact: item.impact,
+      title: item.title,
       updatedAt: item.updatedAt,
     }]);
   }

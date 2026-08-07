@@ -673,6 +673,13 @@
       "when": 1785986134000,
       "tag": "0095_result_execution_completion",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1786075200000,
+      "tag": "0096_feedback_lifecycle_rebuild",
+      "breakpoints": true
     }
   ]
 }

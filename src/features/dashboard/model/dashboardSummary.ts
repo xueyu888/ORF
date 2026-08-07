@@ -2,7 +2,7 @@ import type { Feedback, Objective, OrfUser, Result, Task } from "../../../types/
 import { feedbackCauseGroupsForCategories } from "../../feedback/model/feedbackCategories";
 
 const inactiveObjectiveStatuses = new Set<Objective["flowStatus"]>(["settled", "closed"]);
-const highImpactLevels = new Set<Feedback["impact"]>(["High", "Critical"]);
+const highImpactLevels = new Set<Feedback["impact"]>(["high", "critical"]);
 
 export interface DashboardSummary {
   activeObjectives: Objective[];
@@ -16,7 +16,7 @@ export interface DashboardSummary {
 }
 
 export function summarizeDashboardState(state: DashboardSummaryInput, currentUser?: Pick<OrfUser, "id"> | null): DashboardSummary {
-  const pendingFeedback = state.feedback.filter((feedback) => feedback.status !== "Closed");
+  const pendingFeedback = state.feedback.filter((feedback) => feedback.stage !== "closed");
   const causeCounts = new Map<string, number>();
 
   for (const feedback of pendingFeedback) {

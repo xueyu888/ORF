@@ -85,12 +85,12 @@ import {
   objectiveAlignmentReviewStatusText,
 } from "../../src/domain/orfAlignment";
 import { validateObjectiveDeadlineChange } from "../../src/domain/orfDeadline";
+import { feedback } from "../../modules/feedback/src/infrastructure/database/schema";
 import { db } from "../db/client";
 import {
   commentAttachments,
   commentMessages,
   commentThreads,
-  feedback,
   objectiveAlignmentRequests,
   objectiveAcceptanceReviews,
   objectives,
@@ -113,6 +113,7 @@ import {
   getUserNameById,
 } from "./notificationRepository";
 import { getFeedbackOrdinaryNotificationRecipients } from "./feedbackSubscriptionRepository";
+import { recordFeedbackCommentCreated } from "./feedbackRepository";
 import { publishNotificationEvent } from "../notifications/publisher";
 import { buildCommentNotificationContent } from "../notifications/notificationEventModel";
 import type { RuntimeScope } from "./runtimeScope";
@@ -831,7 +832,7 @@ async function getFeedbackCommentNotificationContext(input: {
   const [target] = await db
     .select({
       createdBy: feedback.createdBy,
-      ownerUserId: feedback.ownerUserId,
+      assigneeUserId: feedback.assigneeUserId,
       projectId: feedback.projectId,
       projectName: projects.name,
       teamId: feedback.teamId,
@@ -847,9 +848,9 @@ async function getFeedbackCommentNotificationContext(input: {
   const excludedUserIds = new Set(uniqueNotificationUserIds([input.actorUserId, ...input.excludedUserIds]));
   const recipientUserIds = await getFeedbackOrdinaryNotificationRecipients({
     createdBy: target.createdBy,
+    assigneeUserId: target.assigneeUserId,
     feedbackId: input.feedbackId,
     includeCommentParticipants: true,
-    ownerUserId: target.ownerUserId,
     teamId: input.teamId,
   });
   return {
@@ -2514,7 +2515,7 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
 
   if (targetType === "feedback") {
     const [target] = await db
-      .select({ feedbackId: feedback.id, teamId: feedback.teamId, title: feedback.phenomenon })
+      .select({ feedbackId: feedback.id, teamId: feedback.teamId, title: feedback.title })
       .from(feedback)
       .where(eq(feedback.id, targetId))
       .limit(1);
@@ -2842,6 +2843,14 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
         sortOrder,
       });
       await bindMessageAttachments(nextMessageId);
+      if (target.kind === "feedback") {
+        await recordFeedbackCommentCreated({
+          actorUserId: actor.id,
+          commentMessageId: nextMessageId,
+          feedbackId: target.feedbackId,
+          teamId: target.storageScopeId,
+        }, tx);
+      }
       await tx.update(commentThreads).set({ targetTitle, updatedAt: createdAt }).where(eq(commentThreads.id, parent.threadId));
       return {
         messageId: nextMessageId,
@@ -2898,6 +2907,14 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
       sortOrder,
     });
     await bindMessageAttachments(nextMessageId);
+    if (target.kind === "feedback") {
+      await recordFeedbackCommentCreated({
+        actorUserId: actor.id,
+        commentMessageId: nextMessageId,
+        feedbackId: target.feedbackId,
+        teamId: target.storageScopeId,
+      }, tx);
+    }
 
     return { messageId: nextMessageId, replyRecipientUserId: null, replyToMessageId: null, threadId: nextThreadId };
   });

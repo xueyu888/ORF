@@ -41,7 +41,7 @@ type ChatComposerProps = {
   attachmentMaxBytes: number;
   channelId: string;
   disabled?: boolean;
-  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
   focusSignal?: number;
   mentionableUsers: ChatUser[];
   onDraftStateChange?: (channelId: string, hasDraft: boolean) => void;

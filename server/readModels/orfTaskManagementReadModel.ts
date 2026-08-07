@@ -1,4 +1,4 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, or } from "drizzle-orm";
 import { createDefaultOrfReadModelRules, type ReportsPageData, type TaskManagementData } from "../../src/domain/orfReadModel";
 import type {
   CommentThread,
@@ -14,15 +14,13 @@ import type {
   Result,
   Task,
 } from "../../src/types/orf";
+import { feedback, feedbackActivityEvents, feedbackCauseCategories, feedbackRelations, feedbackReportAttachments } from "../../modules/feedback/src/infrastructure/database/schema";
 import { db } from "../db/client";
 import {
   commentAttachments,
   commentMessages,
   commentThreads,
   evidence,
-  feedback,
-  feedbackActivityEvents,
-  feedbackCauseCategories,
   objectiveAcceptanceReviews,
   objectiveAlignmentRequests,
   objectiveLoot,
@@ -40,6 +38,7 @@ import {
 import { getPermissionRulesForScope } from "../repositories/permissionRepository";
 import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 import { getScopedUsers } from "../repositories/userRepository";
+import { feedbackReportAttachmentDto } from "../feedback/feedbackReportAttachments";
 import { groupCommentAttachmentsByMessage } from "../repositories/commentAttachmentRepository";
 import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
 import { uniqueParticipantUserIds } from "../../src/domain/orfObjectiveParticipants";
@@ -129,6 +128,19 @@ async function getFeedbackActivityRows(feedbackIssueIds: string[]) {
   return db.select().from(feedbackActivityEvents).where(inArray(feedbackActivityEvents.feedbackId, feedbackIssueIds));
 }
 
+async function getFeedbackReportAttachmentRows(feedbackIssueIds: string[]) {
+  if (feedbackIssueIds.length === 0) return [];
+  return db.select().from(feedbackReportAttachments).where(inArray(feedbackReportAttachments.feedbackId, feedbackIssueIds));
+}
+
+async function getFeedbackRelationRows(feedbackIssueIds: string[]) {
+  if (feedbackIssueIds.length === 0) return [];
+  return db
+    .select()
+    .from(feedbackRelations)
+    .where(or(inArray(feedbackRelations.sourceFeedbackId, feedbackIssueIds), inArray(feedbackRelations.targetFeedbackId, feedbackIssueIds)));
+}
+
 function taskDefinitionContributorUserIds(task: TaskRow) {
   return task.definitionContributorUserIds.length > 0
     ? uniqueParticipantUserIds(task.definitionContributorUserIds)
@@ -175,7 +187,7 @@ export function userProfilesForTaskManagementData(
     addUserId(ids, item.ownerUserId);
   }
   for (const item of data.feedback) {
-    addUserId(ids, item.ownerUserId);
+    addUserId(ids, item.assigneeUserId);
     addUserId(ids, item.createdBy);
     addUserId(ids, item.updatedBy);
   }
@@ -246,6 +258,8 @@ export async function getTaskManagementData(scope: TaskManagementDataScope): Pro
   const checklistRows = await getChecklistRows(taskIds);
   const causeRows = await getFeedbackCauseRows(feedbackIssueIds);
   const feedbackActivityRows = await getFeedbackActivityRows(feedbackIssueIds);
+  const feedbackRelationRows = await getFeedbackRelationRows(feedbackIssueIds);
+  const feedbackReportAttachmentRows = await getFeedbackReportAttachmentRows(feedbackIssueIds);
   const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows(scope);
   const { userNameById, userProfiles: scopeUserProfiles } = await getUserMapsForStorageScope(storageScopeId);
   const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
@@ -275,11 +289,35 @@ export async function getTaskManagementData(scope: TaskManagementDataScope): Pro
     const list = activityByFeedback.get(item.feedbackId) ?? [];
     list.push({
       id: item.id,
-      actor: item.actorName,
-      action: item.action,
+      actorUserId: item.actorUserId,
+      activityType: item.activityType,
+      payload: item.payload,
+      sequence: item.sequence,
       at: item.createdAt,
     });
     activityByFeedback.set(item.feedbackId, list);
+  }
+  const reportAttachmentsByFeedback = new Map<string, Feedback["reportAttachments"]>();
+  for (const item of feedbackReportAttachmentRows.sort((left, right) => left.sortOrder - right.sortOrder || left.createdAt.localeCompare(right.createdAt))) {
+    const list = reportAttachmentsByFeedback.get(item.feedbackId) ?? [];
+    list.push(feedbackReportAttachmentDto(item));
+    reportAttachmentsByFeedback.set(item.feedbackId, list);
+  }
+  const relationsByFeedback = new Map<string, Feedback["relations"]>();
+  for (const item of feedbackRelationRows.sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
+    const relation = {
+      id: item.id,
+      type: item.type,
+      sourceFeedbackId: item.sourceFeedbackId,
+      targetFeedbackId: item.targetFeedbackId,
+      createdBy: optional(item.createdBy),
+      createdAt: item.createdAt,
+    };
+    for (const feedbackId of [item.sourceFeedbackId, item.targetFeedbackId]) {
+      const list = relationsByFeedback.get(feedbackId) ?? [];
+      list.push(relation);
+      relationsByFeedback.set(feedbackId, list);
+    }
   }
 
   const orderedResultRows = [...resultRows].sort((left, right) => left.sortOrder - right.sortOrder);
@@ -309,15 +347,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope): Pro
     });
     messagesByThread.set(message.threadId, messages);
   }
-  const firstFeedbackMessageByTarget = new Map<string, string>();
-  for (const thread of [...commentThreadRows].sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
-    if (thread.targetType !== "feedback") continue;
-    const firstMessage = messagesByThread.get(thread.id)?.[0];
-    if (firstMessage && !firstFeedbackMessageByTarget.has(thread.targetId)) {
-      firstFeedbackMessageByTarget.set(thread.targetId, firstMessage.body);
-    }
-  }
-
   const taskItems: Task[] = orderedTaskRows.map((task) => {
     const definitionContributorUserIds = taskDefinitionContributorUserIds(task);
     return {
@@ -362,18 +391,24 @@ export async function getTaskManagementData(scope: TaskManagementDataScope): Pro
   const feedbackItems: Feedback[] = feedbackRows.map((item) => ({
     id: item.id,
     projectId: item.projectId,
-    phenomenon: item.phenomenon,
+    title: item.title,
+    description: item.description,
+    reportAttachments: reportAttachmentsByFeedback.get(item.id) ?? [],
     causeCategories: causeCategoriesByFeedback.get(item.id) ?? [],
     impact: item.impact,
-    suggestedAdjustment: firstFeedbackMessageByTarget.get(item.id) ?? item.suggestedAdjustment ?? "",
-    status: item.status,
-    owner: nameForUserId(userNameById, item.ownerUserId, item.owner),
-    ownerUserId: item.ownerUserId,
+    priority: item.priority,
+    stage: item.stage,
+    resolution: item.resolution,
+    assigneeUserId: item.assigneeUserId,
     createdBy: item.createdBy,
     updatedBy: item.updatedBy,
+    version: item.version,
+    closedAt: item.closedAt,
+    closedByUserId: item.closedByUserId,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     activity: activityByFeedback.get(item.id) ?? [],
+    relations: relationsByFeedback.get(item.id) ?? [],
   }));
 
   const resultItems: Result[] = mapResultRows({

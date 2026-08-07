@@ -35,7 +35,7 @@ export function DrivePage() {
     ...state.objectives.slice(0, 120).map((objective) => ({ id: objective.id, title: objective.title, type: "objective" as const })),
     ...state.results.slice(0, 120).map((result) => ({ id: result.id, title: result.title, type: "result" as const })),
     ...state.tasks.slice(0, 120).map((task) => ({ id: task.id, title: task.title, type: "task" as const })),
-    ...state.feedback.slice(0, 120).map((feedback) => ({ id: feedback.id, title: feedback.phenomenon, type: "feedback" as const })),
+    ...state.feedback.slice(0, 120).map((feedback) => ({ id: feedback.id, title: feedback.title, type: "feedback" as const })),
   ], [state.feedback, state.objectives, state.projects, state.results, state.tasks]);
   const resourceHref = useCallback((resourceNodeId: string) => {
     const suffix = previewRoute ? "/preview" : "";

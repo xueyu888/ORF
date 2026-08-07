@@ -1,7 +1,7 @@
 import type { Feedback } from "../../../types/orf";
 import { feedbackCauseGroupsForCategories } from "./feedbackCategories";
 
-const highImpactLevels = new Set<Feedback["impact"]>(["High", "Critical"]);
+const highImpactLevels = new Set<Feedback["impact"]>(["high", "critical"]);
 
 export interface FeedbackInsights {
   highImpactCount: number;
@@ -31,8 +31,8 @@ export function summarizeFeedbackInsights(feedback: readonly Feedback[]): Feedba
       causeCounts.set(cause, (causeCounts.get(cause) ?? 0) + 1);
     }
 
-    if (item.status === "Closed") {
-      const responseHours = hoursBetween(item.createdAt, item.updatedAt);
+    if (item.stage === "closed") {
+      const responseHours = hoursBetween(item.createdAt, item.closedAt ?? item.updatedAt);
       if (responseHours != null) {
         closedResponseHours.push(responseHours);
       }

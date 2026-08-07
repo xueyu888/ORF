@@ -1,4 +1,21 @@
-import { ArrowLeft, Bell, BellOff, CheckCircle2, CircleDot, Link as LinkIcon, MessageSquare, Pencil, Reply, RotateCcw, Save, XCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  Bell,
+  BellOff,
+  CheckCircle2,
+  CircleDot,
+  Link as LinkIcon,
+  MessageSquare,
+  Pencil,
+  Plus,
+  Reply,
+  RotateCcw,
+  Save,
+  Send,
+  Trash2,
+  XCircle,
+} from "lucide-react";
+import type { FeedbackCommandResolution, FeedbackImpact, FeedbackPriority, FeedbackRelationType, FeedbackTransitionInput } from "@orf/feedback-module/contracts";
 import type { FormEvent, MutableRefObject } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -20,18 +37,18 @@ import {
 } from "../features/challenge/comments/CommentPanel";
 import { commentTimeDisplay } from "../features/challenge/comments/commentTime";
 import { RelatedResourcesPanel } from "../features/drive/RelatedResourcesPanel";
-import type { OrfRichTextAttachmentUploadResult } from "../features/rich-text/OrfRichTextEditor";
-import { canAssignFeedbackOwner, canEditFeedbackMetadata, canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
+import {
+  canChangeFeedbackAssignee,
+  canEditFeedbackMetadata,
+  canManageFeedbackLifecycle,
+} from "../features/feedback/model/feedbackCapabilities";
 import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
 import {
   feedbackIssueDisplayId,
   feedbackIssueHref,
   feedbackIssueMarkdownLink,
   feedbackIssueState,
-  feedbackIssueStateLabel,
   feedbackIssueThreads,
-  isFeedbackIssueOpen,
-  nextFeedbackIssueStatus,
 } from "../features/feedback/model/feedbackIssue";
 import {
   ensureFeedbackAssigneeOption,
@@ -39,20 +56,35 @@ import {
 } from "../features/feedback/model/feedbackAssigneeOptions";
 import {
   feedbackIssueAssignee,
+  feedbackIssueAuthor,
   feedbackIssueLabels,
   feedbackIssueLinkedFeedback,
   feedbackIssueParticipants,
 } from "../features/feedback/model/feedbackIssueMetadata";
 import { useFeedbackAssigneeOptions } from "../features/feedback/useFeedbackAssigneeOptions";
-import { useOrf } from "../state/OrfProvider";
+import type { OrfRichTextAttachmentUploadResult } from "../features/rich-text/OrfRichTextEditor";
 import { getFeedbackSubscription, updateFeedbackSubscription } from "../state/apiClient";
-import type { ActivityItem, CommentMessage, CommentThread, Feedback, FeedbackSubscriptionMode, Impact, OrfProject, OrfUser } from "../types/orf";
-import { impactLabel } from "../utils/labels";
+import { useOrf } from "../state/OrfProvider";
+import type { ActivityItem, CommentMessage, CommentThread, Feedback, FeedbackSubscriptionMode, OrfProject, OrfUser } from "../types/orf";
+import { feedbackImpactLabel, feedbackLifecycleLabel, feedbackPriorityLabel, feedbackRelationTypeLabel, feedbackResolutionLabel } from "../utils/labels";
 
 type FeedbackCommentEntry = {
   message: CommentMessage;
   thread: CommentThread;
 };
+
+type FeedbackMetadataDraft = {
+  causeCategories: string[];
+  impact: FeedbackImpact;
+  priority: "" | FeedbackPriority;
+  projectId: string;
+  title: string;
+};
+
+const lifecycleResolutionOptions: FeedbackCommandResolution[] = ["resolved", "not_needed", "cannot_resolve", "duplicate"];
+const feedbackImpactOptions: FeedbackImpact[] = ["low", "medium", "high", "critical"];
+const feedbackPriorityOptions: FeedbackPriority[] = ["p0", "p1", "p2", "p3"];
+const feedbackRelationOptions: FeedbackRelationType[] = ["related", "duplicates", "blocks"];
 
 export function FeedbackIssuePage() {
   const { feedbackId = "" } = useParams();
@@ -62,11 +94,13 @@ export function FeedbackIssuePage() {
     currentUser,
     loadCommentMentionableUsers,
     notify,
+    addFeedbackRelation,
     state,
+    removeFeedbackRelation,
+    transitionFeedback,
     updateCommentMessage,
     updateFeedbackAssignee,
     updateFeedbackMetadata,
-    updateFeedbackStatus,
     uploadCommentAttachment,
   } = useOrf();
   const feedback = state.feedback.find((item) => item.id === feedbackId) ?? null;
@@ -87,14 +121,12 @@ export function FeedbackIssuePage() {
     [entries, linkedCommentId],
   );
   const linkedCommentMessageId = linkedCommentEntry?.message.id ?? null;
-  const originalEntry = entries[0] ?? null;
-  const timelineEntries = originalEntry ? entries.slice(1) : entries;
-  const activityEntries = useMemo(() => feedback ? feedbackIssueActivityEntries(feedback.activity) : [], [feedback]);
   const mentionUsersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
-  const canChangeState = feedback ? canManageFeedbackStatus(feedback, currentUser) : false;
+  const canChangeLifecycle = feedback ? canManageFeedbackLifecycle(feedback, currentUser) : false;
   const canEditMetadata = feedback ? canEditFeedbackMetadata(feedback, currentUser) : false;
-  const canAssignOwner = feedback ? canAssignFeedbackOwner(feedback, currentUser) : false;
+  const canChangeAssignee = feedback ? canChangeFeedbackAssignee(feedback, currentUser) : false;
   const canManageAllComments = hasPermission(currentUser, state.permissionRules, "comment.manage");
+
   const uploadFeedbackCommentAttachment = async (file: File) => {
     if (!feedback) return null;
     const upload = await uploadCommentAttachment({ file, targetId: feedback.id, targetType: "feedback" });
@@ -198,7 +230,7 @@ export function FeedbackIssuePage() {
     addComment({
       targetType: "feedback",
       targetId: feedback.id,
-      targetTitle: feedback.phenomenon,
+      targetTitle: feedback.title,
       body,
       ...replyInput,
     });
@@ -225,8 +257,8 @@ export function FeedbackIssuePage() {
       threadId: entry.thread.id,
     });
   };
-  const updateEditDraft = (messageId: string, draft: CommentDraft) => {
-    setEditState((current) => (current?.messageId === messageId ? { ...current, draft } : current));
+  const updateEditDraft = (messageId: string, nextDraft: CommentDraft) => {
+    setEditState((current) => (current?.messageId === messageId ? { ...current, draft: nextDraft } : current));
   };
   const submitEdit = (event: FormEvent, messageId: string) => {
     event.preventDefault();
@@ -248,7 +280,7 @@ export function FeedbackIssuePage() {
   };
 
   const changeSubscription = async (mode: "none" | "subscribed" | "muted") => {
-    if (!feedback || subscriptionLoading) return;
+    if (subscriptionLoading) return;
     setSubscriptionLoading(true);
     try {
       const response = await updateFeedbackSubscription(feedback.id, mode);
@@ -261,8 +293,6 @@ export function FeedbackIssuePage() {
     }
   };
 
-  const issueOpen = isFeedbackIssueOpen(feedback);
-
   return (
     <div className="bounty-hall-page feedback-issue-detail-page">
       <header className="feedback-issue-detail-header">
@@ -271,12 +301,12 @@ export function FeedbackIssuePage() {
             <ArrowLeft aria-hidden="true" />
             反馈
           </Link>
-          <h2>{feedback.phenomenon}</h2>
+          <h2>{feedback.title}</h2>
           <div className="feedback-issue-detail-meta">
             <IssueStateBadge feedback={feedback} />
             <span>#{feedbackIssueDisplayId(feedback.id)}</span>
-            <span>{feedback.owner} 更新于 {formatIssueDate(feedback.updatedAt)}</span>
-            <span><MessageSquare aria-hidden="true" /> {timelineEntries.length}</span>
+            <span>更新于 {formatIssueDate(feedback.updatedAt)}</span>
+            <span><MessageSquare aria-hidden="true" /> {entries.length}</span>
           </div>
         </div>
         <div className="feedback-issue-detail-actions">
@@ -284,12 +314,6 @@ export function FeedbackIssuePage() {
             <LinkIcon aria-hidden="true" />
             复制链接
           </BountyButton>
-          {canChangeState && (
-            <BountyButton onClick={() => updateFeedbackStatus(feedback.id, nextFeedbackIssueStatus(feedback))} variant={issueOpen ? "secondary" : "primary"}>
-              {issueOpen ? <XCircle aria-hidden="true" /> : <RotateCcw aria-hidden="true" />}
-              {issueOpen ? "关闭 issue" : "重新打开"}
-            </BountyButton>
-          )}
           <BountyButton onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })} variant="secondary">
             <MessageSquare aria-hidden="true" />
             回复
@@ -300,28 +324,16 @@ export function FeedbackIssuePage() {
       <main className="feedback-issue-detail-layout">
         <section className="feedback-issue-thread" aria-label="反馈讨论">
           <OriginalFeedbackCard
-            canManageAllComments={canManageAllComments}
-            currentUser={currentUser}
-            editState={editState}
-            entry={originalEntry}
             feedback={feedback}
-            mentionableUsers={mentionableUsers}
             mentionUsersById={mentionUsersById}
-            focused={originalEntry?.message.id === linkedCommentMessageId}
-            onRegisterElement={registerFeedbackCommentElement(commentElementRefs)}
-            onCancelEdit={() => setEditState(null)}
-            onEditDraftChange={updateEditDraft}
             onOpenImage={setImagePreview}
-            onReply={startReply}
-            onStartEdit={startEdit}
-            onSubmitEdit={submitEdit}
-            onUploadAttachment={uploadFeedbackCommentAttachment}
+            users={state.users}
           />
 
-          <FeedbackActivityTimeline entries={activityEntries} />
+          <FeedbackActivityTimeline entries={feedback.activity} users={state.users} />
 
           <div className="feedback-issue-timeline">
-            {timelineEntries.map(({ message, thread }) => (
+            {entries.map(({ message, thread }) => (
               <article
                 className={message.id === linkedCommentMessageId ? "feedback-issue-comment-card feedback-issue-comment-card-linked" : "feedback-issue-comment-card"}
                 data-comment-message-id={message.id}
@@ -351,7 +363,7 @@ export function FeedbackIssuePage() {
                         draft={editState.draft}
                         mentionableUsers={mentionableUsers}
                         onCancel={() => setEditState(null)}
-                        onDraftChange={(draft) => updateEditDraft(message.id, draft)}
+                        onDraftChange={(nextDraft) => updateEditDraft(message.id, nextDraft)}
                         onSubmit={(event) => submitEdit(event, message.id)}
                         onUploadAttachment={uploadFeedbackCommentAttachment}
                       />
@@ -398,15 +410,25 @@ export function FeedbackIssuePage() {
             mode={subscriptionMode}
             onChange={changeSubscription}
           />
+          <FeedbackLifecyclePanel
+            canChangeLifecycle={canChangeLifecycle}
+            currentUser={currentUser}
+            feedback={feedback}
+            feedbackItems={state.feedback}
+            notify={notify}
+            onTransition={(command) => transitionFeedback(feedback.id, command)}
+          />
           <IssueSidebar
             assigneeOptions={assigneeOptions}
-            canAssignOwner={canAssignOwner}
+            canChangeAssignee={canChangeAssignee}
             canEdit={canEditMetadata}
             comments={threads}
             feedback={feedback}
             feedbackItems={state.feedback}
-            onSaveAssignee={(ownerUserId) => updateFeedbackAssignee(feedback.id, ownerUserId)}
-            onSaveMetadata={(input) => updateFeedbackMetadata(feedback.id, input)}
+            onAddRelation={(input) => addFeedbackRelation(feedback.id, { ...input, expectedVersion: feedback.version })}
+            onRemoveRelation={(relationId) => removeFeedbackRelation(feedback.id, relationId, feedback.version)}
+            onSaveAssignee={(assigneeUserId) => updateFeedbackAssignee(feedback.id, assigneeUserId, feedback.version)}
+            onSaveMetadata={(input) => updateFeedbackMetadata(feedback.id, { ...input, expectedVersion: feedback.version })}
             projects={state.projects}
             users={state.users}
           />
@@ -419,92 +441,197 @@ export function FeedbackIssuePage() {
 }
 
 function OriginalFeedbackCard({
-  canManageAllComments,
-  currentUser,
-  editState,
-  entry,
   feedback,
-  focused,
-  mentionableUsers,
   mentionUsersById,
-  onEditDraftChange,
-  onCancelEdit,
   onOpenImage,
-  onRegisterElement,
-  onReply,
-  onStartEdit,
-  onSubmitEdit,
-  onUploadAttachment,
+  users,
 }: {
-  canManageAllComments: boolean;
-  currentUser: OrfUser | null;
-  editState: { draft: CommentDraft; messageId: string; threadId: string } | null;
-  entry: FeedbackCommentEntry | null;
   feedback: Feedback;
-  focused: boolean;
-  mentionableUsers: CommentMentionUser[];
   mentionUsersById: Map<string, CommentMentionUser>;
-  onCancelEdit: () => void;
-  onEditDraftChange: (messageId: string, draft: CommentDraft) => void;
   onOpenImage: (preview: ImagePreview) => void;
-  onRegisterElement: (messageId: string, element: HTMLElement | null) => void;
-  onReply: (message: CommentMessage) => void;
-  onStartEdit: (entry: FeedbackCommentEntry) => void;
-  onSubmitEdit: (event: FormEvent, messageId: string) => void;
-  onUploadAttachment: (file: File) => Promise<OrfRichTextAttachmentUploadResult | null>;
+  users: readonly OrfUser[];
 }) {
-  const message = entry?.message ?? null;
-  const createdAt = commentTimeDisplay(message?.createdAt ?? feedback.createdAt);
-  const authorName = message?.author ?? feedback.owner;
-  const authorAvatarUrl = message?.authorAvatarUrl ?? null;
+  const author = feedbackIssueAuthor(feedback, users);
+  const createdAt = commentTimeDisplay(feedback.createdAt);
 
   return (
-    <article
-      className={focused ? "feedback-issue-original-card feedback-issue-comment-card-linked" : "feedback-issue-original-card"}
-      data-comment-message-id={message?.id}
-      ref={(element) => {
-        if (message) onRegisterElement(message.id, element);
-      }}
-    >
-      <UserAvatar avatarUrl={authorAvatarUrl} className="h-8 w-8 text-[11px] shadow-sm" frame={false} name={authorName} />
+    <article className="feedback-issue-original-card">
+      <UserAvatar avatarUrl={author.avatarUrl} className="h-8 w-8 text-[11px] shadow-sm" frame={false} name={author.name} />
       <div className="feedback-issue-original-main">
         <div className="feedback-issue-comment-header">
-          <strong>{authorName}</strong>
-          <time dateTime={message?.createdAt ?? feedback.createdAt} title={createdAt.title}>{createdAt.label}</time>
-          {entry && canManageFeedbackComment(entry.message, currentUser, canManageAllComments) && (
-            <Button type="button" size="sm" variant="ghost" onClick={() => onStartEdit(entry)}>
-              <Pencil aria-hidden="true" />
-              编辑
-            </Button>
-          )}
-          {message && (
-            <Button type="button" size="sm" variant="ghost" onClick={() => onReply(message)}>
-              <Reply aria-hidden="true" />
-              回复
-            </Button>
-          )}
+          <strong>{author.name}</strong>
+          <time dateTime={feedback.createdAt} title={createdAt.title}>{createdAt.label}</time>
         </div>
         <div className="feedback-issue-comment-body">
-          {message && editState?.messageId === message.id ? (
-            <CommentInlineEditor
-              currentUserId={currentUser?.id ?? ""}
-              draft={editState.draft}
-              mentionableUsers={mentionableUsers}
-              onCancel={onCancelEdit}
-              onDraftChange={(draft) => onEditDraftChange(message.id, draft)}
-              onSubmit={(event) => onSubmitEdit(event, message.id)}
-              onUploadAttachment={onUploadAttachment}
-            />
-          ) : message ? (
-            <CommentBodyText attachments={message.attachments ?? []} body={message.body} mentionUsersById={mentionUsersById} onOpenImage={onOpenImage} />
-          ) : feedback.suggestedAdjustment ? (
-            <CommentBodyText attachments={[]} body={feedback.suggestedAdjustment} mentionUsersById={mentionUsersById} onOpenImage={onOpenImage} />
-          ) : (
-            <CommentBodyText attachments={[]} body={feedback.phenomenon} mentionUsersById={mentionUsersById} onOpenImage={onOpenImage} />
-          )}
+          <CommentBodyText
+            attachments={feedback.reportAttachments}
+            body={feedback.description}
+            mentionUsersById={mentionUsersById}
+            onOpenImage={onOpenImage}
+          />
         </div>
       </div>
     </article>
+  );
+}
+
+function FeedbackLifecyclePanel({
+  canChangeLifecycle,
+  currentUser,
+  feedback,
+  feedbackItems,
+  notify,
+  onTransition,
+}: {
+  canChangeLifecycle: boolean;
+  currentUser: OrfUser | null;
+  feedback: Feedback;
+  feedbackItems: readonly Feedback[];
+  notify: (message: string) => void;
+  onTransition: (command: FeedbackTransitionInput) => Promise<boolean>;
+}) {
+  const [resolution, setResolution] = useState<FeedbackCommandResolution>("resolved");
+  const [note, setNote] = useState("");
+  const [adminReason, setAdminReason] = useState("");
+  const [duplicateTargetFeedbackId, setDuplicateTargetFeedbackId] = useState("");
+  const adminTakeoverRequired = currentUser?.role === "admin" && currentUser.id !== feedback.createdBy;
+  const noteValue = note.trim();
+  const adminReasonValue = adminReason.trim();
+  const feedbackTitleById = useMemo(() => new Map(feedbackItems.map((item) => [item.id, item.title])), [feedbackItems]);
+  const duplicateTargets = useMemo(
+    () => feedback.relations
+      .filter((relation) => relation.type === "duplicates" && relation.sourceFeedbackId === feedback.id)
+      .map((relation) => ({
+        id: relation.targetFeedbackId,
+        title: feedbackTitleById.get(relation.targetFeedbackId) ?? relation.targetFeedbackId,
+      })),
+    [feedback.id, feedback.relations, feedbackTitleById],
+  );
+
+  useEffect(() => {
+    setNote("");
+    setAdminReason("");
+    setDuplicateTargetFeedbackId("");
+  }, [feedback.id, feedback.stage, feedback.version]);
+
+  useEffect(() => {
+    if (resolution !== "duplicate") return;
+    if (duplicateTargetFeedbackId && duplicateTargets.some((item) => item.id === duplicateTargetFeedbackId)) return;
+    setDuplicateTargetFeedbackId(duplicateTargets[0]?.id ?? "");
+  }, [duplicateTargetFeedbackId, duplicateTargets, resolution]);
+
+  const runTransition = async (type: FeedbackTransitionInput["type"]) => {
+    const expectedVersion = feedback.version;
+    const administrativeTakeover = adminTakeoverRequired ? { reason: adminReasonValue } : undefined;
+    if (adminTakeoverRequired && !adminReasonValue && (type === "accept_verification" || type === "reject_verification" || type === "withdraw" || type === "reopen")) {
+      notify("请填写管理员代操作原因");
+      return;
+    }
+    if ((type === "submit_verification" || type === "reject_verification" || type === "withdraw" || type === "reopen") && !noteValue) {
+      notify("请填写生命周期说明");
+      return;
+    }
+    if (type === "submit_verification" && resolution === "duplicate" && !duplicateTargetFeedbackId) {
+      notify("请先添加并选择重复反馈关系");
+      return;
+    }
+
+    const command: FeedbackTransitionInput =
+      type === "start"
+        ? { type, expectedVersion }
+        : type === "submit_verification"
+          ? {
+              type,
+              expectedVersion,
+              resolution,
+              note: noteValue,
+              ...(resolution === "duplicate" ? { duplicateTargetFeedbackId } : {}),
+            }
+          : type === "accept_verification"
+            ? { type, expectedVersion, administrativeTakeover }
+            : { type, expectedVersion, note: noteValue, administrativeTakeover };
+
+    const ok = await onTransition(command);
+    if (ok) {
+      setNote("");
+      setAdminReason("");
+    }
+  };
+
+  return (
+    <div className="feedback-issue-sidebar-block">
+      <span>Lifecycle</span>
+      <IssueStateBadge feedback={feedback} />
+      {canChangeLifecycle ? (
+        <>
+          {feedback.stage === "open" && (
+            <Button size="sm" type="button" onClick={() => runTransition("start")}>
+              <CircleDot aria-hidden="true" />
+              开始处理
+            </Button>
+          )}
+          {(feedback.stage === "open" || feedback.stage === "in_progress") && (
+            <>
+              <select className="feedback-issue-sidebar-input" value={resolution} onChange={(event) => setResolution(event.target.value as FeedbackCommandResolution)}>
+                {lifecycleResolutionOptions.map((item) => <option key={item} value={item}>{feedbackResolutionLabel[item]}</option>)}
+              </select>
+              {resolution === "duplicate" && (
+                duplicateTargets.length > 0 ? (
+                  <select className="feedback-issue-sidebar-input" value={duplicateTargetFeedbackId} onChange={(event) => setDuplicateTargetFeedbackId(event.target.value)}>
+                    {duplicateTargets.map((item) => <option key={item.id} value={item.id}>#{feedbackIssueDisplayId(item.id)} {item.title}</option>)}
+                  </select>
+                ) : (
+                  <p className="feedback-issue-sidebar-empty">先在关系中添加“重复”目标</p>
+                )
+              )}
+              <textarea className="feedback-issue-sidebar-input" rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="处理说明" />
+              <div className="feedback-issue-sidebar-actions">
+                <Button size="sm" type="button" onClick={() => runTransition("submit_verification")}>
+                  <Send aria-hidden="true" />
+                  提交验证
+                </Button>
+                <Button size="sm" type="button" variant="ghost" onClick={() => runTransition("withdraw")}>
+                  <XCircle aria-hidden="true" />
+                  撤回
+                </Button>
+              </div>
+            </>
+          )}
+          {feedback.stage === "pending_verification" && (
+            <>
+              <textarea className="feedback-issue-sidebar-input" rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="拒绝验证说明" />
+              {adminTakeoverRequired && (
+                <textarea className="feedback-issue-sidebar-input" rows={2} value={adminReason} onChange={(event) => setAdminReason(event.target.value)} placeholder="管理员代操作原因" />
+              )}
+              <div className="feedback-issue-sidebar-actions">
+                <Button size="sm" type="button" onClick={() => runTransition("accept_verification")}>
+                  <CheckCircle2 aria-hidden="true" />
+                  接受验证
+                </Button>
+                <Button size="sm" type="button" variant="ghost" onClick={() => runTransition("reject_verification")}>
+                  <RotateCcw aria-hidden="true" />
+                  退回处理
+                </Button>
+              </div>
+            </>
+          )}
+          {feedback.stage === "closed" && (
+            <>
+              <textarea className="feedback-issue-sidebar-input" rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="重新打开原因" />
+              {adminTakeoverRequired && (
+                <textarea className="feedback-issue-sidebar-input" rows={2} value={adminReason} onChange={(event) => setAdminReason(event.target.value)} placeholder="管理员代操作原因" />
+              )}
+              <Button size="sm" type="button" onClick={() => runTransition("reopen")}>
+                <RotateCcw aria-hidden="true" />
+                重新打开
+              </Button>
+            </>
+          )}
+        </>
+      ) : (
+        <p className="feedback-issue-sidebar-empty">当前账号不能推进生命周期</p>
+      )}
+    </div>
   );
 }
 
@@ -540,26 +667,21 @@ function FeedbackSubscriptionControls({
   );
 }
 
-type FeedbackMetadataDraft = {
-  causeCategories: string[];
-  impact: Impact;
-  phenomenon: string;
-  projectId: string;
-};
-
 function feedbackMetadataDraftFromFeedback(feedback: Feedback): FeedbackMetadataDraft {
   return {
     causeCategories: feedback.causeCategories,
     impact: feedback.impact,
-    phenomenon: feedback.phenomenon,
+    priority: feedback.priority ?? "",
     projectId: feedback.projectId ?? "",
+    title: feedback.title,
   };
 }
 
 function sameFeedbackMetadataDraft(left: FeedbackMetadataDraft, right: FeedbackMetadataDraft) {
   return (
-    left.phenomenon === right.phenomenon &&
+    left.title === right.title &&
     left.impact === right.impact &&
+    left.priority === right.priority &&
     left.projectId === right.projectId &&
     left.causeCategories.length === right.causeCategories.length &&
     left.causeCategories.every((category, index) => category === right.causeCategories[index])
@@ -582,45 +704,51 @@ function subscriptionToast(mode: FeedbackSubscriptionMode) {
 
 function IssueSidebar({
   assigneeOptions,
-  canAssignOwner,
+  canChangeAssignee,
   canEdit,
   comments,
   feedback,
   feedbackItems,
+  onAddRelation,
+  onRemoveRelation,
   onSaveAssignee,
   onSaveMetadata,
   projects,
   users,
 }: {
   assigneeOptions: readonly FeedbackAssigneeOption[];
-  canAssignOwner: boolean;
+  canChangeAssignee: boolean;
   canEdit: boolean;
   comments: readonly CommentThread[];
   feedback: Feedback;
   feedbackItems: readonly Feedback[];
-  onSaveAssignee: (ownerUserId: string) => Promise<boolean>;
+  onAddRelation: (input: { targetFeedbackId: string; type: FeedbackRelationType }) => Promise<boolean>;
+  onRemoveRelation: (relationId: string) => Promise<boolean>;
+  onSaveAssignee: (assigneeUserId: string | null) => Promise<boolean>;
   onSaveMetadata: (input: {
     causeCategories: string[];
-    impact: Impact;
-    phenomenon: string;
+    impact: FeedbackImpact;
+    priority: FeedbackPriority | null;
     projectId: string | null;
+    title: string;
   }) => Promise<boolean>;
   projects: readonly OrfProject[];
   users: readonly OrfUser[];
 }) {
-  const [draft, setDraft] = useState(() => feedbackMetadataDraftFromFeedback(feedback));
-  const [assigneeDraft, setAssigneeDraft] = useState(feedback.ownerUserId);
+  const [metadataDraft, setMetadataDraft] = useState(() => feedbackMetadataDraftFromFeedback(feedback));
+  const [assigneeDraft, setAssigneeDraft] = useState(feedback.assigneeUserId ?? "");
+  const [relationDraft, setRelationDraft] = useState<{ targetFeedbackId: string; type: FeedbackRelationType }>({ targetFeedbackId: "", type: "related" });
   const assignee = feedbackIssueAssignee(feedback, users);
   const labels = feedbackIssueLabels(feedback);
   const participants = feedbackIssueParticipants({ feedback, threads: comments, users });
-  const linkedFeedback = feedbackIssueLinkedFeedback({ feedback, feedbackItems, threads: comments });
-  const ownerOptions = useMemo(
-    () => ensureFeedbackAssigneeOption(assigneeOptions, {
+  const linkedFeedback = feedbackIssueLinkedFeedback({ feedback, feedbackItems });
+  const assigneeSelectOptions = useMemo(
+    () => ensureFeedbackAssigneeOption(assigneeOptions, assignee.id ? {
       avatarUrl: assignee.avatarUrl,
-      id: feedback.ownerUserId,
+      id: assignee.id,
       name: assignee.name,
-    }),
-    [assignee.avatarUrl, assignee.name, assigneeOptions, feedback.ownerUserId],
+    } : null),
+    [assignee.avatarUrl, assignee.id, assignee.name, assigneeOptions],
   );
   const projectById = new Map(projects.map((project) => [project.id, project]));
   const project = feedback.projectId ? projectById.get(feedback.projectId) ?? null : null;
@@ -628,21 +756,34 @@ function IssueSidebar({
     () => Array.from(new Set([...teamFeedbackCauseOptions(), ...feedback.causeCategories])).filter(Boolean),
     [feedback.causeCategories],
   );
-  const metadataDirty = !sameFeedbackMetadataDraft(draft, feedbackMetadataDraftFromFeedback(feedback));
-  const assigneeDirty = assigneeDraft !== feedback.ownerUserId;
-  const canSaveAssignee = Boolean(canAssignOwner && assigneeDirty && assigneeDraft.trim());
-  const canSaveMetadata = Boolean(metadataDirty && draft.phenomenon.trim() && draft.causeCategories.length > 0);
+  const metadataDirty = !sameFeedbackMetadataDraft(metadataDraft, feedbackMetadataDraftFromFeedback(feedback));
+  const assigneeDirty = assigneeDraft !== (feedback.assigneeUserId ?? "");
+  const canSaveAssignee = Boolean(canChangeAssignee && assigneeDirty);
+  const canSaveMetadata = Boolean(metadataDirty && metadataDraft.title.trim() && metadataDraft.causeCategories.length > 0);
+  const relationTargets = useMemo(
+    () => feedbackItems
+      .filter((item) => item.id !== feedback.id)
+      .filter((item) => !feedback.relations.some((relation) => feedbackRelationMatchesDraft(feedback.id, relation, item.id, relationDraft.type))),
+    [feedback.id, feedback.relations, feedbackItems, relationDraft.type],
+  );
 
   useEffect(() => {
-    setDraft(feedbackMetadataDraftFromFeedback(feedback));
-  }, [feedback.causeCategories, feedback.id, feedback.impact, feedback.phenomenon, feedback.projectId]);
+    setMetadataDraft(feedbackMetadataDraftFromFeedback(feedback));
+  }, [feedback.causeCategories, feedback.id, feedback.impact, feedback.priority, feedback.projectId, feedback.title]);
 
   useEffect(() => {
-    setAssigneeDraft(feedback.ownerUserId);
-  }, [feedback.id, feedback.ownerUserId]);
+    setAssigneeDraft(feedback.assigneeUserId ?? "");
+  }, [feedback.assigneeUserId, feedback.id]);
+
+  useEffect(() => {
+    setRelationDraft((current) => ({
+      ...current,
+      targetFeedbackId: relationTargets.some((item) => item.id === current.targetFeedbackId) ? current.targetFeedbackId : "",
+    }));
+  }, [feedback.id, relationTargets]);
 
   const toggleCause = (cause: string) => {
-    setDraft((current) => {
+    setMetadataDraft((current) => {
       const exists = current.causeCategories.includes(cause);
       const nextCategories = exists
         ? current.causeCategories.filter((item) => item !== cause)
@@ -654,49 +795,54 @@ function IssueSidebar({
   const saveMetadata = async () => {
     if (!canSaveMetadata) return;
     await onSaveMetadata({
-      causeCategories: draft.causeCategories,
-      impact: draft.impact,
-      phenomenon: draft.phenomenon.trim(),
-      projectId: draft.projectId || null,
+      causeCategories: metadataDraft.causeCategories,
+      impact: metadataDraft.impact,
+      priority: metadataDraft.priority || null,
+      projectId: metadataDraft.projectId || null,
+      title: metadataDraft.title.trim(),
     });
   };
 
   const saveAssignee = async () => {
     if (!canSaveAssignee) return;
-    await onSaveAssignee(assigneeDraft.trim());
+    await onSaveAssignee(assigneeDraft || null);
+  };
+  const addRelation = async () => {
+    if (!canEdit || !relationDraft.targetFeedbackId) return;
+    const ok = await onAddRelation(relationDraft);
+    if (ok) {
+      setRelationDraft((current) => ({ ...current, targetFeedbackId: "" }));
+    }
   };
 
   return (
     <>
       <div className="feedback-issue-sidebar-block">
-        <span>State</span>
-        <IssueStateBadge feedback={feedback} />
-      </div>
-      <div className="feedback-issue-sidebar-block">
         <span>Title</span>
         {canEdit ? (
           <input
             className="feedback-issue-sidebar-input"
-            value={draft.phenomenon}
-            onChange={(event) => setDraft((current) => ({ ...current, phenomenon: event.target.value }))}
+            value={metadataDraft.title}
+            onChange={(event) => setMetadataDraft((current) => ({ ...current, title: event.target.value }))}
           />
         ) : (
-          <strong>{feedback.phenomenon}</strong>
+          <strong>{feedback.title}</strong>
         )}
       </div>
       <div className="feedback-issue-sidebar-block">
-        <span>Assignees</span>
-        {canAssignOwner ? (
+        <span>Assignee</span>
+        {canChangeAssignee ? (
           <>
             <select className="feedback-issue-sidebar-input" value={assigneeDraft} onChange={(event) => setAssigneeDraft(event.target.value)}>
-              {ownerOptions.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+              <option value="">未指派</option>
+              {assigneeSelectOptions.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
             </select>
             <div className="feedback-issue-sidebar-actions">
               <Button disabled={!canSaveAssignee} size="sm" type="button" onClick={saveAssignee}>
                 <Save aria-hidden="true" />
                 保存处理人
               </Button>
-              <Button disabled={!assigneeDirty} size="sm" type="button" variant="ghost" onClick={() => setAssigneeDraft(feedback.ownerUserId)}>
+              <Button disabled={!assigneeDirty} size="sm" type="button" variant="ghost" onClick={() => setAssigneeDraft(feedback.assigneeUserId ?? "")}>
                 <RotateCcw aria-hidden="true" />
                 重置
               </Button>
@@ -715,7 +861,7 @@ function IssueSidebar({
           <div className="feedback-issue-sidebar-choice-list">
             {causeOptions.map((cause) => (
               <label key={cause}>
-                <input checked={draft.causeCategories.includes(cause)} type="checkbox" onChange={() => toggleCause(cause)} />
+                <input checked={metadataDraft.causeCategories.includes(cause)} type="checkbox" onChange={() => toggleCause(cause)} />
                 <span>{cause}</span>
               </label>
             ))}
@@ -729,20 +875,30 @@ function IssueSidebar({
       <div className="feedback-issue-sidebar-block">
         <span>Impact</span>
         {canEdit ? (
-          <select className="feedback-issue-sidebar-input" value={draft.impact} onChange={(event) => setDraft((current) => ({ ...current, impact: event.target.value as Impact }))}>
-            <option value="Critical">{impactLabel.Critical}</option>
-            <option value="High">{impactLabel.High}</option>
-            <option value="Medium">{impactLabel.Medium}</option>
-            <option value="Low">{impactLabel.Low}</option>
+          <select className="feedback-issue-sidebar-input" value={metadataDraft.impact} onChange={(event) => setMetadataDraft((current) => ({ ...current, impact: event.target.value as FeedbackImpact }))}>
+            {feedbackImpactOptions.map((item) => <option key={item} value={item}>{feedbackImpactLabel[item]}</option>)}
           </select>
         ) : (
-          <strong>{impactLabel[feedback.impact]}</strong>
+          <strong>{feedbackImpactLabel[feedback.impact]}</strong>
+        )}
+      </div>
+      <div className="feedback-issue-sidebar-block">
+        <span>Priority</span>
+        {canEdit ? (
+          <select className="feedback-issue-sidebar-input" value={metadataDraft.priority} onChange={(event) => setMetadataDraft((current) => ({ ...current, priority: event.target.value as "" | FeedbackPriority }))}>
+            <option value="">未设定</option>
+            {feedbackPriorityOptions.map((item) => <option key={item} value={item}>{feedbackPriorityLabel[item]}</option>)}
+          </select>
+        ) : feedback.priority ? (
+          <strong>{feedbackPriorityLabel[feedback.priority]}</strong>
+        ) : (
+          <p className="feedback-issue-sidebar-empty">未设定</p>
         )}
       </div>
       <div className="feedback-issue-sidebar-block">
         <span>Projects</span>
         {canEdit ? (
-          <select className="feedback-issue-sidebar-input" value={draft.projectId} onChange={(event) => setDraft((current) => ({ ...current, projectId: event.target.value }))}>
+          <select className="feedback-issue-sidebar-input" value={metadataDraft.projectId} onChange={(event) => setMetadataDraft((current) => ({ ...current, projectId: event.target.value }))}>
             <option value="">不归属项目</option>
             {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
@@ -760,7 +916,7 @@ function IssueSidebar({
               <Save aria-hidden="true" />
               保存属性
             </Button>
-            <Button disabled={!metadataDirty} size="sm" type="button" variant="ghost" onClick={() => setDraft(feedbackMetadataDraftFromFeedback(feedback))}>
+            <Button disabled={!metadataDirty} size="sm" type="button" variant="ghost" onClick={() => setMetadataDraft(feedbackMetadataDraftFromFeedback(feedback))}>
               <RotateCcw aria-hidden="true" />
               重置
             </Button>
@@ -768,21 +924,40 @@ function IssueSidebar({
         </div>
       )}
       <div className="feedback-issue-sidebar-block">
-        <span>Milestone</span>
-        <p className="feedback-issue-sidebar-empty">无里程碑</p>
-      </div>
-      <div className="feedback-issue-sidebar-block">
         <span>Relationships</span>
         {linkedFeedback.length > 0 ? (
           <div className="feedback-issue-sidebar-links">
             {linkedFeedback.map((item) => (
-              <Link key={item.id} to={feedbackIssueHref(item.id)}>
-                #{feedbackIssueDisplayId(item.id)} {item.phenomenon}
-              </Link>
+              <div key={item.relationId} className="feedback-issue-sidebar-relation-row">
+                <Link to={feedbackIssueHref(item.id)}>
+                  #{feedbackIssueDisplayId(item.id)} {item.title}
+                </Link>
+                <span>{feedbackRelationDirectionLabel(item.type, item.direction)}</span>
+                {canEdit && (
+                  <Button aria-label="移除反馈关系" size="sm" title="移除反馈关系" type="button" variant="ghost" onClick={() => onRemoveRelation(item.relationId)}>
+                    <Trash2 aria-hidden="true" />
+                  </Button>
+                )}
+              </div>
             ))}
           </div>
         ) : (
           <p className="feedback-issue-sidebar-empty">无关联反馈</p>
+        )}
+        {canEdit && (
+          <div className="feedback-issue-relation-form">
+            <select className="feedback-issue-sidebar-input" value={relationDraft.type} onChange={(event) => setRelationDraft((current) => ({ ...current, type: event.target.value as FeedbackRelationType, targetFeedbackId: "" }))}>
+              {feedbackRelationOptions.map((item) => <option key={item} value={item}>{feedbackRelationTypeLabel[item]}</option>)}
+            </select>
+            <select className="feedback-issue-sidebar-input" value={relationDraft.targetFeedbackId} onChange={(event) => setRelationDraft((current) => ({ ...current, targetFeedbackId: event.target.value }))}>
+              <option value="">选择反馈</option>
+              {relationTargets.map((item) => <option key={item.id} value={item.id}>#{feedbackIssueDisplayId(item.id)} {item.title}</option>)}
+            </select>
+            <Button disabled={!relationDraft.targetFeedbackId} size="sm" type="button" onClick={addRelation}>
+              <Plus aria-hidden="true" />
+              添加关系
+            </Button>
+          </div>
         )}
       </div>
       <div className="feedback-issue-sidebar-block">
@@ -808,16 +983,17 @@ function IssueSidebar({
   );
 }
 
-function FeedbackActivityTimeline({ entries }: { entries: readonly ActivityItem[] }) {
+function FeedbackActivityTimeline({ entries, users }: { entries: readonly ActivityItem[]; users: readonly OrfUser[] }) {
   if (entries.length === 0) return null;
+  const userById = new Map(users.map((user) => [user.id, user]));
 
   return (
     <div className="feedback-issue-event-list" aria-label="反馈活动">
-      {entries.map((entry) => (
+      {[...entries].sort((left, right) => left.sequence - right.sequence).map((entry) => (
         <div key={entry.id} className="feedback-issue-event-row">
           <span aria-hidden="true" className="feedback-issue-event-dot" />
           <p>
-            <strong>{entry.actor}</strong> {entry.action}
+            <strong>{entry.actorUserId ? userById.get(entry.actorUserId)?.name ?? "未知成员" : "系统"}</strong> {feedbackActivityLabel(entry)}
             <time dateTime={entry.at}>{formatIssueDate(entry.at)}</time>
           </p>
         </div>
@@ -826,12 +1002,48 @@ function FeedbackActivityTimeline({ entries }: { entries: readonly ActivityItem[
   );
 }
 
+function feedbackActivityLabel(entry: ActivityItem) {
+  if (entry.activityType === "feedback.created") return "创建了反馈";
+  if (entry.activityType === "feedback.report.changed") return "更新了原始报告";
+  if (entry.activityType === "feedback.metadata.changed") return "更新了反馈属性";
+  if (entry.activityType === "feedback.assignee.changed") return "更新了处理人";
+  if (entry.activityType === "feedback.lifecycle.changed") return "推进了生命周期";
+  if (entry.activityType === "feedback.comment.created") return "回复了反馈";
+  if (entry.activityType === "feedback.comment.edited") return "编辑了回复";
+  if (entry.activityType === "feedback.relation.added") return "添加了关联";
+  if (entry.activityType === "feedback.relation.removed") return "移除了关联";
+  return "导入了反馈";
+}
+
+function feedbackRelationOtherId(feedbackId: string, relation: Feedback["relations"][number]) {
+  if (relation.sourceFeedbackId === feedbackId) return relation.targetFeedbackId;
+  if (relation.targetFeedbackId === feedbackId) return relation.sourceFeedbackId;
+  return null;
+}
+
+function feedbackRelationMatchesDraft(
+  feedbackId: string,
+  relation: Feedback["relations"][number],
+  targetFeedbackId: string,
+  type: FeedbackRelationType,
+) {
+  if (relation.type !== type) return false;
+  if (type === "related") return feedbackRelationOtherId(feedbackId, relation) === targetFeedbackId;
+  return relation.sourceFeedbackId === feedbackId && relation.targetFeedbackId === targetFeedbackId;
+}
+
+function feedbackRelationDirectionLabel(type: FeedbackRelationType, direction: "incoming" | "outgoing" | "undirected") {
+  if (type === "related") return "相关";
+  if (type === "duplicates") return direction === "outgoing" ? "重复于" : "被标记重复";
+  return direction === "outgoing" ? "阻塞" : "被阻塞";
+}
+
 function IssueStateBadge({ feedback }: { feedback: Feedback }) {
   const state = feedbackIssueState(feedback);
   return (
     <span className="feedback-issue-state-badge" data-state={state}>
       {state === "open" ? <CircleDot aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
-      {feedbackIssueStateLabel(feedback)}
+      {feedbackLifecycleLabel(feedback)}
     </span>
   );
 }
@@ -856,10 +1068,6 @@ function registerFeedbackCommentElement(ref: MutableRefObject<Map<string, HTMLEl
     if (element) ref.current.set(messageId, element);
     else ref.current.delete(messageId);
   };
-}
-
-function feedbackIssueActivityEntries(entries: readonly ActivityItem[]) {
-  return [...entries].sort((left, right) => left.at.localeCompare(right.at));
 }
 
 function canManageFeedbackComment(message: CommentMessage, currentUser: OrfUser | null, canManageAllComments: boolean) {

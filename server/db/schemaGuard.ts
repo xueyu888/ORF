@@ -1,3 +1,5 @@
+import type { QueryResult, QueryResultRow } from "pg";
+
 type NullableFlag = "YES" | "NO";
 
 export type RuntimeSchemaColumn = {
@@ -21,6 +23,11 @@ export type RuntimeSchemaSnapshot = {
 
 export type RuntimeEnumSnapshot = {
   labels: string[];
+};
+
+type RuntimeEnumRow = {
+  enumName: string;
+  label: string;
 };
 
 export class DatabaseSchemaMismatchError extends Error {
@@ -116,6 +123,15 @@ export function validateTeamFeedbackSchema(snapshot: RuntimeSchemaSnapshot) {
   const errors: string[] = [];
   const columnByName = new Map(snapshot.columns.map((column) => [column.columnName, column]));
 
+  for (const columnName of ["id", "team_id", "title", "description", "stage", "impact", "created_by", "version", "created_at", "updated_at"]) {
+    const column = columnByName.get(columnName);
+    if (!column) {
+      errors.push(`feedback.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`feedback.${columnName} must be NOT NULL.`);
+    }
+  }
+
   const projectId = columnByName.get("project_id");
   if (!projectId) {
     errors.push("feedback.project_id is missing.");
@@ -123,9 +139,15 @@ export function validateTeamFeedbackSchema(snapshot: RuntimeSchemaSnapshot) {
     errors.push("feedback.project_id must be nullable.");
   }
 
-  for (const columnName of ["linked_objective_id", "linked_result_id", "source"]) {
+  for (const columnName of ["resolution", "priority", "assignee_user_id", "updated_by", "closed_at", "closed_by_user_id"]) {
+    if (!columnByName.has(columnName)) {
+      errors.push(`feedback.${columnName} is missing.`);
+    }
+  }
+
+  for (const columnName of ["linked_objective_id", "linked_result_id", "source", "phenomenon", "suggested_adjustment", "status", "owner", "owner_user_id"]) {
     if (columnByName.has(columnName)) {
-      errors.push(`feedback.${columnName} must be dropped; feedback is a team issue, not a metric-bound signal.`);
+      errors.push(`feedback.${columnName} must be dropped; feedback lifecycle facts belong to the feedback module schema.`);
     }
   }
 
@@ -142,7 +164,7 @@ export function validateFeedbackMetadataSubscriptionSchema(snapshot: { columns: 
   }, new Map<string, Map<string, RuntimeTableColumn>>());
 
   const activityColumns = columnsByTable.get("feedback_activity_events") ?? new Map();
-  for (const columnName of ["id", "team_id", "feedback_id", "actor_name", "action", "metadata", "created_at"]) {
+  for (const columnName of ["id", "team_id", "feedback_id", "activity_type", "payload", "sequence", "created_at"]) {
     const column = activityColumns.get(columnName);
     if (!column) {
       errors.push(`feedback_activity_events.${columnName} is missing.`);
@@ -153,6 +175,11 @@ export function validateFeedbackMetadataSubscriptionSchema(snapshot: { columns: 
   if (!activityColumns.has("actor_user_id")) {
     errors.push("feedback_activity_events.actor_user_id is missing.");
   }
+  for (const columnName of ["actor_name", "action", "metadata"]) {
+    if (activityColumns.has(columnName)) {
+      errors.push(`feedback_activity_events.${columnName} must be dropped; activity facts use activity_type and payload.`);
+    }
+  }
 
   const subscriptionColumns = columnsByTable.get("feedback_subscriptions") ?? new Map();
   for (const columnName of ["team_id", "feedback_id", "user_id", "mode", "created_at", "updated_at"]) {
@@ -161,6 +188,22 @@ export function validateFeedbackMetadataSubscriptionSchema(snapshot: { columns: 
       errors.push(`feedback_subscriptions.${columnName} is missing.`);
     } else if (column.isNullable !== "NO") {
       errors.push(`feedback_subscriptions.${columnName} must be NOT NULL.`);
+    }
+  }
+
+  const reportAttachmentColumns = columnsByTable.get("feedback_report_attachments") ?? new Map();
+  for (const columnName of ["id", "team_id", "feedback_id", "object_key", "file_name", "mime_type", "file_size", "sort_order", "created_at"]) {
+    const column = reportAttachmentColumns.get(columnName);
+    if (!column) errors.push(`feedback_report_attachments.${columnName} is missing.`);
+    else if (column.isNullable !== "NO") errors.push(`feedback_report_attachments.${columnName} must be NOT NULL.`);
+  }
+  for (const columnName of ["width", "height", "created_by", "source_comment_attachment_id"]) {
+    if (!reportAttachmentColumns.has(columnName)) errors.push(`feedback_report_attachments.${columnName} is missing.`);
+  }
+
+  for (const tableName of ["feedback_cause_categories", "feedback_relations", "feedback_user_views", "feedback_participants", "feedback_event_dispatches", "feedback_event_dispatch_recipients", "feedback_import_batches", "feedback_import_origins"]) {
+    if (!columnsByTable.has(tableName)) {
+      errors.push(`${tableName} table is missing.`);
     }
   }
 
@@ -176,9 +219,48 @@ export function validateTeamFeedbackEvidenceSchema(snapshot: RuntimeSchemaSnapsh
   return errors;
 }
 
-export function validateFeedbackStatusEnum(snapshot: RuntimeEnumSnapshot) {
-  const labels = snapshot.labels.join(",");
-  return labels === "Open,Closed" ? [] : [`feedback_status enum must be exactly Open,Closed; got ${labels}.`];
+export function validateFeedbackLifecycleEnums(snapshot: Record<string, RuntimeEnumSnapshot>) {
+  const expected: Record<string, string[]> = {
+    feedback_activity_type: [
+      "feedback.created",
+      "feedback.metadata.changed",
+      "feedback.assignee.changed",
+      "feedback.lifecycle.changed",
+      "feedback.relation.added",
+      "feedback.relation.removed",
+      "feedback.comment.created",
+      "feedback.comment.edited",
+      "feedback.report.changed",
+      "feedback.imported",
+    ],
+    feedback_impact: ["low", "medium", "high", "critical"],
+    feedback_priority: ["p0", "p1", "p2", "p3"],
+    feedback_relation_type: ["related", "duplicates", "blocks"],
+    feedback_resolution: ["resolved", "not_needed", "cannot_resolve", "duplicate", "unspecified"],
+    feedback_stage: ["open", "in_progress", "pending_verification", "closed"],
+  };
+  const errors: string[] = [];
+  for (const [enumName, expectedLabels] of Object.entries(expected)) {
+    const actualLabels = snapshot[enumName]?.labels ?? [];
+    const actual = actualLabels.join(",");
+    const wanted = expectedLabels.join(",");
+    if (actual !== wanted) {
+      errors.push(`${enumName} enum must be exactly ${wanted}; got ${actual}.`);
+    }
+  }
+  if (snapshot.feedback_status?.labels.length) {
+    errors.push("feedback_status enum must be dropped; feedback uses feedback_stage and feedback_resolution.");
+  }
+  return errors;
+}
+
+function groupRuntimeEnumRows(rows: RuntimeEnumRow[]) {
+  return rows.reduce<Record<string, RuntimeEnumSnapshot>>((map, row) => {
+    const current = map[row.enumName] ?? { labels: [] };
+    current.labels.push(row.label);
+    map[row.enumName] = current;
+    return map;
+  }, {});
 }
 
 export function validateFeedbackCommentTargetSchema(snapshot: RuntimeEnumSnapshot) {
@@ -730,7 +812,17 @@ export function validateChatSyncEventSchema(snapshot: {
 }
 
 export async function assertRuntimeDatabaseSchema() {
-  const { pool } = await import("./client");
+  const { pool: runtimePool } = await import("./client");
+  const schemaClient = await runtimePool.connect();
+  try {
+  let queryQueue = Promise.resolve();
+  const pool = {
+    query<T extends QueryResultRow = QueryResultRow>(queryText: string): Promise<QueryResult<T>> {
+      const result = queryQueue.then(() => schemaClient.query<T>(queryText));
+      queryQueue = result.then(() => undefined, () => undefined);
+      return result;
+    },
+  };
   const [
     taskColumnsResult,
     taskConstraintsResult,
@@ -739,7 +831,7 @@ export async function assertRuntimeDatabaseSchema() {
     feedbackColumnsResult,
     feedbackMetadataSubscriptionColumnsResult,
     evidenceColumnsResult,
-    feedbackStatusResult,
+    feedbackLifecycleEnumsResult,
     notificationStreamResult,
     driveContextTypeResult,
     drivePreviewKindResult,
@@ -813,7 +905,33 @@ export async function assertRuntimeDatabaseSchema() {
         from information_schema.columns
         where table_schema = current_schema()
           and table_name = 'feedback'
-          and column_name in ('project_id', 'linked_objective_id', 'linked_result_id', 'source')
+          and column_name in (
+            'id',
+            'team_id',
+            'project_id',
+            'title',
+            'description',
+            'stage',
+            'resolution',
+            'impact',
+            'priority',
+            'assignee_user_id',
+            'created_by',
+            'updated_by',
+            'version',
+            'created_at',
+            'updated_at',
+            'closed_at',
+            'closed_by_user_id',
+            'linked_objective_id',
+            'linked_result_id',
+            'source',
+            'phenomenon',
+            'suggested_adjustment',
+            'status',
+            'owner',
+            'owner_user_id'
+          )
       `,
     ),
     pool.query<RuntimeTableColumn>(
@@ -824,7 +942,19 @@ export async function assertRuntimeDatabaseSchema() {
           is_nullable as "isNullable"
         from information_schema.columns
         where table_schema = current_schema()
-          and table_name in ('feedback_activity_events', 'feedback_subscriptions')
+          and table_name in (
+            'feedback_activity_events',
+            'feedback_subscriptions',
+            'feedback_report_attachments',
+            'feedback_cause_categories',
+            'feedback_relations',
+            'feedback_user_views',
+            'feedback_participants',
+            'feedback_event_dispatches',
+            'feedback_event_dispatch_recipients',
+            'feedback_import_batches',
+            'feedback_import_origins'
+          )
       `,
     ),
     pool.query<RuntimeSchemaColumn>(
@@ -838,15 +968,23 @@ export async function assertRuntimeDatabaseSchema() {
           and column_name = 'linked_feedback_id'
       `,
     ),
-    pool.query<{ label: string }>(
+    pool.query<{ enumName: string; label: string }>(
       `
-        select e.enumlabel as "label"
+        select t.typname as "enumName", e.enumlabel as "label"
         from pg_enum e
         join pg_type t on t.oid = e.enumtypid
         join pg_namespace nsp on nsp.oid = t.typnamespace
         where nsp.nspname = current_schema()
-          and t.typname = 'feedback_status'
-        order by e.enumsortorder
+          and t.typname in (
+            'feedback_activity_type',
+            'feedback_impact',
+            'feedback_priority',
+            'feedback_relation_type',
+            'feedback_resolution',
+            'feedback_stage',
+            'feedback_status'
+          )
+        order by t.typname, e.enumsortorder
       `,
     ),
     pool.query<{ label: string }>(
@@ -1068,9 +1206,7 @@ export async function assertRuntimeDatabaseSchema() {
       columns: evidenceColumnsResult.rows,
       constraints: [],
     }),
-    ...validateFeedbackStatusEnum({
-      labels: feedbackStatusResult.rows.map((row) => row.label),
-    }),
+    ...validateFeedbackLifecycleEnums(groupRuntimeEnumRows(feedbackLifecycleEnumsResult.rows)),
     ...validateFeedbackCommentTargetSchema({
       labels: commentTargetTypeResult.rows.map((row) => row.label),
     }),
@@ -1124,5 +1260,8 @@ export async function assertRuntimeDatabaseSchema() {
 
   if (errors.length > 0) {
     throw new DatabaseSchemaMismatchError(errors);
+  }
+  } finally {
+    schemaClient.release();
   }
 }

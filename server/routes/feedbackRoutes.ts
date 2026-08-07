@@ -1,46 +1,72 @@
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
+import {
+  feedbackImpactSchema,
+  feedbackPrioritySchema,
+  feedbackRelationTypeSchema,
+  feedbackTransitionInputSchema,
+} from "@orf/feedback-module/contracts";
 import { requireFeedbackInScope, requireUserScopeContext } from "../auth/accessPolicy";
 import { env } from "../env";
 import { getFeedbackSubscriptionMode, setFeedbackSubscriptionMode } from "../repositories/feedbackSubscriptionRepository";
 import {
+  addFeedbackRelation,
   createFeedback,
   getFeedbackReferences,
+  getFeedbackReportAttachmentContent,
   listFeedbackAssigneeOptions,
+  removeFeedbackRelation,
+  transitionFeedback,
   updateFeedbackAssignee,
   updateFeedbackMetadata,
-  updateFeedbackStatus,
-} from "../repositories/orfFeedbackRepository";
+  type FeedbackCommandActor,
+  type FeedbackCommandResult,
+} from "../repositories/feedbackRepository";
 
-const impactSchema = z.enum(["Low", "Medium", "High", "Critical"]);
-const feedbackStatusSchema = z.enum(["Open", "Closed"]);
 const feedbackParamsSchema = z.object({ feedbackId: z.string().min(1) });
+const feedbackRelationParamsSchema = z.object({ feedbackId: z.string().min(1), relationId: z.string().min(1) });
+const feedbackReportAttachmentParamsSchema = z.object({ attachmentId: z.string().min(1) });
+const feedbackReportAttachmentContentQuerySchema = z.object({
+  disposition: z.enum(["attachment", "inline"]).optional(),
+});
 const createFeedbackBodySchema = z.object({
-  phenomenon: z.string().trim().min(1),
+  title: z.string().trim().min(1),
   causeCategories: z.array(z.string().trim().min(1)).min(1),
-  impact: impactSchema,
-  initialBody: z.string().trim().min(1).optional(),
-  suggestedAdjustment: z.string().trim().min(1).optional(),
-  ownerUserId: z.string().trim().min(1),
+  impact: feedbackImpactSchema,
+  priority: feedbackPrioritySchema.nullable().optional(),
+  description: z.string().trim().min(1),
+  assigneeUserId: z.string().trim().min(1).nullable().optional(),
   projectId: z.string().nullable().optional(),
-}).refine((value) => value.initialBody || value.suggestedAdjustment, { message: "Feedback body is required" });
+});
 const createFeedbackMultipartFieldsSchema = z.object({
-  phenomenon: z.string().trim().min(1),
+  title: z.string().trim().min(1),
   causeCategories: z.string().trim().min(1),
-  impact: impactSchema,
-  initialBody: z.string().trim().min(1),
-  ownerUserId: z.string().trim().min(1),
+  impact: feedbackImpactSchema,
+  priority: z.string().optional(),
+  description: z.string().trim().min(1),
+  assigneeUserId: z.string().optional(),
   projectId: z.string().optional(),
 });
-const updateFeedbackStatusBodySchema = z.object({ status: feedbackStatusSchema });
 const updateFeedbackMetadataBodySchema = z.object({
-  phenomenon: z.string().trim().min(1).optional(),
+  expectedVersion: z.number().int().nonnegative(),
+  title: z.string().trim().min(1).optional(),
+  description: z.string().trim().min(1).optional(),
   causeCategories: z.array(z.string().trim().min(1)).min(1).optional(),
-  impact: impactSchema.optional(),
+  impact: feedbackImpactSchema.optional(),
+  priority: feedbackPrioritySchema.nullable().optional(),
   projectId: z.string().trim().min(1).nullable().optional(),
 }).strict();
 const updateFeedbackAssigneeBodySchema = z.object({
-  ownerUserId: z.string().trim().min(1),
+  expectedVersion: z.number().int().nonnegative(),
+  assigneeUserId: z.string().trim().min(1).nullable(),
+}).strict();
+const addFeedbackRelationBodySchema = z.object({
+  expectedVersion: z.number().int().nonnegative(),
+  targetFeedbackId: z.string().trim().min(1),
+  type: feedbackRelationTypeSchema,
+}).strict();
+const removeFeedbackRelationBodySchema = z.object({
+  expectedVersion: z.number().int().nonnegative(),
 }).strict();
 const updateFeedbackSubscriptionBodySchema = z.object({
   mode: z.enum(["none", "subscribed", "muted"]),
@@ -59,6 +85,11 @@ function parseCauseCategories(value: string) {
   }
 }
 
+function parsePriority(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized ? feedbackPrioritySchema.parse(normalized) : null;
+}
+
 function parseFeedbackReferenceIds(query: unknown) {
   const parsed = feedbackReferencesQuerySchema.parse(query);
   const repeatedIds = Array.isArray(parsed.id) ? parsed.id : parsed.id ? [parsed.id] : [];
@@ -66,8 +97,18 @@ function parseFeedbackReferenceIds(query: unknown) {
   return [...repeatedIds, ...commaSeparatedIds].map((value) => value.trim()).filter(Boolean).slice(0, 100);
 }
 
-function normalizeOptionalProjectId(value: string | null | undefined) {
+function normalizeOptionalId(value: string | null | undefined) {
   return value?.trim() || null;
+}
+
+function commandActor(context: NonNullable<Awaited<ReturnType<typeof requireUserScopeContext>>>): FeedbackCommandActor {
+  return {
+    id: context.user.id,
+    name: context.user.name,
+    role: context.user.role,
+    status: context.user.status,
+    scope: context.scope,
+  };
 }
 
 async function readCreateFeedbackBody(request: FastifyRequest) {
@@ -75,12 +116,13 @@ async function readCreateFeedbackBody(request: FastifyRequest) {
   if (!contentType.includes("multipart/form-data")) {
     const body = createFeedbackBodySchema.parse(request.body);
     return {
-      phenomenon: body.phenomenon,
+      title: body.title,
       causeCategories: body.causeCategories,
       impact: body.impact,
-      initialBody: body.initialBody ?? body.suggestedAdjustment ?? "",
-      ownerUserId: body.ownerUserId,
-      projectId: normalizeOptionalProjectId(body.projectId),
+      priority: body.priority ?? null,
+      description: body.description,
+      assigneeUserId: normalizeOptionalId(body.assigneeUserId),
+      projectId: normalizeOptionalId(body.projectId),
       attachments: [],
     };
   }
@@ -106,14 +148,37 @@ async function readCreateFeedbackBody(request: FastifyRequest) {
 
   const body = createFeedbackMultipartFieldsSchema.parse(fields);
   return {
-    phenomenon: body.phenomenon,
+    title: body.title,
     causeCategories: parseCauseCategories(body.causeCategories),
     impact: body.impact,
-    initialBody: body.initialBody,
-    ownerUserId: body.ownerUserId,
-    projectId: normalizeOptionalProjectId(body.projectId),
+    priority: parsePriority(body.priority),
+    description: body.description,
+    assigneeUserId: normalizeOptionalId(body.assigneeUserId),
+    projectId: normalizeOptionalId(body.projectId),
     attachments,
   };
+}
+
+function sendFeedbackCommandOutcome(reply: FastifyReply, outcome: FeedbackCommandResult) {
+  if (outcome.status === "notFound") {
+    return reply.code(404).send({ error: "Feedback not found" });
+  }
+  if (outcome.status === "forbidden") {
+    return reply.code(403).send({ error: "Forbidden" });
+  }
+  if (outcome.status === "conflict") {
+    return reply.code(409).send({ error: "Feedback version conflict" });
+  }
+  if (outcome.status === "invalidAssignee") {
+    return reply.code(409).send({ error: "Feedback assignee must be an active member" });
+  }
+  if (outcome.status === "invalidProject") {
+    return reply.code(409).send({ error: "Feedback project not found" });
+  }
+  if (outcome.status === "invalid") {
+    return reply.code(400).send({ error: "Feedback command is invalid" });
+  }
+  return { ok: true, changed: outcome.changed };
 }
 
 export function registerFeedbackRoutes(app: FastifyInstance) {
@@ -138,15 +203,40 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
     return { feedback };
   });
 
+  app.get("/api/feedback/report-attachments/:attachmentId/content", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = feedbackReportAttachmentParamsSchema.parse(request.params);
+    const query = feedbackReportAttachmentContentQuerySchema.parse(request.query);
+    const outcome = await getFeedbackReportAttachmentContent(params.attachmentId, commandActor(context), query);
+    if (outcome.status === "notFound") {
+      return reply.code(404).send({ error: "Feedback report attachment not found" });
+    }
+    if (outcome.status === "forbidden") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    reply.header("Cache-Control", "private, max-age=60");
+    reply.header("Content-Disposition", contentDispositionHeader(outcome.contentDisposition, outcome.fileName));
+    reply.header("Content-Type", outcome.contentType);
+    reply.header("X-Content-Type-Options", "nosniff");
+    if (outcome.contentLength !== undefined) {
+      reply.header("Content-Length", outcome.contentLength);
+    }
+    return reply.send(outcome.body);
+  });
+
   app.post("/api/feedback", async (request, reply) => {
     const context = await requireUserScopeContext(request, reply);
     if (!context) {
       return reply;
     }
-    const { user, scope } = context;
 
     const body = await readCreateFeedbackBody(request);
-    const outcome = await createFeedback(body, { ...user, scope });
+    const outcome = await createFeedback(body, commandActor(context));
 
     if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Runtime scope not found" });
@@ -154,8 +244,8 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
     if (outcome.status === "invalid") {
       return reply.code(400).send({ error: "Feedback body is required" });
     }
-    if (outcome.status === "invalidOwner") {
-      return reply.code(409).send({ error: "Feedback owner must be an active member" });
+    if (outcome.status === "invalidAssignee") {
+      return reply.code(409).send({ error: "Feedback assignee must be an active member" });
     }
     if (outcome.status === "invalidProject") {
       return reply.code(409).send({ error: "Feedback project not found" });
@@ -167,33 +257,15 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
     return { feedback: outcome.feedback };
   });
 
-  app.patch("/api/feedback/:feedbackId/status", async (request, reply) => {
+  app.post("/api/feedback/:feedbackId/transitions", async (request, reply) => {
     const params = feedbackParamsSchema.parse(request.params);
-    const body = updateFeedbackStatusBodySchema.parse(request.body);
+    const body = feedbackTransitionInputSchema.parse(request.body);
     const context = await requireUserScopeContext(request, reply);
     if (!context) {
       return reply;
     }
-    const { user, scope } = context;
-    if (!(await requireFeedbackInScope(reply, params.feedbackId, scope))) {
-      return reply;
-    }
 
-    const updated = await updateFeedbackStatus(params.feedbackId, body.status, {
-      id: user.id,
-      name: user.name,
-      role: user.role,
-      scope,
-    });
-
-    if (updated.status === "notFound") {
-      return reply.code(404).send({ error: "Feedback not found" });
-    }
-    if (updated.status === "forbidden") {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-
-    return { ok: true };
+    return sendFeedbackCommandOutcome(reply, await transitionFeedback(params.feedbackId, body, commandActor(context)));
   });
 
   app.patch("/api/feedback/:feedbackId/metadata", async (request, reply) => {
@@ -203,32 +275,8 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
     if (!context) {
       return reply;
     }
-    const { user, scope } = context;
-    if (!(await requireFeedbackInScope(reply, params.feedbackId, scope))) {
-      return reply;
-    }
 
-    const updated = await updateFeedbackMetadata(params.feedbackId, body, {
-      id: user.id,
-      name: user.name,
-      role: user.role,
-      scope,
-    });
-
-    if (updated.status === "notFound") {
-      return reply.code(404).send({ error: "Feedback not found" });
-    }
-    if (updated.status === "forbidden") {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-    if (updated.status === "invalid") {
-      return reply.code(400).send({ error: "Feedback metadata is invalid" });
-    }
-    if (updated.status === "invalidProject") {
-      return reply.code(409).send({ error: "Feedback project not found" });
-    }
-
-    return { ok: true };
+    return sendFeedbackCommandOutcome(reply, await updateFeedbackMetadata(params.feedbackId, body, commandActor(context)));
   });
 
   app.patch("/api/feedback/:feedbackId/assignee", async (request, reply) => {
@@ -238,29 +286,30 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
     if (!context) {
       return reply;
     }
-    const { user, scope } = context;
-    if (!(await requireFeedbackInScope(reply, params.feedbackId, scope))) {
+
+    return sendFeedbackCommandOutcome(reply, await updateFeedbackAssignee(params.feedbackId, body, commandActor(context)));
+  });
+
+  app.post("/api/feedback/:feedbackId/relations", async (request, reply) => {
+    const params = feedbackParamsSchema.parse(request.params);
+    const body = addFeedbackRelationBodySchema.parse(request.body);
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
       return reply;
     }
 
-    const updated = await updateFeedbackAssignee(params.feedbackId, body, {
-      id: user.id,
-      name: user.name,
-      role: user.role,
-      scope,
-    });
+    return sendFeedbackCommandOutcome(reply, await addFeedbackRelation(params.feedbackId, body, commandActor(context)));
+  });
 
-    if (updated.status === "notFound") {
-      return reply.code(404).send({ error: "Feedback not found" });
-    }
-    if (updated.status === "forbidden") {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-    if (updated.status === "invalidOwner") {
-      return reply.code(409).send({ error: "Feedback owner must be an active member" });
+  app.delete("/api/feedback/:feedbackId/relations/:relationId", async (request, reply) => {
+    const params = feedbackRelationParamsSchema.parse(request.params);
+    const body = removeFeedbackRelationBodySchema.parse(request.body);
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
     }
 
-    return { ok: true };
+    return sendFeedbackCommandOutcome(reply, await removeFeedbackRelation(params.feedbackId, params.relationId, body, commandActor(context)));
   });
 
   app.get("/api/feedback/:feedbackId/subscription", async (request, reply) => {
@@ -311,4 +360,12 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
 
     return { subscription: { mode: result.mode } };
   });
+}
+
+function contentDispositionHeader(disposition: "attachment" | "inline", fileName: string) {
+  const fallback = (fileName || "attachment")
+    .replace(/["\\\r\n]/g, "_")
+    .replace(/[^\x20-\x7e]/g, "_")
+    .trim() || "attachment";
+  return `${disposition}; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName || "attachment")}`;
 }

@@ -18,10 +18,10 @@ import { feedbackIssueHref } from "../features/feedback/model/feedbackIssue";
 import { useFeedbackAssigneeOptions } from "../features/feedback/useFeedbackAssigneeOptions";
 import { validOrfRichTextDraftAttachments } from "../features/rich-text/orfRichTextDraft";
 import { useOrf } from "../state/OrfProvider";
-import type { Impact } from "../types/orf";
-import { impactLabel } from "../utils/labels";
+import type { FeedbackImpact } from "@orf/feedback-module/contracts";
+import { feedbackImpactLabel } from "../utils/labels";
 
-const feedbackImpactOptions: Impact[] = ["Low", "Medium", "High", "Critical"];
+const feedbackImpactOptions: FeedbackImpact[] = ["low", "medium", "high", "critical"];
 
 type PendingFeedbackAttachment = {
   file: File;
@@ -35,16 +35,16 @@ export function FeedbackCreatePage() {
   const { createFeedback, currentUser, notify, state } = useOrf();
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
   const causeOptions = teamFeedbackCauseOptions();
-  const ownerOptions = useFeedbackAssigneeOptions(state.users, currentUser);
-  const defaultOwnerUserId = currentUser?.id ?? state.currentUserId ?? ownerOptions[0]?.id ?? "";
-  const initialOwnerUserId = ownerOptions.some((user) => user.id === defaultOwnerUserId) ? defaultOwnerUserId : ownerOptions[0]?.id ?? defaultOwnerUserId;
+  const assigneeOptions = useFeedbackAssigneeOptions(state.users, currentUser);
+  const defaultAssigneeUserId = currentUser?.id ?? state.currentUserId ?? assigneeOptions[0]?.id ?? "";
+  const initialAssigneeUserId = assigneeOptions.some((user) => user.id === defaultAssigneeUserId) ? defaultAssigneeUserId : assigneeOptions[0]?.id ?? defaultAssigneeUserId;
   const projectParam = searchParams.get("project") ?? "";
   const initialProjectId = state.projects.some((project) => project.id === projectParam) ? projectParam : "";
   const [title, setTitle] = useState("");
   const [draft, setDraft] = useState<CommentDraft>(() => emptyCommentDraft());
   const [cause, setCause] = useState<string>(causeOptions[0] ?? "技术问题");
-  const [impact, setImpact] = useState<Impact>("Medium");
-  const [ownerUserId, setOwnerUserId] = useState(initialOwnerUserId);
+  const [impact, setImpact] = useState<FeedbackImpact>("medium");
+  const [assigneeUserId, setAssigneeUserId] = useState(initialAssigneeUserId);
   const [projectId, setProjectId] = useState(initialProjectId);
   const [pendingAttachments, setPendingAttachments] = useState<PendingFeedbackAttachment[]>([]);
   const [previewAttachmentId, setPreviewAttachmentId] = useState<string | null>(null);
@@ -79,16 +79,16 @@ export function FeedbackCreatePage() {
   }, [projectId, state.projects]);
 
   useEffect(() => {
-    if (ownerUserId && ownerOptions.some((user) => user.id === ownerUserId)) {
+    if (assigneeUserId && assigneeOptions.some((user) => user.id === assigneeUserId)) {
       return;
     }
-    const nextOwnerUserId = ownerOptions.some((user) => user.id === defaultOwnerUserId)
-      ? defaultOwnerUserId
-      : ownerOptions[0]?.id ?? "";
-    if (nextOwnerUserId && nextOwnerUserId !== ownerUserId) {
-      setOwnerUserId(nextOwnerUserId);
+    const nextAssigneeUserId = assigneeOptions.some((user) => user.id === defaultAssigneeUserId)
+      ? defaultAssigneeUserId
+      : assigneeOptions[0]?.id ?? "";
+    if (nextAssigneeUserId && nextAssigneeUserId !== assigneeUserId) {
+      setAssigneeUserId(nextAssigneeUserId);
     }
-  }, [defaultOwnerUserId, ownerOptions, ownerUserId]);
+  }, [defaultAssigneeUserId, assigneeOptions, assigneeUserId]);
 
   useEffect(() => {
     if (previewAttachmentId && !referencedImageAttachments.some((attachment) => attachment.id === previewAttachmentId)) {
@@ -121,7 +121,7 @@ export function FeedbackCreatePage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (submitting) return;
-    if (!title.trim() || !body || !cause.trim() || !ownerUserId.trim()) {
+    if (!title.trim() || !body || !cause.trim() || !assigneeUserId.trim()) {
       notify("请填写标题、正文、分类和处理人");
       return;
     }
@@ -129,11 +129,11 @@ export function FeedbackCreatePage() {
     setSubmitting(true);
     try {
       const feedback = await createFeedback({
-        phenomenon: title.trim(),
+        title: title.trim(),
+        description: body,
         causeCategories: [cause.trim()],
         impact,
-        initialBody: body,
-        ownerUserId: ownerUserId.trim(),
+        assigneeUserId: assigneeUserId.trim(),
         projectId: projectId || null,
         attachments: referencedAttachments,
       });
@@ -218,8 +218,8 @@ export function FeedbackCreatePage() {
         <aside className="feedback-create-sidebar" aria-label="反馈属性">
           <label className="feedback-create-sidebar-field">
             <span>处理人</span>
-            <select required value={ownerUserId} onChange={(event) => setOwnerUserId(event.target.value)}>
-              {ownerOptions.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+            <select required value={assigneeUserId} onChange={(event) => setAssigneeUserId(event.target.value)}>
+              {assigneeOptions.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
             </select>
           </label>
           <label className="feedback-create-sidebar-field">
@@ -237,8 +237,8 @@ export function FeedbackCreatePage() {
           </label>
           <label className="feedback-create-sidebar-field">
             <span>影响</span>
-            <select value={impact} onChange={(event) => setImpact(event.target.value as Impact)}>
-              {feedbackImpactOptions.map((item) => <option key={item} value={item}>{impactLabel[item]}</option>)}
+            <select value={impact} onChange={(event) => setImpact(event.target.value as FeedbackImpact)}>
+              {feedbackImpactOptions.map((item) => <option key={item} value={item}>{feedbackImpactLabel[item]}</option>)}
             </select>
           </label>
         </aside>

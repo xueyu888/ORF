@@ -23,7 +23,7 @@ export const feedbackCommandResolutionValues = [
 ] as const;
 
 export const feedbackImpactValues = ["low", "medium", "high", "critical"] as const;
-export const feedbackPriorityValues = ["none", "low", "normal", "high", "urgent"] as const;
+export const feedbackPriorityValues = ["p0", "p1", "p2", "p3"] as const;
 export const feedbackActorRoleValues = ["member", "admin"] as const;
 export const feedbackActorStatusValues = ["active", "inactive"] as const;
 export const feedbackRelationTypeValues = ["related", "duplicates", "blocks"] as const;
@@ -38,20 +38,15 @@ export const feedbackTransitionTypeValues = [
 
 export const feedbackActivityTypeValues = [
   "feedback.created",
-  "feedback.report.updated",
-  "feedback.lifecycle.started",
-  "feedback.lifecycle.submitted_for_verification",
-  "feedback.lifecycle.accepted",
-  "feedback.lifecycle.rejected",
-  "feedback.lifecycle.withdrawn",
-  "feedback.lifecycle.reopened",
-  "feedback.priority.changed",
-  "feedback.impact.changed",
+  "feedback.metadata.changed",
   "feedback.assignee.changed",
-  "feedback.project.changed",
-  "feedback.category.changed",
+  "feedback.lifecycle.changed",
   "feedback.relation.added",
   "feedback.relation.removed",
+  "feedback.comment.created",
+  "feedback.comment.edited",
+  "feedback.report.changed",
+  "feedback.imported",
 ] as const;
 
 export const feedbackStageSchema = z.enum(feedbackStageValues);
@@ -92,7 +87,7 @@ export const feedbackEntitySnapshotSchema = feedbackLifecycleSnapshotSchema.exte
   projectId: feedbackProjectIdSchema.nullable().optional(),
   createdByUserId: feedbackUserIdSchema,
   assigneeUserId: feedbackUserIdSchema.nullable(),
-  priority: feedbackPrioritySchema,
+  priority: feedbackPrioritySchema.nullable(),
   impact: feedbackImpactSchema,
   visibleUserIds: z.array(feedbackUserIdSchema).readonly().optional(),
 });

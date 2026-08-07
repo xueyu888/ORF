@@ -29,11 +29,9 @@ import type {
 export const workStatusEnum = pgEnum("work_status", ["On Track", "At Risk", "Blocked", "Draft"]);
 export const taskStatusEnum = pgEnum("task_status", ["Backlog", "Todo", "In Progress", "In Review", "Done"]);
 export const priorityEnum = pgEnum("priority", ["Low", "Medium", "High", "Critical"]);
-export const impactEnum = pgEnum("impact", ["Low", "Medium", "High", "Critical"]);
 export const metricDirectionEnum = pgEnum("metric_direction", ["increase", "decrease"]);
 export const uncertaintyLevelEnum = pgEnum("uncertainty_level", ["简易", "入门", "进阶", "破局", "渡劫", "飞升"]);
 export const evidenceTypeEnum = pgEnum("evidence_type", ["Eval run", "Log sample", "User report", "Dashboard snapshot", "Incident report"]);
-export const feedbackStatusEnum = pgEnum("feedback_status", ["Open", "Closed"]);
 export const teamRoleEnum = pgEnum("team_role", ["admin", "member", "readonly", "supervisor"]);
 export const commentTargetTypeEnum = pgEnum("comment_target_type", ["objective", "result", "task", "subtask", "feedback"]);
 export const commentStatusEnum = pgEnum("comment_status", ["open", "resolved"]);
@@ -875,108 +873,6 @@ export const taskChecklistItems = pgTable("task_checklist_items", {
   sortOrder: integer("sort_order").notNull(),
   updatedAt: date("updated_at", { mode: "string" }).notNull(),
 });
-
-export const feedback = pgTable("feedback", {
-  id: text("id").primaryKey(),
-  teamId: text("team_id")
-    .notNull()
-    .references(() => teams.id, { onDelete: "cascade" }),
-  projectId: text("project_id").references(() => projects.id, { onDelete: "restrict" }),
-  phenomenon: text("phenomenon").notNull(),
-  impact: impactEnum("impact").notNull(),
-  suggestedAdjustment: text("suggested_adjustment").notNull(),
-  status: feedbackStatusEnum("status").notNull(),
-  owner: text("owner").notNull(),
-  ownerUserId: uuid("owner_user_id").notNull().references(() => users.id),
-  createdAt: date("created_at", { mode: "string" }).notNull(),
-  updatedAt: date("updated_at", { mode: "string" }).notNull(),
-  createdBy: uuid("created_by").references(() => users.id),
-  updatedBy: uuid("updated_by").references(() => users.id),
-});
-
-export const feedbackActivityEvents = pgTable(
-  "feedback_activity_events",
-  {
-    id: text("id").primaryKey(),
-    teamId: text("team_id")
-      .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
-    feedbackId: text("feedback_id")
-      .notNull()
-      .references(() => feedback.id, { onDelete: "cascade" }),
-    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
-    actorName: text("actor_name").notNull(),
-    action: text("action").notNull(),
-    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
-    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
-  },
-  (table) => ({
-    feedbackCreated: index("feedback_activity_events_feedback_created_idx").on(table.feedbackId, table.createdAt),
-    teamCreated: index("feedback_activity_events_team_created_idx").on(table.teamId, table.createdAt),
-  }),
-);
-
-export const feedbackSubscriptions = pgTable(
-  "feedback_subscriptions",
-  {
-    teamId: text("team_id")
-      .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
-    feedbackId: text("feedback_id")
-      .notNull()
-      .references(() => feedback.id, { onDelete: "cascade" }),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    mode: text("mode").$type<"subscribed" | "muted">().notNull(),
-    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
-    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
-  },
-  (table) => ({
-    pk: primaryKey({ columns: [table.teamId, table.feedbackId, table.userId] }),
-    feedbackMode: index("feedback_subscriptions_feedback_mode_idx").on(table.teamId, table.feedbackId, table.mode),
-    userMode: index("feedback_subscriptions_user_mode_idx").on(table.teamId, table.userId, table.mode),
-  }),
-);
-
-export const feedbackDailyDigestRuns = pgTable(
-  "feedback_daily_digest_runs",
-  {
-    teamId: text("team_id")
-      .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
-    assigneeUserId: uuid("assignee_user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    localDate: date("local_date", { mode: "string" }).notNull(),
-    status: text("status").$type<"failed" | "pending" | "sent">().notNull().default("pending"),
-    feedbackCount: integer("feedback_count").notNull().default(0),
-    notificationEventId: text("notification_event_id").references(() => notificationEvents.id, { onDelete: "set null" }),
-    lastError: text("last_error"),
-    attempts: integer("attempts").notNull().default(0),
-    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
-    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
-  },
-  (table) => ({
-    pk: primaryKey({ columns: [table.teamId, table.assigneeUserId, table.localDate] }),
-    notificationEvent: index("feedback_daily_digest_runs_notification_event_idx").on(table.notificationEventId),
-    teamDate: index("feedback_daily_digest_runs_team_date_idx").on(table.teamId, table.localDate),
-  }),
-);
-
-export const feedbackCauseCategories = pgTable(
-  "feedback_cause_categories",
-  {
-    feedbackId: text("feedback_id")
-      .notNull()
-      .references(() => feedback.id, { onDelete: "cascade" }),
-    category: text("category").notNull(),
-    sortOrder: integer("sort_order").notNull(),
-  },
-  (table) => ({
-    pk: primaryKey({ columns: [table.feedbackId, table.category] }),
-  }),
-);
 
 export const evidence = pgTable("evidence", {
   id: text("id").primaryKey(),

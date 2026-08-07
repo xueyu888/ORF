@@ -15,7 +15,7 @@ import {
 } from "../features/challenge/model/objectiveVisibility";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
-import { commandTypeLabel, feedbackStatusLabel, impactLabel } from "../utils/labels";
+import { commandTypeLabel, feedbackImpactLabel, feedbackLifecycleLabel } from "../utils/labels";
 
 type CommandMenuItem =
   | { action: "createObjective"; label: string; searchText: string; type: "Action" }
@@ -97,17 +97,16 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
       })),
     );
     const feedbackItems = visibleFeedback.map((item) => ({
-      label: item.phenomenon,
+      label: item.title,
       path: feedbackIssueHref(item.id),
       searchText: [
         item.id,
-        item.phenomenon,
-        item.suggestedAdjustment,
-        item.owner,
-        item.status,
-        feedbackStatusLabel[item.status],
+        item.title,
+        item.description,
+        state.users.find((user) => user.id === item.assigneeUserId)?.name ?? "",
+        feedbackLifecycleLabel(item),
         item.impact,
-        impactLabel[item.impact],
+        feedbackImpactLabel[item.impact],
         ...item.causeCategories,
       ].join(" "),
       type: "Feedback" as const,

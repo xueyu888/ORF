@@ -78,7 +78,7 @@ describe("feedback module domain", () => {
     assert.equal(started.ok, true);
     assert.equal(started.value.feedback.stage, "in_progress");
     assert.equal(started.value.feedback.version, 1);
-    assert.equal(started.value.activityType, "feedback.lifecycle.started");
+    assert.equal(started.value.activityType, "feedback.lifecycle.changed");
 
     const submitted = applyFeedbackTransition({
       feedback: started.value.feedback,

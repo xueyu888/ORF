@@ -1,22 +1,27 @@
-import type { CommentThread, Feedback, FeedbackStatus } from "../../../types/orf";
+import type { FeedbackTransitionType } from "@orf/feedback-module/contracts";
+import type { CommentThread, Feedback } from "../../../types/orf";
+import { feedbackLifecycleLabel } from "../../../utils/labels";
 import { orfRichTextMarkdownToPlainText } from "../../rich-text/orfRichTextMarkdown";
 
 export type FeedbackIssueState = "open" | "closed";
 
-export function feedbackIssueState(feedback: Pick<Feedback, "status">): FeedbackIssueState {
-  return feedback.status === "Closed" ? "closed" : "open";
+export function feedbackIssueState(feedback: Pick<Feedback, "stage">): FeedbackIssueState {
+  return feedback.stage === "closed" ? "closed" : "open";
 }
 
-export function isFeedbackIssueOpen(feedback: Pick<Feedback, "status">) {
+export function isFeedbackIssueOpen(feedback: Pick<Feedback, "stage">) {
   return feedbackIssueState(feedback) === "open";
 }
 
-export function feedbackIssueStateLabel(feedback: Pick<Feedback, "status">) {
-  return isFeedbackIssueOpen(feedback) ? "Open" : "Closed";
+export function feedbackIssueStateLabel(feedback: Pick<Feedback, "resolution" | "stage">) {
+  return feedbackLifecycleLabel(feedback);
 }
 
-export function nextFeedbackIssueStatus(feedback: Pick<Feedback, "status">): FeedbackStatus {
-  return isFeedbackIssueOpen(feedback) ? "Closed" : "Open";
+export function primaryFeedbackIssueTransition(feedback: Pick<Feedback, "stage">): FeedbackTransitionType {
+  if (feedback.stage === "closed") return "reopen";
+  if (feedback.stage === "pending_verification") return "accept_verification";
+  if (feedback.stage === "open") return "start";
+  return "submit_verification";
 }
 
 export function feedbackIssueThreads(comments: readonly CommentThread[], feedbackId: string) {
@@ -27,7 +32,7 @@ export function feedbackIssueCommentCount(comments: readonly CommentThread[], fe
   const messages = feedbackIssueThreads(comments, feedbackId)
     .flatMap((thread) => thread.messages)
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-  return Math.max(0, messages.length - 1);
+  return messages.length;
 }
 
 export function feedbackIssueDisplayId(value: string) {
@@ -48,12 +53,12 @@ function normalizeMarkdownLinkText(value: string) {
     .replace(/\]/g, "\\]");
 }
 
-export function feedbackIssueMarkdownLabel(feedback: Pick<Feedback, "id" | "phenomenon">) {
-  const title = feedback.phenomenon.replace(/\s+/g, " ").trim() || "未命名反馈";
+export function feedbackIssueMarkdownLabel(feedback: Pick<Feedback, "id" | "title">) {
+  const title = feedback.title.replace(/\s+/g, " ").trim() || "未命名反馈";
   return `反馈：${title}`;
 }
 
-export function feedbackIssueMarkdownLink(feedback: Pick<Feedback, "id" | "phenomenon">) {
+export function feedbackIssueMarkdownLink(feedback: Pick<Feedback, "id" | "title">) {
   return `[${normalizeMarkdownLinkText(feedbackIssueMarkdownLabel(feedback))}](${feedbackIssueHref(feedback.id)})`;
 }
 
@@ -101,7 +106,7 @@ function splitTrailingLinkPunctuation(value: string) {
 
 export function formatPastedFeedbackLinks(
   text: string,
-  feedbackItems: readonly Pick<Feedback, "id" | "phenomenon">[],
+  feedbackItems: readonly Pick<Feedback, "id" | "title">[],
 ) {
   const feedbackById = new Map(feedbackItems.map((feedback) => [feedback.id, feedback]));
   let changed = false;

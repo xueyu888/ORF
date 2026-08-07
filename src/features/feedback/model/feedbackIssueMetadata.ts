@@ -1,6 +1,7 @@
-import type { CommentThread, Feedback, Impact, OrfUser } from "../../../types/orf";
-import { impactLabel } from "../../../utils/labels";
-import { feedbackIssueIdsFromText, isFeedbackIssueOpen } from "./feedbackIssue";
+import type { FeedbackImpact, FeedbackRelationType } from "@orf/feedback-module/contracts";
+import type { CommentThread, Feedback, FeedbackRelation, OrfUser } from "../../../types/orf";
+import { feedbackImpactLabel } from "../../../utils/labels";
+import { isFeedbackIssueOpen } from "./feedbackIssue";
 
 export type FeedbackIssueLabel = {
   key: string;
@@ -22,6 +23,13 @@ export type FeedbackIssuePerson = {
   id: string | null;
   name: string;
 };
+export type FeedbackIssueLinkedFeedback = {
+  direction: "incoming" | "outgoing" | "undirected";
+  id: string;
+  relationId: string;
+  title: string;
+  type: FeedbackRelationType;
+};
 
 export function feedbackIssueLabels(feedback: Pick<Feedback, "causeCategories" | "impact">): FeedbackIssueLabel[] {
   const causes = Array.from(new Set(feedback.causeCategories.map((cause) => cause.trim()).filter(Boolean)));
@@ -33,14 +41,14 @@ export function feedbackIssueLabels(feedback: Pick<Feedback, "causeCategories" |
     })),
     {
       key: `impact:${feedback.impact}`,
-      name: impactLabel[feedback.impact],
+      name: feedbackImpactLabel[feedback.impact],
       tone: impactTone(feedback.impact),
     },
   ];
 }
 
 export function feedbackIssueLabelIndexItems(
-  feedbackItems: readonly Pick<Feedback, "causeCategories" | "impact" | "status">[],
+  feedbackItems: readonly Pick<Feedback, "causeCategories" | "impact" | "stage">[],
   sort: FeedbackIssueLabelIndexSortKey = "name-asc",
 ): FeedbackIssueLabelIndexItem[] {
   const labelsByKey = new Map<string, FeedbackIssueLabelIndexItem>();
@@ -68,26 +76,26 @@ export function feedbackIssueLabelIndexItems(
   return [...labelsByKey.values()].sort((left, right) => compareFeedbackIssueLabelIndexItems(left, right, sort));
 }
 
-export function feedbackIssueAssignee(feedback: Pick<Feedback, "owner" | "ownerUserId">, users: readonly OrfUser[]): FeedbackIssuePerson {
-  const user = users.find((item) => item.id === feedback.ownerUserId) ?? null;
+export function feedbackIssueAssignee(feedback: Pick<Feedback, "assigneeUserId">, users: readonly OrfUser[]): FeedbackIssuePerson {
+  const user = feedback.assigneeUserId ? users.find((item) => item.id === feedback.assigneeUserId) ?? null : null;
   return {
     avatarUrl: user?.avatarUrl ?? null,
-    id: feedback.ownerUserId || user?.id || null,
-    name: user?.name ?? feedback.owner,
+    id: feedback.assigneeUserId || user?.id || null,
+    name: user?.name ?? "未指派",
   };
 }
 
-export function feedbackIssueAuthor(feedback: Pick<Feedback, "createdBy" | "owner">, users: readonly OrfUser[]): FeedbackIssuePerson {
-  const user = feedback.createdBy ? users.find((item) => item.id === feedback.createdBy) ?? null : null;
+export function feedbackIssueAuthor(feedback: Pick<Feedback, "createdBy">, users: readonly OrfUser[]): FeedbackIssuePerson {
+  const user = users.find((item) => item.id === feedback.createdBy) ?? null;
   return {
     avatarUrl: user?.avatarUrl ?? null,
     id: user?.id ?? feedback.createdBy ?? null,
-    name: user?.name ?? feedback.owner,
+    name: user?.name ?? "未知成员",
   };
 }
 
 export function feedbackIssueParticipants(input: {
-  feedback: Pick<Feedback, "createdBy" | "owner" | "ownerUserId">;
+  feedback: Pick<Feedback, "assigneeUserId" | "createdBy">;
   threads: readonly CommentThread[];
   users: readonly OrfUser[];
 }) {
@@ -109,26 +117,29 @@ export function feedbackIssueParticipants(input: {
 }
 
 export function feedbackIssueLinkedFeedback(input: {
-  feedback: Pick<Feedback, "id" | "phenomenon" | "suggestedAdjustment">;
-  feedbackItems: readonly Pick<Feedback, "id" | "phenomenon">[];
-  threads: readonly CommentThread[];
-}) {
-  const linkedIds = new Set<string>();
-  for (const value of [
-    input.feedback.phenomenon,
-    input.feedback.suggestedAdjustment,
-    ...input.threads.flatMap((thread) => thread.messages.map((message) => message.body)),
-  ]) {
-    for (const linkedId of feedbackIssueIdsFromText(value)) {
-      if (linkedId !== input.feedback.id) linkedIds.add(linkedId);
-    }
-  }
-
+  feedback: Pick<Feedback, "id" | "relations">;
+  feedbackItems: readonly Pick<Feedback, "id" | "title">[];
+}): FeedbackIssueLinkedFeedback[] {
   const feedbackById = new Map(input.feedbackItems.map((feedback) => [feedback.id, feedback]));
-  return [...linkedIds].flatMap((linkedId) => {
-    const feedback = feedbackById.get(linkedId);
-    return feedback ? [feedback] : [];
+  return input.feedback.relations.flatMap((relation) => {
+    const targetId = feedbackRelationOtherFeedbackId(relation, input.feedback.id);
+    if (!targetId) return [];
+    const target = feedbackById.get(targetId);
+    if (!target) return [];
+    return [{
+      direction: relation.type === "related" ? "undirected" : relation.sourceFeedbackId === input.feedback.id ? "outgoing" : "incoming",
+      id: target.id,
+      relationId: relation.id,
+      title: target.title,
+      type: relation.type,
+    }];
   });
+}
+
+function feedbackRelationOtherFeedbackId(relation: FeedbackRelation, feedbackId: string) {
+  if (relation.sourceFeedbackId === feedbackId) return relation.targetFeedbackId;
+  if (relation.targetFeedbackId === feedbackId) return relation.sourceFeedbackId;
+  return null;
 }
 
 function addPerson(people: Map<string, FeedbackIssuePerson>, person: FeedbackIssuePerson) {
@@ -169,9 +180,9 @@ function causeLabelTone(value: string): FeedbackIssueLabel["tone"] {
   return "neutral";
 }
 
-function impactTone(value: Impact): FeedbackIssueLabel["tone"] {
-  if (value === "Critical") return "danger";
-  if (value === "High") return "warning";
-  if (value === "Medium") return "accent";
+function impactTone(value: FeedbackImpact): FeedbackIssueLabel["tone"] {
+  if (value === "critical") return "danger";
+  if (value === "high") return "warning";
+  if (value === "medium") return "accent";
   return "neutral";
 }

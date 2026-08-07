@@ -1,13 +1,13 @@
 import type { FilterPreferenceRecord } from "../../../domain/settings/filterPreferences";
 import { filterPreferenceStringValue } from "../../../domain/settings/filterPreferences";
-import type { Impact } from "../../../types/orf";
+import type { FeedbackImpact } from "@orf/feedback-module/contracts";
 import type { FeedbackIssueListState, FeedbackIssueSortKey } from "./feedbackIssueList";
 
 export type FeedbackIssueListUrlState = {
   assigneeUserId: string;
   authorUserId: string;
   cause: string;
-  impact: "All" | Impact;
+  impact: "All" | FeedbackImpact;
   listState: FeedbackIssueListState;
   projectId: string;
   query: string;
@@ -161,8 +161,8 @@ function feedbackListStateParam(value: string | null): FeedbackIssueListState {
   return "open";
 }
 
-function feedbackImpactParam(value: string | null): "All" | Impact {
-  if (value === "Critical" || value === "High" || value === "Medium" || value === "Low") return value;
+function feedbackImpactParam(value: string | null): "All" | FeedbackImpact {
+  if (value === "critical" || value === "high" || value === "medium" || value === "low") return value;
   return "All";
 }
 

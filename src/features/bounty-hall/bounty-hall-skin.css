@@ -2294,6 +2294,14 @@ button.bounty-result-preview-item:focus-visible {
   gap: 6px;
 }
 
+.feedback-issue-sidebar-relation-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+}
+
 .feedback-issue-sidebar-links a {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -2306,6 +2314,31 @@ button.bounty-result-preview-item:focus-visible {
 
 .feedback-issue-sidebar-links a:hover {
   text-decoration: underline;
+}
+
+.feedback-issue-sidebar-relation-row > span {
+  min-height: 22px;
+  border-radius: 6px;
+  background: rgba(69, 165, 196, 0.12);
+  color: #426075;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 22px;
+  padding: 0 7px;
+  white-space: nowrap;
+}
+
+.feedback-issue-sidebar-relation-row .orf-action-button {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.feedback-issue-relation-form {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
 }
 
 .feedback-issue-sidebar-participants {
@@ -2965,6 +2998,11 @@ button.bounty-result-preview-item:focus-visible {
 
   .bounty-hall-page .orf-action-button {
     width: 100%;
+  }
+
+  .feedback-issue-sidebar-relation-row .orf-action-button {
+    width: 28px;
+    min-width: 28px;
   }
 
   .feedback-issue-state-tabs {

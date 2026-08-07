@@ -148,7 +148,7 @@ export type FeedbackAssigneesResponse = {
   users: Array<Pick<OrfUserDisplayProfile, "avatarUrl" | "id" | "name">>;
 };
 export type FeedbackReferencesResponse = {
-  feedback: Array<Pick<OrfState["feedback"][number], "id" | "phenomenon">>;
+  feedback: Array<Pick<OrfState["feedback"][number], "id" | "title">>;
 };
 export type FeedbackSubscriptionResponse = {
   subscription: {

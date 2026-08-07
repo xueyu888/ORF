@@ -2,25 +2,46 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   validateFeedbackDailyDigestRunSchema,
+  validateFeedbackLifecycleEnums,
   validateFeedbackMetadataSubscriptionSchema,
   validateTeamFeedbackSchema,
 } from "../server/db/schemaGuard";
 
 test("feedback schema requires nullable project ownership and rejects old metric bindings", () => {
   assert.deepEqual(validateTeamFeedbackSchema({
-    columns: [{ columnName: "project_id", isNullable: "YES" }],
+    columns: [
+      rootColumn("id"),
+      rootColumn("team_id"),
+      rootColumn("project_id", "YES"),
+      rootColumn("title"),
+      rootColumn("description"),
+      rootColumn("stage"),
+      rootColumn("resolution", "YES"),
+      rootColumn("impact"),
+      rootColumn("priority", "YES"),
+      rootColumn("assignee_user_id", "YES"),
+      rootColumn("created_by"),
+      rootColumn("updated_by", "YES"),
+      rootColumn("version"),
+      rootColumn("created_at"),
+      rootColumn("updated_at"),
+      rootColumn("closed_at", "YES"),
+      rootColumn("closed_by_user_id", "YES"),
+    ],
     constraints: [],
   }), []);
 
   const errors = validateTeamFeedbackSchema({
     columns: [
-      { columnName: "project_id", isNullable: "NO" },
-      { columnName: "linked_objective_id", isNullable: "YES" },
+      rootColumn("project_id", "NO"),
+      rootColumn("linked_objective_id", "YES"),
+      rootColumn("phenomenon"),
     ],
     constraints: [],
   });
   assert.match(errors.join("\n"), /feedback\.project_id must be nullable/);
   assert.match(errors.join("\n"), /linked_objective_id must be dropped/);
+  assert.match(errors.join("\n"), /phenomenon must be dropped/);
 });
 
 test("feedback schema guard covers metadata activity and subscription tables", () => {
@@ -30,9 +51,9 @@ test("feedback schema guard covers metadata activity and subscription tables", (
       column("feedback_activity_events", "team_id"),
       column("feedback_activity_events", "feedback_id"),
       column("feedback_activity_events", "actor_user_id", "YES"),
-      column("feedback_activity_events", "actor_name"),
-      column("feedback_activity_events", "action"),
-      column("feedback_activity_events", "metadata"),
+      column("feedback_activity_events", "activity_type"),
+      column("feedback_activity_events", "payload"),
+      column("feedback_activity_events", "sequence"),
       column("feedback_activity_events", "created_at"),
       column("feedback_subscriptions", "team_id"),
       column("feedback_subscriptions", "feedback_id"),
@@ -40,6 +61,27 @@ test("feedback schema guard covers metadata activity and subscription tables", (
       column("feedback_subscriptions", "mode"),
       column("feedback_subscriptions", "created_at"),
       column("feedback_subscriptions", "updated_at"),
+      column("feedback_report_attachments", "id"),
+      column("feedback_report_attachments", "team_id"),
+      column("feedback_report_attachments", "feedback_id"),
+      column("feedback_report_attachments", "object_key"),
+      column("feedback_report_attachments", "file_name"),
+      column("feedback_report_attachments", "mime_type"),
+      column("feedback_report_attachments", "file_size"),
+      column("feedback_report_attachments", "width", "YES"),
+      column("feedback_report_attachments", "height", "YES"),
+      column("feedback_report_attachments", "sort_order"),
+      column("feedback_report_attachments", "created_by", "YES"),
+      column("feedback_report_attachments", "created_at"),
+      column("feedback_report_attachments", "source_comment_attachment_id", "YES"),
+      column("feedback_cause_categories", "feedback_id"),
+      column("feedback_relations", "id"),
+      column("feedback_user_views", "feedback_id"),
+      column("feedback_participants", "feedback_id"),
+      column("feedback_event_dispatches", "id"),
+      column("feedback_event_dispatch_recipients", "dispatch_id"),
+      column("feedback_import_batches", "id"),
+      column("feedback_import_origins", "feedback_id"),
     ],
   }), []);
 
@@ -51,6 +93,31 @@ test("feedback schema guard covers metadata activity and subscription tables", (
   });
   assert.match(errors.join("\n"), /feedback_activity_events\.feedback_id/);
   assert.match(errors.join("\n"), /feedback_subscriptions\.mode/);
+  assert.match(errors.join("\n"), /feedback_report_attachments\.object_key/);
+});
+
+test("feedback lifecycle enum guard rejects old status enum and validates module enums", () => {
+  assert.deepEqual(validateFeedbackLifecycleEnums({
+    feedback_activity_type: { labels: ["feedback.created", "feedback.metadata.changed", "feedback.assignee.changed", "feedback.lifecycle.changed", "feedback.relation.added", "feedback.relation.removed", "feedback.comment.created", "feedback.comment.edited", "feedback.report.changed", "feedback.imported"] },
+    feedback_impact: { labels: ["low", "medium", "high", "critical"] },
+    feedback_priority: { labels: ["p0", "p1", "p2", "p3"] },
+    feedback_relation_type: { labels: ["related", "duplicates", "blocks"] },
+    feedback_resolution: { labels: ["resolved", "not_needed", "cannot_resolve", "duplicate", "unspecified"] },
+    feedback_stage: { labels: ["open", "in_progress", "pending_verification", "closed"] },
+  }), []);
+
+  const errors = validateFeedbackLifecycleEnums({
+    feedback_activity_type: { labels: [] },
+    feedback_impact: { labels: ["Low", "High"] },
+    feedback_priority: { labels: ["p0", "p1", "p2", "p3"] },
+    feedback_relation_type: { labels: ["related", "duplicates", "blocks"] },
+    feedback_resolution: { labels: ["resolved", "not_needed", "cannot_resolve", "duplicate", "unspecified"] },
+    feedback_stage: { labels: ["open", "closed"] },
+    feedback_status: { labels: ["Open", "Closed"] },
+  });
+  assert.match(errors.join("\n"), /feedback_impact enum/);
+  assert.match(errors.join("\n"), /feedback_stage enum/);
+  assert.match(errors.join("\n"), /feedback_status enum must be dropped/);
 });
 
 test("feedback daily digest schema guard keeps the per-assignee per-day idempotency key", () => {
@@ -105,4 +172,8 @@ test("feedback daily digest schema guard keeps the per-assignee per-day idempote
 
 function column(tableName: string, columnName: string, isNullable: "YES" | "NO" = "NO") {
   return { columnName, isNullable, tableName };
+}
+
+function rootColumn(columnName: string, isNullable: "YES" | "NO" = "NO") {
+  return { columnName, isNullable };
 }

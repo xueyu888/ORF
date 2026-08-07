@@ -38,9 +38,9 @@ test("feedback daily digest target id is unique by team date and assignee", () =
 
 test("feedback daily digest sorts by impact then oldest update and formats feedback links", () => {
   const items = sortFeedbackDailyDigestItems([
-    { id: "fb-low", impact: "Low", phenomenon: "低影响", updatedAt: "2026-08-03" },
-    { id: "fb-high-new", impact: "High", phenomenon: "高影响新", updatedAt: "2026-08-04" },
-    { id: "fb-high-old", impact: "High", phenomenon: "高影响旧", updatedAt: "2026-08-01" },
+    { id: "fb-low", impact: "low", title: "低影响", updatedAt: "2026-08-03" },
+    { id: "fb-high-new", impact: "high", title: "高影响新", updatedAt: "2026-08-04" },
+    { id: "fb-high-old", impact: "high", title: "高影响旧", updatedAt: "2026-08-01" },
   ]);
 
   assert.deepEqual(items.map((item) => item.id), ["fb-high-old", "fb-high-new", "fb-low"]);
@@ -58,8 +58,8 @@ test("feedback daily digest keeps two digit ordered list markers in the markdown
   const body = formatFeedbackDailyDigestBody({
     items: Array.from({ length: 22 }, (_, index) => ({
       id: `fb-${String(index + 1).padStart(2, "0")}`,
-      impact: "Medium",
-      phenomenon: `反馈标题 ${index + 1}`,
+      impact: "medium",
+      title: `反馈标题 ${index + 1}`,
       updatedAt: `2026-08-${String(index + 1).padStart(2, "0")}`,
     })),
   });

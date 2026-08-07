@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { OrfUser, UserRole } from "../../src/types/orf";
 import { canEnableUserAccount } from "../../src/domain/userAccountLifecycle";
+import { feedback } from "../../modules/feedback/src/infrastructure/database/schema";
 import { deleteOryIdentity, resetOryIdentityPassword, updateOryIdentityEmail } from "../auth/ory";
 import { db } from "../db/client";
 import {
@@ -9,7 +10,6 @@ import {
   commentMessages,
   commentThreads,
   evidence,
-  feedback,
   notifications,
   objectiveAlignmentRequests,
   objectiveLoot,
@@ -182,7 +182,7 @@ async function isUserIdReferencedByOrfRecords(scope: RuntimeScope, userId: strin
     db
       .select({ id: feedback.id })
       .from(feedback)
-      .where(and(eq(feedback.teamId, storageScopeId), or(eq(feedback.createdBy, userId), eq(feedback.updatedBy, userId), eq(feedback.ownerUserId, userId))))
+      .where(and(eq(feedback.teamId, storageScopeId), or(eq(feedback.createdBy, userId), eq(feedback.updatedBy, userId), eq(feedback.assigneeUserId, userId))))
       .limit(1),
     db
       .select({ id: evidence.id })

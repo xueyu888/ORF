@@ -13,7 +13,7 @@ import { loadEmptyOrfStateSnapshot } from "./orfStateSnapshot";
 import { useOrfDataState } from "./orfProviderData";
 import { type AuthResult, useAuthSessionState } from "./orfProviderAuth";
 import { useOrfProviderCommentActions } from "./orfProviderCommentActions";
-import { type CreateFeedbackInput, type UpdateFeedbackMetadataInput, useOrfProviderFeedbackActions } from "./orfProviderFeedbackActions";
+import { type AddFeedbackRelationInput, type CreateFeedbackInput, type UpdateFeedbackMetadataInput, useOrfProviderFeedbackActions } from "./orfProviderFeedbackActions";
 import { useNotificationState } from "./orfProviderNotifications";
 import { businessMutationFailureMessage } from "./orfProviderMutationMessages";
 import {
@@ -77,11 +77,11 @@ import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import type { ReportsPageData } from "../domain/reportsLeaderboard";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
 import type { ChatRealtimeEvent, ClientUpdateAvailable, OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
+import type { FeedbackTransitionInput } from "@orf/feedback-module/contracts";
 import type {
   CommentStatus,
   CommentTargetType,
   Feedback,
-  FeedbackStatus,
   Objective,
   OrfState,
   OrfUser,
@@ -185,7 +185,10 @@ interface OrfContextValue {
   settleObjectiveLoot: (objectiveId: string, input: SettleObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, input: SubmitContributionReviewInput) => Promise<boolean>;
   createFeedback: (input: CreateFeedbackInput) => Promise<Feedback | null>;
-  updateFeedbackAssignee: (feedbackId: string, ownerUserId: string) => Promise<boolean>;
+  addFeedbackRelation: (feedbackId: string, input: AddFeedbackRelationInput) => Promise<boolean>;
+  removeFeedbackRelation: (feedbackId: string, relationId: string, expectedVersion: number) => Promise<boolean>;
+  transitionFeedback: (feedbackId: string, command: FeedbackTransitionInput) => Promise<boolean>;
+  updateFeedbackAssignee: (feedbackId: string, assigneeUserId: string | null, expectedVersion: number) => Promise<boolean>;
   updateFeedbackMetadata: (feedbackId: string, input: UpdateFeedbackMetadataInput) => Promise<boolean>;
   createTask: (input: Pick<Task, "title" | "description" | "assigneeUserId" | "priority" | "linkedObjectiveId"> & Partial<Pick<Task, "dueDate" | "tags" | "checklist">>) => Promise<Task | null>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
@@ -212,7 +215,6 @@ interface OrfContextValue {
   deleteResult: (resultId: string) => void;
   deleteTask: (taskId: string) => void;
   deleteTaskChecklistItem: (taskId: string, itemId: string) => void;
-  updateFeedbackStatus: (feedbackId: string, status: FeedbackStatus) => void;
   updateResultConfidence: (resultId: string, confidence: number) => void;
   createUser: (input: { name: string; email: string; role: UserRole }) => Promise<boolean>;
   loginWithPassword: (email: string, password: string) => Promise<AuthResult>;

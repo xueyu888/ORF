@@ -813,7 +813,7 @@ async function listDriveContextLinks(nodeId: string, teamId: string) {
                WHEN l.context_type = 'objective' THEN o.title
                WHEN l.context_type = 'result' THEN r.title
                WHEN l.context_type = 'task' THEN t.title
-               WHEN l.context_type = 'feedback' THEN f.phenomenon
+               WHEN l.context_type = 'feedback' THEN f.title
                WHEN l.context_type = 'workLog' THEN wl.work_date || ' · ' || wl.author_name_snapshot
                WHEN l.context_type = 'chatChannel' THEN COALESCE(c.display_name, c.name)
                WHEN l.context_type = 'chatMessage' THEN COALESCE(NULLIF(left(regexp_replace(cm.body, '\\s+', ' ', 'g'), 80), ''), '聊天消息')
@@ -1027,7 +1027,7 @@ export async function searchDriveNodes(
                        WHEN l.context_type = 'objective' THEN o.title
                        WHEN l.context_type = 'result' THEN r.title
                        WHEN l.context_type = 'task' THEN t.title
-                       WHEN l.context_type = 'feedback' THEN fb.phenomenon
+                       WHEN l.context_type = 'feedback' THEN fb.title
                        WHEN l.context_type = 'workLog' THEN wl.work_date || ' · ' || wl.author_name_snapshot
                        WHEN l.context_type = 'chatChannel' THEN COALESCE(c.display_name, c.name)
                        WHEN l.context_type = 'chatMessage' THEN COALESCE(NULLIF(left(regexp_replace(cm.body, '\\s+', ' ', 'g'), 80), ''), '聊天消息')
@@ -1842,7 +1842,7 @@ async function resolveDriveContext(teamId: string, contextType: DriveContextType
   }
   if (contextType === "feedback") {
     const { rows } = await pool.query<{ title: string }>(
-      "SELECT phenomenon AS title FROM feedback WHERE team_id = $1 AND id = $2 LIMIT 1",
+      "SELECT title FROM feedback WHERE team_id = $1 AND id = $2 LIMIT 1",
       [teamId, contextId],
     );
     return rows[0]?.title ?? null;

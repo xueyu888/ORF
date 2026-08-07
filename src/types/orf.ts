@@ -1,7 +1,14 @@
+import type {
+  FeedbackActivityType,
+  FeedbackImpact,
+  FeedbackPriority,
+  FeedbackRelationType,
+  FeedbackResolution,
+  FeedbackStage,
+} from "@orf/feedback-module/contracts";
 import type { PermissionKey } from "../config/permissions";
 
 export type WorkStatus = "On Track" | "At Risk" | "Blocked" | "Draft";
-export type FeedbackStatus = "Open" | "Closed";
 export type TaskStatus = "Backlog" | "Todo" | "In Progress" | "In Review" | "Done";
 export type Priority = "Low" | "Medium" | "High" | "Critical";
 export type Impact = "Low" | "Medium" | "High" | "Critical";
@@ -224,9 +231,20 @@ export interface SystemConversationMessage extends AppNotification {
 
 export interface ActivityItem {
   id: string;
-  actor: string;
-  action: string;
+  actorUserId?: string | null;
+  activityType: FeedbackActivityType;
+  payload: Record<string, unknown>;
+  sequence: number;
   at: string;
+}
+
+export interface FeedbackRelation {
+  id: string;
+  type: FeedbackRelationType;
+  sourceFeedbackId: string;
+  targetFeedbackId: string;
+  createdBy?: string | null;
+  createdAt: string;
 }
 
 export interface OrfProject {
@@ -689,18 +707,24 @@ export interface Result {
 export interface Feedback {
   id: string;
   projectId?: string | null;
-  phenomenon: string;
+  title: string;
+  description: string;
+  reportAttachments: CommentAttachment[];
   causeCategories: string[];
-  impact: Impact;
-  suggestedAdjustment: string;
-  status: FeedbackStatus;
-  owner: string;
-  ownerUserId: string;
-  createdBy?: string | null;
+  impact: FeedbackImpact;
+  priority: FeedbackPriority | null;
+  stage: FeedbackStage;
+  resolution: FeedbackResolution | null;
+  assigneeUserId?: string | null;
+  createdBy: string;
   updatedBy?: string | null;
+  version: number;
+  closedAt?: string | null;
+  closedByUserId?: string | null;
   createdAt: string;
   updatedAt: string;
   activity: ActivityItem[];
+  relations: FeedbackRelation[];
 }
 
 export interface TaskChecklistItem {

@@ -27,7 +27,7 @@ import {
 import { getProjectChatChannels, getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import type { ProjectChatChannel } from "../types/orf";
-import { impactLabel } from "../utils/labels";
+import { feedbackImpactLabel } from "../utils/labels";
 
 export function FeedbackInboxPage() {
   const navigate = useNavigate();
@@ -274,10 +274,10 @@ export function FeedbackInboxPage() {
         </BountySelect>
         <BountySelect label="影响" value={impact} onChange={(value) => setFilter("impact", value, "All")}>
           <option value="All">全部影响</option>
-          <option value="Critical">{impactLabel.Critical}</option>
-          <option value="High">{impactLabel.High}</option>
-          <option value="Medium">{impactLabel.Medium}</option>
-          <option value="Low">{impactLabel.Low}</option>
+          <option value="critical">{feedbackImpactLabel.critical}</option>
+          <option value="high">{feedbackImpactLabel.high}</option>
+          <option value="medium">{feedbackImpactLabel.medium}</option>
+          <option value="low">{feedbackImpactLabel.low}</option>
         </BountySelect>
         <BountySelect label="排序" value={sort} onChange={(value) => setFilter("sort", value, "updated-desc")}>
           <option value="updated-desc">最近更新</option>
@@ -342,7 +342,7 @@ function FeedbackIssueRow({ item }: { item: FeedbackIssueListItem }) {
       </div>
       <div className="feedback-issue-row-main">
         <div className="feedback-issue-row-title-line">
-          <h2>{feedback.phenomenon}</h2>
+          <h2>{feedback.title}</h2>
           <div className="feedback-issue-labels">
             {item.labels.map((label) => (
               <BountyBadge key={label.key} tone={label.tone}>{label.name}</BountyBadge>

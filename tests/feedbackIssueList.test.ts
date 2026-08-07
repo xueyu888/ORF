@@ -6,6 +6,7 @@ import {
   filterFeedbackIssueListItems,
   type FeedbackIssueListFilters,
 } from "../src/features/feedback/model/feedbackIssueList";
+import { feedbackIssueLinkedFeedback } from "../src/features/feedback/model/feedbackIssueMetadata";
 import {
   feedbackIssueListFilterParamsFromPreferenceRecord,
   feedbackIssueListFilterPreferenceRecordFromSearchParams,
@@ -28,8 +29,8 @@ test("feedback list filters by explicit project id and unassigned project bucket
   const items = buildFeedbackIssueListItems({
     comments: [],
     feedback: [
-      feedback({ id: "fb-client", projectId: "project-client", phenomenon: "客户端崩溃" }),
-      feedback({ id: "fb-unassigned", projectId: null, phenomenon: "无项目反馈" }),
+      feedback({ id: "fb-client", projectId: "project-client", title: "客户端崩溃" }),
+      feedback({ id: "fb-unassigned", projectId: null, title: "无项目反馈" }),
     ],
     projects,
     users,
@@ -49,9 +50,9 @@ test("feedback query supports project qualifier by project name and unassigned a
   const items = buildFeedbackIssueListItems({
     comments: [],
     feedback: [
-      feedback({ id: "fb-client", projectId: "project-client", phenomenon: "客户端崩溃" }),
-      feedback({ id: "fb-backend", projectId: "project-backend", phenomenon: "接口超时" }),
-      feedback({ id: "fb-unassigned", projectId: null, phenomenon: "无项目反馈" }),
+      feedback({ id: "fb-client", projectId: "project-client", title: "客户端崩溃" }),
+      feedback({ id: "fb-backend", projectId: "project-backend", title: "接口超时" }),
+      feedback({ id: "fb-unassigned", projectId: null, title: "无项目反馈" }),
     ],
     projects,
     users,
@@ -71,9 +72,9 @@ test("feedback issue state counts follow active filters without swallowing other
   const items = buildFeedbackIssueListItems({
     comments: [],
     feedback: [
-      feedback({ id: "fb-client-open", projectId: "project-client", phenomenon: "客户端崩溃", status: "Open" }),
-      feedback({ id: "fb-client-closed", projectId: "project-client", phenomenon: "客户端已修复", status: "Closed" }),
-      feedback({ id: "fb-backend-open", projectId: "project-backend", phenomenon: "接口超时", status: "Open" }),
+      feedback({ id: "fb-client-open", projectId: "project-client", title: "客户端崩溃", stage: "open" }),
+      feedback({ id: "fb-client-closed", projectId: "project-client", title: "客户端已修复", stage: "closed", resolution: "resolved", closedAt: "2026-07-08", closedByUserId: "user-creator" }),
+      feedback({ id: "fb-backend-open", projectId: "project-backend", title: "接口超时", stage: "open" }),
     ],
     projects,
     users,
@@ -89,10 +90,40 @@ test("feedback issue state counts follow active filters without swallowing other
   assert.deepEqual(feedbackIssueListCountsForFilters(items, { ...projectOpenFilters, query: "is:open" }), { all: 1, closed: 0, open: 1 });
 });
 
+test("feedback linked issues come from relation facts instead of report or comment text", () => {
+  const source = feedback({
+    id: "fb-source",
+    title: "源反馈",
+    description: "正文提到了 #fb-text-only，但没有关系事实。",
+    relations: [
+      {
+        id: "rel-1",
+        type: "duplicates",
+        sourceFeedbackId: "fb-source",
+        targetFeedbackId: "fb-target",
+        createdBy: "user-creator",
+        createdAt: "2026-07-07",
+      },
+    ],
+  });
+  const target = feedback({ id: "fb-target", title: "目标反馈" });
+  const textOnly = feedback({ id: "fb-text-only", title: "只出现在正文里的反馈" });
+
+  assert.deepEqual(feedbackIssueLinkedFeedback({ feedback: source, feedbackItems: [source, target, textOnly] }), [
+    {
+      direction: "outgoing",
+      id: "fb-target",
+      relationId: "rel-1",
+      title: "目标反馈",
+      type: "duplicates",
+    },
+  ]);
+});
+
 test("feedback list filter preference stores project first and skips default filters", () => {
   const query = feedbackIssueListFilterQueryFromSearchParams(
     new URLSearchParams({
-      impact: "High",
+      impact: "high",
       project: "project-client",
       q: "  crash  ",
       sort: "updated-desc",
@@ -100,7 +131,7 @@ test("feedback list filter preference stores project first and skips default fil
     }),
   );
 
-  assert.equal(query, "project=project-client&q=crash&impact=High");
+  assert.equal(query, "project=project-client&q=crash&impact=high");
 });
 
 test("feedback list filter preference restores sanitized query params", () => {
@@ -115,7 +146,7 @@ test("feedback list filter preference restores sanitized query params", () => {
 test("feedback list user preference stores active filter slots without default values", () => {
   const record = feedbackIssueListFilterPreferenceRecordFromSearchParams(
     new URLSearchParams({
-      impact: "High",
+      impact: "high",
       project: "project-client",
       q: "  crash  ",
       sort: "updated-desc",
@@ -125,7 +156,7 @@ test("feedback list user preference stores active filter slots without default v
 
   assert.deepEqual(record, {
     values: {
-      impact: "High",
+      impact: "high",
       project: "project-client",
       q: "crash",
     },
@@ -162,21 +193,28 @@ function filters(input: Partial<FeedbackIssueListFilters>): FeedbackIssueListFil
   };
 }
 
-function feedback(input: Partial<Feedback> & Pick<Feedback, "id" | "phenomenon">): Feedback {
+function feedback(input: Partial<Feedback> & Pick<Feedback, "id" | "title">): Feedback {
   return {
     activity: [],
     causeCategories: ["技术问题"],
     createdAt: "2026-07-07",
     createdBy: "user-creator",
     id: input.id,
-    impact: "High",
-    owner: "处理人",
-    ownerUserId: "user-owner",
-    phenomenon: input.phenomenon,
+    impact: "high",
+    priority: null,
+    reportAttachments: [],
+    relations: [],
+    assigneeUserId: "user-owner",
+    title: input.title,
+    description: "正文",
     projectId: input.projectId ?? null,
-    status: "Open",
-    suggestedAdjustment: "正文",
+    stage: "open",
+    resolution: null,
     updatedAt: "2026-07-07",
+    updatedBy: "user-creator",
+    version: 0,
+    closedAt: null,
+    closedByUserId: null,
     ...input,
   };
 }

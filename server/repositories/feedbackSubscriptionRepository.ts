@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { FeedbackSubscriptionMode } from "../../src/types/orf";
+import { feedback, feedbackParticipants, feedbackSubscriptions } from "../../modules/feedback/src/infrastructure/database/schema";
 import { db } from "../db/client";
-import { commentMessages, commentThreads, feedback, feedbackSubscriptions } from "../db/schema";
 import {
   getActiveAdminNotificationRecipients,
   getActiveMemberNotificationRecipientsByIds,
@@ -34,19 +34,12 @@ async function feedbackExistsInScope(feedbackId: string, storageScopeId: string)
   return target && target.teamId === storageScopeId ? target : null;
 }
 
-async function getFeedbackCommentParticipantUserIds(teamId: string, feedbackId: string) {
+async function getFeedbackParticipantUserIds(teamId: string, feedbackId: string) {
   const rows = await db
-    .select({ authorUserId: commentMessages.authorUserId })
-    .from(commentThreads)
-    .innerJoin(commentMessages, eq(commentMessages.threadId, commentThreads.id))
-    .where(
-      and(
-        eq(commentThreads.teamId, teamId),
-        eq(commentThreads.targetType, "feedback"),
-        eq(commentThreads.targetId, feedbackId),
-      ),
-    );
-  return uniqueUserIds(rows.map((row) => row.authorUserId));
+    .select({ userId: feedbackParticipants.userId })
+    .from(feedbackParticipants)
+    .where(and(eq(feedbackParticipants.teamId, teamId), eq(feedbackParticipants.feedbackId, feedbackId)));
+  return uniqueUserIds(rows.map((row) => row.userId));
 }
 
 async function getFeedbackSubscriptionRows(teamId: string, feedbackId: string) {
@@ -63,12 +56,12 @@ export async function getFeedbackOrdinaryNotificationRecipients(input: {
   createdBy?: string | null;
   feedbackId: string;
   includeCommentParticipants: boolean;
-  ownerUserId?: string | null;
+  assigneeUserId?: string | null;
   teamId: string;
 }) {
   const [commentParticipantUserIds, subscriptionRows] = await Promise.all([
     input.includeCommentParticipants
-      ? getFeedbackCommentParticipantUserIds(input.teamId, input.feedbackId)
+      ? getFeedbackParticipantUserIds(input.teamId, input.feedbackId)
       : Promise.resolve([]),
     getFeedbackSubscriptionRows(input.teamId, input.feedbackId),
   ]);
@@ -80,7 +73,7 @@ export async function getFeedbackOrdinaryNotificationRecipients(input: {
   const subscribedUserIds = subscriptionRows
     .filter((row) => row.mode === "subscribed")
     .map((row) => row.userId);
-  const relatedUserIds = uniqueUserIds([input.createdBy, input.ownerUserId, ...commentParticipantUserIds]);
+  const relatedUserIds = uniqueUserIds([input.createdBy, input.assigneeUserId, ...commentParticipantUserIds]);
   const [adminUserIds, activeRelatedUserIds, activeSubscribedUserIds] = await Promise.all([
     getActiveAdminNotificationRecipients(input.teamId),
     getActiveMemberNotificationRecipientsByIds(input.teamId, relatedUserIds),
@@ -93,18 +86,18 @@ export async function getFeedbackOrdinaryNotificationRecipients(input: {
 }
 
 export async function getFeedbackAssignmentNotificationRecipients(input: {
-  nextOwnerUserId?: string | null;
-  previousOwnerUserId?: string | null;
+  nextAssigneeUserId?: string | null;
+  previousAssigneeUserId?: string | null;
   teamId: string;
 }) {
-  const [adminUserIds, ownerUserIds] = await Promise.all([
+  const [adminUserIds, assigneeUserIds] = await Promise.all([
     getActiveAdminNotificationRecipients(input.teamId),
     getActiveMemberNotificationRecipientsByIds(
       input.teamId,
-      uniqueUserIds([input.previousOwnerUserId, input.nextOwnerUserId]),
+      uniqueUserIds([input.previousAssigneeUserId, input.nextAssigneeUserId]),
     ),
   ]);
-  return uniqueUserIds([...adminUserIds, ...ownerUserIds]);
+  return uniqueUserIds([...adminUserIds, ...assigneeUserIds]);
 }
 
 export async function getFeedbackSubscriptionMode(
@@ -134,14 +127,14 @@ export async function getFeedbackSubscriptionMode(
   const [item] = await db
     .select({
       createdBy: feedback.createdBy,
-      ownerUserId: feedback.ownerUserId,
+      assigneeUserId: feedback.assigneeUserId,
     })
     .from(feedback)
     .where(and(eq(feedback.teamId, storageScopeId), eq(feedback.id, feedbackId)))
     .limit(1);
   const participantUserIds = new Set([
-    ...uniqueUserIds([item?.createdBy, item?.ownerUserId]),
-    ...(await getFeedbackCommentParticipantUserIds(storageScopeId, feedbackId)),
+    ...uniqueUserIds([item?.createdBy, item?.assigneeUserId]),
+    ...(await getFeedbackParticipantUserIds(storageScopeId, feedbackId)),
   ]);
   return { status: "ok", mode: participantUserIds.has(actor.id) ? "participating" : "none" };
 }

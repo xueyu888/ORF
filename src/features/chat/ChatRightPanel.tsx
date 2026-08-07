@@ -28,7 +28,7 @@ type ChatRightPanelProps = {
   currentUserId?: string;
   driveSelectionRequest?: ChatDriveResourceSelectionRequest | null;
   editingMessageId?: string | null;
-  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
   memberSearchFocusSignal?: number;
   onAddMembers: (userIds: string[]) => Promise<void>;
   onAnnouncementMessage: (message: ChatMessage) => void;

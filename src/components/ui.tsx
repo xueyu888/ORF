@@ -1,17 +1,15 @@
 import { Loader2, type LucideIcon } from "lucide-react";
 import { clsx } from "clsx";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import type { FeedbackStatus, Priority, TaskStatus, WorkStatus } from "../types/orf";
+import type { Priority, TaskStatus, WorkStatus } from "../types/orf";
 import { UserAvatar } from "./UserAvatar";
 import { statusLabel } from "../utils/labels";
 
-const statusClasses: Record<WorkStatus | FeedbackStatus | TaskStatus | Priority, string> = {
+const statusClasses: Record<WorkStatus | TaskStatus | Priority, string> = {
   "On Track": "orf-badge-success",
   "At Risk": "orf-badge-warning",
   Blocked: "orf-badge-danger",
   Draft: "orf-badge-neutral",
-  Open: "orf-badge-success",
-  Closed: "orf-badge-neutral",
   Backlog: "orf-badge-neutral",
   Todo: "orf-badge-info",
   "In Progress": "orf-badge-accent",
@@ -99,7 +97,7 @@ export function IconButton({
   );
 }
 
-export function StatusBadge({ status }: { status: WorkStatus | FeedbackStatus | TaskStatus | Priority }) {
+export function StatusBadge({ status }: { status: WorkStatus | TaskStatus | Priority }) {
   return (
     <span className={clsx("orf-status-tag inline-flex h-7 min-w-[66px] items-center justify-center px-3 text-xs font-bold leading-none", statusClasses[status])}>
       {statusLabel(status)}

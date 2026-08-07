@@ -1,38 +1,36 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canAssignFeedbackOwner, canEditFeedbackMetadata } from "../src/features/feedback/model/feedbackCapabilities";
+import { canChangeFeedbackAssignee, canEditFeedbackMetadata } from "../src/features/feedback/model/feedbackCapabilities";
 import type { Feedback, OrfUser } from "../src/types/orf";
 
-test("feedback metadata editing separates admin override from open participant edits", () => {
+test("feedback metadata editing follows active-user visibility gates", () => {
   const creator = user({ id: "user-creator", role: "member" });
-  const owner = user({ id: "user-owner", role: "member" });
-  const admin = user({ id: "user-admin", role: "admin" });
-  const stranger = user({ id: "user-stranger", role: "member" });
-
-  assert.equal(canEditFeedbackMetadata(feedback({ status: "Open" }), creator), true);
-  assert.equal(canEditFeedbackMetadata(feedback({ status: "Open" }), owner), true);
-  assert.equal(canEditFeedbackMetadata(feedback({ status: "Open" }), stranger), false);
-
-  assert.equal(canEditFeedbackMetadata(feedback({ status: "Closed" }), creator), false);
-  assert.equal(canEditFeedbackMetadata(feedback({ status: "Closed" }), owner), false);
-  assert.equal(canEditFeedbackMetadata(feedback({ status: "Closed" }), admin), true);
-});
-
-test("feedback assignment is open to active members without opening all metadata fields", () => {
-  const creator = user({ id: "user-creator", role: "member" });
-  const owner = user({ id: "user-owner", role: "member" });
+  const assignee = user({ id: "user-assignee", role: "member" });
   const admin = user({ id: "user-admin", role: "admin" });
   const stranger = user({ id: "user-stranger", role: "member" });
   const inactiveMember = user({ id: "user-disabled", role: "member", status: "disabled" });
 
-  assert.equal(canEditFeedbackMetadata(feedback({ status: "Open" }), stranger), false);
-  assert.equal(canAssignFeedbackOwner(feedback({ status: "Open" }), creator), true);
-  assert.equal(canAssignFeedbackOwner(feedback({ status: "Open" }), owner), true);
-  assert.equal(canAssignFeedbackOwner(feedback({ status: "Open" }), stranger), true);
-  assert.equal(canAssignFeedbackOwner(feedback({ status: "Open" }), inactiveMember), false);
+  assert.equal(canEditFeedbackMetadata(feedback({ stage: "open" }), creator), true);
+  assert.equal(canEditFeedbackMetadata(feedback({ stage: "open" }), assignee), true);
+  assert.equal(canEditFeedbackMetadata(feedback({ stage: "open" }), stranger), true);
+  assert.equal(canEditFeedbackMetadata(feedback({ stage: "closed", resolution: "resolved", closedAt: "2026-07-08", closedByUserId: "user-creator" }), admin), true);
+  assert.equal(canEditFeedbackMetadata(feedback({ stage: "open" }), inactiveMember), false);
+});
 
-  assert.equal(canAssignFeedbackOwner(feedback({ status: "Closed" }), stranger), false);
-  assert.equal(canAssignFeedbackOwner(feedback({ status: "Closed" }), admin), true);
+test("feedback assignment keeps closed feedback admin-gated in the frontend", () => {
+  const creator = user({ id: "user-creator", role: "member" });
+  const assignee = user({ id: "user-assignee", role: "member" });
+  const admin = user({ id: "user-admin", role: "admin" });
+  const stranger = user({ id: "user-stranger", role: "member" });
+  const inactiveMember = user({ id: "user-disabled", role: "member", status: "disabled" });
+
+  assert.equal(canChangeFeedbackAssignee(feedback({ stage: "open" }), creator), true);
+  assert.equal(canChangeFeedbackAssignee(feedback({ stage: "open" }), assignee), true);
+  assert.equal(canChangeFeedbackAssignee(feedback({ stage: "open" }), stranger), true);
+  assert.equal(canChangeFeedbackAssignee(feedback({ stage: "open" }), inactiveMember), false);
+
+  assert.equal(canChangeFeedbackAssignee(feedback({ stage: "closed", resolution: "resolved", closedAt: "2026-07-08", closedByUserId: "user-creator" }), stranger), false);
+  assert.equal(canChangeFeedbackAssignee(feedback({ stage: "closed", resolution: "resolved", closedAt: "2026-07-08", closedByUserId: "user-creator" }), admin), true);
 });
 
 function user(input: Pick<OrfUser, "id" | "role"> & Partial<Pick<OrfUser, "status">>): OrfUser {
@@ -45,20 +43,28 @@ function user(input: Pick<OrfUser, "id" | "role"> & Partial<Pick<OrfUser, "statu
   };
 }
 
-function feedback(input: Pick<Feedback, "status">): Feedback {
+function feedback(input: Partial<Feedback>): Feedback {
   return {
     activity: [],
     causeCategories: ["技术问题"],
     createdAt: "2026-07-07",
     createdBy: "user-creator",
     id: "fb-1",
-    impact: "High",
-    owner: "Owner",
-    ownerUserId: "user-owner",
-    phenomenon: "标题",
+    impact: "high",
+    priority: null,
+    reportAttachments: [],
+    relations: [],
+    assigneeUserId: "user-assignee",
+    title: "标题",
+    description: "正文",
     projectId: null,
-    status: input.status,
-    suggestedAdjustment: "正文",
+    stage: "open",
+    resolution: null,
     updatedAt: "2026-07-07",
+    updatedBy: "user-creator",
+    version: 0,
+    closedAt: null,
+    closedByUserId: null,
+    ...input,
   };
 }

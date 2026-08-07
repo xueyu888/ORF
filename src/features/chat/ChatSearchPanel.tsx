@@ -9,7 +9,7 @@ import { chatSearchInputPlaceholder } from "./chatSearchSyntax";
 
 type ChatSearchPanelProps = {
   currentUserId?: string;
-  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
   focusSignal: number;
   onOpenResult: (result: ChatSearchResult) => void;
   onSearch: (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => Promise<void>;
@@ -119,7 +119,7 @@ function SearchResultPreview({
   message,
   usersById,
 }: {
-  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
   message: ChatMessage;
   usersById: Map<string, ChatUser>;
 }) {

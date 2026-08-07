@@ -1,4 +1,4 @@
-import type { Impact } from "../../src/types/orf";
+import type { FeedbackImpact } from "@orf/feedback-module/contracts";
 
 export type FeedbackDailyDigestClock = {
   date: string;
@@ -7,8 +7,8 @@ export type FeedbackDailyDigestClock = {
 
 export type FeedbackDailyDigestItem = {
   id: string;
-  impact: Impact;
-  phenomenon: string;
+  impact: FeedbackImpact;
+  title: string;
   updatedAt: string;
 };
 
@@ -45,17 +45,17 @@ export function shouldRunFeedbackDailyDigest(input: {
   };
 }
 
-function impactRank(impact: Impact) {
-  if (impact === "Critical") return 0;
-  if (impact === "High") return 1;
-  if (impact === "Medium") return 2;
+function impactRank(impact: FeedbackImpact) {
+  if (impact === "critical") return 0;
+  if (impact === "high") return 1;
+  if (impact === "medium") return 2;
   return 3;
 }
 
-function impactLabel(impact: Impact) {
-  if (impact === "Critical") return "Critical";
-  if (impact === "High") return "High";
-  if (impact === "Medium") return "Medium";
+function impactLabel(impact: FeedbackImpact) {
+  if (impact === "critical") return "Critical";
+  if (impact === "high") return "High";
+  if (impact === "medium") return "Medium";
   return "Low";
 }
 
@@ -74,7 +74,7 @@ export function formatFeedbackDailyDigestBody(input: {
 }) {
   const items = sortFeedbackDailyDigestItems(input.items);
   const lines = items.slice(0, 20).map((item, index) => {
-    const title = item.phenomenon.replace(/\s+/g, " ").trim() || "未命名反馈";
+    const title = item.title.replace(/\s+/g, " ").trim() || "未命名反馈";
     return `${index + 1}. [${impactLabel(item.impact)}] [${title}](/feedback/${encodeURIComponent(item.id)})`;
   });
   const remainingCount = Math.max(items.length - lines.length, 0);

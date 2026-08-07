@@ -7,7 +7,7 @@ import { ChatMarkdown, commentImageAttachmentIdsFromChatSystemMetadata } from ".
 
 type ChatCollectionPanelProps = {
   currentUserId?: string;
-  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
   kind: "pins" | "saved";
   loading: boolean;
   onOpenResult: (result: ChatSearchResult) => void;

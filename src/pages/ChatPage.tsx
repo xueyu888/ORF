@@ -140,7 +140,7 @@ function mentionableUsersForChannel(channel: ChatChannel | null, users: ChatUser
   return allUsers.filter((user) => memberIds.has(user.id));
 }
 
-type FeedbackReference = Pick<Feedback, "id" | "phenomenon">;
+type FeedbackReference = Pick<Feedback, "id" | "title">;
 
 function addFeedbackIdsFromMessage(ids: Set<string>, message: ChatMessage | null | undefined) {
   if (!message?.body) return;
@@ -173,7 +173,7 @@ function mergeFeedbackReferences(...groups: Array<readonly FeedbackReference[]>)
   const byId = new Map<string, FeedbackReference>();
   for (const group of groups) {
     for (const item of group) {
-      byId.set(item.id, { id: item.id, phenomenon: item.phenomenon });
+      byId.set(item.id, { id: item.id, title: item.title });
     }
   }
   return Array.from(byId.values());

@@ -181,7 +181,7 @@ export function applyFeedbackTransition(
           closedAt: null,
           closedByUserId: null,
         }),
-        activityType: "feedback.lifecycle.started",
+        activityType: "feedback.lifecycle.changed",
       });
     }
 
@@ -208,7 +208,7 @@ export function applyFeedbackTransition(
           closedAt: null,
           closedByUserId: null,
         }),
-        activityType: "feedback.lifecycle.submitted_for_verification",
+        activityType: "feedback.lifecycle.changed",
       });
     }
 
@@ -230,7 +230,7 @@ export function applyFeedbackTransition(
           closedAt: occurredAt,
           closedByUserId: actor.id,
         }),
-        activityType: "feedback.lifecycle.accepted",
+        activityType: "feedback.lifecycle.changed",
       });
     }
 
@@ -252,7 +252,7 @@ export function applyFeedbackTransition(
           closedAt: null,
           closedByUserId: null,
         }),
-        activityType: "feedback.lifecycle.rejected",
+        activityType: "feedback.lifecycle.changed",
       });
     }
 
@@ -274,7 +274,7 @@ export function applyFeedbackTransition(
           closedAt: occurredAt,
           closedByUserId: actor.id,
         }),
-        activityType: "feedback.lifecycle.withdrawn",
+        activityType: "feedback.lifecycle.changed",
       });
     }
 
@@ -296,7 +296,7 @@ export function applyFeedbackTransition(
           closedAt: null,
           closedByUserId: null,
         }),
-        activityType: "feedback.lifecycle.reopened",
+        activityType: "feedback.lifecycle.changed",
       });
     }
   }

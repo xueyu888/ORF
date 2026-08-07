@@ -2,8 +2,9 @@ import { and, eq } from "drizzle-orm";
 import { isObjectiveReestimateWindowOpen } from "../../src/domain/orfLifecycle";
 import { isObjectiveChallenger } from "../../src/domain/orfObjectiveParticipants";
 import { objectiveWorkItemMutationAccess } from "../../src/domain/orfWorkItems";
+import { feedback } from "../../modules/feedback/src/infrastructure/database/schema";
 import { db } from "../db/client";
-import { feedback, objectives, results, taskChecklistItems, tasks } from "../db/schema";
+import { objectives, results, taskChecklistItems, tasks } from "../db/schema";
 import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 
 export type ObjectiveWorkItemTarget =

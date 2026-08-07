@@ -30,7 +30,7 @@ type ChatDraftEditorProps = {
   className?: string;
   disabled?: boolean;
   draft: ChatDraft;
-  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
   focusSignal?: number;
   mentionableUsers: ChatUser[];
   onCancel?: () => void;

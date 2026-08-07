@@ -2,6 +2,7 @@ import type { ElementType } from "react";
 import { Card, ConfidenceBadge, ProgressBar, StatusBadge } from "./ui";
 import { feedbackIssueBodyPreview } from "../features/feedback/model/feedbackIssue";
 import type { Feedback, Objective, Result } from "../types/orf";
+import { feedbackLifecycleLabel } from "../utils/labels";
 
 export function MetricCard({ title, value, delta, icon: Icon }: { title: string; value: string; delta: string; icon: ElementType }) {
   return (
@@ -50,14 +51,16 @@ export function FeedbackCard({ feedback }: { feedback: Feedback }) {
   return (
     <Card className="orf-card-padding">
       <div className="flex items-start justify-between gap-3">
-        <div className="text-sm font-medium orf-text-primary">{feedback.phenomenon}</div>
-        <StatusBadge status={feedback.status} />
+        <div className="text-sm font-medium orf-text-primary">{feedback.title}</div>
+        <span className="orf-status-tag orf-badge-info inline-flex h-7 min-w-[66px] items-center justify-center px-3 text-xs font-bold leading-none">
+          {feedbackLifecycleLabel(feedback)}
+        </span>
       </div>
       <div className="mt-3 flex flex-wrap gap-1">
         {feedback.causeCategories.map((cause) => <span key={cause} className="orf-status-tag border orf-border orf-surface-muted px-2 py-0.5 text-xs orf-text-secondary">{cause}</span>)}
       </div>
-      <div className="mt-3 text-xs orf-text-muted">处理人：<span className="orf-text-secondary">{feedback.owner}</span></div>
-      <div className="mt-3 text-xs orf-text-secondary">{feedbackIssueBodyPreview(feedback.suggestedAdjustment)}</div>
+      <div className="mt-3 text-xs orf-text-muted">处理人：<span className="orf-text-secondary">{feedback.assigneeUserId ?? "未指派"}</span></div>
+      <div className="mt-3 text-xs orf-text-secondary">{feedbackIssueBodyPreview(feedback.description)}</div>
     </Card>
   );
 }
