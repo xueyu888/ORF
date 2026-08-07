@@ -15,8 +15,8 @@ export interface DashboardSummary {
   myOpenTasks: Task[];
 }
 
-export function summarizeDashboardState(state: DashboardSummaryInput, currentUser?: Pick<OrfUser, "id"> | null): DashboardSummary {
-  const pendingFeedback = state.feedback.filter((feedback) => feedback.stage !== "closed");
+export function summarizeDashboardState(input: DashboardSummaryInput, currentUser?: Pick<OrfUser, "id"> | null): DashboardSummary {
+  const pendingFeedback = input.feedbackIssues.filter((feedback) => feedback.stage !== "closed");
   const causeCounts = new Map<string, number>();
 
   for (const feedback of pendingFeedback) {
@@ -26,17 +26,17 @@ export function summarizeDashboardState(state: DashboardSummaryInput, currentUse
   }
 
   return {
-    activeObjectives: state.objectives.filter((objective) => !inactiveObjectiveStatuses.has(objective.flowStatus)),
-    atRiskResults: state.results.filter((result) => result.status === "At Risk"),
+    activeObjectives: input.objectives.filter((objective) => !inactiveObjectiveStatuses.has(objective.flowStatus)),
+    atRiskResults: input.results.filter((result) => result.status === "At Risk"),
     pendingFeedback,
     highImpactFeedback: pendingFeedback.filter((feedback) => highImpactLevels.has(feedback.impact)),
-    averageConfidence: averageObjectiveConfidence(state.objectives),
+    averageConfidence: averageObjectiveConfidence(input.objectives),
     causeChart: [...causeCounts.entries()]
       .map(([cause, count]) => ({ cause, count }))
       .sort((left, right) => right.count - left.count || left.cause.localeCompare(right.cause)),
-    latestCycle: latestObjectiveCycle(state.objectives),
+    latestCycle: latestObjectiveCycle(input.objectives),
     myOpenTasks: currentUser
-      ? state.tasks.filter((task) => task.assigneeUserId === currentUser.id && task.status !== "Done")
+      ? input.tasks.filter((task) => task.assigneeUserId === currentUser.id && task.status !== "Done")
       : [],
   };
 }
@@ -57,6 +57,6 @@ function latestObjectiveCycle(objectives: Objective[]) {
 interface DashboardSummaryInput {
   objectives: Objective[];
   results: Result[];
-  feedback: Feedback[];
+  feedbackIssues: Feedback[];
   tasks: Task[];
 }

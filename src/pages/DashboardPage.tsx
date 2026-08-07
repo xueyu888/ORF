@@ -6,13 +6,13 @@ import { PageScaffold } from "../components/PageScaffold";
 import { DecisionLog, FeedbackCard, MetricCard, ObjectiveCard } from "../components/SharedCards";
 import { Card } from "../components/ui";
 import {
-  filterFeedbackForVisibleObjectives,
   filterResultsForVisibleObjectives,
   filterTasksForVisibleObjectives,
   visibleObjectiveIdsForUser,
   visibleObjectivesForUser,
 } from "../features/challenge/model/objectiveVisibility";
 import { summarizeDashboardState } from "../features/dashboard/model/dashboardSummary";
+import { useFeedbackIssueReadModel } from "../features/feedback/useFeedbackIssueReadModel";
 import { useOrf } from "../state/OrfProvider";
 import { taskStatusLabel } from "../utils/labels";
 
@@ -21,12 +21,13 @@ export function DashboardPage() {
   const visibleObjectiveIds = visibleObjectiveIdsForUser(state.objectives, currentUser);
   const visibleObjectives = visibleObjectivesForUser(state.objectives, currentUser);
   const visibleResults = filterResultsForVisibleObjectives(state.results, visibleObjectiveIds, currentUser);
-  const visibleFeedback = filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds, currentUser);
+  const feedbackReadModel = useFeedbackIssueReadModel(currentUser?.status === "active");
+  const visibleFeedback = feedbackReadModel.data.feedback;
   const visibleTasks = filterTasksForVisibleObjectives(state.tasks, visibleObjectiveIds, currentUser);
   const visibleDecisions = currentUser?.role === "admin" ? state.decisions : state.decisions.filter((decision) => visibleObjectiveIds.has(decision.linkedObjectiveId));
   const summary = summarizeDashboardState(
     {
-      feedback: visibleFeedback,
+      feedbackIssues: visibleFeedback,
       objectives: visibleObjectives,
       results: visibleResults,
       tasks: visibleTasks,
