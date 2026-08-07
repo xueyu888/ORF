@@ -11,6 +11,14 @@ export {
   type FeedbackDailyDigestItem,
 } from "../server/dailyDigest";
 export {
+  markFeedbackViewed,
+  recordFeedbackCommentCreatedActivity,
+  type FeedbackActivityDatabase,
+  type FeedbackCommentCreatedActivityInput,
+  type FeedbackViewedInput,
+  type FeedbackViewedResult,
+} from "../server/activity";
+export {
   runFeedbackDailyDigestSweep,
   startFeedbackDailyDigestScheduler,
   type FeedbackDailyDigestConfig,

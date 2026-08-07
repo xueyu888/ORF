@@ -16,6 +16,9 @@ import {
 import {
   getFeedbackAssignmentNotificationRecipients,
   getFeedbackOrdinaryNotificationRecipients,
+  markFeedbackViewed as markFeedbackViewedInModule,
+  recordFeedbackCommentCreatedActivity,
+  type FeedbackActivityDatabase,
   type FeedbackNotificationRecipientDirectory,
 } from "@orf/feedback-module/server";
 import {
@@ -31,7 +34,6 @@ import {
   feedbackParticipants,
   feedbackRelations,
   feedbackReportAttachments,
-  feedbackUserViews,
 } from "../../modules/feedback/src/infrastructure/database/schema";
 import { replaceOrfAttachmentMarkdownTokens } from "../../src/features/rich-text/orfRichTextTokens";
 import type { OrfUserDisplayProfile } from "../../src/types/orf";
@@ -385,31 +387,6 @@ function publishFeedbackReadModelInvalidation(input: {
     target: { id: input.feedbackId, type: "feedback" },
     teamId: input.teamId,
   });
-}
-
-type FeedbackWriteClient = Pick<typeof db, "insert">;
-
-async function insertFeedbackParticipants(input: {
-  feedbackId: string;
-  teamId: string;
-  userIds: Array<string | null | undefined>;
-  participatedAt: string;
-}, client: FeedbackWriteClient = db) {
-  const rows = uniqueStrings(input.userIds.map((userId) => userId ?? "")).map((userId) => ({
-    teamId: input.teamId,
-    feedbackId: input.feedbackId,
-    userId,
-    firstParticipatedAt: input.participatedAt,
-    lastParticipatedAt: input.participatedAt,
-  }));
-  if (rows.length === 0) return;
-  await client
-    .insert(feedbackParticipants)
-    .values(rows)
-    .onConflictDoUpdate({
-      target: [feedbackParticipants.teamId, feedbackParticipants.feedbackId, feedbackParticipants.userId],
-      set: { lastParticipatedAt: input.participatedAt },
-    });
 }
 
 export async function createFeedback(input: CreateFeedbackInput, actor: FeedbackCommandActor): Promise<CreateFeedbackOutcome> {
@@ -1081,59 +1058,17 @@ export async function markFeedbackViewed(
 ): Promise<FeedbackCommandResult> {
   const teamId = storageScopeId(actor.scope);
   if (!teamId) return { status: "notFound" };
-  if (actor.status !== "active") return { status: "forbidden" };
-  if (!Number.isInteger(input.seenThroughSequence) || input.seenThroughSequence < 0) return { status: "invalid" };
-
-  const [target] = await db
-    .select({ id: feedback.id, teamId: feedback.teamId })
-    .from(feedback)
-    .where(eq(feedback.id, feedbackId))
-    .limit(1);
-  if (!target || target.teamId !== teamId) return { status: "notFound" };
-
-  const [activityCursor] = await db
-    .select({ lastSequence: sql<number>`coalesce(max(${feedbackActivityEvents.sequence}), 0)` })
-    .from(feedbackActivityEvents)
-    .where(and(eq(feedbackActivityEvents.teamId, teamId), eq(feedbackActivityEvents.feedbackId, feedbackId)))
-    .limit(1);
-  const lastActivitySequence = Number(activityCursor?.lastSequence ?? 0);
-  if (input.seenThroughSequence > lastActivitySequence) return { status: "invalid" };
-
-  const [current] = await db
-    .select({ lastSeenSequence: feedbackUserViews.lastSeenSequence })
-    .from(feedbackUserViews)
-    .where(
-      and(
-        eq(feedbackUserViews.teamId, teamId),
-        eq(feedbackUserViews.feedbackId, feedbackId),
-        eq(feedbackUserViews.userId, actor.id),
-      ),
-    )
-    .limit(1);
-  if ((current?.lastSeenSequence ?? 0) >= input.seenThroughSequence) {
-    return { status: "ok", changed: false };
+  const result = await markFeedbackViewedInModule(db, {
+    actorStatus: actor.status === "active" ? "active" : "inactive",
+    actorUserId: actor.id,
+    feedbackId,
+    seenThroughSequence: input.seenThroughSequence,
+    teamId,
+  });
+  if (result.status === "ok" && result.changed) {
+    publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
   }
-
-  const updatedAt = nowIso();
-  await db
-    .insert(feedbackUserViews)
-    .values({
-      teamId,
-      feedbackId,
-      userId: actor.id,
-      lastSeenSequence: input.seenThroughSequence,
-      updatedAt,
-    })
-    .onConflictDoUpdate({
-      target: [feedbackUserViews.teamId, feedbackUserViews.feedbackId, feedbackUserViews.userId],
-      set: {
-        lastSeenSequence: sql`greatest(${feedbackUserViews.lastSeenSequence}, excluded.last_seen_sequence)`,
-        updatedAt,
-      },
-    });
-
-  publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
-  return { status: "ok", changed: true };
+  return result;
 }
 
 export async function getFeedbackReferences(feedbackIds: readonly string[], scope: RuntimeScope): Promise<FeedbackReference[]> {
@@ -1238,21 +1173,6 @@ export async function recordFeedbackCommentCreated(input: {
   commentMessageId: string;
   feedbackId: string;
   teamId: string;
-}, client: FeedbackWriteClient = db) {
-  const occurredAt = nowIso();
-  await insertFeedbackParticipants({
-    feedbackId: input.feedbackId,
-    participatedAt: occurredAt,
-    teamId: input.teamId,
-    userIds: [input.actorUserId],
-  }, client);
-  await client.insert(feedbackActivityEvents).values({
-    id: makeActivityId(),
-    teamId: input.teamId,
-    feedbackId: input.feedbackId,
-    actorUserId: input.actorUserId,
-    activityType: "feedback.comment.created",
-    payload: { commentMessageId: input.commentMessageId },
-    createdAt: occurredAt,
-  });
+}, client: FeedbackActivityDatabase = db) {
+  await recordFeedbackCommentCreatedActivity(client, input);
 }
