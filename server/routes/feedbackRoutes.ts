@@ -15,6 +15,7 @@ import {
   getFeedbackReferences,
   getFeedbackReportAttachmentContent,
   listFeedbackAssigneeOptions,
+  markFeedbackViewed,
   removeFeedbackRelation,
   transitionFeedback,
   updateFeedbackAssignee,
@@ -67,6 +68,9 @@ const addFeedbackRelationBodySchema = z.object({
 }).strict();
 const removeFeedbackRelationBodySchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
+}).strict();
+const markFeedbackViewedBodySchema = z.object({
+  seenThroughSequence: z.number().int().nonnegative(),
 }).strict();
 const updateFeedbackSubscriptionBodySchema = z.object({
   mode: z.enum(["none", "subscribed", "muted"]),
@@ -310,6 +314,20 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
     }
 
     return sendFeedbackCommandOutcome(reply, await removeFeedbackRelation(params.feedbackId, params.relationId, body, commandActor(context)));
+  });
+
+  app.put("/api/feedback/:feedbackId/view", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    const params = feedbackParamsSchema.parse(request.params);
+    if (!(await requireFeedbackInScope(reply, params.feedbackId, context.scope))) {
+      return reply;
+    }
+
+    const body = markFeedbackViewedBodySchema.parse(request.body);
+    return sendFeedbackCommandOutcome(reply, await markFeedbackViewed(params.feedbackId, body, commandActor(context)));
   });
 
   app.get("/api/feedback/:feedbackId/subscription", async (request, reply) => {

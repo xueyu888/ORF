@@ -4,7 +4,7 @@ import { feedbackImpactLabel } from "../../../utils/labels";
 import { feedbackIssueBodyPreview, feedbackIssueCommentCount, feedbackIssueDisplayId, feedbackIssueStateLabel, isFeedbackIssueOpen } from "./feedbackIssue";
 import { feedbackIssueAssignee, feedbackIssueAuthor, feedbackIssueLabels, type FeedbackIssueLabel } from "./feedbackIssueMetadata";
 
-export type FeedbackIssueListState = "open" | "closed" | "all";
+export type FeedbackIssueListState = "assigned" | "open" | "verification" | "unread" | "triage" | "closed" | "all";
 export type FeedbackIssueSortKey = "updated-desc" | "updated-asc" | "created-desc" | "created-asc" | "comments-desc" | "comments-asc";
 
 export type FeedbackIssueListFilters = {
@@ -95,8 +95,24 @@ export function filterFeedbackIssueListItems(items: readonly FeedbackIssueListIt
 }
 
 export function feedbackIssueListCounts(items: readonly FeedbackIssueListItem[]) {
-  const open = items.filter((item) => isFeedbackIssueOpen(item.feedback)).length;
-  return { all: items.length, closed: items.length - open, open };
+  const counts: Record<FeedbackIssueListState, number> = {
+    all: items.length,
+    assigned: 0,
+    closed: 0,
+    open: 0,
+    triage: 0,
+    unread: 0,
+    verification: 0,
+  };
+  for (const item of items) {
+    if (itemMatchesListState(item, "assigned")) counts.assigned += 1;
+    if (itemMatchesListState(item, "closed")) counts.closed += 1;
+    if (itemMatchesListState(item, "open")) counts.open += 1;
+    if (itemMatchesListState(item, "triage")) counts.triage += 1;
+    if (itemMatchesListState(item, "unread")) counts.unread += 1;
+    if (itemMatchesListState(item, "verification")) counts.verification += 1;
+  }
+  return counts;
 }
 
 export function feedbackIssueListCountsForFilters(items: readonly FeedbackIssueListItem[], filters: FeedbackIssueListFilters) {
@@ -211,7 +227,12 @@ function parseFeedbackIssueQuery(query: string): ParsedFeedbackIssueQuery {
 
 function itemMatchesListState(item: FeedbackIssueListItem, state: FeedbackIssueListState) {
   if (state === "all") return true;
-  return state === "open" ? isFeedbackIssueOpen(item.feedback) : !isFeedbackIssueOpen(item.feedback);
+  if (state === "assigned") return item.feedback.requiresAction && (item.feedback.stage === "open" || item.feedback.stage === "in_progress");
+  if (state === "closed") return !isFeedbackIssueOpen(item.feedback);
+  if (state === "open") return isFeedbackIssueOpen(item.feedback);
+  if (state === "triage") return isFeedbackIssueOpen(item.feedback) && item.feedback.priority === null;
+  if (state === "unread") return item.feedback.unread;
+  return item.feedback.requiresAction && item.feedback.stage === "pending_verification";
 }
 
 function compareFeedbackIssueListItems(left: FeedbackIssueListItem, right: FeedbackIssueListItem, sort: FeedbackIssueSortKey) {
@@ -275,9 +296,13 @@ function impactMatches(impact: FeedbackImpact, term: string) {
   return normalizeSearchText(impact).includes(normalizedTerm) || normalizeSearchText(feedbackImpactLabel[impact]).includes(normalizedTerm);
 }
 
-function feedbackIssueListStateForQueryValue(value: string): FeedbackIssueListState | null {
+export function feedbackIssueListStateForQueryValue(value: string): FeedbackIssueListState | null {
   const normalized = value.trim().toLowerCase();
+  if (normalized === "assigned" || normalized === "todo" || normalized === "work") return "assigned";
   if (normalized === "open" || normalized === "opened") return "open";
+  if (normalized === "verification" || normalized === "verify" || normalized === "review") return "verification";
+  if (normalized === "unread" || normalized === "new") return "unread";
+  if (normalized === "triage" || normalized === "untriaged") return "triage";
   if (normalized === "closed" || normalized === "close") return "closed";
   if (normalized === "all") return "all";
   return null;

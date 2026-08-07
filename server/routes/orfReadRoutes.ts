@@ -26,8 +26,8 @@ export function registerOrfReadRoutes(app: FastifyInstance) {
     }
 
     return user.role === "admin"
-      ? getTaskManagementData({ scope })
-      : getMyChallengesData(user.id, false, { scope });
+      ? getTaskManagementData({ scope, viewerUserId: user.id })
+      : getMyChallengesData(user.id, false, { scope, viewerUserId: user.id });
   });
 
   app.get("/api/reports-page", async (request, reply) => {
@@ -55,7 +55,7 @@ export function registerOrfReadRoutes(app: FastifyInstance) {
       return reply.code(404).send({ error: "Runtime scope not found" });
     }
 
-    return getBountyHallData(user, { scope });
+    return getBountyHallData(user, { scope, viewerUserId: user.id });
   });
 
   app.get("/api/my-challenges", async (request, reply) => {
@@ -74,7 +74,7 @@ export function registerOrfReadRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    return getMyChallengesData(user.id, query.scope === "all", { scope });
+    return getMyChallengesData(user.id, query.scope === "all", { scope, viewerUserId: user.id });
   });
 
   app.get("/api/orf-state", async (request, reply) => {
@@ -83,6 +83,6 @@ export function registerOrfReadRoutes(app: FastifyInstance) {
       return reply;
     }
 
-    return getOrfStateSnapshot({ scope: context.scope });
+    return getOrfStateSnapshot({ scope: context.scope, viewerUserId: context.user.id });
   });
 }

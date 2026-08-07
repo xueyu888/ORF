@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleDot, Clock3, Flag, MessageSquare, Plus, RotateCcw, Tag } from "lucide-react";
+import { CheckCircle2, CircleDot, Clock3, Flag, Inbox, MessageSquare, Plus, RotateCcw, Tag, UserCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -291,6 +291,25 @@ export function FeedbackInboxPage() {
         </BountyButton>
       </div>
 
+      <div className="feedback-issue-work-queue" aria-label="反馈工作队列">
+        <IssueStateButton active={listState === "assigned"} onClick={() => setFilter("state", "assigned", "open")}>
+          <UserCheck aria-hidden="true" />
+          待我处理 <strong>{issueCounts.assigned}</strong>
+        </IssueStateButton>
+        <IssueStateButton active={listState === "verification"} onClick={() => setFilter("state", "verification", "open")}>
+          <CheckCircle2 aria-hidden="true" />
+          待我验证 <strong>{issueCounts.verification}</strong>
+        </IssueStateButton>
+        <IssueStateButton active={listState === "unread"} onClick={() => setFilter("state", "unread", "open")}>
+          <Inbox aria-hidden="true" />
+          新动态 <strong>{issueCounts.unread}</strong>
+        </IssueStateButton>
+        <IssueStateButton active={listState === "triage"} onClick={() => setFilter("state", "triage", "open")}>
+          <Flag aria-hidden="true" />
+          待分诊 <strong>{issueCounts.triage}</strong>
+        </IssueStateButton>
+      </div>
+
       <section className="feedback-issue-list bounty-list-table">
         <div className="feedback-issue-list-head">
           <div className="feedback-issue-state-tabs">
@@ -336,14 +355,17 @@ function FeedbackIssueRow({ item }: { item: FeedbackIssueListItem }) {
   const open = isFeedbackIssueOpen(feedback);
 
   return (
-    <Link className="feedback-issue-row" to={feedbackIssueHref(feedback.id)}>
+    <Link className="feedback-issue-row" data-requires-action={feedback.requiresAction ? "true" : "false"} data-unread={feedback.unread ? "true" : "false"} to={feedbackIssueHref(feedback.id)}>
       <div className="feedback-issue-row-icon" data-open={open ? "true" : "false"}>
+        {feedback.unread && <span className="feedback-issue-row-unread-dot" aria-label="有新动态" />}
         {open ? <CircleDot aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
       </div>
       <div className="feedback-issue-row-main">
         <div className="feedback-issue-row-title-line">
           <h2>{feedback.title}</h2>
           <div className="feedback-issue-labels">
+            {feedback.unread && <BountyBadge tone="accent">新动态</BountyBadge>}
+            {feedback.requiresAction && <BountyBadge tone="warning">待处理</BountyBadge>}
             {item.labels.map((label) => (
               <BountyBadge key={label.key} tone={label.tone}>{label.name}</BountyBadge>
             ))}

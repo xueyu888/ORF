@@ -86,8 +86,64 @@ test("feedback issue state counts follow active filters without swallowing other
     filterFeedbackIssueListItems(items, projectOpenFilters).map((item) => item.feedback.id),
     ["fb-client-open"],
   );
-  assert.deepEqual(feedbackIssueListCountsForFilters(items, projectOpenFilters), { all: 2, closed: 1, open: 1 });
-  assert.deepEqual(feedbackIssueListCountsForFilters(items, { ...projectOpenFilters, query: "is:open" }), { all: 1, closed: 0, open: 1 });
+  assert.deepEqual(feedbackIssueListCountsForFilters(items, projectOpenFilters), {
+    all: 2,
+    assigned: 0,
+    closed: 1,
+    open: 1,
+    triage: 1,
+    unread: 0,
+    verification: 0,
+  });
+  assert.deepEqual(feedbackIssueListCountsForFilters(items, { ...projectOpenFilters, query: "is:open" }), {
+    all: 1,
+    assigned: 0,
+    closed: 0,
+    open: 1,
+    triage: 1,
+    unread: 0,
+    verification: 0,
+  });
+});
+
+test("feedback list exposes user work queues from viewer projections", () => {
+  const items = buildFeedbackIssueListItems({
+    comments: [],
+    feedback: [
+      feedback({ id: "fb-assigned", title: "待我处理", requiresAction: true, stage: "in_progress" }),
+      feedback({ id: "fb-verification", title: "待我验证", requiresAction: true, stage: "pending_verification" }),
+      feedback({ id: "fb-unread", title: "有新动态", priority: "p1", unread: true }),
+      feedback({ id: "fb-triage", title: "待分诊", priority: null }),
+    ],
+    projects,
+    users,
+  });
+
+  assert.deepEqual(feedbackIssueListCountsForFilters(items, filters({ listState: "all" })), {
+    all: 4,
+    assigned: 1,
+    closed: 0,
+    open: 4,
+    triage: 3,
+    unread: 1,
+    verification: 1,
+  });
+  assert.deepEqual(
+    filterFeedbackIssueListItems(items, filters({ listState: "assigned" })).map((item) => item.feedback.id),
+    ["fb-assigned"],
+  );
+  assert.deepEqual(
+    filterFeedbackIssueListItems(items, filters({ listState: "verification" })).map((item) => item.feedback.id),
+    ["fb-verification"],
+  );
+  assert.deepEqual(
+    filterFeedbackIssueListItems(items, filters({ query: "is:unread" })).map((item) => item.feedback.id),
+    ["fb-unread"],
+  );
+  assert.deepEqual(
+    filterFeedbackIssueListItems(items, filters({ listState: "triage" })).map((item) => item.feedback.id).sort(),
+    ["fb-assigned", "fb-triage", "fb-verification"],
+  );
 });
 
 test("feedback linked issues come from relation facts instead of report or comment text", () => {
@@ -201,9 +257,13 @@ function feedback(input: Partial<Feedback> & Pick<Feedback, "id" | "title">): Fe
     createdBy: "user-creator",
     id: input.id,
     impact: "high",
+    lastActivityByUserId: "user-creator",
+    lastActivitySequence: 0,
+    lastSeenSequence: 0,
     priority: null,
     reportAttachments: [],
     relations: [],
+    requiresAction: false,
     assigneeUserId: "user-owner",
     title: input.title,
     description: "正文",
@@ -212,6 +272,7 @@ function feedback(input: Partial<Feedback> & Pick<Feedback, "id" | "title">): Fe
     resolution: null,
     updatedAt: "2026-07-07",
     updatedBy: "user-creator",
+    unread: false,
     version: 0,
     closedAt: null,
     closedByUserId: null,

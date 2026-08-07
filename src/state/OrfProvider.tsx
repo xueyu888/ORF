@@ -186,6 +186,7 @@ interface OrfContextValue {
   submitContributionReview: (objectiveId: string, input: SubmitContributionReviewInput) => Promise<boolean>;
   createFeedback: (input: CreateFeedbackInput) => Promise<Feedback | null>;
   addFeedbackRelation: (feedbackId: string, input: AddFeedbackRelationInput) => Promise<boolean>;
+  markFeedbackViewed: (feedbackId: string, seenThroughSequence: number) => Promise<boolean>;
   removeFeedbackRelation: (feedbackId: string, relationId: string, expectedVersion: number) => Promise<boolean>;
   transitionFeedback: (feedbackId: string, command: FeedbackTransitionInput) => Promise<boolean>;
   updateFeedbackAssignee: (feedbackId: string, assigneeUserId: string | null, expectedVersion: number) => Promise<boolean>;

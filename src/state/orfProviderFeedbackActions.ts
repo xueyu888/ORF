@@ -144,6 +144,19 @@ export function useOrfProviderFeedbackActions({ notify, refreshTaskManagementDat
           return false;
         }
       },
+      markFeedbackViewed: async (feedbackId: string, seenThroughSequence: number) => {
+        try {
+          await apiRequest(`/api/feedback/${encodeURIComponent(feedbackId)}/view`, {
+            method: "PUT",
+            body: JSON.stringify({ seenThroughSequence }),
+          });
+          await refreshTaskManagementData();
+          return true;
+        } catch {
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
     }),
     [notify, refreshTaskManagementData],
   );

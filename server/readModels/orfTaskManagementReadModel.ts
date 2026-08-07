@@ -1,4 +1,4 @@
-import { desc, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { createDefaultOrfReadModelRules, type ReportsPageData, type TaskManagementData } from "../../src/domain/orfReadModel";
 import type {
   CommentThread,
@@ -14,7 +14,7 @@ import type {
   Result,
   Task,
 } from "../../src/types/orf";
-import { feedback, feedbackActivityEvents, feedbackCauseCategories, feedbackRelations, feedbackReportAttachments } from "../../modules/feedback/src/infrastructure/database/schema";
+import { feedback, feedbackActivityEvents, feedbackCauseCategories, feedbackRelations, feedbackReportAttachments, feedbackUserViews } from "../../modules/feedback/src/infrastructure/database/schema";
 import { db } from "../db/client";
 import {
   commentAttachments,
@@ -59,6 +59,7 @@ import {
 
 export type TaskManagementDataScope = {
   scope: RuntimeScope;
+  viewerUserId?: string | null;
 };
 
 type CommentThreadRow = typeof commentThreads.$inferSelect;
@@ -141,10 +142,35 @@ async function getFeedbackRelationRows(feedbackIssueIds: string[]) {
     .where(or(inArray(feedbackRelations.sourceFeedbackId, feedbackIssueIds), inArray(feedbackRelations.targetFeedbackId, feedbackIssueIds)));
 }
 
+async function getFeedbackUserViewRows(teamId: string, feedbackIssueIds: string[], viewerUserId: string | null | undefined) {
+  const normalizedViewerUserId = viewerUserId?.trim();
+  if (!normalizedViewerUserId || feedbackIssueIds.length === 0) return [];
+  return db
+    .select({
+      feedbackId: feedbackUserViews.feedbackId,
+      lastSeenSequence: feedbackUserViews.lastSeenSequence,
+    })
+    .from(feedbackUserViews)
+    .where(
+      and(
+        eq(feedbackUserViews.teamId, teamId),
+        eq(feedbackUserViews.userId, normalizedViewerUserId),
+        inArray(feedbackUserViews.feedbackId, feedbackIssueIds),
+      ),
+    );
+}
+
 function taskDefinitionContributorUserIds(task: TaskRow) {
   return task.definitionContributorUserIds.length > 0
     ? uniqueParticipantUserIds(task.definitionContributorUserIds)
     : uniqueParticipantUserIds([task.createdBy, task.updatedBy]);
+}
+
+function feedbackRequiresAction(item: typeof feedback.$inferSelect, viewerUserId: string | null) {
+  if (!viewerUserId) return false;
+  if ((item.stage === "open" || item.stage === "in_progress") && item.assigneeUserId === viewerUserId) return true;
+  if (item.stage === "pending_verification" && item.createdBy === viewerUserId) return true;
+  return false;
 }
 
 function addUserId(ids: Set<string>, value: string | null | undefined) {
@@ -260,6 +286,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope): Pro
   const feedbackActivityRows = await getFeedbackActivityRows(feedbackIssueIds);
   const feedbackRelationRows = await getFeedbackRelationRows(feedbackIssueIds);
   const feedbackReportAttachmentRows = await getFeedbackReportAttachmentRows(feedbackIssueIds);
+  const feedbackUserViewRows = await getFeedbackUserViewRows(storageScopeId, feedbackIssueIds, scope.viewerUserId);
   const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows(scope);
   const { userNameById, userProfiles: scopeUserProfiles } = await getUserMapsForStorageScope(storageScopeId);
   const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
@@ -285,7 +312,11 @@ export async function getTaskManagementData(scope: TaskManagementDataScope): Pro
     causeCategoriesByFeedback.set(item.feedbackId, list);
   }
   const activityByFeedback = new Map<string, Feedback["activity"]>();
-  for (const item of feedbackActivityRows.sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
+  const lastActivitySequenceByFeedback = new Map<string, number>();
+  const lastActivityActorByFeedback = new Map<string, string | null>();
+  const lastOtherActivitySequenceByFeedback = new Map<string, number>();
+  const viewerUserId = scope.viewerUserId?.trim() || null;
+  for (const item of feedbackActivityRows.sort((left, right) => left.sequence - right.sequence || left.createdAt.localeCompare(right.createdAt))) {
     const list = activityByFeedback.get(item.feedbackId) ?? [];
     list.push({
       id: item.id,
@@ -296,7 +327,19 @@ export async function getTaskManagementData(scope: TaskManagementDataScope): Pro
       at: item.createdAt,
     });
     activityByFeedback.set(item.feedbackId, list);
+    const currentLastSequence = lastActivitySequenceByFeedback.get(item.feedbackId) ?? 0;
+    if (item.sequence >= currentLastSequence) {
+      lastActivitySequenceByFeedback.set(item.feedbackId, item.sequence);
+      lastActivityActorByFeedback.set(item.feedbackId, item.actorUserId ?? null);
+    }
+    if (viewerUserId && item.actorUserId !== viewerUserId) {
+      lastOtherActivitySequenceByFeedback.set(
+        item.feedbackId,
+        Math.max(lastOtherActivitySequenceByFeedback.get(item.feedbackId) ?? 0, item.sequence),
+      );
+    }
   }
+  const lastSeenSequenceByFeedback = new Map(feedbackUserViewRows.map((row) => [row.feedbackId, row.lastSeenSequence]));
   const reportAttachmentsByFeedback = new Map<string, Feedback["reportAttachments"]>();
   for (const item of feedbackReportAttachmentRows.sort((left, right) => left.sortOrder - right.sortOrder || left.createdAt.localeCompare(right.createdAt))) {
     const list = reportAttachmentsByFeedback.get(item.feedbackId) ?? [];
@@ -405,6 +448,11 @@ export async function getTaskManagementData(scope: TaskManagementDataScope): Pro
     version: item.version,
     closedAt: item.closedAt,
     closedByUserId: item.closedByUserId,
+    lastActivityByUserId: lastActivityActorByFeedback.get(item.id) ?? null,
+    lastActivitySequence: lastActivitySequenceByFeedback.get(item.id) ?? 0,
+    lastSeenSequence: lastSeenSequenceByFeedback.get(item.id) ?? 0,
+    requiresAction: feedbackRequiresAction(item, viewerUserId),
+    unread: viewerUserId ? (lastOtherActivitySequenceByFeedback.get(item.id) ?? 0) > (lastSeenSequenceByFeedback.get(item.id) ?? 0) : false,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     activity: activityByFeedback.get(item.id) ?? [],

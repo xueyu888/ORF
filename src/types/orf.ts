@@ -721,6 +721,11 @@ export interface Feedback {
   version: number;
   closedAt?: string | null;
   closedByUserId?: string | null;
+  lastActivityByUserId?: string | null;
+  lastActivitySequence: number;
+  lastSeenSequence: number;
+  requiresAction: boolean;
+  unread: boolean;
   createdAt: string;
   updatedAt: string;
   activity: ActivityItem[];

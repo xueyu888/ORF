@@ -48,9 +48,11 @@ type SeedResult = Omit<Result, "uncertaintyScore" | "executionCompleted" | "acce
     priorityDeclinedBy?: string[];
     challengeApplications?: ChallengeApplication[];
   };
+type FeedbackViewerProjectionFields = Pick<Feedback, "lastActivityByUserId" | "lastActivitySequence" | "lastSeenSequence" | "requiresAction" | "unread">;
+type SeedFeedback = Omit<Feedback, keyof FeedbackViewerProjectionFields> & Partial<FeedbackViewerProjectionFields>;
 type SeedInitialState = Omit<OrfState, "evidence" | "feedback" | "objectiveAcceptanceReviews" | "objectiveLoot" | "objectiveSettlementEvents" | "objectives" | "results" | "tasks" | "userProfiles"> & {
   evidence: Evidence[];
-  feedback: Feedback[];
+  feedback: SeedFeedback[];
   objectiveAcceptanceReviews?: OrfState["objectiveAcceptanceReviews"];
   objectiveLoot: ObjectiveLoot[];
   objectiveSettlementEvents?: OrfState["objectiveSettlementEvents"];
@@ -186,7 +188,23 @@ function normalizeInitialState(state: SeedInitialState): OrfState {
     }),
     feedback: state.feedback.map((item) => {
       const assigneeUserId = item.assigneeUserId ? requiredSeedUserId(item.assigneeUserId, `feedback ${item.id} assignee`) : null;
-      return { ...item, assigneeUserId };
+      const normalizedItem = { ...item, assigneeUserId };
+      const latestActivity = latestFeedbackActivity(normalizedItem.activity);
+      const lastActivitySequence = normalizedItem.lastActivitySequence ?? latestActivity?.sequence ?? 0;
+      const lastActivityByUserId = normalizedItem.lastActivityByUserId ?? latestActivity?.actorUserId ?? normalizedItem.updatedBy ?? normalizedItem.createdBy ?? null;
+      const lastSeenSequence = normalizedItem.lastSeenSequence ?? 0;
+      const lastOtherActivitySequence = normalizedItem.activity.reduce((latest, activity) => {
+        if (activity.actorUserId === state.currentUserId) return latest;
+        return Math.max(latest, activity.sequence);
+      }, 0);
+      return {
+        ...normalizedItem,
+        lastActivityByUserId,
+        lastActivitySequence,
+        lastSeenSequence,
+        requiresAction: normalizedItem.requiresAction ?? seedFeedbackRequiresAction(normalizedItem, state.currentUserId),
+        unread: normalizedItem.unread ?? lastOtherActivitySequence > lastSeenSequence,
+      };
     }),
     tasks: state.tasks.map((item) => {
       const assigneeUserId = requiredSeedUserId(item.assigneeUserId, `task ${item.id} assignee`);
@@ -202,6 +220,19 @@ function normalizeInitialState(state: SeedInitialState): OrfState {
     objectiveSettlementEvents: state.objectiveSettlementEvents ?? [],
     pointLedger: state.pointLedger ?? [],
   };
+}
+
+function latestFeedbackActivity(activity: Feedback["activity"]) {
+  return [...activity].sort((left, right) => {
+    if (left.sequence !== right.sequence) return left.sequence - right.sequence;
+    return left.at.localeCompare(right.at);
+  }).at(-1) ?? null;
+}
+
+function seedFeedbackRequiresAction(feedback: Pick<Feedback, "assigneeUserId" | "createdBy" | "stage">, viewerUserId: string | null) {
+  if (!viewerUserId) return false;
+  if (feedback.assigneeUserId === viewerUserId && (feedback.stage === "open" || feedback.stage === "in_progress")) return true;
+  return feedback.createdBy === viewerUserId && feedback.stage === "pending_verification";
 }
 
 const defaultPermissionRules: OrfState["permissionRules"] = [

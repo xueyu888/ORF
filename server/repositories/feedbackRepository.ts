@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import {
   planFeedbackAssigneeChangedNotification,
   planFeedbackCreatedNotification,
@@ -24,6 +24,7 @@ import {
   feedbackParticipants,
   feedbackRelations,
   feedbackReportAttachments,
+  feedbackUserViews,
 } from "../../modules/feedback/src/infrastructure/database/schema";
 import { replaceOrfAttachmentMarkdownTokens } from "../../src/features/rich-text/orfRichTextTokens";
 import type { OrfUserDisplayProfile } from "../../src/types/orf";
@@ -111,6 +112,9 @@ export type AddFeedbackRelationInput = {
 };
 export type RemoveFeedbackRelationInput = {
   expectedVersion: number;
+};
+export type MarkFeedbackViewedInput = {
+  seenThroughSequence: number;
 };
 
 export type FeedbackAssigneeOption = Pick<OrfUserDisplayProfile, "avatarUrl" | "id" | "name">;
@@ -1075,6 +1079,74 @@ export async function removeFeedbackRelation(
     });
   }
   return result;
+}
+
+export async function markFeedbackViewed(
+  feedbackId: string,
+  input: MarkFeedbackViewedInput,
+  actor: FeedbackCommandActor,
+): Promise<FeedbackCommandResult> {
+  const teamId = storageScopeId(actor.scope);
+  if (!teamId) return { status: "notFound" };
+  if (actor.status !== "active") return { status: "forbidden" };
+  if (!Number.isInteger(input.seenThroughSequence) || input.seenThroughSequence < 0) return { status: "invalid" };
+
+  const [target] = await db
+    .select({ id: feedback.id, teamId: feedback.teamId })
+    .from(feedback)
+    .where(eq(feedback.id, feedbackId))
+    .limit(1);
+  if (!target || target.teamId !== teamId) return { status: "notFound" };
+
+  const [activityCursor] = await db
+    .select({ lastSequence: sql<number>`coalesce(max(${feedbackActivityEvents.sequence}), 0)` })
+    .from(feedbackActivityEvents)
+    .where(and(eq(feedbackActivityEvents.teamId, teamId), eq(feedbackActivityEvents.feedbackId, feedbackId)))
+    .limit(1);
+  const lastActivitySequence = Number(activityCursor?.lastSequence ?? 0);
+  if (input.seenThroughSequence > lastActivitySequence) return { status: "invalid" };
+
+  const [current] = await db
+    .select({ lastSeenSequence: feedbackUserViews.lastSeenSequence })
+    .from(feedbackUserViews)
+    .where(
+      and(
+        eq(feedbackUserViews.teamId, teamId),
+        eq(feedbackUserViews.feedbackId, feedbackId),
+        eq(feedbackUserViews.userId, actor.id),
+      ),
+    )
+    .limit(1);
+  if ((current?.lastSeenSequence ?? 0) >= input.seenThroughSequence) {
+    return { status: "ok", changed: false };
+  }
+
+  const updatedAt = nowIso();
+  await db
+    .insert(feedbackUserViews)
+    .values({
+      teamId,
+      feedbackId,
+      userId: actor.id,
+      lastSeenSequence: input.seenThroughSequence,
+      updatedAt,
+    })
+    .onConflictDoUpdate({
+      target: [feedbackUserViews.teamId, feedbackUserViews.feedbackId, feedbackUserViews.userId],
+      set: {
+        lastSeenSequence: sql`greatest(${feedbackUserViews.lastSeenSequence}, excluded.last_seen_sequence)`,
+        updatedAt,
+      },
+    });
+
+  publishOrfDataInvalidation({
+    actorUserId: actor.id,
+    models: ["taskManagement"],
+    reason: "feedback.changed",
+    target: { id: feedbackId, type: "feedback" },
+    teamId,
+  });
+  return { status: "ok", changed: true };
 }
 
 export async function getFeedbackReferences(feedbackIds: readonly string[], scope: RuntimeScope): Promise<FeedbackReference[]> {

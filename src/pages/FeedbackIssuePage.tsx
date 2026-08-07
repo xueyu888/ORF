@@ -93,6 +93,7 @@ export function FeedbackIssuePage() {
     addComment,
     currentUser,
     loadCommentMentionableUsers,
+    markFeedbackViewed,
     notify,
     addFeedbackRelation,
     state,
@@ -112,6 +113,7 @@ export function FeedbackIssuePage() {
   const [subscriptionMode, setSubscriptionMode] = useState<FeedbackSubscriptionMode>("none");
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const commentElementRefs = useRef(new Map<string, HTMLElement>());
+  const markedViewSequenceRef = useRef<string | null>(null);
   const assigneeOptions = useFeedbackAssigneeOptions(state.users, currentUser);
   const threads = useMemo(() => feedback ? feedbackIssueThreads(state.comments, feedback.id) : [], [feedback, state.comments]);
   const entries = useMemo(() => feedbackCommentEntries(threads), [threads]);
@@ -126,6 +128,35 @@ export function FeedbackIssuePage() {
   const canEditMetadata = feedback ? canEditFeedbackMetadata(feedback, currentUser) : false;
   const canChangeAssignee = feedback ? canChangeFeedbackAssignee(feedback, currentUser) : false;
   const canManageAllComments = hasPermission(currentUser, state.permissionRules, "comment.manage");
+
+  useEffect(() => {
+    if (!feedback || feedback.lastActivitySequence <= feedback.lastSeenSequence) return;
+    const viewKey = `${feedback.id}:${feedback.lastActivitySequence}`;
+    if (markedViewSequenceRef.current === viewKey) return;
+    let timeoutId: number | null = null;
+
+    const markVisibleFeedback = () => {
+      if (document.visibilityState !== "visible" || markedViewSequenceRef.current === viewKey) return;
+      timeoutId = window.setTimeout(() => {
+        if (markedViewSequenceRef.current === viewKey) return;
+        markedViewSequenceRef.current = viewKey;
+        void markFeedbackViewed(feedback.id, feedback.lastActivitySequence).then((ok) => {
+          if (!ok && markedViewSequenceRef.current === viewKey) markedViewSequenceRef.current = null;
+        });
+      }, 250);
+    };
+
+    if (document.visibilityState === "visible") {
+      markVisibleFeedback();
+    } else {
+      document.addEventListener("visibilitychange", markVisibleFeedback, { once: true });
+    }
+
+    return () => {
+      document.removeEventListener("visibilitychange", markVisibleFeedback);
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+    };
+  }, [feedback, markFeedbackViewed]);
 
   const uploadFeedbackCommentAttachment = async (file: File) => {
     if (!feedback) return null;

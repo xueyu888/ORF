@@ -1,7 +1,7 @@
 import type { FilterPreferenceRecord } from "../../../domain/settings/filterPreferences";
 import { filterPreferenceStringValue } from "../../../domain/settings/filterPreferences";
 import type { FeedbackImpact } from "@orf/feedback-module/contracts";
-import type { FeedbackIssueListState, FeedbackIssueSortKey } from "./feedbackIssueList";
+import { feedbackIssueListStateForQueryValue, type FeedbackIssueListState, type FeedbackIssueSortKey } from "./feedbackIssueList";
 
 export type FeedbackIssueListUrlState = {
   assigneeUserId: string;
@@ -157,8 +157,7 @@ export function parseStoredFeedbackIssueListFilterParams(raw: string | null) {
 }
 
 function feedbackListStateParam(value: string | null): FeedbackIssueListState {
-  if (value === "closed" || value === "all") return value;
-  return "open";
+  return value ? feedbackIssueListStateForQueryValue(value) ?? "open" : "open";
 }
 
 function feedbackImpactParam(value: string | null): "All" | FeedbackImpact {
