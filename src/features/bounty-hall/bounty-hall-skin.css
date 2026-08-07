@@ -1474,14 +1474,12 @@ button.bounty-result-preview-item:focus-visible {
   padding: 10px;
 }
 
-.feedback-label-list,
-.feedback-milestone-list {
+.feedback-label-list {
   display: grid;
   min-width: 0;
 }
 
-.feedback-label-list-head,
-.feedback-milestone-list-head {
+.feedback-label-list-head {
   display: flex;
   min-width: 0;
   min-height: 52px;
@@ -1609,38 +1607,6 @@ button.bounty-result-preview-item:focus-visible {
   color: #254766;
   font-weight: 950;
   padding: 0 8px;
-}
-
-.feedback-milestone-state-pill {
-  display: inline-flex;
-  min-height: 34px;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  color: #66788f;
-  font-size: 13px;
-  font-weight: 900;
-  padding: 0 12px;
-}
-
-.feedback-milestone-state-pill[data-active="true"] {
-  background: rgba(255, 255, 255, 0.7);
-  color: #173767;
-}
-
-.feedback-milestone-state-pill svg {
-  width: 15px;
-  height: 15px;
-}
-
-.feedback-milestone-state-pill strong {
-  color: #254766;
-  font-weight: 950;
-}
-
-.feedback-milestone-empty {
-  padding: 16px;
 }
 
 .feedback-issue-query-panel {
@@ -2897,7 +2863,6 @@ button.bounty-result-preview-item:focus-visible {
   .feedback-issue-detail-header,
   .feedback-index-header,
   .feedback-label-list-head,
-  .feedback-milestone-list-head,
   .feedback-issue-list-head {
     align-items: stretch;
     flex-direction: column;
@@ -3627,8 +3592,7 @@ button.bounty-result-preview-item:focus-visible {
   padding: 8px;
 }
 
-.orf-workbench-surface .feedback-label-list-head,
-.orf-workbench-surface .feedback-milestone-list-head {
+.orf-workbench-surface .feedback-label-list-head {
   min-height: 42px;
   border-bottom-color: rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.12);
@@ -3832,7 +3796,6 @@ button.bounty-result-preview-item:focus-visible {
   .orf-workbench-surface .feedback-issue-header,
   .orf-workbench-surface .feedback-index-header,
   .orf-workbench-surface .feedback-label-list-head,
-  .orf-workbench-surface .feedback-milestone-list-head,
   .orf-workbench-surface .feedback-issue-list-head {
     align-items: stretch;
   }

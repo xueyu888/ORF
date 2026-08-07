@@ -218,7 +218,6 @@ export function FeedbackInboxPage() {
         <div className="feedback-issue-header-actions">
           <div className="feedback-issue-index-links" aria-label="反馈索引">
             <Link className="feedback-issue-index-link" to="/feedback/labels"><Tag aria-hidden="true" /> 标签 <strong>{labelOptions.length}</strong></Link>
-            <Link className="feedback-issue-index-link" to="/feedback/milestones"><Flag aria-hidden="true" /> 里程碑 <strong>0</strong></Link>
           </div>
           {canCreateFeedback && (
             <BountyButton onClick={() => navigate(newFeedbackHref(projectId))}>

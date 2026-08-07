@@ -21,7 +21,6 @@ import {
   FeedbackInboxPage,
   FeedbackIssuePage,
   FeedbackLabelsPage,
-  FeedbackMilestonesPage,
   LootSubmitPage,
   MembersPage,
   PermissionsPage,
@@ -78,7 +77,6 @@ export function App() {
         <Route path="feedback" element={<LazyRoute><FeedbackInboxPage /></LazyRoute>} />
         <Route path="feedback/new" element={<LazyRoute><FeedbackCreatePage /></LazyRoute>} />
         <Route path="feedback/labels" element={<LazyRoute><FeedbackLabelsPage /></LazyRoute>} />
-        <Route path="feedback/milestones" element={<LazyRoute><FeedbackMilestonesPage /></LazyRoute>} />
         <Route path="feedback/:feedbackId" element={<LazyRoute><FeedbackIssuePage /></LazyRoute>} />
         <Route path="notifications" element={<Navigate to="/chat/system/personalNotifications" replace />} />
         <Route path="reports" element={<LazyRoute><ReportsPage /></LazyRoute>} />

@@ -26,7 +26,6 @@ const feedbackInbox = createRouteModule(() => import("../pages/FeedbackInboxPage
 const feedbackCreate = createRouteModule(() => import("../pages/FeedbackCreatePage"), "FeedbackCreatePage");
 const feedbackIssue = createRouteModule(() => import("../pages/FeedbackIssuePage"), "FeedbackIssuePage");
 const feedbackLabels = createRouteModule(() => import("../pages/FeedbackLabelsPage"), "FeedbackLabelsPage");
-const feedbackMilestones = createRouteModule(() => import("../pages/FeedbackMilestonesPage"), "FeedbackMilestonesPage");
 const loot = createRouteModule(() => import("../pages/LootSubmitPage"), "LootSubmitPage");
 const members = createRouteModule(() => import("../pages/MembersPage"), "MembersPage");
 const permissions = createRouteModule(() => import("../pages/PermissionsPage"), "PermissionsPage");
@@ -45,7 +44,6 @@ export const FeedbackInboxPage = feedbackInbox.Component;
 export const FeedbackCreatePage = feedbackCreate.Component;
 export const FeedbackIssuePage = feedbackIssue.Component;
 export const FeedbackLabelsPage = feedbackLabels.Component;
-export const FeedbackMilestonesPage = feedbackMilestones.Component;
 export const LootSubmitPage = loot.Component;
 export const MembersPage = members.Component;
 export const PermissionsPage = permissions.Component;
@@ -66,7 +64,6 @@ export function preloadProductionRouteModules() {
     feedbackCreate.preload(),
     feedbackIssue.preload(),
     feedbackLabels.preload(),
-    feedbackMilestones.preload(),
     loot.preload(),
     personalSettings.preload(),
     reports.preload(),
