@@ -53,6 +53,14 @@ export {
   type FeedbackReadModelViewer,
 } from "../server/readModel";
 export {
+  feedbackReportAttachmentResponseContentType,
+  getFeedbackReportAttachmentContentFacts,
+  type FeedbackReportAttachmentContentDatabase,
+  type FeedbackReportAttachmentContentDisposition,
+  type FeedbackReportAttachmentContentFacts,
+  type FeedbackReportAttachmentContentFactsOutcome,
+} from "../server/reportAttachmentContent";
+export {
   getFeedbackAssignmentNotificationRecipients,
   getFeedbackOrdinaryNotificationRecipients,
   getFeedbackSubscriptionMode,

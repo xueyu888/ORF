@@ -2,8 +2,6 @@ import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { and, eq, inArray, or } from "drizzle-orm";
 import {
-  canPreviewFeedbackReportAttachment,
-  feedbackReportAttachmentPreviewKind,
   planFeedbackAssigneeChangedNotification,
   planFeedbackCreatedNotification,
   planFeedbackLifecycleChangedNotification,
@@ -14,9 +12,11 @@ import {
   type FeedbackTransitionInput,
 } from "@orf/feedback-module/contracts";
 import {
+  feedbackReportAttachmentResponseContentType,
   getFeedbackAssignmentNotificationRecipients,
   getFeedbackOrdinaryNotificationRecipients,
   getFeedbackReferences as getFeedbackReferenceSummaries,
+  getFeedbackReportAttachmentContentFacts,
   listFeedbackReferences as listFeedbackReferenceSummaries,
   markFeedbackViewed as markFeedbackViewedInModule,
   recordFeedbackCommentCreatedActivity,
@@ -1089,36 +1089,26 @@ export async function getFeedbackReportAttachmentContent(
   const teamId = storageScopeId(actor.scope);
   if (!teamId) return { status: "notFound" };
 
-  const [attachment] = await db.select().from(feedbackReportAttachments).where(eq(feedbackReportAttachments.id, attachmentId)).limit(1);
-  if (!attachment || attachment.teamId !== teamId) {
-    return { status: "notFound" };
-  }
-  if (actor.status !== "active") {
-    return { status: "forbidden" };
-  }
+  const outcome = await getFeedbackReportAttachmentContentFacts(db, {
+    actorStatus: actor.status === "active" ? "active" : "inactive",
+    attachmentId,
+    disposition: options.disposition,
+    teamId,
+  });
+  if (outcome.status !== "ok") return outcome;
 
-  const stored = await objectStorage.getObject(attachment.objectKey);
+  const stored = await objectStorage.getObject(outcome.facts.objectKey);
   if (!stored) {
     return { status: "notFound" };
   }
 
-  const canPreview = canPreviewFeedbackReportAttachment(attachment);
-  const previewKind = feedbackReportAttachmentPreviewKind(attachment);
-  const contentDisposition = options.disposition === "attachment" ? "attachment" : canPreview ? "inline" : "attachment";
-
   return {
     status: "ok",
     body: stored.body,
-    contentDisposition,
+    contentDisposition: outcome.facts.contentDisposition,
     contentLength: stored.contentLength,
-    contentType: contentDisposition === "inline"
-      ? previewKind === "markdown" || previewKind === "text"
-        ? "text/plain; charset=utf-8"
-        : attachment.mimeType
-      : canPreview
-        ? (stored.contentType ?? attachment.mimeType)
-        : "application/octet-stream",
-    fileName: attachment.fileName,
+    contentType: feedbackReportAttachmentResponseContentType(outcome.facts, { storedContentType: stored.contentType }),
+    fileName: outcome.facts.fileName,
   };
 }
 
