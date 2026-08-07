@@ -4,15 +4,17 @@ import {
   feedbackImpactSchema,
   feedbackPrioritySchema,
   feedbackRelationTypeSchema,
+  feedbackSubscriptionMutationModeSchema,
   feedbackTransitionInputSchema,
 } from "@orf/feedback-module/contracts";
+import { getFeedbackSubscriptionMode, setFeedbackSubscriptionMode } from "@orf/feedback-module/server";
 import { requireFeedbackInScope, requireUserScopeContext } from "../auth/accessPolicy";
+import { db } from "../db/client";
 import { env } from "../env";
 import {
   getFeedbackIssueDetailReadModelData,
   getFeedbackIssueReadModelData,
 } from "../readModels/feedbackIssueReadModel";
-import { getFeedbackSubscriptionMode, setFeedbackSubscriptionMode } from "../repositories/feedbackSubscriptionRepository";
 import {
   addFeedbackRelation,
   createFeedback,
@@ -29,6 +31,7 @@ import {
   type FeedbackCommandActor,
   type FeedbackCommandResult,
 } from "../repositories/feedbackRepository";
+import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 
 const feedbackParamsSchema = z.object({ feedbackId: z.string().min(1) });
 const feedbackRelationParamsSchema = z.object({ feedbackId: z.string().min(1), relationId: z.string().min(1) });
@@ -79,7 +82,7 @@ const markFeedbackViewedBodySchema = z.object({
   seenThroughSequence: z.number().int().nonnegative(),
 }).strict();
 const updateFeedbackSubscriptionBodySchema = z.object({
-  mode: z.enum(["none", "subscribed", "muted"]),
+  mode: feedbackSubscriptionMutationModeSchema,
 });
 const feedbackReferencesQuerySchema = z.object({
   id: z.union([z.string(), z.array(z.string())]).optional(),
@@ -384,9 +387,9 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       return reply;
     }
 
-    const result = await getFeedbackSubscriptionMode(params.feedbackId, {
+    const result = await getFeedbackSubscriptionMode(db, params.feedbackId, {
       id: context.user.id,
-      scope: context.scope,
+      teamId: runtimeScopeStorageId(context.scope),
     });
     if (result.status === "notFound") {
       return reply.code(404).send({ error: "Feedback not found" });
@@ -409,9 +412,9 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       return reply;
     }
 
-    const result = await setFeedbackSubscriptionMode(params.feedbackId, body.mode, {
+    const result = await setFeedbackSubscriptionMode(db, params.feedbackId, body.mode, {
       id: context.user.id,
-      scope: context.scope,
+      teamId: runtimeScopeStorageId(context.scope),
     });
     if (result.status === "notFound") {
       return reply.code(404).send({ error: "Feedback not found" });

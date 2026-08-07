@@ -31,6 +31,8 @@ export const feedbackPriorityValues = ["p0", "p1", "p2", "p3"] as const;
 export const feedbackActorRoleValues = ["member", "admin"] as const;
 export const feedbackActorStatusValues = ["active", "inactive"] as const;
 export const feedbackRelationTypeValues = ["related", "duplicates", "blocks"] as const;
+export const feedbackSubscriptionModeValues = ["none", "participating", "subscribed", "muted"] as const;
+export const feedbackSubscriptionMutationModeValues = ["none", "subscribed", "muted"] as const;
 export const feedbackTransitionTypeValues = [
   "start",
   "submit_verification",
@@ -61,6 +63,8 @@ export const feedbackPrioritySchema = z.enum(feedbackPriorityValues);
 export const feedbackActorRoleSchema = z.enum(feedbackActorRoleValues);
 export const feedbackActorStatusSchema = z.enum(feedbackActorStatusValues);
 export const feedbackRelationTypeSchema = z.enum(feedbackRelationTypeValues);
+export const feedbackSubscriptionModeSchema = z.enum(feedbackSubscriptionModeValues);
+export const feedbackSubscriptionMutationModeSchema = z.enum(feedbackSubscriptionMutationModeValues);
 export const feedbackTransitionTypeSchema = z.enum(feedbackTransitionTypeValues);
 export const feedbackActivityTypeSchema = z.enum(feedbackActivityTypeValues);
 
@@ -165,6 +169,8 @@ export type FeedbackPriority = z.infer<typeof feedbackPrioritySchema>;
 export type FeedbackActorRole = z.infer<typeof feedbackActorRoleSchema>;
 export type FeedbackActorStatus = z.infer<typeof feedbackActorStatusSchema>;
 export type FeedbackRelationType = z.infer<typeof feedbackRelationTypeSchema>;
+export type FeedbackSubscriptionMode = z.infer<typeof feedbackSubscriptionModeSchema>;
+export type FeedbackSubscriptionMutationMode = z.infer<typeof feedbackSubscriptionMutationModeSchema>;
 export type FeedbackTransitionType = z.infer<typeof feedbackTransitionTypeSchema>;
 export type FeedbackActivityType = z.infer<typeof feedbackActivityTypeSchema>;
 export type FeedbackLifecycleSnapshot = z.infer<typeof feedbackLifecycleSnapshotSchema>;

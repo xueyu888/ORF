@@ -14,6 +14,11 @@ import {
   type FeedbackTransitionInput,
 } from "@orf/feedback-module/contracts";
 import {
+  getFeedbackAssignmentNotificationRecipients,
+  getFeedbackOrdinaryNotificationRecipients,
+  type FeedbackNotificationRecipientDirectory,
+} from "@orf/feedback-module/server";
+import {
   applyFeedbackTransition,
   canonicalizeFeedbackRelation,
   deriveFeedbackCapabilities,
@@ -32,6 +37,10 @@ import { replaceOrfAttachmentMarkdownTokens } from "../../src/features/rich-text
 import type { OrfUserDisplayProfile } from "../../src/types/orf";
 import { db } from "../db/client";
 import { publishNotificationEvent } from "../notifications/publisher";
+import {
+  getActiveAdminNotificationRecipients,
+  getActiveMemberNotificationRecipientsByIds,
+} from "./notificationRepository";
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { getFeedbackIssueDetailReadModelData } from "../readModels/feedbackIssueReadModel";
 import { commentThreads, projects } from "../db/schema";
@@ -41,10 +50,6 @@ import {
   prepareCommentAttachment,
   type PreparedCommentAttachment,
 } from "./commentAttachmentRepository";
-import {
-  getFeedbackAssignmentNotificationRecipients,
-  getFeedbackOrdinaryNotificationRecipients,
-} from "./feedbackSubscriptionRepository";
 import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
 
@@ -130,6 +135,11 @@ export type FeedbackReportAttachmentContentOutcome =
 
 type FeedbackRow = typeof feedback.$inferSelect;
 type ProjectRow = { id: string; name: string } | null;
+
+const feedbackNotificationRecipientDirectory: FeedbackNotificationRecipientDirectory = {
+  getActiveAdminUserIds: getActiveAdminNotificationRecipients,
+  getActiveMemberUserIdsByIds: getActiveMemberNotificationRecipientsByIds,
+};
 
 let idCounter = 0;
 
@@ -287,7 +297,7 @@ async function notifyFeedbackCreated(input: {
     assigneeName: input.assigneeName,
     feedbackId: input.feedbackId,
     project: input.project,
-    recipientUserIds: await getFeedbackOrdinaryNotificationRecipients({
+    recipientUserIds: await getFeedbackOrdinaryNotificationRecipients(db, feedbackNotificationRecipientDirectory, {
       assigneeUserId: input.assigneeUserId,
       createdBy: input.actorUserId,
       feedbackId: input.feedbackId,
@@ -316,7 +326,7 @@ async function notifyFeedbackLifecycleChanged(input: {
     actorUserId: input.actorUserId,
     feedbackId: input.feedbackId,
     project: input.project,
-    recipientUserIds: await getFeedbackOrdinaryNotificationRecipients({
+    recipientUserIds: await getFeedbackOrdinaryNotificationRecipients(db, feedbackNotificationRecipientDirectory, {
       assigneeUserId: input.assigneeUserId,
       createdBy: input.createdBy,
       feedbackId: input.feedbackId,
@@ -347,7 +357,7 @@ async function notifyFeedbackAssigned(input: {
     feedbackId: input.feedbackId,
     nextAssigneeName: input.nextAssigneeName,
     previousAssigneeName: input.previousAssigneeName,
-    recipientUserIds: await getFeedbackAssignmentNotificationRecipients({
+    recipientUserIds: await getFeedbackAssignmentNotificationRecipients(feedbackNotificationRecipientDirectory, {
       nextAssigneeUserId: input.nextAssigneeUserId,
       previousAssigneeUserId: input.previousAssigneeUserId,
       teamId: input.teamId,

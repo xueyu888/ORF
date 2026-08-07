@@ -4,9 +4,11 @@ import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from "driz
 import { feedbackCommentPath, feedbackIssuePath, planFeedbackCommentCreatedNotification } from "@orf/feedback-module/contracts";
 import {
   getFeedbackCommentNotificationFacts,
+  getFeedbackOrdinaryNotificationRecipients,
   hasFeedbackLinkedToProject,
   lockFeedbackCommentTarget,
   resolveFeedbackCommentTarget,
+  type FeedbackNotificationRecipientDirectory,
 } from "@orf/feedback-module/server";
 import type {
   CommentAttachment,
@@ -118,7 +120,6 @@ import {
   getProjectChatNotificationChannelIds,
   getUserNameById,
 } from "./notificationRepository";
-import { getFeedbackOrdinaryNotificationRecipients } from "./feedbackSubscriptionRepository";
 import { recordFeedbackCommentCreated } from "./feedbackRepository";
 import { publishNotificationEvent } from "../notifications/publisher";
 import { buildCommentNotificationContent } from "../notifications/notificationEventModel";
@@ -143,6 +144,11 @@ import {
   groupCommentAttachmentsByMessage,
   prepareCommentAttachment,
 } from "./commentAttachmentRepository";
+
+const feedbackNotificationRecipientDirectory: FeedbackNotificationRecipientDirectory = {
+  getActiveAdminUserIds: getActiveAdminNotificationRecipients,
+  getActiveMemberUserIdsByIds: getActiveMemberNotificationRecipientsByIds,
+};
 
 type CommentActor = {
   canManageAllComments?: boolean;
@@ -847,7 +853,7 @@ async function getFeedbackCommentNotificationContext(input: {
     : [];
 
   const excludedUserIds = new Set(uniqueNotificationUserIds([input.actorUserId, ...input.excludedUserIds]));
-  const recipientUserIds = await getFeedbackOrdinaryNotificationRecipients({
+  const recipientUserIds = await getFeedbackOrdinaryNotificationRecipients(db, feedbackNotificationRecipientDirectory, {
     createdBy: target.createdBy,
     assigneeUserId: target.assigneeUserId,
     feedbackId: input.feedbackId,

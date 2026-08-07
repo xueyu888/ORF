@@ -31,6 +31,17 @@ export {
   type FeedbackCommentTargetReference,
   type FeedbackReferenceDatabase,
 } from "../server/references";
+export {
+  getFeedbackAssignmentNotificationRecipients,
+  getFeedbackOrdinaryNotificationRecipients,
+  getFeedbackSubscriptionMode,
+  setFeedbackSubscriptionMode,
+  type ExplicitFeedbackSubscriptionMode,
+  type FeedbackNotificationRecipientDirectory,
+  type FeedbackSubscriptionActor,
+  type FeedbackSubscriptionDatabase,
+  type FeedbackSubscriptionResult,
+} from "../server/subscriptions";
 
 export interface FeedbackServerHost {
   readonly protocolVersion: 1;

@@ -19,10 +19,6 @@
     {
       "file": "server/repositories/feedbackRepository.ts",
       "specifier": "../../modules/feedback/src/infrastructure/database/schema"
-    },
-    {
-      "file": "server/repositories/feedbackSubscriptionRepository.ts",
-      "specifier": "../../modules/feedback/src/infrastructure/database/schema"
     }
   ]
 }
