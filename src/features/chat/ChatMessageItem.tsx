@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { Bookmark, CheckCheck, ChevronDown, ChevronUp, Copy, Edit3, EyeOff, FileText, Link as LinkIcon, type LucideIcon, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
-import { type CSSProperties, type KeyboardEvent, type MouseEvent, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser, Feedback } from "../../types/orf";
@@ -45,6 +45,8 @@ type ChatMessageItemProps = {
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onThread?: (rootMessageId: string, options?: ChatOpenThreadOptions) => void;
   reactionPickerSignal?: number;
+  renderMessageBody?: (message: ChatMessage) => string | null | undefined;
+  renderReferenceCard?: (message: ChatMessage) => ReactNode;
   usersById: Map<string, ChatUser>;
 };
 
@@ -73,6 +75,7 @@ function isInteractiveMessageTarget(target: EventTarget | null) {
     "select",
     "textarea",
     "[role='button']",
+    ".orf-chat-reference-card",
     ".orf-chat-message-actions",
     ".orf-chat-reaction-row",
   ].join(", ")));
@@ -464,6 +467,8 @@ export function ChatMessageItem({
   onSaveEdit,
   onThread,
   reactionPickerSignal,
+  renderMessageBody,
+  renderReferenceCard,
   usersById,
 }: ChatMessageItemProps) {
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -644,6 +649,9 @@ export function ChatMessageItem({
     }] : []),
   ];
   const hasMoreActions = moreActions.length > 0;
+  const referenceCard = !message.deletedAt && !editing ? renderReferenceCard?.(message) : null;
+  const resolvedMessageBody = !message.deletedAt && !editing ? renderMessageBody?.(message) : undefined;
+  const visibleMessageBody = resolvedMessageBody === undefined ? message.body : resolvedMessageBody;
 
   return (
     <article
@@ -715,13 +723,16 @@ export function ChatMessageItem({
           </div>
         ) : (
           <>
-            <CollapsibleMessageText
-              body={message.body}
-              commentImageAttachmentIds={commentImageAttachmentIdsFromChatSystemMetadata(message.system)}
-              feedbackItems={feedbackItems}
-              onDriveResourceLink={onDriveResourceLink}
-              usersById={usersById}
-            />
+            {visibleMessageBody !== null && (
+              <CollapsibleMessageText
+                body={visibleMessageBody}
+                commentImageAttachmentIds={commentImageAttachmentIdsFromChatSystemMetadata(message.system)}
+                feedbackItems={feedbackItems}
+                onDriveResourceLink={onDriveResourceLink}
+                usersById={usersById}
+              />
+            )}
+            {referenceCard}
             <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
             {sendStatus === "failed" && (
               <div className="orf-chat-delivery-status" role="alert">

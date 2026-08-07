@@ -28,17 +28,23 @@ import {
   applyWorkLogEditorDraftPatch,
   applyWorkLogEditorSessionDraftPatch,
   blankWorkLogEditorDraft,
+  buildWorkLogStatusUpdateMarkdown,
   buildWorkLogClassificationChoices,
   canonicalWorkLogEditorDraft,
   canonicalWorkLogEntryForEdit,
   classificationSelectValueFromDraft,
   createWorkLogEditorSession,
+  formatWorkLogProgressEstimate,
   moveWorkLogEditorSession,
+  parseWorkLogStatusUpdateMarkdown,
   validateWorkLogEditorDraft,
+  workLogBodyMarkdownHasUserContent,
+  workLogBodyMarkdownUserContent,
   workLogDraftPatchFromClassificationSelect,
   workLogEditorDraftFromEntry,
   workLogEditorDraftPreservesExistingClassification,
   workLogEditorSessionShouldFollowViewDate,
+  workLogStatusUpdateTemplateMarkdown,
 } from "../src/features/work-logs/workLogEditorModel";
 import type { WorkLogEntry } from "../src/types/orf";
 
@@ -138,6 +144,69 @@ test("work log local draft storage parses only the editor draft contract", () =>
   assert.equal(parseStoredWorkLogEditorDraft("{bad json"), null);
 });
 
+test("work log status update template owns markdown headings and user body", () => {
+  assert.deepEqual(parseWorkLogStatusUpdateMarkdown(""), {
+    next: "",
+    risk: "",
+    status: "",
+  });
+  assert.equal(workLogStatusUpdateTemplateMarkdown.endsWith("\n"), true);
+  assert.equal(blankWorkLogEditorDraft().bodyMarkdown, workLogStatusUpdateTemplateMarkdown);
+  assert.equal(workLogBodyMarkdownHasUserContent(workLogStatusUpdateTemplateMarkdown), false);
+  assert.equal(buildWorkLogStatusUpdateMarkdown({
+    next: "",
+    risk: "",
+    status: "",
+  }), workLogStatusUpdateTemplateMarkdown);
+
+  const markdown = buildWorkLogStatusUpdateMarkdown({
+    next: "明天先验证演示路径的数据初始化。",
+    risk: "无",
+    status: "核心流程已完成第一轮验证。",
+  });
+
+  assert.equal(markdown, [
+    "## 状态说明",
+    "",
+    "核心流程已完成第一轮验证。",
+    "",
+    "## 偏差 / 风险 / 阻塞",
+    "",
+    "无",
+    "",
+    "## 下一步",
+    "",
+    "明天先验证演示路径的数据初始化。",
+  ].join("\n"));
+  assert.deepEqual(parseWorkLogStatusUpdateMarkdown(markdown), {
+    next: "明天先验证演示路径的数据初始化。",
+    risk: "无",
+    status: "核心流程已完成第一轮验证。",
+  });
+  assert.equal(workLogBodyMarkdownHasUserContent(markdown), true);
+  assert.equal(
+    workLogBodyMarkdownUserContent(markdown),
+    "核心流程已完成第一轮验证。\n\n无\n\n明天先验证演示路径的数据初始化。",
+  );
+  assert.equal(
+    workLogBodyMarkdownHasUserContent([
+      "## 状态说明",
+      "",
+      "## 偏差 / 风险 / 阻塞",
+      "",
+      "## 下一步",
+    ].join("\n")),
+    false,
+  );
+  assert.equal(parseWorkLogStatusUpdateMarkdown("历史自由正文"), null);
+});
+
+test("work log progress estimate label is shared by page and chat card", () => {
+  assert.equal(formatWorkLogProgressEstimate(null), "");
+  assert.equal(formatWorkLogProgressEstimate(72), "进 28%");
+  assert.equal(formatWorkLogProgressEstimate(72, { compact: true }), "进28%");
+});
+
 test("work log editor session keeps draft ownership across refresh and resets for the next entry", () => {
   const initial = createWorkLogEditorSession({
     userId: "user-1",
@@ -168,7 +237,7 @@ test("work log editor session keeps draft ownership across refresh and resets fo
     workDate: moved.workDate,
   });
   assert.equal(nextEntry.revision, moved.revision + 1);
-  assert.equal(nextEntry.draft.bodyMarkdown, "");
+  assert.equal(nextEntry.draft.bodyMarkdown, workLogStatusUpdateTemplateMarkdown);
   assert.equal(nextEntry.draft.editingEntryId, null);
   assert.equal(
     workLogEditorSessionShouldFollowViewDate(
@@ -200,7 +269,7 @@ test("work log editor session keeps draft ownership across refresh and resets fo
     workDate: historicalEdit.workDate,
   });
   assert.equal(cancelledEdit.draft.editingEntryId, null);
-  assert.equal(cancelledEdit.draft.bodyMarkdown, "");
+  assert.equal(cancelledEdit.draft.bodyMarkdown, workLogStatusUpdateTemplateMarkdown);
   assert.equal(cancelledEdit.revision, historicalEdit.revision + 1);
 });
 

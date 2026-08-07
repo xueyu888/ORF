@@ -850,7 +850,7 @@ function ChatResourceInlinePreview({
           {textPreviewLoading && textPreview === undefined ? (
             <div className="orf-chat-resource-preview-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载预览</div>
           ) : textPreview ? (
-            <OrfRichTextMarkdownViewer body={textPreview} classNamePrefix="orf-drive-markdown" compact />
+            <OrfRichTextMarkdownViewer body={textPreview} compact />
           ) : null}
         </div>
       ) : file && file.previewKind === "text" && previewUrl ? (

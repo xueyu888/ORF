@@ -1,5 +1,5 @@
 import { CheckCheck, ChevronDown, Loader2, Reply } from "lucide-react";
-import type { RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import type { ChatMessage, ChatUser, Feedback } from "../../types/orf";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
@@ -52,6 +52,8 @@ type ChatMessageFeedProps = {
   pendingNewMessageCount: number;
   reactionPickerMessageId: string | null;
   reactionPickerSignal: number;
+  renderMessageBody?: (message: ChatMessage) => string | null | undefined;
+  renderReferenceCard?: (message: ChatMessage) => ReactNode;
   scrollRef: RefObject<HTMLDivElement | null>;
   unreadAnchor: UnreadAnchor | null;
   usersById: Map<string, ChatUser>;
@@ -100,6 +102,8 @@ export function ChatMessageFeed({
   pendingNewMessageCount,
   reactionPickerMessageId,
   reactionPickerSignal,
+  renderMessageBody,
+  renderReferenceCard,
   scrollRef,
   unreadAnchor,
   usersById,
@@ -148,6 +152,8 @@ export function ChatMessageFeed({
           onThread={onThread}
           reactionPickerMessageId={reactionPickerMessageId}
           reactionPickerSignal={reactionPickerSignal}
+          renderMessageBody={renderMessageBody}
+          renderReferenceCard={renderReferenceCard}
           unreadAnchor={unreadAnchor}
           usersById={usersById}
         />
@@ -201,6 +207,8 @@ function MessageList({
   onThread,
   reactionPickerMessageId,
   reactionPickerSignal,
+  renderMessageBody,
+  renderReferenceCard,
   usersById,
   unreadAnchor,
 }: MessageListProps) {
@@ -307,6 +315,8 @@ function MessageList({
               onSaveEdit={onSaveEdit}
               onThread={onThread}
               reactionPickerSignal={reactionPickerMessageId === message.id ? reactionPickerSignal : undefined}
+              renderMessageBody={renderMessageBody}
+              renderReferenceCard={renderReferenceCard}
               usersById={usersById}
             />
           </div>

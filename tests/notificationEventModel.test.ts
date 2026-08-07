@@ -22,6 +22,7 @@ import {
   selectDataSyncRecipientMembership,
   dataSyncEventMetadata,
 } from "../server/notifications/dataSyncNotificationModel";
+import { workLogSubmissionNotificationBody } from "../server/workLogs/workLogSubmissionNotification";
 import type { NotificationKind, NotificationTargetType } from "../src/types/orf";
 
 test("personal notifications dedupe recipients and exclude the actor", () => {
@@ -129,6 +130,16 @@ test("notification actions use the target-specific label", () => {
     href: "/reports?date=2026-08-04&objective=objective-1",
     label: "打开统计",
   });
+});
+
+test("work log submission notification body stays compact because chat renders the log card separately", () => {
+  assert.equal(
+    workLogSubmissionNotificationBody({
+      authorName: "张骞",
+      workDate: "2026-08-04",
+    }),
+    "张骞 提交了 2026-08-04 的工作日志。",
+  );
 });
 
 test("known notification kinds have explicit action labels", () => {

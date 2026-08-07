@@ -114,6 +114,7 @@ export type OrfRichTextEditorProps = {
   onUploadImage?: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
   placeholder: string;
   submitOnEnter?: boolean;
+  templateOverlay?: ReactNode;
   toolbarControls?: ReactNode;
   transformPastedText?: (text: string) => string;
   value: string;
@@ -202,6 +203,7 @@ export function OrfRichTextEditor({
   onUploadImage,
   placeholder,
   submitOnEnter = true,
+  templateOverlay,
   toolbarControls,
   transformPastedText,
   value,
@@ -792,6 +794,11 @@ export function OrfRichTextEditor({
         </form>
       )}
       <div className="orf-rich-text-editor-shell">
+        {templateOverlay && (
+          <div className="orf-rich-text-editor-template-overlay" aria-hidden="true">
+            {templateOverlay}
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           aria-label={placeholder}

@@ -42,7 +42,6 @@ import { RelatedResourcesPanel } from "../features/drive/RelatedResourcesPanel";
 import { driveNodeMetaLabel, formatDriveDateTime } from "../features/drive/drivePresentation";
 import {
   OrfRichTextEditor,
-  orfRichTextHasMeaningfulContent,
 } from "../features/rich-text/OrfRichTextEditor";
 import { OrfRichTextMarkdownViewer } from "../features/rich-text/OrfRichTextMarkdownViewer";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
@@ -61,10 +60,14 @@ import {
   classificationSelectValueFromDraft,
   createWorkLogEditorSession,
   formatWorkLogDurationMinutes,
+  formatWorkLogProgressEstimate,
   moveWorkLogEditorSession,
   parseWorkLogProgressEstimateInput,
+  parseWorkLogStatusUpdateMarkdown,
   suggestionMatchesWorkLogDraft,
   validateWorkLogEditorDraft,
+  workLogBodyMarkdownHasUserContent,
+  workLogBodyMarkdownUserContent,
   workLogDraftPatchFromClassificationSelect,
   workLogDraftPatchFromSuggestion,
   workLogEditorDraftHasContent,
@@ -75,6 +78,8 @@ import {
   workLogProgressEstimatePercentFromRemaining,
   workLogEntryTargetLabel,
   workLogSuggestionLabel,
+  workLogStatusUpdateTemplateMarkdown,
+  workLogStatusUpdateTemplateSections,
   type WorkLogClassificationChoice,
   type WorkLogEditorDraft,
   type WorkLogEditorDraftPatch,
@@ -698,7 +703,7 @@ export function WorkLogsPage() {
     draftInput.categoryId ||
     draftInput.categoryName ||
     draftInput.objectiveId ||
-    orfRichTextHasMeaningfulContent(draftInput.bodyMarkdown),
+    workLogBodyMarkdownHasUserContent(draftInput.bodyMarkdown),
   );
   const draftValidation = draftHasInput
     ? validateWorkLogEditorDraft(editorDraft, {
@@ -715,7 +720,7 @@ export function WorkLogsPage() {
           workDate: editingEntry.workDate,
         }
       : {
-          bodyMarkdown: "",
+          bodyMarkdown: workLogStatusUpdateTemplateMarkdown,
           categoryId: null,
           categoryName: null,
           objectiveId: null,
@@ -921,8 +926,8 @@ export function WorkLogsPage() {
       return undefined;
     }
     if (
-      editorDraft.bodyMarkdown.trim().length < 8 ||
-      !orfRichTextHasMeaningfulContent(editorDraft.bodyMarkdown)
+      workLogBodyMarkdownUserContent(editorDraft.bodyMarkdown).length < 8 ||
+      !workLogBodyMarkdownHasUserContent(editorDraft.bodyMarkdown)
     ) {
       setClassificationObservation(null);
       setClassificationSuggestionLoading(false);
@@ -1513,19 +1518,76 @@ function WorkLogEditorCard({
           </button>
         </div>
       </div>
-      <OrfRichTextEditor
-        autoGrow
-        className="work-logs-editor"
+      <WorkLogBodyMarkdownEditor
         currentUserId={currentUserId}
         disabled={disabled}
-        idleHint="Markdown"
-        mentionableUsers={[]}
         onChange={(bodyMarkdown) => onChange({ bodyMarkdown })}
-        placeholder="写下这一天完成了什么"
-        submitOnEnter={false}
         value={draft.bodyMarkdown}
       />
     </section>
+  );
+}
+
+function WorkLogBodyMarkdownEditor({
+  currentUserId,
+  disabled,
+  onChange,
+  value,
+}: {
+  currentUserId: string;
+  disabled: boolean;
+  onChange: (bodyMarkdown: string) => void;
+  value: string;
+}) {
+  const templateBody = useMemo(() => parseWorkLogStatusUpdateMarkdown(value), [value]);
+
+  return (
+    <OrfRichTextEditor
+      autoGrow
+      className="work-logs-editor"
+      currentUserId={currentUserId}
+      disabled={disabled}
+      idleHint="Markdown"
+      mentionableUsers={[]}
+      onChange={onChange}
+      placeholder="用 Markdown 记录状态说明、风险阻塞和下一步"
+      submitOnEnter={false}
+      templateOverlay={
+        templateBody ? (
+          <WorkLogBodyTemplateOverlay templateBody={templateBody} />
+        ) : undefined
+      }
+      value={value}
+    />
+  );
+}
+
+function WorkLogBodyTemplateOverlay({
+  templateBody,
+}: {
+  templateBody: NonNullable<ReturnType<typeof parseWorkLogStatusUpdateMarkdown>>;
+}) {
+  return (
+    <div className="work-logs-body-template-overlay">
+      {workLogStatusUpdateTemplateSections.map((section, index) => (
+        <span key={section.key}>
+          <span className="work-logs-body-template-hidden-line">
+            ## {section.heading}
+          </span>
+          {"\n"}
+          {templateBody[section.key].trim() ? (
+            <span className="work-logs-body-template-hidden-line">
+              {templateBody[section.key]}
+            </span>
+          ) : (
+            <span className="work-logs-body-template-hint">
+              {section.placeholder}
+            </span>
+          )}
+          {index < workLogStatusUpdateTemplateSections.length - 1 ? "\n" : ""}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -1547,8 +1609,8 @@ function WorkLogClassificationSuggestionSlot({
   suggestion: WorkLogClassificationSuggestion | null;
 }) {
   const hasContent =
-    draft.bodyMarkdown.trim().length >= 8 &&
-    orfRichTextHasMeaningfulContent(draft.bodyMarkdown);
+    workLogBodyMarkdownUserContent(draft.bodyMarkdown).length >= 8 &&
+    workLogBodyMarkdownHasUserContent(draft.bodyMarkdown);
   const label =
     suggestion && !suggestionMatchesWorkLogDraft(suggestion, draft)
       ? workLogSuggestionLabel(suggestion, { categories, objectives })
@@ -1941,7 +2003,6 @@ function WorkLogMarkdown({ body }: { body: string }) {
     <div className="work-logs-activity-markdown">
       <OrfRichTextMarkdownViewer
         body={body}
-        classNamePrefix="orf-work-log-markdown"
         compact
       />
     </div>
@@ -2584,12 +2645,6 @@ function shortWeekdayLabel(date: string) {
 
 function formatOptionalPercent(value: number | null | undefined) {
   return value === null || value === undefined ? "--" : `${value}%`;
-}
-
-function formatWorkLogProgressEstimate(value: number | null | undefined, options?: { compact?: boolean }) {
-  const progressEstimate = workLogProgressEstimatePercentFromRemaining(value);
-  if (progressEstimate === null) return "";
-  return `${options?.compact ? "进" : "进 "}${progressEstimate}%`;
 }
 
 function workLogReportDensity(count: number) {

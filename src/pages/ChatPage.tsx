@@ -21,6 +21,7 @@ import type { ChatDriveResourceLinkTarget, ChatDriveResourceSelectionRequest } f
 import { chatPresenceProtocolUpgradeMessage, hasChatPresenceProtocolMismatch } from "../features/chat/chatPresence";
 import { chatRealtimeReconciliationScope } from "../features/chat/chatRealtimeReconciliation";
 import { resetChatNativeNotificationViewState, setChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
+import { renderChatSystemMessageBody, renderChatSystemReferenceCard } from "../features/chat/chatSystemReferenceCards";
 import { requestClientUpdateCenterOpen } from "../features/client-updates/clientUpdateCenterEvents";
 import { feedbackIssueIdsFromText } from "../features/feedback/model/feedbackIssue";
 import {
@@ -1390,6 +1391,8 @@ export function ChatPage() {
               pendingNewMessageCount={pendingNewMessageCount}
               reactionPickerMessageId={reactionPickerRequest.messageId}
               reactionPickerSignal={reactionPickerRequest.signal}
+              renderMessageBody={renderChatSystemMessageBody}
+              renderReferenceCard={renderChatSystemReferenceCard}
               scrollRef={messageScrollRef}
               unreadAnchor={unreadAnchor?.channelId === activeChannel.id ? unreadAnchor : null}
               usersById={usersById}

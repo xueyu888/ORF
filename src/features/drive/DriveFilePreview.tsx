@@ -196,7 +196,7 @@ export function DriveFilePreviewSurface({
           <div className="orf-drive-preview-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载预览</div>
         ) : markdownViewMode === "rendered" && effectiveTextPreview ? (
           <div className="orf-drive-markdown-rendered">
-            <OrfRichTextMarkdownViewer body={effectiveTextPreview} classNamePrefix="orf-drive-markdown" />
+            <OrfRichTextMarkdownViewer body={effectiveTextPreview} />
           </div>
         ) : (
           <div className="orf-drive-text-preview is-markdown-source">

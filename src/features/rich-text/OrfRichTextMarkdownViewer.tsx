@@ -57,7 +57,6 @@ export type OrfRichTextResolvedLink = {
 
 export type OrfRichTextMarkdownViewerProps = {
   body: string;
-  classNamePrefix?: string;
   compact?: boolean;
   enableTitleAutolinks?: boolean;
   renderAttachment?: (reference: OrfAttachmentReference, key: string, token: string) => ReactNode;
@@ -67,6 +66,8 @@ export type OrfRichTextMarkdownViewerProps = {
   resolveLink?: (href: string, label: ReactNode) => OrfRichTextResolvedLink | null;
   usersById?: ReadonlyMap<string, OrfRichTextViewerUser>;
 };
+
+const markdownClassNamePrefix = "orf-rich-text-markdown";
 
 function isFenceLine(line: string) {
   return line.trimStart().startsWith("```");
@@ -495,7 +496,6 @@ function defaultRenderAttachment(reference: OrfAttachmentReference, key: string)
 }
 
 type InlineRenderContext = Required<Pick<OrfRichTextMarkdownViewerProps, "renderPlainText">> & {
-  classNamePrefix: string;
   renderAttachment: NonNullable<OrfRichTextMarkdownViewerProps["renderAttachment"]>;
   renderLink: NonNullable<OrfRichTextMarkdownViewerProps["renderLink"]>;
   renderMention: NonNullable<OrfRichTextMarkdownViewerProps["renderMention"]>;
@@ -570,12 +570,10 @@ function renderLineBreakJoined(lines: string[], context: InlineRenderContext, ke
 }
 
 function MarkdownCodeBlock({
-  classNamePrefix,
   compact,
   content,
   language,
 }: {
-  classNamePrefix: string;
   compact: boolean;
   content: string;
   language: string | null;
@@ -592,9 +590,9 @@ function MarkdownCodeBlock({
   };
 
   return (
-    <pre className={`${classNamePrefix}-code-block`}>
+    <pre className={`${markdownClassNamePrefix}-code-block`}>
       {(language || !compact) && (
-        <span className={`${classNamePrefix}-code-header`}>
+        <span className={`${markdownClassNamePrefix}-code-header`}>
           <small>{language ?? "code"}</small>
           {!compact && <button type="button" onClick={copyCode}>{copied ? "已复制" : "复制"}</button>}
         </span>
@@ -605,34 +603,31 @@ function MarkdownCodeBlock({
 }
 
 function MarkdownListBlock({
-  classNamePrefix,
   context,
   list,
   nodeKey,
 }: {
-  classNamePrefix: string;
   context: InlineRenderContext;
   list: MarkdownList;
   nodeKey: string;
 }) {
   const ListTag = list.ordered ? "ol" : "ul";
   return (
-    <ListTag className={`${classNamePrefix}-list orf-rich-text-markdown-list`} start={list.start && list.start !== 1 ? list.start : undefined}>
+    <ListTag className={`${markdownClassNamePrefix}-list`} start={list.start && list.start !== 1 ? list.start : undefined}>
       {list.items.map((item, index) => (
         <li
-          className={item.checked === null ? undefined : `${classNamePrefix}-task-item orf-rich-text-markdown-task-item`}
+          className={item.checked === null ? undefined : `${markdownClassNamePrefix}-task-item`}
           key={`${nodeKey}:item:${index}`}
         >
           {item.checked !== null && <input checked={item.checked} readOnly type="checkbox" />}
           {renderInlineFragments(item.text, context, `${nodeKey}:item:${index}`)}
           {item.continuationLines.length > 0 && (
-            <span className={`${classNamePrefix}-list-continuation orf-rich-text-markdown-list-continuation`}>
+            <span className={`${markdownClassNamePrefix}-list-continuation`}>
               {renderLineBreakJoined(item.continuationLines, context, `${nodeKey}:item:${index}:continuation`)}
             </span>
           )}
           {item.children.map((childList, childIndex) => (
             <MarkdownListBlock
-              classNamePrefix={classNamePrefix}
               context={context}
               key={`${nodeKey}:item:${index}:child:${childIndex}`}
               list={childList}
@@ -647,7 +642,6 @@ function MarkdownListBlock({
 
 export function OrfRichTextMarkdownViewer({
   body,
-  classNamePrefix = "orf-rich-text-viewer",
   compact = false,
   enableTitleAutolinks = false,
   renderAttachment,
@@ -661,7 +655,6 @@ export function OrfRichTextMarkdownViewer({
   if (blocks.length === 0) return null;
 
   const context: InlineRenderContext = {
-    classNamePrefix,
     renderAttachment: renderAttachment ?? defaultRenderAttachment,
     renderLink,
     renderMention: renderMention ?? ((reference, key) => defaultRenderMention(reference, key, usersById)),
@@ -677,14 +670,14 @@ export function OrfRichTextMarkdownViewer({
           return context.renderAttachment(block.reference, block.key, block.token);
         }
         if (block.kind === "code") {
-          return <MarkdownCodeBlock classNamePrefix={classNamePrefix} compact={compact} content={block.content} key={block.key} language={block.language} />;
+          return <MarkdownCodeBlock compact={compact} content={block.content} key={block.key} language={block.language} />;
         }
         if (block.kind === "heading") {
           const Tag = `h${Math.min(compact ? 4 : block.level, 6)}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
           const headingClassName = [
-            `${classNamePrefix}-heading`,
-            `${classNamePrefix}-heading-${block.level}`,
-            compact ? `${classNamePrefix}-heading-compact` : null,
+            `${markdownClassNamePrefix}-heading`,
+            `${markdownClassNamePrefix}-heading-${block.level}`,
+            compact ? `${markdownClassNamePrefix}-heading-compact` : null,
           ].filter(Boolean).join(" ");
           return (
             <Tag className={headingClassName} key={block.key}>
@@ -693,22 +686,22 @@ export function OrfRichTextMarkdownViewer({
           );
         }
         if (block.kind === "divider") {
-          return <hr className={`${classNamePrefix}-divider`} key={block.key} />;
+          return <hr className={`${markdownClassNamePrefix}-divider`} key={block.key} />;
         }
         if (block.kind === "quote") {
           return (
-            <blockquote className={`${classNamePrefix}-quote`} key={block.key}>
+            <blockquote className={`${markdownClassNamePrefix}-quote`} key={block.key}>
               {renderLineBreakJoined(block.lines, context, block.key)}
             </blockquote>
           );
         }
         if (block.kind === "list") {
-          return <MarkdownListBlock classNamePrefix={classNamePrefix} context={context} key={block.key} list={block.list} nodeKey={block.key} />;
+          return <MarkdownListBlock context={context} key={block.key} list={block.list} nodeKey={block.key} />;
         }
         if (block.kind === "table") {
           return (
-            <div className={`${classNamePrefix}-table-wrap`} key={block.key}>
-              <table className={`${classNamePrefix}-table`}>
+            <div className={`${markdownClassNamePrefix}-table-wrap`} key={block.key}>
+              <table className={`${markdownClassNamePrefix}-table`}>
                 <thead>
                   <tr>
                     {block.table.headers.map((header, index) => (
@@ -738,14 +731,14 @@ export function OrfRichTextMarkdownViewer({
           if (titleLink) {
             const link = resolvedLinkFor(titleLink.href, renderInlineFragments(titleLink.label, context, `${block.key}:title-link-label`), context.resolveLink);
             return (
-              <p className={`${classNamePrefix}-paragraph`} key={block.key}>
+              <p className={`${markdownClassNamePrefix}-paragraph`} key={block.key}>
                 {context.renderLink(link.href, link.label, `${block.key}:title-link`)}
               </p>
             );
           }
         }
         return (
-          <p className={`${classNamePrefix}-paragraph`} key={block.key}>
+          <p className={`${markdownClassNamePrefix}-paragraph`} key={block.key}>
             {renderLineBreakJoined(block.lines, context, block.key)}
           </p>
         );

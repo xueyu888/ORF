@@ -68,6 +68,43 @@ type WorkLogObjectiveOptionLookup = {
   objectives?: WorkLogObjectiveOption[];
 };
 
+export const workLogStatusUpdateTemplateSections = [
+  {
+    heading: "状态说明",
+    key: "status",
+    placeholder: "写目标状态和可验证结果",
+  },
+  {
+    heading: "偏差 / 风险 / 阻塞",
+    key: "risk",
+    placeholder: "无则写“无”；有则写风险或阻塞",
+  },
+  {
+    heading: "下一步",
+    key: "next",
+    placeholder: "写接下来最重要的一件事",
+  },
+] as const;
+
+export type WorkLogStatusUpdateTemplateKey =
+  (typeof workLogStatusUpdateTemplateSections)[number]["key"];
+
+export type WorkLogStatusUpdateTemplateBody = Record<
+  WorkLogStatusUpdateTemplateKey,
+  string
+>;
+
+const blankWorkLogStatusUpdateTemplateBody = (): WorkLogStatusUpdateTemplateBody => ({
+  next: "",
+  risk: "",
+  status: "",
+});
+
+export const workLogStatusUpdateTemplateMarkdown =
+  `${workLogStatusUpdateTemplateSections
+    .map((section) => `## ${section.heading}`)
+    .join("\n\n")}\n`;
+
 function normalizeWorkLogEstimatePercent(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -83,7 +120,7 @@ export function workLogRemainingEstimatePercentFromProgress(value: number | null
 }
 
 export const blankWorkLogEditorDraft = (): WorkLogEditorDraft => ({
-  bodyMarkdown: "",
+  bodyMarkdown: workLogStatusUpdateTemplateMarkdown,
   categoryId: "",
   categoryName: "",
   classificationKind: "uncategorized",
@@ -92,10 +129,100 @@ export const blankWorkLogEditorDraft = (): WorkLogEditorDraft => ({
   progressEstimatePercent: null,
 });
 
+function workLogStatusUpdateHeadingKey(line: string): WorkLogStatusUpdateTemplateKey | null {
+  const trimmed = line.trim();
+  for (const section of workLogStatusUpdateTemplateSections) {
+    if (trimmed === `## ${section.heading}`) return section.key;
+  }
+  return null;
+}
+
+export function parseWorkLogStatusUpdateMarkdown(
+  markdown: string,
+): WorkLogStatusUpdateTemplateBody | null {
+  if (!markdown.trim()) return blankWorkLogStatusUpdateTemplateBody();
+
+  const sections = blankWorkLogStatusUpdateTemplateBody();
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  let activeKey: WorkLogStatusUpdateTemplateKey | null = null;
+  let expectedHeadingIndex = 0;
+  const bodyLinesByKey = new Map<WorkLogStatusUpdateTemplateKey, string[]>(
+    workLogStatusUpdateTemplateSections.map((section) => [section.key, []]),
+  );
+
+  for (const line of lines) {
+    const headingKey = workLogStatusUpdateHeadingKey(line);
+    if (headingKey) {
+      const expectedSection = workLogStatusUpdateTemplateSections[expectedHeadingIndex];
+      if (!expectedSection || headingKey !== expectedSection.key) return null;
+      activeKey = headingKey;
+      expectedHeadingIndex += 1;
+      continue;
+    }
+
+    if (!activeKey) {
+      if (line.trim()) return null;
+      continue;
+    }
+    bodyLinesByKey.get(activeKey)?.push(line);
+  }
+
+  if (expectedHeadingIndex !== workLogStatusUpdateTemplateSections.length) {
+    return null;
+  }
+
+  for (const section of workLogStatusUpdateTemplateSections) {
+    sections[section.key] = (bodyLinesByKey.get(section.key) ?? [])
+      .join("\n")
+      .trim();
+  }
+  return sections;
+}
+
+export function buildWorkLogStatusUpdateMarkdown(
+  body: WorkLogStatusUpdateTemplateBody,
+) {
+  const normalizedBody = workLogStatusUpdateTemplateSections.map((section) => ({
+    ...section,
+    bodyMarkdown: body[section.key].trim(),
+  }));
+  if (normalizedBody.every((section) => !section.bodyMarkdown)) {
+    return workLogStatusUpdateTemplateMarkdown;
+  }
+
+  return normalizedBody
+    .map((section) =>
+      section.bodyMarkdown
+        ? `## ${section.heading}\n\n${section.bodyMarkdown}`
+        : `## ${section.heading}`,
+    )
+    .join("\n\n");
+}
+
+export function workLogBodyMarkdownHasUserContent(markdown: string) {
+  const templateBody = parseWorkLogStatusUpdateMarkdown(markdown);
+  if (templateBody) {
+    return workLogStatusUpdateTemplateSections.some((section) =>
+      orfRichTextHasMeaningfulContent(templateBody[section.key]),
+    );
+  }
+  return orfRichTextHasMeaningfulContent(markdown);
+}
+
+export function workLogBodyMarkdownUserContent(markdown: string) {
+  const templateBody = parseWorkLogStatusUpdateMarkdown(markdown);
+  if (!templateBody) return markdown.trim();
+  return workLogStatusUpdateTemplateSections
+    .map((section) => templateBody[section.key])
+    .filter((sectionBody) => sectionBody.trim())
+    .join("\n\n")
+    .trim();
+}
+
 export function workLogEditorDraftHasContent(draft: WorkLogEditorDraft) {
   return Boolean(
     draft.editingEntryId ||
-      draft.bodyMarkdown.trim() ||
+      workLogBodyMarkdownHasUserContent(draft.bodyMarkdown) ||
       draft.categoryId.trim() ||
       draft.categoryName.trim() ||
       draft.objectiveId.trim() ||
@@ -325,7 +452,7 @@ export function validateWorkLogEditorDraft(
   ) {
     return "请填写目标进度估计";
   }
-  if (!orfRichTextHasMeaningfulContent(entry.bodyMarkdown)) {
+  if (!workLogBodyMarkdownHasUserContent(entry.bodyMarkdown)) {
     return "工作日志内容不能为空";
   }
   return "";
@@ -520,6 +647,12 @@ export function formatWorkLogDurationMinutes(value: number | null | undefined) {
   if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
   if (hours > 0) return `${hours}h`;
   return `${minutes}m`;
+}
+
+export function formatWorkLogProgressEstimate(value: number | null | undefined, options?: { compact?: boolean }) {
+  const progressEstimate = workLogProgressEstimatePercentFromRemaining(value);
+  if (progressEstimate === null) return "";
+  return `${options?.compact ? "进" : "进 "}${progressEstimate}%`;
 }
 
 export function buildWorkLogClassificationChoices(

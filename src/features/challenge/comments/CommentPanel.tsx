@@ -612,7 +612,6 @@ export function CommentBodyText({
   return (
     <OrfRichTextMarkdownViewer
       body={body}
-      classNamePrefix="orf-comment-markdown"
       enableTitleAutolinks
       renderAttachment={renderAttachment}
       renderLink={(href, children, key) => (

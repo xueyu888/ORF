@@ -12,13 +12,17 @@ export type WorkLogSubmissionNotificationInput = {
   workDate: string;
 };
 
+export function workLogSubmissionNotificationBody(input: Pick<WorkLogSubmissionNotificationInput, "authorName" | "workDate">) {
+  return `${input.authorName} 提交了 ${input.workDate} 的工作日志。`;
+}
+
 export async function notifyTeamOfWorkLogSubmission(input: WorkLogSubmissionNotificationInput) {
   const classificationTitle = input.classificationTitle.trim() || "未归类";
   const targetTitle = `${input.workDate} ${input.authorName} 工作日志`;
   await publishNotificationEvent({
     actorName: input.authorName,
     actorUserId: input.authorUserId,
-    body: `${input.authorName} 提交了 ${input.workDate} 的工作日志：${classificationTitle}。`,
+    body: workLogSubmissionNotificationBody(input),
     kind: "worklog.submitted",
     metadata: {
       authorName: input.authorName,
@@ -29,8 +33,8 @@ export async function notifyTeamOfWorkLogSubmission(input: WorkLogSubmissionNoti
       workDate: input.workDate,
     },
     recipientUserIds: await getActiveTeamNotificationRecipients(input.teamId),
-    targetHref: `/work-logs?date=${encodeURIComponent(input.workDate)}&view=today&entry=${encodeURIComponent(input.entryId)}`,
     targetId: input.entryId,
+    targetHref: `/work-logs?date=${encodeURIComponent(input.workDate)}&view=today&entry=${encodeURIComponent(input.entryId)}`,
     targetType: "workLog",
     teamId: input.teamId,
     title: "新的工作日志",

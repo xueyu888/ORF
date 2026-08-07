@@ -50,11 +50,10 @@ test("rich text paste keeps blank-line-separated bold sections outside list cont
 
   const html = renderToStaticMarkup(React.createElement(OrfRichTextMarkdownViewer, {
     body: normalized,
-    classNamePrefix: "orf-work-log-markdown",
     compact: true,
   }));
 
-  assert.doesNotMatch(html, /orf-work-log-markdown-code-block/);
+  assert.doesNotMatch(html, /orf-rich-text-markdown-code-block/);
   assert.match(html, /<strong><span>当前问题： <\/span><\/strong>/);
 });
 
@@ -68,9 +67,21 @@ test("rich text viewer keeps list continuations and nested lists inside one orde
   ].join("\n");
   const html = renderToStaticMarkup(React.createElement(OrfRichTextMarkdownViewer, { body }));
 
-  assert.match(html, /<ol class="orf-rich-text-viewer-list orf-rich-text-markdown-list">/);
+  assert.match(html, /<ol class="orf-rich-text-markdown-list">/);
   assert.equal((html.match(/<ol /g) ?? []).length, 1);
   assert.equal((html.match(/<li/g) ?? []).length, 3);
   assert.match(html, /A 端 15:54 后新对象曾卡在 PENDING/);
-  assert.match(html, /<ul class="orf-rich-text-viewer-list orf-rich-text-markdown-list">/);
+  assert.match(html, /<ul class="orf-rich-text-markdown-list">/);
+});
+
+test("rich text viewer renders headings with shared markdown classes", () => {
+  const html = renderToStaticMarkup(React.createElement(OrfRichTextMarkdownViewer, {
+    body: "## 是的\n\n- 是的",
+    compact: true,
+  }));
+
+  assert.match(html, /<h4 class="orf-rich-text-markdown-heading orf-rich-text-markdown-heading-2 orf-rich-text-markdown-heading-compact">/);
+  for (const prefix of ["chat", "work-log", "comment", "drive"]) {
+    assert.doesNotMatch(html, new RegExp(`orf-${prefix}-markdown`));
+  }
 });

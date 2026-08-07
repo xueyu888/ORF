@@ -151,12 +151,12 @@ function renderCommentNotificationImageAttachment(
   }
 
   if (compact) {
-    return <span key={key} className="orf-chat-markdown-notification-image-compact">图片：{reference.alt}</span>;
+    return <span key={key} className="orf-rich-text-markdown-notification-image-compact">图片：{reference.alt}</span>;
   }
 
   const src = commentAttachmentInlineUrl(reference.attachmentId);
   return (
-    <figure key={key} className="orf-chat-markdown-notification-image">
+    <figure key={key} className="orf-rich-text-markdown-notification-image">
       <a href={src} target="_blank" rel="noreferrer noopener" title={`打开图片 ${reference.alt}`}>
         <img alt={reference.alt} loading="lazy" src={src} />
       </a>
@@ -187,7 +187,6 @@ export function ChatMarkdown({ body, compact = false, commentImageAttachmentIds 
   return (
     <OrfRichTextMarkdownViewer
       body={body}
-      classNamePrefix="orf-chat-markdown"
       compact={compact}
       renderAttachment={allowedCommentImageAttachmentIds.size > 0 ? renderAttachment : undefined}
       renderLink={renderLink}
