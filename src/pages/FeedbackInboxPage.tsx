@@ -1,4 +1,17 @@
-import { CheckCircle2, CircleDot, Clock3, Flag, Inbox, MessageSquare, Plus, RotateCcw, Tag, UserCheck } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  CircleDot,
+  Clock3,
+  Flag,
+  Inbox,
+  MessageSquare,
+  Plus,
+  RotateCcw,
+  SlidersHorizontal,
+  Tag,
+  UserCheck,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -56,6 +69,7 @@ export function FeedbackInboxPage() {
   } = useMemo(() => feedbackIssueListUrlStateFromSearchParams(searchParams), [searchParamSignature, searchParams]);
   const [projectChannels, setProjectChannels] = useState<ProjectChatChannel[]>([]);
   const [projectChannelsLoading, setProjectChannelsLoading] = useState(false);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
   const selectedProject = useMemo(
     () => feedbackData.projects.find((project) => project.id === projectId) ?? null,
     [feedbackData.projects, projectId],
@@ -192,6 +206,16 @@ export function FeedbackInboxPage() {
     authorUserId !== "All" ||
     projectId !== "All" ||
     sort !== "updated-desc";
+  const activeFilterCount = [
+    query.trim().length > 0,
+    listState !== "open",
+    cause !== "All",
+    impact !== "All",
+    assigneeUserId !== "All",
+    authorUserId !== "All",
+    projectId !== "All",
+    sort !== "updated-desc",
+  ].filter(Boolean).length;
 
   const setFilter = (key: string, value: string, defaultValue: string) => {
     const next = new URLSearchParams(searchParams);
@@ -260,7 +284,24 @@ export function FeedbackInboxPage() {
         </section>
       )}
 
-      <div className="feedback-issue-query-panel" aria-label="反馈筛选">
+      <button
+        aria-controls="feedback-issue-query-panel"
+        aria-expanded={filtersExpanded}
+        className="feedback-mobile-filter-toggle"
+        type="button"
+        onClick={() => setFiltersExpanded((value) => !value)}
+      >
+        <span><SlidersHorizontal aria-hidden="true" /> 筛选</span>
+        {activeFilterCount > 0 && <strong>{activeFilterCount}</strong>}
+        <ChevronDown aria-hidden="true" className="feedback-mobile-filter-toggle-chevron" />
+      </button>
+
+      <div
+        id="feedback-issue-query-panel"
+        className="feedback-issue-query-panel"
+        data-expanded={filtersExpanded ? "true" : "false"}
+        aria-label="反馈筛选"
+      >
         <BountySelect label="项目" value={projectId} onChange={(value) => setFilter("project", value, "All")}>
           <option value="All">全部项目</option>
           <option value="unassigned">未归属项目</option>
