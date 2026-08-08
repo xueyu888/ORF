@@ -50,9 +50,9 @@
 | 等级 | 展示效果 | 适合事件 |
 | --- | --- | --- |
 | `badge` | 只显示聊天入口、任务栏和托盘无数字红点；不单独生成“待我处理”入口 | 普通群聊未读、GitHub/GitLab 工程动态、普通系统公告、`objective.published`、`worklog.submitted`、`objective.settled` |
-| `toast` | Windows 右下角系统 Toast；点击进入聊天或业务目标 | 普通回复、我关注的话题有回复、`feedback.commented`、`feedback.status.changed`、`comment.reply.created` |
+| `toast` | Windows 右下角系统 Toast；点击进入聊天或业务目标 | 普通回复、我关注的话题有回复、`comment.reply.created`、业务通知 provider 标记为普通待看提醒的事件 |
 | `flash` | `toast` + Win11 任务栏与右下角托盘的整枚 ORF 图标持续闪烁；窗口不在前台时额外触发系统任务栏提醒 | `comment.mention.created`、私聊、聊天具名 `@我`、`@所有人`、话题内显式提及 |
-| `urgent` | `toast` + 任务栏闪烁 + 右下角托盘图标闪烁 + 托盘置顶入口 + 侧边栏“待我处理”置顶 | `feedback.assigned`、`objective.recruitment.created`、`objective.reinforcement.added`、`objective.alignment.requested`、`objective.loot.submitted`、`objective.peerReview.requested`、`objective.revision.required`、active `WorkLogReminderState`、`data.sync.conflict` |
+| `urgent` | `toast` + 任务栏闪烁 + 右下角托盘图标闪烁 + 托盘置顶入口 + 侧边栏“待我处理”置顶 | 业务通知 provider 标记为 `action_required` 的反馈事件、`objective.recruitment.created`、`objective.reinforcement.added`、`objective.alignment.requested`、`objective.loot.submitted`、`objective.peerReview.requested`、`objective.revision.required`、active `WorkLogReminderState`、`data.sync.conflict` |
 
 默认等级只是初始策略；运行时必须结合当前上下文降级或抑制。
 
@@ -257,7 +257,7 @@ type AttentionState = {
 1. `chatUnreadSummary.totalUnreadCount > 0` 只派生 `badgeCount` 和 `badge`，不增加 `AttentionState.count`，不生成“待我处理”项。
 2. 私聊、聊天具名 `@我`、`@所有人` 和话题内显式提及在 realtime 到达时立即产生 `flash` 意图，再由持久未读汇总接管；两者按消息和提醒类型合并计数，不能重复生成“待我处理”项。普通关注话题回复派生 `toast`，普通聊天未读只派生聊天入口和桌面红点。聊天实时 Toast 仍由聊天原生通知模型一次性投递，强提醒意图只驱动统一注意力状态和托盘/任务栏，不重复弹 Toast。
 3. `worklog.reminder.required` 或 active `WorkLogReminderState` 派生 `urgent`，并通过 `shouldRemindNow` 尊重工作日志自身提醒节奏。
-4. 业务系统通知按 `NotificationKind` 映射为 `badge`、`toast`、`flash` 或 `urgent`；正在查看对应目标时降级为 `badge`。
+4. 业务系统通知按通用 notification presentation 的 attention level 派生为 `badge`、`toast`、`flash` 或 `urgent`；正在查看对应目标时降级为 `badge`。注意力系统不维护反馈专属 `feedback.*` kind 清单。
 5. Win11 托盘菜单提供“打开待处理提醒”，点击后跳转到 `latestTargetPath`；任务栏与托盘共用 `normal/unread/attention` 三态图标事实源，使用适合各自系统槽位的独立逻辑尺寸和同一份四倍超采样渲染。`unread` 只显示无数字红点；`flash/urgent` 且 `count > 0` 时整枚图标在正常帧和高对比提醒帧之间持续闪烁，清空或降级后同步恢复 unread/normal 图标。
 6. 侧边栏新增“待我处理”入口，只在 `AttentionState.count > 0` 时展示数量和轻量面板；通知项点击进入现有聊天系统消息或业务页面前会调用通知已读接口，面板也提供“通知全部已读”用于清理历史未读积压。
 7. 移动端底部导航只在 `AttentionState.count > 0` 时新增 `待办` 入口，不新增独立页面；点击进入最新待处理目标或个人系统通知，最新项是通知时先调用通知已读接口。

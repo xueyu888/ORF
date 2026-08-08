@@ -473,13 +473,13 @@
               </article>
               <article class="module-card">
                 <h3>反馈详情评论</h3>
-                <p>反馈首条正文、后续评论、编辑和回复复用评论适配层。</p>
+                <p>后续讨论、编辑和回复复用评论适配层；原始报告属于反馈模块。</p>
                 <div class="tag-row"><span class="tag">反馈 issue</span><span class="tag">时间线</span></div>
               </article>
               <article class="module-card">
                 <h3>新建反馈</h3>
-                <p>特殊点是提交前没有正式评论，所以附件先走 pending 引用。</p>
-                <div class="tag-row"><span class="tag">pending 附件</span><span class="tag">multipart</span></div>
+                <p>原始报告和报告附件由反馈模块提交；pending 引用只表达报告附件位置。</p>
+                <div class="tag-row"><span class="tag">报告附件</span><span class="tag">multipart</span></div>
               </article>
             </div>
           </section>
@@ -501,9 +501,9 @@
                 <div class="tag-row"><span class="tag">挑战评论</span><span class="tag">反馈评论</span></div>
               </article>
               <article class="module-card">
-                <h3>feedbackInitialAdapter</h3>
-                <p>处理新建反馈首条正文的 pending 附件：文件注册、预览 URL、提交映射。</p>
-                <div class="tag-row"><span class="tag">pending -> 正式附件</span></div>
+                <h3>feedbackReportAdapter</h3>
+                <p>处理新建反馈原始报告的 pending 附件：文件注册、预览 URL、提交映射。</p>
+                <div class="tag-row"><span class="tag">pending -> 报告附件</span></div>
               </article>
               <article class="module-card">
                 <h3>plainMarkdownAdapter</h3>

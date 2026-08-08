@@ -22,7 +22,7 @@
 2. 编辑态事实源是 `OrfRichTextDraft`；`draft.text` 是用户可见文本，`draft.mentions` 和 `draft.attachments` 是可序列化的业务引用。
 3. textarea、选区、提及候选、上传状态和链接草稿只是临时 UI 状态；当前块类型始终从 `draft.text` 和选区派生。
 4. `@[显示名](orf-user:{userId})` 是用户提及事实，业务只信 token 里的 `userId`。
-5. 评论附件正文使用 `![alt](orf-attachment:{id})` 或新建反馈阶段的 `orf-pending-attachment:{clientId}`。
+5. 评论附件正文使用 `![alt](orf-attachment:{id})`；反馈原始报告创建阶段可以临时使用 `orf-pending-attachment:{clientId}` 表达报告附件位置，但该附件最终属于反馈报告附件事实源，不属于评论附件事实源。
 6. Chat 文件附件不是正文 token，仍由 Chat 的 `attachmentIds` 和 `message.attachments` 管理。
 7. `attachment.contentUrl`、`attachment.previewUrl`、`attachment.downloadUrl`、本地 object URL 和图片 `src` 都只是展示状态，不写入正文。
 8. Chat 的 `@所有人` 是广播纯文本，服从后端广播匹配规则，不伪装成 `orf-user` token。
@@ -39,20 +39,25 @@
 | `OrfRichTextEditor.tsx` | 通用 Markdown 编辑器外壳、工具栏、提及菜单、链接编辑、附件上传插槽、文件插入回调 | 决定附件属于评论还是 Chat |
 | `OrfRichTextDraftEditor.tsx` | Draft 编辑适配：用户只编辑可见文本，提及和附件插入同步写入 Draft 引用 | 业务提交流程、附件文件持久化 |
 | `OrfRichTextMarkdownViewer.tsx` | 通用 Markdown block/inline 渲染、嵌套 mark 展示、链接/提及/附件渲染插槽、可选标题链接兼容 | 决定聊天反馈链接或评论附件预览的业务行为 |
-| `CommentPanel.tsx` | 评论/反馈草稿状态、回复/编辑状态、评论提交；组合 DraftEditor 和 viewer | 重复维护 token 正则或接管 Draft 内部引用 |
+| `CommentPanel.tsx` | 评论草稿状态、回复/编辑状态、评论提交；在反馈详情中只承担后续讨论输入，不拥有反馈原始报告 | 重复维护 token 正则或接管 Draft 内部引用 |
 | `chatRichTextDraftModel.ts` | Chat 草稿和 ORF Markdown 的转换、广播提及候选和纯文本提及边界 | UI 事件、发送副作用 |
 | `ChatDraftEditor.tsx` | Chat 专用编辑适配：广播提及、表情、历史召回、最近消息快捷键、预览和发送状态 | 重复实现富文本编辑器 |
 | `chatMarkdown.tsx` | Chat 专用展示适配：反馈链接、站内路由链接、系统广播提及 | 重复实现 Markdown block/inline 解析 |
 
 ## 接入面
 
-评论和反馈：
+评论：
 
 - 草稿事实源是 `OrfRichTextDraft`，不是裸 `body` 字符串。
 - 附件上传成功后，编辑区显示 `附件：文件名`，Draft 记录 attached 或 pending 引用；提交时统一序列化为正文中的附件 token。
-- 新建反馈只按 Draft 中仍有效的 pending 附件引用提交文件，不再用 `body.includes(...)` 判断附件是否被引用。
 - 编辑历史评论时，正文 token 反解析为可读文本和 Draft 引用；已上传附件的预览 URL 来自 `message.attachments`。
 - 展示历史评论时，正文通过共享 viewer 渲染；评论层只注入成员提及、外链点击、标题链接兼容和附件预览/下载行为。
+
+反馈原始报告：
+
+- 可复用 Draft 编辑体验和 pending 附件位置模型，但提交给反馈模块的是 `description` 与报告附件文件。
+- 报告附件提交后归 `feedback_report_attachments`，后续展示使用反馈报告附件投影；不能把原始报告伪装成评论首消息，也不能从 `comment_attachments` 回填反馈报告。
+- 新建反馈只按 Draft 中仍有效的 pending 附件引用提交文件，不再用 `body.includes(...)` 判断附件是否被引用。
 
 Chat：
 

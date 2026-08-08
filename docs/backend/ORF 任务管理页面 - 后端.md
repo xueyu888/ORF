@@ -43,10 +43,10 @@
 | `PATCH`  | `/api/results/:resultId/confidence`                                          | 更新指标信心 |
 | `PATCH`  | `/api/results/:resultId/order`                                               | 更新指标在同目标内的排序 |
 | `GET`    | `/api/feedback/assignees`                                                    | 返回当前作用域内可作为反馈处理人的 active 成员最小展示资料：`id`、`name`、`avatarUrl`；不返回邮箱、角色或成员管理字段                 |
-| `POST`   | `/api/feedback`                                                              | 创建团队级内部反馈 issue，记录 `createdBy`、处理人、可空 `projectId`，并同步创建首条评论正文和可选附件；新反馈不接收目标或指标绑定                 |
-| `PATCH`  | `/api/feedback/:feedbackId/metadata`                                         | 更新反馈标题、分类、影响和可空项目；Open 反馈允许管理员、创建人、处理人编辑，Closed 反馈只有管理员可编辑                                          |
-| `PATCH`  | `/api/feedback/:feedbackId/assignee`                                         | 更新反馈处理人；Open 反馈允许当前作用域内 active 成员改派，Closed 反馈只有管理员可改派，处理人必须是当前作用域内 active 成员                       |
-| `PATCH`  | `/api/feedback/:feedbackId/status`                                           | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行                                                                                               |
+| `POST`   | `/api/feedback`                                                              | 创建团队级内部反馈 issue，写入反馈主体、原始报告正文、报告附件、处理人和可空 `projectId`；新反馈不接收目标或指标绑定，也不创建评论首消息           |
+| `PATCH`  | `/api/feedback/:feedbackId/metadata`                                         | 更新反馈标题、原始报告、分类、影响、优先级和可空项目；必须携带 `expectedVersion`，权限以反馈模块返回的 capabilities 和后端领域策略为准            |
+| `PATCH`  | `/api/feedback/:feedbackId/assignee`                                         | 更新反馈处理人；处理人必须是当前作用域内 active 成员，权限以反馈模块返回的 capabilities 和后端领域策略为准                                       |
+| `POST`   | `/api/feedback/:feedbackId/transitions`                                      | 执行具名生命周期转换，例如开始处理、提交验证、确认、退回、撤回或重新打开；必须携带 `expectedVersion`，不得传任意目标状态                         |
 | `GET`    | `/api/feedback/:feedbackId/subscription`                                     | 返回当前用户对该反馈的订阅状态：`none`、`participating`、`subscribed` 或 `muted`                                                                   |
 | `PUT`    | `/api/feedback/:feedbackId/subscription`                                     | 设置当前用户对该反馈的显式订阅状态：`subscribed`、`muted` 或清除显式状态 `none`                                                                    |
 | `POST`   | `/api/tasks`                                                                 | 在目标下创建任务并返回 `{ task }`；候选、重估和冻结目标可维护任务                                                                                  |
@@ -223,11 +223,11 @@ type ObjectiveFlowStatus =
 - 目标内容只能由指挥官修改。
 - 指挥官可以编辑未冻结目标下指标。
 - 挑战者只能在未过期 `reestimating` 状态提出、编辑或删除自己参与目标下的指标；超过 `confirmationDueAt` 或目标冻结后均不可调整。该指标维护能力不授予 `objective.delete`，挑战者不能删除目标。
-- 反馈状态只能由管理员、反馈创建人或 `ownerUserId` 指定处理人更新；普通成员不能关闭或改写他人反馈状态。
+- 反馈生命周期只能通过 `/api/feedback/:feedbackId/transitions` 的具名命令推进；前端只渲染反馈读模型返回的 capabilities，不能自行用 Open/Closed、创建人或处理人判断按钮权限。
 - 反馈创建以当前默认团队作用域为边界；active 团队成员可以创建不绑定目标或指标的内部反馈，反馈事实只写入团队反馈 issue。
 - 反馈处理人候选读模型来自 `/api/feedback/assignees`，只暴露当前作用域 active 成员的最小展示资料，供新建反馈和反馈详情改派共用；管理员成员管理列表 `/api/users` 不作为普通成员页面的数据源。
-- 反馈处理人只能通过 `/api/feedback/:feedbackId/assignee` 写入 `Feedback.ownerUserId`；Open 反馈允许当前作用域内 active 成员自由改派，Closed 反馈只有管理员可改派。
-- 反馈 `ownerUserId` 必须是当前默认作用域内 `active` 成员；停用、待审核、拒绝或不存在的用户不能成为反馈处理人。
+- 反馈处理人只能通过 `/api/feedback/:feedbackId/assignee` 写入 `Feedback.assigneeUserId`；处理人必须是当前默认作用域内 `active` 成员。
+- 停用、待审核、拒绝或不存在的用户不能成为反馈处理人。
 - 指标更新提案不接受 `feedbackId`，不会改写反馈状态；指标更新只影响结果和结果评论审计。
 - 任务创建基于目标授权和排序，不要求关联指标，也不接受反馈来源；反馈不会被挂成任务来源。
 - 任务和子任务维护权限以 `Objective.challengerUserIds` 为身份边界；同一目标正式挑战者可以共同新增、编辑、勾选、移动和删除目标下任务与子任务，旁观成员返回 403，指挥官/管理员可维护任意目标任务。
