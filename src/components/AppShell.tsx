@@ -1,7 +1,7 @@
 import { Flag, MessageSquarePlus, Search, Shield } from "lucide-react";
 import { Outlet, useLocation } from "react-router-dom";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
-import { canCreateTeamFeedback } from "@orf/feedback-module/web";
+import { canCreateTeamFeedback } from "@orf/feedback-module/contracts";
 import { Sidebar } from "./Sidebar";
 import { VisualBackgroundSlot } from "./VisualBackgroundSlot";
 import { Button } from "./ui";

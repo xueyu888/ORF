@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export * from "./links";
+export * from "./capabilities";
 export * from "./categories";
 export * from "./commandResult";
 export * from "./labels";

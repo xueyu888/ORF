@@ -162,7 +162,6 @@ export {
   getFeedbackReferences,
 } from "../web/api";
 export type { FeedbackReferenceSummary } from "../web/types";
-export { canCreateTeamFeedback } from "../web/model/capabilities";
 export {
   useFeedbackDashboardSummary,
 } from "../web/hooks";

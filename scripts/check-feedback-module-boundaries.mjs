@@ -177,6 +177,8 @@ async function checkWebPublicBoundary() {
     "FeedbackWebRelation",
     "FeedbackWebSession",
     "FeedbackWebUserSummary",
+    "canCreateTeamFeedback",
+    "canImportExportTeamFeedback",
     "feedbackImpactLabel",
     "feedbackIssueBodyPreview",
     "feedbackIssueDisplayId",

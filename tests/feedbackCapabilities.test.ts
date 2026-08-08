@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canCreateTeamFeedback } from "@orf/feedback-module/web";
+import { canCreateTeamFeedback } from "@orf/feedback-module/contracts";
 import type { OrfUser } from "../src/types/orf";
 
 test("feedback creation follows the active-user frontend gate", () => {
