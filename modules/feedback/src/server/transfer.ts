@@ -10,13 +10,19 @@ import {
   feedbackImportOrigins,
 } from "../infrastructure/database/schema";
 import {
-  type FeedbackWriteActor,
   type FeedbackWriteClient,
   type FeedbackWriteDatabase,
 } from "./writeModel";
 import { feedbackNowIso, makeFeedbackActivityId, makeFeedbackId } from "./ids";
 
 type FeedbackTransferDatabase = NodePgDatabase<any> & FeedbackWriteDatabase;
+
+export type FeedbackImportActor = {
+  readonly id: string;
+  readonly role: "admin" | "member";
+  readonly status: "active" | "inactive";
+  readonly teamId: string;
+};
 
 export type FeedbackImportMessage = {
   field?: string;
@@ -317,7 +323,7 @@ function userReferenceMapping(user: FeedbackIssueReadModelData["users"][number])
 export async function preflightFeedbackImport(
   database: FeedbackTransferDatabase,
   input: {
-    actor: FeedbackWriteActor;
+    actor: FeedbackImportActor;
     body: Buffer;
     fileName: string;
     knownAssigneeUserIds: ReadonlySet<string>;
@@ -350,7 +356,7 @@ export async function preflightFeedbackImport(
 export async function preflightFeedbackImportZip(
   database: FeedbackTransferDatabase,
   input: {
-    actor: FeedbackWriteActor;
+    actor: FeedbackImportActor;
     body: Buffer;
     fileName: string;
     knownAssigneeUserIds: ReadonlySet<string>;
@@ -402,7 +408,7 @@ export async function preflightFeedbackImportZip(
 export async function preflightFeedbackImportCsv(
   database: FeedbackTransferDatabase,
   input: {
-    actor: FeedbackWriteActor;
+    actor: FeedbackImportActor;
     fileName: string;
     knownAssigneeUserIds: ReadonlySet<string>;
     knownProjectIds: ReadonlySet<string>;
@@ -521,7 +527,7 @@ export async function preflightFeedbackImportCsv(
 export async function commitFeedbackImportBatch(
   database: FeedbackTransferDatabase,
   input: {
-    actor: FeedbackWriteActor;
+    actor: FeedbackImportActor;
     batchId: string;
   },
 ): Promise<FeedbackImportCommitResult> {
@@ -616,7 +622,7 @@ export async function commitFeedbackImportBatch(
 async function createImportedFeedbackIssue(
   database: Pick<FeedbackWriteClient, "insert">,
   input: {
-    actor: FeedbackWriteActor;
+    actor: FeedbackImportActor;
     batchId: string;
     createdAt: string;
     record: FeedbackImportRecord;

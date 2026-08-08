@@ -17,7 +17,7 @@ import {
   getFeedbackSubscriptionMode,
   preflightFeedbackImport,
   setFeedbackSubscriptionMode,
-  type FeedbackWriteActor,
+  type FeedbackImportActor,
 } from "@orf/feedback-module/server";
 import { requireFeedbackInScope, requireUserScopeContext } from "../auth/accessPolicy";
 import { db } from "../db/client";
@@ -152,7 +152,7 @@ function commandActor(context: NonNullable<Awaited<ReturnType<typeof requireUser
   };
 }
 
-function feedbackWriteActor(context: NonNullable<Awaited<ReturnType<typeof requireUserScopeContext>>>): FeedbackWriteActor {
+function feedbackImportActor(context: NonNullable<Awaited<ReturnType<typeof requireUserScopeContext>>>): FeedbackImportActor {
   return {
     id: context.user.id,
     role: context.user.role,
@@ -169,7 +169,7 @@ function requireActiveFeedbackTransferActor(
     reply.code(403).send({ error: "Only active members can import or export feedback" });
     return null;
   }
-  return feedbackWriteActor(context);
+  return feedbackImportActor(context);
 }
 
 async function readCreateFeedbackBody(request: FastifyRequest) {

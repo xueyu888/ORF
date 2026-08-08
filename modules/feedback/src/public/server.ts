@@ -61,7 +61,6 @@ export {
   type FeedbackCommandResult,
   type FeedbackTargetTitleSync,
   type FeedbackTransitionNotificationDispatchFactory,
-  type FeedbackWriteActor,
 } from "../server/writeModel";
 export {
   buildFeedbackBackupZip,
@@ -69,6 +68,7 @@ export {
   feedbackBackupZipFileName,
   preflightFeedbackImport,
   type FeedbackBackupAttachmentFile,
+  type FeedbackImportActor,
 } from "../server/transfer";
 
 export interface FeedbackServerHost {
