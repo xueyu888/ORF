@@ -27,9 +27,11 @@ export {
   insertFeedbackNotificationDispatch,
   publishFeedbackNotificationDispatch,
   startFeedbackNotificationDispatchWorker,
-  type FeedbackNotificationDispatchDraft,
-  type FeedbackNotificationPort,
 } from "../server/notificationDispatch";
+export type {
+  FeedbackNotificationDispatchDraft,
+  FeedbackNotificationPort,
+} from "../server/notificationProtocol";
 export {
   buildFeedbackAssigneeChangedNotificationDispatch,
   buildFeedbackCommentCreatedNotificationDispatch,

@@ -1,6 +1,6 @@
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { FeedbackResolution, FeedbackStage } from "../contracts";
-import type { FeedbackNotificationDispatchDraft } from "./notificationDispatch";
+import type { FeedbackNotificationDispatchDraft } from "./notificationProtocol";
 
 export type FeedbackWriteClient = Pick<NodePgDatabase<any>, "delete" | "insert" | "select" | "update">;
 

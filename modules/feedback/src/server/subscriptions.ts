@@ -5,8 +5,8 @@ import { feedback, feedbackParticipants, feedbackSubscriptions } from "../infras
 import {
   feedbackNotificationRecipient,
   mergeFeedbackNotificationDispatchRecipients,
-  type FeedbackNotificationDispatchRecipient,
 } from "./notificationDispatch";
+import type { FeedbackNotificationDispatchRecipient } from "./notificationProtocol";
 
 export type ExplicitFeedbackSubscriptionMode = "subscribed" | "muted";
 export type FeedbackSubscriptionMutationMode = ExplicitFeedbackSubscriptionMode | "none";

@@ -1,20 +1,19 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { feedbackNotificationEventPlanSchema, type FeedbackNotificationEventPlan } from "../contracts";
+import type {
+  FeedbackNotificationAttentionLevel,
+  FeedbackNotificationDeliveryClass,
+  FeedbackNotificationDispatchDraft,
+  FeedbackNotificationDispatchRecipient,
+  FeedbackNotificationPort,
+  FeedbackNotificationRecipientReason,
+} from "./notificationProtocol";
 import {
   feedbackEventDispatches,
   feedbackEventDispatchRecipients,
 } from "../infrastructure/database/schema";
 import { feedbackNowIso, makeFeedbackDispatchId } from "./ids";
-
-export type FeedbackNotificationRecipientReason =
-  | "action_required"
-  | "administrator"
-  | "assignee"
-  | "creator"
-  | "follower"
-  | "participant"
-  | "previous_assignee";
 
 const feedbackNotificationRecipientReasonValues = [
   "action_required",
@@ -27,36 +26,6 @@ const feedbackNotificationRecipientReasonValues = [
 ] satisfies FeedbackNotificationRecipientReason[];
 
 const feedbackNotificationRecipientReasonSet = new Set<string>(feedbackNotificationRecipientReasonValues);
-
-export type FeedbackNotificationDeliveryClass = "direct" | "mandatory" | "ordinary";
-export type FeedbackNotificationAttentionLevel = "action_required" | "normal";
-
-export type FeedbackNotificationDispatchRecipient = {
-  readonly attentionLevel: FeedbackNotificationAttentionLevel;
-  readonly deliveryClass: FeedbackNotificationDeliveryClass;
-  readonly muted?: boolean;
-  readonly reasons: readonly FeedbackNotificationRecipientReason[];
-  readonly userId: string;
-};
-
-export type FeedbackNotificationDispatchDraft = {
-  readonly plan: FeedbackNotificationEventPlan;
-  readonly recipients: readonly FeedbackNotificationDispatchRecipient[];
-};
-
-export type FeedbackNotificationPortResult = {
-  readonly notificationEventId?: string | null;
-};
-
-export type FeedbackNotificationPort = (
-  plan: FeedbackNotificationEventPlan,
-  context: {
-    readonly activityEventId: string;
-    readonly dispatchId: string;
-    readonly idempotencyKey: string;
-    readonly recipients: readonly FeedbackNotificationDispatchRecipient[];
-  },
-) => Promise<FeedbackNotificationPortResult>;
 
 export type FeedbackNotificationDispatchDatabase = Pick<NodePgDatabase<any>, "insert" | "select" | "update">;
 

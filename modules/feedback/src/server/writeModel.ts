@@ -32,8 +32,8 @@ import {
 } from "./ids";
 import {
   insertFeedbackNotificationDispatch,
-  type FeedbackNotificationDispatchDraft,
 } from "./notificationDispatch";
+import type { FeedbackNotificationDispatchDraft } from "./notificationProtocol";
 import { upsertFeedbackParticipants } from "./participants";
 import type { FeedbackCommandResult } from "./commandResult";
 import type {

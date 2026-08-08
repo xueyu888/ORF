@@ -6,9 +6,11 @@ import {
 } from "../contracts";
 import {
   buildFeedbackNotificationDispatchDraft,
-  type FeedbackNotificationDispatchDraft,
-  type FeedbackNotificationDispatchRecipient,
 } from "./notificationDispatch";
+import type {
+  FeedbackNotificationDispatchDraft,
+  FeedbackNotificationDispatchRecipient,
+} from "./notificationProtocol";
 
 type CreatedNotificationInput = Parameters<typeof planFeedbackCreatedNotification>[0];
 type LifecycleChangedNotificationInput = Parameters<typeof planFeedbackLifecycleChangedNotification>[0];
