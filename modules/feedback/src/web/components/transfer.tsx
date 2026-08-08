@@ -28,8 +28,7 @@ export function FeedbackTransferMenu({
 }: FeedbackTransferMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-
-  if (!canImportExport) return null;
+  const unavailableReason = "当前账号没有导入导出权限";
 
   return (
     <div className="feedback-transfer-menu">
@@ -37,6 +36,7 @@ export function FeedbackTransferMenu({
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         className="feedback-transfer-trigger"
+        data-unavailable={canImportExport ? undefined : "true"}
         onClick={() => setMenuOpen((value) => !value)}
         variant="secondary"
       >
@@ -46,11 +46,15 @@ export function FeedbackTransferMenu({
       </FeedbackButton>
       {menuOpen && (
         <div className="feedback-transfer-popover" role="menu">
+          {!canImportExport && (
+            <p className="feedback-transfer-unavailable" role="note">{unavailableReason}</p>
+          )}
           <button
-            disabled={csvDisabled}
+            disabled={!canImportExport || csvDisabled}
             role="menuitem"
             type="button"
             onClick={() => {
+              if (!canImportExport) return;
               setMenuOpen(false);
               void onExportCurrentViewCsv();
             }}
@@ -58,18 +62,27 @@ export function FeedbackTransferMenu({
             <FileDown aria-hidden="true" />
             <span>导出当前视图 CSV</span>
           </button>
-          <a
-            href="/api/feedback/exports/backup.zip"
-            role="menuitem"
-            onClick={() => setMenuOpen(false)}
-          >
-            <DatabaseBackup aria-hidden="true" />
-            <span>导出完整备份 ZIP</span>
-          </a>
+          {canImportExport ? (
+            <a
+              href="/api/feedback/exports/backup.zip"
+              role="menuitem"
+              onClick={() => setMenuOpen(false)}
+            >
+              <DatabaseBackup aria-hidden="true" />
+              <span>导出完整备份 ZIP</span>
+            </a>
+          ) : (
+            <button disabled role="menuitem" type="button">
+              <DatabaseBackup aria-hidden="true" />
+              <span>导出完整备份 ZIP</span>
+            </button>
+          )}
           <button
+            disabled={!canImportExport}
             role="menuitem"
             type="button"
             onClick={() => {
+              if (!canImportExport) return;
               setMenuOpen(false);
               setImportOpen(true);
             }}
