@@ -2,11 +2,14 @@ import type {
   OrfWebModuleCommandItem,
   OrfWebModuleContribution,
 } from "@orf/module-protocol";
+import type { AnyChatReferenceCardRegistration } from "../features/chat/chatReferenceCardProvider";
 import type { OrfUser } from "../types/orf";
 import { feedbackWebContribution } from "../feedback/feedbackWebContribution";
 
 type RegisteredWebModuleUser = Pick<OrfUser, "role" | "status">;
-type RegisteredWebModule = OrfWebModuleContribution<RegisteredWebModuleUser>;
+type RegisteredWebModule = OrfWebModuleContribution<RegisteredWebModuleUser> & {
+  readonly chatReferenceCards?: readonly AnyChatReferenceCardRegistration[];
+};
 export type RegisteredWebModuleCommandItem = OrfWebModuleCommandItem;
 
 const feedbackWebModule = feedbackWebContribution satisfies RegisteredWebModule;
@@ -23,6 +26,10 @@ export const registeredWebModuleCommandSearches = registeredWebModules.flatMap((
 
 export const registeredWebModulePreloads = registeredWebModules.flatMap((module) =>
   module.preload ? [module.preload] : [],
+);
+
+export const registeredWebModuleChatReferenceCards = registeredWebModules.flatMap((module) =>
+  module.chatReferenceCards ?? [],
 );
 
 export function webModuleBreadcrumb(pathname: string) {

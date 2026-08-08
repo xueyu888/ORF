@@ -8,6 +8,7 @@ import {
   type FeedbackWebHost,
   type FeedbackWebUser,
 } from "@orf/feedback-module/web";
+import type { AnyChatReferenceCardRegistration } from "../features/chat/chatReferenceCardProvider";
 import type { FormEvent } from "react";
 import { ImagePreviewDialog, type ImagePreview } from "../components/ImagePreviewDialog";
 import { UserAvatar } from "../components/UserAvatar";
@@ -27,6 +28,7 @@ import { validOrfRichTextDraftAttachments, type OrfRichTextDraft } from "../feat
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useOrf } from "../state/OrfProvider";
 import type { CommentAttachment } from "../types/orf";
+import { feedbackChatReferenceCardRegistration } from "./feedbackChatReferenceCardProvider";
 
 const feedbackWebHost: FeedbackWebHost = {
   components: {
@@ -72,7 +74,12 @@ const feedbackWebHost: FeedbackWebHost = {
   },
 };
 
-export const feedbackWebContribution = createFeedbackWebContribution(feedbackWebHost);
+export const feedbackWebContribution = {
+  ...createFeedbackWebContribution(feedbackWebHost),
+  chatReferenceCards: [feedbackChatReferenceCardRegistration],
+} satisfies ReturnType<typeof createFeedbackWebContribution> & {
+  readonly chatReferenceCards: readonly AnyChatReferenceCardRegistration[];
+};
 
 function FeedbackCommentBodyText({
   attachments,

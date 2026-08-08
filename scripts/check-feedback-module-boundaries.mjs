@@ -38,6 +38,7 @@ await checkPackageExports();
 await checkServerPublicBoundary();
 await checkWebPublicBoundary();
 await checkHostFeedbackNotificationBoundary();
+await checkHostFeedbackChatReferenceBoundary();
 await checkHostCommentTargetBoundary();
 await checkHostDriveFeedbackBoundary();
 await checkFeedbackLegacyRemovalBoundary();
@@ -236,6 +237,20 @@ async function checkHostFeedbackNotificationBoundary() {
   const attentionModelSource = await fs.readFile(attentionModelPath, "utf8");
   if (attentionModelSource.includes("feedbackNotificationEventKindValues") || attentionModelSource.includes("FeedbackNotificationEventKind")) {
     errors.push("src/features/attention/attentionModel.ts must not import feedback notification kind lists; consume generic attention fields from notifications.");
+  }
+}
+
+async function checkHostFeedbackChatReferenceBoundary() {
+  const chatSystemReferencesPath = path.join(rootDir, "src", "features", "chat", "chatSystemReferenceCards.tsx");
+  const chatSystemReferencesSource = await fs.readFile(chatSystemReferencesPath, "utf8");
+  if (chatSystemReferencesSource.includes("feedbackChatReferenceCardProvider") || chatSystemReferencesSource.includes("../../feedback/")) {
+    errors.push("src/features/chat/chatSystemReferenceCards.tsx must not import feedback chat reference providers directly; collect them from the Web module registry.");
+  }
+
+  const feedbackWebContributionPath = path.join(rootDir, "src", "feedback", "feedbackWebContribution.tsx");
+  const feedbackWebContributionSource = await fs.readFile(feedbackWebContributionPath, "utf8");
+  if (!feedbackWebContributionSource.includes("chatReferenceCards") || !feedbackWebContributionSource.includes("feedbackChatReferenceCardRegistration")) {
+    errors.push("src/feedback/feedbackWebContribution.tsx must expose the feedback chat reference provider through the feedback Web contribution.");
   }
 }
 

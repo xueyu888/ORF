@@ -63,6 +63,8 @@ export type ChatReferenceCardRegistration<TReference> = {
   readonly renderMessageBody?: (message: ChatMessage) => string | null | undefined;
 };
 
+export type AnyChatReferenceCardRegistration = ChatReferenceCardRegistration<any>;
+
 export type RegisteredChatReferenceCardRegistration = {
   readonly cacheKey?: (reference: unknown) => string;
   readonly placeholder: (reference: unknown) => ChatReferenceCardModel;
