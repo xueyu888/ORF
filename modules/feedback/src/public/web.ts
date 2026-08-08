@@ -1,4 +1,11 @@
 import { createElement, type ComponentType } from "react";
+import type {
+  OrfWebModuleCommandItem,
+  OrfWebModuleCommandSearch,
+  OrfWebModuleContribution,
+  OrfWebModuleRoute,
+  OrfWebModuleRouteDefinition,
+} from "@orf/module-protocol";
 import {
   feedbackCreateBasePath,
   feedbackCreatePath,
@@ -16,41 +23,20 @@ import { FeedbackIssuePage } from "../web/pages/FeedbackIssuePage";
 import { FeedbackLabelsPage } from "../web/pages/FeedbackLabelsPage";
 import type { FeedbackWebUser } from "../web/types";
 
-export interface FeedbackWebRouteContribution {
-  readonly id: string;
-  readonly path: string;
-  readonly routePath: string;
-  readonly title: string;
-}
-
 export interface FeedbackWebNavigationContribution {
   readonly label: "反馈";
   readonly path: "/feedback";
 }
 
-export interface FeedbackWebCommandItem {
-  readonly label: string;
-  readonly path: string;
-  readonly searchText: string;
+export type FeedbackWebCommandItem = OrfWebModuleCommandItem & {
   readonly type: "Feedback";
-}
+};
 
-export interface FeedbackWebCommandSearchContext {
-  readonly currentUser: Pick<FeedbackWebUser, "role" | "status"> | null;
-}
+type FeedbackWebCommandUser = Pick<FeedbackWebUser, "role" | "status">;
+type FeedbackWebCommandContribution = OrfWebModuleCommandSearch<FeedbackWebCommandUser>;
+type FeedbackWebRouteContribution = OrfWebModuleRouteDefinition;
 
-export interface FeedbackWebCommandSearchOptions {
-  readonly limit?: number;
-  readonly signal?: AbortSignal;
-}
-
-export interface FeedbackWebCommandContribution {
-  readonly minQueryLength?: number;
-  readonly canSearch?: (context: FeedbackWebCommandSearchContext) => boolean;
-  search(query: string, options: FeedbackWebCommandSearchOptions): Promise<readonly FeedbackWebCommandItem[]>;
-}
-
-export interface FeedbackWebContributionDefinition {
+export interface FeedbackWebContributionDefinition extends Omit<OrfWebModuleContribution<FeedbackWebCommandUser>, "routes"> {
   readonly id: "feedback";
   readonly navigation: FeedbackWebNavigationContribution;
   readonly commands: readonly FeedbackWebCommandContribution[];
@@ -63,17 +49,10 @@ export interface FeedbackWebContributionDefinition {
   readonly actions: {
     readonly createPath: "/feedback/new";
   };
-  breadcrumb(pathname: string): string | null;
-  preload(): Promise<void>;
 }
 
-export interface FeedbackWebContribution extends FeedbackWebContributionDefinition {
-  readonly pages: {
-    readonly Create: ComponentType;
-    readonly Detail: ComponentType;
-    readonly Inbox: ComponentType;
-    readonly Labels: ComponentType;
-  };
+export interface FeedbackWebContribution extends Omit<FeedbackWebContributionDefinition, "routes"> {
+  readonly routes: readonly OrfWebModuleRoute[];
 }
 
 export const feedbackWebContribution: FeedbackWebContributionDefinition = {
@@ -159,12 +138,12 @@ export function createFeedbackWebContribution(host: FeedbackWebHost): FeedbackWe
 
   return {
     ...feedbackWebContribution,
-    pages: {
-      Create: withHost(FeedbackCreatePage),
-      Detail: withHost(FeedbackIssuePage),
-      Inbox: withHost(FeedbackInboxPage),
-      Labels: withHost(FeedbackLabelsPage),
-    },
+    routes: [
+      { ...feedbackWebContribution.routes.inbox, Page: withHost(FeedbackInboxPage) },
+      { ...feedbackWebContribution.routes.create, Page: withHost(FeedbackCreatePage) },
+      { ...feedbackWebContribution.routes.labels, Page: withHost(FeedbackLabelsPage) },
+      { ...feedbackWebContribution.routes.detail, Page: withHost(FeedbackIssuePage) },
+    ],
   };
 }
 

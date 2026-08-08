@@ -12,6 +12,7 @@
     "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
+      "@orf/module-protocol": ["packages/module-protocol/src/index.ts"],
       "@orf/feedback-module/contracts": ["modules/feedback/src/public/contracts.ts"],
       "@orf/feedback-module/server": ["modules/feedback/src/public/server.ts"],
       "@orf/feedback-module/web": ["modules/feedback/src/public/web.ts"],
@@ -24,6 +25,6 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "modules", "server", "scripts", "drizzle.config.ts"],
+  "include": ["src", "modules", "packages", "server", "scripts", "drizzle.config.ts"],
   "references": []
 }

@@ -9,7 +9,8 @@
   "type": "module",
   "packageManager": "npm@10.9.2",
   "workspaces": [
-    "modules/*"
+    "modules/*",
+    "packages/*"
   ],
   "scripts": {
     "orf": "node scripts/with-public-ca.mjs node bin/orf.mjs",

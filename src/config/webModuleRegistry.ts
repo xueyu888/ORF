@@ -1,64 +1,15 @@
-import type { ComponentType } from "react";
+import type {
+  OrfWebModuleCommandItem,
+  OrfWebModuleContribution,
+} from "@orf/module-protocol";
 import type { OrfUser } from "../types/orf";
 import { feedbackWebContribution } from "../feedback/feedbackWebContribution";
 
-export type RegisteredWebModuleCommandItem = {
-  readonly label: string;
-  readonly path: string;
-  readonly searchText: string;
-  readonly type: string;
-};
+type RegisteredWebModuleUser = Pick<OrfUser, "role" | "status">;
+type RegisteredWebModule = OrfWebModuleContribution<RegisteredWebModuleUser>;
+export type RegisteredWebModuleCommandItem = OrfWebModuleCommandItem;
 
-export type RegisteredWebModuleCommandSearchContext = {
-  readonly currentUser: Pick<OrfUser, "role" | "status"> | null;
-};
-
-export type RegisteredWebModuleCommandSearchOptions = {
-  readonly limit?: number;
-  readonly signal?: AbortSignal;
-};
-
-export type RegisteredWebModuleCommandSearch = {
-  readonly minQueryLength?: number;
-  readonly canSearch?: (context: RegisteredWebModuleCommandSearchContext) => boolean;
-  search(query: string, options: RegisteredWebModuleCommandSearchOptions): Promise<readonly RegisteredWebModuleCommandItem[]>;
-};
-
-export type RegisteredWebModuleRoute = {
-  readonly id: string;
-  readonly Page: ComponentType;
-  readonly path: string;
-  readonly routePath: string;
-  readonly title: string;
-};
-
-export type RegisteredWebModule = {
-  readonly actions?: Record<string, string>;
-  readonly breadcrumb: (pathname: string) => string | null;
-  readonly commands?: readonly RegisteredWebModuleCommandSearch[];
-  readonly id: string;
-  readonly navigation: {
-    readonly label: string;
-    readonly path: string;
-  };
-  readonly preload?: () => Promise<unknown>;
-  readonly routes: readonly RegisteredWebModuleRoute[];
-};
-
-const feedbackWebModule = {
-  actions: feedbackWebContribution.actions,
-  breadcrumb: feedbackWebContribution.breadcrumb,
-  commands: feedbackWebContribution.commands,
-  id: feedbackWebContribution.id,
-  navigation: feedbackWebContribution.navigation,
-  preload: feedbackWebContribution.preload,
-  routes: [
-    { ...feedbackWebContribution.routes.inbox, Page: feedbackWebContribution.pages.Inbox },
-    { ...feedbackWebContribution.routes.create, Page: feedbackWebContribution.pages.Create },
-    { ...feedbackWebContribution.routes.labels, Page: feedbackWebContribution.pages.Labels },
-    { ...feedbackWebContribution.routes.detail, Page: feedbackWebContribution.pages.Detail },
-  ],
-} satisfies RegisteredWebModule;
+const feedbackWebModule = feedbackWebContribution satisfies RegisteredWebModule;
 
 export const registeredWebModules = [
   feedbackWebModule,
