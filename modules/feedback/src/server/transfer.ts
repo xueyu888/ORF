@@ -70,9 +70,15 @@ export type FeedbackImportSummary = {
 };
 
 export type FeedbackImportCommitResult =
-  | { status: "ok"; batchId: string; createdFeedbackIds: string[]; skippedRecords: number }
+  | { status: "ok"; batchId: string; createdFeedbackIds: string[]; report: FeedbackImportResultReport; skippedRecords: number }
   | { status: "notFound" }
   | { status: "invalid" };
+
+export type FeedbackImportResultReport = {
+  content: string;
+  fileName: string;
+  mimeType: "text/plain;charset=utf-8";
+};
 
 type FeedbackImportRecord = {
   assigneeUserId: string | null;
@@ -565,6 +571,13 @@ export async function commitFeedbackImportBatch(
     status: "ok",
     batchId: input.batchId,
     createdFeedbackIds,
+    report: buildFeedbackImportResultReport({
+      batchId: input.batchId,
+      createdFeedbackIds,
+      fileName: batch.fileName ?? null,
+      skippedRecords: summary.skippedRecords + skippedRecords,
+      totalRecords: summary.totalRecords,
+    }),
     skippedRecords: summary.skippedRecords + skippedRecords,
   };
 }
@@ -995,6 +1008,34 @@ function publicImportSummary(summary: StoredFeedbackImportSummary): FeedbackImpo
     skippedRecords: summary.skippedRecords,
     totalRecords: summary.totalRecords,
     updateRecords: summary.updateRecords,
+  };
+}
+
+function buildFeedbackImportResultReport(input: {
+  batchId: string;
+  createdFeedbackIds: readonly string[];
+  fileName: string | null;
+  skippedRecords: number;
+  totalRecords: number;
+}): FeedbackImportResultReport {
+  return {
+    content: [
+      "反馈导入结果报告",
+      `批次: ${input.batchId}`,
+      `文件: ${input.fileName ?? "未命名文件"}`,
+      "",
+      "摘要",
+      `总记录: ${input.totalRecords}`,
+      `新增反馈: ${input.createdFeedbackIds.length}`,
+      `跳过记录: ${input.skippedRecords}`,
+      "",
+      "新增反馈 ID",
+      ...input.createdFeedbackIds,
+      ...(input.createdFeedbackIds.length === 0 ? ["无"] : []),
+      "",
+    ].join("\n"),
+    fileName: `orf-feedback-import-result-${input.batchId}.txt`,
+    mimeType: "text/plain;charset=utf-8",
   };
 }
 

@@ -126,6 +126,7 @@ function FeedbackImportDialog({
     setCommitting(true);
     try {
       const response = await commitFeedbackImport(preflight.batchId);
+      downloadTextFile(response.result.report);
       notify(`导入完成：${response.result.createdFeedbackIds.length} 条新反馈`);
       await onCommitted();
       onClose();

@@ -81,6 +81,7 @@ export type FeedbackImportPreflight = {
 export type FeedbackImportCommitResult = {
   batchId: string;
   createdFeedbackIds: string[];
+  report: { content: string; fileName: string; mimeType: string };
   skippedRecords: number;
 };
 

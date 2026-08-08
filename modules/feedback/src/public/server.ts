@@ -111,6 +111,7 @@ export {
   type FeedbackImportFieldDiff,
   type FeedbackImportFieldMapping,
   type FeedbackImportPreflight,
+  type FeedbackImportResultReport,
   type FeedbackImportSourceKind,
   type FeedbackImportUpdateDiff,
 } from "../server/transfer";
