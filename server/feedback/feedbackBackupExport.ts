@@ -1,8 +1,9 @@
 import { and, eq, inArray } from "drizzle-orm";
 import {
   buildFeedbackBackupZip,
-  feedbackDatabaseSchema,
+  listFeedbackReportAttachmentObjectRefs,
   type FeedbackBackupAttachmentFile,
+  type FeedbackReportAttachmentObjectRef,
 } from "@orf/feedback-module/server";
 import type { FeedbackIssueReadModelData } from "@orf/feedback-module/contracts";
 import { db } from "../db/client";
@@ -10,8 +11,6 @@ import { commentAttachments } from "../db/schema";
 import { getFeedbackIssueTransferReadModelData } from "../readModels/feedbackIssueReadModel";
 import { runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 import { objectStorage, type ObjectStorage } from "../storage/objectStorage";
-
-const { feedbackReportAttachments } = feedbackDatabaseSchema;
 
 export class FeedbackBackupAttachmentUnavailableError extends Error {
   constructor(readonly attachmentId: string, readonly objectKey: string) {
@@ -82,14 +81,10 @@ async function getFeedbackBackupReportAttachmentRows(input: {
   teamId: string;
 }) {
   const attachmentIds = input.data.feedback.flatMap((item) => item.reportAttachments.map((attachment) => attachment.id));
-  if (attachmentIds.length === 0) return [];
-  return db
-    .select()
-    .from(feedbackReportAttachments)
-    .where(and(
-      eq(feedbackReportAttachments.teamId, input.teamId),
-      inArray(feedbackReportAttachments.id, [...new Set(attachmentIds)]),
-    ));
+  return listFeedbackReportAttachmentObjectRefs(db, {
+    attachmentIds,
+    teamId: input.teamId,
+  });
 }
 
 async function getFeedbackBackupCommentAttachmentRows(input: {
@@ -134,8 +129,8 @@ function commentThreadIdByMessageId(data: FeedbackIssueReadModelData) {
 }
 
 function compareReportAttachmentRows(
-  left: typeof feedbackReportAttachments.$inferSelect,
-  right: typeof feedbackReportAttachments.$inferSelect,
+  left: FeedbackReportAttachmentObjectRef,
+  right: FeedbackReportAttachmentObjectRef,
 ) {
   return left.feedbackId.localeCompare(right.feedbackId) ||
     left.sortOrder - right.sortOrder ||

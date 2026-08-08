@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import {
   canPreviewFeedbackReportAttachment,
@@ -24,6 +24,46 @@ export type FeedbackReportAttachmentContentFactsOutcome =
   | { status: "ok"; facts: FeedbackReportAttachmentContentFacts }
   | { status: "notFound" }
   | { status: "forbidden" };
+
+export type FeedbackReportAttachmentObjectRef = {
+  readonly feedbackId: string;
+  readonly fileName: string;
+  readonly fileSize: number;
+  readonly id: string;
+  readonly mimeType: string;
+  readonly objectKey: string;
+  readonly sortOrder: number;
+};
+
+export async function listFeedbackReportAttachmentObjectRefs(
+  database: FeedbackReportAttachmentContentDatabase,
+  input: {
+    readonly attachmentIds: readonly string[];
+    readonly teamId: string;
+  },
+): Promise<FeedbackReportAttachmentObjectRef[]> {
+  const teamId = input.teamId.trim();
+  const attachmentIds = [...new Set(input.attachmentIds.map((id) => id.trim()).filter(Boolean))];
+  if (!teamId || attachmentIds.length === 0) return [];
+
+  const rows = await database
+    .select()
+    .from(feedbackReportAttachments)
+    .where(and(
+      eq(feedbackReportAttachments.teamId, teamId),
+      inArray(feedbackReportAttachments.id, attachmentIds),
+    ));
+
+  return rows.map((row) => ({
+    feedbackId: row.feedbackId,
+    fileName: row.fileName,
+    fileSize: row.fileSize,
+    id: row.id,
+    mimeType: row.mimeType,
+    objectKey: row.objectKey,
+    sortOrder: row.sortOrder,
+  }));
+}
 
 export async function getFeedbackReportAttachmentContentFacts(
   database: FeedbackReportAttachmentContentDatabase,

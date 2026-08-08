@@ -61,10 +61,12 @@ export {
 export {
   feedbackReportAttachmentResponseContentType,
   getFeedbackReportAttachmentContentFacts,
+  listFeedbackReportAttachmentObjectRefs,
   type FeedbackReportAttachmentContentDatabase,
   type FeedbackReportAttachmentContentDisposition,
   type FeedbackReportAttachmentContentFacts,
   type FeedbackReportAttachmentContentFactsOutcome,
+  type FeedbackReportAttachmentObjectRef,
 } from "../server/reportAttachmentContent";
 export {
   getFeedbackAssignmentNotificationDispatchRecipients,
@@ -126,7 +128,6 @@ export {
   type FeedbackImportSourceKind,
   type FeedbackImportUpdateDiff,
 } from "../server/transfer";
-export * as feedbackDatabaseSchema from "../infrastructure/database/schema";
 
 export interface FeedbackServerHost {
   readonly protocolVersion: 1;

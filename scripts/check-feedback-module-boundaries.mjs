@@ -35,6 +35,7 @@ const ignoredDirectories = new Set([
 const errors = [];
 
 await checkPackageExports();
+await checkServerPublicBoundary();
 await checkTsconfigPaths();
 await scanSourceImports();
 
@@ -66,6 +67,14 @@ async function checkPackageExports() {
     if (!expectedExports.has(subpath)) {
       errors.push(`modules/feedback/package.json has unsupported export ${subpath}.`);
     }
+  }
+}
+
+async function checkServerPublicBoundary() {
+  const publicServerPath = path.join(feedbackPackageDir, "src", "public", "server.ts");
+  const source = await fs.readFile(publicServerPath, "utf8");
+  if (source.includes("feedbackDatabaseSchema") || source.includes("../infrastructure/database/schema")) {
+    errors.push("modules/feedback/src/public/server.ts must not export feedback database schema or table objects.");
   }
 }
 
