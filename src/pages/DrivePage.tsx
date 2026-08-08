@@ -17,7 +17,7 @@ import {
   uploadDriveFileVersionRequest,
   type ApiUploadProgress,
 } from "../state/apiClient";
-import { getFeedbackReferences, type FeedbackReferenceSummary } from "@orf/feedback-module/web";
+import { getFeedbackReferences, type FeedbackReferenceSummary } from "../feedback/feedbackWebClient";
 import { driveBootstrapSnapshot, invalidateDriveBootstrap, loadDriveBootstrap } from "../state/readModelQueries";
 import { useOrf } from "../state/OrfProvider";
 import type { DriveBootstrap } from "../types/orf";

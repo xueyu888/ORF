@@ -5,7 +5,7 @@ import { ChartFrame } from "../components/ChartFrame";
 import { PageScaffold } from "../components/PageScaffold";
 import { DecisionLog, FeedbackCard, MetricCard, ObjectiveCard } from "../components/SharedCards";
 import { Card } from "../components/ui";
-import { useFeedbackDashboardSummary } from "@orf/feedback-module/web";
+import { useFeedbackDashboardSummary } from "../feedback/feedbackWebClient";
 import {
   filterResultsForVisibleObjectives,
   filterTasksForVisibleObjectives,

@@ -27,7 +27,7 @@ import { feedbackIssueIdsFromText } from "@orf/feedback-module/contracts";
 import {
   getFeedbackReferences,
   type FeedbackReferenceSummary,
-} from "@orf/feedback-module/web";
+} from "../feedback/feedbackWebClient";
 import {
   chatMessageCopyText,
   chatMessageSendStatus,

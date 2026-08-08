@@ -11,7 +11,7 @@ import {
   FeedbackWebApiError,
   getFeedbackReferenceCard,
   type FeedbackReferenceCardData,
-} from "@orf/feedback-module/web";
+} from "./feedbackWebClient";
 import { CircleDot, MessageSquare, Paperclip } from "lucide-react";
 import type {
   ChatReferenceCardAttachment,

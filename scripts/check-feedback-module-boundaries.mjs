@@ -335,6 +335,10 @@ function checkSpecifier(relativePath, specifier) {
       errors.push(`${relativePath} imports @orf/feedback-module/server outside the composition root or feedback adapter boundaries.`);
       return;
     }
+    if (specifier === "@orf/feedback-module/web" && !canImportFeedbackWeb(relativePath)) {
+      errors.push(`${relativePath} imports @orf/feedback-module/web outside the feedback Web adapter boundary.`);
+      return;
+    }
     if (specifier === "@orf/feedback-module/testing" && !canImportFeedbackTesting(relativePath)) {
       errors.push(`${relativePath} imports @orf/feedback-module/testing outside tests.`);
     }
@@ -364,6 +368,10 @@ function canImportFeedbackServer(relativePath) {
   return relativePath === "server/app.ts" ||
     relativePath.startsWith("server/feedback/") ||
     relativePath === "server/readModels/feedbackIssueReadModel.ts";
+}
+
+function canImportFeedbackWeb(relativePath) {
+  return relativePath.startsWith("src/feedback/");
 }
 
 function moduleSpecifiers(source) {
