@@ -134,6 +134,7 @@ export async function getFeedbackReferences(input: {
   ids?: readonly string[];
   limit?: number;
   query?: string;
+  signal?: AbortSignal;
 } = {}) {
   const query = new URLSearchParams();
   for (const id of input.ids ?? []) {
@@ -144,7 +145,9 @@ export async function getFeedbackReferences(input: {
   if (searchText) query.set("q", searchText);
   if (input.limit !== undefined) query.set("limit", String(input.limit));
   const suffix = query.toString() ? `?${query.toString()}` : "";
-  const response = await apiJson<{ feedback: FeedbackReferenceSummary[] }>(`/api/feedback/references${suffix}`);
+  const response = await apiJson<{ feedback: FeedbackReferenceSummary[] }>(`/api/feedback/references${suffix}`, {
+    signal: input.signal,
+  });
   return response.feedback;
 }
 

@@ -1,6 +1,5 @@
 import type { ComponentType } from "react";
 import type { OrfUser } from "../types/orf";
-import { feedbackWebModuleCommandSearch } from "../feedback/feedbackCommandSearch";
 import { feedbackWebContribution } from "../feedback/feedbackWebContribution";
 
 export type RegisteredWebModuleCommandItem = {
@@ -36,21 +35,23 @@ export type RegisteredWebModuleRoute = {
 export type RegisteredWebModule = {
   readonly actions?: Record<string, string>;
   readonly breadcrumb: (pathname: string) => string | null;
-  readonly commandSearch?: RegisteredWebModuleCommandSearch;
+  readonly commands?: readonly RegisteredWebModuleCommandSearch[];
   readonly id: string;
   readonly navigation: {
     readonly label: string;
     readonly path: string;
   };
+  readonly preload?: () => Promise<unknown>;
   readonly routes: readonly RegisteredWebModuleRoute[];
 };
 
 const feedbackWebModule = {
   actions: feedbackWebContribution.actions,
   breadcrumb: feedbackWebContribution.breadcrumb,
-  commandSearch: feedbackWebModuleCommandSearch,
+  commands: feedbackWebContribution.commands,
   id: feedbackWebContribution.id,
   navigation: feedbackWebContribution.navigation,
+  preload: feedbackWebContribution.preload,
   routes: [
     { ...feedbackWebContribution.routes.inbox, Page: feedbackWebContribution.pages.Inbox },
     { ...feedbackWebContribution.routes.create, Page: feedbackWebContribution.pages.Create },
@@ -66,7 +67,11 @@ export const registeredWebModules = [
 export const registeredWebModuleRoutes = registeredWebModules.flatMap((module) => module.routes);
 
 export const registeredWebModuleCommandSearches = registeredWebModules.flatMap((module) =>
-  module.commandSearch ? [module.commandSearch] : [],
+  module.commands ?? [],
+);
+
+export const registeredWebModulePreloads = registeredWebModules.flatMap((module) =>
+  module.preload ? [module.preload] : [],
 );
 
 export function webModuleBreadcrumb(pathname: string) {

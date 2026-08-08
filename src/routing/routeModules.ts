@@ -1,4 +1,5 @@
 import { lazy, type ComponentType } from "react";
+import { registeredWebModulePreloads } from "../config/webModuleRegistry";
 
 type PageModule<TExport extends string, TComponent extends ComponentType> = Record<TExport, TComponent>;
 
@@ -59,5 +60,6 @@ export function preloadProductionRouteModules() {
     members.preload(),
     permissions.preload(),
     systemSettings.preload(),
+    ...registeredWebModulePreloads.map((preload) => preload()),
   ]);
 }

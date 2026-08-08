@@ -9,10 +9,12 @@ import {
   feedbackRootPath,
 } from "../contracts/links";
 import { FeedbackWebHostProvider, type FeedbackWebHost } from "../web/runtime";
+import { getFeedbackReferences } from "../web/api";
 import { FeedbackCreatePage } from "../web/pages/FeedbackCreatePage";
 import { FeedbackInboxPage } from "../web/pages/FeedbackInboxPage";
 import { FeedbackIssuePage } from "../web/pages/FeedbackIssuePage";
 import { FeedbackLabelsPage } from "../web/pages/FeedbackLabelsPage";
+import type { FeedbackWebUser } from "../web/types";
 
 export interface FeedbackWebRouteContribution {
   readonly id: string;
@@ -26,9 +28,32 @@ export interface FeedbackWebNavigationContribution {
   readonly path: "/feedback";
 }
 
+export interface FeedbackWebCommandItem {
+  readonly label: string;
+  readonly path: string;
+  readonly searchText: string;
+  readonly type: "Feedback";
+}
+
+export interface FeedbackWebCommandSearchContext {
+  readonly currentUser: Pick<FeedbackWebUser, "role" | "status"> | null;
+}
+
+export interface FeedbackWebCommandSearchOptions {
+  readonly limit?: number;
+  readonly signal?: AbortSignal;
+}
+
+export interface FeedbackWebCommandContribution {
+  readonly minQueryLength?: number;
+  readonly canSearch?: (context: FeedbackWebCommandSearchContext) => boolean;
+  search(query: string, options: FeedbackWebCommandSearchOptions): Promise<readonly FeedbackWebCommandItem[]>;
+}
+
 export interface FeedbackWebContributionDefinition {
   readonly id: "feedback";
   readonly navigation: FeedbackWebNavigationContribution;
+  readonly commands: readonly FeedbackWebCommandContribution[];
   readonly routes: {
     readonly inbox: FeedbackWebRouteContribution;
     readonly create: FeedbackWebRouteContribution;
@@ -39,6 +64,7 @@ export interface FeedbackWebContributionDefinition {
     readonly createPath: "/feedback/new";
   };
   breadcrumb(pathname: string): string | null;
+  preload(): Promise<void>;
 }
 
 export interface FeedbackWebContribution extends FeedbackWebContributionDefinition {
@@ -56,6 +82,27 @@ export const feedbackWebContribution: FeedbackWebContributionDefinition = {
     label: "反馈",
     path: feedbackRootPath,
   },
+  commands: [
+    {
+      minQueryLength: 2,
+      canSearch({ currentUser }) {
+        return currentUser?.status === "active" || currentUser?.role === "admin";
+      },
+      async search(query, options) {
+        const feedback = await getFeedbackReferences({
+          limit: options.limit,
+          query,
+          signal: options.signal,
+        });
+        return feedback.map((item) => ({
+          label: item.title,
+          path: feedbackIssuePath(item.id),
+          searchText: `${item.id} ${item.title}`,
+          type: "Feedback",
+        }));
+      },
+    },
+  ],
   routes: {
     inbox: {
       id: "feedback.inbox",
@@ -99,6 +146,9 @@ export const feedbackWebContribution: FeedbackWebContributionDefinition = {
       return "反馈";
     }
     return null;
+  },
+  async preload() {
+    return undefined;
   },
 };
 
