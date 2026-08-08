@@ -18360,6 +18360,10 @@ a.orf-sidebar-link,
   --orf-chat-reference-card-notice-border: var(--orf-border);
   --orf-chat-reference-card-notice-bg: color-mix(in srgb, var(--orf-bg-card) 70%, transparent);
   --orf-chat-reference-card-notice-text: var(--orf-text-secondary);
+  --orf-chat-reference-card-attachment-border: color-mix(in srgb, var(--orf-border) 78%, transparent);
+  --orf-chat-reference-card-attachment-bg: color-mix(in srgb, var(--orf-bg-card) 78%, transparent);
+  --orf-chat-reference-card-attachment-hover-bg: color-mix(in srgb, var(--orf-accent-soft) 58%, var(--orf-bg-card));
+  --orf-chat-reference-card-attachment-preview-bg: color-mix(in srgb, var(--orf-bg-muted) 84%, transparent);
   --orf-chat-reference-card-action-border: color-mix(in srgb, var(--orf-accent) 44%, white 56%);
   --orf-chat-reference-card-action-hover-border: color-mix(in srgb, var(--orf-accent-hover) 48%, white 52%);
   --orf-chat-reference-card-action-bg:
@@ -18542,6 +18546,73 @@ a.orf-sidebar-link,
 
 .orf-chat-reference-card-notice svg {
   flex: 0 0 auto;
+}
+
+.orf-chat-reference-card-attachments {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 7px;
+}
+
+.orf-chat-reference-card-attachment {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--orf-chat-reference-card-attachment-border);
+  border-radius: 7px;
+  background: var(--orf-chat-reference-card-attachment-bg);
+  color: var(--orf-chat-reference-card-body-text);
+  padding: 6px;
+  text-decoration: none;
+}
+
+.orf-chat-reference-card-attachment:hover,
+.orf-chat-reference-card-attachment:focus-visible {
+  border-color: var(--orf-chat-reference-card-badge-border);
+  background: var(--orf-chat-reference-card-attachment-hover-bg);
+  color: var(--orf-chat-reference-card-title);
+  text-decoration: none;
+}
+
+.orf-chat-reference-card-attachment-preview {
+  display: grid;
+  width: 44px;
+  height: 38px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--orf-chat-reference-card-attachment-preview-bg);
+  color: var(--orf-chat-reference-card-icon-text);
+}
+
+.orf-chat-reference-card-attachment-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.orf-chat-reference-card-attachment-main {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.orf-chat-reference-card-attachment-name {
+  overflow: hidden;
+  color: var(--orf-chat-reference-card-title);
+  font-size: 12px;
+  font-weight: 820;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-chat-reference-card-attachment-meta {
+  color: var(--orf-chat-reference-card-muted);
+  font-size: 11px;
+  font-weight: 760;
 }
 
 .orf-chat-reference-card-footer {
@@ -23871,6 +23942,19 @@ button.orf-chat-image-attachment {
     max-height: min(52dvh, 420px);
   }
 
+  .orf-chat-reference-card-attachments {
+    grid-template-columns: 1fr;
+  }
+
+  .orf-chat-reference-card-attachment {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .orf-chat-reference-card-attachment-preview {
+    width: 40px;
+    height: 36px;
+  }
+
   .orf-chat-reference-card-footer {
     align-items: stretch;
     flex-direction: column;
@@ -24747,6 +24831,10 @@ button.orf-chat-image-attachment {
   --orf-chat-reference-card-notice-border: rgba(158, 174, 199, 0.18);
   --orf-chat-reference-card-notice-bg: rgba(29, 38, 54, 0.84);
   --orf-chat-reference-card-notice-text: #cbd6e6;
+  --orf-chat-reference-card-attachment-border: rgba(158, 174, 199, 0.18);
+  --orf-chat-reference-card-attachment-bg: rgba(20, 29, 43, 0.72);
+  --orf-chat-reference-card-attachment-hover-bg: rgba(88, 174, 191, 0.12);
+  --orf-chat-reference-card-attachment-preview-bg: rgba(11, 18, 30, 0.82);
   --orf-chat-reference-card-action-border: rgba(103, 199, 215, 0.36);
   --orf-chat-reference-card-action-hover-border: rgba(123, 219, 235, 0.5);
   --orf-chat-reference-card-action-bg:

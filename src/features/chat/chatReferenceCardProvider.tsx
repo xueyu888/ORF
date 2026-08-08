@@ -1,9 +1,10 @@
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, FileText, Image as ImageIcon, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { ZodType } from "zod";
 import type { ChatMessage } from "../../types/orf";
 import { OrfRichTextMarkdownViewer } from "../rich-text/OrfRichTextMarkdownViewer";
+import { formatFileSize } from "./chatFormat";
 import {
   ChatReferenceCard,
   ChatReferenceCardNotice,
@@ -12,8 +13,20 @@ import {
 } from "./ChatReferenceCard";
 
 export type ChatReferenceCardNoticeTone = "loading" | "warning";
+export type ChatReferenceCardAttachmentPreviewKind = "download" | "image" | "markdown" | "pdf" | "text";
+
+export type ChatReferenceCardAttachment = {
+  readonly contentUrl?: string | null;
+  readonly downloadUrl: string;
+  readonly fileName: string;
+  readonly fileSize: number;
+  readonly id: string;
+  readonly previewKind: ChatReferenceCardAttachmentPreviewKind;
+  readonly previewUrl?: string | null;
+};
 
 export type ChatReferenceCardBodyBlock =
+  | { readonly type: "attachments"; readonly attachments: readonly ChatReferenceCardAttachment[]; readonly title?: string }
   | { readonly type: "markdown"; readonly bodyMarkdown: string }
   | { readonly type: "notice"; readonly text: string; readonly tone?: ChatReferenceCardNoticeTone }
   | { readonly type: "section"; readonly title: string; readonly bodyMarkdown: string };
@@ -249,7 +262,47 @@ function renderNoticeIcon(tone: ChatReferenceCardNoticeTone | undefined) {
   return undefined;
 }
 
+function attachmentPreviewHref(attachment: ChatReferenceCardAttachment) {
+  return attachment.previewUrl?.trim() || attachment.contentUrl?.trim() || attachment.downloadUrl;
+}
+
+function attachmentIcon(attachment: ChatReferenceCardAttachment) {
+  if (attachment.previewKind === "image") return <ImageIcon className="h-4 w-4" />;
+  return <FileText className="h-4 w-4" />;
+}
+
+function ChatReferenceCardAttachmentItem({ attachment }: { attachment: ChatReferenceCardAttachment }) {
+  const href = attachmentPreviewHref(attachment);
+  const isImagePreview = attachment.previewKind === "image" && Boolean(attachment.previewUrl?.trim());
+  return (
+    <a className="orf-chat-reference-card-attachment" href={href} rel="noreferrer noopener" target="_blank">
+      <span className="orf-chat-reference-card-attachment-preview">
+        {isImagePreview ? <img alt="" loading="lazy" src={attachment.previewUrl ?? ""} /> : attachmentIcon(attachment)}
+      </span>
+      <span className="orf-chat-reference-card-attachment-main">
+        <span className="orf-chat-reference-card-attachment-name">{attachment.fileName}</span>
+        <span className="orf-chat-reference-card-attachment-meta">{formatFileSize(attachment.fileSize)}</span>
+      </span>
+    </a>
+  );
+}
+
+function ChatReferenceCardAttachmentBlock({ block }: { block: Extract<ChatReferenceCardBodyBlock, { type: "attachments" }> }) {
+  const attachments = block.attachments.filter((attachment) => attachment.downloadUrl.trim() && attachment.fileName.trim());
+  if (attachments.length === 0) return null;
+  return (
+    <ChatReferenceCardSection title={block.title ?? "附件"}>
+      <div className="orf-chat-reference-card-attachments">
+        {attachments.map((attachment) => <ChatReferenceCardAttachmentItem key={attachment.id} attachment={attachment} />)}
+      </div>
+    </ChatReferenceCardSection>
+  );
+}
+
 function renderReferenceCardBodyBlock(block: ChatReferenceCardBodyBlock, index: number) {
+  if (block.type === "attachments") {
+    return <ChatReferenceCardAttachmentBlock key={`${block.type}-${index}`} block={block} />;
+  }
   if (block.type === "notice") {
     return (
       <ChatReferenceCardNotice key={`${block.type}-${index}`} icon={renderNoticeIcon(block.tone)}>

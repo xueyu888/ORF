@@ -14,12 +14,11 @@ import {
 } from "@orf/feedback-module/web";
 import { CircleDot, MessageSquare, Paperclip } from "lucide-react";
 import type {
+  ChatReferenceCardAttachment,
   ChatReferenceCardBodyBlock,
   ChatReferenceCardModel,
   ChatReferenceCardRegistration,
 } from "../features/chat/chatReferenceCardProvider";
-
-const visibleAttachmentLimit = 5;
 
 function feedbackReferenceHref(reference: FeedbackNotificationCardReferenceV1) {
   const href = feedbackIssueHref(reference.feedbackId);
@@ -118,23 +117,18 @@ function FeedbackReferenceBadge({ data }: { data: FeedbackReferenceCardData }) {
   );
 }
 
-function escapeMarkdownText(value: string) {
-  return value.replace(/\\/g, "\\\\").replace(/([\[\]()`*_{}#+\-.!|>])/g, "\\$1");
-}
-
-function formatAttachmentSize(value: number) {
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
-  return `${(value / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function attachmentSectionMarkdown(attachments: FeedbackReferenceCardData["feedback"]["reportAttachments"]) {
-  const visible = attachments.slice(0, visibleAttachmentLimit);
-  const lines = visible.map((attachment) => `- ${escapeMarkdownText(attachment.fileName)} (${formatAttachmentSize(attachment.fileSize)})`);
-  if (attachments.length > visible.length) {
-    lines.push(`- 还有 ${attachments.length - visible.length} 个附件`);
-  }
-  return lines.join("\n");
+function feedbackReferenceAttachments(
+  attachments: FeedbackReferenceCardData["feedback"]["reportAttachments"],
+): ChatReferenceCardAttachment[] {
+  return attachments.map((attachment) => ({
+    contentUrl: attachment.contentUrl,
+    downloadUrl: attachment.downloadUrl,
+    fileName: attachment.fileName,
+    fileSize: attachment.fileSize,
+    id: attachment.id,
+    previewKind: attachment.previewKind,
+    previewUrl: attachment.previewUrl,
+  }));
 }
 
 function addAttachmentSection(
@@ -143,9 +137,9 @@ function addAttachmentSection(
 ) {
   if (attachments.length === 0) return;
   blocks.push({
-    bodyMarkdown: attachmentSectionMarkdown(attachments),
+    attachments: feedbackReferenceAttachments(attachments),
     title: "附件",
-    type: "section",
+    type: "attachments",
   });
 }
 
