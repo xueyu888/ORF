@@ -36,8 +36,12 @@ import {
 } from "./notificationDispatch";
 import { upsertFeedbackParticipants } from "./participants";
 import type { FeedbackCommandResult } from "./commandResult";
+import type {
+  FeedbackTargetTitleSync,
+  FeedbackTransitionNotificationDispatchFactory,
+  FeedbackWriteClient,
+} from "./commandPorts";
 
-export type FeedbackWriteClient = Pick<NodePgDatabase<any>, "delete" | "insert" | "select" | "update">;
 export type FeedbackWriteDatabase = Pick<NodePgDatabase<any>, "transaction">;
 
 export type FeedbackWriteActor = {
@@ -120,21 +124,6 @@ export type TransitionFeedbackIssueWriteInput = {
   readonly notificationDispatch?: FeedbackTransitionNotificationDispatchFactory | null;
 };
 
-export type FeedbackTransitionNotificationDispatchContext = {
-  readonly assigneeUserId?: string | null;
-  readonly createdBy?: string | null;
-  readonly feedbackId: string;
-  readonly projectId?: string | null;
-  readonly resolution?: FeedbackResolution | null;
-  readonly stage: FeedbackStage;
-  readonly teamId: string;
-  readonly title: string;
-};
-
-export type FeedbackTransitionNotificationDispatchFactory = (
-  context: FeedbackTransitionNotificationDispatchContext,
-) => FeedbackNotificationDispatchDraft | null;
-
 export type TransitionFeedbackIssueWriteResult =
   | FeedbackCommandFailure
   | {
@@ -161,16 +150,6 @@ export type RemoveFeedbackRelationWriteInput = {
   readonly feedbackId: string;
   readonly relationId: string;
 };
-
-export type FeedbackTargetTitleSync = (
-  database: FeedbackWriteClient,
-  input: {
-    readonly feedbackId: string;
-    readonly teamId: string;
-    readonly title: string;
-    readonly updatedAt: string;
-  },
-) => Promise<void>;
 
 export type FeedbackWriteHost = {
   readonly syncFeedbackTargetTitle?: FeedbackTargetTitleSync;

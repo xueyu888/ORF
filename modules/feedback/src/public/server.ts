@@ -58,9 +58,11 @@ export {
   transitionFeedbackIssue,
   updateFeedbackIssueAssignee,
   updateFeedbackIssueMetadata,
-  type FeedbackTargetTitleSync,
-  type FeedbackTransitionNotificationDispatchFactory,
 } from "../server/writeModel";
+export type {
+  FeedbackTargetTitleSync,
+  FeedbackTransitionNotificationDispatchFactory,
+} from "../server/commandPorts";
 export type { FeedbackCommandResult } from "../server/commandResult";
 export {
   buildFeedbackBackupZip,

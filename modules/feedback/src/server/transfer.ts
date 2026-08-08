@@ -10,9 +10,9 @@ import {
   feedbackImportOrigins,
 } from "../infrastructure/database/schema";
 import {
-  type FeedbackWriteClient,
   type FeedbackWriteDatabase,
 } from "./writeModel";
+import type { FeedbackWriteClient } from "./commandPorts";
 import { feedbackNowIso, makeFeedbackActivityId, makeFeedbackId } from "./ids";
 
 type FeedbackTransferDatabase = NodePgDatabase<any> & FeedbackWriteDatabase;
