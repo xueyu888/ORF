@@ -9,9 +9,6 @@ import {
   feedbackSubscriptionMutationModeSchema,
   feedbackTransitionInputSchema,
 } from "@orf/feedback-module/contracts";
-import {
-  feedbackBackupZipFileName,
-} from "@orf/feedback-module/server";
 import { requireFeedbackInScope, requireUserScopeContext } from "../auth/accessPolicy";
 import { env } from "../env";
 import {
@@ -40,7 +37,7 @@ import {
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import {
-  buildFeedbackBackupZipForScope,
+  buildFeedbackBackupZipDownloadForScope,
   FeedbackBackupAttachmentUnavailableError,
 } from "../feedback/feedbackBackupExport";
 import {
@@ -358,9 +355,9 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
     }
 
     const exportedAt = new Date().toISOString();
-    let body: Buffer;
+    let download: Awaited<ReturnType<typeof buildFeedbackBackupZipDownloadForScope>>;
     try {
-      body = await buildFeedbackBackupZipForScope({ exportedAt, scope: context.scope });
+      download = await buildFeedbackBackupZipDownloadForScope({ exportedAt, scope: context.scope });
     } catch (error) {
       if (error instanceof FeedbackBackupAttachmentUnavailableError) {
         return reply.code(409).send({ error: "Feedback backup attachment object is unavailable" });
@@ -368,10 +365,10 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       throw error;
     }
     reply.header("Content-Type", "application/zip");
-    reply.header("Content-Disposition", contentDispositionHeader("attachment", feedbackBackupZipFileName(exportedAt)));
+    reply.header("Content-Disposition", contentDispositionHeader("attachment", download.fileName));
     reply.header("Cache-Control", "no-store");
-    reply.header("Content-Length", body.length);
-    return reply.send(body);
+    reply.header("Content-Length", download.body.length);
+    return reply.send(download.body);
   });
 
   app.post("/api/feedback/imports/preflight", async (request, reply) => {

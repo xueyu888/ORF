@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import {
   buildFeedbackBackupZip,
+  feedbackBackupZipFileName,
   listFeedbackReportAttachmentObjectRefs,
   type FeedbackBackupAttachmentFile,
   type FeedbackReportAttachmentObjectRef,
@@ -19,7 +20,7 @@ export class FeedbackBackupAttachmentUnavailableError extends Error {
   }
 }
 
-export async function buildFeedbackBackupZipForScope(input: {
+export async function buildFeedbackBackupZipDownloadForScope(input: {
   exportedAt: string;
   scope: RuntimeScope;
 }) {
@@ -30,11 +31,14 @@ export async function buildFeedbackBackupZipForScope(input: {
     storage: objectStorage,
     teamId,
   });
-  return buildFeedbackBackupZip({
-    attachmentFiles,
-    data,
-    exportedAt: input.exportedAt,
-  });
+  return {
+    body: buildFeedbackBackupZip({
+      attachmentFiles,
+      data,
+      exportedAt: input.exportedAt,
+    }),
+    fileName: feedbackBackupZipFileName(input.exportedAt),
+  };
 }
 
 async function collectFeedbackBackupAttachmentFiles(input: {
