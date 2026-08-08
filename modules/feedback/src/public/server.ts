@@ -53,6 +53,23 @@ export {
   type FeedbackReadModelViewer,
 } from "../server/readModel";
 export {
+  buildFeedbackNotificationDispatchDraft,
+  feedbackNotificationRecipient,
+  insertFeedbackNotificationDispatch,
+  mergeFeedbackNotificationDispatchRecipients,
+  publishFeedbackNotificationDispatch,
+  publishPendingFeedbackNotificationDispatches,
+  startFeedbackNotificationDispatchWorker,
+  type FeedbackNotificationAttentionLevel,
+  type FeedbackNotificationDeliveryClass,
+  type FeedbackNotificationDispatchDatabase,
+  type FeedbackNotificationDispatchDraft,
+  type FeedbackNotificationDispatchRecipient,
+  type FeedbackNotificationPort,
+  type FeedbackNotificationPortResult,
+  type FeedbackNotificationRecipientReason,
+} from "../server/notificationDispatch";
+export {
   feedbackReportAttachmentResponseContentType,
   getFeedbackReportAttachmentContentFacts,
   type FeedbackReportAttachmentContentDatabase,
@@ -61,8 +78,8 @@ export {
   type FeedbackReportAttachmentContentFactsOutcome,
 } from "../server/reportAttachmentContent";
 export {
-  getFeedbackAssignmentNotificationRecipients,
-  getFeedbackOrdinaryNotificationRecipients,
+  getFeedbackAssignmentNotificationDispatchRecipients,
+  getFeedbackOrdinaryNotificationDispatchRecipients,
   getFeedbackSubscriptionMode,
   setFeedbackSubscriptionMode,
   type ExplicitFeedbackSubscriptionMode,
@@ -86,6 +103,8 @@ export {
   type FeedbackCreateDraft,
   type FeedbackCreateReportAttachmentInput,
   type FeedbackTargetTitleSync,
+  type FeedbackTransitionNotificationDispatchContext,
+  type FeedbackTransitionNotificationDispatchFactory,
   type FeedbackWriteActor,
   type FeedbackWriteClient,
   type FeedbackWriteDatabase,
@@ -124,6 +143,7 @@ export interface FeedbackServerHost {
   readonly protocolVersion: 1;
   registerHttpRoutes(): void;
   startDailyDigestScheduler(): FeedbackModuleStop;
+  startNotificationDispatchWorker(): FeedbackModuleStop;
 }
 
 export interface FeedbackModuleHealth {
@@ -145,6 +165,7 @@ export function registerFeedbackServerModule(host: FeedbackServerHost): Feedback
 
   host.registerHttpRoutes();
   const stopDailyDigestScheduler = host.startDailyDigestScheduler();
+  const stopNotificationDispatchWorker = host.startNotificationDispatchWorker();
   let stopped = false;
 
   return {
@@ -161,6 +182,7 @@ export function registerFeedbackServerModule(host: FeedbackServerHost): Feedback
         return;
       }
       stopped = true;
+      await stopNotificationDispatchWorker();
       await stopDailyDigestScheduler();
     },
   };

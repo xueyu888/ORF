@@ -1,9 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import { feedbackCommentPath, feedbackIssuePath, planFeedbackCommentCreatedNotification } from "@orf/feedback-module/contracts";
 import {
+  buildFeedbackNotificationDispatchDraft,
   getFeedbackCommentNotificationFacts,
-  getFeedbackOrdinaryNotificationRecipients,
+  getFeedbackOrdinaryNotificationDispatchRecipients,
+  insertFeedbackNotificationDispatch,
   lockFeedbackCommentTarget,
+  publishFeedbackNotificationDispatch,
   recordFeedbackCommentCreatedActivity,
   resolveFeedbackCommentTarget,
   type FeedbackNotificationRecipientDirectory,
@@ -15,14 +18,14 @@ import {
 import { buildCommentNotificationContent } from "../notifications/notificationEventModel";
 import { db } from "../db/client";
 import { projects } from "../db/schema";
-import { publishNotificationEvent } from "../notifications/publisher";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import {
   registerCommentTargetAdapter,
+  type CommentTargetCommitResult,
   type CommentMessageCommittedEvent,
   type CommentTargetActor,
-  type CommentTargetSnapshot,
 } from "../comments/commentTargetAdapters";
+import { feedbackNotificationPort } from "./feedbackNotificationPort";
 
 const feedbackNotificationRecipientDirectory: FeedbackNotificationRecipientDirectory = {
   getActiveAdminUserIds: getActiveAdminNotificationRecipients,
@@ -57,7 +60,7 @@ async function feedbackCommentNotificationContext(event: CommentMessageCommitted
     ...event.mentionedUserIds,
     event.replyRecipientUserId,
   ]));
-  const recipientUserIds = await getFeedbackOrdinaryNotificationRecipients(db, feedbackNotificationRecipientDirectory, {
+  const recipients = await getFeedbackOrdinaryNotificationDispatchRecipients(db, feedbackNotificationRecipientDirectory, {
     assigneeUserId: target.assigneeUserId,
     createdBy: target.createdBy,
     feedbackId: event.target.targetId,
@@ -66,13 +69,20 @@ async function feedbackCommentNotificationContext(event: CommentMessageCommitted
   });
   return {
     project: project ?? null,
-    recipientUserIds: recipientUserIds.filter((userId) => !excludedUserIds.has(userId)),
+    recipients: recipients.filter((recipient) => !excludedUserIds.has(recipient.userId)),
   };
 }
 
-async function notifyFeedbackParticipantsOfComment(event: CommentMessageCommittedEvent) {
+async function notifyFeedbackParticipantsOfComment(
+  event: CommentMessageCommittedEvent,
+  result?: CommentTargetCommitResult,
+) {
+  const activityEventId = result?.feedbackActivityEventId?.trim();
+  if (!activityEventId) {
+    return;
+  }
   const context = await feedbackCommentNotificationContext(event);
-  if (!context || context.recipientUserIds.length === 0) {
+  if (!context || context.recipients.length === 0) {
     return;
   }
 
@@ -82,7 +92,7 @@ async function notifyFeedbackParticipantsOfComment(event: CommentMessageCommitte
     summary: `${event.actor.name} 回复了反馈「${event.target.title}」：`,
   });
 
-  await publishNotificationEvent(planFeedbackCommentCreatedNotification({
+  const dispatch = buildFeedbackNotificationDispatchDraft(planFeedbackCommentCreatedNotification({
     actorName: event.actor.name,
     actorUserId: event.actor.id,
     body: content.body,
@@ -91,10 +101,15 @@ async function notifyFeedbackParticipantsOfComment(event: CommentMessageCommitte
     commentThreadId: event.commentThreadId,
     feedbackId: event.target.targetId,
     project: context.project,
-    recipientUserIds: context.recipientUserIds,
+    recipientUserIds: [],
     targetTitle: event.target.title,
     teamId: event.target.storageScopeId,
-  }));
+  }), context.recipients);
+  const dispatchId = await insertFeedbackNotificationDispatch(db, {
+    activityEventId,
+    dispatch,
+  });
+  await publishFeedbackNotificationDispatch(db, dispatchId, feedbackNotificationPort);
 }
 
 export function registerFeedbackCommentTargetAdapter() {
@@ -129,12 +144,13 @@ export function registerFeedbackCommentTargetAdapter() {
       return lockFeedbackCommentTarget(database, target.targetId);
     },
     async onMessageCommitted(event, database) {
-      await recordFeedbackCommentCreatedActivity(database, {
+      const result = await recordFeedbackCommentCreatedActivity(database, {
         actorUserId: event.actor.id,
         commentMessageId: event.commentMessageId,
         feedbackId: event.target.targetId,
         teamId: event.target.storageScopeId,
       });
+      return { feedbackActivityEventId: result.activityEventId };
     },
     afterMessageCommitted: notifyFeedbackParticipantsOfComment,
   });

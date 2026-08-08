@@ -30,6 +30,10 @@ import {
   makeFeedbackId,
   makeFeedbackRelationId,
 } from "./ids";
+import {
+  insertFeedbackNotificationDispatch,
+  type FeedbackNotificationDispatchDraft,
+} from "./notificationDispatch";
 import { upsertFeedbackParticipants } from "./participants";
 
 export type FeedbackWriteClient = Pick<NodePgDatabase<any>, "delete" | "insert" | "select" | "update">;
@@ -64,6 +68,7 @@ export type CreateFeedbackIssueWriteInput = {
   readonly description: string;
   readonly draft: FeedbackCreateDraft;
   readonly impact: FeedbackImpact;
+  readonly notificationDispatch?: FeedbackNotificationDispatchDraft | null;
   readonly priority?: FeedbackPriority | null;
   readonly projectId?: string | null;
   readonly reportAttachments?: readonly FeedbackCreateReportAttachmentInput[];
@@ -71,7 +76,7 @@ export type CreateFeedbackIssueWriteInput = {
 };
 
 export type CreateFeedbackIssueWriteResult =
-  | { status: "ok"; feedbackId: string; assigneeUserId?: string | null; projectId?: string | null; title: string }
+  | { status: "ok"; feedbackId: string; assigneeUserId?: string | null; notificationDispatchId?: string | null; projectId?: string | null; title: string }
   | { status: "notFound" }
   | { status: "invalid" };
 
@@ -101,6 +106,7 @@ export type UpdateFeedbackAssigneeWriteInput = {
   readonly assigneeUserId?: string | null;
   readonly expectedVersion: number;
   readonly feedbackId: string;
+  readonly notificationDispatch?: FeedbackNotificationDispatchDraft | null;
 };
 
 export type UpdateFeedbackAssigneeWriteResult =
@@ -110,14 +116,32 @@ export type UpdateFeedbackAssigneeWriteResult =
       status: "ok";
       changed: true;
       nextAssigneeUserId?: string | null;
+      notificationDispatchId?: string | null;
       previousAssigneeUserId?: string | null;
+      createdBy?: string | null;
       title: string;
     };
 
 export type TransitionFeedbackIssueWriteInput = {
   readonly command: FeedbackTransitionInput;
   readonly feedbackId: string;
+  readonly notificationDispatch?: FeedbackTransitionNotificationDispatchFactory | null;
 };
+
+export type FeedbackTransitionNotificationDispatchContext = {
+  readonly assigneeUserId?: string | null;
+  readonly createdBy?: string | null;
+  readonly feedbackId: string;
+  readonly projectId?: string | null;
+  readonly resolution?: FeedbackResolution | null;
+  readonly stage: FeedbackStage;
+  readonly teamId: string;
+  readonly title: string;
+};
+
+export type FeedbackTransitionNotificationDispatchFactory = (
+  context: FeedbackTransitionNotificationDispatchContext,
+) => FeedbackNotificationDispatchDraft | null;
 
 export type TransitionFeedbackIssueWriteResult =
   | FeedbackCommandFailure
@@ -126,6 +150,7 @@ export type TransitionFeedbackIssueWriteResult =
       changed: true;
       assigneeUserId?: string | null;
       createdBy?: string | null;
+      notificationDispatchId?: string | null;
       projectId?: string | null;
       resolution?: FeedbackResolution | null;
       stage: FeedbackStage;
@@ -250,6 +275,7 @@ export async function createFeedbackIssue(
     return { status: "invalid" };
   }
 
+  let notificationDispatchId: string | null = null;
   await database.transaction(async (tx) => {
     await tx.insert(feedback).values({
       id,
@@ -307,8 +333,9 @@ export async function createFeedbackIssue(
       participatedAt: createdAt,
     });
 
+    const activityEventId = makeFeedbackActivityId();
     await tx.insert(feedbackActivityEvents).values({
-      id: makeFeedbackActivityId(),
+      id: activityEventId,
       teamId,
       feedbackId: id,
       actorUserId: actor.id,
@@ -316,9 +343,13 @@ export async function createFeedbackIssue(
       payload: { title, assigneeUserId, projectId, priority: input.priority ?? null },
       createdAt,
     });
+    notificationDispatchId = await insertFeedbackNotificationDispatch(tx, {
+      activityEventId,
+      dispatch: input.notificationDispatch,
+    });
   });
 
-  return { status: "ok", feedbackId: id, assigneeUserId, projectId, title };
+  return { status: "ok", feedbackId: id, assigneeUserId, notificationDispatchId, projectId, title };
 }
 
 export async function updateFeedbackIssueMetadata(
@@ -476,8 +507,9 @@ export async function updateFeedbackIssueAssignee(
         version: target.version + 1,
       })
       .where(and(eq(feedback.id, input.feedbackId), eq(feedback.teamId, teamId), eq(feedback.version, input.expectedVersion)));
+    const activityEventId = makeFeedbackActivityId();
     await tx.insert(feedbackActivityEvents).values({
-      id: makeFeedbackActivityId(),
+      id: activityEventId,
       teamId,
       feedbackId: input.feedbackId,
       actorUserId: actor.id,
@@ -488,11 +520,17 @@ export async function updateFeedbackIssueAssignee(
       },
       createdAt: updatedAt,
     });
+    const notificationDispatchId = await insertFeedbackNotificationDispatch(tx, {
+      activityEventId,
+      dispatch: input.notificationDispatch,
+    });
 
     return {
       status: "ok",
       changed: true,
+      createdBy: target.createdBy,
       nextAssigneeUserId,
+      notificationDispatchId,
       previousAssigneeUserId: target.assigneeUserId,
       title: target.title,
     };
@@ -553,8 +591,9 @@ export async function transitionFeedbackIssue(
         version: outcome.value.feedback.version,
       })
       .where(and(eq(feedback.id, input.feedbackId), eq(feedback.teamId, teamId), eq(feedback.version, input.command.expectedVersion)));
+    const activityEventId = makeFeedbackActivityId();
     await tx.insert(feedbackActivityEvents).values({
-      id: makeFeedbackActivityId(),
+      id: activityEventId,
       teamId,
       feedbackId: input.feedbackId,
       actorUserId: actor.id,
@@ -568,12 +607,26 @@ export async function transitionFeedbackIssue(
       },
       createdAt: occurredAt,
     });
+    const notificationDispatchId = await insertFeedbackNotificationDispatch(tx, {
+      activityEventId,
+      dispatch: input.notificationDispatch?.({
+        assigneeUserId: target.assigneeUserId,
+        createdBy: target.createdBy,
+        feedbackId: input.feedbackId,
+        projectId: target.projectId,
+        resolution: outcome.value.feedback.resolution,
+        stage: outcome.value.feedback.stage,
+        teamId,
+        title: target.title,
+      }) ?? null,
+    });
 
     return {
       status: "ok",
       changed: true,
       assigneeUserId: target.assigneeUserId,
       createdBy: target.createdBy,
+      notificationDispatchId,
       projectId: target.projectId,
       stage: outcome.value.feedback.stage,
       resolution: outcome.value.feedback.resolution,

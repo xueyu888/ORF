@@ -2,6 +2,11 @@ import { and, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { FeedbackSubscriptionMode } from "../contracts";
 import { feedback, feedbackParticipants, feedbackSubscriptions } from "../infrastructure/database/schema";
+import {
+  feedbackNotificationRecipient,
+  mergeFeedbackNotificationDispatchRecipients,
+  type FeedbackNotificationDispatchRecipient,
+} from "./notificationDispatch";
 
 export type ExplicitFeedbackSubscriptionMode = "subscribed" | "muted";
 export type FeedbackSubscriptionMutationMode = ExplicitFeedbackSubscriptionMode | "none";
@@ -66,7 +71,15 @@ async function getFeedbackSubscriptionRows(
     .where(and(eq(feedbackSubscriptions.teamId, teamId), eq(feedbackSubscriptions.feedbackId, feedbackId)));
 }
 
-export async function getFeedbackOrdinaryNotificationRecipients(
+function presentRecipients(
+  recipients: Array<FeedbackNotificationDispatchRecipient | null>,
+) {
+  return mergeFeedbackNotificationDispatchRecipients(
+    recipients.filter((recipient): recipient is FeedbackNotificationDispatchRecipient => Boolean(recipient)),
+  );
+}
+
+export async function getFeedbackOrdinaryNotificationDispatchRecipients(
   database: FeedbackSubscriptionDatabase,
   directory: FeedbackNotificationRecipientDirectory,
   input: {
@@ -91,34 +104,73 @@ export async function getFeedbackOrdinaryNotificationRecipients(
   const subscribedUserIds = subscriptionRows
     .filter((row) => row.mode === "subscribed")
     .map((row) => row.userId);
-  const relatedUserIds = uniqueUserIds([input.createdBy, input.assigneeUserId, ...commentParticipantUserIds]);
-  const [adminUserIds, activeRelatedUserIds, activeSubscribedUserIds] = await Promise.all([
-    directory.getActiveAdminUserIds(input.teamId),
-    directory.getActiveMemberUserIdsByIds(input.teamId, relatedUserIds),
-    directory.getActiveMemberUserIdsByIds(input.teamId, subscribedUserIds),
-  ]);
 
-  return uniqueUserIds([...adminUserIds, ...activeRelatedUserIds, ...activeSubscribedUserIds]).filter(
-    (userId) => !mutedUserIds.has(userId),
-  );
+  const relatedCandidates = [
+    ...uniqueUserIds([input.createdBy]).map((userId) => ({ userId, reason: "creator" as const })),
+    ...uniqueUserIds([input.assigneeUserId]).map((userId) => ({ userId, reason: "assignee" as const })),
+    ...commentParticipantUserIds.map((userId) => ({ userId, reason: "participant" as const })),
+    ...subscribedUserIds.map((userId) => ({ userId, reason: "follower" as const })),
+  ];
+  const [adminUserIds, activeRelatedUserIds] = await Promise.all([
+    directory.getActiveAdminUserIds(input.teamId),
+    directory.getActiveMemberUserIdsByIds(input.teamId, relatedCandidates.map((candidate) => candidate.userId)),
+  ]);
+  const activeRelatedUserIdSet = new Set(activeRelatedUserIds);
+
+  return presentRecipients([
+    ...adminUserIds.map((userId) => feedbackNotificationRecipient({
+      deliveryClass: "mandatory",
+      reasons: ["administrator"],
+      userId,
+    })),
+    ...relatedCandidates
+      .filter((candidate) => activeRelatedUserIdSet.has(candidate.userId))
+      .map((candidate) => feedbackNotificationRecipient({
+        deliveryClass: "ordinary",
+        muted: mutedUserIds.has(candidate.userId),
+        reasons: [candidate.reason],
+        userId: candidate.userId,
+      })),
+  ]);
 }
 
-export async function getFeedbackAssignmentNotificationRecipients(
+export async function getFeedbackAssignmentNotificationDispatchRecipients(
+  database: FeedbackSubscriptionDatabase,
   directory: FeedbackNotificationRecipientDirectory,
   input: {
+    createdBy?: string | null;
+    feedbackId: string;
     nextAssigneeUserId?: string | null;
     previousAssigneeUserId?: string | null;
     teamId: string;
   },
 ) {
-  const [adminUserIds, assigneeUserIds] = await Promise.all([
-    directory.getActiveAdminUserIds(input.teamId),
-    directory.getActiveMemberUserIdsByIds(
-      input.teamId,
-      uniqueUserIds([input.previousAssigneeUserId, input.nextAssigneeUserId]),
-    ),
+  const [ordinaryRecipients, activePreviousAssigneeUserIds, activeNextAssigneeUserIds] = await Promise.all([
+    getFeedbackOrdinaryNotificationDispatchRecipients(database, directory, {
+      assigneeUserId: input.nextAssigneeUserId,
+      createdBy: input.createdBy,
+      feedbackId: input.feedbackId,
+      includeCommentParticipants: true,
+      teamId: input.teamId,
+    }),
+    directory.getActiveMemberUserIdsByIds(input.teamId, uniqueUserIds([input.previousAssigneeUserId])),
+    directory.getActiveMemberUserIdsByIds(input.teamId, uniqueUserIds([input.nextAssigneeUserId])),
   ]);
-  return uniqueUserIds([...adminUserIds, ...assigneeUserIds]);
+
+  return presentRecipients([
+    ...ordinaryRecipients,
+    ...activePreviousAssigneeUserIds.map((userId) => feedbackNotificationRecipient({
+      deliveryClass: "ordinary",
+      reasons: ["previous_assignee"],
+      userId,
+    })),
+    ...activeNextAssigneeUserIds.map((userId) => feedbackNotificationRecipient({
+      attentionLevel: "action_required",
+      deliveryClass: "direct",
+      reasons: ["assignee", "action_required"],
+      userId,
+    })),
+  ]);
 }
 
 export async function getFeedbackSubscriptionMode(

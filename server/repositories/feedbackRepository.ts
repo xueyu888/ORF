@@ -11,32 +11,40 @@ import {
 } from "@orf/feedback-module/contracts";
 import {
   addFeedbackIssueRelation,
+  buildFeedbackNotificationDispatchDraft,
   createFeedbackDraft,
   createFeedbackIssue,
   feedbackReportAttachmentResponseContentType,
-  getFeedbackAssignmentNotificationRecipients,
-  getFeedbackOrdinaryNotificationRecipients,
+  feedbackNotificationRecipient,
+  getFeedbackAssignmentNotificationDispatchRecipients,
+  getFeedbackCommentNotificationFacts,
+  getFeedbackOrdinaryNotificationDispatchRecipients,
   getFeedbackReferences as getFeedbackReferenceSummaries,
   getFeedbackReportAttachmentContentFacts,
   listFeedbackReferences as listFeedbackReferenceSummaries,
   markFeedbackViewed as markFeedbackViewedInModule,
+  mergeFeedbackNotificationDispatchRecipients,
+  publishFeedbackNotificationDispatch,
   removeFeedbackIssueRelation,
   searchFeedbackReferences as searchFeedbackReferenceSummaries,
   transitionFeedbackIssue,
   updateFeedbackIssueAssignee,
   updateFeedbackIssueMetadata,
   type FeedbackCommandResult,
+  type FeedbackNotificationDispatchDraft,
+  type FeedbackNotificationDispatchRecipient,
   type FeedbackNotificationRecipientDirectory,
   type FeedbackTargetTitleSync,
+  type FeedbackTransitionNotificationDispatchFactory,
 } from "@orf/feedback-module/server";
 import { replaceOrfAttachmentMarkdownTokens } from "../../src/features/rich-text/orfRichTextTokens";
 import type { OrfUserDisplayProfile } from "../../src/types/orf";
 import { db } from "../db/client";
-import { publishNotificationEvent } from "../notifications/publisher";
 import {
   getActiveAdminNotificationRecipients,
   getActiveMemberNotificationRecipientsByIds,
 } from "./notificationRepository";
+import { feedbackNotificationPort } from "../feedback/feedbackNotificationPort";
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { getFeedbackIssueDetailReadModelData } from "../readModels/feedbackIssueReadModel";
 import { commentThreads, projects } from "../db/schema";
@@ -208,7 +216,16 @@ function buildReportDescription(input: { description: string; uploads: Array<{ c
   return description ? { status: "ok" as const, description } : { status: "invalid" as const };
 }
 
-async function notifyFeedbackCreated(input: {
+function uniqueNotificationUserIds(userIds: Array<string | null | undefined>) {
+  const normalized = userIds.map((userId) => userId?.trim()).filter((userId): userId is string => Boolean(userId));
+  return Array.from(new Set(normalized));
+}
+
+async function publishFeedbackDispatch(dispatchId: string | null | undefined) {
+  await publishFeedbackNotificationDispatch(db, dispatchId, feedbackNotificationPort);
+}
+
+async function prepareFeedbackCreatedNotificationDispatch(input: {
   actorName: string;
   actorUserId: string;
   assigneeName?: string | null;
@@ -217,59 +234,87 @@ async function notifyFeedbackCreated(input: {
   project: ProjectRow;
   teamId: string;
   title: string;
-}) {
-  await publishNotificationEvent(planFeedbackCreatedNotification({
+}): Promise<FeedbackNotificationDispatchDraft | null> {
+  const recipients = await getFeedbackOrdinaryNotificationDispatchRecipients(db, feedbackNotificationRecipientDirectory, {
+    assigneeUserId: input.assigneeUserId,
+    createdBy: input.actorUserId,
+    feedbackId: input.feedbackId,
+    includeCommentParticipants: false,
+    teamId: input.teamId,
+  });
+
+  return buildFeedbackNotificationDispatchDraft(planFeedbackCreatedNotification({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     assigneeName: input.assigneeName,
     feedbackId: input.feedbackId,
     project: input.project,
-    recipientUserIds: await getFeedbackOrdinaryNotificationRecipients(db, feedbackNotificationRecipientDirectory, {
-      assigneeUserId: input.assigneeUserId,
-      createdBy: input.actorUserId,
-      feedbackId: input.feedbackId,
-      includeCommentParticipants: false,
-      teamId: input.teamId,
-    }),
+    recipientUserIds: [],
     teamId: input.teamId,
     title: input.title,
-  }));
+  }), recipients);
 }
 
-async function notifyFeedbackLifecycleChanged(input: {
+function feedbackLifecycleActionRequiredUserId(
+  command: FeedbackTransitionInput,
+  input: { assigneeUserId?: string | null; createdBy?: string | null },
+) {
+  if (command.type === "submit_verification") return input.createdBy ?? null;
+  if (command.type === "reject_verification" || command.type === "reopen") return input.assigneeUserId ?? null;
+  return null;
+}
+
+async function prepareFeedbackLifecycleNotificationDispatchFactory(input: {
   actorName: string;
   actorUserId: string;
   assigneeUserId?: string | null;
+  command: FeedbackTransitionInput;
   createdBy?: string | null;
   feedbackId: string;
   project: ProjectRow;
-  stage: string;
-  resolution?: string | null;
   teamId: string;
   title: string;
-}) {
-  await publishNotificationEvent(planFeedbackLifecycleChangedNotification({
+}): Promise<FeedbackTransitionNotificationDispatchFactory | null> {
+  const ordinaryRecipients = await getFeedbackOrdinaryNotificationDispatchRecipients(db, feedbackNotificationRecipientDirectory, {
+    assigneeUserId: input.assigneeUserId,
+    createdBy: input.createdBy,
+    feedbackId: input.feedbackId,
+    includeCommentParticipants: true,
+    teamId: input.teamId,
+  });
+  const actionRequiredUserIds = await getActiveMemberNotificationRecipientsByIds(input.teamId, uniqueNotificationUserIds([
+    feedbackLifecycleActionRequiredUserId(input.command, {
+      assigneeUserId: input.assigneeUserId,
+      createdBy: input.createdBy,
+    }),
+  ]));
+  const recipients = mergeFeedbackNotificationDispatchRecipients([
+    ...ordinaryRecipients,
+    ...actionRequiredUserIds.map((userId) => feedbackNotificationRecipient({
+      attentionLevel: "action_required",
+      deliveryClass: "direct",
+      reasons: ["action_required"],
+      userId,
+    })),
+  ].filter((recipient): recipient is FeedbackNotificationDispatchRecipient => Boolean(recipient)));
+
+  return (context) => buildFeedbackNotificationDispatchDraft(planFeedbackLifecycleChangedNotification({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     feedbackId: input.feedbackId,
     project: input.project,
-    recipientUserIds: await getFeedbackOrdinaryNotificationRecipients(db, feedbackNotificationRecipientDirectory, {
-      assigneeUserId: input.assigneeUserId,
-      createdBy: input.createdBy,
-      feedbackId: input.feedbackId,
-      includeCommentParticipants: true,
-      teamId: input.teamId,
-    }),
-    resolution: input.resolution,
-    stage: input.stage,
+    recipientUserIds: [],
+    resolution: context.resolution,
+    stage: context.stage,
     teamId: input.teamId,
     title: input.title,
-  }));
+  }), recipients);
 }
 
-async function notifyFeedbackAssigned(input: {
+async function prepareFeedbackAssignedNotificationDispatch(input: {
   actorName: string;
   actorUserId: string;
+  createdBy?: string | null;
   feedbackId: string;
   nextAssigneeName?: string | null;
   nextAssigneeUserId?: string | null;
@@ -277,21 +322,25 @@ async function notifyFeedbackAssigned(input: {
   previousAssigneeUserId?: string | null;
   teamId: string;
   title: string;
-}) {
-  await publishNotificationEvent(planFeedbackAssigneeChangedNotification({
+}): Promise<FeedbackNotificationDispatchDraft | null> {
+  const recipients = await getFeedbackAssignmentNotificationDispatchRecipients(db, feedbackNotificationRecipientDirectory, {
+    createdBy: input.createdBy,
+    feedbackId: input.feedbackId,
+    nextAssigneeUserId: input.nextAssigneeUserId,
+    previousAssigneeUserId: input.previousAssigneeUserId,
+    teamId: input.teamId,
+  });
+
+  return buildFeedbackNotificationDispatchDraft(planFeedbackAssigneeChangedNotification({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     feedbackId: input.feedbackId,
     nextAssigneeName: input.nextAssigneeName,
     previousAssigneeName: input.previousAssigneeName,
-    recipientUserIds: await getFeedbackAssignmentNotificationRecipients(feedbackNotificationRecipientDirectory, {
-      nextAssigneeUserId: input.nextAssigneeUserId,
-      previousAssigneeUserId: input.previousAssigneeUserId,
-      teamId: input.teamId,
-    }),
+    recipientUserIds: [],
     teamId: input.teamId,
     title: input.title,
-  }));
+  }), recipients);
 }
 
 async function getFeedbackFromReadModel(feedbackId: string, scope: RuntimeScope, viewerUserId?: string | null) {
@@ -333,8 +382,6 @@ export async function createFeedback(input: CreateFeedbackInput, actor: Feedback
   const draft = createFeedbackDraft();
   const preparedUploads: Array<{ clientId: string; prepared: PreparedCommentAttachment }> = [];
   let createdFeedbackId = "";
-  let createdTitle = "";
-  let createdAssigneeUserId: string | null = null;
   try {
     for (const attachment of input.attachments ?? []) {
       const prepared = await prepareCommentAttachment({
@@ -361,12 +408,24 @@ export async function createFeedback(input: CreateFeedbackInput, actor: Feedback
       return { status: "invalid" };
     }
 
+    const notificationDispatch = await prepareFeedbackCreatedNotificationDispatch({
+      actorName: actor.name,
+      actorUserId: actor.id,
+      assigneeName: assigneeUser?.name ?? null,
+      assigneeUserId: assigneeUser?.id ?? null,
+      feedbackId: draft.id,
+      project,
+      teamId,
+      title: input.title.trim(),
+    });
+
     const created = await createFeedbackIssue(db, {
       assigneeUserId: assigneeUser?.id ?? null,
       causeCategories: input.causeCategories,
       description: report.description,
       draft,
       impact: input.impact,
+      notificationDispatch,
       priority: input.priority ?? null,
       projectId,
       reportAttachments: preparedUploads.map((upload) => ({
@@ -387,23 +446,11 @@ export async function createFeedback(input: CreateFeedbackInput, actor: Feedback
     }
 
     createdFeedbackId = created.feedbackId;
-    createdTitle = created.title;
-    createdAssigneeUserId = created.assigneeUserId ?? null;
+    await publishFeedbackDispatch(created.notificationDispatchId);
   } catch (error) {
     await deleteStoredCommentAttachmentObjects(preparedUploads.map((upload) => upload.prepared.row));
     throw error;
   }
-
-  await notifyFeedbackCreated({
-    actorName: actor.name,
-    actorUserId: actor.id,
-    assigneeName: assigneeUser?.name ?? null,
-    assigneeUserId: createdAssigneeUserId,
-    feedbackId: createdFeedbackId,
-    project,
-    teamId,
-    title: createdTitle,
-  });
 
   publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId: createdFeedbackId, teamId });
 
@@ -453,28 +500,34 @@ export async function updateFeedbackAssignee(
   if (input.assigneeUserId && !nextAssignee) {
     return { status: "invalidAssignee" };
   }
+  const currentFacts = await getFeedbackCommentNotificationFacts(db, feedbackId);
+  const previousAssignee = currentFacts?.assigneeUserId ? await resolveActiveMemberById(teamId, currentFacts.assigneeUserId) : null;
+  const notificationDispatch = currentFacts && currentFacts.teamId === teamId
+    ? await prepareFeedbackAssignedNotificationDispatch({
+        actorName: actor.name,
+        actorUserId: actor.id,
+        createdBy: currentFacts.createdBy,
+        feedbackId,
+        nextAssigneeName: nextAssignee?.name ?? null,
+        nextAssigneeUserId: nextAssignee?.id ?? null,
+        previousAssigneeName: previousAssignee?.name ?? null,
+        previousAssigneeUserId: currentFacts.assigneeUserId ?? null,
+        teamId,
+        title: currentFacts.title,
+      })
+    : null;
 
   const result = await updateFeedbackIssueAssignee(db, {
     assigneeUserId: nextAssignee?.id ?? null,
     expectedVersion: input.expectedVersion,
     feedbackId,
+    notificationDispatch,
   }, feedbackWriteActor(actor, teamId));
 
   if (result.status !== "ok") return result;
 
   if (result.changed) {
-    const previousAssignee = result.previousAssigneeUserId ? await resolveActiveMemberById(teamId, result.previousAssigneeUserId) : null;
-    await notifyFeedbackAssigned({
-      actorName: actor.name,
-      actorUserId: actor.id,
-      feedbackId,
-      nextAssigneeName: nextAssignee?.name ?? null,
-      nextAssigneeUserId: result.nextAssigneeUserId ?? null,
-      previousAssigneeName: previousAssignee?.name ?? null,
-      previousAssigneeUserId: result.previousAssigneeUserId ?? null,
-      teamId,
-      title: result.title,
-    });
+    await publishFeedbackDispatch(result.notificationDispatchId);
     publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
   }
   return { status: "ok", changed: result.changed };
@@ -488,26 +541,31 @@ export async function transitionFeedback(
   const teamId = storageScopeId(actor.scope);
   if (!teamId) return { status: "notFound" };
 
+  const currentFacts = await getFeedbackCommentNotificationFacts(db, feedbackId);
+  const project = currentFacts?.projectId ? await resolveProjectById(teamId, currentFacts.projectId) : null;
+  const notificationDispatch = currentFacts && currentFacts.teamId === teamId
+    ? await prepareFeedbackLifecycleNotificationDispatchFactory({
+        actorName: actor.name,
+        actorUserId: actor.id,
+        assigneeUserId: currentFacts.assigneeUserId ?? null,
+        command,
+        createdBy: currentFacts.createdBy ?? null,
+        feedbackId,
+        project,
+        teamId,
+        title: currentFacts.title,
+      })
+    : null;
+
   const result = await transitionFeedbackIssue(db, {
     command,
     feedbackId,
+    notificationDispatch,
   }, feedbackWriteActor(actor, teamId));
 
   if (result.status !== "ok") return result;
   if (result.changed) {
-    const project = result.projectId ? await resolveProjectById(teamId, result.projectId) : null;
-    await notifyFeedbackLifecycleChanged({
-      actorName: actor.name,
-      actorUserId: actor.id,
-      assigneeUserId: result.assigneeUserId ?? null,
-      createdBy: result.createdBy ?? null,
-      feedbackId,
-      project,
-      resolution: result.resolution ?? null,
-      stage: result.stage,
-      teamId,
-      title: result.title,
-    });
+    await publishFeedbackDispatch(result.notificationDispatchId);
     publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
   }
   return { status: "ok", changed: result.changed };

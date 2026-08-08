@@ -15,6 +15,7 @@ export type FeedbackCommentNotificationFacts = {
   readonly createdBy: string;
   readonly projectId: string | null;
   readonly teamId: string;
+  readonly title: string;
 };
 
 export type FeedbackReferenceSummary = {
@@ -172,6 +173,7 @@ export async function getFeedbackCommentNotificationFacts(
       createdBy: feedback.createdBy,
       projectId: feedback.projectId,
       teamId: feedback.teamId,
+      title: feedback.title,
     })
     .from(feedback)
     .where(eq(feedback.id, feedbackId))

@@ -34,6 +34,10 @@ export type CommentMessageCommittedEvent = {
   readonly target: CommentTargetSnapshot;
 };
 
+export type CommentTargetCommitResult = {
+  readonly feedbackActivityEventId?: string | null;
+};
+
 export interface CommentTargetAdapter {
   readonly invalidationModel: CommentTargetInvalidationModel;
   readonly protocolVersion: 1;
@@ -43,8 +47,8 @@ export interface CommentTargetAdapter {
   href(targetId: string, commentId?: string | null): string;
   lockForComment(database: CommentTargetDatabase, target: CommentTargetSnapshot): Promise<boolean>;
   resolve(targetId: string): Promise<CommentTargetSnapshot | null>;
-  afterMessageCommitted?(event: CommentMessageCommittedEvent): Promise<void>;
-  onMessageCommitted?(event: CommentMessageCommittedEvent, database: CommentTargetDatabase): Promise<void>;
+  afterMessageCommitted?(event: CommentMessageCommittedEvent, result?: CommentTargetCommitResult): Promise<void>;
+  onMessageCommitted?(event: CommentMessageCommittedEvent, database: CommentTargetDatabase): Promise<CommentTargetCommitResult | void>;
 }
 
 const commentTargetAdapters = new Map<CommentTargetType, CommentTargetAdapter>();

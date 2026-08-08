@@ -138,6 +138,7 @@ import {
   getCommentTargetAdapter,
   type CommentMessageCommittedEvent,
   type CommentTargetAdapter,
+  type CommentTargetCommitResult,
   type CommentTargetSnapshot,
 } from "../comments/commentTargetAdapters";
 
@@ -2625,6 +2626,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
   const attachmentIds = extractCommentAttachmentIds(body);
   const mentionedUserIds = extractCommentMentionUserIds(body);
   const createdComment = await db.transaction(async (tx) => {
+    let targetCommitResult: CommentTargetCommitResult | undefined;
     const notifyTargetMessageCommitted = async (input: {
       messageId: string;
       replyRecipientUserId?: string | null;
@@ -2634,7 +2636,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
       if (target.kind !== "registered") {
         return;
       }
-      await target.adapter.onMessageCommitted?.({
+      const result = await target.adapter.onMessageCommitted?.({
         actor,
         attachments: [],
         body,
@@ -2646,6 +2648,9 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
         replyToMessageId: input.replyToMessageId ?? null,
         target,
       }, tx);
+      if (result) {
+        targetCommitResult = result;
+      }
     };
 
     if (target.kind === "workItem") {
@@ -2769,6 +2774,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
         messageId: nextMessageId,
         replyRecipientUserId,
         replyToMessageId: replyToMessageId ?? input.parentMessageId,
+        targetCommitResult,
         threadId: parent.threadId,
       };
     }
@@ -2827,7 +2833,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
       threadId: nextThreadId,
     });
 
-    return { messageId: nextMessageId, replyRecipientUserId: null, replyToMessageId: null, threadId: nextThreadId };
+    return { messageId: nextMessageId, replyRecipientUserId: null, replyToMessageId: null, targetCommitResult, threadId: nextThreadId };
   });
 
   if (!createdComment) {
@@ -2882,7 +2888,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
       replyToMessageId: createdComment.replyToMessageId,
       target,
     };
-    await target.adapter.afterMessageCommitted?.(committedEvent);
+    await target.adapter.afterMessageCommitted?.(committedEvent, createdComment.targetCommitResult);
   }
 
   publishOrfDataInvalidation({

@@ -36,6 +36,7 @@ export async function recordFeedbackCommentCreatedActivity(
   input: FeedbackCommentCreatedActivityInput,
 ) {
   const occurredAt = feedbackNowIso();
+  const activityEventId = makeFeedbackActivityId();
   await upsertFeedbackParticipants(database, {
     feedbackId: input.feedbackId,
     participatedAt: occurredAt,
@@ -43,7 +44,7 @@ export async function recordFeedbackCommentCreatedActivity(
     userIds: [input.actorUserId],
   });
   await database.insert(feedbackActivityEvents).values({
-    id: makeFeedbackActivityId(),
+    id: activityEventId,
     teamId: input.teamId,
     feedbackId: input.feedbackId,
     actorUserId: input.actorUserId,
@@ -51,6 +52,7 @@ export async function recordFeedbackCommentCreatedActivity(
     payload: { commentMessageId: input.commentMessageId },
     createdAt: occurredAt,
   });
+  return { activityEventId };
 }
 
 export async function markFeedbackViewed(

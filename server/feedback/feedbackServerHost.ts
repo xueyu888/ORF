@@ -1,5 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { startFeedbackDailyDigestScheduler, type FeedbackServerHost } from "@orf/feedback-module/server";
+import {
+  startFeedbackDailyDigestScheduler,
+  startFeedbackNotificationDispatchWorker,
+  type FeedbackServerHost,
+} from "@orf/feedback-module/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { teamMembers, users } from "../db/schema";
@@ -7,6 +11,7 @@ import { env } from "../env";
 import { publishNotificationEvent } from "../notifications/publisher";
 import { registerFeedbackRoutes } from "../routes/feedbackRoutes";
 import { registerFeedbackCommentTargetAdapter } from "./feedbackCommentTargetAdapter";
+import { feedbackNotificationPort } from "./feedbackNotificationPort";
 
 async function listActiveFeedbackDigestRecipients() {
   return db
@@ -41,6 +46,12 @@ export function createOrfFeedbackServerHost(app: FastifyInstance): FeedbackServe
         listActiveRecipients: listActiveFeedbackDigestRecipients,
         log: app.log,
         publishNotification: publishNotificationEvent,
+      });
+    },
+    startNotificationDispatchWorker() {
+      return startFeedbackNotificationDispatchWorker({
+        database: db,
+        publishNotification: feedbackNotificationPort,
       });
     },
   };

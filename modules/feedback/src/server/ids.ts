@@ -19,6 +19,10 @@ export function makeFeedbackRelationId() {
   return `frel-${Date.now()}-${nextCounter()}-${randomUUID()}`;
 }
 
+export function makeFeedbackDispatchId() {
+  return `fdisp-${Date.now()}-${nextCounter()}-${randomUUID()}`;
+}
+
 export function feedbackNowIso() {
   return new Date().toISOString();
 }
