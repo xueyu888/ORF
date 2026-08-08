@@ -47,8 +47,13 @@ function corsOrigin() {
   return env.CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean);
 }
 
-export async function buildServer(options: { logger?: boolean; registerOptionalIntegrations?: boolean } = {}) {
+export async function buildServer(options: {
+  logger?: boolean;
+  registerOptionalIntegrations?: boolean;
+  startBackgroundJobs?: boolean;
+} = {}) {
   const app = Fastify({ logger: options.logger ?? true });
+  const startBackgroundJobs = options.startBackgroundJobs ?? true;
 
   await app.register(cors, {
     origin: corsOrigin(),
@@ -119,7 +124,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   registerChatRoutes(app);
   registerDriveRoutes(app);
   registerGitLabOrfChatRoutes(app);
-  const feedbackModule = registerFeedbackServerModule(createOrfFeedbackServerHost(app));
+  const feedbackModule = registerFeedbackServerModule(createOrfFeedbackServerHost(app, { startBackgroundJobs }));
   registerLocalSettlementRoutes(app);
   registerOrfObjectiveRoutes(app);
   registerOrfResultRoutes(app);
@@ -129,13 +134,13 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   registerUserRoutes(app);
   registerPermissionRoutes(app);
 
-  const stopClientUpdatePushScheduler = startClientUpdatePushScheduler(app.log);
-  const stopChatPushDeliveryWorker = startChatPushDeliveryWorker(app.log, deliverChatPushDelivery);
-  const stopLegacyRealtimeDeliveryRetention = startLegacyRealtimeDeliveryRetention(app.log);
-  const stopChatSyncEventRetentionScheduler = startChatSyncEventRetentionScheduler(app.log);
-  const stopNotificationDeliveryScheduler = startNotificationDeliveryScheduler(app.log);
-  const stopReestimateAutoFreezeScheduler = startReestimateAutoFreezeScheduler(app.log);
-  const stopWorkLogReminderScheduler = startWorkLogReminderScheduler(app.log);
+  const stopClientUpdatePushScheduler = startBackgroundJobs ? startClientUpdatePushScheduler(app.log) : () => undefined;
+  const stopChatPushDeliveryWorker = startBackgroundJobs ? startChatPushDeliveryWorker(app.log, deliverChatPushDelivery) : async () => undefined;
+  const stopLegacyRealtimeDeliveryRetention = startBackgroundJobs ? startLegacyRealtimeDeliveryRetention(app.log) : () => undefined;
+  const stopChatSyncEventRetentionScheduler = startBackgroundJobs ? startChatSyncEventRetentionScheduler(app.log) : () => undefined;
+  const stopNotificationDeliveryScheduler = startBackgroundJobs ? startNotificationDeliveryScheduler(app.log) : () => undefined;
+  const stopReestimateAutoFreezeScheduler = startBackgroundJobs ? startReestimateAutoFreezeScheduler(app.log) : () => undefined;
+  const stopWorkLogReminderScheduler = startBackgroundJobs ? startWorkLogReminderScheduler(app.log) : () => undefined;
   app.addHook("onClose", async () => {
     stopClientUpdatePushScheduler();
     await stopChatPushDeliveryWorker();

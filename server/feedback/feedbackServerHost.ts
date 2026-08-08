@@ -27,7 +27,11 @@ async function listActiveFeedbackDigestRecipients() {
     .orderBy(asc(teamMembers.teamId), asc(users.name), asc(users.id));
 }
 
-export function createOrfFeedbackServerHost(app: FastifyInstance): FeedbackServerHost {
+export function createOrfFeedbackServerHost(
+  app: FastifyInstance,
+  options: { readonly startBackgroundJobs?: boolean } = {},
+): FeedbackServerHost {
+  const startBackgroundJobs = options.startBackgroundJobs ?? true;
   return {
     protocolVersion: 1,
     registerHttpRoutes() {
@@ -36,6 +40,9 @@ export function createOrfFeedbackServerHost(app: FastifyInstance): FeedbackServe
       registerFeedbackRoutes(app);
     },
     startDailyDigestScheduler() {
+      if (!startBackgroundJobs) {
+        return () => undefined;
+      }
       return startFeedbackDailyDigestScheduler({
         config: {
           enabled: env.ORF_FEEDBACK_DAILY_DIGEST_ENABLED,
@@ -51,6 +58,9 @@ export function createOrfFeedbackServerHost(app: FastifyInstance): FeedbackServe
       });
     },
     startNotificationDispatchWorker() {
+      if (!startBackgroundJobs) {
+        return () => undefined;
+      }
       return startFeedbackNotificationDispatchWorker({
         database: db,
         publishNotification: feedbackNotificationPort,
