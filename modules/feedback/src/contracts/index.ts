@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export * from "./links";
 export * from "./categories";
+export * from "./commandResult";
 export * from "./labels";
 export * from "./dashboardSummary";
 export * from "./issueList";

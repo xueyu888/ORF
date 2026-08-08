@@ -2,6 +2,7 @@ import type { Readable } from "node:stream";
 import { and, eq } from "drizzle-orm";
 import {
   type FeedbackImpact,
+  type FeedbackCommandResult,
   type FeedbackPriority,
   type FeedbackRelationType,
   type FeedbackSubscriptionMutationMode,
@@ -31,7 +32,6 @@ import {
   transitionFeedbackIssue,
   updateFeedbackIssueAssignee,
   updateFeedbackIssueMetadata,
-  type FeedbackCommandResult,
   type FeedbackNotificationDispatchDraft,
   type FeedbackTargetTitleSync,
   type FeedbackTransitionNotificationDispatchFactory,
@@ -56,7 +56,7 @@ import {
 import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 import { resolveFeedbackActiveMemberById } from "./feedbackAssigneeOptions";
 
-export type { FeedbackCommandResult } from "@orf/feedback-module/server";
+export type { FeedbackCommandResult } from "@orf/feedback-module/contracts";
 
 export type CreateFeedbackAttachmentInput = {
   body: Buffer;

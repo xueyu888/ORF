@@ -65,7 +65,6 @@ export type {
   FeedbackTargetTitleSync,
   FeedbackTransitionNotificationDispatchFactory,
 } from "../server/commandPorts";
-export type { FeedbackCommandResult } from "../server/commandResult";
 export {
   buildFeedbackBackupZip,
   commitFeedbackImportBatch,

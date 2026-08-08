@@ -4,6 +4,7 @@ import type {
   FeedbackActivityType,
   FeedbackActorRole,
   FeedbackActorStatus,
+  FeedbackCommandResult,
   FeedbackImpact,
   FeedbackPriority,
   FeedbackRelationType,
@@ -35,7 +36,6 @@ import {
 } from "./notificationDispatch";
 import type { FeedbackNotificationDispatchDraft } from "./notificationProtocol";
 import { upsertFeedbackParticipants } from "./participants";
-import type { FeedbackCommandResult } from "./commandResult";
 import type {
   FeedbackTargetTitleSync,
   FeedbackTransitionNotificationDispatchFactory,
