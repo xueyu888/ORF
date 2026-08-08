@@ -6,6 +6,7 @@ import { teamMembers, users } from "../db/schema";
 import { env } from "../env";
 import { publishNotificationEvent } from "../notifications/publisher";
 import { registerFeedbackRoutes } from "../routes/feedbackRoutes";
+import { registerFeedbackCommentTargetAdapter } from "./feedbackCommentTargetAdapter";
 
 async function listActiveFeedbackDigestRecipients() {
   return db
@@ -24,6 +25,7 @@ export function createOrfFeedbackServerHost(app: FastifyInstance): FeedbackServe
   return {
     protocolVersion: 1,
     registerHttpRoutes() {
+      registerFeedbackCommentTargetAdapter();
       registerFeedbackRoutes(app);
     },
     startDailyDigestScheduler() {

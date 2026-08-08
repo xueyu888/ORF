@@ -1,15 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
-import { feedbackCommentPath, feedbackIssuePath, planFeedbackCommentCreatedNotification } from "@orf/feedback-module/contracts";
-import {
-  getFeedbackCommentNotificationFacts,
-  getFeedbackOrdinaryNotificationRecipients,
-  hasFeedbackLinkedToProject,
-  lockFeedbackCommentTarget,
-  resolveFeedbackCommentTarget,
-  type FeedbackNotificationRecipientDirectory,
-} from "@orf/feedback-module/server";
+import { hasFeedbackLinkedToProject } from "@orf/feedback-module/server";
 import type {
   CommentAttachment,
   BountySource,
@@ -119,7 +111,6 @@ import {
   getActiveTeamNotificationRecipients,
   getUserNameById,
 } from "./notificationRepository";
-import { recordFeedbackCommentCreated } from "./feedbackRepository";
 import { publishNotificationEvent } from "../notifications/publisher";
 import { buildCommentNotificationContent } from "../notifications/notificationEventModel";
 import type { RuntimeScope } from "./runtimeScope";
@@ -143,11 +134,12 @@ import {
   groupCommentAttachmentsByMessage,
   prepareCommentAttachment,
 } from "./commentAttachmentRepository";
-
-const feedbackNotificationRecipientDirectory: FeedbackNotificationRecipientDirectory = {
-  getActiveAdminUserIds: getActiveAdminNotificationRecipients,
-  getActiveMemberUserIdsByIds: getActiveMemberNotificationRecipientsByIds,
-};
+import {
+  getCommentTargetAdapter,
+  type CommentMessageCommittedEvent,
+  type CommentTargetAdapter,
+  type CommentTargetSnapshot,
+} from "../comments/commentTargetAdapters";
 
 type CommentActor = {
   canManageAllComments?: boolean;
@@ -304,20 +296,21 @@ function challengeObjectiveHref(path: "/bounties" | "/tasks", objectiveId: strin
 
 function commentTargetHref(targetType: CommentTargetType, targetId: string, commentId?: string | null) {
   const commentQuery = commentId?.trim() ? `?comment=${encodeURIComponent(commentId.trim())}` : "";
-  if (targetType === "feedback") {
-    const feedbackId = targetId.trim();
-    return commentId?.trim()
-      ? feedbackCommentPath({ commentMessageId: commentId.trim(), feedbackId })
-      : feedbackIssuePath(feedbackId);
+  const adapter = getCommentTargetAdapter(targetType);
+  if (adapter) {
+    return adapter.href(targetId, commentId);
   }
 
-  const challengeTargetTypeByCommentTarget: Record<Exclude<CommentTargetType, "feedback">, "action" | "bounty" | "objective" | "subAction"> = {
+  const challengeTargetTypeByCommentTarget: Partial<Record<CommentTargetType, "action" | "bounty" | "objective" | "subAction">> = {
     objective: "objective",
     result: "bounty",
     subtask: "subAction",
     task: "action",
   };
-  return `/tasks${commentQuery}#${challengeTargetTypeByCommentTarget[targetType]}:${encodeURIComponent(targetId)}`;
+  const challengeTargetType = challengeTargetTypeByCommentTarget[targetType];
+  return challengeTargetType
+    ? `/tasks${commentQuery}#${challengeTargetType}:${encodeURIComponent(targetId)}`
+    : `/tasks${commentQuery}`;
 }
 
 function reportsSettlementTargetHref(input: {
@@ -831,82 +824,6 @@ async function notifyCommentReplyRecipient(input: {
     teamId: input.teamId,
     title: "评论有新回复",
   });
-}
-
-async function getFeedbackCommentNotificationContext(input: {
-  actorUserId: string;
-  excludedUserIds: string[];
-  feedbackId: string;
-  teamId: string;
-}) {
-  const target = await getFeedbackCommentNotificationFacts(db, input.feedbackId);
-  if (!target || target.teamId !== input.teamId) {
-    return null;
-  }
-  const [project] = target.projectId
-    ? await db
-      .select({ id: projects.id, name: projects.name })
-      .from(projects)
-      .where(and(eq(projects.id, target.projectId), eq(projects.teamId, input.teamId)))
-      .limit(1)
-    : [];
-
-  const excludedUserIds = new Set(uniqueNotificationUserIds([input.actorUserId, ...input.excludedUserIds]));
-  const recipientUserIds = await getFeedbackOrdinaryNotificationRecipients(db, feedbackNotificationRecipientDirectory, {
-    createdBy: target.createdBy,
-    assigneeUserId: target.assigneeUserId,
-    feedbackId: input.feedbackId,
-    includeCommentParticipants: true,
-    teamId: input.teamId,
-  });
-  return {
-    project: project ?? null,
-    recipientUserIds: recipientUserIds.filter((userId) => !excludedUserIds.has(userId)),
-  };
-}
-
-async function notifyFeedbackParticipantsOfComment(input: {
-  actorName: string;
-  actorUserId: string;
-  attachments?: CommentAttachment[];
-  body: string;
-  commentMessageId: string;
-  commentThreadId: string;
-  excludedUserIds: string[];
-  targetId: string;
-  targetTitle: string;
-  teamId: string;
-}) {
-  const context = await getFeedbackCommentNotificationContext({
-    actorUserId: input.actorUserId,
-    excludedUserIds: input.excludedUserIds,
-    feedbackId: input.targetId,
-    teamId: input.teamId,
-  });
-  if (!context) {
-    return;
-  }
-  if (context.recipientUserIds.length === 0) return;
-
-  const content = buildCommentNotificationContent({
-    attachments: input.attachments ?? [],
-    commentBody: input.body,
-    summary: `${input.actorName} 回复了反馈「${input.targetTitle}」：`,
-  });
-
-  await publishNotificationEvent(planFeedbackCommentCreatedNotification({
-    actorName: input.actorName,
-    actorUserId: input.actorUserId,
-    body: content.body,
-    commentMessageId: input.commentMessageId,
-    commentMetadata: content.metadata,
-    commentThreadId: input.commentThreadId,
-    feedbackId: input.targetId,
-    project: context.project,
-    recipientUserIds: context.recipientUserIds,
-    targetTitle: input.targetTitle,
-    teamId: input.teamId,
-  }));
 }
 
 export interface CreateResultInput {
@@ -2382,12 +2299,10 @@ type CommentTarget =
       storageScopeId: string;
       title: string;
     }
-  | {
-      feedbackId: string;
-      kind: "feedback";
-      storageScopeId: string;
-      title: string;
-    };
+  | (CommentTargetSnapshot & {
+      adapter: CommentTargetAdapter;
+      kind: "registered";
+    });
 
 type ObjectiveWorkItemMutationOutcome = "allowed" | "forbidden" | "notFound";
 
@@ -2455,17 +2370,12 @@ async function canReadObjectiveComment(
   return actorUserId && (isObjectiveChallenger(objective, actorUserId) || isObjectiveAssignedChallenger(objective, actorUserId)) ? "allowed" : "forbidden";
 }
 
-function actorCanUseScopedTeamTarget(actor: CommentActor, storageScopeId: string) {
-  const actorStorageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
-  return Boolean(storageScopeId) && (!actorStorageScopeId || actorStorageScopeId === storageScopeId);
-}
-
 async function canMutateCommentTarget(actor: CommentActor, target: CommentTarget): Promise<ObjectiveWorkItemMutationOutcome> {
   if (target.kind === "workItem") {
     return canMutateObjectiveComment(actor, target.objectiveId);
   }
 
-  return actorCanUseScopedTeamTarget(actor, target.storageScopeId) ? "allowed" : "notFound";
+  return target.adapter.canComment(actor, target);
 }
 
 async function canReadCommentTarget(actor: CommentActor, target: CommentTarget): Promise<ObjectiveWorkItemMutationOutcome> {
@@ -2473,7 +2383,7 @@ async function canReadCommentTarget(actor: CommentActor, target: CommentTarget):
     return canReadObjectiveComment(actor, target.objectiveId);
   }
 
-  return actorCanUseScopedTeamTarget(actor, target.storageScopeId) ? "allowed" : "notFound";
+  return target.adapter.canRead(actor, target);
 }
 
 async function resolveCommentTarget(targetType: CommentTargetType, targetId: string): Promise<CommentTarget | null> {
@@ -2504,9 +2414,10 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
     return target ? { kind: "workItem", objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
   }
 
-  if (targetType === "feedback") {
-    const target = await resolveFeedbackCommentTarget(db, targetId);
-    return target ? { ...target, kind: "feedback" } : null;
+  const adapter = getCommentTargetAdapter(targetType);
+  if (adapter) {
+    const target = await adapter.resolve(targetId);
+    return target ? { ...target, adapter, kind: "registered" } : null;
   }
 
   const [target] = await db
@@ -2714,6 +2625,29 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
   const attachmentIds = extractCommentAttachmentIds(body);
   const mentionedUserIds = extractCommentMentionUserIds(body);
   const createdComment = await db.transaction(async (tx) => {
+    const notifyTargetMessageCommitted = async (input: {
+      messageId: string;
+      replyRecipientUserId?: string | null;
+      replyToMessageId?: string | null;
+      threadId: string;
+    }) => {
+      if (target.kind !== "registered") {
+        return;
+      }
+      await target.adapter.onMessageCommitted?.({
+        actor,
+        attachments: [],
+        body,
+        commentMessageId: input.messageId,
+        commentThreadId: input.threadId,
+        createdAt,
+        mentionedUserIds,
+        replyRecipientUserId: input.replyRecipientUserId ?? null,
+        replyToMessageId: input.replyToMessageId ?? null,
+        target,
+      }, tx);
+    };
+
     if (target.kind === "workItem") {
       const [lockedObjective] = await tx
         .select({ id: objectives.id })
@@ -2725,7 +2659,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
         return null;
       }
     } else {
-      if (!(await lockFeedbackCommentTarget(tx, target.feedbackId))) {
+      if (!(await target.adapter.lockForComment(tx, target))) {
         return null;
       }
     }
@@ -2824,14 +2758,12 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
         sortOrder,
       });
       await bindMessageAttachments(nextMessageId);
-      if (target.kind === "feedback") {
-        await recordFeedbackCommentCreated({
-          actorUserId: actor.id,
-          commentMessageId: nextMessageId,
-          feedbackId: target.feedbackId,
-          teamId: target.storageScopeId,
-        }, tx);
-      }
+      await notifyTargetMessageCommitted({
+        messageId: nextMessageId,
+        replyRecipientUserId,
+        replyToMessageId: replyToMessageId ?? input.parentMessageId,
+        threadId: parent.threadId,
+      });
       await tx.update(commentThreads).set({ targetTitle, updatedAt: createdAt }).where(eq(commentThreads.id, parent.threadId));
       return {
         messageId: nextMessageId,
@@ -2888,14 +2820,12 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
       sortOrder,
     });
     await bindMessageAttachments(nextMessageId);
-    if (target.kind === "feedback") {
-      await recordFeedbackCommentCreated({
-        actorUserId: actor.id,
-        commentMessageId: nextMessageId,
-        feedbackId: target.feedbackId,
-        teamId: target.storageScopeId,
-      }, tx);
-    }
+    await notifyTargetMessageCommitted({
+      messageId: nextMessageId,
+      replyRecipientUserId: null,
+      replyToMessageId: null,
+      threadId: nextThreadId,
+    });
 
     return { messageId: nextMessageId, replyRecipientUserId: null, replyToMessageId: null, threadId: nextThreadId };
   });
@@ -2939,24 +2869,25 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
     teamId: target.storageScopeId,
   });
 
-  if (input.targetType === "feedback") {
-    await notifyFeedbackParticipantsOfComment({
-      actorName: actor.name,
-      actorUserId: actor.id,
+  if (target.kind === "registered") {
+    const committedEvent: CommentMessageCommittedEvent = {
+      actor,
       attachments: notificationAttachments,
       body,
       commentMessageId: createdComment.messageId,
       commentThreadId: createdComment.threadId,
-      excludedUserIds: uniqueNotificationUserIds([...mentionedUserIds, createdComment.replyRecipientUserId]),
-      targetId: input.targetId,
-      targetTitle,
-      teamId: target.storageScopeId,
-    });
+      createdAt,
+      mentionedUserIds,
+      replyRecipientUserId: createdComment.replyRecipientUserId,
+      replyToMessageId: createdComment.replyToMessageId,
+      target,
+    };
+    await target.adapter.afterMessageCommitted?.(committedEvent);
   }
 
   publishOrfDataInvalidation({
     actorUserId: actor.id,
-    models: [input.targetType === "feedback" ? "feedback" : "taskManagement"],
+    models: [target.kind === "registered" ? target.adapter.invalidationModel : "taskManagement"],
     reason: "comment.changed",
     target: { id: createdComment.threadId, type: "comment" },
     teamId: target.storageScopeId,

@@ -20,13 +20,11 @@ import {
   getFeedbackReportAttachmentContentFacts,
   listFeedbackReferences as listFeedbackReferenceSummaries,
   markFeedbackViewed as markFeedbackViewedInModule,
-  recordFeedbackCommentCreatedActivity,
   removeFeedbackIssueRelation,
   searchFeedbackReferences as searchFeedbackReferenceSummaries,
   transitionFeedbackIssue,
   updateFeedbackIssueAssignee,
   updateFeedbackIssueMetadata,
-  type FeedbackActivityDatabase,
   type FeedbackCommandResult,
   type FeedbackNotificationRecipientDirectory,
   type FeedbackTargetTitleSync,
@@ -621,13 +619,4 @@ export async function getFeedbackReportAttachmentContent(
     contentType: feedbackReportAttachmentResponseContentType(outcome.facts, { storedContentType: stored.contentType }),
     fileName: outcome.facts.fileName,
   };
-}
-
-export async function recordFeedbackCommentCreated(input: {
-  actorUserId: string;
-  commentMessageId: string;
-  feedbackId: string;
-  teamId: string;
-}, client: FeedbackActivityDatabase = db) {
-  await recordFeedbackCommentCreatedActivity(client, input);
 }
