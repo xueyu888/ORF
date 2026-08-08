@@ -25,7 +25,7 @@ export type FeedbackIssueLabelIndexItem = FeedbackIssueLabel & {
   openCount: number;
 };
 
-export type FeedbackIssueLinkedFeedback = {
+export type FeedbackIssueRelationSummary = {
   direction: "incoming" | "outgoing" | "undirected";
   id: string;
   relationId: string;
@@ -34,7 +34,7 @@ export type FeedbackIssueLinkedFeedback = {
 };
 
 export function feedbackIssueLabelIndexItems(
-  feedbackItems: readonly Pick<FeedbackWebIssue, "causeCategories" | "impact" | "stage">[],
+  feedbackItems: readonly Pick<FeedbackWebIssue, "causeCategories" | "stage">[],
   sort: FeedbackIssueLabelIndexSortKey = "name-asc",
 ): FeedbackIssueLabelIndexItem[] {
   const labelsByKey = new Map<string, FeedbackIssueLabelIndexItem>();
@@ -84,10 +84,10 @@ export function feedbackIssueParticipants(input: {
   return [...people.values()];
 }
 
-export function feedbackIssueLinkedFeedback(input: {
+export function feedbackIssueRelationSummaries(input: {
   feedback: Pick<FeedbackWebIssue, "id" | "relations">;
   feedbackReferences: readonly FeedbackReferenceSummary[];
-}): FeedbackIssueLinkedFeedback[] {
+}): FeedbackIssueRelationSummary[] {
   const feedbackById = new Map(input.feedbackReferences.map((feedback) => [feedback.id, feedback]));
   return input.feedback.relations.flatMap((relation) => {
     const targetId = feedbackRelationOtherFeedbackId(relation, input.feedback.id);
@@ -116,9 +116,6 @@ function addPerson(people: Map<string, FeedbackIssuePerson>, person: FeedbackIss
 }
 
 function feedbackIssueLabelDescription(label: FeedbackIssueLabel) {
-  if (label.key.startsWith("impact:")) {
-    return "影响等级标签，由反馈影响字段派生。";
-  }
   return "反馈原因标签，由反馈分类字段派生。";
 }
 

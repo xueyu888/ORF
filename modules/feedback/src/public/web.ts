@@ -228,9 +228,10 @@ export {
 export {
   feedbackIssueLabelIndexItems,
   feedbackIssueLabels,
-  feedbackIssueLinkedFeedback,
+  feedbackIssueRelationSummaries,
   type FeedbackIssueLabelIndexItem,
   type FeedbackIssueLabelIndexSortKey,
+  type FeedbackIssueRelationSummary,
 } from "../web/model/issueMetadata";
 export {
   feedbackAssigneeOptionsFromUsers,

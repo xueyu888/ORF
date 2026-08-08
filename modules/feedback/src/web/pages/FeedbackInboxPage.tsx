@@ -260,8 +260,8 @@ export function FeedbackInboxPage() {
         <div className="feedback-issue-title-block">
           <h1>反馈</h1>
           <div className="feedback-issue-header-counts">
-            <span><CircleDot aria-hidden="true" /> {issueCounts.open} Open</span>
-            <span><CheckCircle2 aria-hidden="true" /> {issueCounts.closed} Closed</span>
+            <span><CircleDot aria-hidden="true" /> {issueCounts.open} 未关闭</span>
+            <span><CheckCircle2 aria-hidden="true" /> {issueCounts.closed} 已关闭</span>
           </div>
         </div>
         <div className="feedback-issue-header-actions">
@@ -389,14 +389,14 @@ export function FeedbackInboxPage() {
           <div className="feedback-issue-state-tabs">
             <IssueStateButton active={listState === "open"} onClick={() => setFilter("state", "open", "open")}>
               <CircleDot aria-hidden="true" className="feedback-state-icon-open" />
-              Open <strong>{issueCounts.open}</strong>
+              未关闭 <strong>{issueCounts.open}</strong>
             </IssueStateButton>
             <IssueStateButton active={listState === "closed"} onClick={() => setFilter("state", "closed", "open")}>
               <CheckCircle2 aria-hidden="true" className="feedback-state-icon-closed" />
-              Closed <strong>{issueCounts.closed}</strong>
+              已关闭 <strong>{issueCounts.closed}</strong>
             </IssueStateButton>
             <IssueStateButton active={listState === "all"} onClick={() => setFilter("state", "all", "open")}>
-              All <strong>{issueCounts.all}</strong>
+              全部 <strong>{issueCounts.all}</strong>
             </IssueStateButton>
           </div>
           <span className="feedback-issue-match-count">已加载 {filteredFeedback.length} / {issueList.matchedCount} 条匹配</span>

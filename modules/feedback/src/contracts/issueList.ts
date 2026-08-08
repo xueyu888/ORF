@@ -519,20 +519,13 @@ export function feedbackIssueCommentCount(comments: readonly FeedbackWebCommentT
   return messages.length;
 }
 
-export function feedbackIssueLabels(feedback: Pick<FeedbackWebIssue, "causeCategories" | "impact">): FeedbackIssueLabel[] {
+export function feedbackIssueLabels(feedback: Pick<FeedbackWebIssue, "causeCategories">): FeedbackIssueLabel[] {
   const causes = Array.from(new Set(feedback.causeCategories.map((cause) => cause.trim()).filter(Boolean)));
-  return [
-    ...causes.map((cause) => ({
-      key: `cause:${cause}`,
-      name: cause,
-      tone: causeLabelTone(cause),
-    })),
-    {
-      key: `impact:${feedback.impact}`,
-      name: feedbackImpactLabel[feedback.impact],
-      tone: impactTone(feedback.impact),
-    },
-  ];
+  return causes.map((cause) => ({
+    key: `cause:${cause}`,
+    name: cause,
+    tone: causeLabelTone(cause),
+  }));
 }
 
 export function feedbackIssueAssignee(feedback: Pick<FeedbackWebIssue, "assigneeUserId">, users: readonly FeedbackWebUser[]): FeedbackIssuePerson {
@@ -654,13 +647,6 @@ function causeLabelTone(value: string): FeedbackIssueLabel["tone"] {
   if (/管理|流程|协作/.test(value)) return "gold";
   if (/技术|系统|质量|缺陷|bug/i.test(value)) return "accent";
   if (/风险|事故|阻塞/.test(value)) return "warning";
-  return "neutral";
-}
-
-function impactTone(value: FeedbackImpact): FeedbackIssueLabel["tone"] {
-  if (value === "critical") return "danger";
-  if (value === "high") return "warning";
-  if (value === "medium") return "accent";
   return "neutral";
 }
 

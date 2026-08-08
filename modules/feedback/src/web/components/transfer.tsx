@@ -168,7 +168,7 @@ function FeedbackImportDialog({
             }}
           />
           <div>
-            <strong>{file?.name ?? "选择 CSV 或 ZIP 文件"}</strong>
+            <strong>{file?.name ?? "选择 CSV 文件"}</strong>
             <span>{file ? `${Math.ceil(file.size / 1024)} KB` : "支持当前视图 CSV"}</span>
           </div>
           <FeedbackButton variant="secondary" onClick={() => inputRef.current?.click()}>
@@ -429,7 +429,7 @@ function buildFeedbackImportUpdateDiffReport(diffs: NonNullable<FeedbackImportPr
 }
 
 function referenceIssueLocation(item: NonNullable<FeedbackImportPreflight["referenceIssues"]>[number]) {
-  return item.rows.length > 0 ? `第 ${item.rows.join("、")} 行` : "ZIP 引用";
+  return item.rows.length > 0 ? `第 ${item.rows.join("、")} 行` : "CSV 文件";
 }
 
 function messageLine(item: { field?: string; message: string; row?: number }) {

@@ -38,8 +38,8 @@ import {
   feedbackIssueAssignee,
   feedbackIssueAuthor,
   feedbackIssueLabels,
-  feedbackIssueLinkedFeedback,
   feedbackIssueParticipants,
+  feedbackIssueRelationSummaries,
 } from "../model/issueMetadata";
 import { useFeedbackWebHost, type FeedbackCommentDraft, type FeedbackCommentDraftMode, type FeedbackCommentMentionUser, type FeedbackImagePreview } from "../runtime";
 import { useFeedbackAssigneeOptions, useFeedbackIssueDetailReadModel, useFeedbackReferenceOptions } from "../hooks";
@@ -846,7 +846,7 @@ function IssueSidebar({
     relationSearch,
   );
   const relationReferences = relationReferenceOptions.references;
-  const linkedFeedback = feedbackIssueLinkedFeedback({ feedback, feedbackReferences: relationReferences });
+  const relationSummaries = feedbackIssueRelationSummaries({ feedback, feedbackReferences: relationReferences });
   const assigneeSelectOptions = useMemo(
     () => ensureFeedbackAssigneeOption(assigneeOptions, assignee.id ? {
       avatarUrl: assignee.avatarUrl,
@@ -1030,9 +1030,9 @@ function IssueSidebar({
       )}
       <div className="feedback-issue-sidebar-block">
         <span>关系</span>
-        {linkedFeedback.length > 0 ? (
+        {relationSummaries.length > 0 ? (
           <div className="feedback-issue-sidebar-links">
-            {linkedFeedback.map((item) => (
+            {relationSummaries.map((item) => (
               <div key={item.relationId} className="feedback-issue-sidebar-relation-row">
                 <Link to={feedbackIssueHref(item.id)}>
                   #{feedbackIssueDisplayId(item.id)} {item.title}

@@ -14,7 +14,7 @@ import {
   filterFeedbackIssueListItems,
   type FeedbackIssueListFilters,
 } from "@orf/feedback-module/web";
-import { feedbackIssueLinkedFeedback } from "@orf/feedback-module/web";
+import { feedbackIssueRelationSummaries } from "@orf/feedback-module/web";
 import {
   feedbackIssueListFilterParamsFromPreferenceRecord,
   feedbackIssueListFilterPreferenceRecordFromSearchParams,
@@ -333,6 +333,7 @@ test("feedback list label options contain only cause categories", () => {
   });
 
   assert.deepEqual(list.labelOptions, [{ label: "技术问题", value: "技术问题" }]);
+  assert.deepEqual(list.items[0]?.labels, [{ key: "cause:技术问题", name: "技术问题", tone: "accent" }]);
 });
 
 test("feedback dashboard summary owns lightweight pending aggregates", () => {
@@ -423,7 +424,7 @@ test("feedback list read model page merge appends cursor pages without duplicati
   assert.equal(merged.list?.pageInfo.nextCursor, null);
 });
 
-test("feedback linked issues come from relation facts instead of report or comment text", () => {
+test("feedback relation summaries come from relation facts instead of report or comment text", () => {
   const source = feedback({
     id: "fb-source",
     title: "源反馈",
@@ -442,7 +443,7 @@ test("feedback linked issues come from relation facts instead of report or comme
   const target = feedback({ id: "fb-target", title: "目标反馈" });
   const textOnly = feedback({ id: "fb-text-only", title: "只出现在正文里的反馈" });
 
-  assert.deepEqual(feedbackIssueLinkedFeedback({ feedback: source, feedbackReferences: [target, textOnly] }), [
+  assert.deepEqual(feedbackIssueRelationSummaries({ feedback: source, feedbackReferences: [target, textOnly] }), [
     {
       direction: "outgoing",
       id: "fb-target",

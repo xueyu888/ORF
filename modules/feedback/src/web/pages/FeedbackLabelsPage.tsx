@@ -47,7 +47,7 @@ export function FeedbackLabelsPage() {
         <FeedbackSelect label="排序" value={sort} onChange={(value) => setSort(value as FeedbackIssueLabelIndexSortKey)}>
           <option value="name-asc">名称</option>
           <option value="feedback-desc">反馈数最多</option>
-          <option value="open-desc">Open 数最多</option>
+          <option value="open-desc">未关闭数最多</option>
         </FeedbackSelect>
       </div>
 
@@ -81,8 +81,8 @@ function FeedbackLabelRow({ label }: { label: FeedbackIssueLabelIndexItem }) {
         </div>
       </div>
       <div className="feedback-label-stats" aria-label="标签反馈统计">
-        <span><CircleDot aria-hidden="true" /> {label.openCount} Open</span>
-        <span><CheckCircle2 aria-hidden="true" /> {label.closedCount} Closed</span>
+        <span><CircleDot aria-hidden="true" /> {label.openCount} 未关闭</span>
+        <span><CheckCircle2 aria-hidden="true" /> {label.closedCount} 已关闭</span>
         <strong>{label.feedbackCount}</strong>
       </div>
     </Link>

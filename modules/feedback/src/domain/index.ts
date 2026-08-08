@@ -103,7 +103,7 @@ export function validateFeedbackLifecycle(
   }
 
   if (feedback.stage === "closed" && (!feedback.closedAt || !feedback.closedByUserId)) {
-    errors.push(error("lifecycle_invariant_violation", "Closed feedback needs close facts."));
+    errors.push(error("lifecycle_invariant_violation", "closed stage requires close facts."));
   }
 
   if (feedback.stage !== "closed" && (feedback.closedAt || feedback.closedByUserId)) {
