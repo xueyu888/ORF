@@ -1,4 +1,4 @@
-import { isFeedbackPath } from "@orf/feedback-module/web";
+import { isFeedbackPath } from "@orf/feedback-module/contracts";
 import type { PageVisualBackgroundScene, VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
 
 export type VisualSkinSlotKind = "login" | "chrome" | "page";

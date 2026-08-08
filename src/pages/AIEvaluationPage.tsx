@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { canCreateTeamFeedback, feedbackCreatePath } from "@orf/feedback-module/web";
+import { feedbackCreatePath } from "@orf/feedback-module/contracts";
+import { canCreateTeamFeedback } from "@orf/feedback-module/web";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, StatusBadge } from "../components/ui";
 import { evaluationMetricCards, summarizeEvalRuns } from "../features/evaluation/model/evaluationSummary";

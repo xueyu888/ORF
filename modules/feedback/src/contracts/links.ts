@@ -46,6 +46,10 @@ export function feedbackCommentPath(input: {
   return `${feedbackIssuePath(input.feedbackId)}?comment=${encodeURIComponent(input.commentMessageId)}`;
 }
 
+export function isFeedbackPath(pathname: string) {
+  return pathname === feedbackRootPath || pathname.startsWith(`${feedbackRootPath}/`);
+}
+
 export type FeedbackIssueLinkTarget = {
   readonly id: string;
   readonly title: string;

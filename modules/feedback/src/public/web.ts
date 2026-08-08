@@ -8,11 +8,9 @@ import type {
 } from "@orf/module-protocol";
 import {
   feedbackCreateBasePath,
-  feedbackCreatePath,
   feedbackDetailPathTemplate,
   feedbackIssuePath,
   feedbackLabelsPath,
-  feedbackListPath,
   feedbackRootPath,
 } from "../contracts/links";
 import { FeedbackWebHostProvider, type FeedbackWebHost } from "../web/runtime";
@@ -158,12 +156,6 @@ export function createFeedbackWebContribution(host: FeedbackWebHost): FeedbackWe
     ],
   };
 }
-
-export function isFeedbackPath(pathname: string) {
-  return pathname === feedbackRootPath || pathname.startsWith(`${feedbackRootPath}/`);
-}
-
-export { feedbackCreatePath, feedbackIssuePath, feedbackLabelsPath, feedbackListPath, feedbackRootPath };
 export {
   FeedbackWebApiError,
   getFeedbackReferenceCard,

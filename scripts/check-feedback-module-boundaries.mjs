@@ -196,6 +196,26 @@ async function checkWebPublicBoundary() {
       errors.push(`modules/feedback/src/public/web.ts must not export ${name}; use contracts or @orf/feedback-module/testing as appropriate.`);
     }
   }
+
+  if (/\bexport\s+function\s+isFeedbackPath\b/.test(source)) {
+    errors.push("modules/feedback/src/public/web.ts must not export isFeedbackPath; use contracts for route path checks.");
+  }
+
+  const forbiddenPathExports = [
+    "feedbackCreatePath",
+    "feedbackIssuePath",
+    "feedbackLabelsPath",
+    "feedbackListPath",
+    "feedbackRootPath",
+    "isFeedbackPath",
+  ];
+  for (const block of exportBlocks(source)) {
+    for (const name of forbiddenPathExports) {
+      if (new RegExp(`\\b${name}\\b`).test(block.names)) {
+        errors.push(`modules/feedback/src/public/web.ts must not export ${name}; use contracts for route path helpers.`);
+      }
+    }
+  }
 }
 
 async function checkHostFeedbackNotificationBoundary() {

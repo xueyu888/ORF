@@ -1,4 +1,4 @@
-import { isFeedbackPath } from "@orf/feedback-module/web";
+import { isFeedbackPath } from "@orf/feedback-module/contracts";
 
 export const workbenchNavigationSources = ["command", "deepLink", "notification", "route", "search", "user"] as const;
 
