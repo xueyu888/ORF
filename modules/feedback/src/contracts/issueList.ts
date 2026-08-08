@@ -104,7 +104,7 @@ export type FeedbackIssueListCommentSummary = {
   updatedAt: string | null;
 };
 
-type ParsedFeedbackIssueQuery = {
+export type ParsedFeedbackIssueListQuery = {
   assigneeTerms: string[];
   authorTerms: string[];
   impactTerms: string[];
@@ -252,7 +252,7 @@ export function filterFeedbackIssueListItems(items: readonly FeedbackIssueListIt
 }
 
 function filterFeedbackIssueListItemsWithSort(items: readonly FeedbackIssueListItem[], filters: FeedbackIssueListFilters) {
-  const parsedQuery = parseFeedbackIssueQuery(filters.query);
+  const parsedQuery = parseFeedbackIssueListQuery(filters.query);
   const sort = parsedQuery.sort ?? filters.sort;
   return {
     items: filterFeedbackIssueListMatches(items, filters, parsedQuery, filters.listState)
@@ -262,7 +262,7 @@ function filterFeedbackIssueListItemsWithSort(items: readonly FeedbackIssueListI
 }
 
 function feedbackIssueListEffectiveSort(filters: FeedbackIssueListFilters) {
-  return parseFeedbackIssueQuery(filters.query).sort ?? filters.sort;
+  return parseFeedbackIssueListQuery(filters.query).sort ?? filters.sort;
 }
 
 function paginateFeedbackIssueListItems(
@@ -310,7 +310,7 @@ export function feedbackIssueListCounts(items: readonly FeedbackIssueListItem[])
 }
 
 export function feedbackIssueListCountsForFilters(items: readonly FeedbackIssueListItem[], filters: FeedbackIssueListFilters) {
-  const parsedQuery = parseFeedbackIssueQuery(filters.query);
+  const parsedQuery = parseFeedbackIssueListQuery(filters.query);
   return feedbackIssueListCounts(filterFeedbackIssueListMatches(items, filters, parsedQuery, "all"));
 }
 
@@ -341,7 +341,7 @@ export function feedbackIssueLabelOptions(items: readonly FeedbackIssueListItem[
 function filterFeedbackIssueListMatches(
   items: readonly FeedbackIssueListItem[],
   filters: FeedbackIssueListFilters,
-  parsedQuery: ParsedFeedbackIssueQuery,
+  parsedQuery: ParsedFeedbackIssueListQuery,
   listState: FeedbackIssueListState,
 ) {
   return [...items]
@@ -360,8 +360,8 @@ function filterFeedbackIssueListMatches(
     .filter((item) => textMatches(item, parsedQuery.text));
 }
 
-function parseFeedbackIssueQuery(query: string): ParsedFeedbackIssueQuery {
-  const parsed: ParsedFeedbackIssueQuery = {
+export function parseFeedbackIssueListQuery(query: string): ParsedFeedbackIssueListQuery {
+  const parsed: ParsedFeedbackIssueListQuery = {
     assigneeTerms: [],
     authorTerms: [],
     impactTerms: [],

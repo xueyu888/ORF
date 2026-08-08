@@ -106,6 +106,7 @@ async function getFeedbackIssueListReadModelDataForScope(
     getScopedUsers(scope.scope),
   ]);
   const feedback = await getFeedbackReadModelListIssues(db, {
+    filters: scope.filters ?? null,
     teamId: storageScopeId,
     viewer: feedbackReadModelViewer(users, scope.viewerUserId),
   });

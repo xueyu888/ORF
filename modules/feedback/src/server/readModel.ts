@@ -1,7 +1,13 @@
-import { and, desc, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import {
+  feedbackImpactLabel,
+  feedbackImpactValues,
   feedbackReportAttachmentDto,
+  parseFeedbackIssueListQuery,
+  type FeedbackIssueListFilters,
+  type FeedbackIssueListState,
   type FeedbackActivityType,
   type FeedbackActorRole,
   type FeedbackActorSnapshot,
@@ -105,9 +111,17 @@ export async function getFeedbackReadModelIssues(
 
 export async function getFeedbackReadModelListIssues(
   database: FeedbackReadModelDatabase,
-  input: { readonly teamId: string; readonly viewer?: FeedbackReadModelViewer | null },
+  input: {
+    readonly filters?: FeedbackIssueListFilters | null;
+    readonly teamId: string;
+    readonly viewer?: FeedbackReadModelViewer | null;
+  },
 ): Promise<FeedbackReadModelIssue[]> {
-  const feedbackRows = await getFeedbackRows(database, input.teamId);
+  const feedbackRows = await getFeedbackListCandidateRows(database, {
+    filters: input.filters ?? null,
+    teamId: input.teamId,
+    viewerUserId: input.viewer?.id.trim() || null,
+  });
   return getFeedbackReadModelListIssuesFromRows(database, {
     feedbackRows,
     teamId: input.teamId,
@@ -192,6 +206,136 @@ async function getFeedbackRows(database: FeedbackReadModelDatabase, storageScope
     .from(feedback)
     .where(eq(feedback.teamId, storageScopeId))
     .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id));
+}
+
+async function getFeedbackListCandidateRows(
+  database: FeedbackReadModelDatabase,
+  input: {
+    readonly filters: FeedbackIssueListFilters | null;
+    readonly teamId: string;
+    readonly viewerUserId: string | null;
+  },
+) {
+  const conditions = feedbackListCandidateConditions(input);
+  return database
+    .select()
+    .from(feedback)
+    .where(and(...conditions))
+    .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id));
+}
+
+function feedbackListCandidateConditions(input: {
+  readonly filters: FeedbackIssueListFilters | null;
+  readonly teamId: string;
+  readonly viewerUserId: string | null;
+}): SQL<unknown>[] {
+  const conditions: SQL<unknown>[] = [eq(feedback.teamId, input.teamId)];
+  const filters = input.filters;
+  if (!filters) return conditions;
+
+  const parsedQuery = parseFeedbackIssueListQuery(filters.query);
+  // The active tab stays in the projection until facet counts have their own database query.
+  pushCondition(conditions, feedbackListProjectCondition(filters.projectId));
+  pushCondition(conditions, feedbackListLabelCondition(filters.cause));
+  if (filters.impact !== "All") conditions.push(eq(feedback.impact, filters.impact));
+  if (filters.assigneeUserId !== "All") conditions.push(eq(feedback.assigneeUserId, filters.assigneeUserId));
+  if (filters.authorUserId !== "All") conditions.push(eq(feedback.createdBy, filters.authorUserId));
+
+  for (const term of parsedQuery.labelTerms) {
+    pushCondition(conditions, feedbackListLabelCondition(term));
+  }
+  for (const term of parsedQuery.impactTerms) {
+    conditions.push(feedbackImpactTermCondition(term) ?? sql`false`);
+  }
+  pushCondition(conditions, feedbackListStateTermsCondition(parsedQuery.stateTerms, input.viewerUserId));
+  return conditions;
+}
+
+function feedbackListProjectCondition(projectId: string): SQL<unknown> | null {
+  if (projectId === "All") return null;
+  if (projectId === "unassigned") return isNull(feedback.projectId);
+  return eq(feedback.projectId, projectId);
+}
+
+function feedbackListLabelCondition(term: string): SQL<unknown> | null {
+  if (term === "All") return null;
+  const normalizedTerm = normalizeFeedbackListSearchText(term);
+  if (!normalizedTerm) return null;
+  const conditions = [feedbackCauseTermCondition(normalizedTerm)];
+  pushCondition(conditions, feedbackImpactTermCondition(normalizedTerm));
+  return or(...conditions) ?? sql`false`;
+}
+
+function feedbackCauseTermCondition(normalizedTerm: string): SQL<unknown> {
+  return sql`exists (
+    select 1
+    from ${feedbackCauseCategories}
+    where ${feedbackCauseCategories.teamId} = ${feedback.teamId}
+      and ${feedbackCauseCategories.feedbackId} = ${feedback.id}
+      and ${feedbackCauseCategories.category} ilike ${feedbackListLikePattern(normalizedTerm)} escape '\\'
+  )`;
+}
+
+function feedbackImpactTermCondition(term: string): SQL<unknown> | null {
+  const normalizedTerm = normalizeFeedbackListSearchText(term);
+  if (!normalizedTerm) return null;
+  const matchingImpacts = feedbackImpactValues.filter((impact) =>
+    normalizeFeedbackListSearchText(impact).includes(normalizedTerm) ||
+    normalizeFeedbackListSearchText(feedbackImpactLabel[impact]).includes(normalizedTerm)
+  );
+  return matchingImpacts.length > 0 ? inArray(feedback.impact, matchingImpacts) : null;
+}
+
+function feedbackListStateTermsCondition(
+  states: readonly FeedbackIssueListState[],
+  viewerUserId: string | null,
+): SQL<unknown> | null {
+  if (states.length === 0 || states.includes("all")) return null;
+  const stateConditions = states.map((state) => feedbackListStateCondition(state, viewerUserId));
+  return or(...stateConditions) ?? sql`false`;
+}
+
+function feedbackListStateCondition(state: FeedbackIssueListState, viewerUserId: string | null): SQL<unknown> {
+  if (state === "all") return sql`true`;
+  if (state === "assigned") {
+    return viewerUserId
+      ? and(or(eq(feedback.stage, "open"), eq(feedback.stage, "in_progress")), eq(feedback.assigneeUserId, viewerUserId)) ?? sql`false`
+      : sql`false`;
+  }
+  if (state === "closed") return eq(feedback.stage, "closed");
+  if (state === "open") return sql`${feedback.stage} <> 'closed'`;
+  if (state === "triage") return and(sql`${feedback.stage} <> 'closed'`, isNull(feedback.priority)) ?? sql`false`;
+  if (state === "unread") return viewerUserId ? feedbackUnreadCondition(viewerUserId) : sql`false`;
+  return viewerUserId
+    ? and(eq(feedback.stage, "pending_verification"), eq(feedback.createdBy, viewerUserId)) ?? sql`false`
+    : sql`false`;
+}
+
+function feedbackUnreadCondition(viewerUserId: string): SQL<unknown> {
+  return sql`exists (
+    select 1
+    from ${feedbackActivityEvents}
+    left join ${feedbackUserViews}
+      on ${feedbackUserViews.teamId} = ${feedback.teamId}
+      and ${feedbackUserViews.feedbackId} = ${feedback.id}
+      and ${feedbackUserViews.userId} = ${viewerUserId}
+    where ${feedbackActivityEvents.teamId} = ${feedback.teamId}
+      and ${feedbackActivityEvents.feedbackId} = ${feedback.id}
+      and ${feedbackActivityEvents.actorUserId} is distinct from ${viewerUserId}
+      and ${feedbackActivityEvents.sequence} > coalesce(${feedbackUserViews.lastSeenSequence}, 0)
+  )`;
+}
+
+function pushCondition(conditions: SQL<unknown>[], condition: SQL<unknown> | null | undefined) {
+  if (condition) conditions.push(condition);
+}
+
+function feedbackListLikePattern(value: string) {
+  return `%${value.replace(/[\\%_]/g, "\\$&")}%`;
+}
+
+function normalizeFeedbackListSearchText(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 }
 
 async function getFeedbackRowsByIds(database: FeedbackReadModelDatabase, storageScopeId: string, feedbackIssueIds: readonly string[]) {
