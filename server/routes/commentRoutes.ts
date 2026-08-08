@@ -11,8 +11,9 @@ import {
   updateCommentMessage,
   updateCommentThreadStatus,
 } from "../repositories/orfRepository";
+import { isCommentTargetType } from "../comments/commentTargetAdapters";
 
-const commentTargetTypeSchema = z.enum(["objective", "result", "task", "subtask", "feedback"]);
+const commentTargetTypeSchema = z.string().trim().min(1).refine(isCommentTargetType, { message: "Unsupported comment target type" });
 const commentStatusSchema = z.enum(["open", "resolved"]);
 const commentThreadParamsSchema = z.object({ threadId: z.string().min(1) });
 const commentMessageParamsSchema = commentThreadParamsSchema.extend({ messageId: z.string().min(1) });

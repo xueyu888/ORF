@@ -52,6 +52,7 @@ export interface CommentTargetAdapter {
 }
 
 const commentTargetAdapters = new Map<CommentTargetType, CommentTargetAdapter>();
+const builtInCommentTargetTypes = new Set<CommentTargetType>(["objective", "result", "task", "subtask"]);
 
 export function registerCommentTargetAdapter(adapter: CommentTargetAdapter) {
   if (adapter.protocolVersion !== 1) {
@@ -65,4 +66,8 @@ export function registerCommentTargetAdapter(adapter: CommentTargetAdapter) {
 
 export function getCommentTargetAdapter(type: CommentTargetType) {
   return commentTargetAdapters.get(type) ?? null;
+}
+
+export function isCommentTargetType(value: unknown): value is CommentTargetType {
+  return typeof value === "string" && (builtInCommentTargetTypes.has(value as CommentTargetType) || commentTargetAdapters.has(value as CommentTargetType));
 }

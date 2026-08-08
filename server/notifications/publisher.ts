@@ -1,4 +1,5 @@
 import type { CommentTargetType } from "../../src/types/orf";
+import { isCommentTargetType } from "../comments/commentTargetAdapters";
 import type { NotificationEventInput } from "../repositories/notificationRepository";
 import { createNotificationEvent } from "../repositories/notificationRepository";
 import { notificationPolicy } from "./policies/registry";
@@ -36,8 +37,4 @@ function inferredReplyTarget(
     return { targetId: input.targetId, targetType: input.targetType };
   }
   return null;
-}
-
-function isCommentTargetType(value: string | undefined): value is CommentTargetType {
-  return value === "objective" || value === "result" || value === "task" || value === "subtask" || value === "feedback";
 }

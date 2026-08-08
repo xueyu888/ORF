@@ -38,6 +38,7 @@ await checkPackageExports();
 await checkServerPublicBoundary();
 await checkWebPublicBoundary();
 await checkHostFeedbackNotificationBoundary();
+await checkHostCommentTargetBoundary();
 await checkHostDriveFeedbackBoundary();
 await checkFeedbackLegacyRemovalBoundary();
 await checkTsconfigPaths();
@@ -232,6 +233,18 @@ async function checkHostFeedbackNotificationBoundary() {
   const attentionModelSource = await fs.readFile(attentionModelPath, "utf8");
   if (attentionModelSource.includes("feedbackNotificationEventKindValues") || attentionModelSource.includes("FeedbackNotificationEventKind")) {
     errors.push("src/features/attention/attentionModel.ts must not import feedback notification kind lists; consume generic attention fields from notifications.");
+  }
+}
+
+async function checkHostCommentTargetBoundary() {
+  const commentRoutesSource = await fs.readFile(path.join(rootDir, "server", "routes", "commentRoutes.ts"), "utf8");
+  if (/\bz\.enum\(\s*\[\s*["']objective["']\s*,\s*["']result["']\s*,\s*["']task["']\s*,\s*["']subtask["']\s*,\s*["']feedback["']\s*\]\s*\)/.test(commentRoutesSource)) {
+    errors.push("server/routes/commentRoutes.ts must not hardcode feedback in the comment target type schema; use the comment target registry.");
+  }
+
+  const notificationPublisherSource = await fs.readFile(path.join(rootDir, "server", "notifications", "publisher.ts"), "utf8");
+  if (/\bvalue\s*===\s*["']feedback["']/.test(notificationPublisherSource)) {
+    errors.push("server/notifications/publisher.ts must not hardcode feedback as a comment reply target; use the comment target registry.");
   }
 }
 
