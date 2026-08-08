@@ -19,6 +19,7 @@ export {
 export {
   getFeedbackReadModelIssue,
   getFeedbackReadModelIssues,
+  getFeedbackReadModelListIssues,
   type FeedbackReadModelViewer,
 } from "../server/readModel";
 export {

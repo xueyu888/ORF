@@ -1,5 +1,10 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { getFeedbackReadModelIssue, getFeedbackReadModelIssues, type FeedbackReadModelViewer } from "@orf/feedback-module/server";
+import {
+  getFeedbackReadModelIssue,
+  getFeedbackReadModelIssues,
+  getFeedbackReadModelListIssues,
+  type FeedbackReadModelViewer,
+} from "@orf/feedback-module/server";
 import {
   buildFeedbackIssueListProjection,
   defaultFeedbackIssueListFilters,
@@ -69,7 +74,7 @@ export async function getFeedbackIssueReadModelData(scope: FeedbackIssueReadMode
 }
 
 export async function getFeedbackIssueListReadModelData(scope: FeedbackIssueReadModelScope): Promise<FeedbackIssueReadModelData> {
-  const data = await getFeedbackIssueReadModelDataForScope(scope, { includeComments: false });
+  const data = await getFeedbackIssueListReadModelDataForScope(scope);
   const storageScopeId = feedbackReadModelStorageId(scope);
   const commentSummaries = await getFeedbackCommentSummaries(
     storageScopeId,
@@ -89,6 +94,27 @@ export async function getFeedbackIssueListReadModelData(scope: FeedbackIssueRead
     comments: [],
     feedback: list.items.map((item) => item.feedback),
     list,
+  };
+}
+
+async function getFeedbackIssueListReadModelDataForScope(
+  scope: FeedbackIssueReadModelScope,
+): Promise<FeedbackIssueReadModelData> {
+  const storageScopeId = feedbackReadModelStorageId(scope);
+  const [projectRows, users] = await Promise.all([
+    db.select().from(projects).where(eq(projects.teamId, storageScopeId)).orderBy(desc(projects.createdAt), desc(projects.id)),
+    getScopedUsers(scope.scope),
+  ]);
+  const feedback = await getFeedbackReadModelListIssues(db, {
+    teamId: storageScopeId,
+    viewer: feedbackReadModelViewer(users, scope.viewerUserId),
+  });
+
+  return {
+    comments: [],
+    feedback,
+    projects: mapProjectRows(projectRows),
+    users,
   };
 }
 

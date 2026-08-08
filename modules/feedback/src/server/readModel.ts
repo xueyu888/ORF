@@ -83,6 +83,7 @@ export type FeedbackReadModelIssue = {
 type FeedbackRow = typeof feedback.$inferSelect;
 type FeedbackCauseRow = typeof feedbackCauseCategories.$inferSelect;
 type FeedbackActivityRow = typeof feedbackActivityEvents.$inferSelect;
+type FeedbackActivitySummaryRow = Pick<FeedbackActivityRow, "actorUserId" | "feedbackId" | "sequence">;
 type FeedbackRelationRow = typeof feedbackRelations.$inferSelect;
 type FeedbackReportAttachmentRow = typeof feedbackReportAttachments.$inferSelect;
 type FeedbackUserViewRow = {
@@ -96,6 +97,18 @@ export async function getFeedbackReadModelIssues(
 ): Promise<FeedbackReadModelIssue[]> {
   const feedbackRows = await getFeedbackRows(database, input.teamId);
   return getFeedbackReadModelIssuesFromRows(database, {
+    feedbackRows,
+    teamId: input.teamId,
+    viewer: input.viewer ?? null,
+  });
+}
+
+export async function getFeedbackReadModelListIssues(
+  database: FeedbackReadModelDatabase,
+  input: { readonly teamId: string; readonly viewer?: FeedbackReadModelViewer | null },
+): Promise<FeedbackReadModelIssue[]> {
+  const feedbackRows = await getFeedbackRows(database, input.teamId);
+  return getFeedbackReadModelListIssuesFromRows(database, {
     feedbackRows,
     teamId: input.teamId,
     viewer: input.viewer ?? null,
@@ -146,6 +159,33 @@ async function getFeedbackReadModelIssuesFromRows(
   });
 }
 
+async function getFeedbackReadModelListIssuesFromRows(
+  database: FeedbackReadModelDatabase,
+  input: {
+    readonly feedbackRows: readonly FeedbackRow[];
+    readonly teamId: string;
+    readonly viewer: FeedbackReadModelViewer | null;
+  },
+): Promise<FeedbackReadModelIssue[]> {
+  const feedbackRows = input.feedbackRows;
+  const feedbackIds = feedbackRows.map((item) => item.id);
+  const [causeRows, activityRows, relationRows, userViewRows] = await Promise.all([
+    getFeedbackCauseRows(database, feedbackIds),
+    getFeedbackActivitySummaryRows(database, feedbackIds),
+    getFeedbackRelationRows(database, feedbackIds),
+    getFeedbackUserViewRows(database, input.teamId, feedbackIds, input.viewer?.id),
+  ]);
+
+  return mapFeedbackIssueListRows({
+    activityRows,
+    causeRows,
+    feedbackRows,
+    relationRows,
+    userViewRows,
+    viewer: input.viewer,
+  });
+}
+
 async function getFeedbackRows(database: FeedbackReadModelDatabase, storageScopeId: string) {
   return database
     .select()
@@ -171,6 +211,18 @@ async function getFeedbackCauseRows(database: FeedbackReadModelDatabase, feedbac
 async function getFeedbackActivityRows(database: FeedbackReadModelDatabase, feedbackIssueIds: string[]) {
   if (feedbackIssueIds.length === 0) return [];
   return database.select().from(feedbackActivityEvents).where(inArray(feedbackActivityEvents.feedbackId, feedbackIssueIds));
+}
+
+async function getFeedbackActivitySummaryRows(database: FeedbackReadModelDatabase, feedbackIssueIds: string[]): Promise<FeedbackActivitySummaryRow[]> {
+  if (feedbackIssueIds.length === 0) return [];
+  return database
+    .select({
+      actorUserId: feedbackActivityEvents.actorUserId,
+      feedbackId: feedbackActivityEvents.feedbackId,
+      sequence: feedbackActivityEvents.sequence,
+    })
+    .from(feedbackActivityEvents)
+    .where(inArray(feedbackActivityEvents.feedbackId, feedbackIssueIds));
 }
 
 async function getFeedbackReportAttachmentRows(database: FeedbackReadModelDatabase, feedbackIssueIds: string[]) {
@@ -305,6 +357,87 @@ function mapFeedbackIssueRows(input: {
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     activity: activityByFeedback.get(item.id) ?? [],
+    relations: relationsByFeedback.get(item.id) ?? [],
+  }));
+}
+
+function mapFeedbackIssueListRows(input: {
+  activityRows: readonly FeedbackActivitySummaryRow[];
+  causeRows: readonly FeedbackCauseRow[];
+  feedbackRows: readonly FeedbackRow[];
+  relationRows: readonly FeedbackRelationRow[];
+  userViewRows: readonly FeedbackUserViewRow[];
+  viewer: FeedbackReadModelViewer | null;
+}): FeedbackReadModelIssue[] {
+  const causeCategoriesByFeedback = new Map<string, string[]>();
+  for (const item of [...input.causeRows].sort((left, right) => left.sortOrder - right.sortOrder)) {
+    const list = causeCategoriesByFeedback.get(item.feedbackId) ?? [];
+    list.push(item.category);
+    causeCategoriesByFeedback.set(item.feedbackId, list);
+  }
+
+  const lastActivitySequenceByFeedback = new Map<string, number>();
+  const lastActivityActorByFeedback = new Map<string, string | null>();
+  const lastOtherActivitySequenceByFeedback = new Map<string, number>();
+  const viewerUserId = input.viewer?.id.trim() || null;
+  for (const item of input.activityRows) {
+    const currentLastSequence = lastActivitySequenceByFeedback.get(item.feedbackId) ?? 0;
+    if (item.sequence >= currentLastSequence) {
+      lastActivitySequenceByFeedback.set(item.feedbackId, item.sequence);
+      lastActivityActorByFeedback.set(item.feedbackId, item.actorUserId ?? null);
+    }
+    if (viewerUserId && item.actorUserId !== viewerUserId) {
+      lastOtherActivitySequenceByFeedback.set(
+        item.feedbackId,
+        Math.max(lastOtherActivitySequenceByFeedback.get(item.feedbackId) ?? 0, item.sequence),
+      );
+    }
+  }
+
+  const lastSeenSequenceByFeedback = new Map(input.userViewRows.map((row) => [row.feedbackId, row.lastSeenSequence]));
+  const relationsByFeedback = new Map<string, FeedbackReadModelIssue["relations"]>();
+  for (const item of [...input.relationRows].sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
+    const relation = {
+      id: item.id,
+      type: item.type,
+      sourceFeedbackId: item.sourceFeedbackId,
+      targetFeedbackId: item.targetFeedbackId,
+      createdBy: optional(item.createdBy),
+      createdAt: item.createdAt,
+    };
+    for (const feedbackId of [item.sourceFeedbackId, item.targetFeedbackId]) {
+      const list = relationsByFeedback.get(feedbackId) ?? [];
+      list.push(relation);
+      relationsByFeedback.set(feedbackId, list);
+    }
+  }
+
+  return input.feedbackRows.map((item) => ({
+    id: item.id,
+    capabilities: deriveReadModelFeedbackCapabilities(item, input.viewer),
+    projectId: item.projectId,
+    title: item.title,
+    description: item.description,
+    reportAttachments: [],
+    causeCategories: causeCategoriesByFeedback.get(item.id) ?? [],
+    impact: item.impact,
+    priority: item.priority,
+    stage: item.stage,
+    resolution: item.resolution,
+    assigneeUserId: item.assigneeUserId,
+    createdBy: item.createdBy,
+    updatedBy: item.updatedBy,
+    version: item.version,
+    closedAt: item.closedAt,
+    closedByUserId: item.closedByUserId,
+    lastActivityByUserId: lastActivityActorByFeedback.get(item.id) ?? null,
+    lastActivitySequence: lastActivitySequenceByFeedback.get(item.id) ?? 0,
+    lastSeenSequence: lastSeenSequenceByFeedback.get(item.id) ?? 0,
+    requiresAction: feedbackRequiresAction(item, viewerUserId),
+    unread: viewerUserId ? (lastOtherActivitySequenceByFeedback.get(item.id) ?? 0) > (lastSeenSequenceByFeedback.get(item.id) ?? 0) : false,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    activity: [],
     relations: relationsByFeedback.get(item.id) ?? [],
   }));
 }
