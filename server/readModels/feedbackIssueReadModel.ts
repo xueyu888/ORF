@@ -60,7 +60,7 @@ function isMissingCommentStorageError(error: unknown) {
   return cause.code === "42P01" || cause.code === "42704";
 }
 
-export function mapProjectRows(projectRows: readonly ProjectRow[]): FeedbackWebProject[] {
+function mapProjectRows(projectRows: readonly ProjectRow[]): FeedbackWebProject[] {
   return projectRows.map((project) => ({
     id: project.id,
     name: project.name,

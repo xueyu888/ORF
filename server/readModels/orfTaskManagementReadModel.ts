@@ -53,19 +53,25 @@ import {
   nameForUserId,
   optional,
 } from "./orfReadModelMappers";
-import {
-  mapProjectRows,
-} from "./feedbackIssueReadModel";
-
 export type TaskManagementDataScope = {
   scope: RuntimeScope;
   viewerUserId?: string | null;
 };
 
+type ProjectRow = typeof projects.$inferSelect;
 type CommentThreadRow = typeof commentThreads.$inferSelect;
 type CommentMessageRow = typeof commentMessages.$inferSelect;
 type CommentAttachmentRow = typeof commentAttachments.$inferSelect;
 type TaskRow = typeof tasks.$inferSelect;
+
+function mapProjectRows(projectRows: readonly ProjectRow[]): OrfProject[] {
+  return projectRows.map((project) => ({
+    id: project.id,
+    name: project.name,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+  }));
+}
 
 function isMissingCommentStorageError(error: unknown) {
   const cause = error && typeof error === "object" && "cause" in error ? (error as { cause?: unknown }).cause : error;
