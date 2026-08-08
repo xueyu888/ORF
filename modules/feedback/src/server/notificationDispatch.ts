@@ -60,6 +60,10 @@ export type FeedbackNotificationPort = (
 
 export type FeedbackNotificationDispatchDatabase = Pick<NodePgDatabase<any>, "insert" | "select" | "update">;
 
+type FeedbackNotificationDispatchLog = {
+  warn(input: unknown, message?: string): void;
+};
+
 type DispatchRow = {
   readonly activityEventId: string;
   readonly attempts: number;
@@ -401,6 +405,7 @@ export async function publishPendingFeedbackNotificationDispatches(
 
 export function startFeedbackNotificationDispatchWorker(input: {
   readonly database: FeedbackNotificationDispatchDatabase;
+  readonly log?: FeedbackNotificationDispatchLog;
   readonly pollIntervalMs?: number;
   readonly publishNotification: FeedbackNotificationPort;
 }) {
@@ -413,6 +418,8 @@ export function startFeedbackNotificationDispatchWorker(input: {
     running = true;
     try {
       await publishPendingFeedbackNotificationDispatches(input.database, input.publishNotification);
+    } catch (error) {
+      input.log?.warn({ error }, "ORF feedback notification dispatch worker failed");
     } finally {
       running = false;
     }

@@ -65,6 +65,7 @@ export function createOrfFeedbackServerHost(
       }
       return startFeedbackNotificationDispatchWorker({
         database: db,
+        log: app.log,
         publishNotification: feedbackNotificationPort,
       });
     },
