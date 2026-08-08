@@ -3,7 +3,7 @@ import { Bookmark, CheckCheck, ChevronDown, ChevronUp, Copy, Edit3, EyeOff, File
 import { type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, IconButton } from "../../components/ui";
-import type { ChatAttachment, ChatMessage, ChatUser, Feedback } from "../../types/orf";
+import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatPastedFeedbackLinks } from "@orf/feedback-module/web";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
@@ -14,7 +14,7 @@ import { ChatReactionEmoji } from "./ChatReactionEmoji";
 import { ChatReactionPicker } from "./ChatReactionPicker";
 import { canonicalChatReactionName, isVisibleChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
 import { ChatDraftEditor } from "./ChatDraftEditor";
-import { chatMessageSendStatus, draftFromStoredBody, serializeDraft, type ChatDraft } from "./chatModels";
+import { chatMessageSendStatus, draftFromStoredBody, serializeDraft, type ChatDraft, type ChatFeedbackReference } from "./chatModels";
 import type { ChatOpenThreadOptions } from "./useChatThreadState";
 
 type ChatMessageItemProps = {
@@ -23,7 +23,7 @@ type ChatMessageItemProps = {
   compact?: boolean;
   currentUserId?: string;
   editing?: boolean;
-  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
+  feedbackItems?: readonly ChatFeedbackReference[];
   firstUnread?: boolean;
   focused?: boolean;
   mentionableUsers: ChatUser[];
@@ -159,7 +159,7 @@ function CollapsibleMessageText({
 }: {
   body: string;
   commentImageAttachmentIds?: readonly string[];
-  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
+  feedbackItems?: readonly ChatFeedbackReference[];
   onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
   usersById: Map<string, ChatUser>;
 }) {

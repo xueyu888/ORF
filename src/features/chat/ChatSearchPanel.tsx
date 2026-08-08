@@ -1,15 +1,16 @@
 import { FileText, Image as ImageIcon, Loader2, Search } from "lucide-react";
 import { useEffect, useRef } from "react";
-import type { ChatMessage, ChatSearchResult, ChatUser, Feedback } from "../../types/orf";
+import type { ChatMessage, ChatSearchResult, ChatUser } from "../../types/orf";
 import { chatChannelDisplayLabel } from "./chatChannelPresentation";
 import { formatDateTime, formatDay, formatTime } from "./chatFormat";
 import { ChatMarkdown, commentImageAttachmentIdsFromChatSystemMetadata } from "./chatMarkdown";
+import type { ChatFeedbackReference } from "./chatModels";
 import type { ChatSearchScope, ChatSearchTypeFilter } from "./chatPanelTypes";
 import { chatSearchInputPlaceholder } from "./chatSearchSyntax";
 
 type ChatSearchPanelProps = {
   currentUserId?: string;
-  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
+  feedbackItems?: readonly ChatFeedbackReference[];
   focusSignal: number;
   onOpenResult: (result: ChatSearchResult) => void;
   onSearch: (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => Promise<void>;
@@ -119,7 +120,7 @@ function SearchResultPreview({
   message,
   usersById,
 }: {
-  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
+  feedbackItems?: readonly ChatFeedbackReference[];
   message: ChatMessage;
   usersById: Map<string, ChatUser>;
 }) {

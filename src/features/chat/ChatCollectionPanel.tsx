@@ -1,13 +1,14 @@
 import { Bookmark, Loader2, Pin } from "lucide-react";
 import { IconButton } from "../../components/ui";
-import type { ChatMessage, ChatSearchResult, ChatUser, Feedback } from "../../types/orf";
+import type { ChatMessage, ChatSearchResult, ChatUser } from "../../types/orf";
 import { chatChannelDisplayLabel } from "./chatChannelPresentation";
 import { formatDateTime, formatDay, formatTime } from "./chatFormat";
 import { ChatMarkdown, commentImageAttachmentIdsFromChatSystemMetadata } from "./chatMarkdown";
+import type { ChatFeedbackReference } from "./chatModels";
 
 type ChatCollectionPanelProps = {
   currentUserId?: string;
-  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
+  feedbackItems?: readonly ChatFeedbackReference[];
   kind: "pins" | "saved";
   loading: boolean;
   onOpenResult: (result: ChatSearchResult) => void;

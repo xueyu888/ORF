@@ -1,7 +1,7 @@
 import { clsx } from "clsx";
 import { AtSign, Edit3, Eye, Smile } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChatUser, Feedback } from "../../types/orf";
+import type { ChatUser } from "../../types/orf";
 import {
   OrfRichTextEditor,
   orfRichTextHasMeaningfulContent,
@@ -11,7 +11,7 @@ import {
 import { emptyComposerHistory, recallComposerHistory, recordSentComposerDraft } from "./chatComposerModel";
 import { matchesChatShortcutKey } from "./chatKeyboardShortcuts";
 import { ChatMarkdown } from "./chatMarkdown";
-import { reconcileMentions, serializeDraft, type ChatDraft, type DraftMention } from "./chatModels";
+import { reconcileMentions, serializeDraft, type ChatDraft, type ChatFeedbackReference, type DraftMention } from "./chatModels";
 import {
   chatMentionPlainTextUserIds,
   chatRichTextMentionableUsers,
@@ -30,7 +30,7 @@ type ChatDraftEditorProps = {
   className?: string;
   disabled?: boolean;
   draft: ChatDraft;
-  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
+  feedbackItems?: readonly ChatFeedbackReference[];
   focusSignal?: number;
   mentionableUsers: ChatUser[];
   onCancel?: () => void;

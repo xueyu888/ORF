@@ -1,12 +1,13 @@
 import { CheckCheck, ChevronDown, Loader2, Reply } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
-import type { ChatMessage, ChatUser, Feedback } from "../../types/orf";
+import type { ChatMessage, ChatUser } from "../../types/orf";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { formatDay } from "./chatFormat";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import {
   chatUnreadControlKind,
+  type ChatFeedbackReference,
   resolveUnreadJumpTarget,
   type ChatUnreadJumpTarget,
   type UnreadAnchor,
@@ -19,7 +20,7 @@ type ChatMessageFeedProps = {
   canPin: boolean;
   currentUserId?: string;
   editingMessageId?: string | null;
-  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
+  feedbackItems?: readonly ChatFeedbackReference[];
   focusMessageId: string | null;
   hasNewerMessages: boolean;
   hasOlderMessages: boolean;

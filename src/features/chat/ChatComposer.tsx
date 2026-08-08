@@ -13,7 +13,7 @@ import { type ChangeEvent, type DragEvent, useCallback, useEffect, useMemo, useR
 import { formatPastedFeedbackLinks } from "@orf/feedback-module/web";
 import { IconButton } from "../../components/ui";
 import { uploadChatAttachment } from "../../state/apiClient";
-import type { ChatAttachment, ChatUser, Feedback } from "../../types/orf";
+import type { ChatAttachment, ChatUser } from "../../types/orf";
 import { formatFileSize } from "./chatFormat";
 import {
   type ChatAttachmentDraftItem,
@@ -29,6 +29,7 @@ import {
 } from "./chatComposerModel";
 import {
   type ChatDraft,
+  type ChatFeedbackReference,
   type ChatSendHandler,
   chatDraftStorageKey,
   emptyDraft,
@@ -41,7 +42,7 @@ type ChatComposerProps = {
   attachmentMaxBytes: number;
   channelId: string;
   disabled?: boolean;
-  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
+  feedbackItems?: readonly ChatFeedbackReference[];
   focusSignal?: number;
   mentionableUsers: ChatUser[];
   onDraftStateChange?: (channelId: string, hasDraft: boolean) => void;

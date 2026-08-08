@@ -20,6 +20,11 @@ export type ChatDraft = {
   text: string;
 };
 
+export type ChatFeedbackReference = {
+  readonly id: string;
+  readonly title: string;
+};
+
 export type ChatSendInput = {
   attachments: ChatAttachment[];
   channelId: string;

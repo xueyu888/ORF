@@ -1,7 +1,7 @@
 import { useCallback, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { feedbackIssueHref, feedbackIssueIdFromHref, feedbackIssueMarkdownLabel } from "@orf/feedback-module/web";
-import type { ChatUser, Feedback } from "../../types/orf";
+import type { ChatUser } from "../../types/orf";
 import {
   OrfRichTextMarkdownViewer,
   type OrfRichTextResolvedLink,
@@ -13,13 +13,14 @@ import {
 } from "../rich-text/orfRichTextMarkdown";
 import { ChatReactionEmoji } from "./ChatReactionEmoji";
 import { parseChatDriveResourceHref, type ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
+import type { ChatFeedbackReference } from "./chatModels";
 import { tokenizeChatReactionEmojiText } from "./chatReactions";
 
 type ChatMarkdownProps = {
   body: string;
   compact?: boolean;
   commentImageAttachmentIds?: readonly string[];
-  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
+  feedbackItems?: readonly ChatFeedbackReference[];
   onDriveResourceLink?: (target: ChatDriveResourceLinkTarget) => void;
   usersById: Map<string, ChatUser>;
 };
@@ -28,7 +29,7 @@ function isInternalHref(href: string) {
   return href.startsWith("/") && !href.startsWith("//");
 }
 
-function feedbackLinkForHref(href: string, feedbackById: Map<string, Pick<Feedback, "id" | "title">>) {
+function feedbackLinkForHref(href: string, feedbackById: Map<string, ChatFeedbackReference>) {
   const feedbackId = feedbackIssueIdFromHref(href);
   if (!feedbackId) return null;
   const feedback = feedbackById.get(feedbackId);

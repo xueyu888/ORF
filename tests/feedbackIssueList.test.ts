@@ -13,6 +13,7 @@ import {
   feedbackIssueListCountsForFilters,
   filterFeedbackIssueListItems,
   type FeedbackIssueListFilters,
+  type FeedbackWebIssue,
 } from "@orf/feedback-module/web";
 import { feedbackIssueRelationSummaries } from "@orf/feedback-module/web";
 import {
@@ -28,7 +29,7 @@ import {
   feedbackIssueListPaginationFromInput,
   type FeedbackIssueReadModelData,
 } from "@orf/feedback-module/contracts";
-import type { Feedback, OrfProject, OrfUser } from "../src/types/orf";
+import type { OrfProject, OrfUser } from "../src/types/orf";
 
 const users: OrfUser[] = [
   { email: "creator@example.com", id: "user-creator", name: "创建者", role: "member", status: "active" },
@@ -592,7 +593,7 @@ function filters(input: Partial<FeedbackIssueListFilters>): FeedbackIssueListFil
   };
 }
 
-function feedback(input: Partial<Feedback> & Pick<Feedback, "id" | "title">): Feedback {
+function feedback(input: Partial<FeedbackWebIssue> & Pick<FeedbackWebIssue, "id" | "title">): FeedbackWebIssue {
   return {
     activity: [],
     causeCategories: ["技术问题"],

@@ -1,12 +1,13 @@
 import { Loader2, Reply } from "lucide-react";
-import type { ChatThreadSummary, ChatUser, Feedback } from "../../types/orf";
+import type { ChatThreadSummary, ChatUser } from "../../types/orf";
 import { chatChannelDisplayLabel } from "./chatChannelPresentation";
 import { formatDateTime, formatTime } from "./chatFormat";
 import { ChatMarkdown, commentImageAttachmentIdsFromChatSystemMetadata } from "./chatMarkdown";
+import type { ChatFeedbackReference } from "./chatModels";
 
 type ChatThreadInboxPanelProps = {
   currentUserId?: string;
-  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
+  feedbackItems?: readonly ChatFeedbackReference[];
   loading: boolean;
   onOpenThread: (summary: ChatThreadSummary) => void;
   summaries: ChatThreadSummary[];

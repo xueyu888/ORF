@@ -76,11 +76,9 @@ import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import type { ReportsPageData } from "../domain/reportsLeaderboard";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
 import type { ChatRealtimeEvent, ClientUpdateAvailable, OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
-import type { FeedbackTransitionInput } from "@orf/feedback-module/contracts";
 import type {
   CommentStatus,
   CommentTargetType,
-  Feedback,
   Objective,
   OrfState,
   OrfUser,

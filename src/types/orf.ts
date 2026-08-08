@@ -1,12 +1,5 @@
 import type {
-  FeedbackActivityType,
-  FeedbackCapabilities,
-  FeedbackImpact,
   FeedbackNotificationEventKind,
-  FeedbackPriority,
-  FeedbackRelationType,
-  FeedbackResolution,
-  FeedbackStage,
   FeedbackSubscriptionMode as FeedbackSubscriptionModeContract,
 } from "@orf/feedback-module/contracts";
 import type { PermissionKey } from "../config/permissions";
@@ -236,24 +229,6 @@ export interface SystemConversationSummary {
 
 export interface SystemConversationMessage extends AppNotification {
   canReply: boolean;
-}
-
-export interface ActivityItem {
-  id: string;
-  actorUserId?: string | null;
-  activityType: FeedbackActivityType;
-  payload: Record<string, unknown>;
-  sequence: number;
-  at: string;
-}
-
-export interface FeedbackRelation {
-  id: string;
-  type: FeedbackRelationType;
-  sourceFeedbackId: string;
-  targetFeedbackId: string;
-  createdBy?: string | null;
-  createdAt: string;
 }
 
 export interface OrfProject {
@@ -711,35 +686,6 @@ export interface Result {
   reviewCadence: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface Feedback {
-  id: string;
-  capabilities: FeedbackCapabilities;
-  projectId?: string | null;
-  title: string;
-  description: string;
-  reportAttachments: CommentAttachment[];
-  causeCategories: string[];
-  impact: FeedbackImpact;
-  priority: FeedbackPriority | null;
-  stage: FeedbackStage;
-  resolution: FeedbackResolution | null;
-  assigneeUserId?: string | null;
-  createdBy: string;
-  updatedBy?: string | null;
-  version: number;
-  closedAt?: string | null;
-  closedByUserId?: string | null;
-  lastActivityByUserId?: string | null;
-  lastActivitySequence: number;
-  lastSeenSequence: number;
-  requiresAction: boolean;
-  unread: boolean;
-  createdAt: string;
-  updatedAt: string;
-  activity: ActivityItem[];
-  relations: FeedbackRelation[];
 }
 
 export interface TaskChecklistItem {

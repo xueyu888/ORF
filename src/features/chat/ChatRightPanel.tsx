@@ -1,6 +1,6 @@
 import { Loader2, MessageSquare, X } from "lucide-react";
 import { IconButton } from "../../components/ui";
-import type { ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback, OrfProject } from "../../types/orf";
+import type { ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, OrfProject } from "../../types/orf";
 import { ChatChannelInfoPanel } from "./ChatChannelInfoPanel";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import { chatChannelInfoLabel } from "./chatChannelPresentation";
@@ -13,6 +13,7 @@ import { ChatThreadPanel } from "./ChatThreadPanel";
 import { ChatDrivePanel } from "./ChatDrivePanel";
 import type { ChatDriveResourceLinkTarget, ChatDriveResourceSelectionRequest } from "./chatDriveResourceLinks";
 import type { AppAttentionState } from "../interaction/appAttentionState";
+import type { ChatFeedbackReference } from "./chatModels";
 
 type ChatRightPanelProps = {
   activePanel: ActivePanel;
@@ -28,7 +29,7 @@ type ChatRightPanelProps = {
   currentUserId?: string;
   driveSelectionRequest?: ChatDriveResourceSelectionRequest | null;
   editingMessageId?: string | null;
-  feedbackItems?: readonly Pick<Feedback, "id" | "title">[];
+  feedbackItems?: readonly ChatFeedbackReference[];
   memberSearchFocusSignal?: number;
   onAddMembers: (userIds: string[]) => Promise<void>;
   onAnnouncementMessage: (message: ChatMessage) => void;
