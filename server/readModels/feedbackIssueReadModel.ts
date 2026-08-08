@@ -2,7 +2,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   getFeedbackReadModelIssue,
   getFeedbackReadModelIssues,
-  getFeedbackReadModelListIssues,
+  getFeedbackReadModelListPage,
   type FeedbackReadModelViewer,
 } from "@orf/feedback-module/server";
 import {
@@ -74,49 +74,57 @@ export async function getFeedbackIssueReadModelData(scope: FeedbackIssueReadMode
 }
 
 export async function getFeedbackIssueListReadModelData(scope: FeedbackIssueReadModelScope): Promise<FeedbackIssueReadModelData> {
-  const data = await getFeedbackIssueListReadModelDataForScope(scope);
-  const storageScopeId = feedbackReadModelStorageId(scope);
-  const commentSummaries = await getFeedbackCommentSummaries(
-    storageScopeId,
-    data.feedback.map((item) => item.id),
-  );
-  const filters = scope.filters ?? defaultFeedbackIssueListFilters;
-  const list = buildFeedbackIssueListProjection({
-    commentSummaries,
-    feedback: data.feedback,
-    filters,
-    pagination: scope.pagination ?? null,
-    projects: data.projects,
-    users: data.users,
-  });
-  return {
-    ...data,
-    comments: [],
-    feedback: list.items.map((item) => item.feedback),
-    list,
-  };
-}
-
-async function getFeedbackIssueListReadModelDataForScope(
-  scope: FeedbackIssueReadModelScope,
-): Promise<FeedbackIssueReadModelData> {
   const storageScopeId = feedbackReadModelStorageId(scope);
   const [projectRows, users] = await Promise.all([
     db.select().from(projects).where(eq(projects.teamId, storageScopeId)).orderBy(desc(projects.createdAt), desc(projects.id)),
     getScopedUsers(scope.scope),
   ]);
-  const feedback = await getFeedbackReadModelListIssues(db, {
-    filters: scope.filters ?? null,
+  const filters = scope.filters ?? defaultFeedbackIssueListFilters;
+  const listPage = await getFeedbackReadModelListPage(db, {
+    filters,
+    pagination: scope.pagination ?? null,
     teamId: storageScopeId,
     viewer: feedbackReadModelViewer(users, scope.viewerUserId),
+  });
+  const projectModels = mapProjectRows(projectRows);
+  const commentSummaries = await getFeedbackCommentSummaries(
+    storageScopeId,
+    listPage.issues.map((item) => item.id),
+  );
+  const list = buildFeedbackIssueListProjection({
+    commentSummaries,
+    feedback: listPage.issues,
+    filters,
+    projectionFacts: {
+      assigneeOptions: feedbackListUserOptions(listPage.facts.optionFacts.assigneeUserIds, users),
+      authorOptions: feedbackListUserOptions(listPage.facts.optionFacts.authorUserIds, users),
+      counts: listPage.facts.counts,
+      labelOptions: listPage.facts.optionFacts.labelOptions,
+      matchedCount: listPage.facts.matchedCount,
+      pageInfo: listPage.facts.pageInfo,
+      totalCount: listPage.facts.totalCount,
+    },
+    projects: projectModels,
+    users,
   });
 
   return {
     comments: [],
-    feedback,
-    projects: mapProjectRows(projectRows),
+    feedback: list.items.map((item) => item.feedback),
+    list,
+    projects: projectModels,
     users,
   };
+}
+
+function feedbackListUserOptions(userIds: readonly string[], users: readonly OrfUser[]) {
+  const userById = new Map(users.map((user) => [user.id, user]));
+  return userIds
+    .map((userId) => ({
+      label: userById.get(userId)?.name ?? userId,
+      value: userId,
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label, "zh-Hans-CN"));
 }
 
 async function getFeedbackIssueReadModelDataForScope(

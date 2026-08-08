@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import {
@@ -9,10 +9,18 @@ import {
   feedbackReportAttachmentDto,
   feedbackResolutionLabel,
   feedbackStageLabel,
+  feedbackIssueListCursorForFeedback,
+  feedbackIssueListCursorFromText,
+  feedbackIssueListEffectiveSort,
   parseFeedbackIssueListQuery,
   type FeedbackDashboardSummary,
+  type FeedbackIssueListCounts,
   type FeedbackIssueListFilters,
+  type FeedbackIssueListOption,
+  type FeedbackIssueListPageInfo,
+  type FeedbackIssueListPagination,
   type FeedbackIssuePriorityFilter,
+  type FeedbackIssueSortKey,
   type FeedbackIssueListState,
   type FeedbackActivityType,
   type FeedbackActorRole,
@@ -92,12 +100,32 @@ export type FeedbackReadModelIssue = {
   readonly relations: FeedbackReadModelRelation[];
 };
 
+export type FeedbackReadModelListOptionFacts = {
+  readonly assigneeUserIds: readonly string[];
+  readonly authorUserIds: readonly string[];
+  readonly labelOptions: readonly FeedbackIssueListOption[];
+};
+
+export type FeedbackReadModelListFacts = {
+  readonly counts: FeedbackIssueListCounts;
+  readonly matchedCount: number;
+  readonly optionFacts: FeedbackReadModelListOptionFacts;
+  readonly pageInfo: FeedbackIssueListPageInfo;
+  readonly totalCount: number;
+};
+
+export type FeedbackReadModelListPage = {
+  readonly facts: FeedbackReadModelListFacts;
+  readonly issues: readonly FeedbackReadModelIssue[];
+};
+
 type FeedbackRow = typeof feedback.$inferSelect;
 type FeedbackDashboardSummaryRow = Pick<
   FeedbackRow,
   "assigneeUserId" | "description" | "id" | "impact" | "resolution" | "stage" | "title" | "updatedAt"
 >;
 type FeedbackCauseRow = typeof feedbackCauseCategories.$inferSelect;
+type FeedbackListOptionRow = Pick<FeedbackRow, "assigneeUserId" | "createdBy" | "id">;
 type FeedbackActivityRow = typeof feedbackActivityEvents.$inferSelect;
 type FeedbackActivitySummaryRow = Pick<FeedbackActivityRow, "actorUserId" | "feedbackId" | "sequence">;
 type FeedbackRelationRow = typeof feedbackRelations.$inferSelect;
@@ -119,24 +147,31 @@ export async function getFeedbackReadModelIssues(
   });
 }
 
-export async function getFeedbackReadModelListIssues(
+export async function getFeedbackReadModelListPage(
   database: FeedbackReadModelDatabase,
   input: {
     readonly filters?: FeedbackIssueListFilters | null;
+    readonly pagination?: FeedbackIssueListPagination | null;
     readonly teamId: string;
     readonly viewer?: FeedbackReadModelViewer | null;
   },
-): Promise<FeedbackReadModelIssue[]> {
-  const feedbackRows = await getFeedbackListCandidateRows(database, {
+): Promise<FeedbackReadModelListPage> {
+  const queryResult = await getFeedbackListQueryRows(database, {
     filters: input.filters ?? null,
+    pagination: input.pagination ?? null,
     teamId: input.teamId,
     viewerUserId: input.viewer?.id.trim() || null,
   });
-  return getFeedbackReadModelListIssuesFromRows(database, {
-    feedbackRows,
+  const issues = await getFeedbackReadModelListPageIssues(database, {
+    feedbackRows: queryResult.feedbackRows,
     teamId: input.teamId,
     viewer: input.viewer ?? null,
   });
+
+  return {
+    facts: queryResult.facts,
+    issues,
+  };
 }
 
 export async function getFeedbackReadModelIssue(
@@ -206,7 +241,7 @@ async function getFeedbackReadModelIssuesFromRows(
   });
 }
 
-async function getFeedbackReadModelListIssuesFromRows(
+async function getFeedbackReadModelListPageIssues(
   database: FeedbackReadModelDatabase,
   input: {
     readonly feedbackRows: readonly FeedbackRow[];
@@ -261,33 +296,219 @@ async function getFeedbackDashboardSummaryRows(
     .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id));
 }
 
-async function getFeedbackListCandidateRows(
+async function getFeedbackListQueryRows(
+  database: FeedbackReadModelDatabase,
+  input: {
+    readonly filters: FeedbackIssueListFilters | null;
+    readonly pagination: FeedbackIssueListPagination | null;
+    readonly teamId: string;
+    readonly viewerUserId: string | null;
+  },
+) {
+  const sort = input.filters ? feedbackIssueListEffectiveSort(input.filters) : "updated-desc";
+  const [page, counts, totalCount, optionFacts] = await Promise.all([
+    getFeedbackListPageRows(database, { ...input, sort }),
+    getFeedbackListCounts(database, input),
+    countFeedbackRows(database, [eq(feedback.teamId, input.teamId)]),
+    getFeedbackListOptionFacts(database, input),
+  ]);
+
+  return {
+    feedbackRows: page.feedbackRows,
+    facts: {
+      counts,
+      matchedCount: input.filters ? counts[input.filters.listState] : counts.all,
+      optionFacts,
+      pageInfo: page.pageInfo,
+      totalCount,
+    },
+  };
+}
+
+async function getFeedbackListPageRows(
+  database: FeedbackReadModelDatabase,
+  input: {
+    readonly filters: FeedbackIssueListFilters | null;
+    readonly pagination: FeedbackIssueListPagination | null;
+    readonly sort: FeedbackIssueSortKey;
+    readonly teamId: string;
+    readonly viewerUserId: string | null;
+  },
+) {
+  const conditions = feedbackListConditions(input, { listState: input.filters?.listState ?? null });
+  const cursor = feedbackIssueListCursorFromText(input.pagination?.cursor ?? null);
+  if (cursor?.sort === input.sort) {
+    const cursorRow = await getFeedbackListCursorRow(database, input.teamId, cursor.feedbackId);
+    if (cursorRow) {
+      conditions.push(feedbackListCursorCondition(cursorRow, input.sort));
+    }
+  }
+
+  const query = database
+    .select()
+    .from(feedback)
+    .where(and(...conditions))
+    .orderBy(...feedbackListOrderBy(input.sort));
+  const rows = input.pagination ? await query.limit(input.pagination.limit + 1) : await query;
+  const feedbackRows = input.pagination ? rows.slice(0, input.pagination.limit) : rows;
+  const hasMore = input.pagination ? rows.length > input.pagination.limit : false;
+  const lastRow = feedbackRows.at(-1) ?? null;
+
+  return {
+    feedbackRows,
+    pageInfo: {
+      cursor: input.pagination?.cursor ?? null,
+      hasMore,
+      limit: input.pagination?.limit ?? null,
+      nextCursor: hasMore && lastRow ? feedbackIssueListCursorForFeedback(lastRow, input.sort) : null,
+    },
+  };
+}
+
+async function getFeedbackListCounts(
   database: FeedbackReadModelDatabase,
   input: {
     readonly filters: FeedbackIssueListFilters | null;
     readonly teamId: string;
     readonly viewerUserId: string | null;
   },
-) {
-  const conditions = feedbackListCandidateConditions(input);
-  return database
-    .select()
-    .from(feedback)
-    .where(and(...conditions))
-    .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id));
+): Promise<FeedbackIssueListCounts> {
+  const [all, assigned, closed, open, triage, unread, verification] = await Promise.all([
+    countFeedbackRows(database, feedbackListConditions(input, { listState: null })),
+    countFeedbackRows(database, feedbackListConditions(input, { listState: "assigned" })),
+    countFeedbackRows(database, feedbackListConditions(input, { listState: "closed" })),
+    countFeedbackRows(database, feedbackListConditions(input, { listState: "open" })),
+    countFeedbackRows(database, feedbackListConditions(input, { listState: "triage" })),
+    countFeedbackRows(database, feedbackListConditions(input, { listState: "unread" })),
+    countFeedbackRows(database, feedbackListConditions(input, { listState: "verification" })),
+  ]);
+
+  return {
+    all,
+    assigned,
+    closed,
+    open,
+    triage,
+    unread,
+    verification,
+  };
 }
 
-function feedbackListCandidateConditions(input: {
-  readonly filters: FeedbackIssueListFilters | null;
-  readonly teamId: string;
-  readonly viewerUserId: string | null;
-}): SQL<unknown>[] {
+async function getFeedbackListOptionFacts(
+  database: FeedbackReadModelDatabase,
+  input: {
+    readonly filters: FeedbackIssueListFilters | null;
+    readonly teamId: string;
+    readonly viewerUserId: string | null;
+  },
+): Promise<FeedbackReadModelListOptionFacts> {
+  const optionRows: FeedbackListOptionRow[] = await database
+    .select({
+      assigneeUserId: feedback.assigneeUserId,
+      createdBy: feedback.createdBy,
+      id: feedback.id,
+    })
+    .from(feedback)
+    .where(and(...feedbackListConditions(input, { listState: null })))
+    .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id));
+  const causeRows = await getFeedbackCauseRows(database, optionRows.map((row) => row.id));
+
+  return {
+    assigneeUserIds: uniqueTexts(optionRows.map((row) => row.assigneeUserId ?? "")),
+    authorUserIds: uniqueTexts(optionRows.map((row) => row.createdBy)),
+    labelOptions: uniqueTexts(causeRows.map((row) => row.category))
+      .map((category) => ({ label: category, value: category }))
+      .sort((left, right) => left.label.localeCompare(right.label, "zh-Hans-CN")),
+  };
+}
+
+async function countFeedbackRows(database: FeedbackReadModelDatabase, conditions: readonly SQL<unknown>[]) {
+  const [row] = await database
+    .select({ count: sql<number>`count(*)::int` })
+    .from(feedback)
+    .where(and(...conditions));
+  return Number(row?.count ?? 0);
+}
+
+async function getFeedbackListCursorRow(database: FeedbackReadModelDatabase, teamId: string, feedbackId: string) {
+  const [row] = await database
+    .select()
+    .from(feedback)
+    .where(and(eq(feedback.teamId, teamId), eq(feedback.id, feedbackId)));
+  return row ?? null;
+}
+
+function feedbackListOrderBy(sort: FeedbackIssueSortKey) {
+  if (sort === "priority") {
+    return [asc(feedbackPriorityRankExpression()), desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id)];
+  }
+  if (sort === "created-desc") {
+    return [desc(feedback.createdAt), desc(feedback.id)];
+  }
+  return [desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id)];
+}
+
+function feedbackListCursorCondition(cursorRow: FeedbackRow, sort: FeedbackIssueSortKey): SQL<unknown> {
+  if (sort === "priority") {
+    return or(
+      sql`${feedbackPriorityRankExpression()} > ${feedbackPriorityRank(cursorRow.priority)}`,
+      and(sql`${feedbackPriorityRankExpression()} = ${feedbackPriorityRank(cursorRow.priority)}`, feedbackListUpdatedDescCursorCondition(cursorRow)),
+    ) ?? sql`false`;
+  }
+  if (sort === "created-desc") {
+    return feedbackListCreatedDescCursorCondition(cursorRow);
+  }
+  return feedbackListUpdatedDescCursorCondition(cursorRow);
+}
+
+function feedbackListUpdatedDescCursorCondition(cursorRow: FeedbackRow): SQL<unknown> {
+  return or(
+    sql`${feedback.updatedAt} < ${cursorRow.updatedAt}`,
+    and(eq(feedback.updatedAt, cursorRow.updatedAt), feedbackListCreatedDescCursorCondition(cursorRow)),
+  ) ?? sql`false`;
+}
+
+function feedbackListCreatedDescCursorCondition(cursorRow: FeedbackRow): SQL<unknown> {
+  return or(
+    sql`${feedback.createdAt} < ${cursorRow.createdAt}`,
+    and(eq(feedback.createdAt, cursorRow.createdAt), sql`${feedback.id} < ${cursorRow.id}`),
+  ) ?? sql`false`;
+}
+
+function feedbackPriorityRankExpression() {
+  return sql<number>`case
+    when ${feedback.priority} = 'p0' then 0
+    when ${feedback.priority} = 'p1' then 1
+    when ${feedback.priority} = 'p2' then 2
+    when ${feedback.priority} = 'p3' then 3
+    else 4
+  end`;
+}
+
+function feedbackPriorityRank(priority: FeedbackPriority | null) {
+  if (priority === "p0") return 0;
+  if (priority === "p1") return 1;
+  if (priority === "p2") return 2;
+  if (priority === "p3") return 3;
+  return 4;
+}
+
+function feedbackListConditions(
+  input: {
+    readonly filters: FeedbackIssueListFilters | null;
+    readonly teamId: string;
+    readonly viewerUserId: string | null;
+  },
+  options: { readonly listState: FeedbackIssueListState | null },
+): SQL<unknown>[] {
   const conditions: SQL<unknown>[] = [eq(feedback.teamId, input.teamId)];
   const filters = input.filters;
-  if (!filters) return conditions;
+  if (!filters) {
+    pushCondition(conditions, options.listState ? feedbackListStateCondition(options.listState, input.viewerUserId) : null);
+    return conditions;
+  }
 
   const parsedQuery = parseFeedbackIssueListQuery(filters.query);
-  // The active tab stays in the projection until facet counts have their own database query.
   pushCondition(conditions, feedbackListProjectCondition(filters.projectId));
   pushCondition(conditions, feedbackListLabelCondition(filters.cause));
   if (filters.impact !== "All") conditions.push(eq(feedback.impact, filters.impact));
@@ -297,6 +518,18 @@ function feedbackListCandidateConditions(input: {
   if (filters.assigneeUserId !== "All") conditions.push(eq(feedback.assigneeUserId, filters.assigneeUserId));
   if (filters.authorUserId !== "All") conditions.push(eq(feedback.createdBy, filters.authorUserId));
 
+  for (const condition of feedbackListTextConditions(parsedQuery.text)) {
+    conditions.push(condition);
+  }
+  for (const term of parsedQuery.assigneeTerms) {
+    conditions.push(feedbackListAssigneeTermCondition(term) ?? sql`false`);
+  }
+  for (const term of parsedQuery.authorTerms) {
+    conditions.push(feedbackListAuthorTermCondition(term) ?? sql`false`);
+  }
+  for (const term of parsedQuery.projectTerms) {
+    conditions.push(feedbackListProjectTermCondition(term) ?? sql`false`);
+  }
   for (const term of parsedQuery.labelTerms) {
     pushCondition(conditions, feedbackListLabelCondition(term));
   }
@@ -313,7 +546,45 @@ function feedbackListCandidateConditions(input: {
     conditions.push(feedbackStageTermCondition(term) ?? sql`false`);
   }
   pushCondition(conditions, feedbackListStateTermsCondition(parsedQuery.stateTerms, input.viewerUserId));
+  pushCondition(conditions, options.listState ? feedbackListStateCondition(options.listState, input.viewerUserId) : null);
   return conditions;
+}
+
+function feedbackListTextConditions(text: string): SQL<unknown>[] {
+  return normalizeFeedbackListSearchText(text)
+    .split(" ")
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .map((term) => or(
+      sql`${feedback.id} ilike ${feedbackListLikePattern(term)} escape '\\'`,
+      sql`${feedback.title} ilike ${feedbackListLikePattern(term)} escape '\\'`,
+      sql`${feedback.description} ilike ${feedbackListLikePattern(term)} escape '\\'`,
+    ) ?? sql`false`);
+}
+
+function feedbackListAssigneeTermCondition(term: string): SQL<unknown> | null {
+  const normalizedTerm = normalizeFeedbackListSearchText(term);
+  if (!normalizedTerm) return null;
+  return sql`${feedback.assigneeUserId} ilike ${feedbackListLikePattern(normalizedTerm)} escape '\\'`;
+}
+
+function feedbackListAuthorTermCondition(term: string): SQL<unknown> | null {
+  const normalizedTerm = normalizeFeedbackListSearchText(term);
+  if (!normalizedTerm) return null;
+  return sql`${feedback.createdBy} ilike ${feedbackListLikePattern(normalizedTerm)} escape '\\'`;
+}
+
+function feedbackListProjectTermCondition(term: string): SQL<unknown> | null {
+  const normalizedTerm = normalizeFeedbackListSearchText(term);
+  if (!normalizedTerm) return null;
+  if (["unassigned", "none", "null", "未归属", "无项目"].some((value) => normalizeFeedbackListSearchText(value).includes(normalizedTerm))) {
+    return isNull(feedback.projectId);
+  }
+  return sql`${feedback.projectId} ilike ${feedbackListLikePattern(normalizedTerm)} escape '\\'`;
+}
+
+function uniqueTexts(values: readonly string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }
 
 function feedbackListProjectCondition(projectId: string): SQL<unknown> | null {
@@ -332,9 +603,7 @@ function feedbackListLabelCondition(term: string): SQL<unknown> | null {
   if (term === "All") return null;
   const normalizedTerm = normalizeFeedbackListSearchText(term);
   if (!normalizedTerm) return null;
-  const conditions = [feedbackCauseTermCondition(normalizedTerm)];
-  pushCondition(conditions, feedbackImpactTermCondition(normalizedTerm));
-  return or(...conditions) ?? sql`false`;
+  return feedbackCauseTermCondition(normalizedTerm);
 }
 
 function feedbackCauseTermCondition(normalizedTerm: string): SQL<unknown> {

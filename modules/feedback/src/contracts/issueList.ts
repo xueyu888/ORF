@@ -3,7 +3,7 @@ import type { FeedbackWebCommentThread, FeedbackWebIssue, FeedbackWebProject, Fe
 import { feedbackImpactLabel, feedbackLifecycleLabel, feedbackPriorityLabel, feedbackResolutionLabel, feedbackStageLabel } from "./labels";
 
 export type FeedbackIssueListState = "assigned" | "open" | "verification" | "unread" | "triage" | "closed" | "all";
-export type FeedbackIssueSortKey = "updated-desc" | "updated-asc" | "created-desc" | "created-asc" | "comments-desc" | "comments-asc";
+export type FeedbackIssueSortKey = "updated-desc" | "created-desc" | "priority";
 export type FeedbackIssuePriorityFilter = "All" | "untriaged" | FeedbackPriority;
 
 export type FeedbackIssueListFilters = {
@@ -100,6 +100,15 @@ export type FeedbackIssueListProjection = {
   totalCount: number;
 };
 
+export type FeedbackIssueListProjectionFacts = Pick<
+  FeedbackIssueListProjection,
+  "counts" | "matchedCount" | "pageInfo" | "totalCount"
+> & {
+  assigneeOptions?: readonly FeedbackIssueListOption[];
+  authorOptions?: readonly FeedbackIssueListOption[];
+  labelOptions?: readonly FeedbackIssueListOption[];
+};
+
 export type FeedbackIssueListRequest = {
   filters: FeedbackIssueListFilters;
   pagination: FeedbackIssueListPagination | null;
@@ -123,6 +132,11 @@ export type ParsedFeedbackIssueListQuery = {
   stageTerms: string[];
   stateTerms: FeedbackIssueListState[];
   text: string;
+};
+
+export type FeedbackIssueListCursor = {
+  feedbackId: string;
+  sort: FeedbackIssueSortKey;
 };
 
 const queryQualifierPattern = /(?:^|\s)(is|status|assignee|owner|author|label|impact|priority|project|resolution|sort|stage):("[^"]+"|\S+)/gi;
@@ -201,10 +215,25 @@ export function buildFeedbackIssueListProjection(input: {
   feedback: readonly FeedbackWebIssue[];
   filters: FeedbackIssueListFilters;
   pagination?: FeedbackIssueListPagination | null;
+  projectionFacts?: FeedbackIssueListProjectionFacts;
   projects?: readonly FeedbackWebProject[];
   users: readonly FeedbackWebUser[];
 }): FeedbackIssueListProjection {
   const items = buildFeedbackIssueListItems(input);
+  if (input.projectionFacts) {
+    return {
+      assigneeOptions: [...(input.projectionFacts.assigneeOptions ?? feedbackIssueAssigneeOptions(items))],
+      authorOptions: [...(input.projectionFacts.authorOptions ?? feedbackIssueAuthorOptions(items))],
+      counts: input.projectionFacts.counts,
+      filters: input.filters,
+      items,
+      labelOptions: [...(input.projectionFacts.labelOptions ?? feedbackIssueLabelOptions(items))],
+      matchedCount: input.projectionFacts.matchedCount,
+      pageInfo: input.projectionFacts.pageInfo,
+      totalCount: input.projectionFacts.totalCount,
+    };
+  }
+
   const filteredItems = filterFeedbackIssueListItems(items, input.filters);
   const effectiveSort = feedbackIssueListEffectiveSort(input.filters);
   const page = paginateFeedbackIssueListItems(filteredItems, input.pagination ?? null, effectiveSort);
@@ -277,7 +306,7 @@ function filterFeedbackIssueListItemsWithSort(items: readonly FeedbackIssueListI
   };
 }
 
-function feedbackIssueListEffectiveSort(filters: FeedbackIssueListFilters) {
+export function feedbackIssueListEffectiveSort(filters: FeedbackIssueListFilters) {
   return parseFeedbackIssueListQuery(filters.query).sort ?? filters.sort;
 }
 
@@ -307,7 +336,7 @@ function paginateFeedbackIssueListItems(
       cursor: pagination.cursor,
       hasMore,
       limit: pagination.limit,
-      nextCursor: hasMore && lastItem ? feedbackIssueListCursorForItem(lastItem, sort) : null,
+      nextCursor: hasMore && lastItem ? feedbackIssueListCursorForFeedback(lastItem.feedback, sort) : null,
     },
   };
 }
@@ -351,7 +380,7 @@ export function feedbackIssueAuthorOptions(items: readonly FeedbackIssueListItem
 }
 
 export function feedbackIssueLabelOptions(items: readonly FeedbackIssueListItem[]) {
-  return uniqueOptions(items.flatMap((item) => item.labels.map((label) => ({ label: label.name, value: label.name }))));
+  return uniqueOptions(items.flatMap((item) => item.feedback.causeCategories.map((cause) => ({ label: cause, value: cause }))));
 }
 
 function filterFeedbackIssueListMatches(
@@ -536,14 +565,16 @@ function feedbackMarkdownToPlainText(value: string, options: { attachmentText?: 
 }
 
 function compareFeedbackIssueListItems(left: FeedbackIssueListItem, right: FeedbackIssueListItem, sort: FeedbackIssueSortKey) {
-  const direction = sort.endsWith("-asc") ? 1 : -1;
-  if (sort.startsWith("comments")) {
-    return direction * compareNumber(left.commentCount, right.commentCount) || compareTextDescending(left.lastActivityAt, right.lastActivityAt) || compareTextDescending(left.feedback.id, right.feedback.id);
+  if (sort === "priority") {
+    return compareNumber(priorityRank(left.feedback.priority), priorityRank(right.feedback.priority))
+      || compareTextDescending(left.lastActivityAt, right.lastActivityAt)
+      || compareTextDescending(left.feedback.createdAt, right.feedback.createdAt)
+      || compareTextDescending(left.feedback.id, right.feedback.id);
   }
-  if (sort.startsWith("created")) {
-    return direction * compareText(left.feedback.createdAt, right.feedback.createdAt) || compareTextDescending(left.feedback.id, right.feedback.id);
+  if (sort === "created-desc") {
+    return compareTextDescending(left.feedback.createdAt, right.feedback.createdAt) || compareTextDescending(left.feedback.id, right.feedback.id);
   }
-  return direction * compareText(left.lastActivityAt, right.lastActivityAt) || compareTextDescending(left.feedback.createdAt, right.feedback.createdAt) || compareTextDescending(left.feedback.id, right.feedback.id);
+  return compareTextDescending(left.lastActivityAt, right.lastActivityAt) || compareTextDescending(left.feedback.createdAt, right.feedback.createdAt) || compareTextDescending(left.feedback.id, right.feedback.id);
 }
 
 function textMatches(item: FeedbackIssueListItem, text: string) {
@@ -702,11 +733,11 @@ function emptyFeedbackIssueListPageInfo(): FeedbackIssueListPageInfo {
   };
 }
 
-function feedbackIssueListCursorForItem(item: FeedbackIssueListItem, sort: FeedbackIssueSortKey) {
-  return ["v1", sort, item.feedback.id].map(encodeURIComponent).join("|");
+export function feedbackIssueListCursorForFeedback(feedback: Pick<FeedbackWebIssue, "id">, sort: FeedbackIssueSortKey) {
+  return ["v1", sort, feedback.id].map(encodeURIComponent).join("|");
 }
 
-function feedbackIssueListCursorFromText(value: string | null) {
+export function feedbackIssueListCursorFromText(value: string | null): FeedbackIssueListCursor | null {
   if (!value) return null;
   const [version, sort, feedbackId] = value.split("|").map((part) => {
     try {
@@ -735,12 +766,9 @@ export function feedbackIssueListStateForQueryValue(value: string): FeedbackIssu
 
 function feedbackIssueSortForQueryValue(value: string): FeedbackIssueSortKey | null {
   const normalized = value.trim().toLowerCase();
-  if (normalized === "updated-asc" || normalized === "updated") return "updated-asc";
-  if (normalized === "updated-desc") return "updated-desc";
-  if (normalized === "created-asc" || normalized === "created") return "created-asc";
+  if (normalized === "updated-desc" || normalized === "updated") return "updated-desc";
   if (normalized === "created-desc") return "created-desc";
-  if (normalized === "comments-asc" || normalized === "comments") return "comments-asc";
-  if (normalized === "comments-desc") return "comments-desc";
+  if (normalized === "priority") return "priority";
   return null;
 }
 
@@ -786,4 +814,12 @@ function compareTextDescending(left: string, right: string) {
 
 function compareNumber(left: number, right: number) {
   return left === right ? 0 : left > right ? 1 : -1;
+}
+
+function priorityRank(priority: FeedbackPriority | null) {
+  if (priority === "p0") return 0;
+  if (priority === "p1") return 1;
+  if (priority === "p2") return 2;
+  if (priority === "p3") return 3;
+  return 4;
 }

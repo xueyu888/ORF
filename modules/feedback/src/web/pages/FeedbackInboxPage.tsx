@@ -334,7 +334,7 @@ export function FeedbackInboxPage() {
           <option value="unassigned">未归属项目</option>
           {projectOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </FeedbackSelect>
-        <FeedbackTextInput ariaLabel="搜索反馈" value={query} onValueChange={(value) => setFilter("q", value, "")} placeholder="is:open label:技术问题 assignee:薛雨 project:客户端" />
+        <FeedbackTextInput ariaLabel="搜索反馈" value={query} onValueChange={(value) => setFilter("q", value, "")} placeholder="搜索标题、ID、正文，或 is:open label:技术问题" />
         <FeedbackSelect label="处理人" value={assigneeUserId} onChange={(value) => setFilter("assignee", value, "All")}>
           <option value="All">全部处理人</option>
           {assigneeOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
@@ -357,8 +357,7 @@ export function FeedbackInboxPage() {
         <FeedbackSelect label="排序" value={sort} onChange={(value) => setFilter("sort", value, "updated-desc")}>
           <option value="updated-desc">最近更新</option>
           <option value="created-desc">最近创建</option>
-          <option value="comments-desc">评论最多</option>
-          <option value="updated-asc">最早更新</option>
+          <option value="priority">优先级</option>
         </FeedbackSelect>
         <FeedbackButton className="feedback-reset-button" disabled={!hasActiveFilters} onClick={resetFilters} variant="secondary">
           <RotateCcw aria-hidden="true" />

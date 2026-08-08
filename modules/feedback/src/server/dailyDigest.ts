@@ -19,7 +19,7 @@ export const feedbackDailyDigestTargetId = (teamId: string, assigneeUserId: stri
 export function feedbackDailyDigestListHref(assigneeUserId: string) {
   return feedbackListPath({
     assigneeUserId,
-    sort: "updated-asc",
+    sort: "priority",
     view: "assigned",
   });
 }

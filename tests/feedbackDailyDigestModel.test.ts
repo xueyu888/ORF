@@ -40,7 +40,7 @@ test("feedback daily digest target id is unique by team date and assignee", () =
 test("feedback daily digest list href uses the feedback route contribution link contract", () => {
   assert.equal(
     feedbackDailyDigestListHref("user 1"),
-    "/feedback?assignee=user+1&sort=updated-asc&view=assigned",
+    "/feedback?assignee=user+1&sort=priority&view=assigned",
   );
 });
 

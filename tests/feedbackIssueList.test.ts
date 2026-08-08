@@ -226,6 +226,23 @@ test("feedback list projection uses cursor pagination after filtering and sortin
   assert.equal(secondPage.pageInfo.nextCursor, null);
 });
 
+test("feedback list projection supports priority sort without comment-derived ordering", () => {
+  const list = buildFeedbackIssueListProjection({
+    comments: [],
+    feedback: [
+      feedback({ id: "fb-untriaged", title: "未分诊", priority: null, updatedAt: "2026-07-10" }),
+      feedback({ id: "fb-p1", title: "P1", priority: "p1", updatedAt: "2026-07-08" }),
+      feedback({ id: "fb-p0", title: "P0", priority: "p0", updatedAt: "2026-07-07" }),
+      feedback({ id: "fb-p3", title: "P3", priority: "p3", updatedAt: "2026-07-09" }),
+    ],
+    filters: filters({ listState: "all", sort: "priority" }),
+    projects,
+    users,
+  });
+
+  assert.deepEqual(list.items.map((item) => item.feedback.id), ["fb-p0", "fb-p1", "fb-p3", "fb-untriaged"]);
+});
+
 test("feedback list projection can use comment summaries without comment bodies", () => {
   const [item] = buildFeedbackIssueListProjection({
     commentSummaries: [
@@ -245,6 +262,69 @@ test("feedback list projection can use comment summaries without comment bodies"
 
   assert.equal(item?.commentCount, 3);
   assert.equal(item?.lastActivityAt, "2026-07-10");
+});
+
+test("feedback list projection accepts module query facts for counts pagination and options", () => {
+  const list = buildFeedbackIssueListProjection({
+    comments: [],
+    feedback: [
+      feedback({ id: "fb-page", title: "当前页", updatedAt: "2026-07-10" }),
+    ],
+    filters: filters({ listState: "open" }),
+    projectionFacts: {
+      assigneeOptions: [{ label: "处理人", value: "user-owner" }],
+      authorOptions: [{ label: "创建者", value: "user-creator" }],
+      counts: {
+        all: 10,
+        assigned: 2,
+        closed: 3,
+        open: 7,
+        triage: 1,
+        unread: 4,
+        verification: 1,
+      },
+      labelOptions: [{ label: "技术问题", value: "技术问题" }],
+      matchedCount: 7,
+      pageInfo: {
+        cursor: null,
+        hasMore: true,
+        limit: 1,
+        nextCursor: "next",
+      },
+      totalCount: 13,
+    },
+    projects,
+    users,
+  });
+
+  assert.deepEqual(list.items.map((item) => item.feedback.id), ["fb-page"]);
+  assert.equal(list.matchedCount, 7);
+  assert.equal(list.totalCount, 13);
+  assert.equal(list.pageInfo.nextCursor, "next");
+  assert.deepEqual(list.counts, {
+    all: 10,
+    assigned: 2,
+    closed: 3,
+    open: 7,
+    triage: 1,
+    unread: 4,
+    verification: 1,
+  });
+  assert.deepEqual(list.labelOptions, [{ label: "技术问题", value: "技术问题" }]);
+});
+
+test("feedback list label options contain only cause categories", () => {
+  const list = buildFeedbackIssueListProjection({
+    comments: [],
+    feedback: [
+      feedback({ causeCategories: ["技术问题"], id: "fb-label", impact: "critical", title: "标签" }),
+    ],
+    filters: filters({ listState: "all" }),
+    projects,
+    users,
+  });
+
+  assert.deepEqual(list.labelOptions, [{ label: "技术问题", value: "技术问题" }]);
 });
 
 test("feedback dashboard summary owns lightweight pending aggregates", () => {

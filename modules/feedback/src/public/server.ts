@@ -20,7 +20,7 @@ export {
   getFeedbackDashboardSummary,
   getFeedbackReadModelIssue,
   getFeedbackReadModelIssues,
-  getFeedbackReadModelListIssues,
+  getFeedbackReadModelListPage,
   type FeedbackReadModelViewer,
 } from "../server/readModel";
 export {
