@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
-import { hasFeedbackLinkedToProject } from "@orf/feedback-module/server";
 import type {
   CommentAttachment,
   BountySource,
@@ -87,6 +86,7 @@ import {
 } from "../../src/domain/orfAlignment";
 import { validateObjectiveDeadlineChange } from "../../src/domain/orfDeadline";
 import { db } from "../db/client";
+import { requireFeedbackReferenceProvider } from "../references/feedbackReferenceRegistry";
 import {
   commentAttachments,
   commentMessages,
@@ -918,7 +918,7 @@ export async function deleteProject(projectId: string, context: { scope: Runtime
       .for("update");
     if (!project) return null;
 
-    if (await hasFeedbackLinkedToProject(tx, { projectId: nextProjectId, storageScopeId })) {
+    if (await requireFeedbackReferenceProvider().hasProjectReference(tx, { projectId: nextProjectId, storageScopeId })) {
       return { status: "hasFeedback" as const, project };
     }
 

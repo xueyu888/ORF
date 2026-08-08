@@ -29,11 +29,9 @@ export {
   type FeedbackDailyDigestRuntime,
 } from "../server/dailyDigestScheduler";
 export {
-  findFeedbackTeamId,
+  createFeedbackReferenceProvider,
   getFeedbackCommentNotificationFacts,
   getFeedbackReferences,
-  hasFeedbackLinkedToProject,
-  hasFeedbackUserReference,
   lockFeedbackCommentTarget,
   listFeedbackReferences,
   resolveFeedbackCommentTarget,

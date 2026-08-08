@@ -180,3 +180,12 @@ export async function getFeedbackCommentNotificationFacts(
     .limit(1);
   return target ?? null;
 }
+
+export function createFeedbackReferenceProvider() {
+  return {
+    protocolVersion: 1 as const,
+    findTeamId: findFeedbackTeamId,
+    hasProjectReference: hasFeedbackLinkedToProject,
+    hasUserReference: hasFeedbackUserReference,
+  };
+}

@@ -12,6 +12,7 @@ import { publishNotificationEvent } from "../notifications/publisher";
 import { registerFeedbackRoutes } from "../routes/feedbackRoutes";
 import { registerFeedbackCommentTargetAdapter } from "./feedbackCommentTargetAdapter";
 import { feedbackNotificationPort } from "./feedbackNotificationPort";
+import { registerOrfFeedbackReferenceProvider } from "./feedbackReferenceProvider";
 
 async function listActiveFeedbackDigestRecipients() {
   return db
@@ -30,6 +31,7 @@ export function createOrfFeedbackServerHost(app: FastifyInstance): FeedbackServe
   return {
     protocolVersion: 1,
     registerHttpRoutes() {
+      registerOrfFeedbackReferenceProvider();
       registerFeedbackCommentTargetAdapter();
       registerFeedbackRoutes(app);
     },
