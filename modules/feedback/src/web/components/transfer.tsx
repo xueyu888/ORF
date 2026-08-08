@@ -1,4 +1,4 @@
-import { ChevronDown, DatabaseBackup, FileDown, FileUp, UploadCloud } from "lucide-react";
+import { ChevronDown, FileDown, FileUp, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -62,21 +62,6 @@ export function FeedbackTransferMenu({
             <FileDown aria-hidden="true" />
             <span>导出当前视图 CSV</span>
           </button>
-          {canImportExport ? (
-            <a
-              href="/api/feedback/exports/backup.zip"
-              role="menuitem"
-              onClick={() => setMenuOpen(false)}
-            >
-              <DatabaseBackup aria-hidden="true" />
-              <span>导出完整备份 ZIP</span>
-            </a>
-          ) : (
-            <button disabled role="menuitem" type="button">
-              <DatabaseBackup aria-hidden="true" />
-              <span>导出完整备份 ZIP</span>
-            </button>
-          )}
           <button
             disabled={!canImportExport}
             role="menuitem"
@@ -165,7 +150,7 @@ function FeedbackImportDialog({
         <header>
           <div>
             <h2 id="feedback-import-title">导入反馈</h2>
-            <p>上传反馈 CSV 或完整备份 ZIP，先完成预检，再确认写入。</p>
+            <p>上传反馈 CSV，先完成预检，再确认写入。</p>
           </div>
           <FeedbackButton variant="ghost" onClick={onClose}>关闭</FeedbackButton>
         </header>
@@ -173,7 +158,7 @@ function FeedbackImportDialog({
         <div className="feedback-import-dropzone">
           <input
             ref={inputRef}
-            accept=".csv,.zip,text/csv,application/zip,application/x-zip-compressed"
+            accept=".csv,text/csv"
             type="file"
             onChange={(event) => {
               const selected = event.target.files?.[0] ?? null;
@@ -184,7 +169,7 @@ function FeedbackImportDialog({
           />
           <div>
             <strong>{file?.name ?? "选择 CSV 或 ZIP 文件"}</strong>
-            <span>{file ? `${Math.ceil(file.size / 1024)} KB` : "支持当前视图 CSV 和完整备份 ZIP"}</span>
+            <span>{file ? `${Math.ceil(file.size / 1024)} KB` : "支持当前视图 CSV"}</span>
           </div>
           <FeedbackButton variant="secondary" onClick={() => inputRef.current?.click()}>
             <FileUp aria-hidden="true" />

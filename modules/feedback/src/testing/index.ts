@@ -17,7 +17,6 @@ export {
   sortFeedbackDailyDigestItems,
 } from "../server/dailyDigest";
 export {
-  buildFeedbackBackupZip,
   commitFeedbackImportBatch,
   preflightFeedbackImport,
 } from "../server/transfer";

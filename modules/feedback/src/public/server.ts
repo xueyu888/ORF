@@ -66,14 +66,9 @@ export type {
   FeedbackTransitionNotificationDispatchFactory,
 } from "../server/commandPorts";
 export {
-  buildFeedbackBackupZip,
   commitFeedbackImportBatch,
-  feedbackBackupZipFileName,
   preflightFeedbackImport,
 } from "../server/transfer";
-export type {
-  FeedbackBackupAttachmentFile,
-} from "../server/transferProtocol";
 
 export interface FeedbackServerHost {
   readonly protocolVersion: 1;

@@ -37,10 +37,6 @@ import { listFeedbackAssigneeOptions } from "../feedback/feedbackAssigneeOptions
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import {
-  buildFeedbackBackupZipDownloadForScope,
-  FeedbackBackupAttachmentUnavailableError,
-} from "../feedback/feedbackBackupExport";
-import {
   commitFeedbackImportForScope,
   preflightFeedbackImportForScope,
   type FeedbackTransferActor,
@@ -267,6 +263,14 @@ function importReferenceMappingRecord(value: unknown) {
   return result;
 }
 
+function isUnsupportedFeedbackImportArchive(file: { body: Buffer; fileName: string; mimeType: string }) {
+  const fileName = file.fileName.toLowerCase();
+  const mimeType = file.mimeType.toLowerCase();
+  return (file.body.length >= 4 && file.body.readUInt32LE(0) === 0x04034b50) ||
+    fileName.endsWith(".zip") ||
+    mimeType.includes("zip");
+}
+
 function sendFeedbackCommandOutcome(reply: FastifyReply, outcome: FeedbackCommandResult) {
   if (outcome.status === "notFound") {
     return reply.code(404).send({ error: "Feedback not found" });
@@ -344,33 +348,6 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
     return getFeedbackDashboardSummaryReadModelData({ scope: context.scope });
   });
 
-  app.get("/api/feedback/exports/backup.zip", async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-    const actor = requireActiveFeedbackTransferActor(reply, context);
-    if (!actor) {
-      return reply;
-    }
-
-    const exportedAt = new Date().toISOString();
-    let download: Awaited<ReturnType<typeof buildFeedbackBackupZipDownloadForScope>>;
-    try {
-      download = await buildFeedbackBackupZipDownloadForScope({ exportedAt, scope: context.scope });
-    } catch (error) {
-      if (error instanceof FeedbackBackupAttachmentUnavailableError) {
-        return reply.code(409).send({ error: "Feedback backup attachment object is unavailable" });
-      }
-      throw error;
-    }
-    reply.header("Content-Type", "application/zip");
-    reply.header("Content-Disposition", contentDispositionHeader("attachment", download.fileName));
-    reply.header("Cache-Control", "no-store");
-    reply.header("Content-Length", download.body.length);
-    return reply.send(download.body);
-  });
-
   app.post("/api/feedback/imports/preflight", async (request, reply) => {
     const context = await requireUserScopeContext(request, reply);
     if (!context) {
@@ -384,6 +361,9 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
     const file = await readFeedbackImportUpload(request);
     if (!file) {
       return reply.code(400).send({ error: "Feedback import file is required" });
+    }
+    if (isUnsupportedFeedbackImportArchive(file)) {
+      return reply.code(400).send({ error: "Feedback import currently accepts CSV only" });
     }
 
     let referenceMappings: ReturnType<typeof parseFeedbackImportReferenceMappings>;

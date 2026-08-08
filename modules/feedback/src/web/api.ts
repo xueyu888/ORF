@@ -72,7 +72,7 @@ export type FeedbackImportPreflight = {
     rows: number[];
     sourceValue: string;
   }>;
-  sourceKind: "csv" | "zip";
+  sourceKind: "csv";
   summary: {
     attachmentBytes: number;
     errors: number;
