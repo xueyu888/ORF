@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   canPreviewFeedbackReportAttachment,
+  feedbackNotificationCardReferenceFromPayload,
   feedbackReportAttachmentDto,
   feedbackReportAttachmentPreviewKind,
   feedbackNotificationEventPlanSchema,
@@ -446,6 +447,21 @@ describe("feedback module domain", () => {
         title: "页面滚动位置异常",
       },
     });
+    assert.deepEqual(feedbackNotificationCardReferenceFromPayload(plans[0].payload, "activity-1"), {
+      version: 1,
+      kind: "feedback",
+      activityId: "activity-1",
+      feedbackId: "feedback-1",
+      payloadType: "created",
+    });
+    assert.deepEqual(feedbackNotificationCardReferenceFromPayload(plans[3].payload, "activity-4"), {
+      version: 1,
+      kind: "comment",
+      activityId: "activity-4",
+      commentMessageId: "comment-1",
+      feedbackId: "feedback-1",
+      payloadType: "comment_created",
+    });
     assert.deepEqual(plans[0]?.metadata, {
       assignee: "处理人",
       feedbackTitle: "页面滚动位置异常",
@@ -458,6 +474,17 @@ describe("feedback module domain", () => {
       payload: undefined,
     }).success, false);
     assert.equal(plans[3]?.targetHref, "/feedback/feedback-1?comment=comment-1");
+  });
+
+  it("does not create card references for feedback digest payloads", () => {
+    assert.equal(feedbackNotificationCardReferenceFromPayload({
+      version: 1,
+      type: "assignee_digest",
+      assigneeUserId: "assignee-1",
+      items: [],
+      localDate: "2026-08-08",
+      pendingCount: 0,
+    }, "activity-digest"), null);
   });
 
   it("maps feedback report attachments through the module-owned attachment contract", () => {

@@ -51,6 +51,7 @@ export type FeedbackNotificationPortResult = {
 export type FeedbackNotificationPort = (
   plan: FeedbackNotificationEventPlan,
   context: {
+    readonly activityEventId: string;
     readonly dispatchId: string;
     readonly idempotencyKey: string;
     readonly recipients: readonly FeedbackNotificationDispatchRecipient[];
@@ -60,6 +61,7 @@ export type FeedbackNotificationPort = (
 export type FeedbackNotificationDispatchDatabase = Pick<NodePgDatabase<any>, "insert" | "select" | "update">;
 
 type DispatchRow = {
+  readonly activityEventId: string;
   readonly attempts: number;
   readonly id: string;
   readonly idempotencyKey: string;
@@ -309,6 +311,7 @@ export async function publishFeedbackNotificationDispatch(
 
   const [dispatch] = await database
     .select({
+      activityEventId: feedbackEventDispatches.activityEventId,
       attempts: feedbackEventDispatches.attempts,
       id: feedbackEventDispatches.id,
       idempotencyKey: feedbackEventDispatches.idempotencyKey,
@@ -364,6 +367,7 @@ export async function publishFeedbackNotificationDispatch(
       ...plan,
       recipientUserIds,
     }, {
+      activityEventId: dispatch.activityEventId,
       dispatchId: dispatch.id,
       idempotencyKey: dispatch.idempotencyKey,
       recipients: activeRecipients,

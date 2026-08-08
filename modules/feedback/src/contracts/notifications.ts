@@ -85,6 +85,26 @@ export const feedbackNotificationPayloadV1Schema = z.discriminatedUnion("type", 
 
 export type FeedbackNotificationPayloadV1 = z.infer<typeof feedbackNotificationPayloadV1Schema>;
 
+export const feedbackNotificationCardReferenceV1Schema = z.discriminatedUnion("kind", [
+  z.object({
+    version: z.literal(1),
+    kind: z.literal("feedback"),
+    activityId: feedbackNotificationNonEmptyTextSchema,
+    feedbackId: feedbackNotificationNonEmptyTextSchema,
+    payloadType: z.enum(["assignee_changed", "created", "lifecycle_changed"]),
+  }),
+  z.object({
+    version: z.literal(1),
+    kind: z.literal("comment"),
+    activityId: feedbackNotificationNonEmptyTextSchema,
+    commentMessageId: feedbackNotificationNonEmptyTextSchema,
+    feedbackId: feedbackNotificationNonEmptyTextSchema,
+    payloadType: z.literal("comment_created"),
+  }),
+]);
+
+export type FeedbackNotificationCardReferenceV1 = z.infer<typeof feedbackNotificationCardReferenceV1Schema>;
+
 export const feedbackNotificationEventPlanSchema = z.object({
   actorName: feedbackNotificationTextSchema,
   actorUserId: feedbackNotificationTextSchema.nullable().optional(),
@@ -102,6 +122,33 @@ export const feedbackNotificationEventPlanSchema = z.object({
 
 export type FeedbackNotificationProjectSnapshot = z.infer<typeof feedbackNotificationProjectSnapshotSchema>;
 export type FeedbackNotificationEventPlan = z.infer<typeof feedbackNotificationEventPlanSchema>;
+
+export function feedbackNotificationCardReferenceFromPayload(
+  payload: FeedbackNotificationPayloadV1,
+  activityId: string | null | undefined,
+): FeedbackNotificationCardReferenceV1 | null {
+  const normalizedActivityId = activityId?.trim();
+  if (!normalizedActivityId || payload.type === "assignee_digest") {
+    return null;
+  }
+  if (payload.type === "comment_created") {
+    return {
+      version: 1,
+      kind: "comment",
+      activityId: normalizedActivityId,
+      commentMessageId: payload.commentMessageId,
+      feedbackId: payload.feedback.id,
+      payloadType: payload.type,
+    };
+  }
+  return {
+    version: 1,
+    kind: "feedback",
+    activityId: normalizedActivityId,
+    feedbackId: payload.feedback.id,
+    payloadType: payload.type,
+  };
+}
 
 function actorSnapshot(input: { readonly actorName: string; readonly actorUserId?: string | null }) {
   return {

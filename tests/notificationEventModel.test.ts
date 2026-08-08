@@ -5,8 +5,10 @@ import {
   buildNotificationSystemMetadata,
   commentNotificationImageAttachmentIdsFromMetadata,
   formatNotificationChatBody,
+  notificationMetadataWithSystemReference,
   notificationActionFor,
   notificationChatDeliveryId,
+  notificationSystemReferenceFromMetadata,
   resolveNotificationRecipients,
 } from "../server/notifications/notificationEventModel";
 import {
@@ -122,12 +124,38 @@ test("chat delivery ids are stable per event and recipient boundary", () => {
 });
 
 test("system chat projection metadata points back to the notification event", () => {
+  const eventMetadata = notificationMetadataWithSystemReference(
+    { targetTitle: "聊天界面内存管理有问题" },
+    {
+      namespace: "feedback",
+      reference: {
+        version: 1,
+        kind: "comment",
+        activityId: "activity-1",
+        commentMessageId: "comment-1",
+        feedbackId: "fb-1",
+        payloadType: "comment_created",
+      },
+    },
+  );
+  assert.deepEqual(notificationSystemReferenceFromMetadata(eventMetadata), {
+    namespace: "feedback",
+    reference: {
+      version: 1,
+      kind: "comment",
+      activityId: "activity-1",
+      commentMessageId: "comment-1",
+      feedbackId: "fb-1",
+      payloadType: "comment_created",
+    },
+  });
+
   const metadata = buildNotificationSystemMetadata({
     actorName: "薛雨",
     actorUserId: "user-a",
     body: "请补充信息",
     kind: "feedback.comment.created",
-    metadata: { targetTitle: "聊天界面内存管理有问题" },
+    metadata: eventMetadata,
     replyTargetId: "fb-1",
     replyTargetType: "feedback",
     stream: "personalNotification",
@@ -140,6 +168,15 @@ test("system chat projection metadata points back to the notification event", ()
   assert.equal(metadata.notificationEventId, "nevt-1");
   assert.equal(metadata.recipientUserId, "user-b");
   assert.equal(metadata.targetTitle, "聊天界面内存管理有问题");
+  assert.equal(metadata.referenceNamespace, "feedback");
+  assert.deepEqual(metadata.reference, {
+    version: 1,
+    kind: "comment",
+    activityId: "activity-1",
+    commentMessageId: "comment-1",
+    feedbackId: "fb-1",
+    payloadType: "comment_created",
+  });
   assert.equal(formatNotificationChatBody({
     body: "请补充信息",
     kind: "feedback.comment.created",

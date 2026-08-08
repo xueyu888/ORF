@@ -13,12 +13,14 @@ import { ensureOrfChatBotActor } from "../integrations/orf-chat-delivery";
 import {
   buildNotificationSystemMetadata,
   formatNotificationChatBody,
+  notificationMetadataWithSystemReference,
   notificationChatDeliveryId,
   resolveNotificationRecipients,
   type NotificationDeliveryStatus,
   type NotificationMetadataInput,
   type NotificationRecipientFact,
   type NotificationRecipientInput,
+  type NotificationSystemReferenceInput,
 } from "../notifications/notificationEventModel";
 import {
   E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
@@ -45,6 +47,7 @@ export type NotificationEventInput = {
   replyTargetType?: CommentTargetType | null;
   sourceEventKey?: string | null;
   stream: NotificationStream;
+  systemReference?: NotificationSystemReferenceInput | null;
   targetHref: string;
   targetId: string;
   targetType: NotificationTargetType;
@@ -552,7 +555,7 @@ async function insertNotificationEvent(input: NotificationEventInput, eventId: s
         input.replyTargetId ?? null,
         normalizeSourceEventKey(input.sourceEventKey),
         createdAt,
-        JSON.stringify(input.metadata ?? {}),
+        JSON.stringify(notificationMetadataWithSystemReference(input.metadata, input.systemReference)),
       ],
     );
 

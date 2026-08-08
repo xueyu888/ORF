@@ -31,6 +31,11 @@ export type NotificationContentInput = {
 
 export type NotificationActionInput = NotificationPresentationActionInput;
 
+export type NotificationSystemReferenceInput = {
+  readonly namespace: string;
+  readonly reference: Record<string, unknown>;
+};
+
 export type NotificationMetadataInput = NotificationContentInput & {
   actorName: string;
   actorUserId?: string | null;
@@ -42,6 +47,7 @@ export type NotificationMetadataInput = NotificationContentInput & {
   replyTargetId?: string | null;
   replyTargetType?: CommentTargetType | null;
   stream: NotificationStream;
+  systemReference?: NotificationSystemReferenceInput | null;
   targetId: string;
   targetType: NotificationTargetType;
 };
@@ -74,6 +80,8 @@ export type CommentNotificationContent = {
 };
 
 const commentNotificationImageMetadataKey = "commentImageAttachmentIds";
+const systemReferenceNamespaceMetadataKey = "systemReferenceNamespace";
+const systemReferenceValueMetadataKey = "systemReferenceJson";
 
 function cleanUserIds(userIds: readonly string[]) {
   return Array.from(new Set(userIds.map((id) => id.trim()).filter(Boolean)));
@@ -87,6 +95,55 @@ const recipientDeliveryClassRank: Record<NotificationRecipientDeliveryClass, num
 
 function cleanRecipientReasons(reasons: readonly string[] | undefined) {
   return Array.from(new Set((reasons ?? []).map((reason) => reason.trim()).filter(Boolean))).sort();
+}
+
+function cleanSystemReference(input: NotificationSystemReferenceInput | null | undefined): NotificationSystemReferenceInput | null {
+  const namespace = input?.namespace.trim();
+  if (!namespace || !input?.reference || typeof input.reference !== "object" || Array.isArray(input.reference)) {
+    return null;
+  }
+  return {
+    namespace,
+    reference: input.reference,
+  };
+}
+
+export function notificationSystemReferenceMetadata(
+  input: NotificationSystemReferenceInput | null | undefined,
+): Record<string, string> {
+  const systemReference = cleanSystemReference(input);
+  if (!systemReference) return {};
+  return {
+    [systemReferenceNamespaceMetadataKey]: systemReference.namespace,
+    [systemReferenceValueMetadataKey]: JSON.stringify(systemReference.reference),
+  };
+}
+
+export function notificationMetadataWithSystemReference(
+  metadata: Record<string, string> | null | undefined,
+  input: NotificationSystemReferenceInput | null | undefined,
+): Record<string, string> {
+  return {
+    ...(metadata ?? {}),
+    ...notificationSystemReferenceMetadata(input),
+  };
+}
+
+export function notificationSystemReferenceFromMetadata(
+  metadata: Record<string, string> | null | undefined,
+): NotificationSystemReferenceInput | null {
+  const namespace = metadata?.[systemReferenceNamespaceMetadataKey]?.trim();
+  const rawReference = metadata?.[systemReferenceValueMetadataKey]?.trim();
+  if (!namespace || !rawReference) return null;
+  try {
+    const reference = JSON.parse(rawReference) as unknown;
+    if (!reference || typeof reference !== "object" || Array.isArray(reference)) {
+      return null;
+    }
+    return { namespace, reference: reference as Record<string, unknown> };
+  } catch {
+    return null;
+  }
 }
 
 function addNotificationRecipient(
@@ -273,6 +330,7 @@ export function buildNotificationSystemMetadata(
   eventId: string,
   recipientUserId?: string | null,
 ): ChatMessageSystemMetadata {
+  const systemReference = cleanSystemReference(input.systemReference) ?? notificationSystemReferenceFromMetadata(input.metadata);
   return {
     actorName: input.actorName.trim(),
     actorUserId: input.actorUserId?.trim() || null,
@@ -282,6 +340,8 @@ export function buildNotificationSystemMetadata(
     notificationDeliveryClass: input.deliveryClass ?? "ordinary",
     notificationEventId: eventId,
     notificationRecipientReasons: [...(input.recipientReasons ?? [])],
+    reference: systemReference?.reference ?? null,
+    referenceNamespace: systemReference?.namespace ?? null,
     recipientUserId: recipientUserId ?? null,
     replyTargetId: input.replyTargetId ?? null,
     replyTargetType: input.replyTargetType ?? null,
