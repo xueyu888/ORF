@@ -23,7 +23,11 @@ import { chatRealtimeReconciliationScope } from "../features/chat/chatRealtimeRe
 import { resetChatNativeNotificationViewState, setChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
 import { renderChatSystemMessageBody, renderChatSystemReferenceCard } from "../features/chat/chatSystemReferenceCards";
 import { requestClientUpdateCenterOpen } from "../features/client-updates/clientUpdateCenterEvents";
-import { feedbackIssueIdsFromText } from "@orf/feedback-module/web";
+import {
+  feedbackIssueIdsFromText,
+  getFeedbackReferences,
+  type FeedbackReferenceSummary,
+} from "@orf/feedback-module/web";
 import {
   chatMessageCopyText,
   chatMessageSendStatus,
@@ -59,8 +63,6 @@ import {
   archiveChatChannelRequest,
   createChatChannel,
   deleteChatMessageRequest,
-  type FeedbackReferenceSummary,
-  getFeedbackReferences,
   markChatChannelReadRequest,
   openChatConversation,
   removeChatChannelMemberRequest,
@@ -610,10 +612,10 @@ export function ChatPage() {
     if (missingFeedbackIds.length === 0) return undefined;
 
     let cancelled = false;
-    void getFeedbackReferences(missingFeedbackIds)
-      .then((response) => {
-        if (cancelled || response.feedback.length === 0) return;
-        setFeedbackReferences((items) => mergeFeedbackReferences(items, response.feedback));
+    void getFeedbackReferences({ ids: missingFeedbackIds })
+      .then((feedback) => {
+        if (cancelled || feedback.length === 0) return;
+        setFeedbackReferences((items) => mergeFeedbackReferences(items, feedback));
       })
       .catch(() => undefined);
 

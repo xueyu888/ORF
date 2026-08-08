@@ -28,7 +28,6 @@ import type {
   CommentAttachmentUploadResult,
   CommentTargetType,
   OrfState,
-  OrfUserDisplayProfile,
   DriveBootstrap,
   DriveNode,
   OrfUser,
@@ -143,16 +142,6 @@ export type PushDeviceRegistrationResponse = {
   pushEnabled: boolean;
 };
 export type CommentMentionableUsersResponse = Pick<OrfState, "users">;
-export type FeedbackAssigneesResponse = {
-  users: Array<Pick<OrfUserDisplayProfile, "avatarUrl" | "id" | "name">>;
-};
-export type FeedbackReferenceSummary = {
-  id: string;
-  title: string;
-};
-export type FeedbackReferencesResponse = {
-  feedback: FeedbackReferenceSummary[];
-};
 export type CommentAttachmentUploadResponse = CommentAttachmentUploadResult & {
   ok: true;
 };
@@ -646,36 +635,6 @@ export async function uploadCommentAttachment(input: { file: File; targetId: str
 export async function getCommentMentionableUsers(input: { targetId: string; targetType: CommentTargetType }) {
   const query = new URLSearchParams({ targetId: input.targetId, targetType: input.targetType });
   return apiJson<CommentMentionableUsersResponse>(`/api/comments/mentionable-users?${query.toString()}`);
-}
-
-export async function getFeedbackAssignees() {
-  return apiJson<FeedbackAssigneesResponse>("/api/feedback/assignees");
-}
-
-export async function getFeedbackReferences(feedbackIds: string[], init?: RequestInit) {
-  const query = new URLSearchParams();
-  for (const feedbackId of feedbackIds.slice(0, 100)) {
-    query.append("id", feedbackId);
-  }
-  const suffix = query.toString() ? `?${query.toString()}` : "";
-  return apiJson<FeedbackReferencesResponse>(`/api/feedback/references${suffix}`, init);
-}
-
-export async function searchFeedbackReferences(queryText: string, options: { limit?: number; signal?: AbortSignal } = {}) {
-  const query = new URLSearchParams({ q: queryText });
-  if (options.limit) {
-    query.set("limit", String(options.limit));
-  }
-  return apiJson<FeedbackReferencesResponse>(`/api/feedback/references?${query.toString()}`, { signal: options.signal });
-}
-
-export async function listFeedbackReferences(options: { limit?: number; signal?: AbortSignal } = {}) {
-  const query = new URLSearchParams();
-  if (options.limit) {
-    query.set("limit", String(options.limit));
-  }
-  const suffix = query.toString() ? `?${query.toString()}` : "";
-  return apiJson<FeedbackReferencesResponse>(`/api/feedback/references${suffix}`, { signal: options.signal });
 }
 
 export async function getChatBootstrap() {

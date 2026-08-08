@@ -167,7 +167,9 @@ export { feedbackCreatePath, feedbackIssuePath, feedbackLabelsPath, feedbackList
 export {
   FeedbackWebApiError,
   getFeedbackReferenceCard,
+  getFeedbackReferences,
 } from "../web/api";
+export type { FeedbackReferenceSummary } from "../web/types";
 export { canCreateTeamFeedback } from "../web/model/capabilities";
 export {
   feedbackImpactLabel,

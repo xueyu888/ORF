@@ -16,9 +16,8 @@ import {
   uploadDriveRequest,
   uploadDriveFileVersionRequest,
   type ApiUploadProgress,
-  type FeedbackReferenceSummary,
-  listFeedbackReferences,
 } from "../state/apiClient";
+import { getFeedbackReferences, type FeedbackReferenceSummary } from "@orf/feedback-module/web";
 import { driveBootstrapSnapshot, invalidateDriveBootstrap, loadDriveBootstrap } from "../state/readModelQueries";
 import { useOrf } from "../state/OrfProvider";
 import type { DriveBootstrap } from "../types/orf";
@@ -84,8 +83,8 @@ export function DrivePage() {
     }
 
     const controller = new AbortController();
-    void listFeedbackReferences({ limit: 120, signal: controller.signal })
-      .then((response) => setFeedbackReferences(response.feedback))
+    void getFeedbackReferences({ limit: 120, signal: controller.signal })
+      .then((feedback) => setFeedbackReferences([...feedback]))
       .catch((error) => {
         if (!controller.signal.aborted) {
           setFeedbackReferences([]);
