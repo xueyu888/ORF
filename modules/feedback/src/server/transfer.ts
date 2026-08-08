@@ -4,17 +4,17 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { FeedbackImpact, FeedbackIssueReadModelData, FeedbackPriority } from "../contracts";
 import {
   feedback,
+  feedbackActivityEvents,
   feedbackCauseCategories,
   feedbackImportBatches,
   feedbackImportOrigins,
 } from "../infrastructure/database/schema";
 import {
-  createFeedbackDraft,
-  createFeedbackIssue,
   type FeedbackWriteActor,
+  type FeedbackWriteClient,
   type FeedbackWriteDatabase,
 } from "./writeModel";
-import { feedbackNowIso } from "./ids";
+import { feedbackNowIso, makeFeedbackActivityId, makeFeedbackId } from "./ids";
 
 type FeedbackTransferDatabase = NodePgDatabase<any> & FeedbackWriteDatabase;
 
@@ -551,31 +551,31 @@ export async function commitFeedbackImportBatch(
         continue;
       }
 
-      const draft = createFeedbackDraft();
-      const created = await createFeedbackIssue(tx, {
-        assigneeUserId: record.assigneeUserId,
-        causeCategories: record.causeCategories,
-        description: record.description,
-        draft,
-        impact: record.impact,
-        priority: record.priority,
-        projectId: record.projectId,
-        reportAttachments: [],
-        title: record.title,
-      }, input.actor);
-      if (created.status !== "ok") {
-        throw new Error(`Feedback import failed for ${record.externalId}: ${created.status}`);
+      const [existingFeedbackId] = await tx
+        .select({ id: feedback.id })
+        .from(feedback)
+        .where(and(eq(feedback.teamId, input.actor.teamId), eq(feedback.id, record.externalId)))
+        .limit(1);
+      if (existingFeedbackId) {
+        skippedRecords += 1;
+        continue;
       }
 
+      const feedbackId = await createImportedFeedbackIssue(tx, {
+        actor: input.actor,
+        batchId: input.batchId,
+        createdAt: now,
+        record,
+      });
       await tx.insert(feedbackImportOrigins).values({
         teamId: input.actor.teamId,
         sourceSystem: record.sourceSystem,
         externalId: record.externalId,
-        feedbackId: created.feedbackId,
+        feedbackId,
         importBatchId: input.batchId,
         createdAt: now,
       });
-      createdFeedbackIds.push(created.feedbackId);
+      createdFeedbackIds.push(feedbackId);
     }
 
     await tx
@@ -605,6 +605,69 @@ export async function commitFeedbackImportBatch(
     }),
     skippedRecords: summary.skippedRecords + skippedRecords,
   };
+}
+
+async function createImportedFeedbackIssue(
+  database: Pick<FeedbackWriteClient, "insert">,
+  input: {
+    actor: FeedbackWriteActor;
+    batchId: string;
+    createdAt: string;
+    record: FeedbackImportRecord;
+  },
+) {
+  const feedbackId = makeFeedbackId();
+  const assigneeUserId = input.record.assigneeUserId?.trim() || null;
+  const projectId = input.record.projectId?.trim() || null;
+  await database.insert(feedback).values({
+    id: feedbackId,
+    teamId: input.actor.teamId,
+    projectId,
+    title: input.record.title,
+    description: input.record.description,
+    stage: "open",
+    resolution: null,
+    impact: input.record.impact,
+    priority: input.record.priority ?? null,
+    assigneeUserId,
+    createdBy: input.actor.id,
+    updatedBy: input.actor.id,
+    version: 0,
+    createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+    closedAt: null,
+    closedByUserId: null,
+  });
+
+  await database.insert(feedbackCauseCategories).values(
+    input.record.causeCategories.map((category, index) => ({
+      teamId: input.actor.teamId,
+      feedbackId,
+      category,
+      sortOrder: index,
+    })),
+  );
+
+  await database.insert(feedbackActivityEvents).values({
+    id: makeFeedbackActivityId(),
+    teamId: input.actor.teamId,
+    feedbackId,
+    actorUserId: input.actor.id,
+    activityType: "feedback.created",
+    payload: {
+      assigneeUserId,
+      externalId: input.record.externalId,
+      importBatchId: input.batchId,
+      imported: true,
+      priority: input.record.priority ?? null,
+      projectId,
+      sourceSystem: input.record.sourceSystem,
+      title: input.record.title,
+    },
+    createdAt: input.createdAt,
+  });
+
+  return feedbackId;
 }
 
 type FeedbackBackupZipInspection = {

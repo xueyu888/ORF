@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { preflightFeedbackImport } from "@orf/feedback-module/server";
+import { commitFeedbackImportBatch, preflightFeedbackImport } from "@orf/feedback-module/server";
 
 test("feedback CSV import preflight maps Chinese field headers", async () => {
   const { database, inserted } = fakeImportDatabase();
@@ -122,6 +122,22 @@ test("feedback CSV import preflight requires explicit project mapping before com
   assert.equal((second.inserted[0]?.summary as { records: Array<{ projectId: string | null }> }).records[0]?.projectId, null);
 });
 
+test("feedback CSV import commit uses import write path without participant side effects", async () => {
+  const { database, inserted, updated } = fakeImportCommitDatabase();
+  const result = await commitFeedbackImportBatch(database, { actor: importActor(), batchId: "batch-1" });
+
+  assert.equal(result.status, "ok");
+  assert.equal(result.createdFeedbackIds.length, 1);
+  assert.match(result.report.content, /反馈导入结果报告/);
+  const insertedRows = inserted.flatMap((value) => Array.isArray(value) ? value : [value]);
+  assert.ok(insertedRows.some((row) => row.title === "导入标题" && row.stage === "open"));
+  assert.ok(insertedRows.some((row) => row.category === "技术问题"));
+  assert.ok(insertedRows.some((row) => row.externalId === "external-1" && row.importBatchId === "batch-1"));
+  assert.ok(insertedRows.some((row) => row.activityType === "feedback.created" && row.payload?.imported === true));
+  assert.equal(insertedRows.some((row) => Object.prototype.hasOwnProperty.call(row, "participatedAt")), false);
+  assert.equal(updated[0]?.status, "committed");
+});
+
 function fakeImportDatabase(input: {
   categoryRows?: Array<{ category: string; feedbackId: string; sortOrder: number }>;
   feedbackRows?: Array<Record<string, unknown>>;
@@ -149,6 +165,66 @@ function fakeImportDatabase(input: {
     } as never,
     inserted,
   };
+}
+
+function fakeImportCommitDatabase() {
+  const inserted: Array<Record<string, unknown> | Array<Record<string, unknown>>> = [];
+  const updated: Array<Record<string, unknown>> = [];
+  const batch = {
+    fileName: "feedback.csv",
+    sourceKind: "csv",
+    status: "validated",
+    summary: {
+      attachmentBytes: 0,
+      errors: 0,
+      newRecords: 1,
+      records: [
+        {
+          assigneeUserId: null,
+          causeCategories: ["技术问题"],
+          description: "导入正文",
+          externalId: "external-1",
+          impact: "high",
+          priority: null,
+          projectId: null,
+          sourceSystem: "orf.feedback.current_view.v1",
+          title: "导入标题",
+        },
+      ],
+      skippedRecords: 0,
+      totalRecords: 1,
+      updateRecords: 0,
+    },
+  };
+  const database = {
+    insert: () => ({
+      values: async (value: Record<string, unknown> | Array<Record<string, unknown>>) => {
+        inserted.push(value);
+      },
+    }),
+    select: (selection?: Record<string, unknown>) => ({
+      from: () => ({
+        where: () => ({
+          limit: async () => {
+            if (!selection) return [batch];
+            return [];
+          },
+        }),
+      }),
+    }),
+    transaction: async (fn: (tx: unknown) => Promise<void>) => {
+      await fn(database);
+    },
+    update: () => ({
+      set: (value: Record<string, unknown>) => ({
+        where: async () => {
+          updated.push(value);
+        },
+      }),
+    }),
+  } as never;
+
+  return { database, inserted, updated };
 }
 
 function importActor() {
