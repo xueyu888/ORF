@@ -27,6 +27,18 @@ export type FeedbackIssueListFilterInput = {
   state?: string | readonly string[] | null;
 };
 
+export type FeedbackIssueListPageInput = {
+  cursor?: string | readonly string[] | null;
+  limit?: string | readonly string[] | null;
+};
+
+export type FeedbackIssueListRequestInput = FeedbackIssueListFilterInput & FeedbackIssueListPageInput;
+
+export type FeedbackIssueListPagination = {
+  cursor: string | null;
+  limit: number;
+};
+
 export type FeedbackIssueListLabel = FeedbackIssueLabel;
 
 export type FeedbackIssueLabel = {
@@ -62,6 +74,13 @@ export type FeedbackIssueListOption = {
   value: string;
 };
 
+export type FeedbackIssueListPageInfo = {
+  cursor: string | null;
+  hasMore: boolean;
+  limit: number | null;
+  nextCursor: string | null;
+};
+
 export type FeedbackIssueListProjection = {
   assigneeOptions: FeedbackIssueListOption[];
   authorOptions: FeedbackIssueListOption[];
@@ -70,7 +89,19 @@ export type FeedbackIssueListProjection = {
   items: FeedbackIssueListItem[];
   labelOptions: FeedbackIssueListOption[];
   matchedCount: number;
+  pageInfo: FeedbackIssueListPageInfo;
   totalCount: number;
+};
+
+export type FeedbackIssueListRequest = {
+  filters: FeedbackIssueListFilters;
+  pagination: FeedbackIssueListPagination | null;
+};
+
+export type FeedbackIssueListCommentSummary = {
+  commentCount: number;
+  feedbackId: string;
+  updatedAt: string | null;
 };
 
 type ParsedFeedbackIssueQuery = {
@@ -86,6 +117,8 @@ type ParsedFeedbackIssueQuery = {
 
 const queryQualifierPattern = /(?:^|\s)(is|status|assignee|owner|author|label|impact|project|sort):("[^"]+"|\S+)/gi;
 const impactValues = new Set<FeedbackImpact>(["low", "medium", "high", "critical"]);
+const defaultFeedbackIssueListPageLimit = 40;
+const maxFeedbackIssueListPageLimit = 120;
 
 export const defaultFeedbackIssueListFilters: FeedbackIssueListFilters = {
   assigneeUserId: "All",
@@ -106,8 +139,16 @@ export const emptyFeedbackIssueListProjection: FeedbackIssueListProjection = {
   items: [],
   labelOptions: [],
   matchedCount: 0,
+  pageInfo: emptyFeedbackIssueListPageInfo(),
   totalCount: 0,
 };
+
+export function feedbackIssueListRequestFromInput(input: FeedbackIssueListRequestInput): FeedbackIssueListRequest {
+  return {
+    filters: feedbackIssueListFiltersFromInput(input),
+    pagination: feedbackIssueListPaginationFromInput(input),
+  };
+}
 
 export function feedbackIssueListFiltersFromInput(input: FeedbackIssueListFilterInput): FeedbackIssueListFilters {
   return {
@@ -122,35 +163,58 @@ export function feedbackIssueListFiltersFromInput(input: FeedbackIssueListFilter
   };
 }
 
+export function feedbackIssueListPaginationFromInput(input: FeedbackIssueListPageInput): FeedbackIssueListPagination | null {
+  const cursor = feedbackIssueListInputValue(input.cursor);
+  const limitValue = feedbackIssueListInputValue(input.limit);
+  if (!cursor && !limitValue) return null;
+
+  const parsedLimit = Number.parseInt(limitValue, 10);
+  const limit = Number.isFinite(parsedLimit)
+    ? Math.max(1, Math.min(maxFeedbackIssueListPageLimit, parsedLimit))
+    : defaultFeedbackIssueListPageLimit;
+
+  return {
+    cursor: cursor || null,
+    limit,
+  };
+}
+
 export function buildFeedbackIssueListProjection(input: {
-  comments: readonly FeedbackWebCommentThread[];
+  commentSummaries?: readonly FeedbackIssueListCommentSummary[];
+  comments?: readonly FeedbackWebCommentThread[];
   feedback: readonly FeedbackWebIssue[];
   filters: FeedbackIssueListFilters;
+  pagination?: FeedbackIssueListPagination | null;
   projects?: readonly FeedbackWebProject[];
   users: readonly FeedbackWebUser[];
 }): FeedbackIssueListProjection {
   const items = buildFeedbackIssueListItems(input);
   const filteredItems = filterFeedbackIssueListItems(items, input.filters);
+  const effectiveSort = feedbackIssueListEffectiveSort(input.filters);
+  const page = paginateFeedbackIssueListItems(filteredItems, input.pagination ?? null, effectiveSort);
   return {
     assigneeOptions: feedbackIssueAssigneeOptions(items),
     authorOptions: feedbackIssueAuthorOptions(items),
     counts: feedbackIssueListCountsForFilters(items, input.filters),
     filters: input.filters,
-    items: filteredItems,
+    items: page.items,
     labelOptions: feedbackIssueLabelOptions(items),
     matchedCount: filteredItems.length,
+    pageInfo: page.pageInfo,
     totalCount: items.length,
   };
 }
 
 export function buildFeedbackIssueListItems(input: {
-  comments: readonly FeedbackWebCommentThread[];
+  commentSummaries?: readonly FeedbackIssueListCommentSummary[];
+  comments?: readonly FeedbackWebCommentThread[];
   feedback: readonly FeedbackWebIssue[];
   projects?: readonly FeedbackWebProject[];
   users: readonly FeedbackWebUser[];
 }): FeedbackIssueListItem[] {
+  const comments = input.comments ?? [];
   const threadsByFeedbackId = new Map<string, FeedbackWebCommentThread[]>();
-  for (const thread of input.comments) {
+  for (const thread of comments) {
     if (thread.targetType !== "feedback") continue;
     const threads = threadsByFeedbackId.get(thread.targetId) ?? [];
     threads.push(thread);
@@ -158,19 +222,21 @@ export function buildFeedbackIssueListItems(input: {
   }
 
   const projectById = new Map((input.projects ?? []).map((project) => [project.id, project]));
+  const commentSummaryByFeedbackId = new Map((input.commentSummaries ?? []).map((summary) => [summary.feedbackId, summary]));
 
   return input.feedback.map((feedback) => {
     const assignee = feedbackIssueAssignee(feedback, input.users);
     const author = feedbackIssueAuthor(feedback, input.users);
     const threads = threadsByFeedbackId.get(feedback.id) ?? [];
-    const threadActivityAt = latestText(threads.map((thread) => thread.updatedAt));
+    const commentSummary = commentSummaryByFeedbackId.get(feedback.id) ?? null;
+    const threadActivityAt = commentSummary?.updatedAt ?? latestText(threads.map((thread) => thread.updatedAt));
 
     return {
       assigneeAvatarUrl: assignee.avatarUrl,
       assigneeName: assignee.name,
       authorAvatarUrl: author.avatarUrl,
       authorName: author.name,
-      commentCount: feedbackIssueCommentCount(input.comments, feedback.id),
+      commentCount: commentSummary?.commentCount ?? feedbackIssueCommentCount(comments, feedback.id),
       feedback,
       issueNumber: feedbackIssueDisplayId(feedback.id),
       labels: feedbackIssueLabels(feedback),
@@ -182,11 +248,52 @@ export function buildFeedbackIssueListItems(input: {
 }
 
 export function filterFeedbackIssueListItems(items: readonly FeedbackIssueListItem[], filters: FeedbackIssueListFilters) {
-  const parsedQuery = parseFeedbackIssueQuery(filters.query);
-  const nextSort = parsedQuery.sort ?? filters.sort;
+  return filterFeedbackIssueListItemsWithSort(items, filters).items;
+}
 
-  return filterFeedbackIssueListMatches(items, filters, parsedQuery, filters.listState)
-    .sort((left, right) => compareFeedbackIssueListItems(left, right, nextSort));
+function filterFeedbackIssueListItemsWithSort(items: readonly FeedbackIssueListItem[], filters: FeedbackIssueListFilters) {
+  const parsedQuery = parseFeedbackIssueQuery(filters.query);
+  const sort = parsedQuery.sort ?? filters.sort;
+  return {
+    items: filterFeedbackIssueListMatches(items, filters, parsedQuery, filters.listState)
+      .sort((left, right) => compareFeedbackIssueListItems(left, right, sort)),
+    sort,
+  };
+}
+
+function feedbackIssueListEffectiveSort(filters: FeedbackIssueListFilters) {
+  return parseFeedbackIssueQuery(filters.query).sort ?? filters.sort;
+}
+
+function paginateFeedbackIssueListItems(
+  items: readonly FeedbackIssueListItem[],
+  pagination: FeedbackIssueListPagination | null,
+  sort: FeedbackIssueSortKey,
+) {
+  if (!pagination) {
+    return {
+      items: [...items],
+      pageInfo: emptyFeedbackIssueListPageInfo(),
+    };
+  }
+
+  const cursor = feedbackIssueListCursorFromText(pagination.cursor);
+  const startIndex = cursor && cursor.sort === sort
+    ? Math.max(0, items.findIndex((item) => item.feedback.id === cursor.feedbackId) + 1)
+    : 0;
+  const pageItems = items.slice(startIndex, startIndex + pagination.limit);
+  const hasMore = startIndex + pagination.limit < items.length;
+  const lastItem = pageItems.at(-1) ?? null;
+
+  return {
+    items: pageItems,
+    pageInfo: {
+      cursor: pagination.cursor,
+      hasMore,
+      limit: pagination.limit,
+      nextCursor: hasMore && lastItem ? feedbackIssueListCursorForItem(lastItem, sort) : null,
+    },
+  };
 }
 
 export function feedbackIssueListCounts(items: readonly FeedbackIssueListItem[]) {
@@ -496,6 +603,34 @@ function emptyFeedbackIssueListCounts(total = 0): FeedbackIssueListCounts {
     unread: 0,
     verification: 0,
   };
+}
+
+function emptyFeedbackIssueListPageInfo(): FeedbackIssueListPageInfo {
+  return {
+    cursor: null,
+    hasMore: false,
+    limit: null,
+    nextCursor: null,
+  };
+}
+
+function feedbackIssueListCursorForItem(item: FeedbackIssueListItem, sort: FeedbackIssueSortKey) {
+  return ["v1", sort, item.feedback.id].map(encodeURIComponent).join("|");
+}
+
+function feedbackIssueListCursorFromText(value: string | null) {
+  if (!value) return null;
+  const [version, sort, feedbackId] = value.split("|").map((part) => {
+    try {
+      return decodeURIComponent(part);
+    } catch {
+      return "";
+    }
+  });
+  if (version !== "v1") return null;
+  const normalizedSort = sort ? feedbackIssueSortForQueryValue(sort) : null;
+  if (!normalizedSort || !feedbackId) return null;
+  return { feedbackId, sort: normalizedSort };
 }
 
 export function feedbackIssueListStateForQueryValue(value: string): FeedbackIssueListState | null {

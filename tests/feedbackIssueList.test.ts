@@ -17,6 +17,10 @@ import {
   feedbackIssueListFilterQueryFromSearchParams,
   parseStoredFeedbackIssueListFilterParams,
 } from "@orf/feedback-module/web";
+import {
+  buildFeedbackIssueListProjection,
+  feedbackIssueListPaginationFromInput,
+} from "@orf/feedback-module/contracts";
 import type { Feedback, OrfProject, OrfUser } from "../src/types/orf";
 
 const users: OrfUser[] = [
@@ -148,6 +152,63 @@ test("feedback list exposes user work queues from viewer projections", () => {
     filterFeedbackIssueListItems(items, filters({ listState: "triage" })).map((item) => item.feedback.id).sort(),
     ["fb-assigned", "fb-triage", "fb-verification"],
   );
+});
+
+test("feedback list projection uses cursor pagination after filtering and sorting", () => {
+  const feedbackItems = [
+    feedback({ id: "fb-first", title: "第一条", updatedAt: "2026-07-09" }),
+    feedback({ id: "fb-second", title: "第二条", updatedAt: "2026-07-08" }),
+    feedback({ id: "fb-third", title: "第三条", updatedAt: "2026-07-07" }),
+  ];
+
+  const firstPage = buildFeedbackIssueListProjection({
+    comments: [],
+    feedback: feedbackItems,
+    filters: filters({ listState: "all", sort: "updated-desc" }),
+    pagination: feedbackIssueListPaginationFromInput({ limit: "2" }),
+    projects,
+    users,
+  });
+
+  assert.deepEqual(firstPage.items.map((item) => item.feedback.id), ["fb-first", "fb-second"]);
+  assert.equal(firstPage.matchedCount, 3);
+  assert.equal(firstPage.pageInfo.hasMore, true);
+  assert.equal(firstPage.pageInfo.limit, 2);
+  assert.ok(firstPage.pageInfo.nextCursor);
+
+  const secondPage = buildFeedbackIssueListProjection({
+    comments: [],
+    feedback: feedbackItems,
+    filters: filters({ listState: "all", sort: "updated-desc" }),
+    pagination: feedbackIssueListPaginationFromInput({ cursor: firstPage.pageInfo.nextCursor, limit: "2" }),
+    projects,
+    users,
+  });
+
+  assert.deepEqual(secondPage.items.map((item) => item.feedback.id), ["fb-third"]);
+  assert.equal(secondPage.pageInfo.hasMore, false);
+  assert.equal(secondPage.pageInfo.nextCursor, null);
+});
+
+test("feedback list projection can use comment summaries without comment bodies", () => {
+  const [item] = buildFeedbackIssueListProjection({
+    commentSummaries: [
+      {
+        commentCount: 3,
+        feedbackId: "fb-summary",
+        updatedAt: "2026-07-10",
+      },
+    ],
+    feedback: [
+      feedback({ id: "fb-summary", title: "摘要反馈", updatedAt: "2026-07-07" }),
+    ],
+    filters: filters({ listState: "all" }),
+    projects,
+    users,
+  }).items;
+
+  assert.equal(item?.commentCount, 3);
+  assert.equal(item?.lastActivityAt, "2026-07-10");
 });
 
 test("feedback linked issues come from relation facts instead of report or comment text", () => {

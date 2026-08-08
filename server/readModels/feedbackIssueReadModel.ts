@@ -1,11 +1,13 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getFeedbackReadModelIssues, type FeedbackReadModelViewer } from "@orf/feedback-module/server";
 import {
   buildFeedbackIssueListProjection,
   defaultFeedbackIssueListFilters,
   type FeedbackIssueListFilters,
+  type FeedbackIssueListPagination,
 } from "@orf/feedback-module/contracts";
 import type {
+  FeedbackIssueListCommentSummary,
   FeedbackIssueReadModelData,
   FeedbackWebCommentThread,
   FeedbackWebProject,
@@ -26,6 +28,7 @@ import { optional } from "./orfReadModelMappers";
 
 export type FeedbackIssueReadModelScope = {
   filters?: FeedbackIssueListFilters;
+  pagination?: FeedbackIssueListPagination | null;
   scope: RuntimeScope;
   viewerUserId?: string | null;
 };
@@ -66,25 +69,33 @@ export async function getFeedbackIssueReadModelData(scope: FeedbackIssueReadMode
 }
 
 export async function getFeedbackIssueListReadModelData(scope: FeedbackIssueReadModelScope): Promise<FeedbackIssueReadModelData> {
-  const data = await getFeedbackIssueReadModelDataForScope(scope);
+  const data = await getFeedbackIssueReadModelDataForScope(scope, { includeComments: false });
+  const storageScopeId = feedbackReadModelStorageId(scope);
+  const commentSummaries = await getFeedbackCommentSummaries(
+    storageScopeId,
+    data.feedback.map((item) => item.id),
+  );
   const filters = scope.filters ?? defaultFeedbackIssueListFilters;
   const list = buildFeedbackIssueListProjection({
-    comments: data.comments,
+    commentSummaries,
     feedback: data.feedback,
     filters,
+    pagination: scope.pagination ?? null,
     projects: data.projects,
     users: data.users,
   });
-  const feedbackIds = new Set(list.items.map((item) => item.feedback.id));
   return {
     ...data,
-    comments: data.comments.filter((thread) => feedbackIds.has(thread.targetId)),
+    comments: [],
     feedback: list.items.map((item) => item.feedback),
     list,
   };
 }
 
-async function getFeedbackIssueReadModelDataForScope(scope: FeedbackIssueReadModelScope): Promise<FeedbackIssueReadModelData> {
+async function getFeedbackIssueReadModelDataForScope(
+  scope: FeedbackIssueReadModelScope,
+  options: { includeComments?: boolean } = {},
+): Promise<FeedbackIssueReadModelData> {
   const storageScopeId = feedbackReadModelStorageId(scope);
   const [projectRows, users] = await Promise.all([
     db.select().from(projects).where(eq(projects.teamId, storageScopeId)).orderBy(desc(projects.createdAt), desc(projects.id)),
@@ -94,10 +105,12 @@ async function getFeedbackIssueReadModelDataForScope(scope: FeedbackIssueReadMod
     teamId: storageScopeId,
     viewer: feedbackReadModelViewer(users, scope.viewerUserId),
   });
-  const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getFeedbackCommentRows(
-    storageScopeId,
-    feedback.map((item) => item.id),
-  );
+  const [commentThreadRows, commentMessageRows, commentAttachmentRows] = options.includeComments === false
+    ? [[], [], []] as [CommentThreadRow[], CommentMessageRow[], CommentAttachmentRow[]]
+    : await getFeedbackCommentRows(
+      storageScopeId,
+      feedback.map((item) => item.id),
+    );
 
   return {
     comments: await mapCommentThreadRows({
@@ -109,6 +122,29 @@ async function getFeedbackIssueReadModelDataForScope(scope: FeedbackIssueReadMod
     projects: mapProjectRows(projectRows),
     users,
   };
+}
+
+async function getFeedbackCommentSummaries(
+  storageScopeId: string,
+  feedbackIds: readonly string[],
+): Promise<FeedbackIssueListCommentSummary[]> {
+  if (feedbackIds.length === 0) return [];
+  const rows = await db
+    .select({
+      commentCount: sql<number>`count(${commentMessages.id})::int`,
+      feedbackId: commentThreads.targetId,
+      updatedAt: sql<string | null>`max(${commentThreads.updatedAt})`,
+    })
+    .from(commentThreads)
+    .leftJoin(commentMessages, eq(commentMessages.threadId, commentThreads.id))
+    .where(and(eq(commentThreads.teamId, storageScopeId), eq(commentThreads.targetType, "feedback"), inArray(commentThreads.targetId, [...feedbackIds])))
+    .groupBy(commentThreads.targetId);
+
+  return rows.map((row) => ({
+    commentCount: Number(row.commentCount) || 0,
+    feedbackId: row.feedbackId,
+    updatedAt: row.updatedAt ?? null,
+  }));
 }
 
 export async function getFeedbackIssueTransferReadModelData(scope: Pick<FeedbackIssueReadModelScope, "scope">): Promise<FeedbackIssueReadModelData> {

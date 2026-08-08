@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   feedbackReferenceCardDataFromReadModel,
-  feedbackIssueListFiltersFromInput,
+  feedbackIssueListRequestFromInput,
   feedbackImpactSchema,
   feedbackPrioritySchema,
   feedbackRelationTypeSchema,
@@ -300,8 +300,10 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       return reply;
     }
 
+    const listRequest = feedbackIssueListRequestFromInput(request.query as Record<string, string | string[] | null | undefined>);
     return getFeedbackIssueListReadModelData({
-      filters: feedbackIssueListFiltersFromInput(request.query as Record<string, string | string[] | null | undefined>),
+      filters: listRequest.filters,
+      pagination: listRequest.pagination,
       scope: context.scope,
       viewerUserId: context.user.id,
     });
