@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
+  getFeedbackDashboardSummary,
   getFeedbackReadModelIssue,
   getFeedbackReadModelIssues,
   getFeedbackReadModelListPage,
@@ -111,6 +112,14 @@ export async function getFeedbackIssueListReadModelData(scope: FeedbackIssueRead
     projects: projectModels,
     users,
   };
+}
+
+export async function getFeedbackDashboardSummaryReadModelData(
+  scope: Pick<FeedbackIssueReadModelScope, "scope">,
+) {
+  return getFeedbackDashboardSummary(db, {
+    teamId: feedbackReadModelStorageId({ scope: scope.scope }),
+  });
 }
 
 function feedbackListUserOptions(userIds: readonly string[], users: readonly OrfUser[]) {

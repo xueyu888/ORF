@@ -13,7 +13,6 @@ import {
 import {
   commitFeedbackImportBatch,
   feedbackBackupZipFileName,
-  getFeedbackDashboardSummary,
   preflightFeedbackImport,
   type FeedbackImportActor,
 } from "@orf/feedback-module/server";
@@ -22,6 +21,7 @@ import { db } from "../db/client";
 import { projects } from "../db/schema";
 import { env } from "../env";
 import {
+  getFeedbackDashboardSummaryReadModelData,
   getFeedbackIssueDetailReadModelData,
   getFeedbackIssueListReadModelData,
 } from "../readModels/feedbackIssueReadModel";
@@ -345,9 +345,7 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       return reply;
     }
 
-    return getFeedbackDashboardSummary(db, {
-      teamId: runtimeScopeStorageId(context.scope),
-    });
+    return getFeedbackDashboardSummaryReadModelData({ scope: context.scope });
   });
 
   app.get("/api/feedback/exports/backup.zip", async (request, reply) => {
