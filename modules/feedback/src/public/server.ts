@@ -21,8 +21,8 @@ export {
   getFeedbackReadModelIssue,
   getFeedbackReadModelIssues,
   getFeedbackReadModelListPage,
-  type FeedbackReadModelViewer,
 } from "../server/readModel";
+export type { FeedbackReadModelViewer } from "../server/readModelProtocol";
 export {
   insertFeedbackNotificationDispatch,
   publishFeedbackNotificationDispatch,

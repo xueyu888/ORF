@@ -23,9 +23,7 @@ import {
   type FeedbackIssueSortKey,
   type FeedbackIssueListState,
   type FeedbackActivityType,
-  type FeedbackActorRole,
   type FeedbackActorSnapshot,
-  type FeedbackActorStatus,
   type FeedbackCapabilities,
   type FeedbackImpact,
   type FeedbackPriority,
@@ -42,14 +40,9 @@ import {
   feedbackReportAttachments,
   feedbackUserViews,
 } from "../infrastructure/database/schema";
+import type { FeedbackReadModelViewer } from "./readModelProtocol";
 
 export type FeedbackReadModelDatabase = Pick<NodePgDatabase<any>, "select">;
-
-export type FeedbackReadModelViewer = {
-  readonly id: string;
-  readonly role: FeedbackActorRole;
-  readonly status: FeedbackActorStatus;
-};
 
 export type FeedbackReadModelActivityItem = {
   readonly id: string;
