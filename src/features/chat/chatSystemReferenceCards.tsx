@@ -1,27 +1,22 @@
 import type { ReactNode } from "react";
-import { WorkLogChatReferenceCard, isWorkLogSubmittedChatMessage } from "../work-logs/WorkLogChatReferenceCard";
 import type { ChatMessage } from "../../types/orf";
+import {
+  defineChatReferenceCardRegistration,
+  renderChatReferenceCardFromRegistrations,
+  renderChatSystemMessageBodyFromRegistrations,
+} from "./chatReferenceCardProvider";
+import { workLogChatReferenceCardRegistration } from "../work-logs/WorkLogChatReferenceCard";
 
 export type ChatReferenceCardRenderer = (message: ChatMessage) => ReactNode;
 
-export function renderChatSystemReferenceCard(message: ChatMessage): ReactNode {
-  if (isWorkLogSubmittedChatMessage(message)) {
-    return <WorkLogChatReferenceCard message={message} />;
-  }
-  return null;
-}
+const chatReferenceCardRegistrations = [
+  defineChatReferenceCardRegistration(workLogChatReferenceCardRegistration),
+];
 
-function workLogSubmittedActorName(message: ChatMessage) {
-  return (
-    message.system?.metadata?.authorName?.trim() ||
-    message.system?.actorName?.trim() ||
-    "成员"
-  );
+export function renderChatSystemReferenceCard(message: ChatMessage): ReactNode {
+  return renderChatReferenceCardFromRegistrations(message, chatReferenceCardRegistrations);
 }
 
 export function renderChatSystemMessageBody(message: ChatMessage): string | null | undefined {
-  if (isWorkLogSubmittedChatMessage(message)) {
-    return `${workLogSubmittedActorName(message)}发布了新的工作日志`;
-  }
-  return undefined;
+  return renderChatSystemMessageBodyFromRegistrations(message, chatReferenceCardRegistrations);
 }

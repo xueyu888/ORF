@@ -1247,6 +1247,7 @@ export async function getWorkLogActivity(input: {
   from?: string;
   limit?: number;
   objectiveId?: string;
+  signal?: AbortSignal;
   to?: string;
   userId?: string;
 } = {}) {
@@ -1258,7 +1259,7 @@ export async function getWorkLogActivity(input: {
   if (input.objectiveId) query.set("objectiveId", input.objectiveId);
   if (input.limit) query.set("limit", String(input.limit));
   const suffix = query.toString() ? `?${query.toString()}` : "";
-  return apiJson<WorkLogActivityResponse>(`/api/work-logs/activity${suffix}`);
+  return apiJson<WorkLogActivityResponse>(`/api/work-logs/activity${suffix}`, { signal: input.signal });
 }
 
 export async function getWorkLogReport(input: {

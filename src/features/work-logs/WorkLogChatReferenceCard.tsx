@@ -1,8 +1,12 @@
-import { AlertCircle, Loader2, NotebookPen, Tags, Target } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { OrfRichTextMarkdownViewer } from "../rich-text/OrfRichTextMarkdownViewer";
+import { NotebookPen, Tags, Target } from "lucide-react";
+import { z } from "zod";
 import { getWorkLogActivity } from "../../state/apiClient";
 import type { ChatMessage, WorkLogActivityItem } from "../../types/orf";
+import type {
+  ChatReferenceCardBodyBlock,
+  ChatReferenceCardModel,
+  ChatReferenceCardRegistration,
+} from "../chat/chatReferenceCardProvider";
 import {
   formatWorkLogDurationMinutes,
   formatWorkLogProgressEstimate,
@@ -10,117 +14,17 @@ import {
   workLogEntryClassification,
   workLogStatusUpdateTemplateSections,
 } from "./workLogEditorModel";
-import {
-  ChatReferenceCard,
-  ChatReferenceCardNotice,
-  ChatReferenceCardSection,
-} from "../chat/ChatReferenceCard";
 
-type WorkLogReferenceState =
-  | { status: "loading"; startedAt: number }
-  | { status: "ready"; entry: WorkLogActivityItem; fetchedAt: number }
-  | { status: "missing"; fetchedAt: number }
-  | { status: "error"; fetchedAt: number; message: string };
+const workLogChatReferenceSchema = z.object({
+  authorName: z.string().optional(),
+  entryId: z.string().trim().min(1),
+  href: z.string().optional(),
+  title: z.string().optional(),
+  version: z.literal(1),
+  workDate: z.string().optional(),
+});
 
-const workLogReferenceCacheMaxAgeMs = 30_000;
-const workLogReferenceRequestTimeoutMs = 8_000;
-const workLogReferenceCache = new Map<string, WorkLogReferenceState>();
-const workLogReferenceRequests = new Map<string, Promise<void>>();
-const workLogReferenceListeners = new Map<string, Set<() => void>>();
-
-function notifyWorkLogReferenceListeners(entryId: string) {
-  for (const listener of workLogReferenceListeners.get(entryId) ?? []) {
-    listener();
-  }
-}
-
-function setWorkLogReferenceCache(entryId: string, state: WorkLogReferenceState) {
-  workLogReferenceCache.set(entryId, state);
-  notifyWorkLogReferenceListeners(entryId);
-}
-
-function subscribeWorkLogReference(entryId: string, listener: () => void) {
-  const listeners = workLogReferenceListeners.get(entryId) ?? new Set<() => void>();
-  listeners.add(listener);
-  workLogReferenceListeners.set(entryId, listeners);
-  return () => {
-    listeners.delete(listener);
-    if (listeners.size === 0) workLogReferenceListeners.delete(entryId);
-  };
-}
-
-function isFreshWorkLogReferenceState(state: WorkLogReferenceState | undefined) {
-  if (!state || state.status === "loading") return false;
-  return Date.now() - state.fetchedAt < workLogReferenceCacheMaxAgeMs;
-}
-
-function readWorkLogReferenceState(entryId: string): WorkLogReferenceState {
-  return workLogReferenceCache.get(entryId) ?? { status: "loading", startedAt: Date.now() };
-}
-
-function withWorkLogReferenceTimeout<T>(request: Promise<T>): Promise<T> {
-  let timeoutId: number | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = window.setTimeout(() => {
-      reject(new Error("工作日志读取超时，请稍后再试"));
-    }, workLogReferenceRequestTimeoutMs);
-  });
-  return Promise.race([request, timeout]).finally(() => {
-    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-  });
-}
-
-function loadWorkLogReferenceEntry(entryId: string) {
-  const cachedState = workLogReferenceCache.get(entryId);
-  if (isFreshWorkLogReferenceState(cachedState) || workLogReferenceRequests.has(entryId)) return;
-
-  if (cachedState?.status !== "ready") {
-    setWorkLogReferenceCache(entryId, { status: "loading", startedAt: Date.now() });
-  }
-
-  const request = withWorkLogReferenceTimeout(getWorkLogActivity({ entryId, limit: 1 }))
-    .then((response) => {
-      const entry = response.entries[0] ?? null;
-      setWorkLogReferenceCache(
-        entryId,
-        entry ? { status: "ready", entry, fetchedAt: Date.now() } : { status: "missing", fetchedAt: Date.now() },
-      );
-    })
-    .catch((error) => {
-      setWorkLogReferenceCache(entryId, {
-        status: "error",
-        fetchedAt: Date.now(),
-        message: error instanceof Error ? error.message : "工作日志读取失败",
-      });
-    })
-    .finally(() => {
-      workLogReferenceRequests.delete(entryId);
-    });
-
-  workLogReferenceRequests.set(entryId, request);
-}
-
-function useWorkLogReferenceEntry(entryId: string | null) {
-  const [state, setState] = useState<WorkLogReferenceState>(() => (
-    entryId ? readWorkLogReferenceState(entryId) : { status: "missing", fetchedAt: Date.now() }
-  ));
-
-  useEffect(() => {
-    if (!entryId) {
-      setState({ status: "missing", fetchedAt: Date.now() });
-      return undefined;
-    }
-
-    const unsubscribe = subscribeWorkLogReference(entryId, () => {
-      setState(readWorkLogReferenceState(entryId));
-    });
-    setState(readWorkLogReferenceState(entryId));
-    loadWorkLogReferenceEntry(entryId);
-    return unsubscribe;
-  }, [entryId]);
-
-  return state;
-}
+type WorkLogChatReference = z.infer<typeof workLogChatReferenceSchema>;
 
 function workLogEntryIdFromMessage(message: ChatMessage) {
   const targetId = message.system?.targetId?.trim();
@@ -135,8 +39,29 @@ function workLogEntryIdFromMessage(message: ChatMessage) {
   }
 }
 
-function workLogReferenceHref(message: ChatMessage, entry: WorkLogActivityItem | null) {
-  const href = message.system?.targetHref?.trim();
+function workLogSubmittedReferenceFromMessage(message: ChatMessage): WorkLogChatReference | null {
+  if (
+    message.source !== "system" ||
+    message.system?.kind !== "worklog.submitted" ||
+    message.system.targetType !== "workLog"
+  ) {
+    return null;
+  }
+
+  const entryId = workLogEntryIdFromMessage(message);
+  if (!entryId) return null;
+  return {
+    authorName: message.system.metadata?.authorName?.trim() || message.system.actorName?.trim() || undefined,
+    entryId,
+    href: message.system.targetHref?.trim() || undefined,
+    title: message.system.metadata?.classificationTitle?.trim() || message.system.targetTitle?.trim() || undefined,
+    version: 1,
+    workDate: message.system.metadata?.workDate?.trim() || undefined,
+  };
+}
+
+function workLogReferenceHref(reference: WorkLogChatReference, entry: WorkLogActivityItem | null) {
+  const href = reference.href?.trim();
   if (href) return href;
   if (!entry) return null;
   return `/work-logs?date=${encodeURIComponent(entry.workDate)}&view=today&entry=${encodeURIComponent(entry.id)}`;
@@ -151,16 +76,16 @@ function formatWorkLogReferenceTime(value: string) {
   }).format(date);
 }
 
-function fallbackWorkLogTitle(message: ChatMessage) {
-  return message.system?.metadata?.classificationTitle?.trim() || message.system?.targetTitle || "工作日志";
+function fallbackWorkLogTitle(reference: WorkLogChatReference) {
+  return reference.title?.trim() || "工作日志";
 }
 
-function fallbackWorkLogAuthor(message: ChatMessage) {
-  return message.system?.metadata?.authorName?.trim() || message.system?.actorName || "成员";
+function fallbackWorkLogAuthor(reference: WorkLogChatReference) {
+  return reference.authorName?.trim() || "成员";
 }
 
-function fallbackWorkLogDate(message: ChatMessage) {
-  return message.system?.metadata?.workDate?.trim() || "";
+function fallbackWorkLogDate(reference: WorkLogChatReference) {
+  return reference.workDate?.trim() || "";
 }
 
 function WorkLogReferenceIcon({ entry }: { entry: WorkLogActivityItem | null }) {
@@ -183,16 +108,13 @@ function WorkLogReferenceMeta({ entry }: { entry: WorkLogActivityItem }) {
   );
 }
 
-function WorkLogReferenceMarkdown({ body }: { body: string }) {
-  return (
-    <OrfRichTextMarkdownViewer
-      body={body}
-      compact
-    />
-  );
+function workLogReferenceSubtitle(reference: WorkLogChatReference, entry: WorkLogActivityItem | null) {
+  const authorName = entry?.authorCurrentName ?? entry?.authorNameSnapshot ?? fallbackWorkLogAuthor(reference);
+  const workDate = entry?.workDate ?? fallbackWorkLogDate(reference);
+  return [authorName, workDate].filter(Boolean).join(" · ");
 }
 
-function WorkLogReferenceBody({ entry }: { entry: WorkLogActivityItem }) {
+function workLogReferenceBodyBlocks(entry: WorkLogActivityItem): ChatReferenceCardBodyBlock[] {
   const templateBody = parseWorkLogStatusUpdateMarkdown(entry.bodyMarkdown);
   const visibleSections = templateBody
     ? workLogStatusUpdateTemplateSections
@@ -201,70 +123,89 @@ function WorkLogReferenceBody({ entry }: { entry: WorkLogActivityItem }) {
     : [];
 
   if (templateBody && visibleSections.length > 0) {
-    return (
-      <>
-        {visibleSections.map((section) => (
-          <ChatReferenceCardSection key={section.key} title={section.label}>
-            <WorkLogReferenceMarkdown body={section.bodyMarkdown} />
-          </ChatReferenceCardSection>
-        ))}
-      </>
-    );
+    return visibleSections.map((section) => ({
+      bodyMarkdown: section.bodyMarkdown,
+      title: section.label,
+      type: "section" as const,
+    }));
   }
 
-  return <WorkLogReferenceMarkdown body={entry.bodyMarkdown} />;
+  return [{ bodyMarkdown: entry.bodyMarkdown, type: "markdown" }];
 }
 
-export function isWorkLogSubmittedChatMessage(message: ChatMessage) {
+function workLogReferencePlaceholder(reference: WorkLogChatReference): ChatReferenceCardModel {
+  const actionHref = workLogReferenceHref(reference, null);
+  return {
+    action: actionHref ? { href: actionHref, label: "打开完整日志" } : null,
+    className: "orf-chat-work-log-reference-card",
+    eyebrow: "工作日志",
+    icon: <WorkLogReferenceIcon entry={null} />,
+    status: "loading",
+    subtitle: workLogReferenceSubtitle(reference, null),
+    title: fallbackWorkLogTitle(reference),
+  };
+}
+
+function workLogMissingReferenceModel(reference: WorkLogChatReference): ChatReferenceCardModel {
+  return {
+    ...workLogReferencePlaceholder(reference),
+    body: [{ text: "这条工作日志已删除或当前不可见", tone: "warning", type: "notice" }],
+    status: "missing",
+  };
+}
+
+async function loadWorkLogReferenceModel(
+  reference: WorkLogChatReference,
+  signal: AbortSignal,
+): Promise<ChatReferenceCardModel> {
+  const response = await getWorkLogActivity({ entryId: reference.entryId, limit: 1, signal });
+  const entry = response.entries[0] ?? null;
+  if (!entry) {
+    return workLogMissingReferenceModel(reference);
+  }
+
+  const classification = workLogEntryClassification(entry);
+  return {
+    action: { href: workLogReferenceHref(reference, entry) ?? "", label: "打开完整日志" },
+    badge: <WorkLogReferenceMeta entry={entry} />,
+    body: workLogReferenceBodyBlocks(entry),
+    className: "orf-chat-work-log-reference-card",
+    eyebrow: "工作日志",
+    icon: <WorkLogReferenceIcon entry={entry} />,
+    meta: `更新于 ${formatWorkLogReferenceTime(entry.updatedAt)}`,
+    status: "ready",
+    subtitle: workLogReferenceSubtitle(reference, entry),
+    title: classification.title ?? fallbackWorkLogTitle(reference),
+  };
+}
+
+function isWorkLogSubmittedChatMessage(message: ChatMessage) {
+  return Boolean(workLogSubmittedReferenceFromMessage(message));
+}
+
+function workLogSubmittedActorName(message: ChatMessage) {
   return (
-    message.source === "system" &&
-    message.system?.kind === "worklog.submitted" &&
-    message.system.targetType === "workLog" &&
-    Boolean(workLogEntryIdFromMessage(message))
+    message.system?.metadata?.authorName?.trim() ||
+    message.system?.actorName?.trim() ||
+    "成员"
   );
 }
 
-export function WorkLogChatReferenceCard({ message }: { message: ChatMessage }) {
-  const systemTargetHref = message.system?.targetHref ?? "";
-  const systemTargetId = message.system?.targetId ?? "";
-  const entryId = useMemo(() => workLogEntryIdFromMessage(message), [message, systemTargetHref, systemTargetId]);
-  const state = useWorkLogReferenceEntry(entryId);
-
-  const entry = state.status === "ready" ? state.entry : null;
-  const classification = entry ? workLogEntryClassification(entry) : null;
-  const title = classification?.title ?? fallbackWorkLogTitle(message);
-  const authorName = entry?.authorCurrentName ?? entry?.authorNameSnapshot ?? fallbackWorkLogAuthor(message);
-  const workDate = entry?.workDate ?? fallbackWorkLogDate(message);
-  const subtitle = [authorName, workDate].filter(Boolean).join(" · ");
-  const href = workLogReferenceHref(message, entry);
-
-  return (
-    <ChatReferenceCard
-      actionHref={href}
-      actionLabel="打开完整日志"
-      badge={entry ? <WorkLogReferenceMeta entry={entry} /> : null}
-      className="orf-chat-work-log-reference-card"
-      eyebrow="工作日志"
-      icon={state.status === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <WorkLogReferenceIcon entry={entry} />}
-      meta={entry ? `更新于 ${formatWorkLogReferenceTime(entry.updatedAt)}` : null}
-      status={state.status === "loading" ? "loading" : state.status}
-      subtitle={subtitle}
-      title={title}
-    >
-      {state.status === "loading" && (
-        <ChatReferenceCardNotice>正在读取工作日志内容</ChatReferenceCardNotice>
-      )}
-      {state.status === "missing" && (
-        <ChatReferenceCardNotice icon={<AlertCircle className="h-3.5 w-3.5" />}>
-          这条工作日志已删除或当前不可见
-        </ChatReferenceCardNotice>
-      )}
-      {state.status === "error" && (
-        <ChatReferenceCardNotice icon={<AlertCircle className="h-3.5 w-3.5" />}>
-          {state.message}
-        </ChatReferenceCardNotice>
-      )}
-      {state.status === "ready" && <WorkLogReferenceBody entry={state.entry} />}
-    </ChatReferenceCard>
-  );
+function renderWorkLogSubmittedSystemMessageBody(message: ChatMessage): string | null | undefined {
+  if (isWorkLogSubmittedChatMessage(message)) {
+    return `${workLogSubmittedActorName(message)}发布了新的工作日志`;
+  }
+  return undefined;
 }
+
+export const workLogChatReferenceCardRegistration: ChatReferenceCardRegistration<WorkLogChatReference> = {
+  cacheKey: (reference) => `workLog:${reference.entryId}`,
+  placeholder: workLogReferencePlaceholder,
+  provider: {
+    namespace: "workLog",
+    referenceSchema: workLogChatReferenceSchema,
+    load: loadWorkLogReferenceModel,
+  },
+  referenceFromMessage: workLogSubmittedReferenceFromMessage,
+  renderMessageBody: renderWorkLogSubmittedSystemMessageBody,
+};

@@ -185,6 +185,8 @@ export interface ChatMessageSystemMetadata {
   notificationDeliveryClass?: NotificationDeliveryClass;
   notificationEventId?: string;
   notificationRecipientReasons?: string[];
+  reference?: Record<string, unknown> | null;
+  referenceNamespace?: string | null;
   recipientUserId?: string | null;
   replyTargetId?: string | null;
   replyTargetType?: CommentTargetType | null;
