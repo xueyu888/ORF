@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildFeedbackIssueCurrentViewCsv,
+  feedbackIssueCsvExportFileName,
+} from "../src/features/feedback/model/feedbackIssueCsvExport";
+import {
   buildFeedbackIssueListItems,
   feedbackIssueListCountsForFilters,
   filterFeedbackIssueListItems,
@@ -233,6 +237,46 @@ test("feedback list user preference restores through canonical URL params", () =
   });
 
   assert.equal(restored?.toString(), "project=project-client&state=closed&sort=created-desc");
+});
+
+test("feedback current-view CSV export uses stable contract columns and escapes user text", () => {
+  const [item] = buildFeedbackIssueListItems({
+    comments: [],
+    feedback: [
+      feedback({
+        id: "fb-export",
+        title: '导出 "CSV"',
+        description: "第一行\n第二行",
+        priority: "p1",
+        projectId: "project-client",
+        relations: [
+          {
+            id: "rel-export",
+            createdAt: "2026-07-07",
+            sourceFeedbackId: "fb-export",
+            targetFeedbackId: "fb-target",
+            type: "related",
+          },
+        ],
+      }),
+    ],
+    projects,
+    users,
+  });
+
+  const csv = buildFeedbackIssueCurrentViewCsv({
+    exportedAt: "2026-08-08T10:11:12.000Z",
+    filters: filters({ listState: "open", projectId: "project-client", query: "CSV" }),
+    items: item ? [item] : [],
+  });
+
+  assert.match(csv, /^\uFEFF"export_version","exported_at","feedback_id"/);
+  assert.match(csv, /"orf\.feedback\.current_view\.v1","2026-08-08T10:11:12\.000Z","fb-export"/);
+  assert.match(csv, /"导出 ""CSV"""/);
+  assert.match(csv, /"第一行\n第二行"/);
+  assert.match(csv, /"related:fb-export->fb-target"/);
+  assert.match(csv, /"open","project-client","CSV"/);
+  assert.equal(feedbackIssueCsvExportFileName("2026-08-08T10:11:12.000Z"), "orf-feedback-current-view-20260808-101112.csv");
 });
 
 function filters(input: Partial<FeedbackIssueListFilters>): FeedbackIssueListFilters {

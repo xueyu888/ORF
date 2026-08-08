@@ -3,6 +3,7 @@ import {
   ChevronDown,
   CircleDot,
   Clock3,
+  FileDown,
   Flag,
   Inbox,
   MessageSquare,
@@ -31,6 +32,10 @@ import {
   type FeedbackIssueListItem,
 } from "../features/feedback/model/feedbackIssueList";
 import {
+  buildFeedbackIssueCurrentViewCsv,
+  feedbackIssueCsvExportFileName,
+} from "../features/feedback/model/feedbackIssueCsvExport";
+import {
   clearStoredFeedbackIssueListFilterParams,
   feedbackIssueListFilterParamsFromPreferenceRecord,
   feedbackIssueListFilterPreferenceKey,
@@ -48,7 +53,7 @@ import { feedbackImpactLabel } from "../utils/labels";
 export function FeedbackInboxPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { currentUser, readModelInvalidations } = useOrf();
+  const { currentUser, notify, readModelInvalidations } = useOrf();
   const feedbackInvalidationKey = useMemo(
     () => readModelInvalidationKey(readModelInvalidations, "feedback"),
     [readModelInvalidations],
@@ -234,6 +239,20 @@ export function FeedbackInboxPage() {
     persistFilterPreference(next);
     setSearchParams(next, { replace: true });
   };
+  const exportCurrentViewCsv = useCallback(() => {
+    const exportedAt = new Date().toISOString();
+    const csv = buildFeedbackIssueCurrentViewCsv({
+      exportedAt,
+      filters: issueFilters,
+      items: filteredFeedback,
+    });
+    downloadTextFile({
+      content: csv,
+      fileName: feedbackIssueCsvExportFileName(exportedAt),
+      mimeType: "text/csv;charset=utf-8",
+    });
+    notify(`已导出 ${filteredFeedback.length} 条反馈`);
+  }, [filteredFeedback, issueFilters, notify]);
 
   return (
     <div className="bounty-hall-page orf-workbench-surface feedback-issue-page">
@@ -249,6 +268,10 @@ export function FeedbackInboxPage() {
           <div className="feedback-issue-index-links" aria-label="反馈索引">
             <Link className="feedback-issue-index-link" to={feedbackWebContribution.routes.labels.path}><Tag aria-hidden="true" /> 标签 <strong>{labelOptions.length}</strong></Link>
           </div>
+          <BountyButton disabled={feedbackReadModel.loading} onClick={exportCurrentViewCsv} variant="secondary">
+            <FileDown aria-hidden="true" />
+            导出 CSV
+          </BountyButton>
           {canCreateFeedback && (
             <BountyButton onClick={() => navigate(newFeedbackHref(projectId))}>
               <Plus aria-hidden="true" />
@@ -466,6 +489,18 @@ function formatFeedbackDate(value: string) {
   }
 
   return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(date);
+}
+
+function downloadTextFile(input: { content: string; fileName: string; mimeType: string }) {
+  const blob = new Blob([input.content], { type: input.mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = input.fileName;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function newFeedbackHref(projectId: string) {
