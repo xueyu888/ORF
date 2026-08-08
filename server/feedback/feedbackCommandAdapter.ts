@@ -40,8 +40,8 @@ import { db } from "../db/client";
 import {
   getActiveAdminNotificationRecipients,
   getActiveMemberNotificationRecipientsByIds,
-} from "./notificationRepository";
-import { feedbackNotificationPort } from "../feedback/feedbackNotificationPort";
+} from "../repositories/notificationRepository";
+import { feedbackNotificationPort } from "./feedbackNotificationPort";
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { getFeedbackIssueDetailReadModelData } from "../readModels/feedbackIssueReadModel";
 import { commentThreads, projects } from "../db/schema";
@@ -50,9 +50,9 @@ import {
   deleteStoredCommentAttachmentObjects,
   prepareCommentAttachment,
   type PreparedCommentAttachment,
-} from "./commentAttachmentRepository";
-import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "./runtimeScope";
-import { getScopedUsers } from "./userRepository";
+} from "../repositories/commentAttachmentRepository";
+import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
+import { getScopedUsers } from "../repositories/userRepository";
 
 export type { FeedbackCommandResult } from "@orf/feedback-module/server";
 

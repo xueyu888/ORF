@@ -42,7 +42,7 @@ import {
   updateFeedbackMetadata,
   type FeedbackCommandActor,
   type FeedbackCommandResult,
-} from "../repositories/feedbackRepository";
+} from "../feedback/feedbackCommandAdapter";
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import {
