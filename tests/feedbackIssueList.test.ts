@@ -61,7 +61,7 @@ test("feedback list filters by explicit project id and unassigned project bucket
   );
 });
 
-test("feedback query supports project qualifier by project name and unassigned alias", () => {
+test("feedback query supports project qualifier by stable project id and unassigned alias", () => {
   const items = buildFeedbackIssueListItems({
     comments: [],
     feedback: [
@@ -74,12 +74,20 @@ test("feedback query supports project qualifier by project name and unassigned a
   });
 
   assert.deepEqual(
-    filterFeedbackIssueListItems(items, filters({ query: "project:客户端" })).map((item) => item.feedback.id),
+    filterFeedbackIssueListItems(items, filters({ query: "project:project-client" })).map((item) => item.feedback.id),
     ["fb-client"],
   );
   assert.deepEqual(
     filterFeedbackIssueListItems(items, filters({ query: "project:unassigned" })).map((item) => item.feedback.id),
     ["fb-unassigned"],
+  );
+  assert.deepEqual(
+    filterFeedbackIssueListItems(items, filters({ query: "客户端" })).map((item) => item.feedback.id),
+    ["fb-client"],
+  );
+  assert.deepEqual(
+    filterFeedbackIssueListItems(items, filters({ query: "后端" })).map((item) => item.feedback.id),
+    [],
   );
 });
 

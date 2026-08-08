@@ -400,8 +400,8 @@ function filterFeedbackIssueListMatches(
     .filter((item) => filters.assigneeUserId === "All" || item.feedback.assigneeUserId === filters.assigneeUserId)
     .filter((item) => filters.authorUserId === "All" || item.feedback.createdBy === filters.authorUserId)
     .filter((item) => parsedQuery.stateTerms.length === 0 || parsedQuery.stateTerms.some((state) => itemMatchesListState(item, state)))
-    .filter((item) => parsedQuery.assigneeTerms.every((term) => personMatches(item.feedback.assigneeUserId ?? "", item.assigneeName, term)))
-    .filter((item) => parsedQuery.authorTerms.every((term) => personMatches(item.feedback.createdBy ?? "", item.authorName, term)))
+    .filter((item) => parsedQuery.assigneeTerms.every((term) => personMatches(item.feedback.assigneeUserId ?? "", term)))
+    .filter((item) => parsedQuery.authorTerms.every((term) => personMatches(item.feedback.createdBy ?? "", term)))
     .filter((item) => parsedQuery.labelTerms.every((term) => labelMatches(item, term)))
     .filter((item) => parsedQuery.impactTerms.every((term) => impactMatches(item.feedback.impact, term)))
     .filter((item) => parsedQuery.priorityTerms.every((term) => priorityMatchesTerm(item.feedback.priority, term)))
@@ -586,12 +586,6 @@ function textMatches(item: FeedbackIssueListItem, text: string) {
     item.issueNumber,
     item.feedback.title,
     item.feedback.description,
-    item.assigneeName,
-    item.authorName,
-    item.projectName ?? (item.feedback.projectId ? item.feedback.projectId : "未归属"),
-    feedbackIssueStateLabel(item.feedback),
-    feedbackImpactLabel[item.feedback.impact],
-    ...item.labels.map((label) => label.name),
   ].join(" "));
   return normalizedText.split(" ").every((token) => searchable.includes(token));
 }
@@ -609,7 +603,7 @@ function projectMatches(item: FeedbackIssueListItem, term: string) {
   if (!projectId) {
     return ["unassigned", "none", "未归属", "无项目"].some((value) => normalizeSearchText(value).includes(normalizedTerm));
   }
-  return normalizeSearchText(projectId).includes(normalizedTerm) || normalizeSearchText(item.projectName ?? "").includes(normalizedTerm);
+  return normalizeSearchText(projectId).includes(normalizedTerm);
 }
 
 function labelMatches(item: FeedbackIssueListItem, term: string) {
@@ -617,9 +611,9 @@ function labelMatches(item: FeedbackIssueListItem, term: string) {
   return item.labels.some((label) => normalizeSearchText(label.name).includes(normalizedTerm));
 }
 
-function personMatches(userId: string, name: string, term: string) {
+function personMatches(userId: string, term: string) {
   const normalizedTerm = normalizeSearchText(term);
-  return normalizeSearchText(userId).includes(normalizedTerm) || normalizeSearchText(name).includes(normalizedTerm);
+  return normalizeSearchText(userId).includes(normalizedTerm);
 }
 
 function impactMatches(impact: FeedbackImpact, term: string) {
