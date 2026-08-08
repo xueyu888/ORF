@@ -96,6 +96,10 @@ async function checkServerPublicBoundary() {
       names: ["FeedbackReportAttachmentObjectRef"],
       specifier: "../server/reportAttachmentContent",
     },
+    {
+      names: ["FeedbackBackupAttachmentFile", "FeedbackImportActor"],
+      specifier: "../server/transfer",
+    },
   ];
   for (const block of exportBlocks(source)) {
     for (const rule of forbiddenTypeExports) {

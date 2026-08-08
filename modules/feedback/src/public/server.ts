@@ -71,9 +71,11 @@ export {
   commitFeedbackImportBatch,
   feedbackBackupZipFileName,
   preflightFeedbackImport,
-  type FeedbackBackupAttachmentFile,
-  type FeedbackImportActor,
 } from "../server/transfer";
+export type {
+  FeedbackBackupAttachmentFile,
+  FeedbackImportActor,
+} from "../server/transferProtocol";
 
 export interface FeedbackServerHost {
   readonly protocolVersion: 1;
