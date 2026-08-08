@@ -6,7 +6,10 @@ import {
   feedbackNotificationRecipient,
   mergeFeedbackNotificationDispatchRecipients,
 } from "./notificationDispatch";
-import type { FeedbackNotificationDispatchRecipient } from "./notificationProtocol";
+import type {
+  FeedbackNotificationDispatchRecipient,
+  FeedbackNotificationRecipientDirectory,
+} from "./notificationProtocol";
 
 export type ExplicitFeedbackSubscriptionMode = "subscribed" | "muted";
 export type FeedbackSubscriptionMutationMode = ExplicitFeedbackSubscriptionMode | "none";
@@ -17,11 +20,6 @@ export type FeedbackSubscriptionResult =
   | { status: "invalid" };
 
 export type FeedbackSubscriptionDatabase = Pick<NodePgDatabase<any>, "delete" | "insert" | "select">;
-
-export type FeedbackNotificationRecipientDirectory = {
-  getActiveAdminUserIds(teamId: string): Promise<string[]>;
-  getActiveMemberUserIdsByIds(teamId: string, userIds: string[]): Promise<string[]>;
-};
 
 function nowIso() {
   return new Date().toISOString();

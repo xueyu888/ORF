@@ -38,3 +38,8 @@ export type FeedbackNotificationPort = (
     readonly recipients: readonly FeedbackNotificationDispatchRecipient[];
   },
 ) => Promise<FeedbackNotificationPortResult>;
+
+export type FeedbackNotificationRecipientDirectory = {
+  getActiveAdminUserIds(teamId: string): Promise<string[]>;
+  getActiveMemberUserIdsByIds(teamId: string, userIds: string[]): Promise<string[]>;
+};

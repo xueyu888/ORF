@@ -31,6 +31,7 @@ export {
 export type {
   FeedbackNotificationDispatchDraft,
   FeedbackNotificationPort,
+  FeedbackNotificationRecipientDirectory,
 } from "../server/notificationProtocol";
 export {
   buildFeedbackAssigneeChangedNotificationDispatch,
@@ -50,7 +51,6 @@ export {
   getFeedbackOrdinaryNotificationDispatchRecipients,
   getFeedbackSubscriptionMode,
   setFeedbackSubscriptionMode,
-  type FeedbackNotificationRecipientDirectory,
 } from "../server/subscriptions";
 export {
   addFeedbackIssueRelation,
