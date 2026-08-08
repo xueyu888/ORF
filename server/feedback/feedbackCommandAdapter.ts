@@ -33,18 +33,14 @@ import {
   updateFeedbackIssueMetadata,
   type FeedbackCommandResult,
   type FeedbackNotificationDispatchDraft,
-  type FeedbackNotificationRecipientDirectory,
   type FeedbackTargetTitleSync,
   type FeedbackTransitionNotificationDispatchFactory,
 } from "@orf/feedback-module/server";
 import { replaceOrfAttachmentMarkdownTokens } from "../../src/features/rich-text/orfRichTextTokens";
 import type { OrfUserDisplayProfile } from "../../src/types/orf";
 import { db } from "../db/client";
-import {
-  getActiveAdminNotificationRecipients,
-  getActiveMemberNotificationRecipientsByIds,
-} from "../repositories/notificationRepository";
 import { feedbackNotificationPort } from "./feedbackNotificationPort";
+import { feedbackNotificationRecipientDirectory } from "./feedbackNotificationRecipientDirectory";
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { getFeedbackIssueDetailReadModelData } from "../readModels/feedbackIssueReadModel";
 import { commentThreads, projects } from "../db/schema";
@@ -131,11 +127,6 @@ export type FeedbackReportAttachmentContentOutcome =
   | { status: "forbidden" };
 
 type ProjectRow = { id: string; name: string } | null;
-
-const feedbackNotificationRecipientDirectory: FeedbackNotificationRecipientDirectory = {
-  getActiveAdminUserIds: getActiveAdminNotificationRecipients,
-  getActiveMemberUserIdsByIds: getActiveMemberNotificationRecipientsByIds,
-};
 
 function storageScopeId(scope: RuntimeScope | null | undefined) {
   return scope ? runtimeScopeStorageId(scope).trim() : "";

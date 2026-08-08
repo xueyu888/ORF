@@ -9,12 +9,7 @@ import {
   publishFeedbackNotificationDispatch,
   recordFeedbackCommentCreatedActivity,
   resolveFeedbackCommentTarget,
-  type FeedbackNotificationRecipientDirectory,
 } from "@orf/feedback-module/server";
-import {
-  getActiveAdminNotificationRecipients,
-  getActiveMemberNotificationRecipientsByIds,
-} from "../repositories/notificationRepository";
 import { buildCommentNotificationContent } from "../notifications/notificationEventModel";
 import { db } from "../db/client";
 import { projects } from "../db/schema";
@@ -26,11 +21,7 @@ import {
   type CommentTargetActor,
 } from "../comments/commentTargetAdapters";
 import { feedbackNotificationPort } from "./feedbackNotificationPort";
-
-const feedbackNotificationRecipientDirectory: FeedbackNotificationRecipientDirectory = {
-  getActiveAdminUserIds: getActiveAdminNotificationRecipients,
-  getActiveMemberUserIdsByIds: getActiveMemberNotificationRecipientsByIds,
-};
+import { feedbackNotificationRecipientDirectory } from "./feedbackNotificationRecipientDirectory";
 
 function actorCanUseScopedFeedbackTarget(actor: CommentTargetActor, storageScopeId: string) {
   const actorStorageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
