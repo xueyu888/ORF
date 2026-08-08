@@ -123,9 +123,19 @@ export function isFeedbackPath(pathname: string) {
 }
 
 export { feedbackCreatePath, feedbackIssuePath, feedbackLabelsPath, feedbackListPath, feedbackRootPath };
+export {
+  FeedbackWebApiError,
+  getFeedbackReferenceCard,
+} from "../web/api";
 export { canCreateTeamFeedback } from "../web/model/capabilities";
 export {
+  feedbackImpactLabel,
+  feedbackLifecycleLabel,
+  feedbackPriorityLabel,
+} from "../web/labels";
+export {
   feedbackIssueBodyPreview,
+  feedbackIssueDisplayId,
   feedbackIssueHref,
   feedbackIssueIdFromHref,
   feedbackIssueIdsFromText,
@@ -195,6 +205,8 @@ export type {
 } from "../web/runtime";
 export type {
   FeedbackIssueReadModelData,
+  FeedbackReferenceCardData,
+  FeedbackReferenceCardQuery,
   FeedbackSubscription,
   FeedbackSubscriptionMode,
   FeedbackWebActivityItem,

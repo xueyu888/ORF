@@ -127,12 +127,81 @@ export type FeedbackIssueReadModelData = {
   users: FeedbackWebUser[];
 };
 
+export type FeedbackReferenceCardQuery = {
+  activityId?: string | null;
+  commentMessageId?: string | null;
+  feedbackId: string;
+};
+
+export type FeedbackReferenceCardData = {
+  activity?: FeedbackWebActivityItem | null;
+  comment?: FeedbackWebCommentMessage | null;
+  feedback: FeedbackWebIssue;
+  project?: FeedbackWebProject | null;
+  thread?: FeedbackWebCommentThread | null;
+  users: FeedbackWebUser[];
+};
+
 export const emptyFeedbackIssueReadModelData: FeedbackIssueReadModelData = {
   comments: [],
   feedback: [],
   projects: [],
   users: [],
 };
+
+export function feedbackReferenceCardDataFromReadModel(
+  data: FeedbackIssueReadModelData,
+  query: FeedbackReferenceCardQuery,
+): FeedbackReferenceCardData | null {
+  const feedbackId = query.feedbackId.trim();
+  if (!feedbackId) return null;
+  const feedback = data.feedback.find((item) => item.id === feedbackId);
+  if (!feedback) return null;
+
+  const activityId = query.activityId?.trim();
+  const commentMessageId = query.commentMessageId?.trim();
+  const activity = activityId ? feedback.activity.find((item) => item.id === activityId) ?? null : null;
+  if (activityId && !activity) return null;
+
+  const thread = commentMessageId
+    ? data.comments.find((item) => item.targetType === "feedback" && item.targetId === feedbackId && item.messages.some((message) => message.id === commentMessageId)) ?? null
+    : null;
+  const comment = thread?.messages.find((message) => message.id === commentMessageId) ?? null;
+  if (commentMessageId && !comment) return null;
+  if (commentMessageId && activity && !feedbackActivityReferencesComment(activity, commentMessageId)) return null;
+
+  const userIds = new Set<string>();
+  addOptionalUserId(userIds, feedback.createdBy);
+  addOptionalUserId(userIds, feedback.updatedBy);
+  addOptionalUserId(userIds, feedback.assigneeUserId);
+  addOptionalUserId(userIds, feedback.closedByUserId);
+  addOptionalUserId(userIds, activity?.actorUserId);
+  for (const message of thread?.messages ?? []) {
+    addOptionalUserId(userIds, message.authorUserId);
+  }
+
+  return {
+    activity,
+    comment,
+    feedback,
+    project: feedback.projectId ? data.projects.find((project) => project.id === feedback.projectId) ?? null : null,
+    thread,
+    users: data.users.filter((user) => userIds.has(user.id)),
+  };
+}
+
+function feedbackActivityReferencesComment(activity: FeedbackWebActivityItem, commentMessageId: string) {
+  if (activity.activityType !== "feedback.comment.created") return false;
+  const payloadCommentMessageId = activity.payload.commentMessageId;
+  return typeof payloadCommentMessageId === "string" && payloadCommentMessageId.trim() === commentMessageId;
+}
+
+function addOptionalUserId(userIds: Set<string>, userId: string | null | undefined) {
+  const normalizedUserId = userId?.trim();
+  if (normalizedUserId) {
+    userIds.add(normalizedUserId);
+  }
+}
 
 export type FeedbackSubscription = {
   mode: FeedbackSubscriptionMode;

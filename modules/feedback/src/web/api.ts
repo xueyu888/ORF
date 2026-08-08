@@ -7,6 +7,8 @@ import type {
 } from "../contracts";
 import type {
   FeedbackIssueReadModelData,
+  FeedbackReferenceCardData,
+  FeedbackReferenceCardQuery,
   FeedbackSubscription,
   FeedbackWebIssue,
   FeedbackWebProject,
@@ -109,6 +111,20 @@ export async function getFeedbackIssueReadModel() {
 
 export async function getFeedbackIssueDetailReadModel(feedbackId: string) {
   return apiJson<FeedbackIssueReadModelData>(`/api/feedback/${encodeURIComponent(feedbackId)}`);
+}
+
+export async function getFeedbackReferenceCard(input: FeedbackReferenceCardQuery, options: { signal?: AbortSignal } = {}) {
+  const feedbackId = input.feedbackId.trim();
+  const query = new URLSearchParams();
+  const activityId = input.activityId?.trim();
+  const commentMessageId = input.commentMessageId?.trim();
+  if (activityId) query.set("activity", activityId);
+  if (commentMessageId) query.set("comment", commentMessageId);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiJson<{ reference: FeedbackReferenceCardData }>(
+    `/api/feedback/${encodeURIComponent(feedbackId)}/reference${suffix}`,
+    { signal: options.signal },
+  );
 }
 
 export async function getFeedbackAssignees() {

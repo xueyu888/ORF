@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
+  feedbackReferenceCardDataFromReadModel,
   feedbackImpactSchema,
   feedbackPrioritySchema,
   feedbackRelationTypeSchema,
@@ -53,6 +54,10 @@ const feedbackImportParamsSchema = z.object({ batchId: z.string().min(1) });
 const feedbackReportAttachmentParamsSchema = z.object({ attachmentId: z.string().min(1) });
 const feedbackReportAttachmentContentQuerySchema = z.object({
   disposition: z.enum(["attachment", "inline"]).optional(),
+});
+const feedbackReferenceCardQuerySchema = z.object({
+  activity: z.preprocess((value) => typeof value === "string" && value.trim() === "" ? undefined : value, z.string().trim().min(1).optional()),
+  comment: z.preprocess((value) => typeof value === "string" && value.trim() === "" ? undefined : value, z.string().trim().min(1).optional()),
 });
 const createFeedbackBodySchema = z.object({
   title: z.string().trim().min(1),
@@ -447,6 +452,31 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       reply.header("Content-Length", outcome.contentLength);
     }
     return reply.send(outcome.body);
+  });
+
+  app.get("/api/feedback/:feedbackId/reference", async (request, reply) => {
+    const params = feedbackParamsSchema.parse(request.params);
+    const query = feedbackReferenceCardQuerySchema.parse(request.query);
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const data = await getFeedbackIssueDetailReadModelData(params.feedbackId, { scope: context.scope, viewerUserId: context.user.id });
+    if (!data) {
+      return reply.code(404).send({ error: "Feedback not found" });
+    }
+
+    const reference = feedbackReferenceCardDataFromReadModel(data, {
+      activityId: query.activity,
+      commentMessageId: query.comment,
+      feedbackId: params.feedbackId,
+    });
+    if (!reference) {
+      return reply.code(404).send({ error: "Feedback reference not found" });
+    }
+
+    return { reference };
   });
 
   app.get("/api/feedback/:feedbackId", async (request, reply) => {

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   canPreviewFeedbackReportAttachment,
   feedbackNotificationCardReferenceFromPayload,
+  feedbackReferenceCardDataFromReadModel,
   feedbackReportAttachmentDto,
   feedbackReportAttachmentPreviewKind,
   feedbackNotificationEventPlanSchema,
@@ -12,6 +13,7 @@ import {
   planFeedbackCommentCreatedNotification,
   planFeedbackCreatedNotification,
   planFeedbackLifecycleChangedNotification,
+  type FeedbackIssueReadModelData,
 } from "@orf/feedback-module/contracts";
 import {
   applyFeedbackTransition,
@@ -485,6 +487,153 @@ describe("feedback module domain", () => {
       localDate: "2026-08-08",
       pendingCount: 0,
     }, "activity-digest"), null);
+  });
+
+  it("projects feedback reference cards from the authorized detail read model", () => {
+    const readModel: FeedbackIssueReadModelData = {
+      comments: [{
+        createdAt: occurredAt,
+        createdBy: "reporter-1",
+        id: "thread-1",
+        messages: [{
+          attachments: [{
+            contentUrl: "/api/comment-attachments/comment-att-1/content",
+            downloadUrl: "/api/comment-attachments/comment-att-1/content?disposition=attachment",
+            fileName: "reply.png",
+            fileSize: 2048,
+            id: "comment-att-1",
+            mimeType: "image/png",
+            previewKind: "image",
+            previewUrl: "/api/comment-attachments/comment-att-1/content?disposition=inline",
+          }],
+          author: "评论人",
+          authorUserId: "commenter-1",
+          body: "评论正文",
+          createdAt: "2026-08-07T09:05:00.000Z",
+          id: "comment-1",
+        }],
+        status: "open",
+        targetId: "feedback-1",
+        targetTitle: "页面滚动位置异常",
+        targetType: "feedback",
+        updatedAt: "2026-08-07T09:05:00.000Z",
+      }],
+      feedback: [{
+        activity: [{
+          actorUserId: "reporter-1",
+          activityType: "feedback.created",
+          at: occurredAt,
+          id: "activity-1",
+          payload: {},
+          sequence: 1,
+        }, {
+          actorUserId: "actor-1",
+          activityType: "feedback.comment.created",
+          at: "2026-08-07T09:05:00.000Z",
+          id: "activity-2",
+          payload: { commentMessageId: "comment-1" },
+          sequence: 2,
+        }],
+        assigneeUserId: "assignee-1",
+        capabilities: {
+          canAcceptVerification: true,
+          canChangeAssignee: true,
+          canEditReport: true,
+          canImportExport: true,
+          canRejectVerification: true,
+          canReopen: true,
+          canSetPriority: true,
+          canStart: true,
+          canSubmitVerification: true,
+          canView: true,
+          canWithdraw: true,
+        },
+        causeCategories: ["技术问题"],
+        closedAt: null,
+        closedByUserId: null,
+        createdAt: occurredAt,
+        createdBy: "reporter-1",
+        description: "原始报告正文",
+        id: "feedback-1",
+        impact: "high",
+        lastActivityByUserId: "actor-1",
+        lastActivitySequence: 2,
+        lastSeenSequence: 1,
+        priority: "p1",
+        projectId: "project-1",
+        relations: [],
+        reportAttachments: [{
+          contentUrl: "/api/feedback/report-attachments/report-att-1/content",
+          downloadUrl: "/api/feedback/report-attachments/report-att-1/content?disposition=attachment",
+          fileName: "capture.png",
+          fileSize: 1024,
+          id: "report-att-1",
+          mimeType: "image/png",
+          previewKind: "image",
+          previewUrl: "/api/feedback/report-attachments/report-att-1/content?disposition=inline",
+        }],
+        requiresAction: true,
+        resolution: null,
+        stage: "in_progress",
+        title: "页面滚动位置异常",
+        unread: true,
+        updatedAt: "2026-08-07T09:05:00.000Z",
+        updatedBy: "actor-1",
+        version: 2,
+      }],
+      projects: [{
+        createdAt: occurredAt,
+        id: "project-1",
+        name: "客户端",
+        updatedAt: occurredAt,
+      }],
+      users: [
+        { id: "reporter-1", name: "报告人", role: "member", status: "active" },
+        { id: "actor-1", name: "处理人", role: "member", status: "active" },
+        { id: "assignee-1", name: "当前处理人", role: "member", status: "active" },
+        { id: "commenter-1", name: "评论人", role: "member", status: "active" },
+        { id: "other-1", name: "无关成员", role: "member", status: "active" },
+      ],
+    };
+
+    const commentReference = feedbackReferenceCardDataFromReadModel(readModel, {
+      activityId: "activity-2",
+      commentMessageId: "comment-1",
+      feedbackId: "feedback-1",
+    });
+    assert.equal(commentReference?.feedback.id, "feedback-1");
+    assert.equal(commentReference?.activity?.id, "activity-2");
+    assert.equal(commentReference?.comment?.id, "comment-1");
+    assert.equal(commentReference?.project?.name, "客户端");
+    assert.deepEqual(commentReference?.users.map((user) => user.id).sort(), [
+      "actor-1",
+      "assignee-1",
+      "commenter-1",
+      "reporter-1",
+    ]);
+
+    const feedbackReference = feedbackReferenceCardDataFromReadModel(readModel, {
+      activityId: "activity-1",
+      feedbackId: "feedback-1",
+    });
+    assert.equal(feedbackReference?.activity?.id, "activity-1");
+    assert.equal(feedbackReference?.comment, null);
+    assert.equal(feedbackReference?.thread, null);
+    assert.equal(feedbackReference?.feedback.reportAttachments.length, 1);
+
+    assert.equal(feedbackReferenceCardDataFromReadModel(readModel, {
+      commentMessageId: "missing-comment",
+      feedbackId: "feedback-1",
+    }), null);
+    assert.equal(feedbackReferenceCardDataFromReadModel(readModel, {
+      activityId: "activity-1",
+      commentMessageId: "comment-1",
+      feedbackId: "feedback-1",
+    }), null);
+    assert.equal(feedbackReferenceCardDataFromReadModel(readModel, {
+      activityId: "missing-activity",
+      feedbackId: "feedback-1",
+    }), null);
   });
 
   it("maps feedback report attachments through the module-owned attachment contract", () => {

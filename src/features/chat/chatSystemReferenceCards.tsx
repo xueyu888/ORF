@@ -6,11 +6,13 @@ import {
   renderChatSystemMessageBodyFromRegistrations,
 } from "./chatReferenceCardProvider";
 import { workLogChatReferenceCardRegistration } from "../work-logs/WorkLogChatReferenceCard";
+import { feedbackChatReferenceCardRegistration } from "../../feedback/feedbackChatReferenceCardProvider";
 
 export type ChatReferenceCardRenderer = (message: ChatMessage) => ReactNode;
 
 const chatReferenceCardRegistrations = [
   defineChatReferenceCardRegistration(workLogChatReferenceCardRegistration),
+  defineChatReferenceCardRegistration(feedbackChatReferenceCardRegistration),
 ];
 
 export function renderChatSystemReferenceCard(message: ChatMessage): ReactNode {
