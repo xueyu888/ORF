@@ -91,20 +91,19 @@ async function checkServerPublicBoundary() {
   if (source.includes("FeedbackImportActor")) {
     errors.push("modules/feedback/src/public/server.ts must not export import actor DTOs; expose them from contracts.");
   }
-  const forbiddenServerProtocolExports = [
-    "FeedbackNotificationDispatchDraft",
-    "FeedbackNotificationPort",
-    "FeedbackNotificationRecipientDirectory",
-    "FeedbackReportAttachmentObjectRef",
+	  const forbiddenServerProtocolExports = [
+	    "createFeedbackReferenceProvider",
+	    "FeedbackNotificationDispatchDraft",
+	    "FeedbackNotificationPort",
+	    "FeedbackNotificationRecipientDirectory",
+	    "FeedbackReportAttachmentObjectRef",
     "FeedbackTargetTitleSync",
-    "FeedbackTransitionNotificationDispatchFactory",
-    "listFeedbackReportAttachmentObjectRefs",
-  ];
-  for (const name of forbiddenServerProtocolExports) {
-    if (new RegExp(`\\b${name}\\b`).test(source)) {
-      errors.push(`modules/feedback/src/public/server.ts must not export ${name}; keep internal server protocols inside the feedback module.`);
-    }
-  }
+	    "FeedbackTransitionNotificationDispatchFactory",
+	    "listFeedbackReportAttachmentObjectRefs",
+	    "startFeedbackDailyDigestScheduler",
+	    "startFeedbackNotificationDispatchWorker",
+	  ];
+	  assertPublicServerDoesNotExport(source, forbiddenServerProtocolExports);
   const forbiddenTypeExports = [
     {
       names: ["FeedbackBackupAttachmentFile", "FeedbackImportActor"],
@@ -124,6 +123,16 @@ async function checkServerPublicBoundary() {
         if (new RegExp(`\\b${name}\\b`).test(block.names)) {
           errors.push(`modules/feedback/src/public/server.ts must export ${name} from a protocol file, not ${rule.specifier}.`);
         }
+      }
+    }
+  }
+}
+
+function assertPublicServerDoesNotExport(source, names) {
+  for (const block of exportBlocks(source)) {
+    for (const name of names) {
+      if (new RegExp(`\\b${name}\\b`).test(block.names)) {
+        errors.push(`modules/feedback/src/public/server.ts must not export ${name}; keep internal server protocols inside the feedback module.`);
       }
     }
   }
@@ -279,6 +288,9 @@ async function checkHostDriveFeedbackBoundary() {
 
 async function checkFeedbackLegacyRemovalBoundary() {
   const forbiddenFiles = [
+    "server/feedback/feedbackDriveContextProvider.ts",
+    "server/feedback/feedbackNotificationPresentationProvider.ts",
+    "server/feedback/feedbackReferenceProvider.ts",
     "server/routes/feedbackRoutes.ts",
     "server/repositories/feedbackRepository.ts",
     "server/repositories/feedbackSubscriptionRepository.ts",

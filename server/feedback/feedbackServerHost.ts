@@ -1,7 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import {
-  startFeedbackDailyDigestScheduler,
-  startFeedbackNotificationDispatchWorker,
   type FeedbackServerHost,
 } from "@orf/feedback-module/server";
 import { asc, eq } from "drizzle-orm";
@@ -10,11 +8,11 @@ import { teamMembers, users } from "../db/schema";
 import { env } from "../env";
 import { publishNotificationEvent } from "../notifications/publisher";
 import { registerFeedbackCommentTargetAdapter } from "./feedbackCommentTargetAdapter";
-import { registerFeedbackDriveContextProvider } from "./feedbackDriveContextProvider";
 import { registerFeedbackHttpRoutes } from "./feedbackHttpRoutes";
 import { feedbackNotificationPort } from "./feedbackNotificationPort";
-import { registerFeedbackNotificationPresentationProvider } from "./feedbackNotificationPresentationProvider";
-import { registerOrfFeedbackReferenceProvider } from "./feedbackReferenceProvider";
+import { registerDriveContextProvider } from "../drive/driveContextProviderRegistry";
+import { registerNotificationPresentationProvider } from "../notifications/presentationRegistry";
+import { registerFeedbackReferenceProvider } from "../references/feedbackReferenceRegistry";
 
 async function listActiveFeedbackDigestRecipients() {
   return db
@@ -34,20 +32,64 @@ export function createOrfFeedbackServerHost(
   options: { readonly startBackgroundJobs?: boolean } = {},
 ): FeedbackServerHost {
   const startBackgroundJobs = options.startBackgroundJobs ?? true;
+  const registeredHttpRoutes = new Set<string>();
+  const registeredRuntimeTasks = new Set<string>();
   return {
     protocolVersion: 1,
-    registerHttpRoutes() {
-      registerOrfFeedbackReferenceProvider();
-      registerFeedbackDriveContextProvider();
-      registerFeedbackNotificationPresentationProvider();
-      registerFeedbackCommentTargetAdapter();
-      registerFeedbackHttpRoutes(app);
+    http: {
+      registerRoutes(registration) {
+        if (registration.moduleId !== "feedback") {
+          throw new Error(`Unsupported feedback HTTP route module ${registration.moduleId}.`);
+        }
+        if (registeredHttpRoutes.has(registration.mountPath)) {
+          throw new Error(`Feedback HTTP routes already registered at ${registration.mountPath}.`);
+        }
+        registeredHttpRoutes.add(registration.mountPath);
+        registration.register();
+      },
     },
-    startDailyDigestScheduler() {
-      if (!startBackgroundJobs) {
-        return () => undefined;
-      }
-      return startFeedbackDailyDigestScheduler({
+    lifecycle: {
+      registerTask(registration) {
+        const key = `${registration.moduleId}:${registration.taskId}`;
+        if (registeredRuntimeTasks.has(key)) {
+          throw new Error(`Feedback runtime task already registered: ${registration.taskId}.`);
+        }
+        registeredRuntimeTasks.add(key);
+        return registration.start();
+      },
+    },
+    commentTargets: {
+      registerTarget(registration) {
+        if (registration.moduleId !== "feedback" || registration.type !== "feedback") {
+          throw new Error(`Unsupported feedback comment target registration ${registration.type}.`);
+        }
+        registration.register();
+      },
+    },
+    references: {
+      registerProvider(provider) {
+        registerFeedbackReferenceProvider(provider);
+      },
+    },
+    driveContexts: {
+      registerProvider(provider) {
+        registerDriveContextProvider(provider);
+      },
+    },
+    notificationKinds: {
+      registerProvider(provider) {
+        registerNotificationPresentationProvider(provider);
+      },
+    },
+    ports: {
+      backgroundJobs: {
+        enabled: startBackgroundJobs,
+      },
+      commentTarget: {
+        register: registerFeedbackCommentTargetAdapter,
+      },
+      database: db,
+      dailyDigest: {
         config: {
           enabled: env.ORF_FEEDBACK_DAILY_DIGEST_ENABLED,
           hour: env.ORF_FEEDBACK_DAILY_DIGEST_HOUR,
@@ -55,21 +97,16 @@ export function createOrfFeedbackServerHost(
           pollIntervalMs: env.ORF_FEEDBACK_DAILY_DIGEST_POLL_INTERVAL_MS,
           timeZone: env.ORF_FEEDBACK_DAILY_DIGEST_TIME_ZONE,
         },
-        database: db,
         listActiveRecipients: listActiveFeedbackDigestRecipients,
-        log: app.log,
         publishNotification: publishNotificationEvent,
-      });
-    },
-    startNotificationDispatchWorker() {
-      if (!startBackgroundJobs) {
-        return () => undefined;
-      }
-      return startFeedbackNotificationDispatchWorker({
-        database: db,
-        log: app.log,
+      },
+      httpRoutes: {
+        register: () => registerFeedbackHttpRoutes(app),
+      },
+      log: app.log,
+      notificationDispatch: {
         publishNotification: feedbackNotificationPort,
-      });
+      },
     },
   };
 }
