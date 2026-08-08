@@ -82,6 +82,9 @@ async function checkServerPublicBoundary() {
   if (source.includes("FeedbackCommandResult")) {
     errors.push("modules/feedback/src/public/server.ts must not export command result DTOs; expose them from contracts.");
   }
+  if (source.includes("FeedbackImportActor")) {
+    errors.push("modules/feedback/src/public/server.ts must not export import actor DTOs; expose them from contracts.");
+  }
   const forbiddenTypeExports = [
     {
       names: ["FeedbackTargetTitleSync", "FeedbackTransitionNotificationDispatchFactory"],

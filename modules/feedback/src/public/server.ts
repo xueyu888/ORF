@@ -73,7 +73,6 @@ export {
 } from "../server/transfer";
 export type {
   FeedbackBackupAttachmentFile,
-  FeedbackImportActor,
 } from "../server/transferProtocol";
 
 export interface FeedbackServerHost {

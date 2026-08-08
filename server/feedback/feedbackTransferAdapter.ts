@@ -1,8 +1,8 @@
 import {
   commitFeedbackImportBatch,
   preflightFeedbackImport,
-  type FeedbackImportActor,
 } from "@orf/feedback-module/server";
+import type { FeedbackImportActor } from "@orf/feedback-module/contracts";
 import { db } from "../db/client";
 import { runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 import { listFeedbackAssigneeOptions } from "./feedbackAssigneeOptions";

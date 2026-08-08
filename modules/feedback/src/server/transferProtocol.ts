@@ -1,10 +1,3 @@
-export type FeedbackImportActor = {
-  readonly id: string;
-  readonly role: "admin" | "member";
-  readonly status: "active" | "inactive";
-  readonly teamId: string;
-};
-
 export type FeedbackBackupAttachmentKind = "comment" | "report";
 
 export type FeedbackBackupAttachmentFile = {

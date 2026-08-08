@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type { FeedbackImpact, FeedbackIssueReadModelData, FeedbackPriority } from "../contracts";
+import type { FeedbackImpact, FeedbackImportActor, FeedbackIssueReadModelData, FeedbackPriority } from "../contracts";
 import {
   feedback,
   feedbackActivityEvents,
@@ -16,7 +16,6 @@ import type { FeedbackWriteClient } from "./commandPorts";
 import { feedbackNowIso, makeFeedbackActivityId, makeFeedbackId } from "./ids";
 import type {
   FeedbackBackupAttachmentFile,
-  FeedbackImportActor,
 } from "./transferProtocol";
 
 type FeedbackTransferDatabase = NodePgDatabase<any> & FeedbackWriteDatabase;

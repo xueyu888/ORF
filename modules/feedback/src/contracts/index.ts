@@ -181,6 +181,7 @@ export type FeedbackTransitionType = z.infer<typeof feedbackTransitionTypeSchema
 export type FeedbackActivityType = z.infer<typeof feedbackActivityTypeSchema>;
 export type FeedbackLifecycleSnapshot = z.infer<typeof feedbackLifecycleSnapshotSchema>;
 export type FeedbackActorSnapshot = z.infer<typeof feedbackActorSnapshotSchema>;
+export type FeedbackImportActor = FeedbackActorSnapshot;
 export type FeedbackEntitySnapshot = z.infer<typeof feedbackEntitySnapshotSchema>;
 export type FeedbackTransitionInput = z.infer<typeof feedbackTransitionInputSchema>;
 export type FeedbackRelationDraft = z.infer<typeof feedbackRelationDraftSchema>;
