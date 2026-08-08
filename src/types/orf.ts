@@ -2,6 +2,7 @@ import type {
   FeedbackActivityType,
   FeedbackCapabilities,
   FeedbackImpact,
+  FeedbackNotificationEventKind,
   FeedbackPriority,
   FeedbackRelationType,
   FeedbackResolution,
@@ -18,7 +19,7 @@ export type MetricDirection = "increase" | "decrease";
 export type UncertaintyLevel = "简易" | "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 export type BountySource = "managerDefined" | "memberProposed";
 export type ChallengeApplicationStatus = "pending" | "approved" | "declined";
-export type NotificationKind =
+export type CoreNotificationKind =
   | "objective.published"
   | "challenge.application.created"
   | "challenge.application.approved"
@@ -33,17 +34,13 @@ export type NotificationKind =
   | "objective.peerReview.requested"
   | "objective.settlement.updated"
   | "objective.settled"
-  | "feedback.created"
-  | "feedback.comment.created"
-  | "feedback.lifecycle.changed"
-  | "feedback.assignee.changed"
-  | "feedback.assignee.digest"
   | "comment.reply.created"
   | "comment.thread.status.changed"
   | "comment.mention.created"
   | "data.sync.conflict"
   | "worklog.submitted"
   | "worklog.reminder";
+export type NotificationKind = CoreNotificationKind | FeedbackNotificationEventKind;
 export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog" | "dataSync";
 export type NotificationStream = "personalNotification" | "teamAnnouncement";
 export type NotificationDeliveryClass = "direct" | "mandatory" | "ordinary";

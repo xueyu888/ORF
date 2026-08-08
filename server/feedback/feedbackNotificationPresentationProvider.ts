@@ -1,16 +1,11 @@
-import type { FeedbackNotificationEventKind } from "@orf/feedback-module/contracts";
+import {
+  feedbackNotificationEventKindValues,
+  type FeedbackNotificationEventKind,
+} from "@orf/feedback-module/contracts";
 import type { NotificationKind } from "../../src/types/orf";
 import { registerNotificationPresentationProvider } from "../notifications/presentationRegistry";
 
-const feedbackNotificationKinds = [
-  "feedback.assignee.changed",
-  "feedback.assignee.digest",
-  "feedback.comment.created",
-  "feedback.created",
-  "feedback.lifecycle.changed",
-] satisfies FeedbackNotificationEventKind[];
-
-const feedbackNotificationKindSet = new Set<NotificationKind>(feedbackNotificationKinds);
+const feedbackNotificationKindSet = new Set<NotificationKind>(feedbackNotificationEventKindValues);
 
 function assertFeedbackNotificationKind(kind: NotificationKind): FeedbackNotificationEventKind {
   if (!feedbackNotificationKindSet.has(kind)) {
@@ -28,7 +23,7 @@ function feedbackNotificationActionLabel(kind: FeedbackNotificationEventKind) {
 export function registerFeedbackNotificationPresentationProvider() {
   registerNotificationPresentationProvider({
     namespace: "feedback",
-    kinds: feedbackNotificationKinds,
+    kinds: feedbackNotificationEventKindValues,
     policy(kind) {
       const feedbackKind = assertFeedbackNotificationKind(kind);
       return {
