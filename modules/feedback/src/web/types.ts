@@ -1,5 +1,7 @@
 export type {
   FeedbackIssueReadModelData,
+  FeedbackDashboardSummary,
+  FeedbackDashboardSummaryItem,
   FeedbackReferenceSummary,
   FeedbackReferenceCardData,
   FeedbackReferenceCardQuery,
@@ -19,7 +21,7 @@ export type {
   FeedbackWebUserSummary,
 } from "../contracts";
 
-export { emptyFeedbackIssueReadModelData } from "../contracts";
+export { emptyFeedbackDashboardSummary, emptyFeedbackIssueReadModelData } from "../contracts";
 
 export type FeedbackWebProjectChatChannel = {
   displayName: string;

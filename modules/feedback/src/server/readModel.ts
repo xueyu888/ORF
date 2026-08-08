@@ -4,11 +4,13 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import {
   feedbackImpactLabel,
   feedbackImpactValues,
+  buildFeedbackDashboardSummary,
   feedbackPriorityLabel,
   feedbackReportAttachmentDto,
   feedbackResolutionLabel,
   feedbackStageLabel,
   parseFeedbackIssueListQuery,
+  type FeedbackDashboardSummary,
   type FeedbackIssueListFilters,
   type FeedbackIssuePriorityFilter,
   type FeedbackIssueListState,
@@ -91,6 +93,10 @@ export type FeedbackReadModelIssue = {
 };
 
 type FeedbackRow = typeof feedback.$inferSelect;
+type FeedbackDashboardSummaryRow = Pick<
+  FeedbackRow,
+  "assigneeUserId" | "description" | "id" | "impact" | "resolution" | "stage" | "title" | "updatedAt"
+>;
 type FeedbackCauseRow = typeof feedbackCauseCategories.$inferSelect;
 type FeedbackActivityRow = typeof feedbackActivityEvents.$inferSelect;
 type FeedbackActivitySummaryRow = Pick<FeedbackActivityRow, "actorUserId" | "feedbackId" | "sequence">;
@@ -146,6 +152,29 @@ export async function getFeedbackReadModelIssue(
     viewer: input.viewer ?? null,
   });
   return issue ?? null;
+}
+
+export async function getFeedbackDashboardSummary(
+  database: FeedbackReadModelDatabase,
+  input: { readonly teamId: string },
+): Promise<FeedbackDashboardSummary> {
+  const feedbackRows = await getFeedbackDashboardSummaryRows(database, input.teamId);
+  const causeRows = await getFeedbackCauseRows(database, feedbackRows.map((item) => item.id));
+  const causeCategoriesByFeedback = groupFeedbackCauseCategories(causeRows);
+
+  return buildFeedbackDashboardSummary({
+    feedback: feedbackRows.map((item) => ({
+      assigneeUserId: item.assigneeUserId,
+      causeCategories: causeCategoriesByFeedback.get(item.id) ?? [],
+      description: item.description,
+      id: item.id,
+      impact: item.impact,
+      resolution: item.resolution,
+      stage: item.stage,
+      title: item.title,
+      updatedAt: item.updatedAt,
+    })),
+  });
 }
 
 async function getFeedbackReadModelIssuesFromRows(
@@ -209,6 +238,26 @@ async function getFeedbackRows(database: FeedbackReadModelDatabase, storageScope
     .select()
     .from(feedback)
     .where(eq(feedback.teamId, storageScopeId))
+    .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id));
+}
+
+async function getFeedbackDashboardSummaryRows(
+  database: FeedbackReadModelDatabase,
+  storageScopeId: string,
+): Promise<FeedbackDashboardSummaryRow[]> {
+  return database
+    .select({
+      assigneeUserId: feedback.assigneeUserId,
+      description: feedback.description,
+      id: feedback.id,
+      impact: feedback.impact,
+      resolution: feedback.resolution,
+      stage: feedback.stage,
+      title: feedback.title,
+      updatedAt: feedback.updatedAt,
+    })
+    .from(feedback)
+    .where(and(eq(feedback.teamId, storageScopeId), inArray(feedback.stage, ["open", "in_progress", "pending_verification"])))
     .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id));
 }
 
@@ -474,12 +523,7 @@ function mapFeedbackIssueRows(input: {
   userViewRows: readonly FeedbackUserViewRow[];
   viewer: FeedbackReadModelViewer | null;
 }): FeedbackReadModelIssue[] {
-  const causeCategoriesByFeedback = new Map<string, string[]>();
-  for (const item of [...input.causeRows].sort((left, right) => left.sortOrder - right.sortOrder)) {
-    const list = causeCategoriesByFeedback.get(item.feedbackId) ?? [];
-    list.push(item.category);
-    causeCategoriesByFeedback.set(item.feedbackId, list);
-  }
+  const causeCategoriesByFeedback = groupFeedbackCauseCategories(input.causeRows);
 
   const activityByFeedback = new Map<string, FeedbackReadModelIssue["activity"]>();
   const lastActivitySequenceByFeedback = new Map<string, number>();
@@ -573,12 +617,7 @@ function mapFeedbackIssueListRows(input: {
   userViewRows: readonly FeedbackUserViewRow[];
   viewer: FeedbackReadModelViewer | null;
 }): FeedbackReadModelIssue[] {
-  const causeCategoriesByFeedback = new Map<string, string[]>();
-  for (const item of [...input.causeRows].sort((left, right) => left.sortOrder - right.sortOrder)) {
-    const list = causeCategoriesByFeedback.get(item.feedbackId) ?? [];
-    list.push(item.category);
-    causeCategoriesByFeedback.set(item.feedbackId, list);
-  }
+  const causeCategoriesByFeedback = groupFeedbackCauseCategories(input.causeRows);
 
   const lastActivitySequenceByFeedback = new Map<string, number>();
   const lastActivityActorByFeedback = new Map<string, string | null>();
@@ -644,6 +683,16 @@ function mapFeedbackIssueListRows(input: {
     activity: [],
     relations: relationsByFeedback.get(item.id) ?? [],
   }));
+}
+
+function groupFeedbackCauseCategories(causeRows: readonly FeedbackCauseRow[]) {
+  const causeCategoriesByFeedback = new Map<string, string[]>();
+  for (const item of [...causeRows].sort((left, right) => left.sortOrder - right.sortOrder)) {
+    const list = causeCategoriesByFeedback.get(item.feedbackId) ?? [];
+    list.push(item.category);
+    causeCategoriesByFeedback.set(item.feedbackId, list);
+  }
+  return causeCategoriesByFeedback;
 }
 
 function feedbackRequiresAction(item: FeedbackRow, viewerUserId: string | null) {

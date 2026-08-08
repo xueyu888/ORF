@@ -17,6 +17,7 @@ export {
   searchFeedbackReferences,
 } from "../server/references";
 export {
+  getFeedbackDashboardSummary,
   getFeedbackReadModelIssue,
   getFeedbackReadModelIssues,
   getFeedbackReadModelListIssues,

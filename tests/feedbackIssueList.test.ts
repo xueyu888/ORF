@@ -22,6 +22,7 @@ import {
   parseStoredFeedbackIssueListFilterParams,
 } from "@orf/feedback-module/web";
 import {
+  buildFeedbackDashboardSummary,
   buildFeedbackIssueListProjection,
   feedbackIssueListDefaultPageLimit,
   feedbackIssueListPaginationFromInput,
@@ -244,6 +245,45 @@ test("feedback list projection can use comment summaries without comment bodies"
 
   assert.equal(item?.commentCount, 3);
   assert.equal(item?.lastActivityAt, "2026-07-10");
+});
+
+test("feedback dashboard summary owns lightweight pending aggregates", () => {
+  const summary = buildFeedbackDashboardSummary({
+    feedback: [
+      feedback({
+        causeCategories: ["Prompt 问题", "流程问题"],
+        description: "**关键** [链接](https://example.com)",
+        id: "fb-critical",
+        impact: "critical",
+        title: "关键反馈",
+        updatedAt: "2026-07-10",
+      }),
+      feedback({
+        causeCategories: ["技术问题"],
+        id: "fb-medium",
+        impact: "medium",
+        title: "普通反馈",
+        updatedAt: "2026-07-09",
+      }),
+      feedback({
+        id: "fb-closed",
+        resolution: "resolved",
+        stage: "closed",
+        title: "已关闭反馈",
+      }),
+    ],
+    itemLimit: 1,
+  });
+
+  assert.equal(summary.pendingCount, 2);
+  assert.equal(summary.highImpactCount, 1);
+  assert.deepEqual(summary.causeChart, [
+    { cause: "技术问题", count: 2 },
+    { cause: "流程问题", count: 1 },
+  ]);
+  assert.deepEqual(summary.pendingItems.map((item) => item.id), ["fb-critical"]);
+  assert.equal(summary.pendingItems[0]?.descriptionPreview, "关键 链接");
+  assert.equal("description" in (summary.pendingItems[0] ?? {}), false);
 });
 
 test("feedback list page query keeps filters while owning cursor and limit params", () => {

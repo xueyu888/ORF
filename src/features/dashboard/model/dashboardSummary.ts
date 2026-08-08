@@ -1,39 +1,29 @@
-import type { Feedback, Objective, OrfUser, Result, Task } from "../../../types/orf";
-import { feedbackCauseGroupsForCategories } from "@orf/feedback-module/web";
+import type { FeedbackDashboardSummary, FeedbackDashboardSummaryItem } from "@orf/feedback-module/contracts";
+import type { Objective, OrfUser, Result, Task } from "../../../types/orf";
 
 const inactiveObjectiveStatuses = new Set<Objective["flowStatus"]>(["settled", "closed"]);
-const highImpactLevels = new Set<Feedback["impact"]>(["high", "critical"]);
 
 export interface DashboardSummary {
   activeObjectives: Objective[];
   atRiskResults: Result[];
-  pendingFeedback: Feedback[];
-  highImpactFeedback: Feedback[];
+  pendingFeedback: readonly FeedbackDashboardSummaryItem[];
+  pendingFeedbackCount: number;
+  highImpactFeedbackCount: number;
   averageConfidence: number;
-  causeChart: Array<{ cause: string; count: number }>;
+  causeChart: FeedbackDashboardSummary["causeChart"];
   latestCycle: string | null;
   myOpenTasks: Task[];
 }
 
 export function summarizeDashboardState(input: DashboardSummaryInput, currentUser?: Pick<OrfUser, "id"> | null): DashboardSummary {
-  const pendingFeedback = input.feedbackIssues.filter((feedback) => feedback.stage !== "closed");
-  const causeCounts = new Map<string, number>();
-
-  for (const feedback of pendingFeedback) {
-    for (const cause of feedbackCauseGroupsForCategories(feedback.causeCategories)) {
-      causeCounts.set(cause, (causeCounts.get(cause) ?? 0) + 1);
-    }
-  }
-
   return {
     activeObjectives: input.objectives.filter((objective) => !inactiveObjectiveStatuses.has(objective.flowStatus)),
     atRiskResults: input.results.filter((result) => result.status === "At Risk"),
-    pendingFeedback,
-    highImpactFeedback: pendingFeedback.filter((feedback) => highImpactLevels.has(feedback.impact)),
+    pendingFeedback: input.feedbackSummary.pendingItems,
+    pendingFeedbackCount: input.feedbackSummary.pendingCount,
+    highImpactFeedbackCount: input.feedbackSummary.highImpactCount,
     averageConfidence: averageObjectiveConfidence(input.objectives),
-    causeChart: [...causeCounts.entries()]
-      .map(([cause, count]) => ({ cause, count }))
-      .sort((left, right) => right.count - left.count || left.cause.localeCompare(right.cause)),
+    causeChart: input.feedbackSummary.causeChart,
     latestCycle: latestObjectiveCycle(input.objectives),
     myOpenTasks: currentUser
       ? input.tasks.filter((task) => task.assigneeUserId === currentUser.id && task.status !== "Done")
@@ -57,6 +47,6 @@ function latestObjectiveCycle(objectives: Objective[]) {
 interface DashboardSummaryInput {
   objectives: Objective[];
   results: Result[];
-  feedbackIssues: Feedback[];
+  feedbackSummary: FeedbackDashboardSummary;
   tasks: Task[];
 }

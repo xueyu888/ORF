@@ -13,6 +13,7 @@ import {
 import {
   commitFeedbackImportBatch,
   feedbackBackupZipFileName,
+  getFeedbackDashboardSummary,
   getFeedbackSubscriptionMode,
   preflightFeedbackImport,
   setFeedbackSubscriptionMode,
@@ -337,6 +338,17 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
         return true;
       }),
     };
+  });
+
+  app.get("/api/feedback/summary", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    return getFeedbackDashboardSummary(db, {
+      teamId: runtimeScopeStorageId(context.scope),
+    });
   });
 
   app.get("/api/feedback/exports/backup.zip", async (request, reply) => {

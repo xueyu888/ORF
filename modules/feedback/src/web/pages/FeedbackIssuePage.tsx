@@ -15,7 +15,7 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
-import type { FeedbackCommandResolution, FeedbackImpact, FeedbackPriority, FeedbackRelationType, FeedbackTransitionInput } from "../../contracts";
+import { teamFeedbackCauseOptions, type FeedbackCommandResolution, type FeedbackImpact, type FeedbackPriority, type FeedbackRelationType, type FeedbackTransitionInput } from "../../contracts";
 import { feedbackRootPath } from "../../contracts/links";
 import { feedbackImpactLabel, feedbackLifecycleLabel, feedbackPriorityLabel, feedbackRelationTypeLabel, feedbackResolutionLabel } from "../../contracts/labels";
 import type { FormEvent, MutableRefObject } from "react";
@@ -23,7 +23,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { addFeedbackRelation, feedbackMutationFailureMessage, getFeedbackSubscription, markFeedbackViewed, removeFeedbackRelation, transitionFeedback, updateFeedbackAssignee, updateFeedbackMetadata, updateFeedbackSubscription } from "../api";
 import { FeedbackBadge, FeedbackButton, FeedbackEmptyState } from "../components/controls";
-import { teamFeedbackCauseOptions } from "../model/categories";
 import {
   feedbackIssueDisplayId,
   feedbackIssueHref,

@@ -5,7 +5,7 @@ import { ChartFrame } from "../components/ChartFrame";
 import { PageScaffold } from "../components/PageScaffold";
 import { DecisionLog, FeedbackCard, MetricCard, ObjectiveCard } from "../components/SharedCards";
 import { Card } from "../components/ui";
-import { useFeedbackIssueReadModel } from "@orf/feedback-module/web";
+import { useFeedbackDashboardSummary } from "@orf/feedback-module/web";
 import {
   filterResultsForVisibleObjectives,
   filterTasksForVisibleObjectives,
@@ -23,13 +23,12 @@ export function DashboardPage() {
   const visibleObjectives = visibleObjectivesForUser(state.objectives, currentUser);
   const visibleResults = filterResultsForVisibleObjectives(state.results, visibleObjectiveIds, currentUser);
   const feedbackInvalidationKey = readModelInvalidationKey(readModelInvalidations, "feedback");
-  const feedbackReadModel = useFeedbackIssueReadModel(currentUser?.status === "active", feedbackInvalidationKey);
-  const visibleFeedback = feedbackReadModel.data.feedback;
+  const feedbackSummary = useFeedbackDashboardSummary(currentUser?.status === "active", feedbackInvalidationKey);
   const visibleTasks = filterTasksForVisibleObjectives(state.tasks, visibleObjectiveIds, currentUser);
   const visibleDecisions = currentUser?.role === "admin" ? state.decisions : state.decisions.filter((decision) => visibleObjectiveIds.has(decision.linkedObjectiveId));
   const summary = summarizeDashboardState(
     {
-      feedbackIssues: visibleFeedback,
+      feedbackSummary: feedbackSummary.data,
       objectives: visibleObjectives,
       results: visibleResults,
       tasks: visibleTasks,
@@ -46,7 +45,7 @@ export function DashboardPage() {
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard title="进行中的目标" value={`${summary.activeObjectives.length}`} delta={`${visibleObjectives.length} 个目标总数`} icon={Target} />
         <MetricCard title="有风险的指标" value={`${summary.atRiskResults.length}`} delta="来自当前指标状态" icon={AlertTriangle} />
-        <MetricCard title="待处理反馈" value={`${summary.pendingFeedback.length}`} delta={`${summary.highImpactFeedback.length} 个高影响信号`} icon={MessageSquare} />
+        <MetricCard title="待处理反馈" value={`${summary.pendingFeedbackCount}`} delta={`${summary.highImpactFeedbackCount} 个高影响信号`} icon={MessageSquare} />
         <MetricCard title="工程信心" value={`${summary.averageConfidence}%`} delta={`${visibleObjectives.length} 个目标样本`} icon={Gauge} />
       </section>
 
@@ -76,7 +75,7 @@ export function DashboardPage() {
             {summary.pendingFeedback.slice(0, 4).map((feedback) => (
               <FeedbackCard key={feedback.id} feedback={feedback} />
             ))}
-            {summary.pendingFeedback.length === 0 && <div className="rounded-md border orf-border orf-surface-muted p-3 text-sm orf-text-muted">暂无待处理反馈。</div>}
+            {summary.pendingFeedbackCount === 0 && <div className="rounded-md border orf-border orf-surface-muted p-3 text-sm orf-text-muted">暂无待处理反馈。</div>}
           </div>
         </Card>
       </section>

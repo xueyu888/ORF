@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import {
   getFeedbackAssignees,
+  getFeedbackDashboardSummary,
   getFeedbackIssueDetailReadModel,
   getFeedbackIssueReadModel,
   getFeedbackReferences,
@@ -10,19 +11,31 @@ import {
   feedbackIssueListPageQuery,
   mergeFeedbackIssueListReadModelPages,
 } from "./model/issueListPagination";
-import { emptyFeedbackIssueReadModelData, type FeedbackIssueReadModelData, type FeedbackReferenceSummary, type FeedbackWebUser } from "./types";
+import {
+  emptyFeedbackDashboardSummary,
+  emptyFeedbackIssueReadModelData,
+  type FeedbackDashboardSummary,
+  type FeedbackIssueReadModelData,
+  type FeedbackReferenceSummary,
+  type FeedbackWebUser,
+} from "./types";
 
-type FeedbackIssueReadModelHookState = {
-  data: FeedbackIssueReadModelData;
+type FeedbackReadHookState<T> = {
+  data: T;
   error: string | null;
   loading: boolean;
   reload: () => Promise<void>;
 };
 
-type FeedbackIssueReadModelLoaderState = FeedbackIssueReadModelHookState & {
-  setData: Dispatch<SetStateAction<FeedbackIssueReadModelData>>;
+type FeedbackReadLoaderState<T> = FeedbackReadHookState<T> & {
+  setData: Dispatch<SetStateAction<T>>;
   setError: Dispatch<SetStateAction<string | null>>;
 };
+
+type FeedbackIssueReadModelHookState = FeedbackReadHookState<FeedbackIssueReadModelData>;
+type FeedbackIssueReadModelLoaderState = FeedbackReadLoaderState<FeedbackIssueReadModelData>;
+
+type FeedbackDashboardSummaryHookState = FeedbackReadHookState<FeedbackDashboardSummary>;
 
 type FeedbackIssueListReadModelHookState = FeedbackIssueReadModelHookState & {
   hasMore: boolean;
@@ -39,13 +52,13 @@ type FeedbackReferenceOptionsHookState = {
 
 export function useFeedbackIssueReadModel(enabled = true, reloadKey = "", query = ""): FeedbackIssueReadModelHookState {
   const load = useCallback(() => getFeedbackIssueReadModel(query), [query]);
-  return useFeedbackIssueReadModelLoader(load, enabled, reloadKey);
+  return useFeedbackReadLoader(load, enabled, reloadKey, emptyFeedbackIssueReadModelData, "反馈读取失败");
 }
 
 export function useFeedbackIssueListReadModel(enabled = true, reloadKey = "", query = ""): FeedbackIssueListReadModelHookState {
   const firstPageQuery = useMemo(() => feedbackIssueListPageQuery(query), [query]);
   const load = useCallback(() => getFeedbackIssueReadModel(firstPageQuery), [firstPageQuery]);
-  const { data, error, loading, reload, setData, setError } = useFeedbackIssueReadModelLoader(load, enabled, reloadKey);
+  const { data, error, loading, reload, setData, setError } = useFeedbackReadLoader(load, enabled, reloadKey, emptyFeedbackIssueReadModelData, "反馈读取失败");
   const [loadingMore, setLoadingMore] = useState(false);
   const loadMoreRequestIdRef = useRef(0);
   const activePageQueryRef = useRef(firstPageQuery);
@@ -93,7 +106,12 @@ export function useFeedbackIssueListReadModel(enabled = true, reloadKey = "", qu
 
 export function useFeedbackIssueDetailReadModel(feedbackId: string, enabled = true, reloadKey = ""): FeedbackIssueReadModelHookState {
   const load = useCallback(() => getFeedbackIssueDetailReadModel(feedbackId), [feedbackId]);
-  return useFeedbackIssueReadModelLoader(load, enabled && Boolean(feedbackId.trim()), reloadKey);
+  return useFeedbackReadLoader(load, enabled && Boolean(feedbackId.trim()), reloadKey, emptyFeedbackIssueReadModelData, "反馈读取失败");
+}
+
+export function useFeedbackDashboardSummary(enabled = true, reloadKey = ""): FeedbackDashboardSummaryHookState {
+  const load = useCallback(() => getFeedbackDashboardSummary(), []);
+  return useFeedbackReadLoader(load, enabled, reloadKey, emptyFeedbackDashboardSummary, "反馈摘要读取失败");
 }
 
 export function useFeedbackAssigneeOptions(users: readonly FeedbackWebUser[], currentUser: FeedbackWebUser | null): FeedbackAssigneeOption[] {
@@ -181,12 +199,14 @@ export function useFeedbackReferenceOptions(
   return { error, loading, references, reload };
 }
 
-function useFeedbackIssueReadModelLoader(
-  load: () => Promise<FeedbackIssueReadModelData>,
+function useFeedbackReadLoader<T>(
+  load: () => Promise<T>,
   enabled: boolean,
   reloadKey: string,
-): FeedbackIssueReadModelLoaderState {
-  const [data, setData] = useState<FeedbackIssueReadModelData>(emptyFeedbackIssueReadModelData);
+  emptyData: T,
+  errorMessage: string,
+): FeedbackReadLoaderState<T> {
+  const [data, setData] = useState<T>(emptyData);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
@@ -195,7 +215,7 @@ function useFeedbackIssueReadModelLoader(
     requestIdRef.current += 1;
     const requestId = requestIdRef.current;
     if (!enabled) {
-      setData(emptyFeedbackIssueReadModelData);
+      setData(emptyData);
       setLoading(false);
       setError(null);
       return;
@@ -209,14 +229,14 @@ function useFeedbackIssueReadModelLoader(
       setData(nextData);
     } catch (loadError) {
       if (requestId !== requestIdRef.current) return;
-      setError(loadError instanceof Error ? loadError.message : "反馈读取失败");
-      setData(emptyFeedbackIssueReadModelData);
+      setError(loadError instanceof Error ? loadError.message : errorMessage);
+      setData(emptyData);
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false);
       }
     }
-  }, [enabled, load]);
+  }, [emptyData, enabled, errorMessage, load]);
 
   useEffect(() => {
     void reload();

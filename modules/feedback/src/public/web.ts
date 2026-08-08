@@ -191,7 +191,7 @@ export {
   feedbackMatchesCauseGroup,
   teamFeedbackCauseOptions,
   type TeamFeedbackCauseCategory,
-} from "../web/model/categories";
+} from "../contracts/categories";
 export {
   buildFeedbackIssueCurrentViewCsv,
   feedbackIssueCsvExportFileName,
@@ -238,6 +238,7 @@ export {
 } from "../web/model/assigneeOptions";
 export {
   useFeedbackAssigneeOptions,
+  useFeedbackDashboardSummary,
   useFeedbackIssueDetailReadModel,
   useFeedbackIssueListReadModel,
   useFeedbackIssueReadModel,
@@ -251,6 +252,8 @@ export type {
   FeedbackWebSession,
 } from "../web/runtime";
 export type {
+  FeedbackDashboardSummary,
+  FeedbackDashboardSummaryItem,
   FeedbackIssueReadModelData,
   FeedbackReferenceCardData,
   FeedbackReferenceCardQuery,

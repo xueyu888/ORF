@@ -7,6 +7,7 @@ import type {
 } from "../contracts";
 import type {
   FeedbackIssueReadModelData,
+  FeedbackDashboardSummary,
   FeedbackReferenceSummary,
   FeedbackReferenceCardData,
   FeedbackReferenceCardQuery,
@@ -110,6 +111,10 @@ export async function getFeedbackIssueReadModel(query = "") {
   const normalizedQuery = query.trim().replace(/^\?/, "");
   const suffix = normalizedQuery ? `?${normalizedQuery}` : "";
   return apiJson<FeedbackIssueReadModelData>(`/api/feedback${suffix}`);
+}
+
+export async function getFeedbackDashboardSummary() {
+  return apiJson<FeedbackDashboardSummary>("/api/feedback/summary");
 }
 
 export async function getFeedbackIssueDetailReadModel(feedbackId: string) {
