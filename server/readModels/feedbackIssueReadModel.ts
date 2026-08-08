@@ -69,10 +69,6 @@ export function mapProjectRows(projectRows: readonly ProjectRow[]): FeedbackWebP
   }));
 }
 
-export async function getFeedbackIssueReadModelData(scope: FeedbackIssueReadModelScope): Promise<FeedbackIssueReadModelData> {
-  return getFeedbackIssueReadModelDataForScope(scope);
-}
-
 export async function getFeedbackIssueListReadModelData(scope: FeedbackIssueReadModelScope): Promise<FeedbackIssueReadModelData> {
   const storageScopeId = feedbackReadModelStorageId(scope);
   const [projectRows, users] = await Promise.all([
@@ -129,7 +125,6 @@ function feedbackListUserOptions(userIds: readonly string[], users: readonly Orf
 
 async function getFeedbackIssueReadModelDataForScope(
   scope: FeedbackIssueReadModelScope,
-  options: { includeComments?: boolean } = {},
 ): Promise<FeedbackIssueReadModelData> {
   const storageScopeId = feedbackReadModelStorageId(scope);
   const [projectRows, users] = await Promise.all([
@@ -140,12 +135,10 @@ async function getFeedbackIssueReadModelDataForScope(
     teamId: storageScopeId,
     viewer: feedbackReadModelViewer(users, scope.viewerUserId),
   });
-  const [commentThreadRows, commentMessageRows, commentAttachmentRows] = options.includeComments === false
-    ? [[], [], []] as [CommentThreadRow[], CommentMessageRow[], CommentAttachmentRow[]]
-    : await getFeedbackCommentRows(
-      storageScopeId,
-      feedback.map((item) => item.id),
-    );
+  const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getFeedbackCommentRows(
+    storageScopeId,
+    feedback.map((item) => item.id),
+  );
 
   return {
     comments: await mapCommentThreadRows({
@@ -183,7 +176,7 @@ async function getFeedbackCommentSummaries(
 }
 
 export async function getFeedbackIssueTransferReadModelData(scope: Pick<FeedbackIssueReadModelScope, "scope">): Promise<FeedbackIssueReadModelData> {
-  return getFeedbackIssueReadModelData({ scope: scope.scope, viewerUserId: null });
+  return getFeedbackIssueReadModelDataForScope({ scope: scope.scope, viewerUserId: null });
 }
 
 export async function getFeedbackIssueDetailReadModelData(feedbackId: string, scope: FeedbackIssueReadModelScope): Promise<FeedbackIssueReadModelData | null> {

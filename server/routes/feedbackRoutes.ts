@@ -26,7 +26,6 @@ import { env } from "../env";
 import {
   getFeedbackIssueDetailReadModelData,
   getFeedbackIssueListReadModelData,
-  getFeedbackIssueReadModelData,
 } from "../readModels/feedbackIssueReadModel";
 import {
   addFeedbackRelation,
