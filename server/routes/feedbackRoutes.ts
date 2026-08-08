@@ -1,5 +1,4 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   feedbackReferenceCardDataFromReadModel,
@@ -11,14 +10,9 @@ import {
   feedbackTransitionInputSchema,
 } from "@orf/feedback-module/contracts";
 import {
-  commitFeedbackImportBatch,
   feedbackBackupZipFileName,
-  preflightFeedbackImport,
-  type FeedbackImportActor,
 } from "@orf/feedback-module/server";
 import { requireFeedbackInScope, requireUserScopeContext } from "../auth/accessPolicy";
-import { db } from "../db/client";
-import { projects } from "../db/schema";
 import { env } from "../env";
 import {
   getFeedbackDashboardSummaryReadModelData,
@@ -49,6 +43,11 @@ import {
   buildFeedbackBackupZipForScope,
   FeedbackBackupAttachmentUnavailableError,
 } from "../feedback/feedbackBackupExport";
+import {
+  commitFeedbackImportForScope,
+  preflightFeedbackImportForScope,
+  type FeedbackTransferActor,
+} from "../feedback/feedbackTransferAdapter";
 
 const feedbackParamsSchema = z.object({ feedbackId: z.string().min(1) });
 const feedbackRelationParamsSchema = z.object({ feedbackId: z.string().min(1), relationId: z.string().min(1) });
@@ -152,7 +151,7 @@ function commandActor(context: NonNullable<Awaited<ReturnType<typeof requireUser
   };
 }
 
-function feedbackImportActor(context: NonNullable<Awaited<ReturnType<typeof requireUserScopeContext>>>): FeedbackImportActor {
+function feedbackImportActor(context: NonNullable<Awaited<ReturnType<typeof requireUserScopeContext>>>): FeedbackTransferActor {
   return {
     id: context.user.id,
     role: context.user.role,
@@ -390,11 +389,6 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: "Feedback import file is required" });
     }
 
-    const teamId = runtimeScopeStorageId(context.scope);
-    const [assigneeOptions, projectRows] = await Promise.all([
-      listFeedbackAssigneeOptions(context.scope),
-      db.select({ id: projects.id, name: projects.name }).from(projects).where(eq(projects.teamId, teamId)),
-    ]);
     let referenceMappings: ReturnType<typeof parseFeedbackImportReferenceMappings>;
     try {
       referenceMappings = parseFeedbackImportReferenceMappings(file.fields.referenceMappings);
@@ -402,17 +396,14 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: "Feedback import reference mappings are invalid" });
     }
 
-    const preflight = await preflightFeedbackImport(db, {
+    return preflightFeedbackImportForScope({
       actor,
       body: file.body,
       fileName: file.fileName,
-      knownAssigneeUserIds: new Set(assigneeOptions.map((item) => item.id)),
-      knownProjectIds: new Set(projectRows.map((item) => item.id)),
       mimeType: file.mimeType,
       referenceMappings,
+      scope: context.scope,
     });
-
-    return { preflight, referenceOptions: { assignees: assigneeOptions, projects: projectRows } };
   });
 
   app.post("/api/feedback/imports/:batchId/commit", async (request, reply) => {
@@ -426,7 +417,7 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
     }
 
     const params = feedbackImportParamsSchema.parse(request.params);
-    const result = await commitFeedbackImportBatch(db, { actor, batchId: params.batchId });
+    const result = await commitFeedbackImportForScope({ actor, batchId: params.batchId });
     if (result.status === "notFound") {
       return reply.code(404).send({ error: "Feedback import batch not found" });
     }
