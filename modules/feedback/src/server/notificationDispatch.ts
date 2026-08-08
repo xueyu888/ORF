@@ -16,6 +16,18 @@ export type FeedbackNotificationRecipientReason =
   | "participant"
   | "previous_assignee";
 
+const feedbackNotificationRecipientReasonValues = [
+  "action_required",
+  "administrator",
+  "assignee",
+  "creator",
+  "follower",
+  "participant",
+  "previous_assignee",
+] satisfies FeedbackNotificationRecipientReason[];
+
+const feedbackNotificationRecipientReasonSet = new Set<string>(feedbackNotificationRecipientReasonValues);
+
 export type FeedbackNotificationDeliveryClass = "direct" | "mandatory" | "ordinary";
 export type FeedbackNotificationAttentionLevel = "action_required" | "normal";
 
@@ -41,6 +53,7 @@ export type FeedbackNotificationPort = (
   context: {
     readonly dispatchId: string;
     readonly idempotencyKey: string;
+    readonly recipients: readonly FeedbackNotificationDispatchRecipient[];
   },
 ) => Promise<FeedbackNotificationPortResult>;
 
@@ -62,6 +75,10 @@ const deliveryClassRank: Record<FeedbackNotificationDeliveryClass, number> = {
 
 function normalizeReasons(reasons: readonly FeedbackNotificationRecipientReason[]) {
   return Array.from(new Set(reasons)).sort();
+}
+
+function normalizeStoredReasons(reasons: readonly string[]) {
+  return reasons.filter((reason): reason is FeedbackNotificationRecipientReason => feedbackNotificationRecipientReasonSet.has(reason));
 }
 
 function normalizedUserId(value: string | null | undefined) {
@@ -350,16 +367,23 @@ export async function publishFeedbackNotificationDispatch(
 
   const recipientRows = await database
     .select({
+      attentionLevel: feedbackEventDispatchRecipients.attentionLevel,
+      deliveryClass: feedbackEventDispatchRecipients.deliveryClass,
       muted: feedbackEventDispatchRecipients.muted,
+      reasons: feedbackEventDispatchRecipients.reasons,
       recipientUserId: feedbackEventDispatchRecipients.recipientUserId,
     })
     .from(feedbackEventDispatchRecipients)
     .where(eq(feedbackEventDispatchRecipients.dispatchId, dispatch.id));
-  const recipientUserIds = Array.from(new Set(
-    recipientRows
-      .filter((recipient) => !recipient.muted)
-      .map((recipient) => recipient.recipientUserId),
-  ));
+  const recipients = mergeFeedbackNotificationDispatchRecipients(recipientRows.map((recipient) => ({
+    attentionLevel: recipient.attentionLevel,
+    deliveryClass: recipient.deliveryClass,
+    muted: recipient.muted,
+    reasons: normalizeStoredReasons(recipient.reasons),
+    userId: recipient.recipientUserId,
+  })));
+  const activeRecipients = recipients.filter((recipient) => !recipient.muted);
+  const recipientUserIds = activeRecipients.map((recipient) => recipient.userId);
 
   if (recipientUserIds.length === 0) {
     await markDispatchPublished(database, dispatch, null);
@@ -373,6 +397,7 @@ export async function publishFeedbackNotificationDispatch(
     }, {
       dispatchId: dispatch.id,
       idempotencyKey: dispatch.idempotencyKey,
+      recipients: activeRecipients,
     });
     await markDispatchPublished(database, dispatch, result.notificationEventId ?? null);
     return { status: "published" as const, notificationEventId: result.notificationEventId ?? null };

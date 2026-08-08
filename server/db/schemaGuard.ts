@@ -316,6 +316,7 @@ export function validateNotificationConversationSchema(snapshot: { columns: Runt
     "target_type",
     "target_id",
     "target_href",
+    "source_event_key",
     "created_at",
     "metadata",
   ]) {
@@ -325,7 +326,7 @@ export function validateNotificationConversationSchema(snapshot: { columns: Runt
   }
 
   const receiptColumns = columnsByTable.get("notification_receipts") ?? new Map();
-  for (const columnName of ["event_id", "recipient_user_id", "delivered_at", "read_at"]) {
+  for (const columnName of ["event_id", "recipient_user_id", "delivered_at", "read_at", "recipient_reasons", "delivery_class", "attention_level"]) {
     if (!receiptColumns.has(columnName)) {
       errors.push(`notification_receipts.${columnName} is missing.`);
     }

@@ -15,6 +15,8 @@ import {
 export type NotificationDeliveryChannel = "chat";
 
 export type NotificationDeliveryStatus = "pending" | "delivered" | "failed";
+export type NotificationRecipientDeliveryClass = "direct" | "mandatory" | "ordinary";
+export type NotificationRecipientAttentionLevel = "action_required" | "normal";
 
 export type NotificationContentInput = {
   body: string;
@@ -44,8 +46,18 @@ export type NotificationMetadataInput = NotificationContentInput & {
   targetType: NotificationTargetType;
 };
 
+export type NotificationRecipientInput = {
+  attentionLevel?: NotificationRecipientAttentionLevel;
+  deliveryClass?: NotificationRecipientDeliveryClass;
+  reasons?: readonly string[];
+  userId: string;
+};
+
 export type NotificationRecipientFact = {
+  attentionLevel: NotificationRecipientAttentionLevel;
+  deliveryClass: NotificationRecipientDeliveryClass;
   readAt: string | null;
+  reasons: string[];
   userId: string;
 };
 
@@ -65,6 +77,47 @@ const commentNotificationImageMetadataKey = "commentImageAttachmentIds";
 
 function cleanUserIds(userIds: readonly string[]) {
   return Array.from(new Set(userIds.map((id) => id.trim()).filter(Boolean)));
+}
+
+const recipientDeliveryClassRank: Record<NotificationRecipientDeliveryClass, number> = {
+  ordinary: 0,
+  mandatory: 1,
+  direct: 2,
+};
+
+function cleanRecipientReasons(reasons: readonly string[] | undefined) {
+  return Array.from(new Set((reasons ?? []).map((reason) => reason.trim()).filter(Boolean))).sort();
+}
+
+function addNotificationRecipient(
+  recipients: Map<string, Omit<NotificationRecipientFact, "readAt">>,
+  input: NotificationRecipientInput,
+) {
+  const userId = input.userId.trim();
+  if (!userId) return;
+
+  const next = {
+    attentionLevel: input.attentionLevel ?? "normal",
+    deliveryClass: input.deliveryClass ?? "ordinary",
+    reasons: cleanRecipientReasons(input.reasons),
+    userId,
+  } satisfies Omit<NotificationRecipientFact, "readAt">;
+  const existing = recipients.get(userId);
+  if (!existing) {
+    recipients.set(userId, next);
+    return;
+  }
+
+  recipients.set(userId, {
+    attentionLevel: existing.attentionLevel === "action_required" || next.attentionLevel === "action_required"
+      ? "action_required"
+      : "normal",
+    deliveryClass: recipientDeliveryClassRank[next.deliveryClass] > recipientDeliveryClassRank[existing.deliveryClass]
+      ? next.deliveryClass
+      : existing.deliveryClass,
+    reasons: cleanRecipientReasons([...existing.reasons, ...next.reasons]),
+    userId,
+  });
 }
 
 function unreachableNotificationAction(_kind: never): NotificationAction {
@@ -141,15 +194,25 @@ export function commentNotificationImageAttachmentIdsFromMetadata(metadata?: Rec
 export function resolveNotificationRecipients(input: {
   actorUserId?: string | null;
   createdAt: string;
+  recipientFacts?: readonly NotificationRecipientInput[];
   recipientUserIds: readonly string[];
   stream: NotificationStream;
 }): NotificationRecipientFact[] {
   const actorUserId = input.actorUserId?.trim() || null;
-  return cleanUserIds(input.recipientUserIds)
-    .filter((userId) => input.stream === "teamAnnouncement" || userId !== actorUserId)
-    .map((userId) => ({
-      readAt: input.stream === "teamAnnouncement" && userId === actorUserId ? input.createdAt : null,
-      userId,
+  const recipients = new Map<string, Omit<NotificationRecipientFact, "readAt">>();
+  for (const userId of cleanUserIds(input.recipientUserIds)) {
+    addNotificationRecipient(recipients, { userId });
+  }
+  for (const recipient of input.recipientFacts ?? []) {
+    addNotificationRecipient(recipients, recipient);
+  }
+
+  return [...recipients.values()]
+    .filter((recipient) => input.stream === "teamAnnouncement" || recipient.userId !== actorUserId)
+    .sort((left, right) => left.userId.localeCompare(right.userId))
+    .map((recipient) => ({
+      ...recipient,
+      readAt: input.stream === "teamAnnouncement" && recipient.userId === actorUserId ? input.createdAt : null,
     }));
 }
 

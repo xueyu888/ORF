@@ -16,6 +16,7 @@ import {
   type NotificationDeliveryStatus,
   type NotificationMetadataInput,
   type NotificationRecipientFact,
+  type NotificationRecipientInput,
 } from "../notifications/notificationEventModel";
 import {
   E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
@@ -36,9 +37,11 @@ export type NotificationEventInput = {
   body: string;
   kind: NotificationKind;
   metadata?: Record<string, string>;
+  recipientFacts?: readonly NotificationRecipientInput[];
   recipientUserIds: string[];
   replyTargetId?: string | null;
   replyTargetType?: CommentTargetType | null;
+  sourceEventKey?: string | null;
   stream: NotificationStream;
   targetHref: string;
   targetId: string;
@@ -116,6 +119,29 @@ const DELIVERY_RETRY_MAX_MS = 30 * 60_000;
 function iso(value: Date | string | null | undefined) {
   if (!value) return null;
   return value instanceof Date ? value.toISOString() : value;
+}
+
+function normalizeSourceEventKey(value: string | null | undefined) {
+  return value?.trim() || null;
+}
+
+function isPgUniqueViolation(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === "23505");
+}
+
+async function findNotificationEventIdBySourceEventKey(input: { sourceEventKey: string; teamId: string }) {
+  const { rows } = await pool.query<{ id: string }>(
+    `
+      SELECT id
+      FROM notification_events
+      WHERE team_id = $1
+        AND source_event_key = $2
+      ORDER BY created_at ASC, id ASC
+      LIMIT 1
+    `,
+    [input.teamId, input.sourceEventKey],
+  );
+  return rows[0]?.id ?? null;
 }
 
 function metadataInputFromDelivery(row: NotificationDeliveryEventRow): NotificationMetadataInput {
@@ -483,9 +509,9 @@ async function insertNotificationEvent(input: NotificationEventInput, eventId: s
         INSERT INTO notification_events (
           id, team_id, stream, actor_user_id, actor_name, kind, title, body,
           target_type, target_id, target_href, reply_target_type, reply_target_id,
-          created_at, metadata
+          source_event_key, created_at, metadata
         )
-        VALUES ($1, $2, $3::notification_stream, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb)
+        VALUES ($1, $2, $3::notification_stream, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb)
       `,
       [
         eventId,
@@ -501,6 +527,7 @@ async function insertNotificationEvent(input: NotificationEventInput, eventId: s
         input.targetHref,
         input.replyTargetType ?? null,
         input.replyTargetId ?? null,
+        normalizeSourceEventKey(input.sourceEventKey),
         createdAt,
         JSON.stringify(input.metadata ?? {}),
       ],
@@ -511,20 +538,30 @@ async function insertNotificationEvent(input: NotificationEventInput, eventId: s
         `
           WITH input_recipients AS (
             SELECT *
-            FROM unnest($3::uuid[], $4::timestamptz[]) AS item(user_id, read_at)
+            FROM unnest($3::uuid[], $4::timestamptz[], $5::text[], $6::text[], $7::text[]) AS item(user_id, read_at, recipient_reasons, delivery_class, attention_level)
           )
-          INSERT INTO notification_receipts (event_id, recipient_user_id, read_at, delivered_at)
-          SELECT $1, u.id, input_recipients.read_at, $5
+          INSERT INTO notification_receipts (
+            event_id, recipient_user_id, read_at, delivered_at,
+            recipient_reasons, delivery_class, attention_level
+          )
+          SELECT
+            $1,
+            u.id,
+            input_recipients.read_at,
+            $8,
+            input_recipients.recipient_reasons::jsonb,
+            input_recipients.delivery_class,
+            input_recipients.attention_level
           FROM input_recipients
           INNER JOIN users u ON u.id = input_recipients.user_id
           INNER JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = $2
           WHERE COALESCE(u.status, 'active') = 'active'
             AND ${e2eNotificationRecipientVisibilitySql({
-              actorNamePatternParam: "$7",
-              actorNameSql: "$6::text",
+              actorNamePatternParam: "$10",
+              actorNameSql: "$9::text",
               recipientEmailSql: "u.email",
               recipientNameSql: "u.name",
-              viewerEmailsParam: "$8",
+              viewerEmailsParam: "$11",
             })}
           ON CONFLICT (event_id, recipient_user_id) DO NOTHING
           RETURNING recipient_user_id::text, read_at, delivered_at
@@ -534,6 +571,9 @@ async function insertNotificationEvent(input: NotificationEventInput, eventId: s
           input.teamId,
           recipients.map((recipient) => recipient.userId),
           recipients.map((recipient) => recipient.readAt),
+          recipients.map((recipient) => JSON.stringify(recipient.reasons)),
+          recipients.map((recipient) => recipient.deliveryClass),
+          recipients.map((recipient) => recipient.attentionLevel),
           createdAt,
           actorIsolationName,
           E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
@@ -624,11 +664,29 @@ async function listNotificationsForEvent(eventId: string): Promise<AppNotificati
   return rows.map(toNotification);
 }
 
+async function listExistingNotificationsForSourceEvent(eventId: string): Promise<AppNotification[]> {
+  const notifications = await listNotificationsForEvent(eventId);
+  await flushNotificationChatDeliveriesForEvent(eventId).catch(() => undefined);
+  return notifications;
+}
+
 export async function createNotificationEvent(input: NotificationEventInput): Promise<AppNotification[]> {
   const createdAt = nowIso();
+  const sourceEventKey = normalizeSourceEventKey(input.sourceEventKey);
+  if (sourceEventKey) {
+    const existingEventId = await findNotificationEventIdBySourceEventKey({
+      sourceEventKey,
+      teamId: input.teamId,
+    });
+    if (existingEventId) {
+      return listExistingNotificationsForSourceEvent(existingEventId);
+    }
+  }
+
   const recipients = resolveNotificationRecipients({
     actorUserId: input.actorUserId,
     createdAt,
+    recipientFacts: input.recipientFacts,
     recipientUserIds: input.recipientUserIds,
     stream: input.stream,
   });
@@ -637,7 +695,20 @@ export async function createNotificationEvent(input: NotificationEventInput): Pr
   }
 
   const eventId = makeId("nevt");
-  await insertNotificationEvent(input, eventId, createdAt, recipients);
+  try {
+    await insertNotificationEvent({ ...input, sourceEventKey }, eventId, createdAt, recipients);
+  } catch (error) {
+    if (sourceEventKey && isPgUniqueViolation(error)) {
+      const existingEventId = await findNotificationEventIdBySourceEventKey({
+        sourceEventKey,
+        teamId: input.teamId,
+      });
+      if (existingEventId) {
+        return listExistingNotificationsForSourceEvent(existingEventId);
+      }
+    }
+    throw error;
+  }
   const notifications = await listNotificationsForEvent(eventId);
   for (const notification of notifications) {
     publishRealtimeNotification(input.teamId, notification);

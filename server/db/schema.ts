@@ -577,11 +577,15 @@ export const notificationEvents = pgTable(
     targetHref: text("target_href").notNull(),
     replyTargetType: commentTargetTypeEnum("reply_target_type").$type<CommentTargetType>(),
     replyTargetId: text("reply_target_id"),
+    sourceEventKey: text("source_event_key"),
     createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
     metadata: jsonb("metadata").$type<Record<string, string>>().notNull().default({}),
   },
   (table) => ({
     streamCreatedAt: index("notification_events_stream_created_at_idx").on(table.teamId, table.stream, table.createdAt),
+    teamSourceEventKeyUnique: uniqueIndex("notification_events_team_source_event_key_unique")
+      .on(table.teamId, table.sourceEventKey)
+      .where(sql`source_event_key IS NOT NULL`),
     target: index("notification_events_target_idx").on(table.teamId, table.targetType, table.targetId),
   }),
 );
@@ -597,8 +601,13 @@ export const notificationReceipts = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     readAt: timestamp("read_at", { mode: "string", withTimezone: true }),
     deliveredAt: timestamp("delivered_at", { mode: "string", withTimezone: true }).notNull(),
+    recipientReasons: jsonb("recipient_reasons").$type<string[]>().notNull().default([]),
+    deliveryClass: text("delivery_class").$type<"direct" | "mandatory" | "ordinary">().notNull().default("ordinary"),
+    attentionLevel: text("attention_level").$type<"action_required" | "normal">().notNull().default("normal"),
   },
   (table) => ({
+    attentionLevelCheck: check("notification_receipts_attention_level_check", sql`${table.attentionLevel} IN ('normal', 'action_required')`),
+    deliveryClassCheck: check("notification_receipts_delivery_class_check", sql`${table.deliveryClass} IN ('mandatory', 'direct', 'ordinary')`),
     pk: primaryKey({ columns: [table.eventId, table.recipientUserId] }),
     recipientDeliveredAt: index("notification_receipts_recipient_delivered_at_idx").on(table.recipientUserId, table.deliveredAt),
     recipientUnread: index("notification_receipts_recipient_unread_idx").on(table.recipientUserId, table.readAt),

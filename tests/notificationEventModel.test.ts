@@ -34,8 +34,8 @@ test("personal notifications dedupe recipients and exclude the actor", () => {
   });
 
   assert.deepEqual(recipients, [
-    { readAt: null, userId: "user-b" },
-    { readAt: null, userId: "user-c" },
+    { attentionLevel: "normal", deliveryClass: "ordinary", readAt: null, reasons: [], userId: "user-b" },
+    { attentionLevel: "normal", deliveryClass: "ordinary", readAt: null, reasons: [], userId: "user-c" },
   ]);
 });
 
@@ -48,8 +48,46 @@ test("team announcements keep the actor receipt but mark it read", () => {
   });
 
   assert.deepEqual(recipients, [
-    { readAt: "2026-06-19T10:00:00.000Z", userId: "user-a" },
-    { readAt: null, userId: "user-b" },
+    { attentionLevel: "normal", deliveryClass: "ordinary", readAt: "2026-06-19T10:00:00.000Z", reasons: [], userId: "user-a" },
+    { attentionLevel: "normal", deliveryClass: "ordinary", readAt: null, reasons: [], userId: "user-b" },
+  ]);
+});
+
+test("notification recipient facts merge reasons and strongest delivery semantics", () => {
+  const recipients = resolveNotificationRecipients({
+    actorUserId: "user-a",
+    createdAt: "2026-06-19T10:00:00.000Z",
+    recipientFacts: [
+      { deliveryClass: "ordinary", reasons: ["participant"], userId: "user-b" },
+      { attentionLevel: "action_required", deliveryClass: "direct", reasons: ["action_required"], userId: "user-b" },
+      { deliveryClass: "mandatory", reasons: ["administrator"], userId: "user-c" },
+    ],
+    recipientUserIds: ["user-b", "user-d"],
+    stream: "personalNotification",
+  });
+
+  assert.deepEqual(recipients, [
+    {
+      attentionLevel: "action_required",
+      deliveryClass: "direct",
+      readAt: null,
+      reasons: ["action_required", "participant"],
+      userId: "user-b",
+    },
+    {
+      attentionLevel: "normal",
+      deliveryClass: "mandatory",
+      readAt: null,
+      reasons: ["administrator"],
+      userId: "user-c",
+    },
+    {
+      attentionLevel: "normal",
+      deliveryClass: "ordinary",
+      readAt: null,
+      reasons: [],
+      userId: "user-d",
+    },
   ]);
 });
 
