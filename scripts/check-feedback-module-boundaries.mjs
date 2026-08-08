@@ -160,8 +160,8 @@ function checkSpecifier(relativePath, specifier) {
       errors.push(`${relativePath} imports unsupported feedback module subpath ${specifier}.`);
       return;
     }
-    if (specifier === "@orf/feedback-module/server" && relativePath.startsWith("server/routes/")) {
-      errors.push(`${relativePath} imports @orf/feedback-module/server from an HTTP route; use a server/feedback or server/readModels adapter boundary.`);
+    if (specifier === "@orf/feedback-module/server" && !canImportFeedbackServer(relativePath)) {
+      errors.push(`${relativePath} imports @orf/feedback-module/server outside the composition root or feedback adapter boundaries.`);
       return;
     }
     if (specifier === "@orf/feedback-module/testing" && !canImportFeedbackTesting(relativePath)) {
@@ -187,6 +187,12 @@ function checkSpecifier(relativePath, specifier) {
 
 function canImportFeedbackTesting(relativePath) {
   return relativePath.startsWith("tests/") || relativePath.startsWith("testd/");
+}
+
+function canImportFeedbackServer(relativePath) {
+  return relativePath === "server/app.ts" ||
+    relativePath.startsWith("server/feedback/") ||
+    relativePath === "server/readModels/feedbackIssueReadModel.ts";
 }
 
 function moduleSpecifiers(source) {
