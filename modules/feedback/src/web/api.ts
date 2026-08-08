@@ -9,6 +9,7 @@ import type {
   FeedbackIssueReadModelData,
   FeedbackSubscription,
   FeedbackWebIssue,
+  FeedbackWebProject,
   FeedbackWebProjectChatChannel,
   FeedbackWebUserPreferences,
   FeedbackWebUserSummary,
@@ -60,6 +61,12 @@ export type FeedbackImportPreflight = {
   errors: Array<{ field?: string; message: string; row?: number }>;
   fieldMappings?: Array<{ field: string; label: string; required: boolean; sourceColumn: string | null }>;
   fileName: string;
+  referenceIssues?: Array<{
+    field: "assignee_user_id" | "project_id";
+    kind: "assignee" | "project";
+    rows: number[];
+    sourceValue: string;
+  }>;
   sourceKind: "csv" | "zip";
   summary: {
     attachmentBytes: number;
@@ -83,6 +90,16 @@ export type FeedbackImportCommitResult = {
   createdFeedbackIds: string[];
   report: { content: string; fileName: string; mimeType: string };
   skippedRecords: number;
+};
+
+export type FeedbackImportReferenceMappings = {
+  assigneeUserIds?: Record<string, string | null>;
+  projectIds?: Record<string, string | null>;
+};
+
+export type FeedbackImportReferenceOptions = {
+  assignees: FeedbackWebUserSummary[];
+  projects: FeedbackWebProject[];
 };
 
 export async function getFeedbackIssueReadModel() {
@@ -193,10 +210,13 @@ export async function saveUserPreferences(input: {
   return response.data;
 }
 
-export async function preflightFeedbackImport(file: File) {
+export async function preflightFeedbackImport(file: File, referenceMappings?: FeedbackImportReferenceMappings) {
   const formData = new FormData();
   formData.set("file", file);
-  return apiJson<{ preflight: FeedbackImportPreflight }>("/api/feedback/imports/preflight", {
+  if (referenceMappings) {
+    formData.set("referenceMappings", JSON.stringify(referenceMappings));
+  }
+  return apiJson<{ preflight: FeedbackImportPreflight; referenceOptions: FeedbackImportReferenceOptions }>("/api/feedback/imports/preflight", {
     method: "POST",
     body: formData,
   });

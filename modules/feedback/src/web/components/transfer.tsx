@@ -1,7 +1,13 @@
 import { ChevronDown, DatabaseBackup, FileDown, FileUp, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { commitFeedbackImport, preflightFeedbackImport, type FeedbackImportPreflight } from "../api";
+import {
+  commitFeedbackImport,
+  preflightFeedbackImport,
+  type FeedbackImportPreflight,
+  type FeedbackImportReferenceMappings,
+  type FeedbackImportReferenceOptions,
+} from "../api";
 import { downloadTextFile } from "../transfer/download";
 import { FeedbackButton } from "./controls";
 
@@ -96,6 +102,8 @@ function FeedbackImportDialog({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preflight, setPreflight] = useState<FeedbackImportPreflight | null>(null);
+  const [referenceMappings, setReferenceMappings] = useState<FeedbackImportReferenceMappings>({});
+  const [referenceOptions, setReferenceOptions] = useState<FeedbackImportReferenceOptions>({ assignees: [], projects: [] });
   const [loading, setLoading] = useState(false);
   const [committing, setCommitting] = useState(false);
   const canCommit = Boolean(preflight?.commitAvailable);
@@ -105,8 +113,9 @@ function FeedbackImportDialog({
     setLoading(true);
     setPreflight(null);
     try {
-      const response = await preflightFeedbackImport(file);
+      const response = await preflightFeedbackImport(file, referenceMappings);
       setPreflight(response.preflight);
+      setReferenceOptions(response.referenceOptions);
       if (response.preflight.errors.length > 0) {
         notify("导入预检发现错误");
       } else if (!response.preflight.commitAvailable) {
@@ -157,6 +166,7 @@ function FeedbackImportDialog({
               const selected = event.target.files?.[0] ?? null;
               setFile(selected);
               setPreflight(null);
+              setReferenceMappings({});
             }}
           />
           <div>
@@ -169,7 +179,14 @@ function FeedbackImportDialog({
           </FeedbackButton>
         </div>
 
-        {preflight && <FeedbackImportPreflightView preflight={preflight} />}
+        {preflight && (
+          <FeedbackImportPreflightView
+            preflight={preflight}
+            referenceMappings={referenceMappings}
+            referenceOptions={referenceOptions}
+            onReferenceMappingsChange={setReferenceMappings}
+          />
+        )}
 
         <footer>
           <FeedbackButton variant="secondary" onClick={runPreflight} disabled={!file || loading} loading={loading}>
@@ -192,7 +209,17 @@ function feedbackDialogPortalTarget() {
   return document.querySelector<HTMLElement>(".orf-app-shell") ?? document.body;
 }
 
-function FeedbackImportPreflightView({ preflight }: { preflight: FeedbackImportPreflight }) {
+function FeedbackImportPreflightView({
+  onReferenceMappingsChange,
+  preflight,
+  referenceMappings,
+  referenceOptions,
+}: {
+  onReferenceMappingsChange: (mappings: FeedbackImportReferenceMappings) => void;
+  preflight: FeedbackImportPreflight;
+  referenceMappings: FeedbackImportReferenceMappings;
+  referenceOptions: FeedbackImportReferenceOptions;
+}) {
   return (
     <div className="feedback-import-preflight">
       <div className="feedback-import-summary">
@@ -213,6 +240,14 @@ function FeedbackImportPreflightView({ preflight }: { preflight: FeedbackImportP
           下载预检报告
         </FeedbackButton>
       </div>
+      {preflight.referenceIssues && preflight.referenceIssues.length > 0 && (
+        <FeedbackImportReferenceMappingsView
+          mappings={referenceMappings}
+          options={referenceOptions}
+          issues={preflight.referenceIssues}
+          onChange={onReferenceMappingsChange}
+        />
+      )}
       {preflight.fieldMappings && preflight.fieldMappings.length > 0 && (
         <FeedbackImportFieldMappings mappings={preflight.fieldMappings} />
       )}
@@ -263,6 +298,59 @@ function FeedbackImportUpdateDiffs({
   );
 }
 
+function FeedbackImportReferenceMappingsView({
+  issues,
+  mappings,
+  onChange,
+  options,
+}: {
+  issues: NonNullable<FeedbackImportPreflight["referenceIssues"]>;
+  mappings: FeedbackImportReferenceMappings;
+  onChange: (mappings: FeedbackImportReferenceMappings) => void;
+  options: FeedbackImportReferenceOptions;
+}) {
+  const changeMapping = (issue: NonNullable<FeedbackImportPreflight["referenceIssues"]>[number], value: string) => {
+    const groupKey = issue.kind === "assignee" ? "assigneeUserIds" : "projectIds";
+    const nextGroup = { ...(mappings[groupKey] ?? {}) };
+    if (value === "__pending__") {
+      delete nextGroup[issue.sourceValue];
+    } else {
+      nextGroup[issue.sourceValue] = value === "__clear__" ? null : value;
+    }
+    onChange({ ...mappings, [groupKey]: nextGroup });
+  };
+
+  return (
+    <div className="feedback-import-reference-mappings">
+      <strong>引用映射</strong>
+      {issues.map((issue) => {
+        const group = issue.kind === "assignee" ? mappings.assigneeUserIds : mappings.projectIds;
+        const currentValue = Object.prototype.hasOwnProperty.call(group ?? {}, issue.sourceValue)
+          ? group?.[issue.sourceValue] ?? "__clear__"
+          : "__pending__";
+        const optionItems = issue.kind === "assignee"
+          ? options.assignees.map((item) => ({ id: item.id, name: item.name }))
+          : options.projects.map((item) => ({ id: item.id, name: item.name }));
+        return (
+          <label key={`${issue.kind}:${issue.sourceValue}`}>
+            <span>
+              <b>{issue.kind === "assignee" ? "处理人" : "项目"}</b>
+              <em>{issue.sourceValue} · 第 {issue.rows.join("、")} 行</em>
+            </span>
+            <select value={currentValue} onChange={(event) => changeMapping(issue, event.target.value)}>
+              <option value="__pending__">选择映射或置空</option>
+              <option value="__clear__">置空</option>
+              {optionItems.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 function FeedbackImportFieldMappings({
   mappings,
 }: {
@@ -302,6 +390,10 @@ function buildFeedbackImportPreflightReport(preflight: FeedbackImportPreflight) 
     "字段映射",
     ...(preflight.fieldMappings ?? []).map((item) => `${item.label}: ${item.sourceColumn ?? "未匹配"}`),
     ...((preflight.fieldMappings?.length ?? 0) === 0 ? ["无"] : []),
+    "",
+    "引用映射",
+    ...(preflight.referenceIssues ?? []).map((item) => `${item.kind === "assignee" ? "处理人" : "项目"} ${item.sourceValue}: 第 ${item.rows.join("、")} 行`),
+    ...((preflight.referenceIssues?.length ?? 0) === 0 ? ["无"] : []),
     "",
     "摘要",
     `总记录: ${preflight.summary.totalRecords}`,

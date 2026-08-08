@@ -83,6 +83,45 @@ test("feedback CSV import preflight previews update diffs without enabling overw
   assert.deepEqual(preflight.updateDiffs?.[0]?.fields.map((item) => item.field), ["title", "cause_categories"]);
 });
 
+test("feedback CSV import preflight requires explicit project mapping before commit", async () => {
+  const first = fakeImportDatabase();
+  const csv = [
+    "export_version,feedback_id,title,description,impact,cause_categories,project_id",
+    "orf.feedback.current_view.v1,legacy-project-1,标题一,正文一,high,技术问题,legacy-project",
+  ].join("\n");
+
+  const unresolved = await preflightFeedbackImport(first.database, {
+    actor: importActor(),
+    body: Buffer.from(csv, "utf8"),
+    fileName: "feedback.csv",
+    knownAssigneeUserIds: new Set(),
+    knownProjectIds: new Set(["project-1"]),
+    mimeType: "text/csv",
+  });
+
+  assert.equal(unresolved.commitAvailable, false);
+  assert.equal(unresolved.errors.length, 0);
+  assert.equal(unresolved.referenceIssues?.[0]?.kind, "project");
+  assert.equal(unresolved.referenceIssues?.[0]?.sourceValue, "legacy-project");
+  assert.equal(first.inserted[0]?.status, "uploaded");
+
+  const second = fakeImportDatabase();
+  const mapped = await preflightFeedbackImport(second.database, {
+    actor: importActor(),
+    body: Buffer.from(csv, "utf8"),
+    fileName: "feedback.csv",
+    knownAssigneeUserIds: new Set(),
+    knownProjectIds: new Set(["project-1"]),
+    mimeType: "text/csv",
+    referenceMappings: { projectIds: { "legacy-project": null } },
+  });
+
+  assert.equal(mapped.commitAvailable, true);
+  assert.equal(mapped.referenceIssues?.length ?? 0, 0);
+  assert.equal(second.inserted[0]?.status, "validated");
+  assert.equal((second.inserted[0]?.summary as { records: Array<{ projectId: string | null }> }).records[0]?.projectId, null);
+});
+
 function fakeImportDatabase(input: {
   categoryRows?: Array<{ category: string; feedbackId: string; sortOrder: number }>;
   feedbackRows?: Array<Record<string, unknown>>;

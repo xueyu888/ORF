@@ -219,9 +219,15 @@ async function readFeedbackImportUpload(request: FastifyRequest) {
     return null;
   }
 
+  let file: { body: Buffer; fileName: string; mimeType: string } | null = null;
+  const fields: Record<string, string> = {};
   for await (const part of request.parts({ limits: { fileSize: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES } })) {
+    if (part.type === "field" && typeof part.value === "string") {
+      fields[part.fieldname] = part.value;
+      continue;
+    }
     if (part.type === "file" && part.fieldname === "file") {
-      return {
+      file = {
         body: await part.toBuffer(),
         fileName: part.filename || "feedback-import.csv",
         mimeType: part.mimetype,
@@ -229,7 +235,33 @@ async function readFeedbackImportUpload(request: FastifyRequest) {
     }
   }
 
-  return null;
+  return file ? { ...file, fields } : null;
+}
+
+function parseFeedbackImportReferenceMappings(value: string | undefined) {
+  if (!value) return undefined;
+  const parsed = JSON.parse(value) as {
+    assigneeUserIds?: Record<string, string | null>;
+    projectIds?: Record<string, string | null>;
+  };
+  return {
+    assigneeUserIds: importReferenceMappingRecord(parsed.assigneeUserIds),
+    projectIds: importReferenceMappingRecord(parsed.projectIds),
+  };
+}
+
+function importReferenceMappingRecord(value: unknown) {
+  if (!value || typeof value !== "object") return undefined;
+  const result: Record<string, string | null> = {};
+  for (const [source, target] of Object.entries(value as Record<string, unknown>)) {
+    if (!source.trim()) continue;
+    if (target === null || target === "") {
+      result[source] = null;
+    } else if (typeof target === "string") {
+      result[source] = target;
+    }
+  }
+  return result;
 }
 
 function sendFeedbackCommandOutcome(reply: FastifyReply, outcome: FeedbackCommandResult) {
@@ -339,8 +371,14 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
     const teamId = runtimeScopeStorageId(context.scope);
     const [assigneeOptions, projectRows] = await Promise.all([
       listFeedbackAssigneeOptions(context.scope),
-      db.select({ id: projects.id }).from(projects).where(eq(projects.teamId, teamId)),
+      db.select({ id: projects.id, name: projects.name }).from(projects).where(eq(projects.teamId, teamId)),
     ]);
+    let referenceMappings: ReturnType<typeof parseFeedbackImportReferenceMappings>;
+    try {
+      referenceMappings = parseFeedbackImportReferenceMappings(file.fields.referenceMappings);
+    } catch {
+      return reply.code(400).send({ error: "Feedback import reference mappings are invalid" });
+    }
 
     const preflight = await preflightFeedbackImport(db, {
       actor,
@@ -349,9 +387,10 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       knownAssigneeUserIds: new Set(assigneeOptions.map((item) => item.id)),
       knownProjectIds: new Set(projectRows.map((item) => item.id)),
       mimeType: file.mimeType,
+      referenceMappings,
     });
 
-    return { preflight };
+    return { preflight, referenceOptions: { assignees: assigneeOptions, projects: projectRows } };
   });
 
   app.post("/api/feedback/imports/:batchId/commit", async (request, reply) => {

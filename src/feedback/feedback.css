@@ -406,6 +406,63 @@
   font-style: normal;
 }
 
+.feedback-import-reference-mappings {
+  display: grid;
+  gap: 8px;
+}
+
+.feedback-import-reference-mappings > strong {
+  color: var(--orf-text-primary);
+  font-size: 13px;
+}
+
+.feedback-import-reference-mappings label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, #d97706 32%, var(--orf-border));
+  border-radius: 8px;
+  padding: 10px;
+  background: color-mix(in srgb, #d97706 7%, var(--orf-bg-card));
+}
+
+.feedback-import-reference-mappings span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.feedback-import-reference-mappings b,
+.feedback-import-reference-mappings em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feedback-import-reference-mappings b {
+  color: var(--orf-text-primary);
+  font-size: 13px;
+}
+
+.feedback-import-reference-mappings em {
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.feedback-import-reference-mappings select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--orf-border) 72%, transparent);
+  border-radius: 8px;
+  background: var(--orf-bg-card);
+  color: var(--orf-text-primary);
+  min-height: 36px;
+  padding: 0 10px;
+}
+
 .feedback-import-preflight-actions {
   display: flex;
   justify-content: flex-end;
@@ -1105,6 +1162,10 @@ html[data-orf-display-contrast="high"] .feedback-issue-row {
   .feedback-import-field-mappings > div {
     max-height: 214px;
     overflow: auto;
+  }
+
+  .feedback-import-reference-mappings label {
+    grid-template-columns: 1fr;
   }
 
   .feedback-mobile-filter-toggle {

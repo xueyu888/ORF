@@ -31,6 +31,7 @@ export type FeedbackImportPreflight = {
   errors: FeedbackImportMessage[];
   fieldMappings?: FeedbackImportFieldMapping[];
   fileName: string;
+  referenceIssues?: FeedbackImportReferenceIssue[];
   sourceKind: FeedbackImportSourceKind;
   summary: FeedbackImportSummary;
   updateDiffs?: FeedbackImportUpdateDiff[];
@@ -51,6 +52,20 @@ export type FeedbackImportFieldDiff = {
   field: string;
   incomingValue: string;
   label: string;
+};
+
+export type FeedbackImportReferenceKind = "assignee" | "project";
+
+export type FeedbackImportReferenceIssue = {
+  field: "assignee_user_id" | "project_id";
+  kind: FeedbackImportReferenceKind;
+  rows: number[];
+  sourceValue: string;
+};
+
+export type FeedbackImportReferenceMappings = {
+  assigneeUserIds?: Record<string, string | null>;
+  projectIds?: Record<string, string | null>;
 };
 
 export type FeedbackImportUpdateDiff = {
@@ -307,6 +322,7 @@ export async function preflightFeedbackImport(
     knownAssigneeUserIds: ReadonlySet<string>;
     knownProjectIds: ReadonlySet<string>;
     mimeType?: string;
+    referenceMappings?: FeedbackImportReferenceMappings;
   },
 ): Promise<FeedbackImportPreflight> {
   if (detectFeedbackImportSource(input) === "zip") {
@@ -322,6 +338,7 @@ export async function preflightFeedbackImport(
     fileName: input.fileName,
     knownAssigneeUserIds: input.knownAssigneeUserIds,
     knownProjectIds: input.knownProjectIds,
+    referenceMappings: input.referenceMappings,
     text: input.body.toString("utf8"),
   });
 }
@@ -383,6 +400,7 @@ export async function preflightFeedbackImportCsv(
     fileName: string;
     knownAssigneeUserIds: ReadonlySet<string>;
     knownProjectIds: ReadonlySet<string>;
+    referenceMappings?: FeedbackImportReferenceMappings;
     text: string;
   },
 ): Promise<FeedbackImportPreflight> {
@@ -391,6 +409,7 @@ export async function preflightFeedbackImportCsv(
   const parsed = parseCsv(input.text);
   const errors: FeedbackImportMessage[] = [];
   const warnings: FeedbackImportMessage[] = [];
+  const referenceIssues = new Map<string, FeedbackImportReferenceIssue>();
   const records: FeedbackImportRecord[] = [];
   const fieldMapping = resolveCsvImportFieldMapping(parsed.headers);
   errors.push(...fieldMapping.errors);
@@ -404,7 +423,8 @@ export async function preflightFeedbackImportCsv(
   const sourceExternalIdRows = new Map<string, number>();
   if (errors.length === 0) {
     for (const row of parsed.rows) {
-      const record = importRecordFromCsvRow(row, fieldMapping.fieldMap);
+      const imported = importRecordFromCsvRow(row, fieldMapping.fieldMap);
+      const record = resolveImportRecordReferences(imported, row.index, input, referenceIssues);
       const rowErrors = validateImportRecord(record, row.index, input);
       const previousRow = record.externalId ? sourceExternalIdRows.get(record.externalId) : undefined;
       if (previousRow !== undefined) {
@@ -419,33 +439,37 @@ export async function preflightFeedbackImportCsv(
     }
   }
 
-  const [existingOrigins, existingFeedbackById] = errors.length === 0
+  const unresolvedReferenceIssues = [...referenceIssues.values()];
+  const canEvaluateRecords = errors.length === 0 && unresolvedReferenceIssues.length === 0;
+  const [existingOrigins, existingFeedbackById] = canEvaluateRecords
     ? await Promise.all([
         existingImportOrigins(database, input.actor.teamId, sourceExternalIds),
         existingFeedbackRecords(database, input.actor.teamId, sourceExternalIds),
       ])
     : [new Map<string, string>(), new Map<string, ExistingFeedbackImportRecord>()];
   const originFeedbackIds = [...new Set([...existingOrigins.values()].filter((feedbackId) => !existingFeedbackById.has(feedbackId)))];
-  const originFeedbackById = errors.length === 0
+  const originFeedbackById = canEvaluateRecords
     ? await existingFeedbackRecords(database, input.actor.teamId, originFeedbackIds)
     : new Map<string, ExistingFeedbackImportRecord>();
 
   const newRecords: FeedbackImportRecord[] = [];
   const updateDiffs: FeedbackImportUpdateDiff[] = [];
   let skippedRecords = 0;
-  for (const record of records) {
-    const existingFeedbackId = existingOrigins.get(record.externalId) ?? (existingFeedbackById.has(record.externalId) ? record.externalId : null);
-    if (existingFeedbackId) {
-      skippedRecords += 1;
-      const row = rowIndexForRecord(parsed.rows, fieldMapping.fieldMap, record.externalId);
-      const existing = existingFeedbackById.get(existingFeedbackId) ?? originFeedbackById.get(existingFeedbackId);
-      const fields = existing ? feedbackImportUpdateFields(record, existing) : [];
-      if (fields.length > 0) {
-        updateDiffs.push({ externalId: record.externalId, feedbackId: existingFeedbackId, fields, row });
+  if (canEvaluateRecords) {
+    for (const record of records) {
+      const existingFeedbackId = existingOrigins.get(record.externalId) ?? (existingFeedbackById.has(record.externalId) ? record.externalId : null);
+      if (existingFeedbackId) {
+        skippedRecords += 1;
+        const row = rowIndexForRecord(parsed.rows, fieldMapping.fieldMap, record.externalId);
+        const existing = existingFeedbackById.get(existingFeedbackId) ?? originFeedbackById.get(existingFeedbackId);
+        const fields = existing ? feedbackImportUpdateFields(record, existing) : [];
+        if (fields.length > 0) {
+          updateDiffs.push({ externalId: record.externalId, feedbackId: existingFeedbackId, fields, row });
+        }
+        continue;
       }
-      continue;
+      newRecords.push(record);
     }
-    newRecords.push(record);
   }
 
   const summary: StoredFeedbackImportSummary = {
@@ -463,7 +487,7 @@ export async function preflightFeedbackImportCsv(
     id: batchId,
     teamId: input.actor.teamId,
     createdBy: input.actor.id,
-    status: errors.length > 0 ? "failed" : "validated",
+    status: errors.length > 0 ? "failed" : unresolvedReferenceIssues.length > 0 ? "uploaded" : "validated",
     sourceKind: "csv",
     fileName: input.fileName,
     summary,
@@ -475,11 +499,12 @@ export async function preflightFeedbackImportCsv(
 
   return {
     batchId,
-    commitAvailable: errors.length === 0 && newRecords.length > 0,
-    commitBlockedReason: feedbackCsvImportCommitBlockedReason(errors, newRecords.length, updateDiffs.length),
+    commitAvailable: errors.length === 0 && unresolvedReferenceIssues.length === 0 && newRecords.length > 0,
+    commitBlockedReason: feedbackCsvImportCommitBlockedReason(errors, newRecords.length, updateDiffs.length, unresolvedReferenceIssues.length),
     errors,
     fieldMappings: fieldMapping.publicMappings,
     fileName: input.fileName,
+    referenceIssues: unresolvedReferenceIssues,
     sourceKind: "csv",
     summary: publicImportSummary(summary),
     updateDiffs,
@@ -630,8 +655,14 @@ function detectFeedbackImportSource(input: { body: Buffer; fileName: string; mim
   return "csv";
 }
 
-function feedbackCsvImportCommitBlockedReason(errors: readonly FeedbackImportMessage[], newRecords: number, updateRecords: number) {
+function feedbackCsvImportCommitBlockedReason(
+  errors: readonly FeedbackImportMessage[],
+  newRecords: number,
+  updateRecords: number,
+  unresolvedReferences: number,
+) {
   if (errors.length > 0) return "CSV 预检存在错误";
+  if (unresolvedReferences > 0) return "需要先完成用户和项目映射并重新预检";
   if (newRecords === 0 && updateRecords > 0) return "存在可更新记录，默认不会覆盖；需要确认更新差异后才可提交覆盖";
   if (newRecords === 0) return "没有可新增的反馈";
   return undefined;
@@ -903,6 +934,71 @@ function importRecordFromCsvRow(row: ParsedCsvRow, fieldMap: CsvImportFieldMap):
     sourceSystem: mappedCell(row, fieldMap, "export_version"),
     title: mappedCell(row, fieldMap, "title"),
   };
+}
+
+function resolveImportRecordReferences(
+  record: FeedbackImportRecord,
+  row: number,
+  input: {
+    knownAssigneeUserIds: ReadonlySet<string>;
+    knownProjectIds: ReadonlySet<string>;
+    referenceMappings?: FeedbackImportReferenceMappings;
+  },
+  issues: Map<string, FeedbackImportReferenceIssue>,
+): FeedbackImportRecord {
+  return {
+    ...record,
+    assigneeUserId: resolveOptionalImportReference({
+      field: "assignee_user_id",
+      kind: "assignee",
+      knownIds: input.knownAssigneeUserIds,
+      mappings: input.referenceMappings?.assigneeUserIds,
+      row,
+      sourceValue: record.assigneeUserId,
+      issues,
+    }),
+    projectId: resolveOptionalImportReference({
+      field: "project_id",
+      kind: "project",
+      knownIds: input.knownProjectIds,
+      mappings: input.referenceMappings?.projectIds,
+      row,
+      sourceValue: record.projectId,
+      issues,
+    }),
+  };
+}
+
+function resolveOptionalImportReference(input: {
+  field: FeedbackImportReferenceIssue["field"];
+  issues: Map<string, FeedbackImportReferenceIssue>;
+  kind: FeedbackImportReferenceKind;
+  knownIds: ReadonlySet<string>;
+  mappings?: Record<string, string | null>;
+  row: number;
+  sourceValue: string | null;
+}) {
+  if (!input.sourceValue || input.knownIds.has(input.sourceValue)) {
+    return input.sourceValue;
+  }
+
+  if (input.mappings && Object.prototype.hasOwnProperty.call(input.mappings, input.sourceValue)) {
+    return input.mappings[input.sourceValue] || null;
+  }
+
+  const key = `${input.kind}:${input.sourceValue}`;
+  const existing = input.issues.get(key);
+  if (existing) {
+    if (!existing.rows.includes(input.row)) existing.rows.push(input.row);
+  } else {
+    input.issues.set(key, {
+      field: input.field,
+      kind: input.kind,
+      rows: [input.row],
+      sourceValue: input.sourceValue,
+    });
+  }
+  return null;
 }
 
 async function existingImportOrigins(database: FeedbackTransferDatabase, teamId: string, externalIds: readonly string[]) {
