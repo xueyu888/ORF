@@ -112,8 +112,6 @@ export {
   commitFeedbackImportBatch,
   feedbackBackupZipFileName,
   preflightFeedbackImport,
-  preflightFeedbackImportCsv,
-  preflightFeedbackImportZip,
   type FeedbackBackupAttachmentFile,
   type FeedbackBackupAttachmentKind,
   type FeedbackBackupZipInput,
