@@ -306,12 +306,10 @@ async function getFeedbackListQueryRows(
   },
 ) {
   const sort = input.filters ? feedbackIssueListEffectiveSort(input.filters) : "updated-desc";
-  const [page, counts, totalCount, optionFacts] = await Promise.all([
-    getFeedbackListPageRows(database, { ...input, sort }),
-    getFeedbackListCounts(database, input),
-    countFeedbackRows(database, [eq(feedback.teamId, input.teamId)]),
-    getFeedbackListOptionFacts(database, input),
-  ]);
+  const page = await getFeedbackListPageRows(database, { ...input, sort });
+  const counts = await getFeedbackListCounts(database, input);
+  const totalCount = await countFeedbackRows(database, [eq(feedback.teamId, input.teamId)]);
+  const optionFacts = await getFeedbackListOptionFacts(database, input);
 
   return {
     feedbackRows: page.feedbackRows,
@@ -373,24 +371,27 @@ async function getFeedbackListCounts(
     readonly viewerUserId: string | null;
   },
 ): Promise<FeedbackIssueListCounts> {
-  const [all, assigned, closed, open, triage, unread, verification] = await Promise.all([
-    countFeedbackRows(database, feedbackListConditions(input, { listState: null })),
-    countFeedbackRows(database, feedbackListConditions(input, { listState: "assigned" })),
-    countFeedbackRows(database, feedbackListConditions(input, { listState: "closed" })),
-    countFeedbackRows(database, feedbackListConditions(input, { listState: "open" })),
-    countFeedbackRows(database, feedbackListConditions(input, { listState: "triage" })),
-    countFeedbackRows(database, feedbackListConditions(input, { listState: "unread" })),
-    countFeedbackRows(database, feedbackListConditions(input, { listState: "verification" })),
-  ]);
+  const [row] = await database
+    .select({
+      all: sql<number>`count(*)::int`,
+      assigned: countFeedbackRowsWhere(feedbackListStateCondition("assigned", input.viewerUserId)),
+      closed: countFeedbackRowsWhere(feedbackListStateCondition("closed", input.viewerUserId)),
+      open: countFeedbackRowsWhere(feedbackListStateCondition("open", input.viewerUserId)),
+      triage: countFeedbackRowsWhere(feedbackListStateCondition("triage", input.viewerUserId)),
+      unread: countFeedbackRowsWhere(feedbackListStateCondition("unread", input.viewerUserId)),
+      verification: countFeedbackRowsWhere(feedbackListStateCondition("verification", input.viewerUserId)),
+    })
+    .from(feedback)
+    .where(and(...feedbackListConditions(input, { listState: null })));
 
   return {
-    all,
-    assigned,
-    closed,
-    open,
-    triage,
-    unread,
-    verification,
+    all: numberFromCount(row?.all),
+    assigned: numberFromCount(row?.assigned),
+    closed: numberFromCount(row?.closed),
+    open: numberFromCount(row?.open),
+    triage: numberFromCount(row?.triage),
+    unread: numberFromCount(row?.unread),
+    verification: numberFromCount(row?.verification),
   };
 }
 
@@ -427,7 +428,15 @@ async function countFeedbackRows(database: FeedbackReadModelDatabase, conditions
     .select({ count: sql<number>`count(*)::int` })
     .from(feedback)
     .where(and(...conditions));
-  return Number(row?.count ?? 0);
+  return numberFromCount(row?.count);
+}
+
+function countFeedbackRowsWhere(condition: SQL<unknown>) {
+  return sql<number>`count(*) filter (where ${condition})::int`;
+}
+
+function numberFromCount(value: unknown) {
+  return Number(value ?? 0);
 }
 
 async function getFeedbackListCursorRow(database: FeedbackReadModelDatabase, teamId: string, feedbackId: string) {
