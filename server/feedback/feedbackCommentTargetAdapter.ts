@@ -1,4 +1,3 @@
-import { and, eq } from "drizzle-orm";
 import { feedbackCommentPath, feedbackIssuePath } from "@orf/feedback-module/contracts";
 import {
   buildFeedbackCommentCreatedNotificationDispatch,
@@ -12,7 +11,6 @@ import {
 } from "@orf/feedback-module/server";
 import { buildCommentNotificationContent } from "../notifications/notificationEventModel";
 import { db } from "../db/client";
-import { projects } from "../db/schema";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import {
   registerCommentTargetAdapter,
@@ -22,6 +20,7 @@ import {
 } from "../comments/commentTargetAdapters";
 import { feedbackNotificationPort } from "./feedbackNotificationPort";
 import { feedbackNotificationRecipientDirectory } from "./feedbackNotificationRecipientDirectory";
+import { resolveFeedbackProjectById } from "./feedbackProjectOptions";
 
 function actorCanUseScopedFeedbackTarget(actor: CommentTargetActor, storageScopeId: string) {
   const actorStorageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
@@ -39,13 +38,9 @@ async function feedbackCommentNotificationContext(event: CommentMessageCommitted
     return null;
   }
 
-  const [project] = target.projectId
-    ? await db
-      .select({ id: projects.id, name: projects.name })
-      .from(projects)
-      .where(and(eq(projects.id, target.projectId), eq(projects.teamId, event.target.storageScopeId)))
-      .limit(1)
-    : [];
+  const project = target.projectId
+    ? await resolveFeedbackProjectById(event.target.storageScopeId, target.projectId)
+    : null;
   const excludedUserIds = new Set(uniqueNotificationUserIds([
     event.actor.id,
     ...event.mentionedUserIds,
@@ -59,7 +54,7 @@ async function feedbackCommentNotificationContext(event: CommentMessageCommitted
     teamId: event.target.storageScopeId,
   });
   return {
-    project: project ?? null,
+    project,
     recipients: recipients.filter((recipient) => !excludedUserIds.has(recipient.userId)),
   };
 }
