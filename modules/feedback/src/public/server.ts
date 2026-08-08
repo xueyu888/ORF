@@ -1,16 +1,6 @@
 export type FeedbackModuleStop = () => Promise<void> | void;
 
 export {
-  feedbackDailyDigestListHref,
-  feedbackDailyDigestTargetId,
-  formatFeedbackDailyDigestBody,
-  localFeedbackDailyDigestClock,
-  shouldRunFeedbackDailyDigest,
-  sortFeedbackDailyDigestItems,
-  type FeedbackDailyDigestClock,
-  type FeedbackDailyDigestItem,
-} from "../server/dailyDigest";
-export {
   markFeedbackViewed,
   recordFeedbackCommentCreatedActivity,
   type FeedbackActivityDatabase,

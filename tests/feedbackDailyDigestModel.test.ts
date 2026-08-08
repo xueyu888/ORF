@@ -6,7 +6,7 @@ import {
   formatFeedbackDailyDigestBody,
   shouldRunFeedbackDailyDigest,
   sortFeedbackDailyDigestItems,
-} from "@orf/feedback-module/server";
+} from "@orf/feedback-module/testing";
 
 test("feedback daily digest becomes due at the configured local 08:00 boundary", () => {
   assert.deepEqual(shouldRunFeedbackDailyDigest({
