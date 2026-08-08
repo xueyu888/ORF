@@ -88,6 +88,10 @@ async function checkServerPublicBoundary() {
       names: ["FeedbackNotificationDispatchDraft", "FeedbackNotificationPort"],
       specifier: "../server/notificationDispatch",
     },
+    {
+      names: ["FeedbackNotificationRecipientDirectory"],
+      specifier: "../server/subscriptions",
+    },
   ];
   for (const block of exportBlocks(source)) {
     for (const rule of forbiddenTypeExports) {
