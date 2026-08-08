@@ -6,7 +6,6 @@ import {
   Flag,
   Inbox,
   MessageSquare,
-  Plus,
   RotateCcw,
   SlidersHorizontal,
   Tag,
@@ -14,13 +13,13 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { feedbackCreatePath, feedbackLabelsPath } from "../../contracts/links";
+import { Link, useSearchParams } from "react-router-dom";
+import { feedbackLabelsPath } from "../../contracts/links";
 import { feedbackImpactLabel } from "../../contracts/labels";
 import { getFeedbackIssueReadModel, getProjectChatChannels, getUserPreferences, saveUserPreferences } from "../api";
 import { FeedbackTransferMenu } from "../components/transfer";
 import { FeedbackBadge, FeedbackButton, FeedbackEmptyState, FeedbackSelect, FeedbackTextInput } from "../components/controls";
-import { canCreateTeamFeedback, canImportExportTeamFeedback } from "../model/capabilities";
+import { canImportExportTeamFeedback } from "../model/capabilities";
 import { feedbackIssueHref, feedbackIssueStateLabel, isFeedbackIssueOpen } from "../model/issue";
 import {
   emptyFeedbackIssueListProjection,
@@ -45,7 +44,6 @@ import { useFeedbackIssueListReadModel } from "../hooks";
 import type { FeedbackWebProjectChatChannel } from "../types";
 
 export function FeedbackInboxPage() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const host = useFeedbackWebHost();
   const { currentUser, feedbackInvalidationKey, notify } = host.useSession();
@@ -78,7 +76,6 @@ export function FeedbackInboxPage() {
     () => feedbackData.projects.find((project) => project.id === projectId) ?? null,
     [feedbackData.projects, projectId],
   );
-  const canCreateFeedback = canCreateTeamFeedback(currentUser);
   const canImportExport = canImportExportTeamFeedback(currentUser);
   const issueCounts = issueList.counts;
   const labelOptions = issueList.labelOptions;
@@ -272,14 +269,8 @@ export function FeedbackInboxPage() {
             onExportCurrentViewCsv={exportCurrentViewCsv}
             onImportCommitted={feedbackReadModel.reload}
           />
-          {canCreateFeedback && (
-            <FeedbackButton onClick={() => navigate(newFeedbackHref(projectId))}>
-              <Plus aria-hidden="true" />
-              新建反馈
-            </FeedbackButton>
-          )}
           <div className="feedback-issue-index-links" aria-label="反馈索引">
-            <Link className="feedback-issue-index-link" to={feedbackLabelsPath}><Tag aria-hidden="true" /> 标签 <strong>{labelOptions.length}</strong></Link>
+            <Link className="feedback-issue-index-link" to={feedbackLabelsPath}><Tag aria-hidden="true" /> 分类 <strong>{labelOptions.length}</strong></Link>
           </div>
         </div>
       </header>
@@ -343,8 +334,8 @@ export function FeedbackInboxPage() {
           <option value="All">全部作者</option>
           {authorOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </FeedbackSelect>
-        <FeedbackSelect label="标签" value={cause} onChange={(value) => setFilter("label", value, "All")}>
-          <option value="All">全部标签</option>
+        <FeedbackSelect label="分类" value={cause} onChange={(value) => setFilter("label", value, "All")}>
+          <option value="All">全部分类</option>
           {labelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </FeedbackSelect>
         <FeedbackSelect label="影响" value={impact} onChange={(value) => setFilter("impact", value, "All")}>
@@ -504,11 +495,4 @@ function formatFeedbackDate(value: string) {
   }
 
   return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(date);
-}
-
-function newFeedbackHref(projectId: string) {
-  const selectedProjectId = !projectId || projectId === "All" || projectId === "unassigned"
-    ? null
-    : projectId;
-  return feedbackCreatePath({ projectId: selectedProjectId });
 }

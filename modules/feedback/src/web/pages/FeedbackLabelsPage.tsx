@@ -32,18 +32,18 @@ export function FeedbackLabelsPage() {
             <ArrowLeft aria-hidden="true" />
             反馈
           </Link>
-          <h1>标签</h1>
+          <h1>分类</h1>
           <p>按反馈原因和影响等级派生的只读索引。</p>
         </div>
         <div className="feedback-index-summary">
           <Tag aria-hidden="true" />
           <strong>{labels.length}</strong>
-          <span>Labels</span>
+          <span>Categories</span>
         </div>
       </header>
 
       <div className="feedback-index-toolbar">
-        <FeedbackTextInput ariaLabel="搜索标签" value={query} onValueChange={setQuery} placeholder="Search all labels" />
+        <FeedbackTextInput ariaLabel="搜索分类" value={query} onValueChange={setQuery} placeholder="搜索全部分类" />
         <FeedbackSelect label="排序" value={sort} onChange={(value) => setSort(value as FeedbackIssueLabelIndexSortKey)}>
           <option value="name-asc">名称</option>
           <option value="feedback-desc">反馈数最多</option>
@@ -53,8 +53,8 @@ export function FeedbackLabelsPage() {
 
       <section className="feedback-label-list">
         <div className="feedback-label-list-head">
-          <span>{filteredLabels.length} labels</span>
-          <span>点击标签查看匹配反馈</span>
+          <span>{filteredLabels.length} 个分类</span>
+          <span>点击分类查看匹配反馈</span>
         </div>
         {filteredLabels.length > 0 ? (
           <div className="feedback-label-rows">
@@ -63,7 +63,7 @@ export function FeedbackLabelsPage() {
             ))}
           </div>
         ) : (
-          <FeedbackEmptyState title="没有匹配的标签" description="调整搜索条件后再看。" />
+          <FeedbackEmptyState title="没有匹配的分类" description="调整搜索条件后再看。" />
         )}
       </section>
     </div>
@@ -80,7 +80,7 @@ function FeedbackLabelRow({ label }: { label: FeedbackIssueLabelIndexItem }) {
           <p>{label.description}</p>
         </div>
       </div>
-      <div className="feedback-label-stats" aria-label="标签反馈统计">
+      <div className="feedback-label-stats" aria-label="分类反馈统计">
         <span><CircleDot aria-hidden="true" /> {label.openCount} 未关闭</span>
         <span><CheckCircle2 aria-hidden="true" /> {label.closedCount} 已关闭</span>
         <strong>{label.feedbackCount}</strong>
