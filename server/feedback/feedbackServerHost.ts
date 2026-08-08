@@ -9,8 +9,8 @@ import { db } from "../db/client";
 import { teamMembers, users } from "../db/schema";
 import { env } from "../env";
 import { publishNotificationEvent } from "../notifications/publisher";
-import { registerFeedbackRoutes } from "../routes/feedbackRoutes";
 import { registerFeedbackCommentTargetAdapter } from "./feedbackCommentTargetAdapter";
+import { registerFeedbackHttpRoutes } from "./feedbackHttpRoutes";
 import { feedbackNotificationPort } from "./feedbackNotificationPort";
 import { registerFeedbackNotificationPresentationProvider } from "./feedbackNotificationPresentationProvider";
 import { registerOrfFeedbackReferenceProvider } from "./feedbackReferenceProvider";
@@ -39,7 +39,7 @@ export function createOrfFeedbackServerHost(
       registerOrfFeedbackReferenceProvider();
       registerFeedbackNotificationPresentationProvider();
       registerFeedbackCommentTargetAdapter();
-      registerFeedbackRoutes(app);
+      registerFeedbackHttpRoutes(app);
     },
     startDailyDigestScheduler() {
       if (!startBackgroundJobs) {

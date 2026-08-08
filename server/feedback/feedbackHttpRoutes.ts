@@ -32,15 +32,15 @@ import {
   updateFeedbackMetadata,
   type FeedbackCommandActor,
   type FeedbackCommandResult,
-} from "../feedback/feedbackCommandAdapter";
-import { listFeedbackAssigneeOptions } from "../feedback/feedbackAssigneeOptions";
+} from "./feedbackCommandAdapter";
+import { listFeedbackAssigneeOptions } from "./feedbackAssigneeOptions";
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import {
   commitFeedbackImportForScope,
   preflightFeedbackImportForScope,
   type FeedbackTransferActor,
-} from "../feedback/feedbackTransferAdapter";
+} from "./feedbackTransferAdapter";
 
 const feedbackParamsSchema = z.object({ feedbackId: z.string().min(1) });
 const feedbackRelationParamsSchema = z.object({ feedbackId: z.string().min(1), relationId: z.string().min(1) });
@@ -293,7 +293,7 @@ function sendFeedbackCommandOutcome(reply: FastifyReply, outcome: FeedbackComman
   return { ok: true, changed: outcome.changed };
 }
 
-export function registerFeedbackRoutes(app: FastifyInstance) {
+export function registerFeedbackHttpRoutes(app: FastifyInstance) {
   app.get("/api/feedback", async (request, reply) => {
     const context = await requireUserScopeContext(request, reply);
     if (!context) {
