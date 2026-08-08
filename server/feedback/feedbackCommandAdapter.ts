@@ -40,9 +40,13 @@ import { replaceOrfAttachmentMarkdownTokens } from "../../src/features/rich-text
 import { db } from "../db/client";
 import { feedbackNotificationPort } from "./feedbackNotificationPort";
 import { feedbackNotificationRecipientDirectory } from "./feedbackNotificationRecipientDirectory";
+import {
+  resolveFeedbackProjectById,
+  type FeedbackProjectOption,
+} from "./feedbackProjectOptions";
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { getFeedbackIssueDetailReadModelData } from "../readModels/feedbackIssueReadModel";
-import { commentThreads, projects } from "../db/schema";
+import { commentThreads } from "../db/schema";
 import { objectStorage } from "../storage/objectStorage";
 import {
   deleteStoredCommentAttachmentObjects,
@@ -124,8 +128,6 @@ export type FeedbackReportAttachmentContentOutcome =
   | { status: "notFound" }
   | { status: "forbidden" };
 
-type ProjectRow = { id: string; name: string } | null;
-
 function storageScopeId(scope: RuntimeScope | null | undefined) {
   return scope ? runtimeScopeStorageId(scope).trim() : "";
 }
@@ -139,17 +141,6 @@ async function resolveActiveMemberById(teamId: string, userId: string | null | u
   const scopedUsers = await getScopedUsers(runtimeScope(teamId));
   const member = scopedUsers.find((user) => user.status === "active" && user.id === normalizedUserId);
   return member ? { id: member.id, name: member.name } : null;
-}
-
-async function resolveProjectById(teamId: string, projectId: string | null | undefined): Promise<ProjectRow> {
-  const normalizedProjectId = projectId?.trim();
-  if (!normalizedProjectId) return null;
-  const [project] = await db
-    .select({ id: projects.id, name: projects.name })
-    .from(projects)
-    .where(and(eq(projects.id, normalizedProjectId), eq(projects.teamId, teamId)))
-    .limit(1);
-  return project ?? null;
 }
 
 function feedbackWriteActor(actor: FeedbackCommandActor, teamId: string) {
@@ -209,7 +200,7 @@ async function prepareFeedbackCreatedNotificationDispatch(input: {
   assigneeName?: string | null;
   assigneeUserId?: string | null;
   feedbackId: string;
-  project: ProjectRow;
+  project: FeedbackProjectOption | null;
   teamId: string;
   title: string;
 }): Promise<FeedbackNotificationDispatchDraft | null> {
@@ -249,7 +240,7 @@ async function prepareFeedbackLifecycleNotificationDispatchFactory(input: {
   command: FeedbackTransitionInput;
   createdBy?: string | null;
   feedbackId: string;
-  project: ProjectRow;
+  project: FeedbackProjectOption | null;
   teamId: string;
   title: string;
 }): Promise<FeedbackTransitionNotificationDispatchFactory | null> {
@@ -342,7 +333,7 @@ export async function createFeedback(input: CreateFeedbackInput, actor: Feedback
     return { status: "invalidAssignee" };
   }
   const projectId = input.projectId?.trim() || null;
-  const project = projectId ? await resolveProjectById(teamId, projectId) : null;
+  const project = projectId ? await resolveFeedbackProjectById(teamId, projectId) : null;
   if (projectId && !project) {
     return { status: "invalidProject" };
   }
@@ -435,7 +426,7 @@ export async function updateFeedbackMetadata(
   if (!teamId) return { status: "notFound" };
 
   const nextProjectId = input.projectId === undefined ? undefined : input.projectId?.trim() || null;
-  if (nextProjectId && !(await resolveProjectById(teamId, nextProjectId))) {
+  if (nextProjectId && !(await resolveFeedbackProjectById(teamId, nextProjectId))) {
     return { status: "invalidProject" };
   }
 
@@ -510,7 +501,7 @@ export async function transitionFeedback(
   if (!teamId) return { status: "notFound" };
 
   const currentFacts = await getFeedbackCommentNotificationFacts(db, feedbackId);
-  const project = currentFacts?.projectId ? await resolveProjectById(teamId, currentFacts.projectId) : null;
+  const project = currentFacts?.projectId ? await resolveFeedbackProjectById(teamId, currentFacts.projectId) : null;
   const notificationDispatch = currentFacts && currentFacts.teamId === teamId
     ? await prepareFeedbackLifecycleNotificationDispatchFactory({
         actorName: actor.name,

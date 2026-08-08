@@ -1,13 +1,12 @@
-import { eq } from "drizzle-orm";
 import {
   commitFeedbackImportBatch,
   preflightFeedbackImport,
   type FeedbackImportActor,
 } from "@orf/feedback-module/server";
 import { db } from "../db/client";
-import { projects } from "../db/schema";
 import { runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 import { listFeedbackAssigneeOptions } from "./feedbackAssigneeOptions";
+import { listFeedbackProjectOptions } from "./feedbackProjectOptions";
 
 export type FeedbackTransferActor = FeedbackImportActor;
 
@@ -24,7 +23,7 @@ export async function preflightFeedbackImportForScope(input: {
   const teamId = runtimeScopeStorageId(input.scope);
   const [assigneeOptions, projectRows] = await Promise.all([
     listFeedbackAssigneeOptions(input.scope),
-    db.select({ id: projects.id, name: projects.name }).from(projects).where(eq(projects.teamId, teamId)),
+    listFeedbackProjectOptions(teamId),
   ]);
   const preflight = await preflightFeedbackImport(db, {
     actor: input.actor,
