@@ -172,22 +172,6 @@ export {
 export type { FeedbackReferenceSummary } from "../web/types";
 export { canCreateTeamFeedback } from "../web/model/capabilities";
 export {
-  feedbackImpactLabel,
-  feedbackLifecycleLabel,
-  feedbackPriorityLabel,
-} from "../contracts/labels";
-export {
-  feedbackIssueBodyPreview,
-  feedbackIssueDisplayId,
-  feedbackIssueHref,
-  feedbackIssueIdFromHref,
-  feedbackIssueIdsFromText,
-  feedbackIssueMarkdownLabel,
-  feedbackIssueMarkdownLink,
-  formatPastedFeedbackLinks,
-  isFeedbackIssueOpen,
-} from "../web/model/issue";
-export {
   useFeedbackDashboardSummary,
 } from "../web/hooks";
 export type {

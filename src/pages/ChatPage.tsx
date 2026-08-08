@@ -23,8 +23,8 @@ import { chatRealtimeReconciliationScope } from "../features/chat/chatRealtimeRe
 import { resetChatNativeNotificationViewState, setChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
 import { renderChatSystemMessageBody, renderChatSystemReferenceCard } from "../features/chat/chatSystemReferenceCards";
 import { requestClientUpdateCenterOpen } from "../features/client-updates/clientUpdateCenterEvents";
+import { feedbackIssueIdsFromText } from "@orf/feedback-module/contracts";
 import {
-  feedbackIssueIdsFromText,
   getFeedbackReferences,
   type FeedbackReferenceSummary,
 } from "@orf/feedback-module/web";

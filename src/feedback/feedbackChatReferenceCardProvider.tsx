@@ -1,14 +1,14 @@
 import {
-  feedbackNotificationCardReferenceV1Schema,
-  type FeedbackNotificationCardReferenceV1,
-} from "@orf/feedback-module/contracts";
-import {
-  FeedbackWebApiError,
   feedbackImpactLabel,
   feedbackIssueDisplayId,
   feedbackIssueHref,
   feedbackLifecycleLabel,
+  feedbackNotificationCardReferenceV1Schema,
   feedbackPriorityLabel,
+  type FeedbackNotificationCardReferenceV1,
+} from "@orf/feedback-module/contracts";
+import {
+  FeedbackWebApiError,
   getFeedbackReferenceCard,
   type FeedbackReferenceCardData,
 } from "@orf/feedback-module/web";

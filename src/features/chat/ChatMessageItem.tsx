@@ -4,7 +4,7 @@ import { type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode
 import { createPortal } from "react-dom";
 import { Button, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
-import { formatPastedFeedbackLinks } from "@orf/feedback-module/web";
+import { formatPastedFeedbackLinks } from "@orf/feedback-module/contracts";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
 import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";

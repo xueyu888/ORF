@@ -10,7 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { type ChangeEvent, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { formatPastedFeedbackLinks } from "@orf/feedback-module/web";
+import { formatPastedFeedbackLinks } from "@orf/feedback-module/contracts";
 import { IconButton } from "../../components/ui";
 import { uploadChatAttachment } from "../../state/apiClient";
 import type { ChatAttachment, ChatUser } from "../../types/orf";

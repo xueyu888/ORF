@@ -177,6 +177,18 @@ async function checkWebPublicBoundary() {
     "FeedbackWebRelation",
     "FeedbackWebSession",
     "FeedbackWebUserSummary",
+    "feedbackImpactLabel",
+    "feedbackIssueBodyPreview",
+    "feedbackIssueDisplayId",
+    "feedbackIssueHref",
+    "feedbackIssueIdFromHref",
+    "feedbackIssueIdsFromText",
+    "feedbackIssueMarkdownLabel",
+    "feedbackIssueMarkdownLink",
+    "feedbackLifecycleLabel",
+    "feedbackPriorityLabel",
+    "formatPastedFeedbackLinks",
+    "isFeedbackIssueOpen",
   ];
 
   for (const name of forbiddenRuntimeWebExports) {
