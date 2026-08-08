@@ -1,4 +1,12 @@
 import type { QueryResult, QueryResultRow } from "pg";
+import {
+  feedbackActivityTypeValues,
+  feedbackImpactValues,
+  feedbackPriorityValues,
+  feedbackRelationTypeValues,
+  feedbackResolutionValues,
+  feedbackStageValues,
+} from "@orf/feedback-module/contracts";
 
 type NullableFlag = "YES" | "NO";
 
@@ -220,24 +228,13 @@ export function validateTeamFeedbackEvidenceSchema(snapshot: RuntimeSchemaSnapsh
 }
 
 export function validateFeedbackLifecycleEnums(snapshot: Record<string, RuntimeEnumSnapshot>) {
-  const expected: Record<string, string[]> = {
-    feedback_activity_type: [
-      "feedback.created",
-      "feedback.metadata.changed",
-      "feedback.assignee.changed",
-      "feedback.lifecycle.changed",
-      "feedback.relation.added",
-      "feedback.relation.removed",
-      "feedback.comment.created",
-      "feedback.comment.edited",
-      "feedback.report.changed",
-      "feedback.imported",
-    ],
-    feedback_impact: ["low", "medium", "high", "critical"],
-    feedback_priority: ["p0", "p1", "p2", "p3"],
-    feedback_relation_type: ["related", "duplicates", "blocks"],
-    feedback_resolution: ["resolved", "not_needed", "cannot_resolve", "duplicate", "unspecified"],
-    feedback_stage: ["open", "in_progress", "pending_verification", "closed"],
+  const expected: Record<string, readonly string[]> = {
+    feedback_activity_type: feedbackActivityTypeValues,
+    feedback_impact: feedbackImpactValues,
+    feedback_priority: feedbackPriorityValues,
+    feedback_relation_type: feedbackRelationTypeValues,
+    feedback_resolution: feedbackResolutionValues,
+    feedback_stage: feedbackStageValues,
   };
   const errors: string[] = [];
   for (const [enumName, expectedLabels] of Object.entries(expected)) {
