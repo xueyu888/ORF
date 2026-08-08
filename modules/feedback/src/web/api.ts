@@ -58,6 +58,7 @@ export type FeedbackImportPreflight = {
   commitAvailable: boolean;
   commitBlockedReason?: string;
   errors: Array<{ field?: string; message: string; row?: number }>;
+  fieldMappings?: Array<{ field: string; label: string; required: boolean; sourceColumn: string | null }>;
   fileName: string;
   sourceKind: "csv" | "zip";
   summary: {

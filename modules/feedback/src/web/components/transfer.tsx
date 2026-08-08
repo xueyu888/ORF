@@ -203,6 +203,9 @@ function FeedbackImportPreflightView({ preflight }: { preflight: FeedbackImportP
         <span><strong>{preflight.summary.errors}</strong> 错误</span>
         <span><strong>{formatBytes(preflight.summary.attachmentBytes)}</strong> 附件</span>
       </div>
+      {preflight.fieldMappings && preflight.fieldMappings.length > 0 && (
+        <FeedbackImportFieldMappings mappings={preflight.fieldMappings} />
+      )}
       {preflight.commitBlockedReason && (
         <div className="feedback-import-messages" data-tone="warning">
           <strong>提交状态</strong>
@@ -238,6 +241,26 @@ function FeedbackImportPreflightView({ preflight }: { preflight: FeedbackImportP
   );
 }
 
+function FeedbackImportFieldMappings({
+  mappings,
+}: {
+  mappings: NonNullable<FeedbackImportPreflight["fieldMappings"]>;
+}) {
+  return (
+    <div className="feedback-import-field-mappings">
+      <strong>字段映射</strong>
+      <div>
+        {mappings.map((item) => (
+          <span key={item.field} data-missing={item.required && !item.sourceColumn ? "true" : undefined}>
+            <b>{item.label}</b>
+            <em>{item.sourceColumn ?? "未匹配"}</em>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function downloadFeedbackImportPreflightReport(preflight: FeedbackImportPreflight) {
   downloadTextFile({
     content: buildFeedbackImportPreflightReport(preflight),
@@ -253,6 +276,10 @@ function buildFeedbackImportPreflightReport(preflight: FeedbackImportPreflight) 
     `批次: ${preflight.batchId}`,
     `类型: ${preflight.sourceKind.toUpperCase()}`,
     `提交: ${preflight.commitAvailable ? "可提交" : (preflight.commitBlockedReason ?? "不可提交")}`,
+    "",
+    "字段映射",
+    ...(preflight.fieldMappings ?? []).map((item) => `${item.label}: ${item.sourceColumn ?? "未匹配"}`),
+    ...((preflight.fieldMappings?.length ?? 0) === 0 ? ["无"] : []),
     "",
     "摘要",
     `总记录: ${preflight.summary.totalRecords}`,

@@ -28,6 +28,7 @@ export type FeedbackImportPreflight = {
   commitAvailable: boolean;
   commitBlockedReason?: string;
   errors: FeedbackImportMessage[];
+  fieldMappings?: FeedbackImportFieldMapping[];
   fileName: string;
   sourceKind: FeedbackImportSourceKind;
   summary: FeedbackImportSummary;
@@ -35,6 +36,13 @@ export type FeedbackImportPreflight = {
 };
 
 export type FeedbackImportSourceKind = "csv" | "zip";
+
+export type FeedbackImportFieldMapping = {
+  field: string;
+  label: string;
+  required: boolean;
+  sourceColumn: string | null;
+};
 
 export type FeedbackImportSummary = {
   attachmentBytes: number;
@@ -108,6 +116,39 @@ const feedbackCurrentViewCsvVersion = "orf.feedback.current_view.v1";
 const feedbackBackupZipVersion = "orf.feedback.backup.v1";
 const impactValues = new Set<FeedbackImpact>(["low", "medium", "high", "critical"]);
 const priorityValues = new Set<FeedbackPriority>(["p0", "p1", "p2", "p3"]);
+
+const feedbackCsvImportFields = [
+  { key: "export_version", label: "导出版本", required: true, aliases: ["export_version", "导出版本", "版本"] },
+  { key: "feedback_id", label: "反馈 ID", required: true, aliases: ["feedback_id", "反馈ID", "反馈 ID", "id", "issue_id"] },
+  { key: "title", label: "标题", required: true, aliases: ["title", "标题", "问题标题"] },
+  { key: "description", label: "正文", required: true, aliases: ["description", "正文", "描述", "内容"] },
+  { key: "impact", label: "影响", required: true, aliases: ["impact", "影响", "影响等级"] },
+  { key: "cause_categories", label: "分类", required: true, aliases: ["cause_categories", "分类", "原因分类", "标签"] },
+  { key: "priority", label: "优先级", required: false, aliases: ["priority", "优先级"] },
+  { key: "assignee_user_id", label: "处理人", required: false, aliases: ["assignee_user_id", "处理人ID", "处理人 ID"] },
+  { key: "project_id", label: "项目", required: false, aliases: ["project_id", "项目ID", "项目 ID"] },
+] as const satisfies readonly CsvImportFieldSpec[];
+
+type CsvImportFieldKey = (
+  | "assignee_user_id"
+  | "cause_categories"
+  | "description"
+  | "export_version"
+  | "feedback_id"
+  | "impact"
+  | "priority"
+  | "project_id"
+  | "title"
+);
+
+type CsvImportFieldSpec = {
+  aliases: readonly string[];
+  key: CsvImportFieldKey;
+  label: string;
+  required: boolean;
+};
+
+type CsvImportFieldMap = Record<CsvImportFieldKey, string | null>;
 
 export function feedbackBackupZipFileName(exportedAt: string) {
   const stamp = exportedAt
@@ -328,23 +369,19 @@ export async function preflightFeedbackImportCsv(
   const errors: FeedbackImportMessage[] = [];
   const warnings: FeedbackImportMessage[] = [];
   const records: FeedbackImportRecord[] = [];
+  const fieldMapping = resolveCsvImportFieldMapping(parsed.headers);
+  errors.push(...fieldMapping.errors);
+  warnings.push(...fieldMapping.warnings);
 
   if (parsed.rows.length === 0) {
     errors.push({ message: "CSV 没有数据行" });
-  }
-
-  const requiredColumns = ["export_version", "feedback_id", "title", "description", "impact", "cause_categories"];
-  for (const column of requiredColumns) {
-    if (!parsed.headers.includes(column)) {
-      errors.push({ field: column, message: "CSV 缺少必需列" });
-    }
   }
 
   const sourceExternalIds: string[] = [];
   const sourceExternalIdRows = new Map<string, number>();
   if (errors.length === 0) {
     for (const row of parsed.rows) {
-      const record = importRecordFromCsvRow(row);
+      const record = importRecordFromCsvRow(row, fieldMapping.fieldMap);
       const rowErrors = validateImportRecord(record, row.index, input);
       const previousRow = record.externalId ? sourceExternalIdRows.get(record.externalId) : undefined;
       if (previousRow !== undefined) {
@@ -371,7 +408,7 @@ export async function preflightFeedbackImportCsv(
   for (const record of records) {
     if (existingOrigins.has(record.externalId) || existingFeedbackIds.has(record.externalId)) {
       skippedRecords += 1;
-      warnings.push({ field: "feedback_id", message: "来源反馈已存在，提交时会跳过", row: rowIndexForRecord(parsed.rows, record.externalId) });
+      warnings.push({ field: "feedback_id", message: "来源反馈已存在，提交时会跳过", row: rowIndexForRecord(parsed.rows, fieldMapping.fieldMap, record.externalId) });
       continue;
     }
     newRecords.push(record);
@@ -406,6 +443,7 @@ export async function preflightFeedbackImportCsv(
     commitAvailable: errors.length === 0 && newRecords.length > 0,
     commitBlockedReason: feedbackCsvImportCommitBlockedReason(errors, newRecords.length),
     errors,
+    fieldMappings: fieldMapping.publicMappings,
     fileName: input.fileName,
     sourceKind: "csv",
     summary: publicImportSummary(summary),
@@ -798,17 +836,17 @@ function validateImportRecord(
   return errors;
 }
 
-function importRecordFromCsvRow(row: ParsedCsvRow): FeedbackImportRecord {
+function importRecordFromCsvRow(row: ParsedCsvRow, fieldMap: CsvImportFieldMap): FeedbackImportRecord {
   return {
-    assigneeUserId: cell(row, "assignee_user_id") || null,
-    causeCategories: cell(row, "cause_categories").split("|").map((value) => value.trim()).filter(Boolean),
-    description: cell(row, "description"),
-    externalId: cell(row, "feedback_id"),
-    impact: cell(row, "impact") as FeedbackImpact,
-    priority: (cell(row, "priority") || null) as FeedbackPriority | null,
-    projectId: cell(row, "project_id") || null,
-    sourceSystem: cell(row, "export_version"),
-    title: cell(row, "title"),
+    assigneeUserId: mappedCell(row, fieldMap, "assignee_user_id") || null,
+    causeCategories: mappedCell(row, fieldMap, "cause_categories").split("|").map((value) => value.trim()).filter(Boolean),
+    description: mappedCell(row, fieldMap, "description"),
+    externalId: mappedCell(row, fieldMap, "feedback_id"),
+    impact: mappedCell(row, fieldMap, "impact") as FeedbackImpact,
+    priority: (mappedCell(row, fieldMap, "priority") || null) as FeedbackPriority | null,
+    projectId: mappedCell(row, fieldMap, "project_id") || null,
+    sourceSystem: mappedCell(row, fieldMap, "export_version"),
+    title: mappedCell(row, fieldMap, "title"),
   };
 }
 
@@ -952,12 +990,53 @@ type ParsedCsvRow = {
   values: Map<string, string>;
 };
 
-function cell(row: ParsedCsvRow, key: string) {
-  return row.values.get(key)?.trim() ?? "";
+function resolveCsvImportFieldMapping(headers: readonly string[]) {
+  const errors: FeedbackImportMessage[] = [];
+  const warnings: FeedbackImportMessage[] = [];
+  const headerByKey = new Map<string, string>();
+  for (const header of headers) {
+    const normalized = normalizeCsvImportHeader(header);
+    if (!normalized) continue;
+    if (headerByKey.has(normalized)) {
+      warnings.push({ field: header, message: "CSV 存在重复含义的列名，预检只使用第一列" });
+      continue;
+    }
+    headerByKey.set(normalized, header);
+  }
+
+  const fieldMap = Object.fromEntries(
+    feedbackCsvImportFields.map((field) => [field.key, null]),
+  ) as CsvImportFieldMap;
+  const publicMappings: FeedbackImportFieldMapping[] = [];
+
+  for (const field of feedbackCsvImportFields) {
+    const sourceColumn = field.aliases.map(normalizeCsvImportHeader).map((alias) => headerByKey.get(alias)).find(Boolean) ?? null;
+    fieldMap[field.key] = sourceColumn;
+    publicMappings.push({
+      field: field.key,
+      label: field.label,
+      required: field.required,
+      sourceColumn,
+    });
+    if (field.required && !sourceColumn) {
+      errors.push({ field: field.key, message: `CSV 缺少必需字段：${field.label}` });
+    }
+  }
+
+  return { errors, fieldMap, publicMappings, warnings };
 }
 
-function rowIndexForRecord(rows: readonly ParsedCsvRow[], externalId: string) {
-  return rows.find((row) => cell(row, "feedback_id") === externalId)?.index;
+function normalizeCsvImportHeader(value: string) {
+  return value.trim().toLowerCase().replace(/[\s_\-]+/g, "");
+}
+
+function mappedCell(row: ParsedCsvRow, fieldMap: CsvImportFieldMap, key: CsvImportFieldKey) {
+  const column = fieldMap[key];
+  return column ? row.values.get(column)?.trim() ?? "" : "";
+}
+
+function rowIndexForRecord(rows: readonly ParsedCsvRow[], fieldMap: CsvImportFieldMap, externalId: string) {
+  return rows.find((row) => mappedCell(row, fieldMap, "feedback_id") === externalId)?.index;
 }
 
 function parseCsv(text: string) {

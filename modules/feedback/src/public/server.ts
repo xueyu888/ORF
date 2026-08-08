@@ -108,6 +108,7 @@ export {
   type FeedbackBackupAttachmentKind,
   type FeedbackBackupZipInput,
   type FeedbackImportCommitResult,
+  type FeedbackImportFieldMapping,
   type FeedbackImportPreflight,
   type FeedbackImportSourceKind,
 } from "../server/transfer";
