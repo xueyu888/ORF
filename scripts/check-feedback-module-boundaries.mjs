@@ -37,6 +37,7 @@ const errors = [];
 await checkPackageExports();
 await checkServerPublicBoundary();
 await checkWebPublicBoundary();
+await checkHostFeedbackNotificationBoundary();
 await checkTsconfigPaths();
 await scanSourceImports();
 
@@ -181,6 +182,20 @@ async function checkWebPublicBoundary() {
     if (new RegExp(`\\b${name}\\b`).test(source)) {
       errors.push(`modules/feedback/src/public/web.ts must not export ${name}; use contracts or @orf/feedback-module/testing as appropriate.`);
     }
+  }
+}
+
+async function checkHostFeedbackNotificationBoundary() {
+  const globalTypesPath = path.join(rootDir, "src", "types", "orf.ts");
+  const globalTypesSource = await fs.readFile(globalTypesPath, "utf8");
+  if (globalTypesSource.includes("FeedbackNotificationEventKind")) {
+    errors.push("src/types/orf.ts must not add feedback notification kinds to the global NotificationKind union; register feedback kinds through the feedback notification provider.");
+  }
+
+  const attentionModelPath = path.join(rootDir, "src", "features", "attention", "attentionModel.ts");
+  const attentionModelSource = await fs.readFile(attentionModelPath, "utf8");
+  if (attentionModelSource.includes("feedbackNotificationEventKindValues") || attentionModelSource.includes("FeedbackNotificationEventKind")) {
+    errors.push("src/features/attention/attentionModel.ts must not import feedback notification kind lists; consume generic attention fields from notifications.");
   }
 }
 

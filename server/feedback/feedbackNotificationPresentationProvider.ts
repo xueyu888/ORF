@@ -2,12 +2,11 @@ import {
   feedbackNotificationEventKindValues,
   type FeedbackNotificationEventKind,
 } from "@orf/feedback-module/contracts";
-import type { NotificationKind } from "../../src/types/orf";
 import { registerNotificationPresentationProvider } from "../notifications/presentationRegistry";
 
-const feedbackNotificationKindSet = new Set<NotificationKind>(feedbackNotificationEventKindValues);
+const feedbackNotificationKindSet = new Set<string>(feedbackNotificationEventKindValues);
 
-function assertFeedbackNotificationKind(kind: NotificationKind): FeedbackNotificationEventKind {
+function assertFeedbackNotificationKind(kind: string): FeedbackNotificationEventKind {
   if (!feedbackNotificationKindSet.has(kind)) {
     throw new Error(`Unsupported feedback notification kind ${kind}.`);
   }

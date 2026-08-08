@@ -1,5 +1,3 @@
-import type { NotificationKind } from "../../types/orf";
-
 export type AttentionLevel = "none" | "badge" | "toast" | "flash" | "urgent";
 
 export type AttentionSource = "chat" | "notification" | "worklog";
@@ -8,7 +6,7 @@ export type AttentionItem = {
   body: string;
   createdAt: string;
   eventId: string;
-  kind?: NotificationKind | "chat.ack" | "chat.direct" | "chat.mention" | "chat.thread" | "chat.unread" | "worklog.reminder";
+  kind?: string;
   level: Exclude<AttentionLevel, "none">;
   source: AttentionSource;
   targetPath: string;

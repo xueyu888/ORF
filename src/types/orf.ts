@@ -1,7 +1,4 @@
-import type {
-  FeedbackNotificationEventKind,
-  FeedbackSubscriptionMode as FeedbackSubscriptionModeContract,
-} from "@orf/feedback-module/contracts";
+import type { FeedbackSubscriptionMode as FeedbackSubscriptionModeContract } from "@orf/feedback-module/contracts";
 import type { PermissionKey } from "../config/permissions";
 
 export type WorkStatus = "On Track" | "At Risk" | "Blocked" | "Draft";
@@ -33,7 +30,7 @@ export type CoreNotificationKind =
   | "data.sync.conflict"
   | "worklog.submitted"
   | "worklog.reminder";
-export type NotificationKind = CoreNotificationKind | FeedbackNotificationEventKind;
+export type NotificationKind = string;
 export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog" | "dataSync";
 export type NotificationStream = "personalNotification" | "teamAnnouncement";
 export type NotificationDeliveryClass = "direct" | "mandatory" | "ordinary";

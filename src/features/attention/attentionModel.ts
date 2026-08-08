@@ -1,7 +1,6 @@
 import type {
   AppNotification,
   ChatUnreadSummary,
-  NotificationKind,
   WorkLogReminderState,
 } from "../../types/orf";
 import type { AppAttentionState } from "../interaction/appAttentionState";
@@ -49,7 +48,7 @@ const MAX_ATTENTION_ITEMS = 8;
 const SYSTEM_NOTIFICATION_TARGET_PATH = "/chat/system/personalNotifications";
 const WORK_LOG_TARGET_PATH = "/work-logs";
 
-const urgentNotificationKinds = new Set<NotificationKind>([
+const urgentNotificationKinds = new Set<string>([
   "data.sync.conflict",
   "objective.alignment.requested",
   "objective.loot.submitted",
@@ -60,11 +59,11 @@ const urgentNotificationKinds = new Set<NotificationKind>([
   "worklog.reminder",
 ]);
 
-const flashNotificationKinds = new Set<NotificationKind>([
+const flashNotificationKinds = new Set<string>([
   "comment.mention.created",
 ]);
 
-const toastNotificationKinds = new Set<NotificationKind>([
+const toastNotificationKinds = new Set<string>([
   "challenge.application.approved",
   "challenge.application.created",
   "challenge.application.rejected",
@@ -74,7 +73,7 @@ const toastNotificationKinds = new Set<NotificationKind>([
   "objective.challenge.accepted",
 ]);
 
-const badgeNotificationKinds = new Set<NotificationKind>([
+const badgeNotificationKinds = new Set<string>([
   "objective.published",
   "objective.settled",
   "objective.settlement.updated",

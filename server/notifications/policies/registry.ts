@@ -1,8 +1,8 @@
-import type { NotificationKind } from "../../../src/types/orf";
+import type { CoreNotificationKind, NotificationKind } from "../../../src/types/orf";
 import type { NotificationPolicyDescriptor } from "../contracts";
 import { notificationPresentationPolicy } from "../presentationRegistry";
 
-export const notificationPolicyRegistry: Partial<Record<NotificationKind, NotificationPolicyDescriptor>> = {
+export const notificationPolicyRegistry: Partial<Record<CoreNotificationKind, NotificationPolicyDescriptor>> = {
   "challenge.application.approved": {
     kind: "challenge.application.approved",
     replyTarget: "notification-target",
@@ -105,8 +105,16 @@ export const notificationPolicyRegistry: Partial<Record<NotificationKind, Notifi
   },
 };
 
+const coreNotificationKindSet = new Set<string>(Object.keys(notificationPolicyRegistry));
+
+function coreNotificationPolicy(kind: NotificationKind) {
+  return coreNotificationKindSet.has(kind)
+    ? notificationPolicyRegistry[kind as CoreNotificationKind] ?? null
+    : null;
+}
+
 export function notificationPolicy(kind: NotificationKind) {
-  const policy = notificationPresentationPolicy(kind) ?? notificationPolicyRegistry[kind] ?? null;
+  const policy = notificationPresentationPolicy(kind) ?? coreNotificationPolicy(kind);
   if (!policy) {
     throw new Error(`Notification policy is not registered for ${kind}.`);
   }
