@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { getFeedbackReadModelIssues, type FeedbackReadModelViewer } from "@orf/feedback-module/server";
+import { getFeedbackReadModelIssue, getFeedbackReadModelIssues, type FeedbackReadModelViewer } from "@orf/feedback-module/server";
 import {
   buildFeedbackIssueListProjection,
   defaultFeedbackIssueListFilters,
@@ -157,11 +157,12 @@ export async function getFeedbackIssueDetailReadModelData(feedbackId: string, sc
     db.select().from(projects).where(eq(projects.teamId, storageScopeId)).orderBy(desc(projects.createdAt), desc(projects.id)),
     getScopedUsers(scope.scope),
   ]);
-  const feedback = await getFeedbackReadModelIssues(db, {
+  const feedback = await getFeedbackReadModelIssue(db, {
+    feedbackId,
     teamId: storageScopeId,
     viewer: feedbackReadModelViewer(users, scope.viewerUserId),
   });
-  if (!feedback.some((item) => item.id === feedbackId)) {
+  if (!feedback) {
     return null;
   }
 
@@ -173,7 +174,7 @@ export async function getFeedbackIssueDetailReadModelData(feedbackId: string, sc
       messageRows: commentMessageRows,
       threadRows: commentThreadRows,
     }),
-    feedback,
+    feedback: [feedback],
     projects: mapProjectRows(projectRows),
     users,
   };

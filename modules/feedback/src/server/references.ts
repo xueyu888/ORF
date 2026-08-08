@@ -1,6 +1,9 @@
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { FeedbackReferenceSummary } from "../contracts";
 import { feedback } from "../infrastructure/database/schema";
+
+export type { FeedbackReferenceSummary } from "../contracts";
 
 export type FeedbackReferenceDatabase = Pick<NodePgDatabase<any>, "select">;
 
@@ -15,11 +18,6 @@ export type FeedbackCommentNotificationFacts = {
   readonly createdBy: string;
   readonly projectId: string | null;
   readonly teamId: string;
-  readonly title: string;
-};
-
-export type FeedbackReferenceSummary = {
-  readonly id: string;
   readonly title: string;
 };
 

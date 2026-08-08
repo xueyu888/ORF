@@ -230,7 +230,7 @@ test("feedback linked issues come from relation facts instead of report or comme
   const target = feedback({ id: "fb-target", title: "目标反馈" });
   const textOnly = feedback({ id: "fb-text-only", title: "只出现在正文里的反馈" });
 
-  assert.deepEqual(feedbackIssueLinkedFeedback({ feedback: source, feedbackItems: [source, target, textOnly] }), [
+  assert.deepEqual(feedbackIssueLinkedFeedback({ feedback: source, feedbackReferences: [target, textOnly] }), [
     {
       direction: "outgoing",
       id: "fb-target",

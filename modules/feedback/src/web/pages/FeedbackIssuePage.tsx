@@ -43,8 +43,8 @@ import {
   feedbackIssueParticipants,
 } from "../model/issueMetadata";
 import { useFeedbackWebHost, type FeedbackCommentDraft, type FeedbackCommentDraftMode, type FeedbackCommentMentionUser, type FeedbackImagePreview } from "../runtime";
-import { useFeedbackAssigneeOptions, useFeedbackIssueDetailReadModel } from "../hooks";
-import type { FeedbackWebActivityItem, FeedbackWebCommentMessage, FeedbackWebCommentThread, FeedbackWebIssue, FeedbackSubscriptionMode, FeedbackWebProject, FeedbackWebUser } from "../types";
+import { useFeedbackAssigneeOptions, useFeedbackIssueDetailReadModel, useFeedbackReferenceOptions } from "../hooks";
+import type { FeedbackWebActivityItem, FeedbackWebCommentMessage, FeedbackWebCommentThread, FeedbackWebIssue, FeedbackSubscriptionMode, FeedbackReferenceSummary, FeedbackWebProject, FeedbackWebUser } from "../types";
 
 type FeedbackCommentEntry = {
   message: FeedbackWebCommentMessage;
@@ -88,10 +88,19 @@ export function FeedbackIssuePage() {
   } = host.useSession();
   const feedbackReadModel = useFeedbackIssueDetailReadModel(feedbackId, Boolean(currentUser && feedbackId), feedbackInvalidationKey);
   const feedbackData = feedbackReadModel.data;
-  const feedbackItems = feedbackData.feedback;
   const users = feedbackData.users;
   const projects = feedbackData.projects;
-  const feedback = feedbackItems.find((item) => item.id === feedbackId) ?? null;
+  const feedback = feedbackData.feedback.find((item) => item.id === feedbackId) ?? null;
+  const relationReferenceIds = useMemo(
+    () => feedback ? feedback.relations.map((relation) => feedbackRelationOtherId(feedback.id, relation)).filter((id): id is string => Boolean(id)) : [],
+    [feedback],
+  );
+  const relationReferences = useFeedbackReferenceOptions(
+    Boolean(currentUser && feedback),
+    `${feedbackInvalidationKey}:${feedback?.id ?? ""}:${feedback?.version ?? ""}`,
+    relationReferenceIds,
+    80,
+  );
   const [draft, setDraft] = useState<FeedbackCommentDraft>(() => host.commentDraft.empty());
   const [draftMode, setDraftMode] = useState<FeedbackCommentDraftMode>({ type: "default" });
   const [editState, setEditState] = useState<{ draft: FeedbackCommentDraft; messageId: string; threadId: string } | null>(null);
@@ -455,13 +464,13 @@ export function FeedbackIssuePage() {
           <FeedbackLifecyclePanel
             currentUser={currentUser}
             feedback={feedback}
-            feedbackItems={feedbackItems}
             notify={notify}
             onTransition={(command) => runFeedbackMutation(
               () => transitionFeedback(feedback.id, command),
               "反馈状态已更新",
               "反馈状态更新失败",
             )}
+            relationReferences={relationReferences.references}
           />
           <IssueSidebar
             assigneeOptions={assigneeOptions}
@@ -469,7 +478,6 @@ export function FeedbackIssuePage() {
             canEdit={canEditMetadata}
             comments={threads}
             feedback={feedback}
-            feedbackItems={feedbackItems}
             onAddRelation={(input) => runFeedbackMutation(
               () => addFeedbackRelation(feedback.id, { ...input, expectedVersion: feedback.version }),
               "反馈关系已更新",
@@ -540,15 +548,15 @@ function OriginalFeedbackCard({
 function FeedbackLifecyclePanel({
   currentUser,
   feedback,
-  feedbackItems,
   notify,
   onTransition,
+  relationReferences,
 }: {
   currentUser: FeedbackWebUser | null;
   feedback: FeedbackWebIssue;
-  feedbackItems: readonly FeedbackWebIssue[];
   notify: (message: string) => void;
   onTransition: (command: FeedbackTransitionInput) => Promise<boolean>;
+  relationReferences: readonly FeedbackReferenceSummary[];
 }) {
   const [resolution, setResolution] = useState<FeedbackCommandResolution>("resolved");
   const [note, setNote] = useState("");
@@ -561,7 +569,7 @@ function FeedbackLifecyclePanel({
   const hasLifecycleAction = capabilities.canStart || canRunActiveCommand || canRunVerificationCommand || capabilities.canReopen;
   const noteValue = note.trim();
   const adminReasonValue = adminReason.trim();
-  const feedbackTitleById = useMemo(() => new Map(feedbackItems.map((item) => [item.id, item.title])), [feedbackItems]);
+  const feedbackTitleById = useMemo(() => new Map(relationReferences.map((item) => [item.id, item.title])), [relationReferences]);
   const duplicateTargets = useMemo(
     () => feedback.relations
       .filter((relation) => relation.type === "duplicates" && relation.sourceFeedbackId === feedback.id)
@@ -794,7 +802,6 @@ function IssueSidebar({
   canEdit,
   comments,
   feedback,
-  feedbackItems,
   onAddRelation,
   onRemoveRelation,
   onSaveAssignee,
@@ -807,7 +814,6 @@ function IssueSidebar({
   canEdit: boolean;
   comments: readonly FeedbackWebCommentThread[];
   feedback: FeedbackWebIssue;
-  feedbackItems: readonly FeedbackWebIssue[];
   onAddRelation: (input: { targetFeedbackId: string; type: FeedbackRelationType }) => Promise<boolean>;
   onRemoveRelation: (relationId: string) => Promise<boolean>;
   onSaveAssignee: (assigneeUserId: string | null) => Promise<boolean>;
@@ -825,10 +831,23 @@ function IssueSidebar({
   const [metadataDraft, setMetadataDraft] = useState(() => feedbackMetadataDraftFromFeedback(feedback));
   const [assigneeDraft, setAssigneeDraft] = useState(feedback.assigneeUserId ?? "");
   const [relationDraft, setRelationDraft] = useState<{ targetFeedbackId: string; type: FeedbackRelationType }>({ targetFeedbackId: "", type: "related" });
+  const [relationSearch, setRelationSearch] = useState("");
   const assignee = feedbackIssueAssignee(feedback, users);
   const labels = feedbackIssueLabels(feedback);
   const participants = feedbackIssueParticipants({ feedback, threads: comments, users });
-  const linkedFeedback = feedbackIssueLinkedFeedback({ feedback, feedbackItems });
+  const relationReferenceIds = useMemo(
+    () => feedback.relations.map((relation) => feedbackRelationOtherId(feedback.id, relation)).filter((id): id is string => Boolean(id)),
+    [feedback.id, feedback.relations],
+  );
+  const relationReferenceOptions = useFeedbackReferenceOptions(
+    Boolean(feedback.id),
+    `${feedback.id}:${feedback.version}:${relationSearch}`,
+    relationReferenceIds,
+    80,
+    relationSearch,
+  );
+  const relationReferences = relationReferenceOptions.references;
+  const linkedFeedback = feedbackIssueLinkedFeedback({ feedback, feedbackReferences: relationReferences });
   const assigneeSelectOptions = useMemo(
     () => ensureFeedbackAssigneeOption(assigneeOptions, assignee.id ? {
       avatarUrl: assignee.avatarUrl,
@@ -848,10 +867,10 @@ function IssueSidebar({
   const canSaveAssignee = Boolean(canChangeAssignee && assigneeDirty);
   const canSaveMetadata = Boolean(metadataDirty && metadataDraft.title.trim() && metadataDraft.causeCategories.length > 0);
   const relationTargets = useMemo(
-    () => feedbackItems
+    () => relationReferences
       .filter((item) => item.id !== feedback.id)
       .filter((item) => !feedback.relations.some((relation) => feedbackRelationMatchesDraft(feedback.id, relation, item.id, relationDraft.type))),
-    [feedback.id, feedback.relations, feedbackItems, relationDraft.type],
+    [feedback.id, feedback.relations, relationDraft.type, relationReferences],
   );
 
   useEffect(() => {
@@ -1036,10 +1055,17 @@ function IssueSidebar({
             <select className="feedback-issue-sidebar-input" value={relationDraft.type} onChange={(event) => setRelationDraft((current) => ({ ...current, type: event.target.value as FeedbackRelationType, targetFeedbackId: "" }))}>
               {feedbackRelationOptions.map((item) => <option key={item} value={item}>{feedbackRelationTypeLabel[item]}</option>)}
             </select>
+            <input
+              className="feedback-issue-sidebar-input"
+              placeholder="搜索反馈标题或编号"
+              value={relationSearch}
+              onChange={(event) => setRelationSearch(event.target.value)}
+            />
             <select className="feedback-issue-sidebar-input" value={relationDraft.targetFeedbackId} onChange={(event) => setRelationDraft((current) => ({ ...current, targetFeedbackId: event.target.value }))}>
-              <option value="">选择反馈</option>
+              <option value="">{relationReferenceOptions.loading ? "正在读取反馈" : "选择反馈"}</option>
               {relationTargets.map((item) => <option key={item.id} value={item.id}>#{feedbackIssueDisplayId(item.id)} {item.title}</option>)}
             </select>
+            {relationReferenceOptions.error && <p className="feedback-issue-sidebar-empty">反馈候选读取失败</p>}
             <FeedbackButton disabled={!relationDraft.targetFeedbackId} size="sm" type="button" onClick={addRelation}>
               <Plus aria-hidden="true" />
               添加关系

@@ -7,6 +7,7 @@ import type {
 } from "../contracts";
 import type {
   FeedbackIssueReadModelData,
+  FeedbackReferenceSummary,
   FeedbackReferenceCardData,
   FeedbackReferenceCardQuery,
   FeedbackSubscription,
@@ -127,6 +128,24 @@ export async function getFeedbackReferenceCard(input: FeedbackReferenceCardQuery
     `/api/feedback/${encodeURIComponent(feedbackId)}/reference${suffix}`,
     { signal: options.signal },
   );
+}
+
+export async function getFeedbackReferences(input: {
+  ids?: readonly string[];
+  limit?: number;
+  query?: string;
+} = {}) {
+  const query = new URLSearchParams();
+  for (const id of input.ids ?? []) {
+    const normalizedId = id.trim();
+    if (normalizedId) query.append("id", normalizedId);
+  }
+  const searchText = input.query?.trim();
+  if (searchText) query.set("q", searchText);
+  if (input.limit !== undefined) query.set("limit", String(input.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const response = await apiJson<{ feedback: FeedbackReferenceSummary[] }>(`/api/feedback/references${suffix}`);
+  return response.feedback;
 }
 
 export async function getFeedbackAssignees() {

@@ -1,5 +1,6 @@
 export type {
   FeedbackIssueReadModelData,
+  FeedbackReferenceSummary,
   FeedbackReferenceCardData,
   FeedbackReferenceCardQuery,
   FeedbackSubscription,

@@ -95,6 +95,37 @@ export async function getFeedbackReadModelIssues(
   input: { readonly teamId: string; readonly viewer?: FeedbackReadModelViewer | null },
 ): Promise<FeedbackReadModelIssue[]> {
   const feedbackRows = await getFeedbackRows(database, input.teamId);
+  return getFeedbackReadModelIssuesFromRows(database, {
+    feedbackRows,
+    teamId: input.teamId,
+    viewer: input.viewer ?? null,
+  });
+}
+
+export async function getFeedbackReadModelIssue(
+  database: FeedbackReadModelDatabase,
+  input: { readonly feedbackId: string; readonly teamId: string; readonly viewer?: FeedbackReadModelViewer | null },
+): Promise<FeedbackReadModelIssue | null> {
+  const feedbackId = input.feedbackId.trim();
+  if (!feedbackId) return null;
+  const feedbackRows = await getFeedbackRowsByIds(database, input.teamId, [feedbackId]);
+  const [issue] = await getFeedbackReadModelIssuesFromRows(database, {
+    feedbackRows,
+    teamId: input.teamId,
+    viewer: input.viewer ?? null,
+  });
+  return issue ?? null;
+}
+
+async function getFeedbackReadModelIssuesFromRows(
+  database: FeedbackReadModelDatabase,
+  input: {
+    readonly feedbackRows: readonly FeedbackRow[];
+    readonly teamId: string;
+    readonly viewer: FeedbackReadModelViewer | null;
+  },
+): Promise<FeedbackReadModelIssue[]> {
+  const feedbackRows = input.feedbackRows;
   const feedbackIds = feedbackRows.map((item) => item.id);
   const [causeRows, activityRows, relationRows, reportAttachmentRows, userViewRows] = await Promise.all([
     getFeedbackCauseRows(database, feedbackIds),
@@ -111,7 +142,7 @@ export async function getFeedbackReadModelIssues(
     relationRows,
     reportAttachmentRows,
     userViewRows,
-    viewer: input.viewer ?? null,
+    viewer: input.viewer,
   });
 }
 
@@ -120,6 +151,15 @@ async function getFeedbackRows(database: FeedbackReadModelDatabase, storageScope
     .select()
     .from(feedback)
     .where(eq(feedback.teamId, storageScopeId))
+    .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id));
+}
+
+async function getFeedbackRowsByIds(database: FeedbackReadModelDatabase, storageScopeId: string, feedbackIssueIds: readonly string[]) {
+  if (feedbackIssueIds.length === 0) return [];
+  return database
+    .select()
+    .from(feedback)
+    .where(and(eq(feedback.teamId, storageScopeId), inArray(feedback.id, [...feedbackIssueIds])))
     .orderBy(desc(feedback.updatedAt), desc(feedback.createdAt), desc(feedback.id));
 }
 

@@ -35,6 +35,11 @@ export type FeedbackWebProject = {
   updatedAt: string;
 };
 
+export type FeedbackReferenceSummary = {
+  id: string;
+  title: string;
+};
+
 export type FeedbackWebAttachment = {
   contentUrl: string;
   downloadUrl: string;

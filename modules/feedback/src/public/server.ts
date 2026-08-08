@@ -32,6 +32,7 @@ export {
   type FeedbackReferenceSummary,
 } from "../server/references";
 export {
+  getFeedbackReadModelIssue,
   getFeedbackReadModelIssues,
   type FeedbackReadModelActivityItem,
   type FeedbackReadModelDatabase,

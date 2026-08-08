@@ -7,7 +7,7 @@ import {
   type FeedbackIssueLabel,
   type FeedbackIssuePerson,
 } from "../../contracts/issueList";
-import type { FeedbackWebCommentThread, FeedbackWebIssue, FeedbackWebRelation, FeedbackWebUser } from "../types";
+import type { FeedbackReferenceSummary, FeedbackWebCommentThread, FeedbackWebIssue, FeedbackWebRelation, FeedbackWebUser } from "../types";
 export {
   feedbackIssueAssignee,
   feedbackIssueAuthor,
@@ -86,14 +86,13 @@ export function feedbackIssueParticipants(input: {
 
 export function feedbackIssueLinkedFeedback(input: {
   feedback: Pick<FeedbackWebIssue, "id" | "relations">;
-  feedbackItems: readonly Pick<FeedbackWebIssue, "id" | "title">[];
+  feedbackReferences: readonly FeedbackReferenceSummary[];
 }): FeedbackIssueLinkedFeedback[] {
-  const feedbackById = new Map(input.feedbackItems.map((feedback) => [feedback.id, feedback]));
+  const feedbackById = new Map(input.feedbackReferences.map((feedback) => [feedback.id, feedback]));
   return input.feedback.relations.flatMap((relation) => {
     const targetId = feedbackRelationOtherFeedbackId(relation, input.feedback.id);
     if (!targetId) return [];
-    const target = feedbackById.get(targetId);
-    if (!target) return [];
+    const target = feedbackById.get(targetId) ?? { id: targetId, title: targetId };
     return [{
       direction: relation.type === "related" ? "undirected" : relation.sourceFeedbackId === input.feedback.id ? "outgoing" : "incoming",
       id: target.id,
