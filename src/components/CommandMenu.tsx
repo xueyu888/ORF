@@ -4,8 +4,8 @@ import { canShowFrontendPath } from "../config/frontendVisibility";
 import { quickCommands } from "../config/navigation";
 import { hasPermission } from "../config/permissions";
 import type { PermissionKey } from "../config/permissions";
+import { registeredWebModuleCommandSearches, type RegisteredWebModuleCommandItem } from "../config/webModuleRegistry";
 import { challengePathForTarget } from "../features/challenge/model/challengeLinks";
-import { feedbackIssueHref } from "@orf/feedback-module/web";
 import { useWorkbenchNavigation } from "../features/workbench-navigation";
 import {
   filterResultsForVisibleObjectives,
@@ -15,35 +15,40 @@ import {
 } from "../features/challenge/model/objectiveVisibility";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
-import { searchFeedbackReferences, type FeedbackReferenceSummary } from "../state/apiClient";
 import { commandTypeLabel } from "../utils/labels";
 
 type CommandMenuItem =
   | { action: "createObjective"; label: string; searchText: string; type: "Action" }
-  | { label: string; path: string; searchText: string; type: "Feedback" | "Metric" | "Objective" | "Page" | "Subtask" | "Task" };
+  | RegisteredWebModuleCommandItem
+  | { label: string; path: string; searchText: string; type: "Metric" | "Objective" | "Page" | "Subtask" | "Task" };
 
 export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const workbenchNavigation = useWorkbenchNavigation();
   const { currentUser, state } = useOrf();
   const [query, setQuery] = useState("");
-  const [feedbackReferences, setFeedbackReferences] = useState<FeedbackReferenceSummary[]>([]);
+  const [webModuleCommandItems, setWebModuleCommandItems] = useState<RegisteredWebModuleCommandItem[]>([]);
   const drag = useDraggableFloating<HTMLDivElement>({ disabled: !open, resetKey: open ? "open" : "closed" });
-  const canSearchFeedback = currentUser?.status === "active" || currentUser?.role === "admin";
+  const webModuleCommandSearches = useMemo(() => registeredWebModuleCommandSearches.filter((search) =>
+    search.canSearch ? search.canSearch({ currentUser }) : true,
+  ), [currentUser]);
 
   useEffect(() => {
     const normalizedQuery = query.trim();
-    if (!open || !canSearchFeedback || normalizedQuery.length < 2) {
-      setFeedbackReferences([]);
+    const searches = webModuleCommandSearches.filter((search) => normalizedQuery.length >= (search.minQueryLength ?? 2));
+    if (!open || searches.length === 0) {
+      setWebModuleCommandItems([]);
       return undefined;
     }
 
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void searchFeedbackReferences(normalizedQuery, { limit: 8, signal: controller.signal })
-        .then((response) => setFeedbackReferences(response.feedback))
+      void Promise.all(searches.map((search) => search.search(normalizedQuery, { limit: 8, signal: controller.signal })))
+        .then((results) => {
+          if (!controller.signal.aborted) setWebModuleCommandItems(results.flat());
+        })
         .catch((error) => {
           if (!controller.signal.aborted) {
-            setFeedbackReferences([]);
+            setWebModuleCommandItems([]);
           }
         });
     }, 160);
@@ -52,7 +57,7 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [canSearchFeedback, open, query]);
+  }, [open, query, webModuleCommandSearches]);
 
   const items = useMemo(() => {
     const visibleObjectives = visibleObjectivesForUser(state.objectives, currentUser);
@@ -122,26 +127,20 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
         type: "Subtask" as const,
       })),
     );
-    const feedbackItems = feedbackReferences.map((item) => ({
-      label: item.title,
-      path: feedbackIssueHref(item.id),
-      searchText: `${item.id} ${item.title}`,
-      type: "Feedback" as const,
-    }));
     const allItems: CommandMenuItem[] = [
       ...commandItems,
       ...objectiveItems,
       ...metricItems,
       ...taskItems,
       ...subtaskItems,
-      ...feedbackItems,
+      ...webModuleCommandItems,
     ];
 
     const normalizedQuery = query.trim().toLowerCase();
     return allItems.filter((item) =>
       !normalizedQuery || `${item.label} ${item.searchText} ${item.type}`.toLowerCase().includes(normalizedQuery),
     );
-  }, [currentUser, feedbackReferences, query, state]);
+  }, [currentUser, query, state, webModuleCommandItems]);
 
   if (!open) {
     return null;

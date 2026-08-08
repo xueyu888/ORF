@@ -1,4 +1,11 @@
-import { feedbackWebContribution } from "@orf/feedback-module/web";
+import { registeredWebModules, webModuleBreadcrumb } from "../config/webModuleRegistry";
+
+function webModuleTitleMap() {
+  return Object.fromEntries(registeredWebModules.flatMap((module) => {
+    const segment = module.navigation.path.split("/").filter(Boolean)[0];
+    return segment ? [[segment, module.navigation.label]] : [];
+  }));
+}
 
 const titleMap: Record<string, string> = {
   dashboard: "ORF 仪表盘",
@@ -10,7 +17,7 @@ const titleMap: Record<string, string> = {
   chat: "聊天",
   "fantasy-ui": "Fantasy UI",
   "genshin-ui-kit": "Genshin UI Kit",
-  feedback: feedbackWebContribution.navigation.label,
+  ...webModuleTitleMap(),
   notifications: "聊天",
   "strategy-map": "策略地图",
   "ai-evaluation": "AI 评估",
@@ -22,9 +29,9 @@ const titleMap: Record<string, string> = {
 };
 
 export function breadcrumb(pathname: string) {
-  const feedbackBreadcrumb = feedbackWebContribution.breadcrumb(pathname);
-  if (feedbackBreadcrumb) {
-    return feedbackBreadcrumb;
+  const moduleBreadcrumb = webModuleBreadcrumb(pathname);
+  if (moduleBreadcrumb) {
+    return moduleBreadcrumb;
   }
 
   if (/^\/chat(?:\/.*)?\/?$/.test(pathname)) {

@@ -13,7 +13,7 @@ import { breadcrumb } from "./appShellBreadcrumb";
 import { orfAssetLibrary } from "../config/assetLibrary";
 import { hasPermission } from "../config/permissions";
 import { pageVisualBackgroundSceneForPath } from "../config/visualSkinSlots";
-import { feedbackWebContribution } from "../feedback/feedbackWebContribution";
+import { requiredWebModuleAction } from "../config/webModuleRegistry";
 import { SystemBroadcastBanner } from "../features/notifications/components/SystemBroadcastBanner";
 import { ClientUpdateCenterDialog } from "../features/client-updates/ClientUpdateCenterDialog";
 import { ClientUpdateNotice } from "../features/client-updates/ClientUpdateNotice";
@@ -45,6 +45,7 @@ import type { VisualBackgroundSelection } from "../utils/visualBackgrounds";
 import { preloadProductionRouteExperience } from "../routing/routePreload";
 
 const shellMainMinimumWidthPx = 640;
+const feedbackCreatePath = requiredWebModuleAction("feedback", "createPath");
 
 function clampShellSidebarWidth(width: number, viewportWidth: number) {
   const { min, max } = sidebarLayoutLimits.expandedWidthPx;
@@ -298,7 +299,7 @@ function AppShellFrame() {
                 </button>
               </div>
               {!isBountyHall && canCreateFeedback && (
-                <Button className="orf-topbar-action-button" size="sm" variant="secondary" onClick={() => workbenchNavigation.open(feedbackWebContribution.actions.createPath, { source: "user" })}>
+                <Button className="orf-topbar-action-button" size="sm" variant="secondary" onClick={() => workbenchNavigation.open(feedbackCreatePath, { source: "user" })}>
                   <MessageSquarePlus className="h-4 w-4" />
                   新建反馈
                 </Button>

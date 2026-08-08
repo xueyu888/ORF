@@ -1,9 +1,9 @@
 import { BellRing, Contrast, Loader2, Moon, Power, RotateCcw, Trash2, Type, Upload } from "lucide-react";
-import { feedbackWebContribution } from "@orf/feedback-module/web";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { PageScaffold } from "../components/PageScaffold";
 import { UserAvatar } from "../components/UserAvatar";
+import { registeredWebModules } from "../config/webModuleRegistry";
 import { Button, Card, Field } from "../components/ui";
 import { defaultChatTheme, defaultUserDisplayPreferences, displayPreferenceLimits, type ChatTheme, type UserDisplayPreferences } from "../domain/settings/personalPreferences";
 import { sendNativeChatNotification } from "../features/chat/chatNativeNotificationDelivery";
@@ -32,7 +32,7 @@ const landingOptions = [
   { label: "悬赏大厅", value: "/bounties" },
   { label: "我的挑战", value: "/tasks" },
   { label: "聊天", value: "/chat" },
-  { label: feedbackWebContribution.navigation.label, value: feedbackWebContribution.navigation.path },
+  ...registeredWebModules.map((module) => ({ label: module.navigation.label, value: module.navigation.path })),
   { label: "统计", value: "/reports" },
 ];
 

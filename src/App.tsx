@@ -6,10 +6,10 @@ import { AppFallbackPage } from "./components/AppFallback";
 import { Button } from "./components/ui";
 import { canShowFrontend, canShowFrontendPath, type FrontendVisibilityKey } from "./config/frontendVisibility";
 import { systemManagementPages } from "./config/navigation";
+import { registeredWebModuleRoutes } from "./config/webModuleRegistry";
 import developmentRoutes from "./config/developmentRoutes.json";
 import { ChatImagePopoutPage } from "./features/chat/ChatFloatingImagePreview";
 import { DriveFilePreviewPopoutPage } from "./features/drive/DriveFilePreview";
-import { feedbackWebContribution } from "./feedback/feedbackWebContribution";
 import { readLastWorkbenchLocationHref } from "./features/workbench-navigation";
 import { useOrf } from "./state/OrfProvider";
 import {
@@ -40,10 +40,6 @@ const developmentOnlyPages = import.meta.env.DEV
       StrategyMapPage: lazyDevelopmentPage(() => import("./pages/StrategyMapPage"), "StrategyMapPage"),
     }
   : null;
-const FeedbackCreatePage = feedbackWebContribution.pages.Create;
-const FeedbackInboxPage = feedbackWebContribution.pages.Inbox;
-const FeedbackIssuePage = feedbackWebContribution.pages.Detail;
-const FeedbackLabelsPage = feedbackWebContribution.pages.Labels;
 
 export function App() {
   return (
@@ -75,10 +71,9 @@ export function App() {
         <Route path="chat" element={<LazyRoute><ChatPage /></LazyRoute>} />
         <Route path="chat/system/:systemConversationId" element={<LazyRoute><ChatPage /></LazyRoute>} />
         <Route path="chat/:channelId" element={<LazyRoute><ChatPage /></LazyRoute>} />
-        <Route path={feedbackWebContribution.routes.inbox.routePath} element={<LazyRoute><FeedbackInboxPage /></LazyRoute>} />
-        <Route path={feedbackWebContribution.routes.create.routePath} element={<LazyRoute><FeedbackCreatePage /></LazyRoute>} />
-        <Route path={feedbackWebContribution.routes.labels.routePath} element={<LazyRoute><FeedbackLabelsPage /></LazyRoute>} />
-        <Route path={feedbackWebContribution.routes.detail.routePath} element={<LazyRoute><FeedbackIssuePage /></LazyRoute>} />
+        {registeredWebModuleRoutes.map(({ id, Page, routePath }) => (
+          <Route key={id} path={routePath} element={<LazyRoute><Page /></LazyRoute>} />
+        ))}
         <Route path="notifications" element={<Navigate to="/chat/system/personalNotifications" replace />} />
         <Route path="reports" element={<LazyRoute><ReportsPage /></LazyRoute>} />
         <Route path="members" element={<Navigate to="/system/members" replace />} />

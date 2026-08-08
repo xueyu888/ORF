@@ -11,8 +11,20 @@ import {
   Trophy,
   UsersRound,
 } from "lucide-react";
-import { feedbackWebContribution } from "@orf/feedback-module/web";
+import { registeredWebModules } from "./webModuleRegistry";
 import type { PermissionKey } from "./permissions";
+
+const webModuleNavigationIconById = {
+  feedback: Inbox,
+};
+
+function webModuleNavigationItems() {
+  return registeredWebModules.map((module) => ({
+    label: module.navigation.label,
+    path: module.navigation.path,
+    icon: webModuleNavigationIconById[module.id as keyof typeof webModuleNavigationIconById] ?? Inbox,
+  }));
+}
 
 export const navItems = [
   { label: "悬赏大厅", path: "/bounties", icon: Trophy },
@@ -20,7 +32,7 @@ export const navItems = [
   { label: "工作日志", path: "/work-logs", icon: NotebookPen },
   { label: "聊天", path: "/chat", icon: MessagesSquare },
   { label: "资源", path: "/resources", icon: HardDrive },
-  { label: feedbackWebContribution.navigation.label, path: feedbackWebContribution.navigation.path, icon: Inbox },
+  ...webModuleNavigationItems(),
   { label: "统计", path: "/reports", icon: BarChart3 },
   { label: "系统管理", path: "/system", icon: Settings },
 ];

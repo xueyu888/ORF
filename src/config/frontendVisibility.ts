@@ -1,6 +1,6 @@
-import { feedbackWebContribution } from "@orf/feedback-module/web";
 import type { OrfUser, UserRole } from "../types/orf";
 import frontendVisibilityConfig from "./frontendVisibility.config.json";
+import { registeredWebModules } from "./webModuleRegistry";
 
 type SpecialVisibilityAudience = "systemManagementViewer";
 type VisibilityAudience = "all" | SpecialVisibilityAudience | readonly UserRole[];
@@ -19,6 +19,16 @@ export const frontendVisibilityTable = validateFrontendVisibilityConfig(
   frontendVisibilityConfig as Record<FrontendVisibilityKey, FrontendVisibilityRule>,
 );
 
+function webModuleVisibilityByPath() {
+  return Object.fromEntries(registeredWebModules.map((module) => {
+    const key = `nav.${module.id}` as FrontendVisibilityKey;
+    if (!(key in frontendVisibilityTable)) {
+      throw new Error(`Web module ${module.id} must define frontend visibility key ${key}`);
+    }
+    return [module.navigation.path, key];
+  }));
+}
+
 export const frontendVisibilityByPath: Record<string, FrontendVisibilityKey> = {
   "/bounties": "nav.bounties",
   "/tasks": "nav.tasks",
@@ -26,7 +36,7 @@ export const frontendVisibilityByPath: Record<string, FrontendVisibilityKey> = {
   "/drive": "nav.drive",
   "/resources": "nav.drive",
   "/chat": "nav.chat",
-  [feedbackWebContribution.navigation.path]: "nav.feedback",
+  ...webModuleVisibilityByPath(),
   "/reports": "nav.reports",
   "/settings": "page.personalSettings",
   "/system": "page.systemManagement",
