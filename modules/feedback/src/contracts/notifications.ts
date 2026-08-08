@@ -1,10 +1,11 @@
 import { feedbackCommentPath, feedbackIssuePath } from "./links";
 
 export type FeedbackNotificationEventKind =
-  | "feedback.assigned"
-  | "feedback.commented"
+  | "feedback.assignee.changed"
+  | "feedback.assignee.digest"
+  | "feedback.comment.created"
   | "feedback.created"
-  | "feedback.status.changed";
+  | "feedback.lifecycle.changed";
 
 export type FeedbackNotificationProjectSnapshot = {
   readonly id: string;
@@ -15,7 +16,6 @@ export type FeedbackNotificationEventPlan = {
   actorName: string;
   actorUserId?: string | null;
   body: string;
-  destinationChannelIds: string[];
   kind: FeedbackNotificationEventKind;
   metadata: Record<string, string>;
   recipientUserIds: string[];
@@ -40,7 +40,6 @@ export function planFeedbackCreatedNotification(input: {
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: `${input.actorName} 创建了反馈「${input.title}」${input.assigneeName ? `，处理人：${input.assigneeName}` : ""}。`,
-    destinationChannelIds: [],
     kind: "feedback.created",
     metadata: {
       assignee: input.assigneeName ?? "",
@@ -71,8 +70,7 @@ export function planFeedbackLifecycleChangedNotification(input: {
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: `${input.actorName} 更新了反馈「${input.title}」的生命周期。`,
-    destinationChannelIds: [],
-    kind: "feedback.status.changed",
+    kind: "feedback.lifecycle.changed",
     metadata: {
       feedbackResolution: input.resolution ?? "",
       feedbackStage: input.stage,
@@ -102,8 +100,7 @@ export function planFeedbackAssigneeChangedNotification(input: {
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: `${input.actorName} 将反馈「${input.title}」的处理人从 ${input.previousAssigneeName ?? "未指派"} 调整为 ${input.nextAssigneeName ?? "未指派"}。`,
-    destinationChannelIds: [],
-    kind: "feedback.assigned",
+    kind: "feedback.assignee.changed",
     metadata: {
       feedbackTitle: input.title,
       nextAssignee: input.nextAssigneeName ?? "",
@@ -135,8 +132,7 @@ export function planFeedbackCommentCreatedNotification(input: {
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: input.body,
-    destinationChannelIds: [],
-    kind: "feedback.commented",
+    kind: "feedback.comment.created",
     metadata: {
       commentMessageId: input.commentMessageId,
       commentThreadId: input.commentThreadId,

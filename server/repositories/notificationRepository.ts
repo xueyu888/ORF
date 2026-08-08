@@ -34,7 +34,6 @@ export type NotificationEventInput = {
   actorName: string;
   actorUserId?: string | null;
   body: string;
-  destinationChannelIds?: string[];
   kind: NotificationKind;
   metadata?: Record<string, string>;
   recipientUserIds: string[];
@@ -167,10 +166,6 @@ function toNotification(row: NotificationEventRow): AppNotification {
 function deliveryErrorText(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return message.slice(0, 500);
-}
-
-function uniqueTextValues(values: readonly string[] | undefined) {
-  return Array.from(new Set((values ?? []).map((value) => value.trim()).filter(Boolean)));
 }
 
 function nextDeliveryRetryAt(attempts: number) {
@@ -483,7 +478,6 @@ async function insertNotificationEvent(input: NotificationEventInput, eventId: s
       actorUserId: input.actorUserId,
     });
     const isolatedE2eActor = isE2eNotificationActorName(actorIsolationName);
-    const destinationChannelIds = uniqueTextValues(input.destinationChannelIds);
     await client.query(
       `
         INSERT INTO notification_events (
@@ -586,30 +580,6 @@ async function insertNotificationEvent(input: NotificationEventInput, eventId: s
       );
     }
 
-    if (destinationChannelIds.length > 0 && !isolatedE2eActor) {
-      await client.query(
-        `
-          WITH input_deliveries AS (
-            SELECT *
-            FROM unnest($2::text[], $3::text[]) AS item(id, destination_id)
-          )
-          INSERT INTO notification_deliveries (
-            id, event_id, recipient_user_id, channel, status, destination_id, attempts,
-            created_at, updated_at
-          )
-          SELECT id, $1, null, 'chat', 'pending', destination_id, 0, $4, $4
-          FROM input_deliveries
-          ON CONFLICT DO NOTHING
-        `,
-        [
-          eventId,
-          destinationChannelIds.map((destinationId) => notificationChatDeliveryId(eventId, null, destinationId)),
-          destinationChannelIds,
-          createdAt,
-        ],
-      );
-    }
-
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
@@ -656,19 +626,18 @@ async function listNotificationsForEvent(eventId: string): Promise<AppNotificati
 
 export async function createNotificationEvent(input: NotificationEventInput): Promise<AppNotification[]> {
   const createdAt = nowIso();
-  const destinationChannelIds = uniqueTextValues(input.destinationChannelIds);
   const recipients = resolveNotificationRecipients({
     actorUserId: input.actorUserId,
     createdAt,
     recipientUserIds: input.recipientUserIds,
     stream: input.stream,
   });
-  if (input.stream === "personalNotification" && recipients.length === 0 && destinationChannelIds.length === 0) {
+  if (input.stream === "personalNotification" && recipients.length === 0) {
     return [];
   }
 
   const eventId = makeId("nevt");
-  await insertNotificationEvent({ ...input, destinationChannelIds }, eventId, createdAt, recipients);
+  await insertNotificationEvent(input, eventId, createdAt, recipients);
   const notifications = await listNotificationsForEvent(eventId);
   for (const notification of notifications) {
     publishRealtimeNotification(input.teamId, notification);
@@ -688,26 +657,6 @@ export async function getActiveAdminNotificationRecipients(teamId: string): Prom
         AND COALESCE(u.status, 'active') = 'active'
     `,
     [teamId],
-  );
-  return rows.map((row) => row.id);
-}
-
-export async function getProjectChatNotificationChannelIds(teamId: string, projectId?: string | null): Promise<string[]> {
-  const normalizedProjectId = projectId?.trim();
-  if (!normalizedProjectId) return [];
-
-  const { rows } = await pool.query<{ id: string }>(
-    `
-      SELECT id
-      FROM chat_channels
-      WHERE team_id = $1
-        AND project_id = $2
-        AND system_kind IS NULL
-        AND type IN ('public', 'private')
-        AND archived_at IS NULL
-      ORDER BY updated_at DESC, created_at ASC, id
-    `,
-    [teamId, normalizedProjectId],
   );
   return rows.map((row) => row.id);
 }

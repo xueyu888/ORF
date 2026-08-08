@@ -35,7 +35,7 @@ export type FeedbackDailyDigestNotificationInput = {
   readonly actorName: string;
   readonly actorUserId: string | null;
   readonly body: string;
-  readonly kind: "feedback.assignee.daily_digest";
+  readonly kind: "feedback.assignee.digest";
   readonly metadata: Record<string, string>;
   readonly recipientUserIds: string[];
   readonly targetHref: string;
@@ -229,7 +229,7 @@ async function publishDigestForRecipient(input: {
       body: formatFeedbackDailyDigestBody({
         items,
       }),
-      kind: "feedback.assignee.daily_digest",
+      kind: "feedback.assignee.digest",
       metadata: {
         assigneeUserId: input.recipient.userId,
         feedbackCount: String(items.length),

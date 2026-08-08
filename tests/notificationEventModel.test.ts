@@ -85,7 +85,7 @@ test("system chat projection metadata points back to the notification event", ()
     actorName: "薛雨",
     actorUserId: "user-a",
     body: "请补充信息",
-    kind: "feedback.commented",
+    kind: "feedback.comment.created",
     metadata: { targetTitle: "聊天界面内存管理有问题" },
     replyTargetId: "fb-1",
     replyTargetType: "feedback",
@@ -101,7 +101,7 @@ test("system chat projection metadata points back to the notification event", ()
   assert.equal(metadata.targetTitle, "聊天界面内存管理有问题");
   assert.equal(formatNotificationChatBody({
     body: "请补充信息",
-    kind: "feedback.commented",
+    kind: "feedback.comment.created",
     targetHref: "/feedback/fb-1?comment=comment-1",
     targetType: "feedback",
     title: "反馈有新评论",
@@ -164,10 +164,10 @@ test("known notification kinds have explicit action labels", () => {
     { kind: "objective.settlement.updated", label: "打开统计", targetHref: "/reports?date=2026-08-04&objective=objective-1", targetType: "objective" },
     { kind: "objective.settled", label: "打开统计", targetHref: "/reports?date=2026-08-04&objective=objective-1", targetType: "objective" },
     { kind: "feedback.created", label: "打开反馈", targetHref: "/feedback/feedback-1", targetType: "feedback" },
-    { kind: "feedback.commented", label: "打开评论", targetHref: "/feedback/feedback-1?comment=comment-1", targetType: "feedback" },
-    { kind: "feedback.status.changed", label: "打开反馈", targetHref: "/feedback/feedback-1", targetType: "feedback" },
-    { kind: "feedback.assigned", label: "打开反馈", targetHref: "/feedback/feedback-1", targetType: "feedback" },
-    { kind: "feedback.assignee.daily_digest", label: "打开反馈列表", targetHref: "/feedback?state=open&assignee=user-1", targetType: "feedback" },
+    { kind: "feedback.comment.created", label: "打开评论", targetHref: "/feedback/feedback-1?comment=comment-1", targetType: "feedback" },
+    { kind: "feedback.lifecycle.changed", label: "打开反馈", targetHref: "/feedback/feedback-1", targetType: "feedback" },
+    { kind: "feedback.assignee.changed", label: "打开反馈", targetHref: "/feedback/feedback-1", targetType: "feedback" },
+    { kind: "feedback.assignee.digest", label: "打开反馈列表", targetHref: "/feedback?state=open&assignee=user-1", targetType: "feedback" },
     { kind: "comment.reply.created", label: "打开评论", targetHref: "/tasks?comment=comment-1#objective:objective-1", targetType: "comment" },
     { kind: "comment.thread.status.changed", label: "打开评论", targetHref: "/tasks?comment=thread-1#objective:objective-1", targetType: "comment" },
     { kind: "comment.mention.created", label: "打开评论", targetHref: "/tasks?comment=comment-1#objective:objective-1", targetType: "comment" },
@@ -312,17 +312,17 @@ test("revision and peer review notifications point back to the objective", () =>
   });
 });
 
-test("feedback assignment notifications stay replyable on the feedback target", () => {
-  assert.deepEqual(notificationPolicy("feedback.assigned"), {
-    kind: "feedback.assigned",
+test("feedback assignee change notifications stay replyable on the feedback target", () => {
+  assert.deepEqual(notificationPolicy("feedback.assignee.changed"), {
+    kind: "feedback.assignee.changed",
     replyTarget: "notification-target",
     stream: "personalNotification",
   });
 });
 
-test("feedback assignee daily digest is a personal notification without reply target", () => {
-  assert.deepEqual(notificationPolicy("feedback.assignee.daily_digest"), {
-    kind: "feedback.assignee.daily_digest",
+test("feedback assignee digest is a personal notification without reply target", () => {
+  assert.deepEqual(notificationPolicy("feedback.assignee.digest"), {
+    kind: "feedback.assignee.digest",
     replyTarget: "none",
     stream: "personalNotification",
   });

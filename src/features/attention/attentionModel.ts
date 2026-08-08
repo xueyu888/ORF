@@ -51,7 +51,7 @@ const WORK_LOG_TARGET_PATH = "/work-logs";
 
 const urgentNotificationKinds = new Set<NotificationKind>([
   "data.sync.conflict",
-  "feedback.assigned",
+  "feedback.assignee.changed",
   "objective.alignment.requested",
   "objective.loot.submitted",
   "objective.peerReview.requested",
@@ -71,10 +71,10 @@ const toastNotificationKinds = new Set<NotificationKind>([
   "challenge.application.rejected",
   "comment.reply.created",
   "comment.thread.status.changed",
-  "feedback.assignee.daily_digest",
-  "feedback.commented",
+  "feedback.assignee.digest",
+  "feedback.comment.created",
   "feedback.created",
-  "feedback.status.changed",
+  "feedback.lifecycle.changed",
   "objective.alignment.reviewed",
   "objective.challenge.accepted",
 ]);

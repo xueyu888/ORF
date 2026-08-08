@@ -117,7 +117,6 @@ import {
   getActiveAdminNotificationRecipients,
   getActiveMemberNotificationRecipientsByIds,
   getActiveTeamNotificationRecipients,
-  getProjectChatNotificationChannelIds,
   getUserNameById,
 } from "./notificationRepository";
 import { recordFeedbackCommentCreated } from "./feedbackRepository";

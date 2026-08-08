@@ -403,8 +403,13 @@ describe("feedback module domain", () => {
       }),
     ];
 
+    assert.deepEqual(plans.map((plan) => plan.kind), [
+      "feedback.created",
+      "feedback.lifecycle.changed",
+      "feedback.assignee.changed",
+      "feedback.comment.created",
+    ]);
     for (const plan of plans) {
-      assert.deepEqual(plan.destinationChannelIds, []);
       assert.deepEqual(plan.recipientUserIds, recipients);
       assert.equal(plan.targetType, "feedback");
     }

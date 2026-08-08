@@ -42,10 +42,10 @@ const knownNotificationKinds = new Set<NotificationKind>([
   "objective.settlement.updated",
   "objective.settled",
   "feedback.created",
-  "feedback.commented",
-  "feedback.status.changed",
-  "feedback.assigned",
-  "feedback.assignee.daily_digest",
+  "feedback.comment.created",
+  "feedback.lifecycle.changed",
+  "feedback.assignee.changed",
+  "feedback.assignee.digest",
   "comment.reply.created",
   "comment.thread.status.changed",
   "comment.mention.created",
@@ -138,7 +138,7 @@ function nextTargetHref(row: NotificationRepairRow) {
     }
   }
 
-  if (row.kind.startsWith("comment.") || row.kind === "feedback.commented") {
+  if (row.kind.startsWith("comment.") || row.kind === "feedback.comment.created") {
     const commentId = metadata.commentMessageId?.trim() || metadata.commentThreadId?.trim() || "";
     return commentId ? addSearchParam(row.event_target_href, "comment", commentId) : row.event_target_href;
   }
@@ -147,7 +147,7 @@ function nextTargetHref(row: NotificationRepairRow) {
 }
 
 function eventBodyFor(row: NotificationRepairRow) {
-  return row.kind === "feedback.assignee.daily_digest" ? stripFeedbackDigestActionLink(row.event_body) : row.event_body;
+  return row.kind === "feedback.assignee.digest" ? stripFeedbackDigestActionLink(row.event_body) : row.event_body;
 }
 
 function chatBodyFor(row: NotificationRepairRow, eventBody: string, targetHref: string) {

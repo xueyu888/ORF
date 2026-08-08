@@ -160,7 +160,7 @@ function attentionNotification(overrides: Partial<AppNotification> = {}): AppNot
     body: "请处理这条反馈",
     createdAt: "2026-06-07T09:30:00.000Z",
     id: "notification-1",
-    kind: "feedback.assigned",
+    kind: "feedback.assignee.changed",
     metadata: {},
     readAt: null,
     recipientUserId: currentUserId,
@@ -628,7 +628,7 @@ test("attention state separates notification work items from ordinary chat badge
   assert.equal(state.badgeCount, 43);
   assert.equal(state.level, "urgent");
   assert.equal(state.items.length, 1);
-  assert.equal(state.items[0]?.kind, "feedback.assigned");
+  assert.equal(state.items[0]?.kind, "feedback.assignee.changed");
 });
 
 test("work log reminder attention opens the first missing date", () => {

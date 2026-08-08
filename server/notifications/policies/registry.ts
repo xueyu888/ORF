@@ -37,8 +37,8 @@ export const notificationPolicyRegistry: Record<NotificationKind, NotificationPo
     replyTarget: "none",
     stream: "personalNotification",
   },
-  "feedback.commented": {
-    kind: "feedback.commented",
+  "feedback.comment.created": {
+    kind: "feedback.comment.created",
     replyTarget: "notification-target",
     stream: "personalNotification",
   },
@@ -47,18 +47,18 @@ export const notificationPolicyRegistry: Record<NotificationKind, NotificationPo
     replyTarget: "notification-target",
     stream: "personalNotification",
   },
-  "feedback.status.changed": {
-    kind: "feedback.status.changed",
+  "feedback.lifecycle.changed": {
+    kind: "feedback.lifecycle.changed",
     replyTarget: "notification-target",
     stream: "personalNotification",
   },
-  "feedback.assigned": {
-    kind: "feedback.assigned",
+  "feedback.assignee.changed": {
+    kind: "feedback.assignee.changed",
     replyTarget: "notification-target",
     stream: "personalNotification",
   },
-  "feedback.assignee.daily_digest": {
-    kind: "feedback.assignee.daily_digest",
+  "feedback.assignee.digest": {
+    kind: "feedback.assignee.digest",
     replyTarget: "none",
     stream: "personalNotification",
   },

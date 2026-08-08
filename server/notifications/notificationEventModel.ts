@@ -185,12 +185,12 @@ export function notificationActionFor(input: NotificationActionInput): Notificat
     case "objective.settled":
       return { href, label: "打开统计" };
     case "feedback.created":
-    case "feedback.status.changed":
-    case "feedback.assigned":
+    case "feedback.lifecycle.changed":
+    case "feedback.assignee.changed":
       return { href, label: "打开反馈" };
-    case "feedback.commented":
+    case "feedback.comment.created":
       return { href, label: "打开评论" };
-    case "feedback.assignee.daily_digest":
+    case "feedback.assignee.digest":
       return { href, label: "打开反馈列表" };
     case "comment.reply.created":
     case "comment.thread.status.changed":
