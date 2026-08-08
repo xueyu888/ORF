@@ -55,9 +55,11 @@ export type AddFeedbackRelationInput = {
 
 export type FeedbackImportPreflight = {
   batchId: string;
+  commitAvailable: boolean;
+  commitBlockedReason?: string;
   errors: Array<{ field?: string; message: string; row?: number }>;
   fileName: string;
-  sourceKind: "csv";
+  sourceKind: "csv" | "zip";
   summary: {
     attachmentBytes: number;
     errors: number;

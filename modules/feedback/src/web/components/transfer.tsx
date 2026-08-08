@@ -98,7 +98,7 @@ function FeedbackImportDialog({
   const [preflight, setPreflight] = useState<FeedbackImportPreflight | null>(null);
   const [loading, setLoading] = useState(false);
   const [committing, setCommitting] = useState(false);
-  const canCommit = Boolean(preflight && preflight.errors.length === 0 && preflight.summary.newRecords > 0);
+  const canCommit = Boolean(preflight?.commitAvailable);
 
   const runPreflight = async () => {
     if (!file || loading) return;
@@ -109,6 +109,8 @@ function FeedbackImportDialog({
       setPreflight(response.preflight);
       if (response.preflight.errors.length > 0) {
         notify("导入预检发现错误");
+      } else if (!response.preflight.commitAvailable) {
+        notify(response.preflight.commitBlockedReason ?? "导入文件已识别");
       } else {
         notify(`导入预检通过：${response.preflight.summary.newRecords} 条新反馈`);
       }
@@ -140,7 +142,7 @@ function FeedbackImportDialog({
         <header>
           <div>
             <h2 id="feedback-import-title">导入反馈</h2>
-            <p>上传反馈 CSV，先预检字段、项目和处理人，再确认写入。</p>
+            <p>上传反馈 CSV 或完整备份 ZIP，先完成预检，再确认写入。</p>
           </div>
           <FeedbackButton variant="ghost" onClick={onClose}>关闭</FeedbackButton>
         </header>
@@ -148,7 +150,7 @@ function FeedbackImportDialog({
         <div className="feedback-import-dropzone">
           <input
             ref={inputRef}
-            accept=".csv,text/csv"
+            accept=".csv,.zip,text/csv,application/zip,application/x-zip-compressed"
             type="file"
             onChange={(event) => {
               const selected = event.target.files?.[0] ?? null;
@@ -157,8 +159,8 @@ function FeedbackImportDialog({
             }}
           />
           <div>
-            <strong>{file?.name ?? "选择 CSV 文件"}</strong>
-            <span>{file ? `${Math.ceil(file.size / 1024)} KB` : "支持当前视图 CSV 导入"}</span>
+            <strong>{file?.name ?? "选择 CSV 或 ZIP 文件"}</strong>
+            <span>{file ? `${Math.ceil(file.size / 1024)} KB` : "支持当前视图 CSV 和完整备份 ZIP"}</span>
           </div>
           <FeedbackButton variant="secondary" onClick={() => inputRef.current?.click()}>
             <FileUp aria-hidden="true" />
@@ -193,6 +195,7 @@ function FeedbackImportPreflightView({ preflight }: { preflight: FeedbackImportP
   return (
     <div className="feedback-import-preflight">
       <div className="feedback-import-summary">
+        <span><strong>{preflight.sourceKind.toUpperCase()}</strong> 类型</span>
         <span><strong>{preflight.summary.totalRecords}</strong> 总记录</span>
         <span><strong>{preflight.summary.newRecords}</strong> 可新增</span>
         <span><strong>{preflight.summary.updateRecords}</strong> 可更新</span>
@@ -200,6 +203,12 @@ function FeedbackImportPreflightView({ preflight }: { preflight: FeedbackImportP
         <span><strong>{preflight.summary.errors}</strong> 错误</span>
         <span><strong>{formatBytes(preflight.summary.attachmentBytes)}</strong> 附件</span>
       </div>
+      {preflight.commitBlockedReason && (
+        <div className="feedback-import-messages" data-tone="warning">
+          <strong>提交状态</strong>
+          <p>{preflight.commitBlockedReason}</p>
+        </div>
+      )}
       <div className="feedback-import-preflight-actions">
         <FeedbackButton
           size="sm"
@@ -243,6 +252,7 @@ function buildFeedbackImportPreflightReport(preflight: FeedbackImportPreflight) 
     `文件: ${preflight.fileName}`,
     `批次: ${preflight.batchId}`,
     `类型: ${preflight.sourceKind.toUpperCase()}`,
+    `提交: ${preflight.commitAvailable ? "可提交" : (preflight.commitBlockedReason ?? "不可提交")}`,
     "",
     "摘要",
     `总记录: ${preflight.summary.totalRecords}`,

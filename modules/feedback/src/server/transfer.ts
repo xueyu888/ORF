@@ -25,12 +25,16 @@ export type FeedbackImportMessage = {
 
 export type FeedbackImportPreflight = {
   batchId: string;
+  commitAvailable: boolean;
+  commitBlockedReason?: string;
   errors: FeedbackImportMessage[];
   fileName: string;
-  sourceKind: "csv";
+  sourceKind: FeedbackImportSourceKind;
   summary: FeedbackImportSummary;
   warnings: FeedbackImportMessage[];
 };
+
+export type FeedbackImportSourceKind = "csv" | "zip";
 
 export type FeedbackImportSummary = {
   attachmentBytes: number;
@@ -59,7 +63,18 @@ type FeedbackImportRecord = {
 };
 
 type StoredFeedbackImportSummary = FeedbackImportSummary & {
+  backup?: FeedbackBackupImportSummary;
   records: FeedbackImportRecord[];
+};
+
+type FeedbackBackupImportSummary = {
+  attachmentFiles: number;
+  commentAttachments: number;
+  manifestFiles: number;
+  projects: number;
+  reportAttachments: number;
+  users: number;
+  version: string;
 };
 
 export type FeedbackBackupAttachmentKind = "comment" | "report";
@@ -90,6 +105,7 @@ type StoredZipFile = {
 };
 
 const feedbackCurrentViewCsvVersion = "orf.feedback.current_view.v1";
+const feedbackBackupZipVersion = "orf.feedback.backup.v1";
 const impactValues = new Set<FeedbackImpact>(["low", "medium", "high", "critical"]);
 const priorityValues = new Set<FeedbackPriority>(["p0", "p1", "p2", "p3"]);
 
@@ -165,7 +181,7 @@ function buildFeedbackBackupManifest(input: {
         sha256: sha256(content),
       };
     }),
-    version: "orf.feedback.backup.v1",
+    version: feedbackBackupZipVersion,
   };
 
   return manifest;
@@ -215,6 +231,84 @@ function userReferenceMapping(user: FeedbackIssueReadModelData["users"][number])
     externalId: user.id,
     role: user.role,
     status: user.status,
+  };
+}
+
+export async function preflightFeedbackImport(
+  database: FeedbackTransferDatabase,
+  input: {
+    actor: FeedbackWriteActor;
+    body: Buffer;
+    fileName: string;
+    knownAssigneeUserIds: ReadonlySet<string>;
+    knownProjectIds: ReadonlySet<string>;
+    mimeType?: string;
+  },
+): Promise<FeedbackImportPreflight> {
+  if (detectFeedbackImportSource(input) === "zip") {
+    return preflightFeedbackImportZip(database, {
+      actor: input.actor,
+      body: input.body,
+      fileName: input.fileName,
+    });
+  }
+
+  return preflightFeedbackImportCsv(database, {
+    actor: input.actor,
+    fileName: input.fileName,
+    knownAssigneeUserIds: input.knownAssigneeUserIds,
+    knownProjectIds: input.knownProjectIds,
+    text: input.body.toString("utf8"),
+  });
+}
+
+export async function preflightFeedbackImportZip(
+  database: FeedbackTransferDatabase,
+  input: {
+    actor: FeedbackWriteActor;
+    body: Buffer;
+    fileName: string;
+  },
+): Promise<FeedbackImportPreflight> {
+  const batchId = makeFeedbackImportBatchId();
+  const createdAt = feedbackNowIso();
+  const inspected = inspectFeedbackBackupZip(input.body);
+  const summary: StoredFeedbackImportSummary = {
+    attachmentBytes: inspected.attachmentBytes,
+    backup: inspected.backup,
+    errors: inspected.errors.length,
+    newRecords: 0,
+    records: [],
+    skippedRecords: 0,
+    totalRecords: inspected.feedbackRecords,
+    updateRecords: 0,
+  };
+
+  await database.insert(feedbackImportBatches).values({
+    id: batchId,
+    teamId: input.actor.teamId,
+    createdBy: input.actor.id,
+    status: inspected.errors.length > 0 ? "failed" : "uploaded",
+    sourceKind: "zip",
+    fileName: input.fileName,
+    summary,
+    error: inspected.errors.length > 0 ? "preflight_failed" : null,
+    createdAt,
+    updatedAt: createdAt,
+    committedAt: null,
+  });
+
+  return {
+    batchId,
+    commitAvailable: false,
+    commitBlockedReason: inspected.errors.length > 0
+      ? "完整备份 ZIP 未通过 manifest 校验"
+      : "完整备份 ZIP 已识别；提交前还需要完成用户和项目映射",
+    errors: inspected.errors,
+    fileName: input.fileName,
+    sourceKind: "zip",
+    summary: publicImportSummary(summary),
+    warnings: inspected.warnings,
   };
 }
 
@@ -309,6 +403,8 @@ export async function preflightFeedbackImportCsv(
 
   return {
     batchId,
+    commitAvailable: errors.length === 0 && newRecords.length > 0,
+    commitBlockedReason: feedbackCsvImportCommitBlockedReason(errors, newRecords.length),
     errors,
     fileName: input.fileName,
     sourceKind: "csv",
@@ -334,6 +430,7 @@ export async function commitFeedbackImportBatch(
 
   const summary = readStoredImportSummary(batch.summary);
   if (!summary || summary.errors > 0) return { status: "invalid" };
+  if (batch.sourceKind !== "csv") return { status: "invalid" };
 
   const now = feedbackNowIso();
   const createdFeedbackIds: string[] = [];
@@ -402,6 +499,276 @@ export async function commitFeedbackImportBatch(
     createdFeedbackIds,
     skippedRecords: summary.skippedRecords + skippedRecords,
   };
+}
+
+type FeedbackBackupZipInspection = {
+  attachmentBytes: number;
+  backup: FeedbackBackupImportSummary;
+  errors: FeedbackImportMessage[];
+  feedbackRecords: number;
+  warnings: FeedbackImportMessage[];
+};
+
+type FeedbackBackupManifestFile = {
+  bytes: number;
+  path: string;
+  sha256: string;
+};
+
+type StoredZipEntry = {
+  content: Buffer;
+  path: string;
+};
+
+const feedbackBackupJsonlCountFiles = [
+  ["feedback", "feedback.jsonl"],
+  ["comments", "comments.jsonl"],
+  ["activity", "activity.jsonl"],
+  ["relations", "relations.jsonl"],
+  ["projects", "projects.jsonl"],
+  ["users", "users.jsonl"],
+] as const;
+
+function detectFeedbackImportSource(input: { body: Buffer; fileName: string; mimeType?: string }): FeedbackImportSourceKind {
+  const fileName = input.fileName.toLowerCase();
+  const mimeType = input.mimeType?.toLowerCase() ?? "";
+  if (input.body.length >= 4 && input.body.readUInt32LE(0) === 0x04034b50) return "zip";
+  if (fileName.endsWith(".zip")) return "zip";
+  if (mimeType.includes("zip")) return "zip";
+  return "csv";
+}
+
+function feedbackCsvImportCommitBlockedReason(errors: readonly FeedbackImportMessage[], newRecords: number) {
+  if (errors.length > 0) return "CSV 预检存在错误";
+  if (newRecords === 0) return "没有可新增的反馈";
+  return undefined;
+}
+
+function inspectFeedbackBackupZip(body: Buffer): FeedbackBackupZipInspection {
+  const errors: FeedbackImportMessage[] = [];
+  const warnings: FeedbackImportMessage[] = [];
+  const entries = readStoredZipEntries(body, errors);
+  const emptyBackup: FeedbackBackupImportSummary = {
+    attachmentFiles: 0,
+    commentAttachments: 0,
+    manifestFiles: 0,
+    projects: 0,
+    reportAttachments: 0,
+    users: 0,
+    version: "",
+  };
+  const manifestContent = entries.get("manifest.json");
+  if (!manifestContent) {
+    errors.push({ field: "manifest.json", message: "完整备份 ZIP 缺少 manifest.json" });
+    return { attachmentBytes: 0, backup: emptyBackup, errors, feedbackRecords: 0, warnings };
+  }
+
+  const manifest = readBackupManifest(manifestContent, errors);
+  if (!manifest) {
+    return { attachmentBytes: 0, backup: emptyBackup, errors, feedbackRecords: 0, warnings };
+  }
+  if (manifest.version !== feedbackBackupZipVersion) {
+    errors.push({ field: "manifest.version", message: `不支持的完整备份版本 ${manifest.version || "(空)"}` });
+  }
+
+  const manifestFiles = readBackupManifestFiles(manifest.files, errors);
+  const manifestPathSet = new Set(manifestFiles.map((file) => file.path));
+  validateBackupManifestFiles(entries, manifestFiles, errors);
+  validateBackupManifestCompleteness(entries, manifestPathSet, errors);
+
+  const counts = readBackupManifestCounts(manifest.counts, errors);
+  const jsonlCounts = countBackupJsonlEntries(entries, errors);
+  for (const [countKey] of feedbackBackupJsonlCountFiles) {
+    if (counts[countKey] !== undefined && counts[countKey] !== jsonlCounts[countKey]) {
+      errors.push({ field: `manifest.counts.${countKey}`, message: `manifest 数量 ${counts[countKey]} 与 ${countKey}.jsonl 行数 ${jsonlCounts[countKey]} 不一致` });
+    }
+  }
+
+  const attachmentRows = countJsonlEntries(entries, "attachments.jsonl", errors);
+  const attachmentFiles = manifestFiles.filter((file) => file.path.startsWith("attachments/"));
+  const attachmentBytes = attachmentFiles.reduce((sum, file) => sum + file.bytes, 0);
+  if (counts.attachmentFiles !== undefined && counts.attachmentFiles !== attachmentFiles.length) {
+    errors.push({ field: "manifest.counts.attachmentFiles", message: `附件文件数量 ${counts.attachmentFiles} 与 manifest 文件清单 ${attachmentFiles.length} 不一致` });
+  }
+  if (counts.attachmentFiles !== undefined && counts.attachmentFiles !== attachmentRows) {
+    errors.push({ field: "attachments.jsonl", message: `附件清单 ${attachmentRows} 行与 manifest 附件数量 ${counts.attachmentFiles} 不一致` });
+  }
+
+  const backup: FeedbackBackupImportSummary = {
+    attachmentFiles: counts.attachmentFiles ?? attachmentFiles.length,
+    commentAttachments: counts.commentAttachments ?? 0,
+    manifestFiles: manifestFiles.length,
+    projects: counts.projects ?? jsonlCounts.projects,
+    reportAttachments: counts.reportAttachments ?? 0,
+    users: counts.users ?? jsonlCounts.users,
+    version: manifest.version,
+  };
+  return {
+    attachmentBytes,
+    backup,
+    errors,
+    feedbackRecords: counts.feedback ?? jsonlCounts.feedback,
+    warnings,
+  };
+}
+
+function readStoredZipEntries(body: Buffer, errors: FeedbackImportMessage[]) {
+  const entries = new Map<string, Buffer>();
+  let offset = 0;
+  while (offset + 4 <= body.length && body.readUInt32LE(offset) === 0x04034b50) {
+    const flags = body.readUInt16LE(offset + 6);
+    const method = body.readUInt16LE(offset + 8);
+    const compressedSize = body.readUInt32LE(offset + 18);
+    const fileNameLength = body.readUInt16LE(offset + 26);
+    const extraLength = body.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    const contentStart = nameStart + fileNameLength + extraLength;
+    const contentEnd = contentStart + compressedSize;
+    if (method !== 0 || (flags & 0x08) !== 0) {
+      errors.push({ message: "完整备份 ZIP 必须使用 ORF 原生未压缩格式" });
+      break;
+    }
+    if (contentEnd > body.length) {
+      errors.push({ message: "ZIP 文件结构不完整" });
+      break;
+    }
+    const path = body.subarray(nameStart, nameStart + fileNameLength).toString("utf8");
+    if (entries.has(path)) {
+      errors.push({ field: path, message: "ZIP 内存在重复路径" });
+    }
+    entries.set(path, body.subarray(contentStart, contentEnd));
+    offset = contentEnd;
+  }
+  if (entries.size === 0) {
+    errors.push({ message: "无法读取 ORF 完整备份 ZIP 内容" });
+  }
+  return entries;
+}
+
+function readBackupManifest(content: Buffer, errors: FeedbackImportMessage[]) {
+  try {
+    const value = JSON.parse(content.toString("utf8")) as {
+      counts?: unknown;
+      files?: unknown;
+      version?: unknown;
+    };
+    return {
+      counts: value.counts,
+      files: value.files,
+      version: typeof value.version === "string" ? value.version : "",
+    };
+  } catch {
+    errors.push({ field: "manifest.json", message: "manifest.json 不是合法 JSON" });
+    return null;
+  }
+}
+
+function readBackupManifestFiles(value: unknown, errors: FeedbackImportMessage[]) {
+  if (!Array.isArray(value)) {
+    errors.push({ field: "manifest.files", message: "manifest.files 必须是数组" });
+    return [];
+  }
+  const files: FeedbackBackupManifestFile[] = [];
+  value.forEach((item, index) => {
+    const file = item as Partial<FeedbackBackupManifestFile>;
+    if (
+      !file ||
+      typeof file.path !== "string" ||
+      typeof file.bytes !== "number" ||
+      !Number.isInteger(file.bytes) ||
+      file.bytes < 0 ||
+      typeof file.sha256 !== "string" ||
+      !/^[a-f0-9]{64}$/i.test(file.sha256)
+    ) {
+      errors.push({ field: `manifest.files[${index}]`, message: "文件清单项必须包含 path、非负整数字节数和 SHA-256" });
+      return;
+    }
+    files.push({ bytes: file.bytes, path: file.path, sha256: file.sha256.toLowerCase() });
+  });
+  return files;
+}
+
+function readBackupManifestCounts(value: unknown, errors: FeedbackImportMessage[]) {
+  const counts: Record<string, number | undefined> = {};
+  if (!value || typeof value !== "object") {
+    errors.push({ field: "manifest.counts", message: "manifest.counts 必须是对象" });
+    return counts;
+  }
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) {
+      errors.push({ field: `manifest.counts.${key}`, message: "manifest 数量必须是非负整数" });
+      continue;
+    }
+    counts[key] = raw;
+  }
+  return counts;
+}
+
+function validateBackupManifestFiles(
+  entries: ReadonlyMap<string, Buffer>,
+  files: readonly FeedbackBackupManifestFile[],
+  errors: FeedbackImportMessage[],
+) {
+  for (const file of files) {
+    const content = entries.get(file.path);
+    if (!content) {
+      errors.push({ field: file.path, message: "manifest 文件清单指向的 ZIP 条目不存在" });
+      continue;
+    }
+    if (content.length !== file.bytes) {
+      errors.push({ field: file.path, message: `文件字节数 ${content.length} 与 manifest ${file.bytes} 不一致` });
+    }
+    const digest = sha256(content);
+    if (digest !== file.sha256) {
+      errors.push({ field: file.path, message: "文件 SHA-256 与 manifest 不一致" });
+    }
+  }
+}
+
+function validateBackupManifestCompleteness(
+  entries: ReadonlyMap<string, Buffer>,
+  manifestPathSet: ReadonlySet<string>,
+  errors: FeedbackImportMessage[],
+) {
+  const unexpected = [...entries.keys()].filter((path) => path !== "manifest.json" && !manifestPathSet.has(path));
+  if (unexpected.length > 0) {
+    errors.push({ field: "manifest.files", message: `ZIP 内有 ${unexpected.length} 个文件未列入 manifest` });
+  }
+}
+
+function countBackupJsonlEntries(entries: ReadonlyMap<string, Buffer>, errors: FeedbackImportMessage[]) {
+  const counts: Record<(typeof feedbackBackupJsonlCountFiles)[number][0], number> = {
+    activity: 0,
+    comments: 0,
+    feedback: 0,
+    projects: 0,
+    relations: 0,
+    users: 0,
+  };
+  for (const [key, path] of feedbackBackupJsonlCountFiles) {
+    counts[key] = countJsonlEntries(entries, path, errors);
+  }
+  return counts;
+}
+
+function countJsonlEntries(entries: ReadonlyMap<string, Buffer>, path: string, errors: FeedbackImportMessage[]) {
+  const content = entries.get(path);
+  if (!content) {
+    errors.push({ field: path, message: "完整备份缺少必需 JSONL 文件" });
+    return 0;
+  }
+  const text = content.toString("utf8").trim();
+  if (!text) return 0;
+  const lines = text.split("\n");
+  for (const [index, line] of lines.entries()) {
+    try {
+      JSON.parse(line);
+    } catch {
+      errors.push({ field: path, message: `第 ${index + 1} 行不是合法 JSON` });
+      break;
+    }
+  }
+  return lines.length;
 }
 
 function validateImportRecord(

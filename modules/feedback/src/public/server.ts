@@ -101,12 +101,15 @@ export {
   buildFeedbackBackupZip,
   commitFeedbackImportBatch,
   feedbackBackupZipFileName,
+  preflightFeedbackImport,
   preflightFeedbackImportCsv,
+  preflightFeedbackImportZip,
   type FeedbackBackupAttachmentFile,
   type FeedbackBackupAttachmentKind,
   type FeedbackBackupZipInput,
   type FeedbackImportCommitResult,
   type FeedbackImportPreflight,
+  type FeedbackImportSourceKind,
 } from "../server/transfer";
 export * as feedbackDatabaseSchema from "../infrastructure/database/schema";
 

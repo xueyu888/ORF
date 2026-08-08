@@ -12,7 +12,7 @@ import {
   commitFeedbackImportBatch,
   feedbackBackupZipFileName,
   getFeedbackSubscriptionMode,
-  preflightFeedbackImportCsv,
+  preflightFeedbackImport,
   setFeedbackSubscriptionMode,
   type FeedbackWriteActor,
 } from "@orf/feedback-module/server";
@@ -342,12 +342,13 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       db.select({ id: projects.id }).from(projects).where(eq(projects.teamId, teamId)),
     ]);
 
-    const preflight = await preflightFeedbackImportCsv(db, {
+    const preflight = await preflightFeedbackImport(db, {
       actor,
+      body: file.body,
       fileName: file.fileName,
       knownAssigneeUserIds: new Set(assigneeOptions.map((item) => item.id)),
       knownProjectIds: new Set(projectRows.map((item) => item.id)),
-      text: file.body.toString("utf8"),
+      mimeType: file.mimeType,
     });
 
     return { preflight };
