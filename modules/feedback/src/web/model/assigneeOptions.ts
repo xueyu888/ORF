@@ -1,8 +1,8 @@
-import type { OrfUser, OrfUserDisplayProfile } from "../../../types/orf";
+import type { FeedbackWebUser, FeedbackWebUserSummary } from "../types";
 
-export type FeedbackAssigneeOption = Pick<OrfUserDisplayProfile, "avatarUrl" | "id" | "name">;
+export type FeedbackAssigneeOption = Pick<FeedbackWebUserSummary, "avatarUrl" | "id" | "name">;
 
-export function feedbackAssigneeOptionsFromUsers(users: readonly OrfUser[]): FeedbackAssigneeOption[] {
+export function feedbackAssigneeOptionsFromUsers(users: readonly FeedbackWebUser[]): FeedbackAssigneeOption[] {
   return users
     .filter((user) => user.status === "active")
     .map((user) => ({

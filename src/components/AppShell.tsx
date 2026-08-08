@@ -1,7 +1,7 @@
 import { Flag, MessageSquarePlus, Search, Shield } from "lucide-react";
 import { Outlet, useLocation } from "react-router-dom";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
-import { feedbackWebContribution } from "@orf/feedback-module/web";
+import { canCreateTeamFeedback } from "@orf/feedback-module/web";
 import { Sidebar } from "./Sidebar";
 import { VisualBackgroundSlot } from "./VisualBackgroundSlot";
 import { Button } from "./ui";
@@ -13,7 +13,7 @@ import { breadcrumb } from "./appShellBreadcrumb";
 import { orfAssetLibrary } from "../config/assetLibrary";
 import { hasPermission } from "../config/permissions";
 import { pageVisualBackgroundSceneForPath } from "../config/visualSkinSlots";
-import { canCreateTeamFeedback } from "../features/feedback/model/feedbackCapabilities";
+import { feedbackWebContribution } from "../feedback/feedbackWebContribution";
 import { SystemBroadcastBanner } from "../features/notifications/components/SystemBroadcastBanner";
 import { ClientUpdateCenterDialog } from "../features/client-updates/ClientUpdateCenterDialog";
 import { ClientUpdateNotice } from "../features/client-updates/ClientUpdateNotice";

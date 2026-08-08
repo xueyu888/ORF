@@ -1,7 +1,6 @@
 import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { feedbackWebContribution } from "@orf/feedback-module/web";
 import { AppShell } from "./components/AppShell";
 import { AppFallbackPage } from "./components/AppFallback";
 import { Button } from "./components/ui";
@@ -10,6 +9,7 @@ import { systemManagementPages } from "./config/navigation";
 import developmentRoutes from "./config/developmentRoutes.json";
 import { ChatImagePopoutPage } from "./features/chat/ChatFloatingImagePreview";
 import { DriveFilePreviewPopoutPage } from "./features/drive/DriveFilePreview";
+import { feedbackWebContribution } from "./feedback/feedbackWebContribution";
 import { readLastWorkbenchLocationHref } from "./features/workbench-navigation";
 import { useOrf } from "./state/OrfProvider";
 import {
@@ -18,10 +18,6 @@ import {
   ChallengePlanPage,
   ChatPage,
   DrivePage,
-  FeedbackCreatePage,
-  FeedbackInboxPage,
-  FeedbackIssuePage,
-  FeedbackLabelsPage,
   LootSubmitPage,
   MembersPage,
   PermissionsPage,
@@ -44,6 +40,10 @@ const developmentOnlyPages = import.meta.env.DEV
       StrategyMapPage: lazyDevelopmentPage(() => import("./pages/StrategyMapPage"), "StrategyMapPage"),
     }
   : null;
+const FeedbackCreatePage = feedbackWebContribution.pages.Create;
+const FeedbackInboxPage = feedbackWebContribution.pages.Inbox;
+const FeedbackIssuePage = feedbackWebContribution.pages.Detail;
+const FeedbackLabelsPage = feedbackWebContribution.pages.Labels;
 
 export function App() {
   return (

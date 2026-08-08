@@ -1,5 +1,5 @@
-import { feedbackImpactLabel, feedbackLifecycleLabel, feedbackPriorityLabel } from "../../../utils/labels";
-import type { FeedbackIssueListFilters, FeedbackIssueListItem } from "./feedbackIssueList";
+import { feedbackImpactLabel, feedbackLifecycleLabel, feedbackPriorityLabel } from "../labels";
+import type { FeedbackIssueListFilters, FeedbackIssueListItem } from "../model/issueList";
 
 export type FeedbackIssueCsvExportInput = {
   exportedAt: string;

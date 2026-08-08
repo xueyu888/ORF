@@ -1,23 +1,19 @@
 import { ArrowLeft, CheckCircle2, CircleDot, Tag } from "lucide-react";
-import { feedbackWebContribution } from "@orf/feedback-module/web";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { BountyBadge, BountyEmptyState, BountySelect, BountyTextInput } from "../features/bounty-hall/BountyHallSkin";
+import { feedbackRootPath } from "../../contracts/links";
+import { FeedbackBadge, FeedbackEmptyState, FeedbackSelect, FeedbackTextInput } from "../components/controls";
 import {
   feedbackIssueLabelIndexItems,
   type FeedbackIssueLabelIndexItem,
   type FeedbackIssueLabelIndexSortKey,
-} from "../features/feedback/model/feedbackIssueMetadata";
-import { useFeedbackIssueReadModel } from "../features/feedback/useFeedbackIssueReadModel";
-import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
-import { useOrf } from "../state/OrfProvider";
+} from "../model/issueMetadata";
+import { useFeedbackWebHost } from "../runtime";
+import { useFeedbackIssueReadModel } from "../hooks";
 
 export function FeedbackLabelsPage() {
-  const { currentUser, readModelInvalidations } = useOrf();
-  const feedbackInvalidationKey = useMemo(
-    () => readModelInvalidationKey(readModelInvalidations, "feedback"),
-    [readModelInvalidations],
-  );
+  const host = useFeedbackWebHost();
+  const { currentUser, feedbackInvalidationKey } = host.useSession();
   const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser), feedbackInvalidationKey);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<FeedbackIssueLabelIndexSortKey>("name-asc");
@@ -29,10 +25,10 @@ export function FeedbackLabelsPage() {
   const filteredLabels = useMemo(() => filterFeedbackIssueLabels(labels, query), [labels, query]);
 
   return (
-    <div className="bounty-hall-page orf-workbench-surface feedback-index-page">
+    <div className="orf-feedback-workbench orf-feedback-index-page">
       <header className="feedback-index-header">
         <div className="feedback-index-title-block">
-          <Link className="feedback-issue-back-link" to={feedbackWebContribution.routes.inbox.path}>
+          <Link className="feedback-issue-back-link" to={feedbackRootPath}>
             <ArrowLeft aria-hidden="true" />
             反馈
           </Link>
@@ -47,15 +43,15 @@ export function FeedbackLabelsPage() {
       </header>
 
       <div className="feedback-index-toolbar">
-        <BountyTextInput ariaLabel="搜索标签" value={query} onValueChange={setQuery} placeholder="Search all labels" />
-        <BountySelect label="排序" value={sort} onChange={(value) => setSort(value as FeedbackIssueLabelIndexSortKey)}>
+        <FeedbackTextInput ariaLabel="搜索标签" value={query} onValueChange={setQuery} placeholder="Search all labels" />
+        <FeedbackSelect label="排序" value={sort} onChange={(value) => setSort(value as FeedbackIssueLabelIndexSortKey)}>
           <option value="name-asc">名称</option>
           <option value="feedback-desc">反馈数最多</option>
           <option value="open-desc">Open 数最多</option>
-        </BountySelect>
+        </FeedbackSelect>
       </div>
 
-      <section className="feedback-label-list bounty-list-table">
+      <section className="feedback-label-list">
         <div className="feedback-label-list-head">
           <span>{filteredLabels.length} labels</span>
           <span>点击标签查看匹配反馈</span>
@@ -67,7 +63,7 @@ export function FeedbackLabelsPage() {
             ))}
           </div>
         ) : (
-          <BountyEmptyState title="没有匹配的标签" description="调整搜索条件后再看。" />
+          <FeedbackEmptyState title="没有匹配的标签" description="调整搜索条件后再看。" />
         )}
       </section>
     </div>
@@ -80,7 +76,7 @@ function FeedbackLabelRow({ label }: { label: FeedbackIssueLabelIndexItem }) {
       <div className="feedback-label-main">
         <span className="feedback-label-swatch" data-tone={label.tone} aria-hidden="true" />
         <div className="feedback-label-copy">
-          <BountyBadge tone={label.tone}>{label.name}</BountyBadge>
+          <FeedbackBadge tone={label.tone}>{label.name}</FeedbackBadge>
           <p>{label.description}</p>
         </div>
       </div>

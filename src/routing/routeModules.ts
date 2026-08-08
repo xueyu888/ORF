@@ -22,10 +22,6 @@ const bounties = createRouteModule(() => import("../pages/BountyHallPage"), "Bou
 const tasks = createRouteModule(() => import("../pages/TasksPage"), "ChallengePlanPage");
 const chat = createRouteModule(() => import("../pages/ChatPage"), "ChatPage");
 const drive = createRouteModule(() => import("../pages/DrivePage"), "DrivePage");
-const feedbackInbox = createRouteModule(() => import("../pages/FeedbackInboxPage"), "FeedbackInboxPage");
-const feedbackCreate = createRouteModule(() => import("../pages/FeedbackCreatePage"), "FeedbackCreatePage");
-const feedbackIssue = createRouteModule(() => import("../pages/FeedbackIssuePage"), "FeedbackIssuePage");
-const feedbackLabels = createRouteModule(() => import("../pages/FeedbackLabelsPage"), "FeedbackLabelsPage");
 const loot = createRouteModule(() => import("../pages/LootSubmitPage"), "LootSubmitPage");
 const members = createRouteModule(() => import("../pages/MembersPage"), "MembersPage");
 const permissions = createRouteModule(() => import("../pages/PermissionsPage"), "PermissionsPage");
@@ -40,10 +36,6 @@ export const BountyHallPage = bounties.Component;
 export const ChallengePlanPage = tasks.Component;
 export const ChatPage = chat.Component;
 export const DrivePage = drive.Component;
-export const FeedbackInboxPage = feedbackInbox.Component;
-export const FeedbackCreatePage = feedbackCreate.Component;
-export const FeedbackIssuePage = feedbackIssue.Component;
-export const FeedbackLabelsPage = feedbackLabels.Component;
 export const LootSubmitPage = loot.Component;
 export const MembersPage = members.Component;
 export const PermissionsPage = permissions.Component;
@@ -60,10 +52,6 @@ export function preloadProductionRouteModules() {
     workLogs.preload(),
     chat.preload(),
     drive.preload(),
-    feedbackInbox.preload(),
-    feedbackCreate.preload(),
-    feedbackIssue.preload(),
-    feedbackLabels.preload(),
     loot.preload(),
     personalSettings.preload(),
     reports.preload(),

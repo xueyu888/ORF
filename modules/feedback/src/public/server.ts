@@ -97,6 +97,14 @@ export {
   type UpdateFeedbackAssigneeWriteResult,
   type UpdateFeedbackMetadataWriteInput,
 } from "../server/writeModel";
+export {
+  buildFeedbackBackupZip,
+  commitFeedbackImportBatch,
+  feedbackBackupZipFileName,
+  preflightFeedbackImportCsv,
+  type FeedbackImportCommitResult,
+  type FeedbackImportPreflight,
+} from "../server/transfer";
 export * as feedbackDatabaseSchema from "../infrastructure/database/schema";
 
 export interface FeedbackServerHost {

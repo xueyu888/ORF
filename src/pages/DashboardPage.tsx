@@ -5,6 +5,7 @@ import { ChartFrame } from "../components/ChartFrame";
 import { PageScaffold } from "../components/PageScaffold";
 import { DecisionLog, FeedbackCard, MetricCard, ObjectiveCard } from "../components/SharedCards";
 import { Card } from "../components/ui";
+import { useFeedbackIssueReadModel } from "@orf/feedback-module/web";
 import {
   filterResultsForVisibleObjectives,
   filterTasksForVisibleObjectives,
@@ -12,7 +13,6 @@ import {
   visibleObjectivesForUser,
 } from "../features/challenge/model/objectiveVisibility";
 import { summarizeDashboardState } from "../features/dashboard/model/dashboardSummary";
-import { useFeedbackIssueReadModel } from "../features/feedback/useFeedbackIssueReadModel";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useOrf } from "../state/OrfProvider";
 import { taskStatusLabel } from "../utils/labels";

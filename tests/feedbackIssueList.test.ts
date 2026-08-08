@@ -3,20 +3,20 @@ import test from "node:test";
 import {
   buildFeedbackIssueCurrentViewCsv,
   feedbackIssueCsvExportFileName,
-} from "../src/features/feedback/model/feedbackIssueCsvExport";
+} from "@orf/feedback-module/web";
 import {
   buildFeedbackIssueListItems,
   feedbackIssueListCountsForFilters,
   filterFeedbackIssueListItems,
   type FeedbackIssueListFilters,
-} from "../src/features/feedback/model/feedbackIssueList";
-import { feedbackIssueLinkedFeedback } from "../src/features/feedback/model/feedbackIssueMetadata";
+} from "@orf/feedback-module/web";
+import { feedbackIssueLinkedFeedback } from "@orf/feedback-module/web";
 import {
   feedbackIssueListFilterParamsFromPreferenceRecord,
   feedbackIssueListFilterPreferenceRecordFromSearchParams,
   feedbackIssueListFilterQueryFromSearchParams,
   parseStoredFeedbackIssueListFilterParams,
-} from "../src/features/feedback/model/feedbackIssueListViewState";
+} from "@orf/feedback-module/web";
 import type { Feedback, OrfProject, OrfUser } from "../src/types/orf";
 
 const users: OrfUser[] = [

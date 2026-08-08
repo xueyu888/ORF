@@ -5,7 +5,7 @@ import { quickCommands } from "../config/navigation";
 import { hasPermission } from "../config/permissions";
 import type { PermissionKey } from "../config/permissions";
 import { challengePathForTarget } from "../features/challenge/model/challengeLinks";
-import { feedbackIssueHref } from "../features/feedback/model/feedbackIssue";
+import { feedbackIssueHref } from "@orf/feedback-module/web";
 import { useWorkbenchNavigation } from "../features/workbench-navigation";
 import {
   filterResultsForVisibleObjectives,

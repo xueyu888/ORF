@@ -1,5 +1,5 @@
 import type { Feedback, Objective, OrfUser, Result, Task } from "../../../types/orf";
-import { feedbackCauseGroupsForCategories } from "../../feedback/model/feedbackCategories";
+import { feedbackCauseGroupsForCategories } from "@orf/feedback-module/web";
 
 const inactiveObjectiveStatuses = new Set<Objective["flowStatus"]>(["settled", "closed"]);
 const highImpactLevels = new Set<Feedback["impact"]>(["high", "critical"]);

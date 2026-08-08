@@ -46,7 +46,7 @@ import type {
   WorkLogReportScope,
 } from "../types/orf";
 import type { ChatSyncResponse } from "../domain/chatSync";
-import type { FeedbackIssueReadModelData } from "../domain/feedbackReadModel";
+import type { FeedbackIssueReadModelData } from "@orf/feedback-module/contracts";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
 import type { ChatTheme, UserDisplayPreferences, WorkspaceLayoutPreferences } from "../domain/settings/personalPreferences";
 import type { FilterPreferenceRecord, UserFilterPreferences } from "../domain/settings/filterPreferences";
@@ -74,7 +74,7 @@ export type {
   VisualBackgroundSwitchTrigger,
 } from "../domain/settings/visualBackgrounds";
 export type { BountyHallData, BountyHallItem, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
-export type { FeedbackIssueReadModelData } from "../domain/feedbackReadModel";
+export type { FeedbackIssueReadModelData } from "@orf/feedback-module/contracts";
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
 export type UsersResponse = Pick<OrfState, "users">;

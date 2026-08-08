@@ -1,9 +1,8 @@
 import { useNavigate } from "react-router-dom";
-import { feedbackCreatePath } from "@orf/feedback-module/web";
+import { canCreateTeamFeedback, feedbackCreatePath } from "@orf/feedback-module/web";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, StatusBadge } from "../components/ui";
 import { evaluationMetricCards, summarizeEvalRuns } from "../features/evaluation/model/evaluationSummary";
-import { canCreateTeamFeedback } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
 
 export function AIEvaluationPage() {

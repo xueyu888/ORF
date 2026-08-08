@@ -4,7 +4,7 @@ import {
   ensureFeedbackAssigneeOption,
   feedbackAssigneeOptionsFromUsers,
   mergeFeedbackAssigneeOptions,
-} from "../src/features/feedback/model/feedbackAssigneeOptions";
+} from "@orf/feedback-module/web";
 import type { OrfUser } from "../src/types/orf";
 
 test("feedback assignee options are active scoped members, not the visible users collection", () => {

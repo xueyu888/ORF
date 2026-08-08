@@ -3,7 +3,6 @@ import {
   ChevronDown,
   CircleDot,
   Clock3,
-  FileDown,
   Flag,
   Inbox,
   MessageSquare,
@@ -13,14 +12,16 @@ import {
   Tag,
   UserCheck,
 } from "lucide-react";
-import { feedbackCreatePath, feedbackWebContribution } from "@orf/feedback-module/web";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { UserAvatar } from "../components/UserAvatar";
-import { BountyBadge, BountyButton, BountyEmptyState, BountySelect, BountyTextInput } from "../features/bounty-hall/BountyHallSkin";
-import { canCreateTeamFeedback } from "../features/feedback/model/feedbackCapabilities";
-import { feedbackIssueHref, feedbackIssueStateLabel, isFeedbackIssueOpen } from "../features/feedback/model/feedbackIssue";
+import { feedbackCreatePath, feedbackLabelsPath } from "../../contracts/links";
+import { getProjectChatChannels, getUserPreferences, saveUserPreferences } from "../api";
+import { FeedbackTransferMenu } from "../components/transfer";
+import { FeedbackBadge, FeedbackButton, FeedbackEmptyState, FeedbackSelect, FeedbackTextInput } from "../components/controls";
+import { feedbackImpactLabel } from "../labels";
+import { canCreateTeamFeedback } from "../model/capabilities";
+import { feedbackIssueHref, feedbackIssueStateLabel, isFeedbackIssueOpen } from "../model/issue";
 import {
   buildFeedbackIssueListItems,
   feedbackIssueAssigneeOptions,
@@ -30,11 +31,11 @@ import {
   filterFeedbackIssueListItems,
   type FeedbackIssueListFilters,
   type FeedbackIssueListItem,
-} from "../features/feedback/model/feedbackIssueList";
+} from "../model/issueList";
 import {
   buildFeedbackIssueCurrentViewCsv,
   feedbackIssueCsvExportFileName,
-} from "../features/feedback/model/feedbackIssueCsvExport";
+} from "../transfer/currentViewCsv";
 import {
   clearStoredFeedbackIssueListFilterParams,
   feedbackIssueListFilterParamsFromPreferenceRecord,
@@ -42,22 +43,17 @@ import {
   feedbackIssueListFilterPreferenceRecordFromSearchParams,
   feedbackIssueListUrlStateFromSearchParams,
   readStoredFeedbackIssueListFilterParams,
-} from "../features/feedback/model/feedbackIssueListViewState";
-import { useFeedbackIssueReadModel } from "../features/feedback/useFeedbackIssueReadModel";
-import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
-import { getProjectChatChannels, getUserPreferences, saveUserPreferences } from "../state/apiClient";
-import { useOrf } from "../state/OrfProvider";
-import type { ProjectChatChannel } from "../types/orf";
-import { feedbackImpactLabel } from "../utils/labels";
+} from "../model/issueListViewState";
+import { useFeedbackWebHost } from "../runtime";
+import { useFeedbackIssueReadModel } from "../hooks";
+import type { FeedbackWebProjectChatChannel } from "../types";
 
 export function FeedbackInboxPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { currentUser, notify, readModelInvalidations } = useOrf();
-  const feedbackInvalidationKey = useMemo(
-    () => readModelInvalidationKey(readModelInvalidations, "feedback"),
-    [readModelInvalidations],
-  );
+  const host = useFeedbackWebHost();
+  const { currentUser, feedbackInvalidationKey, notify } = host.useSession();
+  const { UserAvatar } = host.components;
   const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser), feedbackInvalidationKey);
   const feedbackData = feedbackReadModel.data;
   const currentUserId = currentUser?.id ?? null;
@@ -73,7 +69,7 @@ export function FeedbackInboxPage() {
     query,
     sort,
   } = useMemo(() => feedbackIssueListUrlStateFromSearchParams(searchParams), [searchParamSignature, searchParams]);
-  const [projectChannels, setProjectChannels] = useState<ProjectChatChannel[]>([]);
+  const [projectChannels, setProjectChannels] = useState<FeedbackWebProjectChatChannel[]>([]);
   const [projectChannelsLoading, setProjectChannelsLoading] = useState(false);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const selectedProject = useMemo(
@@ -82,6 +78,7 @@ export function FeedbackInboxPage() {
   );
   const visibleFeedback = useMemo(() => currentUser?.status === "active" || currentUser?.role === "admin" ? feedbackData.feedback : [], [currentUser, feedbackData.feedback]);
   const canCreateFeedback = canCreateTeamFeedback(currentUser);
+  const canImportExport = currentUser?.status === "active";
   const issueItems = useMemo(
     () => buildFeedbackIssueListItems({ comments: feedbackData.comments, feedback: visibleFeedback, projects: feedbackData.projects, users: feedbackData.users }),
     [feedbackData.comments, feedbackData.projects, feedbackData.users, visibleFeedback],
@@ -255,7 +252,7 @@ export function FeedbackInboxPage() {
   }, [filteredFeedback, issueFilters, notify]);
 
   return (
-    <div className="bounty-hall-page orf-workbench-surface feedback-issue-page">
+    <div className="orf-feedback-workbench feedback-issue-page">
       <header className="feedback-issue-header">
         <div className="feedback-issue-title-block">
           <h1>反馈</h1>
@@ -266,17 +263,20 @@ export function FeedbackInboxPage() {
         </div>
         <div className="feedback-issue-header-actions">
           <div className="feedback-issue-index-links" aria-label="反馈索引">
-            <Link className="feedback-issue-index-link" to={feedbackWebContribution.routes.labels.path}><Tag aria-hidden="true" /> 标签 <strong>{labelOptions.length}</strong></Link>
+            <Link className="feedback-issue-index-link" to={feedbackLabelsPath}><Tag aria-hidden="true" /> 标签 <strong>{labelOptions.length}</strong></Link>
           </div>
-          <BountyButton disabled={feedbackReadModel.loading} onClick={exportCurrentViewCsv} variant="secondary">
-            <FileDown aria-hidden="true" />
-            导出 CSV
-          </BountyButton>
+          <FeedbackTransferMenu
+            canImportExport={canImportExport}
+            csvDisabled={feedbackReadModel.loading}
+            notify={notify}
+            onExportCurrentViewCsv={exportCurrentViewCsv}
+            onImportCommitted={feedbackReadModel.reload}
+          />
           {canCreateFeedback && (
-            <BountyButton onClick={() => navigate(newFeedbackHref(projectId))}>
+            <FeedbackButton onClick={() => navigate(newFeedbackHref(projectId))}>
               <Plus aria-hidden="true" />
               新建反馈
-            </BountyButton>
+            </FeedbackButton>
           )}
         </div>
       </header>
@@ -326,41 +326,41 @@ export function FeedbackInboxPage() {
         data-expanded={filtersExpanded ? "true" : "false"}
         aria-label="反馈筛选"
       >
-        <BountySelect label="项目" value={projectId} onChange={(value) => setFilter("project", value, "All")}>
+        <FeedbackSelect label="项目" value={projectId} onChange={(value) => setFilter("project", value, "All")}>
           <option value="All">全部项目</option>
           <option value="unassigned">未归属项目</option>
           {projectOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </BountySelect>
-        <BountyTextInput ariaLabel="搜索反馈" value={query} onValueChange={(value) => setFilter("q", value, "")} placeholder="is:open label:技术问题 assignee:薛雨 project:客户端" />
-        <BountySelect label="处理人" value={assigneeUserId} onChange={(value) => setFilter("assignee", value, "All")}>
+        </FeedbackSelect>
+        <FeedbackTextInput ariaLabel="搜索反馈" value={query} onValueChange={(value) => setFilter("q", value, "")} placeholder="is:open label:技术问题 assignee:薛雨 project:客户端" />
+        <FeedbackSelect label="处理人" value={assigneeUserId} onChange={(value) => setFilter("assignee", value, "All")}>
           <option value="All">全部处理人</option>
           {assigneeOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </BountySelect>
-        <BountySelect label="作者" value={authorUserId} onChange={(value) => setFilter("author", value, "All")}>
+        </FeedbackSelect>
+        <FeedbackSelect label="作者" value={authorUserId} onChange={(value) => setFilter("author", value, "All")}>
           <option value="All">全部作者</option>
           {authorOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </BountySelect>
-        <BountySelect label="标签" value={cause} onChange={(value) => setFilter("label", value, "All")}>
+        </FeedbackSelect>
+        <FeedbackSelect label="标签" value={cause} onChange={(value) => setFilter("label", value, "All")}>
           <option value="All">全部标签</option>
           {labelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </BountySelect>
-        <BountySelect label="影响" value={impact} onChange={(value) => setFilter("impact", value, "All")}>
+        </FeedbackSelect>
+        <FeedbackSelect label="影响" value={impact} onChange={(value) => setFilter("impact", value, "All")}>
           <option value="All">全部影响</option>
           <option value="critical">{feedbackImpactLabel.critical}</option>
           <option value="high">{feedbackImpactLabel.high}</option>
           <option value="medium">{feedbackImpactLabel.medium}</option>
           <option value="low">{feedbackImpactLabel.low}</option>
-        </BountySelect>
-        <BountySelect label="排序" value={sort} onChange={(value) => setFilter("sort", value, "updated-desc")}>
+        </FeedbackSelect>
+        <FeedbackSelect label="排序" value={sort} onChange={(value) => setFilter("sort", value, "updated-desc")}>
           <option value="updated-desc">最近更新</option>
           <option value="created-desc">最近创建</option>
           <option value="comments-desc">评论最多</option>
           <option value="updated-asc">最早更新</option>
-        </BountySelect>
-        <BountyButton className="feedback-reset-button" disabled={!hasActiveFilters} onClick={resetFilters} variant="secondary">
+        </FeedbackSelect>
+        <FeedbackButton className="feedback-reset-button" disabled={!hasActiveFilters} onClick={resetFilters} variant="secondary">
           <RotateCcw aria-hidden="true" />
           重置
-        </BountyButton>
+        </FeedbackButton>
       </div>
 
       <div className="feedback-issue-work-queue" aria-label="反馈工作队列">
@@ -382,7 +382,7 @@ export function FeedbackInboxPage() {
         </IssueStateButton>
       </div>
 
-      <section className="feedback-issue-list bounty-list-table">
+      <section className="feedback-issue-list">
         <div className="feedback-issue-list-head">
           <div className="feedback-issue-state-tabs">
             <IssueStateButton active={listState === "open"} onClick={() => setFilter("state", "open", "open")}>
@@ -407,11 +407,11 @@ export function FeedbackInboxPage() {
             ))}
           </div>
         ) : feedbackReadModel.loading ? (
-          <BountyEmptyState title="反馈加载中" description="正在读取反馈列表。" />
+          <FeedbackEmptyState title="反馈加载中" description="正在读取反馈列表。" />
         ) : feedbackReadModel.error ? (
-          <BountyEmptyState title="反馈读取失败" description={feedbackReadModel.error} />
+          <FeedbackEmptyState title="反馈读取失败" description={feedbackReadModel.error} />
         ) : (
-          <BountyEmptyState title="没有匹配的反馈" description="调整搜索或筛选条件后再看。" />
+          <FeedbackEmptyState title="没有匹配的反馈" description="调整搜索或筛选条件后再看。" />
         )}
       </section>
     </div>
@@ -427,6 +427,7 @@ function IssueStateButton({ active, onClick, children }: { active: boolean; onCl
 }
 
 function FeedbackIssueRow({ item }: { item: FeedbackIssueListItem }) {
+  const { UserAvatar } = useFeedbackWebHost().components;
   const feedback = item.feedback;
   const open = isFeedbackIssueOpen(feedback);
 
@@ -440,10 +441,10 @@ function FeedbackIssueRow({ item }: { item: FeedbackIssueListItem }) {
         <div className="feedback-issue-row-title-line">
           <h2>{feedback.title}</h2>
           <div className="feedback-issue-labels">
-            {feedback.unread && <BountyBadge tone="accent">新动态</BountyBadge>}
-            {feedback.requiresAction && <BountyBadge tone="warning">待处理</BountyBadge>}
+            {feedback.unread && <FeedbackBadge tone="accent">新动态</FeedbackBadge>}
+            {feedback.requiresAction && <FeedbackBadge tone="warning">待处理</FeedbackBadge>}
             {item.labels.map((label) => (
-              <BountyBadge key={label.key} tone={label.tone}>{label.name}</BountyBadge>
+              <FeedbackBadge key={label.key} tone={label.tone}>{label.name}</FeedbackBadge>
             ))}
           </div>
         </div>

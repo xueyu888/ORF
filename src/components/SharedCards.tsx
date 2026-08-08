@@ -1,6 +1,6 @@
 import type { ElementType } from "react";
 import { Card, ConfidenceBadge, ProgressBar, StatusBadge } from "./ui";
-import { feedbackIssueBodyPreview } from "../features/feedback/model/feedbackIssue";
+import { feedbackIssueBodyPreview } from "@orf/feedback-module/web";
 import type { Feedback, Objective, Result } from "../types/orf";
 import { feedbackLifecycleLabel } from "../utils/labels";
 

@@ -15,69 +15,40 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
-import type { FeedbackCommandResolution, FeedbackImpact, FeedbackPriority, FeedbackRelationType, FeedbackTransitionInput } from "@orf/feedback-module/contracts";
-import { feedbackWebContribution } from "@orf/feedback-module/web";
+import type { FeedbackCommandResolution, FeedbackImpact, FeedbackPriority, FeedbackRelationType, FeedbackTransitionInput } from "../../contracts";
+import { feedbackRootPath } from "../../contracts/links";
 import type { FormEvent, MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ImagePreviewDialog, type ImagePreview } from "../components/ImagePreviewDialog";
-import { Button } from "../components/ui";
-import { UserAvatar } from "../components/UserAvatar";
-import { hasPermission } from "../config/permissions";
-import { BountyBadge, BountyButton, BountyEmptyState } from "../features/bounty-hall/BountyHallSkin";
-import {
-  CommentBodyText,
-  CommentComposer,
-  CommentInlineEditor,
-  type CommentDraft,
-  type CommentDraftMode,
-  type CommentMentionUser,
-  commentDraftFromStoredBody,
-  emptyCommentDraft,
-  serializeCommentDraft,
-} from "../features/challenge/comments/CommentPanel";
-import { commentTimeDisplay } from "../features/challenge/comments/commentTime";
-import { RelatedResourcesPanel } from "../features/drive/RelatedResourcesPanel";
-import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
+import { addFeedbackRelation, feedbackMutationFailureMessage, getFeedbackSubscription, markFeedbackViewed, removeFeedbackRelation, transitionFeedback, updateFeedbackAssignee, updateFeedbackMetadata, updateFeedbackSubscription } from "../api";
+import { FeedbackBadge, FeedbackButton, FeedbackEmptyState } from "../components/controls";
+import { feedbackImpactLabel, feedbackLifecycleLabel, feedbackPriorityLabel, feedbackRelationTypeLabel, feedbackResolutionLabel } from "../labels";
+import { teamFeedbackCauseOptions } from "../model/categories";
 import {
   feedbackIssueDisplayId,
   feedbackIssueHref,
   feedbackIssueMarkdownLink,
   feedbackIssueState,
   feedbackIssueThreads,
-} from "../features/feedback/model/feedbackIssue";
+} from "../model/issue";
 import {
   ensureFeedbackAssigneeOption,
   type FeedbackAssigneeOption,
-} from "../features/feedback/model/feedbackAssigneeOptions";
-import {
-  addFeedbackRelation,
-  markFeedbackViewed,
-  removeFeedbackRelation,
-  transitionFeedback,
-  updateFeedbackAssignee,
-  updateFeedbackMetadata,
-} from "../features/feedback/feedbackApi";
+} from "../model/assigneeOptions";
 import {
   feedbackIssueAssignee,
   feedbackIssueAuthor,
   feedbackIssueLabels,
   feedbackIssueLinkedFeedback,
   feedbackIssueParticipants,
-} from "../features/feedback/model/feedbackIssueMetadata";
-import { useFeedbackAssigneeOptions } from "../features/feedback/useFeedbackAssigneeOptions";
-import { useFeedbackIssueDetailReadModel } from "../features/feedback/useFeedbackIssueReadModel";
-import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
-import type { OrfRichTextAttachmentUploadResult } from "../features/rich-text/OrfRichTextEditor";
-import { getFeedbackSubscription, updateFeedbackSubscription } from "../state/apiClient";
-import { useOrf } from "../state/OrfProvider";
-import { businessMutationFailureMessage } from "../state/orfProviderMutationMessages";
-import type { ActivityItem, CommentMessage, CommentThread, Feedback, FeedbackSubscriptionMode, OrfProject, OrfUser } from "../types/orf";
-import { feedbackImpactLabel, feedbackLifecycleLabel, feedbackPriorityLabel, feedbackRelationTypeLabel, feedbackResolutionLabel } from "../utils/labels";
+} from "../model/issueMetadata";
+import { useFeedbackWebHost, type FeedbackCommentDraft, type FeedbackCommentDraftMode, type FeedbackCommentMentionUser, type FeedbackImagePreview } from "../runtime";
+import { useFeedbackAssigneeOptions, useFeedbackIssueDetailReadModel } from "../hooks";
+import type { FeedbackWebActivityItem, FeedbackWebCommentMessage, FeedbackWebCommentThread, FeedbackWebIssue, FeedbackSubscriptionMode, FeedbackWebProject, FeedbackWebUser } from "../types";
 
 type FeedbackCommentEntry = {
-  message: CommentMessage;
-  thread: CommentThread;
+  message: FeedbackWebCommentMessage;
+  thread: FeedbackWebCommentThread;
 };
 
 type FeedbackMetadataDraft = {
@@ -96,31 +67,36 @@ const feedbackRelationOptions: FeedbackRelationType[] = ["related", "duplicates"
 export function FeedbackIssuePage() {
   const { feedbackId = "" } = useParams();
   const [searchParams] = useSearchParams();
+  const host = useFeedbackWebHost();
+  const {
+    CommentBodyText,
+    CommentComposer,
+    CommentInlineEditor,
+    ImagePreviewDialog,
+    RelatedResourcesPanel,
+    UserAvatar,
+  } = host.components;
   const {
     addComment,
+    canManageAllComments,
     currentUser,
+    feedbackInvalidationKey,
     loadCommentMentionableUsers,
     notify,
-    readModelInvalidations,
-    state,
     updateCommentMessage,
     uploadCommentAttachment,
-  } = useOrf();
-  const feedbackInvalidationKey = useMemo(
-    () => readModelInvalidationKey(readModelInvalidations, "feedback"),
-    [readModelInvalidations],
-  );
+  } = host.useSession();
   const feedbackReadModel = useFeedbackIssueDetailReadModel(feedbackId, Boolean(currentUser && feedbackId), feedbackInvalidationKey);
   const feedbackData = feedbackReadModel.data;
   const feedbackItems = feedbackData.feedback;
   const users = feedbackData.users;
   const projects = feedbackData.projects;
   const feedback = feedbackItems.find((item) => item.id === feedbackId) ?? null;
-  const [draft, setDraft] = useState<CommentDraft>(() => emptyCommentDraft());
-  const [draftMode, setDraftMode] = useState<CommentDraftMode>({ type: "default" });
-  const [editState, setEditState] = useState<{ draft: CommentDraft; messageId: string; threadId: string } | null>(null);
-  const [imagePreview, setImagePreview] = useState<ImagePreview | null>(null);
-  const [mentionableUsers, setMentionableUsers] = useState<CommentMentionUser[]>([]);
+  const [draft, setDraft] = useState<FeedbackCommentDraft>(() => host.commentDraft.empty());
+  const [draftMode, setDraftMode] = useState<FeedbackCommentDraftMode>({ type: "default" });
+  const [editState, setEditState] = useState<{ draft: FeedbackCommentDraft; messageId: string; threadId: string } | null>(null);
+  const [imagePreview, setImagePreview] = useState<FeedbackImagePreview | null>(null);
+  const [mentionableUsers, setMentionableUsers] = useState<FeedbackCommentMentionUser[]>([]);
   const [subscriptionMode, setSubscriptionMode] = useState<FeedbackSubscriptionMode>("none");
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const commentElementRefs = useRef(new Map<string, HTMLElement>());
@@ -137,15 +113,7 @@ export function FeedbackIssuePage() {
   const mentionUsersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
   const canEditMetadata = Boolean(feedback?.capabilities.canEditReport);
   const canChangeAssignee = Boolean(feedback?.capabilities.canChangeAssignee);
-  const canManageAllComments = hasPermission(currentUser, state.permissionRules, "comment.manage");
   const refreshFeedbackIssueData = useCallback(() => feedbackReadModel.reload(), [feedbackReadModel.reload]);
-  const refreshAfterFeedbackMutation = useCallback(async (operation: Promise<boolean>) => {
-    const ok = await operation;
-    if (ok) {
-      await refreshFeedbackIssueData();
-    }
-    return ok;
-  }, [refreshFeedbackIssueData]);
 
   useEffect(() => {
     if (!feedback || feedback.lastActivitySequence <= feedback.lastSeenSequence) return;
@@ -185,7 +153,7 @@ export function FeedbackIssuePage() {
   };
 
   useEffect(() => {
-    setDraft(emptyCommentDraft());
+    setDraft(host.commentDraft.empty());
     setDraftMode({ type: "default" });
     setEditState(null);
     setImagePreview(null);
@@ -261,9 +229,9 @@ export function FeedbackIssuePage() {
     const description = feedbackReadModel.error ?? "它可能已经被删除，或者当前账号没有访问权限。";
 
     return (
-      <div className="bounty-hall-page feedback-issue-detail-page">
-        <BountyEmptyState title={title} description={description} />
-        <Link className="feedback-issue-back-link" to={feedbackWebContribution.routes.inbox.path}>
+      <div className="orf-feedback-workbench feedback-issue-detail-page">
+        <FeedbackEmptyState title={title} description={description} />
+        <Link className="feedback-issue-back-link" to={feedbackRootPath}>
           <ArrowLeft aria-hidden="true" />
           返回反馈列表
         </Link>
@@ -273,7 +241,7 @@ export function FeedbackIssuePage() {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    const body = serializeCommentDraft(draft).trim();
+    const body = host.commentDraft.serialize(draft).trim();
     if (!body) return;
 
     const replyInput =
@@ -294,13 +262,13 @@ export function FeedbackIssuePage() {
     });
     if (!ok) return;
     await refreshFeedbackIssueData();
-    setDraft(emptyCommentDraft());
+    setDraft(host.commentDraft.empty());
     setDraftMode({ type: "default" });
   };
 
-  const startReply = (message: CommentMessage) => {
+  const startReply = (message: FeedbackWebCommentMessage) => {
     setEditState(null);
-    setDraft(emptyCommentDraft());
+    setDraft(host.commentDraft.empty());
     setDraftMode({
       type: "reply",
       rootMessageId: message.parentMessageId ?? message.id,
@@ -309,21 +277,21 @@ export function FeedbackIssuePage() {
     });
   };
   const startEdit = (entry: FeedbackCommentEntry) => {
-    setDraft(emptyCommentDraft());
+    setDraft(host.commentDraft.empty());
     setDraftMode({ type: "default" });
     setEditState({
-      draft: commentDraftFromStoredBody(entry.message.body, mentionUsersById),
+      draft: host.commentDraft.fromStoredBody(entry.message.body, mentionUsersById),
       messageId: entry.message.id,
       threadId: entry.thread.id,
     });
   };
-  const updateEditDraft = (messageId: string, nextDraft: CommentDraft) => {
+  const updateEditDraft = (messageId: string, nextDraft: FeedbackCommentDraft) => {
     setEditState((current) => (current?.messageId === messageId ? { ...current, draft: nextDraft } : current));
   };
   const submitEdit = async (event: FormEvent, messageId: string) => {
     event.preventDefault();
     if (!editState || editState.messageId !== messageId) return;
-    const body = serializeCommentDraft(editState.draft).trim();
+    const body = host.commentDraft.serialize(editState.draft).trim();
     if (!body) return;
     const ok = await updateCommentMessage(editState.threadId, editState.messageId, body);
     if (!ok) return;
@@ -362,16 +330,16 @@ export function FeedbackIssuePage() {
       notify(successMessage);
       return true;
     } catch (error) {
-      notify(businessMutationFailureMessage(error, failureMessage));
+      notify(feedbackMutationFailureMessage(error, failureMessage));
       return false;
     }
   };
 
   return (
-    <div className="bounty-hall-page feedback-issue-detail-page">
+    <div className="orf-feedback-workbench feedback-issue-detail-page">
       <header className="feedback-issue-detail-header">
         <div className="feedback-issue-detail-title-block">
-          <Link className="feedback-issue-back-link" to={feedbackWebContribution.routes.inbox.path}>
+          <Link className="feedback-issue-back-link" to={feedbackRootPath}>
             <ArrowLeft aria-hidden="true" />
             反馈
           </Link>
@@ -384,14 +352,14 @@ export function FeedbackIssuePage() {
           </div>
         </div>
         <div className="feedback-issue-detail-actions">
-          <BountyButton onClick={copyFeedbackLink} variant="secondary">
+          <FeedbackButton onClick={copyFeedbackLink} variant="secondary">
             <LinkIcon aria-hidden="true" />
             复制链接
-          </BountyButton>
-          <BountyButton onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })} variant="secondary">
+          </FeedbackButton>
+          <FeedbackButton onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })} variant="secondary">
             <MessageSquare aria-hidden="true" />
             回复
-          </BountyButton>
+          </FeedbackButton>
         </div>
       </header>
 
@@ -420,15 +388,15 @@ export function FeedbackIssuePage() {
                     <strong>{message.author}</strong>
                     <time dateTime={message.createdAt} title={commentTimeDisplay(message.createdAt).title}>{commentTimeDisplay(message.createdAt).label}</time>
                     {canManageFeedbackComment(message, currentUser, canManageAllComments) && (
-                      <Button type="button" size="sm" variant="ghost" onClick={() => startEdit({ message, thread })}>
+                      <FeedbackButton type="button" size="sm" variant="ghost" onClick={() => startEdit({ message, thread })}>
                         <Pencil aria-hidden="true" />
                         编辑
-                      </Button>
+                      </FeedbackButton>
                     )}
-                    <Button type="button" size="sm" variant="ghost" onClick={() => startReply(message)}>
+                    <FeedbackButton type="button" size="sm" variant="ghost" onClick={() => startReply(message)}>
                       <Reply aria-hidden="true" />
                       回复
-                    </Button>
+                    </FeedbackButton>
                   </div>
                   <div className="feedback-issue-comment-body">
                     {editState?.messageId === message.id ? (
@@ -467,7 +435,7 @@ export function FeedbackIssuePage() {
               mentionableUsers={mentionableUsers}
               mode={draftMode}
               onCancelMode={() => {
-                setDraft(emptyCommentDraft());
+                setDraft(host.commentDraft.empty());
                 setDraftMode({ type: "default" });
               }}
               onDraftChange={setDraft}
@@ -539,11 +507,12 @@ function OriginalFeedbackCard({
   onOpenImage,
   users,
 }: {
-  feedback: Feedback;
-  mentionUsersById: Map<string, CommentMentionUser>;
-  onOpenImage: (preview: ImagePreview) => void;
-  users: readonly OrfUser[];
+  feedback: FeedbackWebIssue;
+  mentionUsersById: Map<string, FeedbackCommentMentionUser>;
+  onOpenImage: (preview: FeedbackImagePreview) => void;
+  users: readonly FeedbackWebUser[];
 }) {
+  const { CommentBodyText, UserAvatar } = useFeedbackWebHost().components;
   const author = feedbackIssueAuthor(feedback, users);
   const createdAt = commentTimeDisplay(feedback.createdAt);
 
@@ -575,9 +544,9 @@ function FeedbackLifecyclePanel({
   notify,
   onTransition,
 }: {
-  currentUser: OrfUser | null;
-  feedback: Feedback;
-  feedbackItems: readonly Feedback[];
+  currentUser: FeedbackWebUser | null;
+  feedback: FeedbackWebIssue;
+  feedbackItems: readonly FeedbackWebIssue[];
   notify: (message: string) => void;
   onTransition: (command: FeedbackTransitionInput) => Promise<boolean>;
 }) {
@@ -660,10 +629,10 @@ function FeedbackLifecyclePanel({
       {hasLifecycleAction ? (
         <>
           {feedback.stage === "open" && capabilities.canStart && (
-            <Button size="sm" type="button" onClick={() => runTransition("start")}>
+            <FeedbackButton size="sm" type="button" onClick={() => runTransition("start")}>
               <CircleDot aria-hidden="true" />
               开始处理
-            </Button>
+            </FeedbackButton>
           )}
           {(feedback.stage === "open" || feedback.stage === "in_progress") && canRunActiveCommand && (
             <>
@@ -694,16 +663,16 @@ function FeedbackLifecyclePanel({
               )}
               <div className="feedback-issue-sidebar-actions">
                 {capabilities.canSubmitVerification && (
-                  <Button size="sm" type="button" onClick={() => runTransition("submit_verification")}>
+                  <FeedbackButton size="sm" type="button" onClick={() => runTransition("submit_verification")}>
                     <Send aria-hidden="true" />
                     提交验证
-                  </Button>
+                  </FeedbackButton>
                 )}
                 {capabilities.canWithdraw && (
-                  <Button size="sm" type="button" variant="ghost" onClick={() => runTransition("withdraw")}>
+                  <FeedbackButton size="sm" type="button" variant="ghost" onClick={() => runTransition("withdraw")}>
                     <XCircle aria-hidden="true" />
                     撤回
-                  </Button>
+                  </FeedbackButton>
                 )}
               </div>
             </>
@@ -718,16 +687,16 @@ function FeedbackLifecyclePanel({
               )}
               <div className="feedback-issue-sidebar-actions">
                 {capabilities.canAcceptVerification && (
-                  <Button size="sm" type="button" onClick={() => runTransition("accept_verification")}>
+                  <FeedbackButton size="sm" type="button" onClick={() => runTransition("accept_verification")}>
                     <CheckCircle2 aria-hidden="true" />
                     确认关闭
-                  </Button>
+                  </FeedbackButton>
                 )}
                 {capabilities.canRejectVerification && (
-                  <Button size="sm" type="button" variant="ghost" onClick={() => runTransition("reject_verification")}>
+                  <FeedbackButton size="sm" type="button" variant="ghost" onClick={() => runTransition("reject_verification")}>
                     <RotateCcw aria-hidden="true" />
                     退回处理
-                  </Button>
+                  </FeedbackButton>
                 )}
               </div>
             </>
@@ -738,10 +707,10 @@ function FeedbackLifecyclePanel({
               {adminTakeoverRequired && (
                 <textarea className="feedback-issue-sidebar-input" rows={2} value={adminReason} onChange={(event) => setAdminReason(event.target.value)} placeholder="管理员代操作原因" />
               )}
-              <Button size="sm" type="button" onClick={() => runTransition("reopen")}>
+              <FeedbackButton size="sm" type="button" onClick={() => runTransition("reopen")}>
                 <RotateCcw aria-hidden="true" />
                 重新打开
-              </Button>
+              </FeedbackButton>
             </>
           )}
         </>
@@ -771,20 +740,20 @@ function FeedbackSubscriptionControls({
         <strong>{feedbackSubscriptionLabel(mode)}</strong>
       </div>
       <div className="feedback-issue-sidebar-actions">
-        <Button disabled={disabled} size="sm" type="button" variant={subscribed ? "ghost" : "secondary"} onClick={() => onChange(subscribed ? "none" : "subscribed")}>
+        <FeedbackButton disabled={disabled} size="sm" type="button" variant={subscribed ? "ghost" : "secondary"} onClick={() => onChange(subscribed ? "none" : "subscribed")}>
           <Bell aria-hidden="true" />
           {subscribed ? "取消关注" : "关注"}
-        </Button>
-        <Button disabled={disabled} size="sm" type="button" variant={muted ? "secondary" : "ghost"} onClick={() => onChange(muted ? "none" : "muted")}>
+        </FeedbackButton>
+        <FeedbackButton disabled={disabled} size="sm" type="button" variant={muted ? "secondary" : "ghost"} onClick={() => onChange(muted ? "none" : "muted")}>
           <BellOff aria-hidden="true" />
           {muted ? "取消静音" : "静音"}
-        </Button>
+        </FeedbackButton>
       </div>
     </div>
   );
 }
 
-function feedbackMetadataDraftFromFeedback(feedback: Feedback): FeedbackMetadataDraft {
+function feedbackMetadataDraftFromFeedback(feedback: FeedbackWebIssue): FeedbackMetadataDraft {
   return {
     causeCategories: feedback.causeCategories,
     impact: feedback.impact,
@@ -836,9 +805,9 @@ function IssueSidebar({
   assigneeOptions: readonly FeedbackAssigneeOption[];
   canChangeAssignee: boolean;
   canEdit: boolean;
-  comments: readonly CommentThread[];
-  feedback: Feedback;
-  feedbackItems: readonly Feedback[];
+  comments: readonly FeedbackWebCommentThread[];
+  feedback: FeedbackWebIssue;
+  feedbackItems: readonly FeedbackWebIssue[];
   onAddRelation: (input: { targetFeedbackId: string; type: FeedbackRelationType }) => Promise<boolean>;
   onRemoveRelation: (relationId: string) => Promise<boolean>;
   onSaveAssignee: (assigneeUserId: string | null) => Promise<boolean>;
@@ -849,9 +818,10 @@ function IssueSidebar({
     projectId: string | null;
     title: string;
   }) => Promise<boolean>;
-  projects: readonly OrfProject[];
-  users: readonly OrfUser[];
+  projects: readonly FeedbackWebProject[];
+  users: readonly FeedbackWebUser[];
 }) {
+  const { UserAvatar } = useFeedbackWebHost().components;
   const [metadataDraft, setMetadataDraft] = useState(() => feedbackMetadataDraftFromFeedback(feedback));
   const [assigneeDraft, setAssigneeDraft] = useState(feedback.assigneeUserId ?? "");
   const [relationDraft, setRelationDraft] = useState<{ targetFeedbackId: string; type: FeedbackRelationType }>({ targetFeedbackId: "", type: "related" });
@@ -955,14 +925,14 @@ function IssueSidebar({
               {assigneeSelectOptions.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
             </select>
             <div className="feedback-issue-sidebar-actions">
-              <Button disabled={!canSaveAssignee} size="sm" type="button" onClick={saveAssignee}>
+              <FeedbackButton disabled={!canSaveAssignee} size="sm" type="button" onClick={saveAssignee}>
                 <Save aria-hidden="true" />
                 保存处理人
-              </Button>
-              <Button disabled={!assigneeDirty} size="sm" type="button" variant="ghost" onClick={() => setAssigneeDraft(feedback.assigneeUserId ?? "")}>
+              </FeedbackButton>
+              <FeedbackButton disabled={!assigneeDirty} size="sm" type="button" variant="ghost" onClick={() => setAssigneeDraft(feedback.assigneeUserId ?? "")}>
                 <RotateCcw aria-hidden="true" />
                 重置
-              </Button>
+              </FeedbackButton>
             </div>
           </>
         ) : (
@@ -985,7 +955,7 @@ function IssueSidebar({
           </div>
         ) : (
           <div className="feedback-issue-sidebar-labels">
-            {labels.map((item) => <BountyBadge key={item.key} tone={item.tone}>{item.name}</BountyBadge>)}
+            {labels.map((item) => <FeedbackBadge key={item.key} tone={item.tone}>{item.name}</FeedbackBadge>)}
           </div>
         )}
       </div>
@@ -1029,14 +999,14 @@ function IssueSidebar({
         <div className="feedback-issue-sidebar-block">
           <span>属性</span>
           <div className="feedback-issue-sidebar-actions">
-            <Button disabled={!canSaveMetadata} size="sm" type="button" onClick={saveMetadata}>
+            <FeedbackButton disabled={!canSaveMetadata} size="sm" type="button" onClick={saveMetadata}>
               <Save aria-hidden="true" />
               保存属性
-            </Button>
-            <Button disabled={!metadataDirty} size="sm" type="button" variant="ghost" onClick={() => setMetadataDraft(feedbackMetadataDraftFromFeedback(feedback))}>
+            </FeedbackButton>
+            <FeedbackButton disabled={!metadataDirty} size="sm" type="button" variant="ghost" onClick={() => setMetadataDraft(feedbackMetadataDraftFromFeedback(feedback))}>
               <RotateCcw aria-hidden="true" />
               重置
-            </Button>
+            </FeedbackButton>
           </div>
         </div>
       )}
@@ -1051,9 +1021,9 @@ function IssueSidebar({
                 </Link>
                 <span>{feedbackRelationDirectionLabel(item.type, item.direction)}</span>
                 {canEdit && (
-                  <Button aria-label="移除反馈关系" size="sm" title="移除反馈关系" type="button" variant="ghost" onClick={() => onRemoveRelation(item.relationId)}>
+                  <FeedbackButton aria-label="移除反馈关系" size="sm" title="移除反馈关系" type="button" variant="ghost" onClick={() => onRemoveRelation(item.relationId)}>
                     <Trash2 aria-hidden="true" />
-                  </Button>
+                  </FeedbackButton>
                 )}
               </div>
             ))}
@@ -1070,10 +1040,10 @@ function IssueSidebar({
               <option value="">选择反馈</option>
               {relationTargets.map((item) => <option key={item.id} value={item.id}>#{feedbackIssueDisplayId(item.id)} {item.title}</option>)}
             </select>
-            <Button disabled={!relationDraft.targetFeedbackId} size="sm" type="button" onClick={addRelation}>
+            <FeedbackButton disabled={!relationDraft.targetFeedbackId} size="sm" type="button" onClick={addRelation}>
               <Plus aria-hidden="true" />
               添加关系
-            </Button>
+            </FeedbackButton>
           </div>
         )}
       </div>
@@ -1100,7 +1070,7 @@ function IssueSidebar({
   );
 }
 
-function FeedbackActivityTimeline({ entries, users }: { entries: readonly ActivityItem[]; users: readonly OrfUser[] }) {
+function FeedbackActivityTimeline({ entries, users }: { entries: readonly FeedbackWebActivityItem[]; users: readonly FeedbackWebUser[] }) {
   if (entries.length === 0) return null;
   const userById = new Map(users.map((user) => [user.id, user]));
 
@@ -1119,7 +1089,7 @@ function FeedbackActivityTimeline({ entries, users }: { entries: readonly Activi
   );
 }
 
-function feedbackActivityLabel(entry: ActivityItem) {
+function feedbackActivityLabel(entry: FeedbackWebActivityItem) {
   if (entry.activityType === "feedback.created") return "创建了反馈";
   if (entry.activityType === "feedback.report.changed") return "更新了原始报告";
   if (entry.activityType === "feedback.metadata.changed") return "更新了反馈属性";
@@ -1132,7 +1102,7 @@ function feedbackActivityLabel(entry: ActivityItem) {
   return "导入了反馈";
 }
 
-function feedbackRelationOtherId(feedbackId: string, relation: Feedback["relations"][number]) {
+function feedbackRelationOtherId(feedbackId: string, relation: FeedbackWebIssue["relations"][number]) {
   if (relation.sourceFeedbackId === feedbackId) return relation.targetFeedbackId;
   if (relation.targetFeedbackId === feedbackId) return relation.sourceFeedbackId;
   return null;
@@ -1140,7 +1110,7 @@ function feedbackRelationOtherId(feedbackId: string, relation: Feedback["relatio
 
 function feedbackRelationMatchesDraft(
   feedbackId: string,
-  relation: Feedback["relations"][number],
+  relation: FeedbackWebIssue["relations"][number],
   targetFeedbackId: string,
   type: FeedbackRelationType,
 ) {
@@ -1155,7 +1125,7 @@ function feedbackRelationDirectionLabel(type: FeedbackRelationType, direction: "
   return direction === "outgoing" ? "阻塞" : "被阻塞";
 }
 
-function IssueStateBadge({ feedback }: { feedback: Feedback }) {
+function IssueStateBadge({ feedback }: { feedback: FeedbackWebIssue }) {
   const state = feedbackIssueState(feedback);
   return (
     <span className="feedback-issue-state-badge" data-state={state}>
@@ -1165,7 +1135,7 @@ function IssueStateBadge({ feedback }: { feedback: Feedback }) {
   );
 }
 
-function feedbackCommentEntries(threads: readonly CommentThread[]): FeedbackCommentEntry[] {
+function feedbackCommentEntries(threads: readonly FeedbackWebCommentThread[]): FeedbackCommentEntry[] {
   return threads
     .flatMap((thread) => thread.messages.map((message) => ({ message, thread })))
     .sort((left, right) => left.message.createdAt.localeCompare(right.message.createdAt));
@@ -1187,10 +1157,34 @@ function registerFeedbackCommentElement(ref: MutableRefObject<Map<string, HTMLEl
   };
 }
 
-function canManageFeedbackComment(message: CommentMessage, currentUser: OrfUser | null, canManageAllComments: boolean) {
+function canManageFeedbackComment(message: FeedbackWebCommentMessage, currentUser: FeedbackWebUser | null, canManageAllComments: boolean) {
   if (canManageAllComments) return true;
   if (!currentUser) return false;
   return message.authorUserId ? message.authorUserId === currentUser.id : message.author === currentUser.name;
+}
+
+function commentTimeDisplay(value: string, referenceNow = Date.now()) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return { label: value };
+  }
+
+  const title = formatLocalDateTimeMinute(date);
+  const diffMinutes = Math.max(0, Math.floor((referenceNow - date.getTime()) / 60000));
+  if (diffMinutes < 1) return { label: "刚刚", title };
+  if (diffMinutes < 60) return { label: `${diffMinutes} 分钟前`, title };
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return { label: `${diffHours} 小时前`, title };
+  return { label: title, title };
+}
+
+function formatLocalDateTimeMinute(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hour}:${minute}`;
 }
 
 function formatIssueDate(value: string) {

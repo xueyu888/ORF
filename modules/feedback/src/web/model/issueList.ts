@@ -1,8 +1,8 @@
-import type { FeedbackImpact } from "@orf/feedback-module/contracts";
-import type { CommentThread, Feedback, OrfProject, OrfUser } from "../../../types/orf";
-import { feedbackImpactLabel } from "../../../utils/labels";
-import { feedbackIssueBodyPreview, feedbackIssueCommentCount, feedbackIssueDisplayId, feedbackIssueStateLabel, isFeedbackIssueOpen } from "./feedbackIssue";
-import { feedbackIssueAssignee, feedbackIssueAuthor, feedbackIssueLabels, type FeedbackIssueLabel } from "./feedbackIssueMetadata";
+import type { FeedbackImpact } from "../../contracts";
+import type { FeedbackWebCommentThread, FeedbackWebIssue, FeedbackWebProject, FeedbackWebUser } from "../types";
+import { feedbackImpactLabel } from "../labels";
+import { feedbackIssueBodyPreview, feedbackIssueCommentCount, feedbackIssueDisplayId, feedbackIssueStateLabel, isFeedbackIssueOpen } from "./issue";
+import { feedbackIssueAssignee, feedbackIssueAuthor, feedbackIssueLabels, type FeedbackIssueLabel } from "./issueMetadata";
 
 export type FeedbackIssueListState = "assigned" | "open" | "verification" | "unread" | "triage" | "closed" | "all";
 export type FeedbackIssueSortKey = "updated-desc" | "updated-asc" | "created-desc" | "created-asc" | "comments-desc" | "comments-asc";
@@ -26,7 +26,7 @@ export type FeedbackIssueListItem = {
   authorAvatarUrl: string | null;
   authorName: string;
   commentCount: number;
-  feedback: Feedback;
+  feedback: FeedbackWebIssue;
   issueNumber: string;
   labels: FeedbackIssueListLabel[];
   lastActivityAt: string;
@@ -49,12 +49,12 @@ const queryQualifierPattern = /(?:^|\s)(is|status|assignee|owner|author|label|im
 const impactValues = new Set<FeedbackImpact>(["low", "medium", "high", "critical"]);
 
 export function buildFeedbackIssueListItems(input: {
-  comments: readonly CommentThread[];
-  feedback: readonly Feedback[];
-  projects?: readonly OrfProject[];
-  users: readonly OrfUser[];
+  comments: readonly FeedbackWebCommentThread[];
+  feedback: readonly FeedbackWebIssue[];
+  projects?: readonly FeedbackWebProject[];
+  users: readonly FeedbackWebUser[];
 }): FeedbackIssueListItem[] {
-  const threadsByFeedbackId = new Map<string, CommentThread[]>();
+  const threadsByFeedbackId = new Map<string, FeedbackWebCommentThread[]>();
   for (const thread of input.comments) {
     if (thread.targetType !== "feedback") continue;
     const threads = threadsByFeedbackId.get(thread.targetId) ?? [];

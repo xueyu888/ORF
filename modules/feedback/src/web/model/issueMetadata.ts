@@ -1,7 +1,7 @@
-import type { FeedbackImpact, FeedbackRelationType } from "@orf/feedback-module/contracts";
-import type { CommentThread, Feedback, FeedbackRelation, OrfUser } from "../../../types/orf";
-import { feedbackImpactLabel } from "../../../utils/labels";
-import { isFeedbackIssueOpen } from "./feedbackIssue";
+import type { FeedbackImpact, FeedbackRelationType } from "../../contracts";
+import type { FeedbackWebCommentThread, FeedbackWebIssue, FeedbackWebRelation, FeedbackWebUser } from "../types";
+import { feedbackImpactLabel } from "../labels";
+import { isFeedbackIssueOpen } from "./issue";
 
 export type FeedbackIssueLabel = {
   key: string;
@@ -31,7 +31,7 @@ export type FeedbackIssueLinkedFeedback = {
   type: FeedbackRelationType;
 };
 
-export function feedbackIssueLabels(feedback: Pick<Feedback, "causeCategories" | "impact">): FeedbackIssueLabel[] {
+export function feedbackIssueLabels(feedback: Pick<FeedbackWebIssue, "causeCategories" | "impact">): FeedbackIssueLabel[] {
   const causes = Array.from(new Set(feedback.causeCategories.map((cause) => cause.trim()).filter(Boolean)));
   return [
     ...causes.map((cause) => ({
@@ -48,7 +48,7 @@ export function feedbackIssueLabels(feedback: Pick<Feedback, "causeCategories" |
 }
 
 export function feedbackIssueLabelIndexItems(
-  feedbackItems: readonly Pick<Feedback, "causeCategories" | "impact" | "stage">[],
+  feedbackItems: readonly Pick<FeedbackWebIssue, "causeCategories" | "impact" | "stage">[],
   sort: FeedbackIssueLabelIndexSortKey = "name-asc",
 ): FeedbackIssueLabelIndexItem[] {
   const labelsByKey = new Map<string, FeedbackIssueLabelIndexItem>();
@@ -76,7 +76,7 @@ export function feedbackIssueLabelIndexItems(
   return [...labelsByKey.values()].sort((left, right) => compareFeedbackIssueLabelIndexItems(left, right, sort));
 }
 
-export function feedbackIssueAssignee(feedback: Pick<Feedback, "assigneeUserId">, users: readonly OrfUser[]): FeedbackIssuePerson {
+export function feedbackIssueAssignee(feedback: Pick<FeedbackWebIssue, "assigneeUserId">, users: readonly FeedbackWebUser[]): FeedbackIssuePerson {
   const user = feedback.assigneeUserId ? users.find((item) => item.id === feedback.assigneeUserId) ?? null : null;
   return {
     avatarUrl: user?.avatarUrl ?? null,
@@ -85,7 +85,7 @@ export function feedbackIssueAssignee(feedback: Pick<Feedback, "assigneeUserId">
   };
 }
 
-export function feedbackIssueAuthor(feedback: Pick<Feedback, "createdBy">, users: readonly OrfUser[]): FeedbackIssuePerson {
+export function feedbackIssueAuthor(feedback: Pick<FeedbackWebIssue, "createdBy">, users: readonly FeedbackWebUser[]): FeedbackIssuePerson {
   const user = users.find((item) => item.id === feedback.createdBy) ?? null;
   return {
     avatarUrl: user?.avatarUrl ?? null,
@@ -95,9 +95,9 @@ export function feedbackIssueAuthor(feedback: Pick<Feedback, "createdBy">, users
 }
 
 export function feedbackIssueParticipants(input: {
-  feedback: Pick<Feedback, "assigneeUserId" | "createdBy">;
-  threads: readonly CommentThread[];
-  users: readonly OrfUser[];
+  feedback: Pick<FeedbackWebIssue, "assigneeUserId" | "createdBy">;
+  threads: readonly FeedbackWebCommentThread[];
+  users: readonly FeedbackWebUser[];
 }) {
   const people = new Map<string, FeedbackIssuePerson>();
   const userById = new Map(input.users.map((user) => [user.id, user]));
@@ -117,8 +117,8 @@ export function feedbackIssueParticipants(input: {
 }
 
 export function feedbackIssueLinkedFeedback(input: {
-  feedback: Pick<Feedback, "id" | "relations">;
-  feedbackItems: readonly Pick<Feedback, "id" | "title">[];
+  feedback: Pick<FeedbackWebIssue, "id" | "relations">;
+  feedbackItems: readonly Pick<FeedbackWebIssue, "id" | "title">[];
 }): FeedbackIssueLinkedFeedback[] {
   const feedbackById = new Map(input.feedbackItems.map((feedback) => [feedback.id, feedback]));
   return input.feedback.relations.flatMap((relation) => {
@@ -136,7 +136,7 @@ export function feedbackIssueLinkedFeedback(input: {
   });
 }
 
-function feedbackRelationOtherFeedbackId(relation: FeedbackRelation, feedbackId: string) {
+function feedbackRelationOtherFeedbackId(relation: FeedbackWebRelation, feedbackId: string) {
   if (relation.sourceFeedbackId === feedbackId) return relation.targetFeedbackId;
   if (relation.targetFeedbackId === feedbackId) return relation.sourceFeedbackId;
   return null;

@@ -2,29 +2,16 @@ import { ArrowLeft, Check, Paperclip } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { feedbackWebContribution } from "@orf/feedback-module/web";
-import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
-import { Button } from "../components/ui";
-import { UserAvatar } from "../components/UserAvatar";
-import { BountyEmptyState } from "../features/bounty-hall/BountyHallSkin";
-import {
-  CommentDraftFields,
-  emptyCommentDraft,
-  serializeCommentDraft,
-  type CommentDraft,
-} from "../features/challenge/comments/CommentPanel";
-import { canCreateTeamFeedback } from "../features/feedback/model/feedbackCapabilities";
-import { createFeedback } from "../features/feedback/feedbackApi";
-import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
-import { feedbackIssueHref } from "../features/feedback/model/feedbackIssue";
-import { useFeedbackAssigneeOptions } from "../features/feedback/useFeedbackAssigneeOptions";
-import { useFeedbackIssueReadModel } from "../features/feedback/useFeedbackIssueReadModel";
-import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
-import { validOrfRichTextDraftAttachments } from "../features/rich-text/orfRichTextDraft";
-import { useOrf } from "../state/OrfProvider";
-import { businessMutationFailureMessage } from "../state/orfProviderMutationMessages";
-import type { FeedbackImpact } from "@orf/feedback-module/contracts";
-import { feedbackImpactLabel } from "../utils/labels";
+import type { FeedbackImpact } from "../../contracts";
+import { feedbackRootPath } from "../../contracts/links";
+import { createFeedback, feedbackMutationFailureMessage } from "../api";
+import { FeedbackButton, FeedbackEmptyState } from "../components/controls";
+import { feedbackImpactLabel } from "../labels";
+import { canCreateTeamFeedback } from "../model/capabilities";
+import { teamFeedbackCauseOptions } from "../model/categories";
+import { feedbackIssueHref } from "../model/issue";
+import { useFeedbackWebHost, type FeedbackCommentDraft } from "../runtime";
+import { useFeedbackAssigneeOptions, useFeedbackIssueReadModel } from "../hooks";
 
 const feedbackImpactOptions: FeedbackImpact[] = ["low", "medium", "high", "critical"];
 
@@ -37,8 +24,9 @@ type PendingFeedbackAttachment = {
 export function FeedbackCreatePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { currentUser, notify, readModelInvalidations } = useOrf();
-  const feedbackInvalidationKey = readModelInvalidationKey(readModelInvalidations, "feedback");
+  const host = useFeedbackWebHost();
+  const { CommentDraftFields, ImagePreviewDialog, UserAvatar } = host.components;
+  const { currentUser, feedbackInvalidationKey, notify } = host.useSession();
   const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser), feedbackInvalidationKey);
   const feedbackData = feedbackReadModel.data;
   const canCreateFeedback = canCreateTeamFeedback(currentUser);
@@ -49,7 +37,7 @@ export function FeedbackCreatePage() {
   const projectParam = searchParams.get("project") ?? "";
   const initialProjectId = feedbackData.projects.some((project) => project.id === projectParam) ? projectParam : "";
   const [title, setTitle] = useState("");
-  const [draft, setDraft] = useState<CommentDraft>(() => emptyCommentDraft());
+  const [draft, setDraft] = useState<FeedbackCommentDraft>(() => host.commentDraft.empty());
   const [cause, setCause] = useState<string>(causeOptions[0] ?? "技术问题");
   const [impact, setImpact] = useState<FeedbackImpact>("medium");
   const [assigneeUserId, setAssigneeUserId] = useState(initialAssigneeUserId);
@@ -60,12 +48,8 @@ export function FeedbackCreatePage() {
   const attachmentCounterRef = useRef(0);
   const pendingPreviewUrlsRef = useRef(new Set<string>());
 
-  const body = serializeCommentDraft(draft).trim();
-  const referencedPendingAttachmentIds = new Set(
-    validOrfRichTextDraftAttachments(draft).flatMap((attachment) => (
-      attachment.kind === "pending" ? [attachment.pendingAttachmentId] : []
-    )),
-  );
+  const body = host.commentDraft.serialize(draft).trim();
+  const referencedPendingAttachmentIds = new Set(host.commentDraft.validPendingAttachmentIds(draft));
   const referencedAttachments = pendingAttachments.filter((attachment) => referencedPendingAttachmentIds.has(attachment.id));
   const referencedImageAttachments = referencedAttachments.filter(isPendingFeedbackImageAttachment);
   const previewAttachmentIndex = previewAttachmentId
@@ -113,9 +97,9 @@ export function FeedbackCreatePage() {
 
   if (!canCreateFeedback) {
     return (
-      <div className="bounty-hall-page feedback-issue-detail-page">
-        <BountyEmptyState title="当前账号不能创建反馈" description="反馈创建需要 active 成员身份。" />
-        <Link className="feedback-issue-back-link" to={feedbackWebContribution.routes.inbox.path}>
+      <div className="orf-feedback-workbench feedback-issue-detail-page">
+        <FeedbackEmptyState title="当前账号不能创建反馈" description="反馈创建需要 active 成员身份。" />
+        <Link className="feedback-issue-back-link" to={feedbackRootPath}>
           <ArrowLeft aria-hidden="true" />
           返回反馈列表
         </Link>
@@ -155,17 +139,17 @@ export function FeedbackCreatePage() {
       notify("反馈已捕获");
       navigate(feedbackIssueHref(feedback.id));
     } catch (error) {
-      notify(businessMutationFailureMessage(error, "反馈保存失败"));
+      notify(feedbackMutationFailureMessage(error, "反馈保存失败"));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="bounty-hall-page feedback-issue-detail-page feedback-create-page">
+    <div className="orf-feedback-workbench feedback-issue-detail-page feedback-create-page">
       <header className="feedback-create-header">
         <div className="feedback-create-heading">
-          <Link className="feedback-create-back-link" to={feedbackWebContribution.routes.inbox.path}>
+          <Link className="feedback-create-back-link" to={feedbackRootPath}>
             <ArrowLeft aria-hidden="true" />
             反馈
           </Link>
@@ -260,10 +244,10 @@ export function FeedbackCreatePage() {
         </aside>
 
         <div className="feedback-create-submit-row">
-          <Button disabled={submitting} type="submit">
+          <FeedbackButton disabled={submitting} type="submit">
             <Check aria-hidden="true" />
             {submitting ? "创建中..." : "创建 issue"}
-          </Button>
+          </FeedbackButton>
         </div>
       </form>
       {previewAttachment && (

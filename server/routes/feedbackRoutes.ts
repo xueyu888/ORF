@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   feedbackImpactSchema,
@@ -7,13 +8,23 @@ import {
   feedbackSubscriptionMutationModeSchema,
   feedbackTransitionInputSchema,
 } from "@orf/feedback-module/contracts";
-import { getFeedbackSubscriptionMode, setFeedbackSubscriptionMode } from "@orf/feedback-module/server";
+import {
+  buildFeedbackBackupZip,
+  commitFeedbackImportBatch,
+  feedbackBackupZipFileName,
+  getFeedbackSubscriptionMode,
+  preflightFeedbackImportCsv,
+  setFeedbackSubscriptionMode,
+  type FeedbackWriteActor,
+} from "@orf/feedback-module/server";
 import { requireFeedbackInScope, requireUserScopeContext } from "../auth/accessPolicy";
 import { db } from "../db/client";
+import { projects } from "../db/schema";
 import { env } from "../env";
 import {
   getFeedbackIssueDetailReadModelData,
   getFeedbackIssueReadModelData,
+  getFeedbackIssueTransferReadModelData,
 } from "../readModels/feedbackIssueReadModel";
 import {
   addFeedbackRelation,
@@ -31,10 +42,12 @@ import {
   type FeedbackCommandActor,
   type FeedbackCommandResult,
 } from "../repositories/feedbackRepository";
+import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 
 const feedbackParamsSchema = z.object({ feedbackId: z.string().min(1) });
 const feedbackRelationParamsSchema = z.object({ feedbackId: z.string().min(1), relationId: z.string().min(1) });
+const feedbackImportParamsSchema = z.object({ batchId: z.string().min(1) });
 const feedbackReportAttachmentParamsSchema = z.object({ attachmentId: z.string().min(1) });
 const feedbackReportAttachmentContentQuerySchema = z.object({
   disposition: z.enum(["attachment", "inline"]).optional(),
@@ -130,6 +143,26 @@ function commandActor(context: NonNullable<Awaited<ReturnType<typeof requireUser
   };
 }
 
+function feedbackWriteActor(context: NonNullable<Awaited<ReturnType<typeof requireUserScopeContext>>>): FeedbackWriteActor {
+  return {
+    id: context.user.id,
+    role: context.user.role,
+    status: context.user.status === "active" ? "active" : "inactive",
+    teamId: runtimeScopeStorageId(context.scope),
+  };
+}
+
+function requireActiveFeedbackTransferActor(
+  reply: FastifyReply,
+  context: NonNullable<Awaited<ReturnType<typeof requireUserScopeContext>>>,
+) {
+  if (context.user.status !== "active") {
+    reply.code(403).send({ error: "Only active members can import or export feedback" });
+    return null;
+  }
+  return feedbackWriteActor(context);
+}
+
 async function readCreateFeedbackBody(request: FastifyRequest) {
   const contentType = request.headers["content-type"] ?? "";
   if (!contentType.includes("multipart/form-data")) {
@@ -176,6 +209,25 @@ async function readCreateFeedbackBody(request: FastifyRequest) {
     projectId: normalizeOptionalId(body.projectId),
     attachments,
   };
+}
+
+async function readFeedbackImportUpload(request: FastifyRequest) {
+  const contentType = request.headers["content-type"] ?? "";
+  if (!contentType.includes("multipart/form-data")) {
+    return null;
+  }
+
+  for await (const part of request.parts({ limits: { fileSize: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES } })) {
+    if (part.type === "file" && part.fieldname === "file") {
+      return {
+        body: await part.toBuffer(),
+        fileName: part.filename || "feedback-import.csv",
+        mimeType: part.mimetype,
+      };
+    }
+  }
+
+  return null;
 }
 
 function sendFeedbackCommandOutcome(reply: FastifyReply, outcome: FeedbackCommandResult) {
@@ -238,6 +290,88 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
         return true;
       }),
     };
+  });
+
+  app.get("/api/feedback/exports/backup.zip", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    const actor = requireActiveFeedbackTransferActor(reply, context);
+    if (!actor) {
+      return reply;
+    }
+
+    const exportedAt = new Date().toISOString();
+    const data = await getFeedbackIssueTransferReadModelData({ scope: context.scope });
+    const body = buildFeedbackBackupZip(data, exportedAt);
+    reply.header("Content-Type", "application/zip");
+    reply.header("Content-Disposition", contentDispositionHeader("attachment", feedbackBackupZipFileName(exportedAt)));
+    reply.header("Cache-Control", "no-store");
+    reply.header("Content-Length", body.length);
+    return reply.send(body);
+  });
+
+  app.post("/api/feedback/imports/preflight", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    const actor = requireActiveFeedbackTransferActor(reply, context);
+    if (!actor) {
+      return reply;
+    }
+
+    const file = await readFeedbackImportUpload(request);
+    if (!file) {
+      return reply.code(400).send({ error: "Feedback import file is required" });
+    }
+
+    const teamId = runtimeScopeStorageId(context.scope);
+    const [assigneeOptions, projectRows] = await Promise.all([
+      listFeedbackAssigneeOptions(context.scope),
+      db.select({ id: projects.id }).from(projects).where(eq(projects.teamId, teamId)),
+    ]);
+
+    const preflight = await preflightFeedbackImportCsv(db, {
+      actor,
+      fileName: file.fileName,
+      knownAssigneeUserIds: new Set(assigneeOptions.map((item) => item.id)),
+      knownProjectIds: new Set(projectRows.map((item) => item.id)),
+      text: file.body.toString("utf8"),
+    });
+
+    return { preflight };
+  });
+
+  app.post("/api/feedback/imports/:batchId/commit", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    const actor = requireActiveFeedbackTransferActor(reply, context);
+    if (!actor) {
+      return reply;
+    }
+
+    const params = feedbackImportParamsSchema.parse(request.params);
+    const result = await commitFeedbackImportBatch(db, { actor, batchId: params.batchId });
+    if (result.status === "notFound") {
+      return reply.code(404).send({ error: "Feedback import batch not found" });
+    }
+    if (result.status === "invalid") {
+      return reply.code(409).send({ error: "Feedback import batch is not ready to commit" });
+    }
+
+    if (result.createdFeedbackIds.length > 0) {
+      publishOrfDataInvalidation({
+        actorUserId: context.user.id,
+        models: ["feedback"],
+        reason: "feedback.changed",
+        teamId: runtimeScopeStorageId(context.scope),
+      });
+    }
+    return { result };
   });
 
   app.get("/api/feedback/report-attachments/:attachmentId/content", async (request, reply) => {

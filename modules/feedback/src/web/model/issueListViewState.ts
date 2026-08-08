@@ -1,7 +1,6 @@
-import type { FilterPreferenceRecord } from "../../../domain/settings/filterPreferences";
-import { filterPreferenceStringValue } from "../../../domain/settings/filterPreferences";
-import type { FeedbackImpact } from "@orf/feedback-module/contracts";
-import { feedbackIssueListStateForQueryValue, type FeedbackIssueListState, type FeedbackIssueSortKey } from "./feedbackIssueList";
+import type { FeedbackImpact } from "../../contracts";
+import type { FeedbackWebFilterPreferenceRecord } from "../types";
+import { feedbackIssueListStateForQueryValue, type FeedbackIssueListState, type FeedbackIssueSortKey } from "./issueList";
 
 export type FeedbackIssueListUrlState = {
   assigneeUserId: string;
@@ -60,10 +59,10 @@ export function feedbackIssueListFilterQueryFromSearchParams(searchParams: URLSe
 
 export function feedbackIssueListFilterPreferenceRecordFromSearchParams(
   searchParams: URLSearchParams,
-): FilterPreferenceRecord | null {
+): FeedbackWebFilterPreferenceRecord | null {
   const state = feedbackIssueListUrlStateFromSearchParams(searchParams);
   const query = state.query.trim();
-  const values: FilterPreferenceRecord["values"] = {};
+  const values: FeedbackWebFilterPreferenceRecord["values"] = {};
 
   if (state.projectId !== "All") values.project = state.projectId;
   if (query) values.q = query;
@@ -78,7 +77,7 @@ export function feedbackIssueListFilterPreferenceRecordFromSearchParams(
 }
 
 export function feedbackIssueListFilterParamsFromPreferenceRecord(
-  record: FilterPreferenceRecord | null | undefined,
+  record: FeedbackWebFilterPreferenceRecord | null | undefined,
 ) {
   if (!record) return null;
 
@@ -185,4 +184,11 @@ function feedbackIssueListBrowserStorage() {
   } catch {
     return null;
   }
+}
+
+function filterPreferenceStringValue(record: FeedbackWebFilterPreferenceRecord, key: string) {
+  const value = record.values[key];
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) return value.find((item) => item.trim())?.trim() ?? "";
+  return "";
 }

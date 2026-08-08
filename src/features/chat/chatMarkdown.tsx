@@ -1,7 +1,7 @@
 import { useCallback, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { feedbackIssueHref, feedbackIssueIdFromHref, feedbackIssueMarkdownLabel } from "@orf/feedback-module/web";
 import type { ChatUser, Feedback } from "../../types/orf";
-import { feedbackIssueHref, feedbackIssueIdFromHref, feedbackIssueMarkdownLabel } from "../feedback/model/feedbackIssue";
 import {
   OrfRichTextMarkdownViewer,
   type OrfRichTextResolvedLink,

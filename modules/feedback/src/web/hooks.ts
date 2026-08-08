@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { emptyFeedbackIssueReadModelData, type FeedbackIssueReadModelData } from "../../domain/feedbackReadModel";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  getFeedbackAssignees,
   getFeedbackIssueDetailReadModel,
   getFeedbackIssueReadModel,
-} from "../../state/apiClient";
+} from "./api";
+import { mergeFeedbackAssigneeOptions, type FeedbackAssigneeOption } from "./model/assigneeOptions";
+import { emptyFeedbackIssueReadModelData, type FeedbackIssueReadModelData, type FeedbackWebUser } from "./types";
 
 type FeedbackIssueReadModelHookState = {
   data: FeedbackIssueReadModelData;
@@ -20,6 +22,34 @@ export function useFeedbackIssueReadModel(enabled = true, reloadKey = ""): Feedb
 export function useFeedbackIssueDetailReadModel(feedbackId: string, enabled = true, reloadKey = ""): FeedbackIssueReadModelHookState {
   const load = useCallback(() => getFeedbackIssueDetailReadModel(feedbackId), [feedbackId]);
   return useFeedbackIssueReadModelLoader(load, enabled && Boolean(feedbackId.trim()), reloadKey);
+}
+
+export function useFeedbackAssigneeOptions(users: readonly FeedbackWebUser[], currentUser: FeedbackWebUser | null): FeedbackAssigneeOption[] {
+  const [serverOptions, setServerOptions] = useState<FeedbackAssigneeOption[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getFeedbackAssignees()
+      .then((response) => {
+        if (!cancelled) setServerOptions(response.users);
+      })
+      .catch(() => {
+        if (!cancelled) setServerOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return useMemo(() => {
+    const localOptions = users
+      .filter((user) => user.status === "active")
+      .map((user) => ({ avatarUrl: user.avatarUrl ?? null, id: user.id, name: user.name }));
+    const currentOption = currentUser?.status === "active"
+      ? [{ avatarUrl: currentUser.avatarUrl ?? null, id: currentUser.id, name: currentUser.name }]
+      : [];
+    return mergeFeedbackAssigneeOptions(serverOptions, localOptions, currentOption);
+  }, [currentUser, serverOptions, users]);
 }
 
 function useFeedbackIssueReadModelLoader(

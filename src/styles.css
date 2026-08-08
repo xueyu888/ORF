@@ -7664,16 +7664,6 @@ button:disabled {
     padding-bottom: var(--orf-mobile-bottom-nav-height);
   }
 
-  .orf-app-shell:has(.feedback-create-page) .orf-shell-body,
-  .orf-app-shell:has(.feedback-issue-detail-page) .orf-shell-body {
-    padding-bottom: 0;
-  }
-
-  .orf-app-shell:has(.feedback-create-page),
-  .orf-app-shell:has(.feedback-issue-detail-page) {
-    --orf-content-bg-bottom: 0px;
-  }
-
   .orf-sidebar {
     display: none;
   }
@@ -7697,11 +7687,6 @@ button:disabled {
       ),
       #ffffff;
     box-shadow: 0 -14px 34px rgba(15, 35, 58, 0.13);
-  }
-
-  .orf-app-shell:has(.feedback-create-page) .orf-mobile-bottom-nav,
-  .orf-app-shell:has(.feedback-issue-detail-page) .orf-mobile-bottom-nav {
-    display: none;
   }
 
   .orf-mobile-bottom-nav-item {
@@ -9381,11 +9366,6 @@ button:disabled {
 .work-logs-activity-entry-linked {
   border-color: color-mix(in srgb, var(--orf-accent) 72%, var(--orf-border));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--orf-accent) 18%, transparent);
-}
-
-.feedback-issue-comment-card-linked {
-  outline: 2px solid color-mix(in srgb, var(--orf-accent) 44%, transparent);
-  outline-offset: 2px;
 }
 
 .reports-linked-settlement-card {
@@ -21101,69 +21081,6 @@ button.orf-chat-image-attachment {
   padding: 8px;
 }
 
-.feedback-issue-sidebar > .orf-related-resources {
-  margin-bottom: 14px;
-}
-
-.feedback-create-attachment-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.feedback-create-image-preview,
-.feedback-create-file-preview {
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid rgba(218, 224, 232, 0.92);
-  border-radius: 8px;
-  background: rgba(248, 250, 252, 0.84);
-  color: #344054;
-}
-
-.feedback-create-image-preview {
-  display: grid;
-  gap: 6px;
-  padding: 6px;
-  text-align: left;
-  cursor: zoom-in;
-}
-
-.feedback-create-image-preview:hover,
-.feedback-create-image-preview:focus-visible {
-  border-color: rgba(47, 156, 137, 0.42);
-  background: rgba(240, 253, 250, 0.84);
-  outline: 0;
-}
-
-.feedback-create-image-preview img {
-  display: block;
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  border-radius: 6px;
-  background: #f8fafc;
-  object-fit: cover;
-}
-
-.feedback-create-image-preview span,
-.feedback-create-file-preview {
-  overflow: hidden;
-  font-size: 12px;
-  font-weight: 760;
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.feedback-create-file-preview {
-  display: inline-flex;
-  min-height: 34px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 9px;
-}
-
 .orf-drive-panel {
   --orf-drive-control-bg: var(--orf-chat-panel-control-bg);
   --orf-drive-control-text: var(--orf-chat-panel-text-strong);
@@ -25280,7 +25197,6 @@ html[data-orf-display-ready="true"] .orf-mobile-bottom-nav-item {
 }
 
 html[data-orf-display-ready="true"] .orf-comment-body,
-html[data-orf-display-ready="true"] .feedback-issue-comment-body,
 html[data-orf-display-ready="true"] .orf-chat-message-text,
 html[data-orf-display-ready="true"] .orf-chat-collection-body,
 html[data-orf-display-ready="true"] .orf-rich-text-markdown-paragraph,
@@ -25326,14 +25242,12 @@ html[data-orf-display-ready="true"] .orf-rich-text-markdown-heading-6.orf-rich-t
 
 html[data-orf-display-density="compact"] .orf-page,
 html[data-orf-display-density="compact"] .orf-page-content,
-html[data-orf-display-density="compact"] .feedback-issue-thread,
 html[data-orf-display-density="compact"] .orf-chat-message-feed {
   gap: calc(0.75rem * var(--orf-density-scale));
 }
 
 html[data-orf-display-density="comfortable"] .orf-page,
 html[data-orf-display-density="comfortable"] .orf-page-content,
-html[data-orf-display-density="comfortable"] .feedback-issue-thread,
 html[data-orf-display-density="comfortable"] .orf-chat-message-feed {
   gap: calc(1rem * var(--orf-density-scale));
 }
@@ -25347,7 +25261,6 @@ html[data-orf-display-contrast="high"]
 html[data-orf-display-contrast="high"] .orf-card,
 html[data-orf-display-contrast="high"] .orf-control,
 html[data-orf-display-contrast="high"] .orf-input,
-html[data-orf-display-contrast="high"] .feedback-issue-row,
 html[data-orf-display-contrast="high"] .orf-chat-message,
 html[data-orf-display-contrast="high"] .orf-comment-message-row {
   border-color: var(--orf-border-strong) !important;

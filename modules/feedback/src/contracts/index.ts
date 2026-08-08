@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export * from "./links";
 export * from "./notifications";
+export * from "./readModel";
 export * from "./reportAttachments";
 
 export const feedbackStageValues = [

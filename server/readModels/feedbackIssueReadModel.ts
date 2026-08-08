@@ -1,6 +1,10 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { getFeedbackReadModelIssues, type FeedbackReadModelViewer } from "@orf/feedback-module/server";
-import type { FeedbackIssueReadModelData } from "../../src/domain/feedbackReadModel";
+import type {
+  FeedbackIssueReadModelData,
+  FeedbackWebCommentThread,
+  FeedbackWebProject,
+} from "@orf/feedback-module/contracts";
 import type { CommentThread, OrfProject, OrfUser } from "../../src/types/orf";
 import { db } from "../db/client";
 import {
@@ -42,7 +46,7 @@ function isMissingCommentStorageError(error: unknown) {
   return cause.code === "42P01" || cause.code === "42704";
 }
 
-export function mapProjectRows(projectRows: readonly ProjectRow[]): OrfProject[] {
+export function mapProjectRows(projectRows: readonly ProjectRow[]): FeedbackWebProject[] {
   return projectRows.map((project) => ({
     id: project.id,
     name: project.name,
@@ -76,6 +80,10 @@ export async function getFeedbackIssueReadModelData(scope: FeedbackIssueReadMode
     projects: mapProjectRows(projectRows),
     users,
   };
+}
+
+export async function getFeedbackIssueTransferReadModelData(scope: Pick<FeedbackIssueReadModelScope, "scope">): Promise<FeedbackIssueReadModelData> {
+  return getFeedbackIssueReadModelData({ scope: scope.scope, viewerUserId: null });
 }
 
 export async function getFeedbackIssueDetailReadModelData(feedbackId: string, scope: FeedbackIssueReadModelScope): Promise<FeedbackIssueReadModelData | null> {
@@ -141,7 +149,7 @@ async function mapCommentThreadRows(input: {
   attachmentRows: readonly CommentAttachmentRow[];
   messageRows: readonly CommentMessageRow[];
   threadRows: readonly CommentThreadRow[];
-}): Promise<CommentThread[]> {
+}): Promise<FeedbackWebCommentThread[]> {
   const commentAuthorAvatarUrls = await getUserAvatarUrlMap(input.messageRows.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
   const messagesByThread = new Map<string, CommentThread["messages"]>();
   const attachmentsByMessage = groupCommentAttachmentsByMessage([...input.attachmentRows]);
