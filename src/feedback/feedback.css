@@ -10,7 +10,7 @@
 }
 
 .feedback-button,
-.feedback-select-trigger,
+.feedback-select select,
 .feedback-text-input input {
   min-height: 36px;
   border: 1px solid color-mix(in srgb, var(--orf-border) 70%, transparent);
@@ -62,7 +62,7 @@
 }
 
 .feedback-button:disabled,
-.feedback-select-trigger:disabled {
+.feedback-select select:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -156,6 +156,7 @@
 .feedback-issue-header-actions,
 .feedback-issue-detail-actions {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
@@ -164,6 +165,19 @@
 .feedback-transfer-menu {
   position: relative;
   display: inline-flex;
+  z-index: 25;
+}
+
+.feedback-transfer-trigger {
+  min-width: 138px;
+  border-color: color-mix(in srgb, var(--orf-accent) 58%, var(--orf-border));
+  background: color-mix(in srgb, var(--orf-accent) 13%, var(--orf-bg-card));
+  color: var(--orf-accent-text);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--orf-accent) 12%, transparent);
+}
+
+.feedback-transfer-trigger span {
+  line-height: 1;
 }
 
 .feedback-transfer-trigger svg:last-child {
@@ -177,11 +191,11 @@
   top: calc(100% + 8px);
   z-index: 20;
   display: grid;
-  min-width: 230px;
+  min-width: 248px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--orf-border) 72%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--orf-bg-elevated, var(--orf-bg-card)) 94%, transparent);
+  background: var(--orf-bg-elevated, var(--orf-bg-card));
   box-shadow: 0 18px 42px color-mix(in srgb, #0f172a 20%, transparent);
 }
 
@@ -202,6 +216,12 @@
   text-align: left;
   text-decoration: none;
   cursor: pointer;
+}
+
+.feedback-transfer-popover svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
 }
 
 .feedback-transfer-popover a:last-child,
@@ -449,7 +469,7 @@
   font-weight: 800;
 }
 
-.feedback-select-trigger,
+.feedback-select select,
 .feedback-text-input input {
   width: 100%;
   padding: 0 11px;
@@ -974,6 +994,7 @@ html[data-orf-display-contrast="high"] .feedback-issue-row {
   }
 
   .feedback-transfer-menu,
+  .feedback-transfer-trigger,
   .feedback-issue-header-actions .feedback-button,
   .feedback-issue-detail-actions .feedback-button,
   .feedback-create-submit-row .feedback-button {

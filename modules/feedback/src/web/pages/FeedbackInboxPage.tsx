@@ -20,7 +20,7 @@ import { getProjectChatChannels, getUserPreferences, saveUserPreferences } from 
 import { FeedbackTransferMenu } from "../components/transfer";
 import { FeedbackBadge, FeedbackButton, FeedbackEmptyState, FeedbackSelect, FeedbackTextInput } from "../components/controls";
 import { feedbackImpactLabel } from "../labels";
-import { canCreateTeamFeedback } from "../model/capabilities";
+import { canCreateTeamFeedback, canImportExportTeamFeedback } from "../model/capabilities";
 import { feedbackIssueHref, feedbackIssueStateLabel, isFeedbackIssueOpen } from "../model/issue";
 import {
   buildFeedbackIssueListItems,
@@ -78,7 +78,7 @@ export function FeedbackInboxPage() {
   );
   const visibleFeedback = useMemo(() => currentUser?.status === "active" || currentUser?.role === "admin" ? feedbackData.feedback : [], [currentUser, feedbackData.feedback]);
   const canCreateFeedback = canCreateTeamFeedback(currentUser);
-  const canImportExport = currentUser?.status === "active";
+  const canImportExport = canImportExportTeamFeedback(currentUser);
   const issueItems = useMemo(
     () => buildFeedbackIssueListItems({ comments: feedbackData.comments, feedback: visibleFeedback, projects: feedbackData.projects, users: feedbackData.users }),
     [feedbackData.comments, feedbackData.projects, feedbackData.users, visibleFeedback],
@@ -262,9 +262,6 @@ export function FeedbackInboxPage() {
           </div>
         </div>
         <div className="feedback-issue-header-actions">
-          <div className="feedback-issue-index-links" aria-label="反馈索引">
-            <Link className="feedback-issue-index-link" to={feedbackLabelsPath}><Tag aria-hidden="true" /> 标签 <strong>{labelOptions.length}</strong></Link>
-          </div>
           <FeedbackTransferMenu
             canImportExport={canImportExport}
             csvDisabled={feedbackReadModel.loading}
@@ -278,6 +275,9 @@ export function FeedbackInboxPage() {
               新建反馈
             </FeedbackButton>
           )}
+          <div className="feedback-issue-index-links" aria-label="反馈索引">
+            <Link className="feedback-issue-index-link" to={feedbackLabelsPath}><Tag aria-hidden="true" /> 标签 <strong>{labelOptions.length}</strong></Link>
+          </div>
         </div>
       </header>
 

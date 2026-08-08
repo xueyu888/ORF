@@ -26,13 +26,14 @@ export function FeedbackTransferMenu({
   return (
     <div className="feedback-transfer-menu">
       <FeedbackButton
+        aria-haspopup="menu"
         aria-expanded={menuOpen}
         className="feedback-transfer-trigger"
         onClick={() => setMenuOpen((value) => !value)}
         variant="secondary"
       >
         <UploadCloud aria-hidden="true" />
-        导入/导出
+        <span>导入/导出</span>
         <ChevronDown aria-hidden="true" />
       </FeedbackButton>
       {menuOpen && (
