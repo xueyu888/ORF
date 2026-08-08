@@ -243,7 +243,7 @@
 .feedback-transfer-dialog-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 240;
   display: grid;
   place-items: center;
   padding: 24px;
@@ -324,7 +324,7 @@
 
 .feedback-import-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
   gap: 8px;
 }
 
@@ -342,8 +342,13 @@
 
 .feedback-import-summary strong {
   color: var(--orf-text-primary);
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1;
+}
+
+.feedback-import-preflight-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .feedback-import-messages {
@@ -1009,18 +1014,28 @@ html[data-orf-display-contrast="high"] .feedback-issue-row {
 
   .feedback-transfer-dialog-backdrop {
     align-items: stretch;
-    padding: 10px;
+    padding: 0;
   }
 
   .feedback-transfer-dialog {
-    max-height: calc(100vh - 20px);
+    width: 100%;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    align-content: start;
+    border: 0;
+    border-radius: 0;
   }
 
-  .feedback-transfer-dialog header,
   .feedback-transfer-dialog footer,
   .feedback-import-dropzone {
     grid-template-columns: 1fr;
     display: grid;
+  }
+
+  .feedback-transfer-dialog header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
   }
 
   .feedback-import-summary {

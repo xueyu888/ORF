@@ -36,6 +36,7 @@ import {
   buildFeedbackIssueCurrentViewCsv,
   feedbackIssueCsvExportFileName,
 } from "../transfer/currentViewCsv";
+import { downloadTextFile } from "../transfer/download";
 import {
   clearStoredFeedbackIssueListFilterParams,
   feedbackIssueListFilterParamsFromPreferenceRecord,
@@ -490,18 +491,6 @@ function formatFeedbackDate(value: string) {
   }
 
   return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(date);
-}
-
-function downloadTextFile(input: { content: string; fileName: string; mimeType: string }) {
-  const blob = new Blob([input.content], { type: input.mimeType });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = input.fileName;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
 }
 
 function newFeedbackHref(projectId: string) {

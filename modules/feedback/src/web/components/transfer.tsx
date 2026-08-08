@@ -1,6 +1,8 @@
 import { ChevronDown, DatabaseBackup, FileDown, FileUp, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { commitFeedbackImport, preflightFeedbackImport, type FeedbackImportPreflight } from "../api";
+import { downloadTextFile } from "../transfer/download";
 import { FeedbackButton } from "./controls";
 
 type FeedbackTransferMenuProps = {
@@ -132,7 +134,7 @@ function FeedbackImportDialog({
     }
   };
 
-  return (
+  const dialog = (
     <div className="feedback-transfer-dialog-backdrop" role="presentation">
       <section className="feedback-transfer-dialog" role="dialog" aria-modal="true" aria-labelledby="feedback-import-title">
         <header>
@@ -177,6 +179,14 @@ function FeedbackImportDialog({
       </section>
     </div>
   );
+
+  const portalTarget = feedbackDialogPortalTarget();
+  return portalTarget ? createPortal(dialog, portalTarget) : dialog;
+}
+
+function feedbackDialogPortalTarget() {
+  if (typeof document === "undefined") return null;
+  return document.querySelector<HTMLElement>(".orf-app-shell") ?? document.body;
 }
 
 function FeedbackImportPreflightView({ preflight }: { preflight: FeedbackImportPreflight }) {
@@ -185,8 +195,19 @@ function FeedbackImportPreflightView({ preflight }: { preflight: FeedbackImportP
       <div className="feedback-import-summary">
         <span><strong>{preflight.summary.totalRecords}</strong> 总记录</span>
         <span><strong>{preflight.summary.newRecords}</strong> 可新增</span>
+        <span><strong>{preflight.summary.updateRecords}</strong> 可更新</span>
         <span><strong>{preflight.summary.skippedRecords}</strong> 跳过</span>
         <span><strong>{preflight.summary.errors}</strong> 错误</span>
+        <span><strong>{formatBytes(preflight.summary.attachmentBytes)}</strong> 附件</span>
+      </div>
+      <div className="feedback-import-preflight-actions">
+        <FeedbackButton
+          size="sm"
+          variant="secondary"
+          onClick={() => downloadFeedbackImportPreflightReport(preflight)}
+        >
+          下载预检报告
+        </FeedbackButton>
       </div>
       {preflight.warnings.length > 0 && (
         <div className="feedback-import-messages" data-tone="warning">
@@ -208,8 +229,55 @@ function FeedbackImportPreflightView({ preflight }: { preflight: FeedbackImportP
   );
 }
 
+function downloadFeedbackImportPreflightReport(preflight: FeedbackImportPreflight) {
+  downloadTextFile({
+    content: buildFeedbackImportPreflightReport(preflight),
+    fileName: `orf-feedback-import-preflight-${preflight.batchId}.txt`,
+    mimeType: "text/plain;charset=utf-8",
+  });
+}
+
+function buildFeedbackImportPreflightReport(preflight: FeedbackImportPreflight) {
+  const lines = [
+    "反馈导入预检报告",
+    `文件: ${preflight.fileName}`,
+    `批次: ${preflight.batchId}`,
+    `类型: ${preflight.sourceKind.toUpperCase()}`,
+    "",
+    "摘要",
+    `总记录: ${preflight.summary.totalRecords}`,
+    `可新增: ${preflight.summary.newRecords}`,
+    `可更新: ${preflight.summary.updateRecords}`,
+    `跳过: ${preflight.summary.skippedRecords}`,
+    `错误: ${preflight.summary.errors}`,
+    `附件: ${formatBytes(preflight.summary.attachmentBytes)}`,
+    "",
+    "警告",
+    ...preflight.warnings.map(messageLine),
+    ...(preflight.warnings.length === 0 ? ["无"] : []),
+    "",
+    "错误",
+    ...preflight.errors.map(messageLine),
+    ...(preflight.errors.length === 0 ? ["无"] : []),
+  ];
+  return `${lines.join("\n")}\n`;
+}
+
 function messageLine(item: { field?: string; message: string; row?: number }) {
   const row = item.row ? `第 ${item.row} 行` : "文件";
   const field = item.field ? ` · ${item.field}` : "";
   return `${row}${field}: ${item.message}`;
+}
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  if (value < 1024) return `${value} B`;
+  const units = ["KB", "MB", "GB"];
+  let size = value / 1024;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 }
