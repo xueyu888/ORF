@@ -1,9 +1,6 @@
 import type { Readable } from "node:stream";
 import { and, eq } from "drizzle-orm";
 import {
-  planFeedbackAssigneeChangedNotification,
-  planFeedbackCreatedNotification,
-  planFeedbackLifecycleChangedNotification,
   type FeedbackImpact,
   type FeedbackPriority,
   type FeedbackRelationType,
@@ -11,19 +8,20 @@ import {
 } from "@orf/feedback-module/contracts";
 import {
   addFeedbackIssueRelation,
-  buildFeedbackNotificationDispatchDraft,
+  buildFeedbackAssigneeChangedNotificationDispatch,
+  buildFeedbackCreatedNotificationDispatch,
+  buildFeedbackLifecycleChangedNotificationDispatch,
   createFeedbackDraft,
   createFeedbackIssue,
   feedbackReportAttachmentResponseContentType,
-  feedbackNotificationRecipient,
   getFeedbackAssignmentNotificationDispatchRecipients,
   getFeedbackCommentNotificationFacts,
+  getFeedbackLifecycleNotificationDispatchRecipients,
   getFeedbackOrdinaryNotificationDispatchRecipients,
   getFeedbackReferences as getFeedbackReferenceSummaries,
   getFeedbackReportAttachmentContentFacts,
   listFeedbackReferences as listFeedbackReferenceSummaries,
   markFeedbackViewed as markFeedbackViewedInModule,
-  mergeFeedbackNotificationDispatchRecipients,
   publishFeedbackNotificationDispatch,
   removeFeedbackIssueRelation,
   searchFeedbackReferences as searchFeedbackReferenceSummaries,
@@ -32,7 +30,6 @@ import {
   updateFeedbackIssueMetadata,
   type FeedbackCommandResult,
   type FeedbackNotificationDispatchDraft,
-  type FeedbackNotificationDispatchRecipient,
   type FeedbackNotificationRecipientDirectory,
   type FeedbackTargetTitleSync,
   type FeedbackTransitionNotificationDispatchFactory,
@@ -243,16 +240,16 @@ async function prepareFeedbackCreatedNotificationDispatch(input: {
     teamId: input.teamId,
   });
 
-  return buildFeedbackNotificationDispatchDraft(planFeedbackCreatedNotification({
+  return buildFeedbackCreatedNotificationDispatch({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     assigneeName: input.assigneeName,
     feedbackId: input.feedbackId,
     project: input.project,
-    recipientUserIds: [],
+    recipients,
     teamId: input.teamId,
     title: input.title,
-  }), recipients);
+  });
 }
 
 function feedbackLifecycleActionRequiredUserId(
@@ -275,40 +272,30 @@ async function prepareFeedbackLifecycleNotificationDispatchFactory(input: {
   teamId: string;
   title: string;
 }): Promise<FeedbackTransitionNotificationDispatchFactory | null> {
-  const ordinaryRecipients = await getFeedbackOrdinaryNotificationDispatchRecipients(db, feedbackNotificationRecipientDirectory, {
+  const recipients = await getFeedbackLifecycleNotificationDispatchRecipients(db, feedbackNotificationRecipientDirectory, {
+    actionRequiredUserIds: uniqueNotificationUserIds([
+      feedbackLifecycleActionRequiredUserId(input.command, {
+        assigneeUserId: input.assigneeUserId,
+        createdBy: input.createdBy,
+      }),
+    ]),
     assigneeUserId: input.assigneeUserId,
     createdBy: input.createdBy,
     feedbackId: input.feedbackId,
-    includeCommentParticipants: true,
     teamId: input.teamId,
   });
-  const actionRequiredUserIds = await getActiveMemberNotificationRecipientsByIds(input.teamId, uniqueNotificationUserIds([
-    feedbackLifecycleActionRequiredUserId(input.command, {
-      assigneeUserId: input.assigneeUserId,
-      createdBy: input.createdBy,
-    }),
-  ]));
-  const recipients = mergeFeedbackNotificationDispatchRecipients([
-    ...ordinaryRecipients,
-    ...actionRequiredUserIds.map((userId) => feedbackNotificationRecipient({
-      attentionLevel: "action_required",
-      deliveryClass: "direct",
-      reasons: ["action_required"],
-      userId,
-    })),
-  ].filter((recipient): recipient is FeedbackNotificationDispatchRecipient => Boolean(recipient)));
 
-  return (context) => buildFeedbackNotificationDispatchDraft(planFeedbackLifecycleChangedNotification({
+  return (context) => buildFeedbackLifecycleChangedNotificationDispatch({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     feedbackId: input.feedbackId,
     project: input.project,
-    recipientUserIds: [],
+    recipients,
     resolution: context.resolution,
     stage: context.stage,
     teamId: input.teamId,
     title: input.title,
-  }), recipients);
+  });
 }
 
 async function prepareFeedbackAssignedNotificationDispatch(input: {
@@ -331,16 +318,16 @@ async function prepareFeedbackAssignedNotificationDispatch(input: {
     teamId: input.teamId,
   });
 
-  return buildFeedbackNotificationDispatchDraft(planFeedbackAssigneeChangedNotification({
+  return buildFeedbackAssigneeChangedNotificationDispatch({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     feedbackId: input.feedbackId,
     nextAssigneeName: input.nextAssigneeName,
     previousAssigneeName: input.previousAssigneeName,
-    recipientUserIds: [],
+    recipients,
     teamId: input.teamId,
     title: input.title,
-  }), recipients);
+  });
 }
 
 async function getFeedbackFromReadModel(feedbackId: string, scope: RuntimeScope, viewerUserId?: string | null) {

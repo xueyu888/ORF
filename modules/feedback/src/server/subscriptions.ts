@@ -173,6 +173,39 @@ export async function getFeedbackAssignmentNotificationDispatchRecipients(
   ]);
 }
 
+export async function getFeedbackLifecycleNotificationDispatchRecipients(
+  database: FeedbackSubscriptionDatabase,
+  directory: FeedbackNotificationRecipientDirectory,
+  input: {
+    actionRequiredUserIds?: readonly string[];
+    assigneeUserId?: string | null;
+    createdBy?: string | null;
+    feedbackId: string;
+    teamId: string;
+  },
+) {
+  const [ordinaryRecipients, activeActionRequiredUserIds] = await Promise.all([
+    getFeedbackOrdinaryNotificationDispatchRecipients(database, directory, {
+      assigneeUserId: input.assigneeUserId,
+      createdBy: input.createdBy,
+      feedbackId: input.feedbackId,
+      includeCommentParticipants: true,
+      teamId: input.teamId,
+    }),
+    directory.getActiveMemberUserIdsByIds(input.teamId, uniqueUserIds([...(input.actionRequiredUserIds ?? [])])),
+  ]);
+
+  return presentRecipients([
+    ...ordinaryRecipients,
+    ...activeActionRequiredUserIds.map((userId) => feedbackNotificationRecipient({
+      attentionLevel: "action_required",
+      deliveryClass: "direct",
+      reasons: ["action_required"],
+      userId,
+    })),
+  ]);
+}
+
 export async function getFeedbackSubscriptionMode(
   database: FeedbackSubscriptionDatabase,
   feedbackId: string,

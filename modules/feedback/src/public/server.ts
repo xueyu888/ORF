@@ -22,16 +22,18 @@ export {
   type FeedbackReadModelViewer,
 } from "../server/readModel";
 export {
-  buildFeedbackNotificationDispatchDraft,
-  feedbackNotificationRecipient,
   insertFeedbackNotificationDispatch,
-  mergeFeedbackNotificationDispatchRecipients,
   publishFeedbackNotificationDispatch,
   startFeedbackNotificationDispatchWorker,
   type FeedbackNotificationDispatchDraft,
-  type FeedbackNotificationDispatchRecipient,
   type FeedbackNotificationPort,
 } from "../server/notificationDispatch";
+export {
+  buildFeedbackAssigneeChangedNotificationDispatch,
+  buildFeedbackCommentCreatedNotificationDispatch,
+  buildFeedbackCreatedNotificationDispatch,
+  buildFeedbackLifecycleChangedNotificationDispatch,
+} from "../server/notificationDispatchPlans";
 export {
   feedbackReportAttachmentResponseContentType,
   getFeedbackReportAttachmentContentFacts,
@@ -40,6 +42,7 @@ export {
 } from "../server/reportAttachmentContent";
 export {
   getFeedbackAssignmentNotificationDispatchRecipients,
+  getFeedbackLifecycleNotificationDispatchRecipients,
   getFeedbackOrdinaryNotificationDispatchRecipients,
   getFeedbackSubscriptionMode,
   setFeedbackSubscriptionMode,

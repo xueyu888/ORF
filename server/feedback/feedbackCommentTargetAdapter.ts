@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
-import { feedbackCommentPath, feedbackIssuePath, planFeedbackCommentCreatedNotification } from "@orf/feedback-module/contracts";
+import { feedbackCommentPath, feedbackIssuePath } from "@orf/feedback-module/contracts";
 import {
-  buildFeedbackNotificationDispatchDraft,
+  buildFeedbackCommentCreatedNotificationDispatch,
   getFeedbackCommentNotificationFacts,
   getFeedbackOrdinaryNotificationDispatchRecipients,
   insertFeedbackNotificationDispatch,
@@ -92,7 +92,7 @@ async function notifyFeedbackParticipantsOfComment(
     summary: `${event.actor.name} 回复了反馈「${event.target.title}」：`,
   });
 
-  const dispatch = buildFeedbackNotificationDispatchDraft(planFeedbackCommentCreatedNotification({
+  const dispatch = buildFeedbackCommentCreatedNotificationDispatch({
     actorName: event.actor.name,
     actorUserId: event.actor.id,
     body: content.body,
@@ -101,10 +101,10 @@ async function notifyFeedbackParticipantsOfComment(
     commentThreadId: event.commentThreadId,
     feedbackId: event.target.targetId,
     project: context.project,
-    recipientUserIds: [],
+    recipients: context.recipients,
     targetTitle: event.target.title,
     teamId: event.target.storageScopeId,
-  }), context.recipients);
+  });
   const dispatchId = await insertFeedbackNotificationDispatch(db, {
     activityEventId,
     dispatch,
