@@ -5,7 +5,7 @@ import type { FeedbackIssueReadModelData } from "@orf/feedback-module/contracts"
 import {
   buildFeedbackBackupZip,
   preflightFeedbackImport,
-} from "@orf/feedback-module/server";
+} from "@orf/feedback-module/testing";
 
 test("feedback ZIP import preflight validates manifest files and keeps commit closed", async () => {
   const { database, inserted } = fakeImportDatabase();

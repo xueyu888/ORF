@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { FeedbackIssueReadModelData } from "@orf/feedback-module/contracts";
-import { buildFeedbackBackupZip } from "@orf/feedback-module/server";
+import { buildFeedbackBackupZip } from "@orf/feedback-module/testing";
 
 test("feedback backup ZIP includes explicit facts, attachment binaries and SHA-256 manifests", () => {
   const reportContent = Buffer.from("report attachment", "utf8");

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { commitFeedbackImportBatch, preflightFeedbackImport } from "@orf/feedback-module/server";
+import { commitFeedbackImportBatch, preflightFeedbackImport } from "@orf/feedback-module/testing";
 
 test("feedback CSV import preflight maps Chinese field headers", async () => {
   const { database, inserted } = fakeImportDatabase();

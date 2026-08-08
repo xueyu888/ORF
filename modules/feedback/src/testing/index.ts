@@ -16,6 +16,11 @@ export {
   shouldRunFeedbackDailyDigest,
   sortFeedbackDailyDigestItems,
 } from "../server/dailyDigest";
+export {
+  buildFeedbackBackupZip,
+  commitFeedbackImportBatch,
+  preflightFeedbackImport,
+} from "../server/transfer";
 
 export function feedbackEntityFixture(
   overrides: Partial<FeedbackEntitySnapshot> = {},
