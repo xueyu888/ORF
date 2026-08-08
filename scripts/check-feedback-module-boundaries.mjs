@@ -38,6 +38,7 @@ await checkPackageExports();
 await checkServerPublicBoundary();
 await checkWebPublicBoundary();
 await checkHostFeedbackNotificationBoundary();
+await checkFeedbackLegacyRemovalBoundary();
 await checkTsconfigPaths();
 await scanSourceImports();
 
@@ -199,6 +200,62 @@ async function checkHostFeedbackNotificationBoundary() {
   }
 }
 
+async function checkFeedbackLegacyRemovalBoundary() {
+  const forbiddenFiles = [
+    "server/routes/feedbackRoutes.ts",
+    "server/repositories/feedbackRepository.ts",
+    "server/repositories/feedbackSubscriptionRepository.ts",
+  ];
+  for (const relativePath of forbiddenFiles) {
+    if (await pathExists(path.join(rootDir, relativePath))) {
+      errors.push(`${relativePath} must be removed; feedback is owned by modules/feedback and server/feedback adapters.`);
+    }
+  }
+
+  const schemaSource = await fs.readFile(path.join(rootDir, "server", "db", "schema.ts"), "utf8");
+  if (/\bpgTable\(\s*["']feedback["']/.test(schemaSource)) {
+    errors.push("server/db/schema.ts must not define the feedback table; use the feedback module schema entry.");
+  }
+  if (/\bpgEnum\(\s*["']feedback_status["']/.test(schemaSource)) {
+    errors.push("server/db/schema.ts must not define feedback_status; feedback uses feedback_stage and feedback_resolution.");
+  }
+
+  const checkedDirectories = [
+    "server",
+    "src",
+    "docs/project",
+    "docs/backend",
+    "docs/frontend",
+  ];
+  const forbiddenPatterns = [
+    { pattern: /\bPATCH\s+\/api\/feedback\/[^ \n]*\/status\b/, message: "must not document or implement the legacy feedback status API." },
+    { pattern: /\bFeedbackStatus\b/, message: "must not use the legacy FeedbackStatus type." },
+    { pattern: /\bnextFeedbackIssueStatus\b/, message: "must not use the legacy nextFeedbackIssueStatus helper." },
+    { pattern: /\bfeedbackIssueLinkedFeedback\b/, message: "must not derive feedback relations from body text." },
+    { pattern: /\bOrfState\.feedback\b/, message: "must not keep feedback in the global OrfState snapshot." },
+    { pattern: /\bTaskManagementData\.feedback\b/, message: "must not keep full feedback collections in TaskManagementData." },
+    { pattern: /\bfeedbackSubscriptionRepository\b/, message: "must not reference the old feedbackSubscriptionRepository." },
+    { pattern: /\bserver\/routes\/feedbackRoutes\b/, message: "must not reference the old feedback route path." },
+    { pattern: /\bserver\/repositories\/feedbackRepository\b/, message: "must not reference the old feedback repository path." },
+  ];
+
+  for (const relativePath of await listFilesByExtensions(checkedDirectories, new Set([".md", ".ts", ".tsx"]))) {
+    const source = await fs.readFile(path.join(rootDir, relativePath), "utf8");
+    for (const rule of forbiddenPatterns) {
+      if (rule.pattern.test(source)) {
+        errors.push(`${relativePath} ${rule.message}`);
+      }
+    }
+  }
+
+  for (const relativePath of await listFilesByExtensions(["server/feedback", "modules/feedback/src"], new Set([".ts", ".tsx"]))) {
+    const source = await fs.readFile(path.join(rootDir, relativePath), "utf8");
+    if (/\bdestinationChannelIds\b/.test(source)) {
+      errors.push(`${relativePath} must not route feedback notifications to project chat channels.`);
+    }
+  }
+}
+
 async function checkTsconfigPaths() {
   const tsconfig = await readJson(path.join(rootDir, "tsconfig.json"));
   const paths = tsconfig.compilerOptions?.paths ?? {};
@@ -296,6 +353,19 @@ function exportBlocks(source) {
 }
 
 async function listSourceFiles(directory) {
+  return listFilesInDirectory(directory, sourceExtensions);
+}
+
+async function listFilesByExtensions(relativeDirectories, extensions) {
+  const files = [];
+  for (const relativeDirectory of relativeDirectories) {
+    const absoluteFiles = await listFilesInDirectory(path.join(rootDir, relativeDirectory), extensions);
+    files.push(...absoluteFiles.map((filePath) => slash(path.relative(rootDir, filePath))));
+  }
+  return files;
+}
+
+async function listFilesInDirectory(directory, extensions) {
   const entries = await fs.readdir(directory, { withFileTypes: true });
   const files = [];
 
@@ -306,11 +376,11 @@ async function listSourceFiles(directory) {
 
     const fullPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      files.push(...await listSourceFiles(fullPath));
+      files.push(...await listFilesInDirectory(fullPath, extensions));
       continue;
     }
 
-    if (entry.isFile() && sourceExtensions.has(path.extname(entry.name))) {
+    if (entry.isFile() && extensions.has(path.extname(entry.name))) {
       files.push(fullPath);
     }
   }
@@ -320,6 +390,15 @@ async function listSourceFiles(directory) {
 
 async function readJson(filePath) {
   return JSON.parse(await fs.readFile(filePath, "utf8"));
+}
+
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function slash(value) {
