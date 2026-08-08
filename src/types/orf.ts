@@ -1,4 +1,3 @@
-import type { FeedbackSubscriptionMode as FeedbackSubscriptionModeContract } from "@orf/feedback-module/contracts";
 import type { PermissionKey } from "../config/permissions";
 
 export type WorkStatus = "On Track" | "At Risk" | "Blocked" | "Draft";
@@ -35,7 +34,6 @@ export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" |
 export type NotificationStream = "personalNotification" | "teamAnnouncement";
 export type NotificationDeliveryClass = "direct" | "mandatory" | "ordinary";
 export type NotificationReceiptAttentionLevel = "action_required" | "normal";
-export type FeedbackSubscriptionMode = FeedbackSubscriptionModeContract;
 export type ChatSystemKind = NotificationStream;
 export type ChatMessageSource = "user" | "system";
 export type WorkLogReminderStatus = "active" | "resolved";

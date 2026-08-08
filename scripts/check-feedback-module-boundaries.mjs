@@ -225,6 +225,9 @@ async function checkWebPublicBoundary() {
 async function checkHostFeedbackNotificationBoundary() {
   const globalTypesPath = path.join(rootDir, "src", "types", "orf.ts");
   const globalTypesSource = await fs.readFile(globalTypesPath, "utf8");
+  if (globalTypesSource.includes("@orf/feedback-module")) {
+    errors.push("src/types/orf.ts must not import feedback module exports; keep feedback-owned contracts inside @orf/feedback-module/contracts.");
+  }
   if (globalTypesSource.includes("FeedbackNotificationEventKind")) {
     errors.push("src/types/orf.ts must not add feedback notification kinds to the global NotificationKind union; register feedback kinds through the feedback notification provider.");
   }
