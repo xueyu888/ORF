@@ -27,7 +27,6 @@ import { validOrfRichTextDraftAttachments, type OrfRichTextDraft } from "../feat
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useOrf } from "../state/OrfProvider";
 import type { CommentAttachment } from "../types/orf";
-import "./feedback.css";
 
 const feedbackWebHost: FeedbackWebHost = {
   components: {

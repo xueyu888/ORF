@@ -131,7 +131,19 @@ export const feedbackWebContribution: FeedbackWebContributionDefinition = {
   },
 };
 
+let feedbackWebStyleLoaded = false;
+
+function loadFeedbackWebStyle() {
+  if (feedbackWebStyleLoaded || typeof document === "undefined") {
+    return;
+  }
+  feedbackWebStyleLoaded = true;
+  void import("../web/feedback.css");
+}
+
 export function createFeedbackWebContribution(host: FeedbackWebHost): FeedbackWebContribution {
+  loadFeedbackWebStyle();
+
   const withHost = (Page: ComponentType): ComponentType => function FeedbackHostedPage() {
     return createElement(FeedbackWebHostProvider, { host, children: createElement(Page) });
   };
