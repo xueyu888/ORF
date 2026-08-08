@@ -38,6 +38,7 @@ await checkPackageExports();
 await checkServerPublicBoundary();
 await checkWebPublicBoundary();
 await checkHostFeedbackNotificationBoundary();
+await checkHostDriveFeedbackBoundary();
 await checkFeedbackLegacyRemovalBoundary();
 await checkTsconfigPaths();
 await scanSourceImports();
@@ -231,6 +232,17 @@ async function checkHostFeedbackNotificationBoundary() {
   const attentionModelSource = await fs.readFile(attentionModelPath, "utf8");
   if (attentionModelSource.includes("feedbackNotificationEventKindValues") || attentionModelSource.includes("FeedbackNotificationEventKind")) {
     errors.push("src/features/attention/attentionModel.ts must not import feedback notification kind lists; consume generic attention fields from notifications.");
+  }
+}
+
+async function checkHostDriveFeedbackBoundary() {
+  const driveRepositoryPath = path.join(rootDir, "server", "repositories", "driveRepository.ts");
+  const source = await fs.readFile(driveRepositoryPath, "utf8");
+  if (/\b(?:FROM|JOIN)\s+feedback\b/i.test(source)) {
+    errors.push("server/repositories/driveRepository.ts must not query the feedback table directly; resolve feedback contexts through the registered feedback reference provider.");
+  }
+  if (source.includes("feedbackReferenceRegistry")) {
+    errors.push("server/repositories/driveRepository.ts must not import feedback-specific registries; use the drive-owned context provider registry.");
   }
 }
 

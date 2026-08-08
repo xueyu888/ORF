@@ -28,6 +28,7 @@ import {
   DrivePreviewSourceTooLargeError,
   type DriveStoredPreviewMetadata,
 } from "../drive/drivePreviewService";
+import { requireDriveContextProvider } from "../drive/driveContextProviderRegistry";
 import { objectStorage, ObjectStorageUploadEmptyError, ObjectStorageUploadTooLargeError } from "../storage/objectStorage";
 import { sendChatMessage, type ChatActor } from "./chatRepository";
 import {
@@ -350,6 +351,80 @@ function driveContextLinkDto(row: DriveContextLinkRow): DriveContextLink {
     createdByName: row.created_by_name,
     createdAt: iso(row.created_at) ?? nowIso(),
   };
+}
+
+function feedbackContextIdsFromRows(rows: readonly Pick<DriveContextLinkRow, "context_id" | "context_type">[]) {
+  return Array.from(new Set(
+    rows
+      .filter((row) => row.context_type === "feedback")
+      .map((row) => row.context_id.trim())
+      .filter(Boolean),
+  ));
+}
+
+async function feedbackContextTitles(teamId: string, feedbackIds: readonly string[]) {
+  const ids = Array.from(new Set(feedbackIds.map((id) => id.trim()).filter(Boolean)));
+  if (ids.length === 0) return new Map<string, string>();
+
+  const references = await requireDriveContextProvider("feedback").getReferences({
+    contextIds: ids,
+    storageScopeId: teamId,
+  });
+  return new Map(references.map((reference) => [reference.id, reference.title]));
+}
+
+async function searchFeedbackContextIds(teamId: string, query: string) {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) return [];
+  const references = await requireDriveContextProvider("feedback").searchReferences({
+    limit: 120,
+    query: normalizedQuery,
+    storageScopeId: teamId,
+  });
+  return references.map((reference) => reference.id);
+}
+
+async function enrichDriveContextLinkRowsWithFeedbackTitles(
+  rows: readonly DriveContextLinkRow[],
+  teamId: string,
+): Promise<DriveContextLinkRow[]> {
+  const titles = await feedbackContextTitles(teamId, feedbackContextIdsFromRows(rows));
+  if (titles.size === 0) return [...rows];
+  return rows.map((row) => row.context_type === "feedback"
+    ? { ...row, context_title: titles.get(row.context_id) ?? row.context_title }
+    : row);
+}
+
+function driveSearchFeedbackContextIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const input = item as Record<string, unknown>;
+    return input.contextType === "feedback" && typeof input.contextId === "string" ? [input.contextId] : [];
+  });
+}
+
+async function enrichDriveSearchRowsWithFeedbackTitles(
+  rows: readonly DriveSearchRow[],
+  teamId: string,
+): Promise<DriveSearchRow[]> {
+  const titles = await feedbackContextTitles(teamId, rows.flatMap((row) => driveSearchFeedbackContextIds(row.search_contexts)));
+  if (titles.size === 0) return [...rows];
+
+  return rows.map((row) => {
+    if (!Array.isArray(row.search_contexts)) return row;
+    let changed = false;
+    const searchContexts = row.search_contexts.map((item) => {
+      if (!item || typeof item !== "object") return item;
+      const input = item as Record<string, unknown>;
+      if (input.contextType !== "feedback" || typeof input.contextId !== "string") return item;
+      const title = titles.get(input.contextId);
+      if (!title) return item;
+      changed = true;
+      return { ...input, contextTitle: title };
+    });
+    return changed ? { ...row, search_contexts: searchContexts } : row;
+  });
 }
 
 function sanitizeDriveName(value: string) {
@@ -813,7 +888,6 @@ async function listDriveContextLinks(nodeId: string, teamId: string) {
                WHEN l.context_type = 'objective' THEN o.title
                WHEN l.context_type = 'result' THEN r.title
                WHEN l.context_type = 'task' THEN t.title
-               WHEN l.context_type = 'feedback' THEN f.title
                WHEN l.context_type = 'workLog' THEN wl.work_date || ' · ' || wl.author_name_snapshot
                WHEN l.context_type = 'chatChannel' THEN COALESCE(c.display_name, c.name)
                WHEN l.context_type = 'chatMessage' THEN COALESCE(NULLIF(left(regexp_replace(cm.body, '\\s+', ' ', 'g'), 80), ''), '聊天消息')
@@ -826,7 +900,6 @@ async function listDriveContextLinks(nodeId: string, teamId: string) {
       LEFT JOIN objectives o ON o.id = l.context_id AND o.team_id = l.team_id AND l.context_type = 'objective'
       LEFT JOIN results r ON r.id = l.context_id AND r.team_id = l.team_id AND l.context_type = 'result'
       LEFT JOIN tasks t ON t.id = l.context_id AND t.team_id = l.team_id AND l.context_type = 'task'
-      LEFT JOIN feedback f ON f.id = l.context_id AND f.team_id = l.team_id AND l.context_type = 'feedback'
       LEFT JOIN work_log_entries wl ON wl.id = l.context_id AND wl.team_id = l.team_id AND l.context_type = 'workLog'
       LEFT JOIN chat_channels c ON c.id = l.context_id AND c.team_id = l.team_id AND l.context_type = 'chatChannel'
       LEFT JOIN chat_messages cm ON cm.id = l.context_id AND cm.team_id = l.team_id AND cm.deleted_at IS NULL AND l.context_type = 'chatMessage'
@@ -837,7 +910,7 @@ async function listDriveContextLinks(nodeId: string, teamId: string) {
     `,
     [teamId, nodeId],
   );
-  return rows.map(driveContextLinkDto);
+  return (await enrichDriveContextLinkRowsWithFeedbackTitles(rows, teamId)).map(driveContextLinkDto);
 }
 
 async function listDriveNodePath(nodeId: string, teamId: string) {
@@ -973,13 +1046,29 @@ export async function searchDriveNodes(
     )`);
   }
   const query = input.query?.trim().toLowerCase();
+  const feedbackContextIdsMatchingQuery = query ? await searchFeedbackContextIds(teamId, query) : [];
   if (query) {
     params.push(`%${query}%`);
+    const queryParamIndex = params.length;
+    let feedbackContextMatchClause = "";
+    if (feedbackContextIdsMatchingQuery.length > 0) {
+      params.push(feedbackContextIdsMatchingQuery);
+      feedbackContextMatchClause = `
+      OR EXISTS (
+        SELECT 1
+        FROM drive_node_context_links feedback_context
+        WHERE feedback_context.team_id = n.team_id
+          AND feedback_context.node_id = n.id
+          AND feedback_context.context_type = 'feedback'
+          AND feedback_context.context_id = ANY($${params.length}::text[])
+      )`;
+    }
     conditions.push(`(
-      lower(n.name) LIKE $${params.length}
-      OR lower(COALESCE(f.file_name, '')) LIKE $${params.length}
-      OR lower(COALESCE(f.mime_type, '')) LIKE $${params.length}
-      OR lower(COALESCE(search_meta.search_text, '')) LIKE $${params.length}
+      lower(n.name) LIKE $${queryParamIndex}
+      OR lower(COALESCE(f.file_name, '')) LIKE $${queryParamIndex}
+      OR lower(COALESCE(f.mime_type, '')) LIKE $${queryParamIndex}
+      OR lower(COALESCE(search_meta.search_text, '')) LIKE $${queryParamIndex}
+      ${feedbackContextMatchClause}
     )`);
   }
   const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
@@ -1027,7 +1116,6 @@ export async function searchDriveNodes(
                        WHEN l.context_type = 'objective' THEN o.title
                        WHEN l.context_type = 'result' THEN r.title
                        WHEN l.context_type = 'task' THEN t.title
-                       WHEN l.context_type = 'feedback' THEN fb.title
                        WHEN l.context_type = 'workLog' THEN wl.work_date || ' · ' || wl.author_name_snapshot
                        WHEN l.context_type = 'chatChannel' THEN COALESCE(c.display_name, c.name)
                        WHEN l.context_type = 'chatMessage' THEN COALESCE(NULLIF(left(regexp_replace(cm.body, '\\s+', ' ', 'g'), 80), ''), '聊天消息')
@@ -1043,7 +1131,6 @@ export async function searchDriveNodes(
             LEFT JOIN objectives o ON o.id = l.context_id AND o.team_id = l.team_id AND l.context_type = 'objective'
             LEFT JOIN results r ON r.id = l.context_id AND r.team_id = l.team_id AND l.context_type = 'result'
             LEFT JOIN tasks t ON t.id = l.context_id AND t.team_id = l.team_id AND l.context_type = 'task'
-            LEFT JOIN feedback fb ON fb.id = l.context_id AND fb.team_id = l.team_id AND l.context_type = 'feedback'
             LEFT JOIN work_log_entries wl ON wl.id = l.context_id AND wl.team_id = l.team_id AND l.context_type = 'workLog'
             LEFT JOIN chat_channels c ON c.id = l.context_id AND c.team_id = l.team_id AND l.context_type = 'chatChannel'
             LEFT JOIN chat_messages cm ON cm.id = l.context_id AND cm.team_id = l.team_id AND cm.deleted_at IS NULL AND l.context_type = 'chatMessage'
@@ -1071,7 +1158,8 @@ export async function searchDriveNodes(
     `,
     params,
   );
-  return ok({ nodes: rows.map((row) => driveSearchNodeDto(row, query)) });
+  const enrichedRows = await enrichDriveSearchRowsWithFeedbackTitles(rows, teamId);
+  return ok({ nodes: enrichedRows.map((row) => driveSearchNodeDto(row, query)) });
 }
 
 export async function listDriveTrash(actor: ChatActor): Promise<Outcome<{ nodes: DriveNode[] }>> {
@@ -1841,11 +1929,7 @@ async function resolveDriveContext(teamId: string, contextType: DriveContextType
     return rows[0]?.title ?? null;
   }
   if (contextType === "feedback") {
-    const { rows } = await pool.query<{ title: string }>(
-      "SELECT title FROM feedback WHERE team_id = $1 AND id = $2 LIMIT 1",
-      [teamId, contextId],
-    );
-    return rows[0]?.title ?? null;
+    return (await feedbackContextTitles(teamId, [contextId])).get(contextId) ?? null;
   }
   if (contextType === "workLog") {
     const { rows } = await pool.query<{ title: string }>(

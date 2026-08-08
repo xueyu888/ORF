@@ -10,6 +10,7 @@ import { teamMembers, users } from "../db/schema";
 import { env } from "../env";
 import { publishNotificationEvent } from "../notifications/publisher";
 import { registerFeedbackCommentTargetAdapter } from "./feedbackCommentTargetAdapter";
+import { registerFeedbackDriveContextProvider } from "./feedbackDriveContextProvider";
 import { registerFeedbackHttpRoutes } from "./feedbackHttpRoutes";
 import { feedbackNotificationPort } from "./feedbackNotificationPort";
 import { registerFeedbackNotificationPresentationProvider } from "./feedbackNotificationPresentationProvider";
@@ -37,6 +38,7 @@ export function createOrfFeedbackServerHost(
     protocolVersion: 1,
     registerHttpRoutes() {
       registerOrfFeedbackReferenceProvider();
+      registerFeedbackDriveContextProvider();
       registerFeedbackNotificationPresentationProvider();
       registerFeedbackCommentTargetAdapter();
       registerFeedbackHttpRoutes(app);
