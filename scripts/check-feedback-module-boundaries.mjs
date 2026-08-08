@@ -76,6 +76,9 @@ async function checkServerPublicBoundary() {
   if (source.includes("feedbackDatabaseSchema") || source.includes("../infrastructure/database/schema")) {
     errors.push("modules/feedback/src/public/server.ts must not export feedback database schema or table objects.");
   }
+  if (source.includes("FeedbackWriteActor")) {
+    errors.push("modules/feedback/src/public/server.ts must not export write-model actor types; expose a narrower protocol-owned actor type instead.");
+  }
 }
 
 async function checkTsconfigPaths() {
