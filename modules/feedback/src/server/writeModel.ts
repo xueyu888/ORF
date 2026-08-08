@@ -35,6 +35,7 @@ import {
   type FeedbackNotificationDispatchDraft,
 } from "./notificationDispatch";
 import { upsertFeedbackParticipants } from "./participants";
+import type { FeedbackCommandResult } from "./commandResult";
 
 export type FeedbackWriteClient = Pick<NodePgDatabase<any>, "delete" | "insert" | "select" | "update">;
 export type FeedbackWriteDatabase = Pick<NodePgDatabase<any>, "transaction">;
@@ -79,15 +80,6 @@ export type CreateFeedbackIssueWriteResult =
   | { status: "ok"; feedbackId: string; assigneeUserId?: string | null; notificationDispatchId?: string | null; projectId?: string | null; title: string }
   | { status: "notFound" }
   | { status: "invalid" };
-
-export type FeedbackCommandResult =
-  | { status: "ok"; changed: boolean }
-  | { status: "notFound" }
-  | { status: "invalid" }
-  | { status: "invalidAssignee" }
-  | { status: "invalidProject" }
-  | { status: "conflict" }
-  | { status: "forbidden" };
 
 type FeedbackCommandFailure = Exclude<FeedbackCommandResult, { status: "ok" }>;
 

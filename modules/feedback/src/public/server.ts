@@ -58,10 +58,10 @@ export {
   transitionFeedbackIssue,
   updateFeedbackIssueAssignee,
   updateFeedbackIssueMetadata,
-  type FeedbackCommandResult,
   type FeedbackTargetTitleSync,
   type FeedbackTransitionNotificationDispatchFactory,
 } from "../server/writeModel";
+export type { FeedbackCommandResult } from "../server/commandResult";
 export {
   buildFeedbackBackupZip,
   commitFeedbackImportBatch,
