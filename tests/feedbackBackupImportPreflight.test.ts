@@ -28,8 +28,8 @@ test("feedback ZIP import preflight validates manifest files and keeps commit cl
       exportedAt: "2026-08-08T10:11:12.000Z",
     }),
     fileName: "orf-feedback-backup.zip",
-    knownAssigneeUserIds: new Set(),
-    knownProjectIds: new Set(),
+    knownAssigneeUserIds: new Set(["user-1"]),
+    knownProjectIds: new Set(["project-1"]),
     mimeType: "application/zip",
   });
 
@@ -37,10 +37,62 @@ test("feedback ZIP import preflight validates manifest files and keeps commit cl
   assert.equal(preflight.errors.length, 0);
   assert.equal(preflight.summary.totalRecords, 1);
   assert.equal(preflight.summary.attachmentBytes, content.length);
+  assert.equal(preflight.referenceIssues?.length ?? 0, 0);
   assert.equal(preflight.commitAvailable, false);
-  assert.match(preflight.commitBlockedReason ?? "", /用户和项目映射/);
+  assert.match(preflight.commitBlockedReason ?? "", /恢复提交/);
   assert.equal(inserted[0]?.sourceKind, "zip");
   assert.equal(inserted[0]?.status, "uploaded");
+});
+
+test("feedback ZIP import preflight requires explicit backup reference mapping", async () => {
+  const unresolved = fakeImportDatabase();
+  const zip = buildFeedbackBackupZip({
+    attachmentFiles: [],
+    data: backupData(),
+    exportedAt: "2026-08-08T10:11:12.000Z",
+  });
+
+  const preflight = await preflightFeedbackImport(unresolved.database, {
+    actor: importActor(),
+    body: zip,
+    fileName: "orf-feedback-backup.zip",
+    knownAssigneeUserIds: new Set(["target-user"]),
+    knownProjectIds: new Set(["target-project"]),
+    mimeType: "application/zip",
+  });
+
+  assert.equal(preflight.errors.length, 0);
+  assert.equal(preflight.commitAvailable, false);
+  assert.match(preflight.commitBlockedReason ?? "", /用户和项目映射/);
+  assert.deepEqual(preflight.referenceIssues?.map((item) => ({
+    canClear: item.canClear,
+    kind: item.kind,
+    rows: item.rows,
+    sourceValue: item.sourceValue,
+  })), [
+    { canClear: false, kind: "assignee", rows: [], sourceValue: "user-1" },
+    { canClear: true, kind: "project", rows: [], sourceValue: "project-1" },
+  ]);
+  assert.equal(unresolved.inserted[0]?.status, "uploaded");
+
+  const mapped = fakeImportDatabase();
+  const mappedPreflight = await preflightFeedbackImport(mapped.database, {
+    actor: importActor(),
+    body: zip,
+    fileName: "orf-feedback-backup.zip",
+    knownAssigneeUserIds: new Set(["target-user"]),
+    knownProjectIds: new Set(["target-project"]),
+    mimeType: "application/zip",
+    referenceMappings: {
+      assigneeUserIds: { "user-1": "target-user" },
+      projectIds: { "project-1": null },
+    },
+  });
+
+  assert.equal(mappedPreflight.errors.length, 0);
+  assert.equal(mappedPreflight.referenceIssues?.length ?? 0, 0);
+  assert.equal(mappedPreflight.commitAvailable, false);
+  assert.match(mappedPreflight.commitBlockedReason ?? "", /恢复提交/);
 });
 
 test("feedback ZIP import preflight rejects tampered content by SHA-256", async () => {

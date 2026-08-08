@@ -325,8 +325,9 @@ function FeedbackImportReferenceMappingsView({
       <strong>引用映射</strong>
       {issues.map((issue) => {
         const group = issue.kind === "assignee" ? mappings.assigneeUserIds : mappings.projectIds;
-        const currentValue = Object.prototype.hasOwnProperty.call(group ?? {}, issue.sourceValue)
-          ? group?.[issue.sourceValue] ?? "__clear__"
+        const hasMappedValue = Object.prototype.hasOwnProperty.call(group ?? {}, issue.sourceValue);
+        const currentValue = hasMappedValue
+          ? group?.[issue.sourceValue] ?? (issue.canClear ? "__clear__" : "__pending__")
           : "__pending__";
         const optionItems = issue.kind === "assignee"
           ? options.assignees.map((item) => ({ id: item.id, name: item.name }))
@@ -335,11 +336,11 @@ function FeedbackImportReferenceMappingsView({
           <label key={`${issue.kind}:${issue.sourceValue}`}>
             <span>
               <b>{issue.kind === "assignee" ? "处理人" : "项目"}</b>
-              <em>{issue.sourceValue} · 第 {issue.rows.join("、")} 行</em>
+              <em>{issue.sourceValue} · {referenceIssueLocation(issue)}</em>
             </span>
             <select value={currentValue} onChange={(event) => changeMapping(issue, event.target.value)}>
-              <option value="__pending__">选择映射或置空</option>
-              <option value="__clear__">置空</option>
+              <option value="__pending__">{issue.canClear ? "选择映射或置空" : "选择映射"}</option>
+              {issue.canClear && <option value="__clear__">置空</option>}
               {optionItems.map((item) => (
                 <option key={item.id} value={item.id}>{item.name}</option>
               ))}
@@ -392,7 +393,7 @@ function buildFeedbackImportPreflightReport(preflight: FeedbackImportPreflight) 
     ...((preflight.fieldMappings?.length ?? 0) === 0 ? ["无"] : []),
     "",
     "引用映射",
-    ...(preflight.referenceIssues ?? []).map((item) => `${item.kind === "assignee" ? "处理人" : "项目"} ${item.sourceValue}: 第 ${item.rows.join("、")} 行`),
+    ...(preflight.referenceIssues ?? []).map((item) => `${item.kind === "assignee" ? "处理人" : "项目"} ${item.sourceValue}: ${referenceIssueLocation(item)}`),
     ...((preflight.referenceIssues?.length ?? 0) === 0 ? ["无"] : []),
     "",
     "摘要",
@@ -427,6 +428,10 @@ function buildFeedbackImportUpdateDiffReport(diffs: NonNullable<FeedbackImportPr
     }
   }
   return lines;
+}
+
+function referenceIssueLocation(item: NonNullable<FeedbackImportPreflight["referenceIssues"]>[number]) {
+  return item.rows.length > 0 ? `第 ${item.rows.join("、")} 行` : "ZIP 引用";
 }
 
 function messageLine(item: { field?: string; message: string; row?: number }) {

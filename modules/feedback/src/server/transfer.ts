@@ -57,6 +57,7 @@ export type FeedbackImportFieldDiff = {
 export type FeedbackImportReferenceKind = "assignee" | "project";
 
 export type FeedbackImportReferenceIssue = {
+  canClear: boolean;
   field: "assignee_user_id" | "project_id";
   kind: FeedbackImportReferenceKind;
   rows: number[];
@@ -330,6 +331,9 @@ export async function preflightFeedbackImport(
       actor: input.actor,
       body: input.body,
       fileName: input.fileName,
+      knownAssigneeUserIds: input.knownAssigneeUserIds,
+      knownProjectIds: input.knownProjectIds,
+      referenceMappings: input.referenceMappings,
     });
   }
 
@@ -349,11 +353,14 @@ export async function preflightFeedbackImportZip(
     actor: FeedbackWriteActor;
     body: Buffer;
     fileName: string;
+    knownAssigneeUserIds: ReadonlySet<string>;
+    knownProjectIds: ReadonlySet<string>;
+    referenceMappings?: FeedbackImportReferenceMappings;
   },
 ): Promise<FeedbackImportPreflight> {
   const batchId = makeFeedbackImportBatchId();
   const createdAt = feedbackNowIso();
-  const inspected = inspectFeedbackBackupZip(input.body);
+  const inspected = inspectFeedbackBackupZip(input.body, input);
   const summary: StoredFeedbackImportSummary = {
     attachmentBytes: inspected.attachmentBytes,
     backup: inspected.backup,
@@ -382,11 +389,10 @@ export async function preflightFeedbackImportZip(
   return {
     batchId,
     commitAvailable: false,
-    commitBlockedReason: inspected.errors.length > 0
-      ? "完整备份 ZIP 未通过 manifest 校验"
-      : "完整备份 ZIP 已识别；提交前还需要完成用户和项目映射",
+    commitBlockedReason: feedbackZipImportCommitBlockedReason(inspected.errors, inspected.referenceIssues),
     errors: inspected.errors,
     fileName: input.fileName,
+    referenceIssues: inspected.referenceIssues,
     sourceKind: "zip",
     summary: publicImportSummary(summary),
     warnings: inspected.warnings,
@@ -675,7 +681,14 @@ type FeedbackBackupZipInspection = {
   backup: FeedbackBackupImportSummary;
   errors: FeedbackImportMessage[];
   feedbackRecords: number;
+  referenceIssues: FeedbackImportReferenceIssue[];
   warnings: FeedbackImportMessage[];
+};
+
+type FeedbackBackupReferenceContext = {
+  knownAssigneeUserIds: ReadonlySet<string>;
+  knownProjectIds: ReadonlySet<string>;
+  referenceMappings?: FeedbackImportReferenceMappings;
 };
 
 type FeedbackBackupManifestFile = {
@@ -731,7 +744,16 @@ function feedbackCsvImportCommitBlockedReason(
   return undefined;
 }
 
-function inspectFeedbackBackupZip(body: Buffer): FeedbackBackupZipInspection {
+function feedbackZipImportCommitBlockedReason(
+  errors: readonly FeedbackImportMessage[],
+  referenceIssues: readonly FeedbackImportReferenceIssue[],
+) {
+  if (errors.length > 0) return "完整备份 ZIP 预检存在错误";
+  if (referenceIssues.length > 0) return "需要先完成用户和项目映射并重新预检";
+  return "完整备份 ZIP 已完成预检；恢复提交仍需启用附件暂存和批量恢复";
+}
+
+function inspectFeedbackBackupZip(body: Buffer, references: FeedbackBackupReferenceContext): FeedbackBackupZipInspection {
   const errors: FeedbackImportMessage[] = [];
   const warnings: FeedbackImportMessage[] = [];
   const entries = readStoredZipEntries(body, errors);
@@ -747,12 +769,12 @@ function inspectFeedbackBackupZip(body: Buffer): FeedbackBackupZipInspection {
   const manifestContent = entries.get("manifest.json");
   if (!manifestContent) {
     errors.push({ field: "manifest.json", message: "完整备份 ZIP 缺少 manifest.json" });
-    return { attachmentBytes: 0, backup: emptyBackup, errors, feedbackRecords: 0, warnings };
+    return { attachmentBytes: 0, backup: emptyBackup, errors, feedbackRecords: 0, referenceIssues: [], warnings };
   }
 
   const manifest = readBackupManifest(manifestContent, errors);
   if (!manifest) {
-    return { attachmentBytes: 0, backup: emptyBackup, errors, feedbackRecords: 0, warnings };
+    return { attachmentBytes: 0, backup: emptyBackup, errors, feedbackRecords: 0, referenceIssues: [], warnings };
   }
   if (manifest.version !== feedbackBackupZipVersion) {
     errors.push({ field: "manifest.version", message: `不支持的完整备份版本 ${manifest.version || "(空)"}` });
@@ -790,13 +812,109 @@ function inspectFeedbackBackupZip(body: Buffer): FeedbackBackupZipInspection {
     users: counts.users ?? jsonlCounts.users,
     version: manifest.version,
   };
+  const referenceIssues = inspectBackupReferenceIssues(entries, references, errors);
   return {
     attachmentBytes,
     backup,
     errors,
     feedbackRecords: counts.feedback ?? jsonlCounts.feedback,
+    referenceIssues,
     warnings,
   };
+}
+
+function inspectBackupReferenceIssues(
+  entries: ReadonlyMap<string, Buffer>,
+  references: FeedbackBackupReferenceContext,
+  errors: FeedbackImportMessage[],
+) {
+  const issues = new Map<string, FeedbackImportReferenceIssue>();
+  addBackupReferenceIssues({
+    canClear: false,
+    entries,
+    errors,
+    field: "assignee_user_id",
+    issues,
+    kind: "assignee",
+    knownIds: references.knownAssigneeUserIds,
+    mappings: references.referenceMappings?.assigneeUserIds,
+    path: "reference-mappings/users.jsonl",
+  });
+  addBackupReferenceIssues({
+    canClear: true,
+    entries,
+    errors,
+    field: "project_id",
+    issues,
+    kind: "project",
+    knownIds: references.knownProjectIds,
+    mappings: references.referenceMappings?.projectIds,
+    path: "reference-mappings/projects.jsonl",
+  });
+  return [...issues.values()];
+}
+
+function addBackupReferenceIssues(input: {
+  canClear: boolean;
+  entries: ReadonlyMap<string, Buffer>;
+  errors: FeedbackImportMessage[];
+  field: FeedbackImportReferenceIssue["field"];
+  issues: Map<string, FeedbackImportReferenceIssue>;
+  kind: FeedbackImportReferenceKind;
+  knownIds: ReadonlySet<string>;
+  mappings?: Record<string, string | null>;
+  path: string;
+}) {
+  for (const sourceValue of readBackupReferenceExternalIds(input.entries, input.path, input.errors)) {
+    if (input.knownIds.has(sourceValue)) continue;
+    if (input.mappings && Object.prototype.hasOwnProperty.call(input.mappings, sourceValue)) {
+      const targetValue = input.mappings[sourceValue];
+      if (targetValue === null) {
+        if (input.canClear) continue;
+        input.errors.push({ field: input.field, message: `处理人引用 ${sourceValue} 必须映射到当前 active 成员，不能置空` });
+        continue;
+      }
+      if (targetValue && input.knownIds.has(targetValue)) continue;
+      input.errors.push({ field: input.field, message: `${input.kind === "assignee" ? "处理人" : "项目"}引用 ${sourceValue} 的映射目标不存在或不可用` });
+      continue;
+    }
+    input.issues.set(`${input.kind}:${sourceValue}`, {
+      canClear: input.canClear,
+      field: input.field,
+      kind: input.kind,
+      rows: [],
+      sourceValue,
+    });
+  }
+}
+
+function readBackupReferenceExternalIds(
+  entries: ReadonlyMap<string, Buffer>,
+  path: string,
+  errors: FeedbackImportMessage[],
+) {
+  const content = entries.get(path);
+  if (!content) {
+    errors.push({ field: path, message: "完整备份缺少引用映射文件" });
+    return [];
+  }
+  const text = content.toString("utf8").trim();
+  if (!text) return [];
+  const ids = new Set<string>();
+  for (const [index, line] of text.split("\n").entries()) {
+    try {
+      const value = JSON.parse(line) as { externalId?: unknown };
+      if (typeof value.externalId !== "string" || value.externalId.trim() === "") {
+        errors.push({ field: `${path}[${index + 1}]`, message: "引用映射缺少 externalId" });
+        continue;
+      }
+      ids.add(value.externalId);
+    } catch {
+      errors.push({ field: path, message: `第 ${index + 1} 行不是合法 JSON` });
+      break;
+    }
+  }
+  return [...ids];
 }
 
 function readStoredZipEntries(body: Buffer, errors: FeedbackImportMessage[]) {
@@ -1055,6 +1173,7 @@ function resolveOptionalImportReference(input: {
     if (!existing.rows.includes(input.row)) existing.rows.push(input.row);
   } else {
     input.issues.set(key, {
+      canClear: true,
       field: input.field,
       kind: input.kind,
       rows: [input.row],

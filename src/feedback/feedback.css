@@ -1149,6 +1149,11 @@ html[data-orf-display-contrast="high"] .feedback-issue-row {
     display: grid;
   }
 
+  .feedback-transfer-dialog footer {
+    background: var(--orf-bg-elevated, var(--orf-bg-card));
+    box-shadow: 0 -12px 24px color-mix(in srgb, #020617 10%, transparent);
+  }
+
   .feedback-transfer-dialog header {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -1156,7 +1161,20 @@ html[data-orf-display-contrast="high"] .feedback-issue-row {
   }
 
   .feedback-import-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .feedback-import-summary span {
+    min-height: 52px;
+    padding: 8px;
+  }
+
+  .feedback-import-summary strong {
+    font-size: 16px;
+  }
+
+  .feedback-import-preflight {
+    padding-bottom: 104px;
   }
 
   .feedback-import-field-mappings > div {

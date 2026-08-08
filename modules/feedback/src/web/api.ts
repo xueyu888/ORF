@@ -62,6 +62,7 @@ export type FeedbackImportPreflight = {
   fieldMappings?: Array<{ field: string; label: string; required: boolean; sourceColumn: string | null }>;
   fileName: string;
   referenceIssues?: Array<{
+    canClear: boolean;
     field: "assignee_user_id" | "project_id";
     kind: "assignee" | "project";
     rows: number[];
