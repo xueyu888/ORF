@@ -196,23 +196,9 @@ export type {
   FeedbackCommentMentionUser,
   FeedbackImagePreview,
   FeedbackWebHost,
-  FeedbackWebSession,
 } from "../web/runtime";
 export type {
-  FeedbackDashboardSummary,
-  FeedbackDashboardSummaryItem,
-  FeedbackIssueReadModelData,
   FeedbackReferenceCardData,
-  FeedbackReferenceCardQuery,
-  FeedbackSubscription,
-  FeedbackSubscriptionMode,
-  FeedbackWebActivityItem,
   FeedbackWebAttachment,
-  FeedbackWebCommentMessage,
-  FeedbackWebCommentThread,
-  FeedbackWebIssue,
-  FeedbackWebProject,
-  FeedbackWebRelation,
   FeedbackWebUser,
-  FeedbackWebUserSummary,
 } from "../web/types";

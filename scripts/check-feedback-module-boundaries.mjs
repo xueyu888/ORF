@@ -163,6 +163,20 @@ async function checkWebPublicBoundary() {
     "feedbackCauseGroupsForCategories",
     "feedbackMatchesCauseGroup",
     "teamFeedbackCauseOptions",
+    "FeedbackDashboardSummary",
+    "FeedbackDashboardSummaryItem",
+    "FeedbackIssueReadModelData",
+    "FeedbackReferenceCardQuery",
+    "FeedbackSubscription",
+    "FeedbackSubscriptionMode",
+    "FeedbackWebActivityItem",
+    "FeedbackWebCommentMessage",
+    "FeedbackWebCommentThread",
+    "FeedbackWebIssue",
+    "FeedbackWebProject",
+    "FeedbackWebRelation",
+    "FeedbackWebSession",
+    "FeedbackWebUserSummary",
   ];
 
   for (const name of forbiddenRuntimeWebExports) {
