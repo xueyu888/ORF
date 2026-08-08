@@ -14,9 +14,7 @@ import {
   commitFeedbackImportBatch,
   feedbackBackupZipFileName,
   getFeedbackDashboardSummary,
-  getFeedbackSubscriptionMode,
   preflightFeedbackImport,
-  setFeedbackSubscriptionMode,
   type FeedbackImportActor,
 } from "@orf/feedback-module/server";
 import { requireFeedbackInScope, requireUserScopeContext } from "../auth/accessPolicy";
@@ -34,11 +32,13 @@ import {
   listFeedbackReferences,
   searchFeedbackReferences,
   getFeedbackReportAttachmentContent,
+  getFeedbackSubscription,
   listFeedbackAssigneeOptions,
   markFeedbackViewed,
   removeFeedbackRelation,
   transitionFeedback,
   updateFeedbackAssignee,
+  updateFeedbackSubscription,
   updateFeedbackMetadata,
   type FeedbackCommandActor,
   type FeedbackCommandResult,
@@ -619,10 +619,7 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       return reply;
     }
 
-    const result = await getFeedbackSubscriptionMode(db, params.feedbackId, {
-      id: context.user.id,
-      teamId: runtimeScopeStorageId(context.scope),
-    });
+    const result = await getFeedbackSubscription(params.feedbackId, commandActor(context));
     if (result.status === "notFound") {
       return reply.code(404).send({ error: "Feedback not found" });
     }
@@ -644,10 +641,7 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       return reply;
     }
 
-    const result = await setFeedbackSubscriptionMode(db, params.feedbackId, body.mode, {
-      id: context.user.id,
-      teamId: runtimeScopeStorageId(context.scope),
-    });
+    const result = await updateFeedbackSubscription(params.feedbackId, body.mode, commandActor(context));
     if (result.status === "notFound") {
       return reply.code(404).send({ error: "Feedback not found" });
     }

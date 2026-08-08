@@ -4,6 +4,7 @@ import {
   type FeedbackImpact,
   type FeedbackPriority,
   type FeedbackRelationType,
+  type FeedbackSubscriptionMutationMode,
   type FeedbackTransitionInput,
 } from "@orf/feedback-module/contracts";
 import {
@@ -20,11 +21,13 @@ import {
   getFeedbackOrdinaryNotificationDispatchRecipients,
   getFeedbackReferences as getFeedbackReferenceSummaries,
   getFeedbackReportAttachmentContentFacts,
+  getFeedbackSubscriptionMode as getFeedbackSubscriptionModeFromModule,
   listFeedbackReferences as listFeedbackReferenceSummaries,
   markFeedbackViewed as markFeedbackViewedInModule,
   publishFeedbackNotificationDispatch,
   removeFeedbackIssueRelation,
   searchFeedbackReferences as searchFeedbackReferenceSummaries,
+  setFeedbackSubscriptionMode as setFeedbackSubscriptionModeInModule,
   transitionFeedbackIssue,
   updateFeedbackIssueAssignee,
   updateFeedbackIssueMetadata,
@@ -618,6 +621,28 @@ export async function markFeedbackViewed(
     publishFeedbackReadModelInvalidation({ actorUserId: actor.id, feedbackId, teamId });
   }
   return result;
+}
+
+export async function getFeedbackSubscription(feedbackId: string, actor: FeedbackCommandActor) {
+  const teamId = storageScopeId(actor.scope);
+  if (!teamId) return { status: "notFound" as const };
+  return getFeedbackSubscriptionModeFromModule(db, feedbackId, {
+    id: actor.id,
+    teamId,
+  });
+}
+
+export async function updateFeedbackSubscription(
+  feedbackId: string,
+  mode: FeedbackSubscriptionMutationMode,
+  actor: FeedbackCommandActor,
+) {
+  const teamId = storageScopeId(actor.scope);
+  if (!teamId) return { status: "notFound" as const };
+  return setFeedbackSubscriptionModeInModule(db, feedbackId, mode, {
+    id: actor.id,
+    teamId,
+  });
 }
 
 export async function getFeedbackReferences(feedbackIds: readonly string[], scope: RuntimeScope): Promise<FeedbackReference[]> {
