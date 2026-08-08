@@ -46,7 +46,48 @@ test("feedback CSV import preflight reports missing required mapped fields", asy
   assert.equal(inserted[0]?.status, "failed");
 });
 
-function fakeImportDatabase() {
+test("feedback CSV import preflight previews update diffs without enabling overwrite", async () => {
+  const { database } = fakeImportDatabase({
+    categoryRows: [{ category: "旧分类", feedbackId: "fb-existing", sortOrder: 0 }],
+    feedbackRows: [
+      {
+        assigneeUserId: null,
+        description: "旧正文",
+        id: "fb-existing",
+        impact: "medium",
+        priority: null,
+        projectId: null,
+        title: "旧标题",
+      },
+    ],
+  });
+  const csv = [
+    "export_version,feedback_id,title,description,impact,cause_categories",
+    "orf.feedback.current_view.v1,fb-existing,新标题,旧正文,medium,旧分类 | 新分类",
+  ].join("\n");
+
+  const preflight = await preflightFeedbackImport(database, {
+    actor: importActor(),
+    body: Buffer.from(csv, "utf8"),
+    fileName: "feedback.csv",
+    knownAssigneeUserIds: new Set(),
+    knownProjectIds: new Set(),
+    mimeType: "text/csv",
+  });
+
+  assert.equal(preflight.commitAvailable, false);
+  assert.equal(preflight.summary.newRecords, 0);
+  assert.equal(preflight.summary.skippedRecords, 1);
+  assert.equal(preflight.summary.updateRecords, 1);
+  assert.match(preflight.commitBlockedReason ?? "", /默认不会覆盖/);
+  assert.deepEqual(preflight.updateDiffs?.[0]?.fields.map((item) => item.field), ["title", "cause_categories"]);
+});
+
+function fakeImportDatabase(input: {
+  categoryRows?: Array<{ category: string; feedbackId: string; sortOrder: number }>;
+  feedbackRows?: Array<Record<string, unknown>>;
+  originRows?: Array<{ externalId: string; feedbackId: string }>;
+} = {}) {
   const inserted: Array<Record<string, unknown>> = [];
   return {
     database: {
@@ -55,9 +96,15 @@ function fakeImportDatabase() {
           inserted.push(value);
         },
       }),
-      select: () => ({
+      select: (selection: Record<string, unknown>) => ({
         from: () => ({
-          where: async () => [],
+          where: async () => {
+            const keys = Object.keys(selection);
+            if (keys.includes("externalId") && keys.includes("feedbackId")) return input.originRows ?? [];
+            if (keys.includes("category")) return input.categoryRows ?? [];
+            if (keys.includes("title")) return input.feedbackRows ?? [];
+            return [];
+          },
         }),
       }),
     } as never,

@@ -4,6 +4,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { FeedbackImpact, FeedbackIssueReadModelData, FeedbackPriority } from "../contracts";
 import {
   feedback,
+  feedbackCauseCategories,
   feedbackImportBatches,
   feedbackImportOrigins,
 } from "../infrastructure/database/schema";
@@ -32,6 +33,7 @@ export type FeedbackImportPreflight = {
   fileName: string;
   sourceKind: FeedbackImportSourceKind;
   summary: FeedbackImportSummary;
+  updateDiffs?: FeedbackImportUpdateDiff[];
   warnings: FeedbackImportMessage[];
 };
 
@@ -42,6 +44,20 @@ export type FeedbackImportFieldMapping = {
   label: string;
   required: boolean;
   sourceColumn: string | null;
+};
+
+export type FeedbackImportFieldDiff = {
+  currentValue: string;
+  field: string;
+  incomingValue: string;
+  label: string;
+};
+
+export type FeedbackImportUpdateDiff = {
+  externalId: string;
+  feedbackId: string;
+  fields: FeedbackImportFieldDiff[];
+  row?: number;
 };
 
 export type FeedbackImportSummary = {
@@ -73,6 +89,7 @@ type FeedbackImportRecord = {
 type StoredFeedbackImportSummary = FeedbackImportSummary & {
   backup?: FeedbackBackupImportSummary;
   records: FeedbackImportRecord[];
+  updateDiffs?: FeedbackImportUpdateDiff[];
 };
 
 type FeedbackBackupImportSummary = {
@@ -396,19 +413,30 @@ export async function preflightFeedbackImportCsv(
     }
   }
 
-  const [existingOrigins, existingFeedbackIds] = errors.length === 0
+  const [existingOrigins, existingFeedbackById] = errors.length === 0
     ? await Promise.all([
-        existingImportExternalIds(database, input.actor.teamId, sourceExternalIds),
-        existingFeedbackExternalIds(database, input.actor.teamId, sourceExternalIds),
+        existingImportOrigins(database, input.actor.teamId, sourceExternalIds),
+        existingFeedbackRecords(database, input.actor.teamId, sourceExternalIds),
       ])
-    : [new Set<string>(), new Set<string>()];
+    : [new Map<string, string>(), new Map<string, ExistingFeedbackImportRecord>()];
+  const originFeedbackIds = [...new Set([...existingOrigins.values()].filter((feedbackId) => !existingFeedbackById.has(feedbackId)))];
+  const originFeedbackById = errors.length === 0
+    ? await existingFeedbackRecords(database, input.actor.teamId, originFeedbackIds)
+    : new Map<string, ExistingFeedbackImportRecord>();
 
   const newRecords: FeedbackImportRecord[] = [];
+  const updateDiffs: FeedbackImportUpdateDiff[] = [];
   let skippedRecords = 0;
   for (const record of records) {
-    if (existingOrigins.has(record.externalId) || existingFeedbackIds.has(record.externalId)) {
+    const existingFeedbackId = existingOrigins.get(record.externalId) ?? (existingFeedbackById.has(record.externalId) ? record.externalId : null);
+    if (existingFeedbackId) {
       skippedRecords += 1;
-      warnings.push({ field: "feedback_id", message: "来源反馈已存在，提交时会跳过", row: rowIndexForRecord(parsed.rows, fieldMapping.fieldMap, record.externalId) });
+      const row = rowIndexForRecord(parsed.rows, fieldMapping.fieldMap, record.externalId);
+      const existing = existingFeedbackById.get(existingFeedbackId) ?? originFeedbackById.get(existingFeedbackId);
+      const fields = existing ? feedbackImportUpdateFields(record, existing) : [];
+      if (fields.length > 0) {
+        updateDiffs.push({ externalId: record.externalId, feedbackId: existingFeedbackId, fields, row });
+      }
       continue;
     }
     newRecords.push(record);
@@ -421,7 +449,8 @@ export async function preflightFeedbackImportCsv(
     records: newRecords,
     skippedRecords,
     totalRecords: parsed.rows.length,
-    updateRecords: 0,
+    updateDiffs,
+    updateRecords: updateDiffs.length,
   };
 
   await database.insert(feedbackImportBatches).values({
@@ -441,12 +470,13 @@ export async function preflightFeedbackImportCsv(
   return {
     batchId,
     commitAvailable: errors.length === 0 && newRecords.length > 0,
-    commitBlockedReason: feedbackCsvImportCommitBlockedReason(errors, newRecords.length),
+    commitBlockedReason: feedbackCsvImportCommitBlockedReason(errors, newRecords.length, updateDiffs.length),
     errors,
     fieldMappings: fieldMapping.publicMappings,
     fileName: input.fileName,
     sourceKind: "csv",
     summary: publicImportSummary(summary),
+    updateDiffs,
     warnings,
   };
 }
@@ -558,6 +588,17 @@ type StoredZipEntry = {
   path: string;
 };
 
+type ExistingFeedbackImportRecord = {
+  assigneeUserId: string | null;
+  causeCategories: string[];
+  description: string;
+  id: string;
+  impact: FeedbackImpact;
+  priority: FeedbackPriority | null;
+  projectId: string | null;
+  title: string;
+};
+
 const feedbackBackupJsonlCountFiles = [
   ["feedback", "feedback.jsonl"],
   ["comments", "comments.jsonl"],
@@ -576,8 +617,9 @@ function detectFeedbackImportSource(input: { body: Buffer; fileName: string; mim
   return "csv";
 }
 
-function feedbackCsvImportCommitBlockedReason(errors: readonly FeedbackImportMessage[], newRecords: number) {
+function feedbackCsvImportCommitBlockedReason(errors: readonly FeedbackImportMessage[], newRecords: number, updateRecords: number) {
   if (errors.length > 0) return "CSV 预检存在错误";
+  if (newRecords === 0 && updateRecords > 0) return "存在可更新记录，默认不会覆盖；需要确认更新差异后才可提交覆盖";
   if (newRecords === 0) return "没有可新增的反馈";
   return undefined;
 }
@@ -850,26 +892,84 @@ function importRecordFromCsvRow(row: ParsedCsvRow, fieldMap: CsvImportFieldMap):
   };
 }
 
-async function existingImportExternalIds(database: FeedbackTransferDatabase, teamId: string, externalIds: readonly string[]) {
-  if (externalIds.length === 0) return new Set<string>();
+async function existingImportOrigins(database: FeedbackTransferDatabase, teamId: string, externalIds: readonly string[]) {
+  if (externalIds.length === 0) return new Map<string, string>();
   const rows = await database
-    .select({ externalId: feedbackImportOrigins.externalId })
+    .select({ externalId: feedbackImportOrigins.externalId, feedbackId: feedbackImportOrigins.feedbackId })
     .from(feedbackImportOrigins)
     .where(and(
       eq(feedbackImportOrigins.teamId, teamId),
       eq(feedbackImportOrigins.sourceSystem, feedbackCurrentViewCsvVersion),
       inArray(feedbackImportOrigins.externalId, [...new Set(externalIds)]),
     ));
-  return new Set(rows.map((row) => row.externalId));
+  return new Map(rows.map((row) => [row.externalId, row.feedbackId]));
 }
 
-async function existingFeedbackExternalIds(database: FeedbackTransferDatabase, teamId: string, externalIds: readonly string[]) {
-  if (externalIds.length === 0) return new Set<string>();
-  const rows = await database
-    .select({ id: feedback.id })
-    .from(feedback)
-    .where(and(eq(feedback.teamId, teamId), inArray(feedback.id, [...new Set(externalIds)])));
-  return new Set(rows.map((row) => row.id));
+async function existingFeedbackRecords(database: FeedbackTransferDatabase, teamId: string, feedbackIds: readonly string[]) {
+  if (feedbackIds.length === 0) return new Map<string, ExistingFeedbackImportRecord>();
+  const ids = [...new Set(feedbackIds)];
+  const [feedbackRows, categoryRows] = await Promise.all([
+    database
+      .select({
+        assigneeUserId: feedback.assigneeUserId,
+        description: feedback.description,
+        id: feedback.id,
+        impact: feedback.impact,
+        priority: feedback.priority,
+        projectId: feedback.projectId,
+        title: feedback.title,
+      })
+      .from(feedback)
+      .where(and(eq(feedback.teamId, teamId), inArray(feedback.id, ids))),
+    database
+      .select({
+        category: feedbackCauseCategories.category,
+        feedbackId: feedbackCauseCategories.feedbackId,
+        sortOrder: feedbackCauseCategories.sortOrder,
+      })
+      .from(feedbackCauseCategories)
+      .where(and(eq(feedbackCauseCategories.teamId, teamId), inArray(feedbackCauseCategories.feedbackId, ids))),
+  ]);
+  const categoriesByFeedbackId = new Map<string, string[]>();
+  for (const row of categoryRows.sort((left, right) => left.sortOrder - right.sortOrder)) {
+    const list = categoriesByFeedbackId.get(row.feedbackId) ?? [];
+    list.push(row.category);
+    categoriesByFeedbackId.set(row.feedbackId, list);
+  }
+  return new Map(feedbackRows.map((row) => [row.id, {
+    ...row,
+    causeCategories: categoriesByFeedbackId.get(row.id) ?? [],
+  }]));
+}
+
+function feedbackImportUpdateFields(record: FeedbackImportRecord, existing: ExistingFeedbackImportRecord) {
+  const fields: FeedbackImportFieldDiff[] = [];
+  pushImportFieldDiff(fields, "title", "标题", existing.title, record.title);
+  pushImportFieldDiff(fields, "description", "正文", existing.description, record.description);
+  pushImportFieldDiff(fields, "impact", "影响", existing.impact, record.impact);
+  pushImportFieldDiff(fields, "priority", "优先级", existing.priority, record.priority);
+  pushImportFieldDiff(fields, "assignee_user_id", "处理人", existing.assigneeUserId, record.assigneeUserId);
+  pushImportFieldDiff(fields, "project_id", "项目", existing.projectId, record.projectId);
+  pushImportFieldDiff(fields, "cause_categories", "分类", existing.causeCategories, record.causeCategories);
+  return fields;
+}
+
+function pushImportFieldDiff(
+  fields: FeedbackImportFieldDiff[],
+  field: string,
+  label: string,
+  currentValue: string | string[] | null,
+  incomingValue: string | string[] | null,
+) {
+  const current = importDiffValue(currentValue);
+  const incoming = importDiffValue(incomingValue);
+  if (current === incoming) return;
+  fields.push({ currentValue: current, field, incomingValue: incoming, label });
+}
+
+function importDiffValue(value: string | string[] | null) {
+  if (Array.isArray(value)) return value.join(" | ");
+  return value ?? "";
 }
 
 function readStoredImportSummary(value: unknown): StoredFeedbackImportSummary | null {

@@ -108,9 +108,11 @@ export {
   type FeedbackBackupAttachmentKind,
   type FeedbackBackupZipInput,
   type FeedbackImportCommitResult,
+  type FeedbackImportFieldDiff,
   type FeedbackImportFieldMapping,
   type FeedbackImportPreflight,
   type FeedbackImportSourceKind,
+  type FeedbackImportUpdateDiff,
 } from "../server/transfer";
 export * as feedbackDatabaseSchema from "../infrastructure/database/schema";
 

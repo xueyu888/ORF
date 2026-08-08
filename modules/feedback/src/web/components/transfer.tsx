@@ -203,15 +203,6 @@ function FeedbackImportPreflightView({ preflight }: { preflight: FeedbackImportP
         <span><strong>{preflight.summary.errors}</strong> 错误</span>
         <span><strong>{formatBytes(preflight.summary.attachmentBytes)}</strong> 附件</span>
       </div>
-      {preflight.fieldMappings && preflight.fieldMappings.length > 0 && (
-        <FeedbackImportFieldMappings mappings={preflight.fieldMappings} />
-      )}
-      {preflight.commitBlockedReason && (
-        <div className="feedback-import-messages" data-tone="warning">
-          <strong>提交状态</strong>
-          <p>{preflight.commitBlockedReason}</p>
-        </div>
-      )}
       <div className="feedback-import-preflight-actions">
         <FeedbackButton
           size="sm"
@@ -221,6 +212,18 @@ function FeedbackImportPreflightView({ preflight }: { preflight: FeedbackImportP
           下载预检报告
         </FeedbackButton>
       </div>
+      {preflight.fieldMappings && preflight.fieldMappings.length > 0 && (
+        <FeedbackImportFieldMappings mappings={preflight.fieldMappings} />
+      )}
+      {preflight.updateDiffs && preflight.updateDiffs.length > 0 && (
+        <FeedbackImportUpdateDiffs diffs={preflight.updateDiffs} />
+      )}
+      {preflight.commitBlockedReason && (
+        <div className="feedback-import-messages" data-tone="warning">
+          <strong>提交状态</strong>
+          <p>{preflight.commitBlockedReason}</p>
+        </div>
+      )}
       {preflight.warnings.length > 0 && (
         <div className="feedback-import-messages" data-tone="warning">
           <strong>警告</strong>
@@ -237,6 +240,24 @@ function FeedbackImportPreflightView({ preflight }: { preflight: FeedbackImportP
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function FeedbackImportUpdateDiffs({
+  diffs,
+}: {
+  diffs: NonNullable<FeedbackImportPreflight["updateDiffs"]>;
+}) {
+  return (
+    <div className="feedback-import-messages" data-tone="warning">
+      <strong>更新差异</strong>
+      {diffs.slice(0, 5).map((item) => (
+        <p key={`${item.externalId}-${item.feedbackId}`}>
+          {item.externalId}: {item.fields.map((field) => field.label).join("、")}
+        </p>
+      ))}
+      {diffs.length > 5 && <p>还有 {diffs.length - 5} 条更新差异，请下载预检报告查看。</p>}
     </div>
   );
 }
@@ -289,6 +310,9 @@ function buildFeedbackImportPreflightReport(preflight: FeedbackImportPreflight) 
     `错误: ${preflight.summary.errors}`,
     `附件: ${formatBytes(preflight.summary.attachmentBytes)}`,
     "",
+    "更新差异",
+    ...buildFeedbackImportUpdateDiffReport(preflight.updateDiffs ?? []),
+    "",
     "警告",
     ...preflight.warnings.map(messageLine),
     ...(preflight.warnings.length === 0 ? ["无"] : []),
@@ -298,6 +322,18 @@ function buildFeedbackImportPreflightReport(preflight: FeedbackImportPreflight) 
     ...(preflight.errors.length === 0 ? ["无"] : []),
   ];
   return `${lines.join("\n")}\n`;
+}
+
+function buildFeedbackImportUpdateDiffReport(diffs: NonNullable<FeedbackImportPreflight["updateDiffs"]>) {
+  if (diffs.length === 0) return ["无"];
+  const lines: string[] = [];
+  for (const diff of diffs) {
+    lines.push(`来源 ${diff.externalId} -> 反馈 ${diff.feedbackId}${diff.row ? `（第 ${diff.row} 行）` : ""}`);
+    for (const field of diff.fields) {
+      lines.push(`- ${field.label}: 当前「${field.currentValue || "空"}」 -> 导入「${field.incomingValue || "空"}」`);
+    }
+  }
+  return lines;
 }
 
 function messageLine(item: { field?: string; message: string; row?: number }) {

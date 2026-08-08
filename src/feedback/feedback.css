@@ -254,7 +254,7 @@
   display: grid;
   gap: 16px;
   width: min(720px, 100%);
-  max-height: min(760px, calc(100vh - 48px));
+  max-height: min(820px, calc(100vh - 48px));
   overflow: auto;
   border: 1px solid color-mix(in srgb, var(--orf-border) 72%, transparent);
   border-radius: 8px;
@@ -270,6 +270,16 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.feedback-transfer-dialog footer {
+  position: sticky;
+  bottom: -18px;
+  z-index: 1;
+  margin: 0 -18px -18px;
+  padding: 10px 18px 18px;
+  border-top: 1px solid color-mix(in srgb, var(--orf-border) 56%, transparent);
+  background: var(--orf-bg-card);
 }
 
 .feedback-transfer-dialog h2,
@@ -320,6 +330,7 @@
 .feedback-import-preflight {
   display: grid;
   gap: 12px;
+  padding-bottom: 58px;
 }
 
 .feedback-import-summary {
@@ -1079,16 +1090,6 @@ html[data-orf-display-contrast="high"] .feedback-issue-row {
   .feedback-import-dropzone {
     grid-template-columns: 1fr;
     display: grid;
-  }
-
-  .feedback-transfer-dialog footer {
-    position: sticky;
-    bottom: 0;
-    z-index: 1;
-    margin: 0 -18px -18px;
-    padding: 10px 18px 18px;
-    border-top: 1px solid color-mix(in srgb, var(--orf-border) 56%, transparent);
-    background: color-mix(in srgb, var(--orf-bg-card) 94%, transparent);
   }
 
   .feedback-transfer-dialog header {

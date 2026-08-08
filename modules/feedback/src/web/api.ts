@@ -69,6 +69,12 @@ export type FeedbackImportPreflight = {
     totalRecords: number;
     updateRecords: number;
   };
+  updateDiffs?: Array<{
+    externalId: string;
+    feedbackId: string;
+    fields: Array<{ currentValue: string; field: string; incomingValue: string; label: string }>;
+    row?: number;
+  }>;
   warnings: Array<{ field?: string; message: string; row?: number }>;
 };
 
