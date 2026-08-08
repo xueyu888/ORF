@@ -7,7 +7,7 @@ import {
 import { db } from "../db/client";
 import { projects } from "../db/schema";
 import { runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
-import { listFeedbackAssigneeOptions } from "./feedbackCommandAdapter";
+import { listFeedbackAssigneeOptions } from "./feedbackAssigneeOptions";
 
 export type FeedbackTransferActor = FeedbackImportActor;
 

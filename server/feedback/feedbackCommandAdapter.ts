@@ -37,7 +37,6 @@ import {
   type FeedbackTransitionNotificationDispatchFactory,
 } from "@orf/feedback-module/server";
 import { replaceOrfAttachmentMarkdownTokens } from "../../src/features/rich-text/orfRichTextTokens";
-import type { OrfUserDisplayProfile } from "../../src/types/orf";
 import { db } from "../db/client";
 import { feedbackNotificationPort } from "./feedbackNotificationPort";
 import { feedbackNotificationRecipientDirectory } from "./feedbackNotificationRecipientDirectory";
@@ -115,7 +114,6 @@ export type MarkFeedbackViewedInput = {
   seenThroughSequence: number;
 };
 
-export type FeedbackAssigneeOption = Pick<OrfUserDisplayProfile, "avatarUrl" | "id" | "name">;
 export type FeedbackReference = {
   id: string;
   title: string;
@@ -141,17 +139,6 @@ async function resolveActiveMemberById(teamId: string, userId: string | null | u
   const scopedUsers = await getScopedUsers(runtimeScope(teamId));
   const member = scopedUsers.find((user) => user.status === "active" && user.id === normalizedUserId);
   return member ? { id: member.id, name: member.name } : null;
-}
-
-export async function listFeedbackAssigneeOptions(scope: RuntimeScope): Promise<FeedbackAssigneeOption[]> {
-  const scopedUsers = await getScopedUsers(scope);
-  return scopedUsers
-    .filter((user) => user.status === "active")
-    .map((user) => ({
-      avatarUrl: user.avatarUrl ?? null,
-      id: user.id,
-      name: user.name,
-    }));
 }
 
 async function resolveProjectById(teamId: string, projectId: string | null | undefined): Promise<ProjectRow> {

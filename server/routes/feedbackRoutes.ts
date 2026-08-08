@@ -24,7 +24,6 @@ import {
   searchFeedbackReferences,
   getFeedbackReportAttachmentContent,
   getFeedbackSubscription,
-  listFeedbackAssigneeOptions,
   markFeedbackViewed,
   removeFeedbackRelation,
   transitionFeedback,
@@ -34,6 +33,7 @@ import {
   type FeedbackCommandActor,
   type FeedbackCommandResult,
 } from "../feedback/feedbackCommandAdapter";
+import { listFeedbackAssigneeOptions } from "../feedback/feedbackAssigneeOptions";
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import {
