@@ -22,7 +22,7 @@
 - `server/readModels/orfTaskManagementReadModel.ts` 负责从数据库事实构造 `TaskManagementData` 和 `OrfState` 快照；写入逻辑只通过 `getOrfStateSnapshot` 做写后回读。
 - `server/readModels/orfChallengeReadModels.ts` 负责构造悬赏大厅读模型，并从 `TaskManagementData` 收敛我的挑战数据。
 - `server/readModels/currentUserAccessReadModel.ts` 负责当前用户 access 读模型；Provider 全局权限判断只读取 `/api/me/access`，不依赖任务管理读模型。
-- `@orf/feedback-module` 通过 `contracts/server/web/testing` 四个公开入口拥有反馈领域模型、状态转换、报告附件、活动、导入导出、订阅和前端页面贡献；宿主 `feedbackRoutes` 只保留当前 HTTP 适配与组合入口，后续不得重新把反馈事实散回全局 `OrfState` 或旧 repository。
+- `@orf/feedback-module` 通过 `contracts/server/web/testing` 四个公开入口拥有反馈领域模型、状态转换、报告附件、活动、导入导出、订阅和前端页面贡献；宿主 `server/feedback/*` 只保留 HTTP host、命令适配器、通知端口、评论目标 adapter 和引用 provider 等组合适配，不重新把反馈事实散回全局 `OrfState`、旧 route 或旧 repository。
 - `server/access/orfTargetAccess.ts` 负责 work item、feedback 的 scope 解析和访问边界判断，避免 `accessPolicy` 依赖完整写仓库。
 - `src/domain/orfReadModel/` 是前后端共享 read model DTO 契约。
 - `src/domain/orfChallengeEntry/` 是挑战入口关闭、申请、接受等纯派生判断。

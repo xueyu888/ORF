@@ -6,7 +6,7 @@
 
 ## 核心原则
 
-1. 通知事实继续由消息系统负责：业务事件写入 `notification_events`、`notification_receipts`、`notification_deliveries`，再投影到聊天系统消息。
+1. 通知事实继续由消息系统负责：业务事件写入 `notification_events`、`notification_receipts`、`notification_deliveries`，再投影到聊天系统消息。反馈只通过自己的 notification outbox 和 provider 提交通用通知请求，注意力系统不维护 `feedback.*` 规则清单。
 2. 注意力系统只回答“此刻如何打扰用户”：红点、系统 Toast、任务栏闪烁、托盘入口、侧边栏待处理入口。
 3. 注意力状态是前端和桌面壳的派生展示状态，不写数据库、不创建通知、不改变业务状态。
 4. 业务模块不得直接调用 `flashFrame`、系统 `Notification`、托盘菜单或任务栏 overlay。
@@ -17,6 +17,7 @@
 
 ```text
 业务 mutation 成功
+  -> 业务模块提交通知请求；反馈先提交 feedback_event_dispatches outbox
   -> 通知事件写入 notification_events / notification_receipts / notification_deliveries
   -> 系统消息投影到 chat_messages
 聊天消息事务提交
