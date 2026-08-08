@@ -122,6 +122,10 @@ function checkSpecifier(relativePath, specifier) {
       errors.push(`${relativePath} imports unsupported feedback module subpath ${specifier}.`);
       return;
     }
+    if (specifier === "@orf/feedback-module/server" && relativePath.startsWith("server/routes/")) {
+      errors.push(`${relativePath} imports @orf/feedback-module/server from an HTTP route; use a server/feedback or server/readModels adapter boundary.`);
+      return;
+    }
     if (specifier === "@orf/feedback-module/testing" && !canImportFeedbackTesting(relativePath)) {
       errors.push(`${relativePath} imports @orf/feedback-module/testing outside tests.`);
     }
