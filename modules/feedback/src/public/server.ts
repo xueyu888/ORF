@@ -28,11 +28,6 @@ export {
   publishFeedbackNotificationDispatch,
   startFeedbackNotificationDispatchWorker,
 } from "../server/notificationDispatch";
-export type {
-  FeedbackNotificationDispatchDraft,
-  FeedbackNotificationPort,
-  FeedbackNotificationRecipientDirectory,
-} from "../server/notificationProtocol";
 export {
   buildFeedbackAssigneeChangedNotificationDispatch,
   buildFeedbackCommentCreatedNotificationDispatch,
@@ -42,9 +37,7 @@ export {
 export {
   feedbackReportAttachmentResponseContentType,
   getFeedbackReportAttachmentContentFacts,
-  listFeedbackReportAttachmentObjectRefs,
 } from "../server/reportAttachmentContent";
-export type { FeedbackReportAttachmentObjectRef } from "../server/reportAttachmentProtocol";
 export {
   getFeedbackAssignmentNotificationDispatchRecipients,
   getFeedbackLifecycleNotificationDispatchRecipients,
@@ -61,10 +54,6 @@ export {
   updateFeedbackIssueAssignee,
   updateFeedbackIssueMetadata,
 } from "../server/writeModel";
-export type {
-  FeedbackTargetTitleSync,
-  FeedbackTransitionNotificationDispatchFactory,
-} from "../server/commandPorts";
 export {
   commitFeedbackImportBatch,
   preflightFeedbackImport,

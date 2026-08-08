@@ -1,10 +1,12 @@
-import type { FeedbackNotificationRecipientDirectory } from "@orf/feedback-module/server";
 import {
   getActiveAdminNotificationRecipients,
   getActiveMemberNotificationRecipientsByIds,
 } from "../repositories/notificationRepository";
 
-export const feedbackNotificationRecipientDirectory: FeedbackNotificationRecipientDirectory = {
+export const feedbackNotificationRecipientDirectory = {
   getActiveAdminUserIds: getActiveAdminNotificationRecipients,
   getActiveMemberUserIdsByIds: getActiveMemberNotificationRecipientsByIds,
+} satisfies {
+  getActiveAdminUserIds(teamId: string): Promise<string[]>;
+  getActiveMemberUserIdsByIds(teamId: string, userIds: string[]): Promise<string[]>;
 };

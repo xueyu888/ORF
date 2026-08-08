@@ -1,8 +1,21 @@
-import { feedbackNotificationCardReferenceFromPayload } from "@orf/feedback-module/contracts";
-import type { FeedbackNotificationPort } from "@orf/feedback-module/server";
+import {
+  feedbackNotificationCardReferenceFromPayload,
+  type FeedbackNotificationEventPlan,
+} from "@orf/feedback-module/contracts";
+import type { NotificationRecipientInput } from "../notifications/notificationEventModel";
 import { publishNotificationEvent } from "../notifications/publisher";
 
-export const feedbackNotificationPort: FeedbackNotificationPort = async (plan, context) => {
+type FeedbackNotificationPortContext = {
+  readonly activityEventId: string;
+  readonly dispatchId: string;
+  readonly idempotencyKey: string;
+  readonly recipients: readonly NotificationRecipientInput[];
+};
+
+export const feedbackNotificationPort = async (
+  plan: FeedbackNotificationEventPlan,
+  context: FeedbackNotificationPortContext,
+) => {
   const cardReference = feedbackNotificationCardReferenceFromPayload(plan.payload, context.activityEventId);
   const notifications = await publishNotificationEvent({
     ...plan,

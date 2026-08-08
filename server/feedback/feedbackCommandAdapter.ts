@@ -32,9 +32,6 @@ import {
   transitionFeedbackIssue,
   updateFeedbackIssueAssignee,
   updateFeedbackIssueMetadata,
-  type FeedbackNotificationDispatchDraft,
-  type FeedbackTargetTitleSync,
-  type FeedbackTransitionNotificationDispatchFactory,
 } from "@orf/feedback-module/server";
 import { replaceOrfAttachmentMarkdownTokens } from "../../src/features/rich-text/orfRichTextTokens";
 import { db } from "../db/client";
@@ -57,6 +54,14 @@ import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "../repos
 import { resolveFeedbackActiveMemberById } from "./feedbackAssigneeOptions";
 
 export type { FeedbackCommandResult } from "@orf/feedback-module/contracts";
+
+type FeedbackNotificationDispatchDraft = NonNullable<ReturnType<typeof buildFeedbackCreatedNotificationDispatch>>;
+type FeedbackTargetTitleSync = NonNullable<
+  NonNullable<Parameters<typeof updateFeedbackIssueMetadata>[3]>["syncFeedbackTargetTitle"]
+>;
+type FeedbackTransitionNotificationDispatchFactory = NonNullable<
+  Parameters<typeof transitionFeedbackIssue>[1]["notificationDispatch"]
+>;
 
 export type CreateFeedbackAttachmentInput = {
   body: Buffer;

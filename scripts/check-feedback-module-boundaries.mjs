@@ -86,23 +86,21 @@ async function checkServerPublicBoundary() {
   if (source.includes("FeedbackImportActor")) {
     errors.push("modules/feedback/src/public/server.ts must not export import actor DTOs; expose them from contracts.");
   }
+  const forbiddenServerProtocolExports = [
+    "FeedbackNotificationDispatchDraft",
+    "FeedbackNotificationPort",
+    "FeedbackNotificationRecipientDirectory",
+    "FeedbackReportAttachmentObjectRef",
+    "FeedbackTargetTitleSync",
+    "FeedbackTransitionNotificationDispatchFactory",
+    "listFeedbackReportAttachmentObjectRefs",
+  ];
+  for (const name of forbiddenServerProtocolExports) {
+    if (new RegExp(`\\b${name}\\b`).test(source)) {
+      errors.push(`modules/feedback/src/public/server.ts must not export ${name}; keep internal server protocols inside the feedback module.`);
+    }
+  }
   const forbiddenTypeExports = [
-    {
-      names: ["FeedbackTargetTitleSync", "FeedbackTransitionNotificationDispatchFactory"],
-      specifier: "../server/writeModel",
-    },
-    {
-      names: ["FeedbackNotificationDispatchDraft", "FeedbackNotificationPort"],
-      specifier: "../server/notificationDispatch",
-    },
-    {
-      names: ["FeedbackNotificationRecipientDirectory"],
-      specifier: "../server/subscriptions",
-    },
-    {
-      names: ["FeedbackReportAttachmentObjectRef"],
-      specifier: "../server/reportAttachmentContent",
-    },
     {
       names: ["FeedbackBackupAttachmentFile", "FeedbackImportActor"],
       specifier: "../server/transfer",
