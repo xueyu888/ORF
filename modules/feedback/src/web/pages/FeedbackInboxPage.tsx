@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { feedbackCreatePath, feedbackLabelsPath } from "../../contracts/links";
 import { feedbackImpactLabel } from "../../contracts/labels";
-import { getProjectChatChannels, getUserPreferences, saveUserPreferences } from "../api";
+import { getFeedbackIssueReadModel, getProjectChatChannels, getUserPreferences, saveUserPreferences } from "../api";
 import { FeedbackTransferMenu } from "../components/transfer";
 import { FeedbackBadge, FeedbackButton, FeedbackEmptyState, FeedbackSelect, FeedbackTextInput } from "../components/controls";
 import { canCreateTeamFeedback, canImportExportTeamFeedback } from "../model/capabilities";
@@ -41,7 +41,7 @@ import {
   readStoredFeedbackIssueListFilterParams,
 } from "../model/issueListViewState";
 import { useFeedbackWebHost } from "../runtime";
-import { useFeedbackIssueReadModel } from "../hooks";
+import { useFeedbackIssueListReadModel } from "../hooks";
 import type { FeedbackWebProjectChatChannel } from "../types";
 
 export function FeedbackInboxPage() {
@@ -54,7 +54,7 @@ export function FeedbackInboxPage() {
   const suppressNextPreferenceRestoreRef = useRef(false);
   const searchParamSignature = searchParams.toString();
   const listQuery = useMemo(() => feedbackIssueListFilterQueryFromSearchParams(searchParams), [searchParamSignature, searchParams]);
-  const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser), `${feedbackInvalidationKey}:${listQuery}`, listQuery);
+  const feedbackReadModel = useFeedbackIssueListReadModel(Boolean(currentUser), `${feedbackInvalidationKey}:${listQuery}`, listQuery);
   const feedbackData = feedbackReadModel.data;
   const issueList = feedbackData.list ?? emptyFeedbackIssueListProjection;
   const {
@@ -69,6 +69,7 @@ export function FeedbackInboxPage() {
   } = useMemo(() => feedbackIssueListUrlStateFromSearchParams(searchParams), [searchParamSignature, searchParams]);
   const [projectChannels, setProjectChannels] = useState<FeedbackWebProjectChatChannel[]>([]);
   const [projectChannelsLoading, setProjectChannelsLoading] = useState(false);
+  const [csvExporting, setCsvExporting] = useState(false);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const selectedProject = useMemo(
     () => feedbackData.projects.find((project) => project.id === projectId) ?? null,
@@ -76,7 +77,6 @@ export function FeedbackInboxPage() {
   );
   const canCreateFeedback = canCreateTeamFeedback(currentUser);
   const canImportExport = canImportExportTeamFeedback(currentUser);
-  const issueFilters = issueList.filters;
   const issueCounts = issueList.counts;
   const labelOptions = issueList.labelOptions;
   const assigneeOptions = issueList.assigneeOptions;
@@ -220,20 +220,30 @@ export function FeedbackInboxPage() {
     persistFilterPreference(next);
     setSearchParams(next, { replace: true });
   };
-  const exportCurrentViewCsv = useCallback(() => {
+  const exportCurrentViewCsv = useCallback(async () => {
+    if (csvExporting) return;
+    setCsvExporting(true);
     const exportedAt = new Date().toISOString();
-    const csv = buildFeedbackIssueCurrentViewCsv({
-      exportedAt,
-      filters: issueFilters,
-      items: filteredFeedback,
-    });
-    downloadTextFile({
-      content: csv,
-      fileName: feedbackIssueCsvExportFileName(exportedAt),
-      mimeType: "text/csv;charset=utf-8",
-    });
-    notify(`已导出 ${filteredFeedback.length} 条反馈`);
-  }, [filteredFeedback, issueFilters, notify]);
+    try {
+      const exportData = await getFeedbackIssueReadModel(listQuery);
+      const exportList = exportData.list ?? issueList;
+      const csv = buildFeedbackIssueCurrentViewCsv({
+        exportedAt,
+        filters: exportList.filters,
+        items: exportList.items,
+      });
+      downloadTextFile({
+        content: csv,
+        fileName: feedbackIssueCsvExportFileName(exportedAt),
+        mimeType: "text/csv;charset=utf-8",
+      });
+      notify(`已导出 ${exportList.items.length} 条反馈`);
+    } catch {
+      notify("反馈导出失败");
+    } finally {
+      setCsvExporting(false);
+    }
+  }, [csvExporting, issueList, listQuery, notify]);
 
   return (
     <div className="orf-feedback-workbench feedback-issue-page">
@@ -248,7 +258,7 @@ export function FeedbackInboxPage() {
         <div className="feedback-issue-header-actions">
           <FeedbackTransferMenu
             canImportExport={canImportExport}
-            csvDisabled={feedbackReadModel.loading}
+            csvDisabled={feedbackReadModel.loading || csvExporting}
             notify={notify}
             onExportCurrentViewCsv={exportCurrentViewCsv}
             onImportCommitted={feedbackReadModel.reload}
@@ -381,7 +391,7 @@ export function FeedbackInboxPage() {
               All <strong>{issueCounts.all}</strong>
             </IssueStateButton>
           </div>
-          <span className="feedback-issue-match-count">{filteredFeedback.length} 条匹配</span>
+          <span className="feedback-issue-match-count">已加载 {filteredFeedback.length} / {issueList.matchedCount} 条匹配</span>
         </div>
 
         {filteredFeedback.length > 0 ? (
@@ -396,6 +406,18 @@ export function FeedbackInboxPage() {
           <FeedbackEmptyState title="反馈读取失败" description={feedbackReadModel.error} />
         ) : (
           <FeedbackEmptyState title="没有匹配的反馈" description="调整搜索或筛选条件后再看。" />
+        )}
+        {filteredFeedback.length > 0 && (
+          <div className="feedback-issue-list-footer">
+            <span>已显示 {filteredFeedback.length} / {issueList.matchedCount}</span>
+            {feedbackReadModel.hasMore ? (
+              <FeedbackButton loading={feedbackReadModel.loadingMore} onClick={feedbackReadModel.loadMore} variant="secondary">
+                加载更多
+              </FeedbackButton>
+            ) : (
+              <span>已全部加载</span>
+            )}
+          </div>
         )}
       </section>
     </div>

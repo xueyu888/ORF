@@ -5,6 +5,10 @@ import {
   feedbackIssueCsvExportFileName,
 } from "@orf/feedback-module/web";
 import {
+  feedbackIssueListPageQuery,
+  mergeFeedbackIssueListReadModelPages,
+} from "@orf/feedback-module/web";
+import {
   buildFeedbackIssueListItems,
   feedbackIssueListCountsForFilters,
   filterFeedbackIssueListItems,
@@ -19,7 +23,9 @@ import {
 } from "@orf/feedback-module/web";
 import {
   buildFeedbackIssueListProjection,
+  feedbackIssueListDefaultPageLimit,
   feedbackIssueListPaginationFromInput,
+  type FeedbackIssueReadModelData,
 } from "@orf/feedback-module/contracts";
 import type { Feedback, OrfProject, OrfUser } from "../src/types/orf";
 
@@ -211,6 +217,55 @@ test("feedback list projection can use comment summaries without comment bodies"
   assert.equal(item?.lastActivityAt, "2026-07-10");
 });
 
+test("feedback list page query keeps filters while owning cursor and limit params", () => {
+  const nextPageParams = new URLSearchParams(feedbackIssueListPageQuery("?state=open&q=crash&cursor=old", {
+    cursor: " next-cursor ",
+    limit: 20,
+  }));
+
+  assert.equal(nextPageParams.get("state"), "open");
+  assert.equal(nextPageParams.get("q"), "crash");
+  assert.equal(nextPageParams.get("cursor"), "next-cursor");
+  assert.equal(nextPageParams.get("limit"), "20");
+
+  const firstPageParams = new URLSearchParams(feedbackIssueListPageQuery("state=open&cursor=old"));
+  assert.equal(firstPageParams.get("state"), "open");
+  assert.equal(firstPageParams.get("cursor"), null);
+  assert.equal(firstPageParams.get("limit"), String(feedbackIssueListDefaultPageLimit));
+});
+
+test("feedback list read model page merge appends cursor pages without duplicating issues", () => {
+  const feedbackItems = [
+    feedback({ id: "fb-first", title: "第一条", updatedAt: "2026-07-09" }),
+    feedback({ id: "fb-second", title: "第二条", updatedAt: "2026-07-08" }),
+    feedback({ id: "fb-third", title: "第三条", updatedAt: "2026-07-07" }),
+  ];
+  const firstPage = buildFeedbackIssueListProjection({
+    comments: [],
+    feedback: feedbackItems,
+    filters: filters({ listState: "all", sort: "updated-desc" }),
+    pagination: feedbackIssueListPaginationFromInput({ limit: "2" }),
+    projects,
+    users,
+  });
+  const secondPage = buildFeedbackIssueListProjection({
+    comments: [],
+    feedback: feedbackItems,
+    filters: filters({ listState: "all", sort: "updated-desc" }),
+    pagination: feedbackIssueListPaginationFromInput({ cursor: firstPage.pageInfo.nextCursor, limit: "2" }),
+    projects,
+    users,
+  });
+
+  const merged = mergeFeedbackIssueListReadModelPages(readModelForList(firstPage), readModelForList(secondPage));
+
+  assert.deepEqual(merged.list?.items.map((item) => item.feedback.id), ["fb-first", "fb-second", "fb-third"]);
+  assert.deepEqual(merged.feedback.map((item) => item.id), ["fb-first", "fb-second", "fb-third"]);
+  assert.equal(merged.list?.matchedCount, 3);
+  assert.equal(merged.list?.pageInfo.hasMore, false);
+  assert.equal(merged.list?.pageInfo.nextCursor, null);
+});
+
 test("feedback linked issues come from relation facts instead of report or comment text", () => {
   const source = feedback({
     id: "fb-source",
@@ -382,5 +437,15 @@ function feedback(input: Partial<Feedback> & Pick<Feedback, "id" | "title">): Fe
     closedAt: null,
     closedByUserId: null,
     ...input,
+  };
+}
+
+function readModelForList(list: ReturnType<typeof buildFeedbackIssueListProjection>): FeedbackIssueReadModelData {
+  return {
+    comments: [],
+    feedback: list.items.map((item) => item.feedback),
+    list,
+    projects,
+    users,
   };
 }

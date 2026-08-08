@@ -655,6 +655,22 @@
   font-weight: 700;
 }
 
+.feedback-issue-list-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid color-mix(in srgb, var(--orf-border) 56%, transparent);
+  color: var(--orf-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.feedback-issue-list-footer .feedback-button {
+  min-width: 104px;
+}
+
 .feedback-issue-rows,
 .feedback-label-rows {
   display: grid;
@@ -1219,6 +1235,16 @@ html[data-orf-display-contrast="high"] .feedback-issue-row {
 
   .feedback-issue-query-panel[data-expanded="true"] {
     display: grid;
+  }
+
+  .feedback-issue-list-head,
+  .feedback-issue-list-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .feedback-issue-list-footer .feedback-button {
+    width: 100%;
   }
 
   .feedback-project-chat-panel,

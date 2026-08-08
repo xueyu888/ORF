@@ -117,7 +117,7 @@ type ParsedFeedbackIssueQuery = {
 
 const queryQualifierPattern = /(?:^|\s)(is|status|assignee|owner|author|label|impact|project|sort):("[^"]+"|\S+)/gi;
 const impactValues = new Set<FeedbackImpact>(["low", "medium", "high", "critical"]);
-const defaultFeedbackIssueListPageLimit = 40;
+export const feedbackIssueListDefaultPageLimit = 40;
 const maxFeedbackIssueListPageLimit = 120;
 
 export const defaultFeedbackIssueListFilters: FeedbackIssueListFilters = {
@@ -171,7 +171,7 @@ export function feedbackIssueListPaginationFromInput(input: FeedbackIssueListPag
   const parsedLimit = Number.parseInt(limitValue, 10);
   const limit = Number.isFinite(parsedLimit)
     ? Math.max(1, Math.min(maxFeedbackIssueListPageLimit, parsedLimit))
-    : defaultFeedbackIssueListPageLimit;
+    : feedbackIssueListDefaultPageLimit;
 
   return {
     cursor: cursor || null,

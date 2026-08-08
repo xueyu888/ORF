@@ -15,7 +15,7 @@ type FeedbackTransferMenuProps = {
   canImportExport: boolean;
   csvDisabled?: boolean;
   notify: (message: string) => void;
-  onExportCurrentViewCsv: () => void;
+  onExportCurrentViewCsv: () => void | Promise<void>;
   onImportCommitted: () => void | Promise<void>;
 };
 
@@ -52,7 +52,7 @@ export function FeedbackTransferMenu({
             type="button"
             onClick={() => {
               setMenuOpen(false);
-              onExportCurrentViewCsv();
+              void onExportCurrentViewCsv();
             }}
           >
             <FileDown aria-hidden="true" />

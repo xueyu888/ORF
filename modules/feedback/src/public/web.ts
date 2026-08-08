@@ -159,6 +159,7 @@ export {
   buildFeedbackIssueListItems,
   feedbackIssueAssigneeOptions,
   feedbackIssueAuthorOptions,
+  feedbackIssueListDefaultPageLimit,
   feedbackIssueLabelOptions,
   feedbackIssueListCountsForFilters,
   filterFeedbackIssueListItems,
@@ -178,6 +179,10 @@ export {
   type FeedbackIssueListUrlState,
 } from "../web/model/issueListViewState";
 export {
+  feedbackIssueListPageQuery,
+  mergeFeedbackIssueListReadModelPages,
+} from "../web/model/issueListPagination";
+export {
   feedbackIssueLabelIndexItems,
   feedbackIssueLabels,
   feedbackIssueLinkedFeedback,
@@ -193,6 +198,7 @@ export {
 export {
   useFeedbackAssigneeOptions,
   useFeedbackIssueDetailReadModel,
+  useFeedbackIssueListReadModel,
   useFeedbackIssueReadModel,
 } from "../web/hooks";
 export type {
