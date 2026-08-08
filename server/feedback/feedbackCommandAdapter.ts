@@ -54,7 +54,7 @@ import {
   type PreparedCommentAttachment,
 } from "../repositories/commentAttachmentRepository";
 import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
-import { getScopedUsers } from "../repositories/userRepository";
+import { resolveFeedbackActiveMemberById } from "./feedbackAssigneeOptions";
 
 export type { FeedbackCommandResult } from "@orf/feedback-module/server";
 
@@ -130,17 +130,6 @@ export type FeedbackReportAttachmentContentOutcome =
 
 function storageScopeId(scope: RuntimeScope | null | undefined) {
   return scope ? runtimeScopeStorageId(scope).trim() : "";
-}
-
-async function resolveActiveMemberById(teamId: string, userId: string | null | undefined) {
-  const normalizedUserId = userId?.trim();
-  if (!normalizedUserId) {
-    return null;
-  }
-
-  const scopedUsers = await getScopedUsers(runtimeScope(teamId));
-  const member = scopedUsers.find((user) => user.status === "active" && user.id === normalizedUserId);
-  return member ? { id: member.id, name: member.name } : null;
 }
 
 function feedbackWriteActor(actor: FeedbackCommandActor, teamId: string) {
@@ -328,7 +317,7 @@ export async function createFeedback(input: CreateFeedbackInput, actor: Feedback
     return { status: "notFound" };
   }
 
-  const assigneeUser = input.assigneeUserId ? await resolveActiveMemberById(teamId, input.assigneeUserId) : null;
+  const assigneeUser = input.assigneeUserId ? await resolveFeedbackActiveMemberById(teamId, input.assigneeUserId) : null;
   if (input.assigneeUserId && !assigneeUser) {
     return { status: "invalidAssignee" };
   }
@@ -455,12 +444,12 @@ export async function updateFeedbackAssignee(
   const teamId = storageScopeId(actor.scope);
   if (!teamId) return { status: "notFound" };
 
-  const nextAssignee = input.assigneeUserId ? await resolveActiveMemberById(teamId, input.assigneeUserId) : null;
+  const nextAssignee = input.assigneeUserId ? await resolveFeedbackActiveMemberById(teamId, input.assigneeUserId) : null;
   if (input.assigneeUserId && !nextAssignee) {
     return { status: "invalidAssignee" };
   }
   const currentFacts = await getFeedbackCommentNotificationFacts(db, feedbackId);
-  const previousAssignee = currentFacts?.assigneeUserId ? await resolveActiveMemberById(teamId, currentFacts.assigneeUserId) : null;
+  const previousAssignee = currentFacts?.assigneeUserId ? await resolveFeedbackActiveMemberById(teamId, currentFacts.assigneeUserId) : null;
   const notificationDispatch = currentFacts && currentFacts.teamId === teamId
     ? await prepareFeedbackAssignedNotificationDispatch({
         actorName: actor.name,
