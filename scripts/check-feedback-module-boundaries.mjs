@@ -79,6 +79,28 @@ async function checkServerPublicBoundary() {
   if (source.includes("FeedbackWriteActor")) {
     errors.push("modules/feedback/src/public/server.ts must not export write-model actor types; expose a narrower protocol-owned actor type instead.");
   }
+  const forbiddenTypeExports = [
+    {
+      names: ["FeedbackTargetTitleSync", "FeedbackTransitionNotificationDispatchFactory"],
+      specifier: "../server/writeModel",
+    },
+    {
+      names: ["FeedbackNotificationDispatchDraft", "FeedbackNotificationPort"],
+      specifier: "../server/notificationDispatch",
+    },
+  ];
+  for (const block of exportBlocks(source)) {
+    for (const rule of forbiddenTypeExports) {
+      if (block.specifier !== rule.specifier) {
+        continue;
+      }
+      for (const name of rule.names) {
+        if (new RegExp(`\\b${name}\\b`).test(block.names)) {
+          errors.push(`modules/feedback/src/public/server.ts must export ${name} from a protocol file, not ${rule.specifier}.`);
+        }
+      }
+    }
+  }
 }
 
 async function checkTsconfigPaths() {
@@ -159,6 +181,16 @@ function moduleSpecifiers(source) {
     specifiers.push(match[1] ?? match[2]);
   }
   return specifiers;
+}
+
+function exportBlocks(source) {
+  const blocks = [];
+  const pattern = /\bexport\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+["']([^"']+)["']/g;
+  let match;
+  while ((match = pattern.exec(source)) !== null) {
+    blocks.push({ names: match[1] ?? "", specifier: match[2] ?? "" });
+  }
+  return blocks;
 }
 
 async function listSourceFiles(directory) {
