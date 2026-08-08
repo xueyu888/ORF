@@ -46,6 +46,8 @@ export type NotificationKind =
   | "worklog.reminder";
 export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog" | "dataSync";
 export type NotificationStream = "personalNotification" | "teamAnnouncement";
+export type NotificationDeliveryClass = "direct" | "mandatory" | "ordinary";
+export type NotificationReceiptAttentionLevel = "action_required" | "normal";
 export type FeedbackSubscriptionMode = FeedbackSubscriptionModeContract;
 export type ChatSystemKind = NotificationStream;
 export type ChatMessageSource = "user" | "system";
@@ -140,15 +142,18 @@ export interface AppNotification {
   id: string;
   kind: NotificationKind;
   recipientUserId: string;
+  attentionLevel: NotificationReceiptAttentionLevel;
   actorUserId?: string | null;
   actorName: string;
   actorAvatarUrl?: string | null;
   title: string;
   body: string;
+  deliveryClass: NotificationDeliveryClass;
   stream: NotificationStream;
   targetType: NotificationTargetType;
   targetId: string;
   targetHref: string;
+  recipientReasons: string[];
   replyTargetType?: CommentTargetType | null;
   replyTargetId?: string | null;
   readAt?: string | null;
@@ -176,7 +181,10 @@ export interface ChatMessageSystemMetadata {
   actorUserId?: string | null;
   kind?: NotificationKind;
   metadata?: Record<string, string>;
+  notificationAttentionLevel?: NotificationReceiptAttentionLevel;
+  notificationDeliveryClass?: NotificationDeliveryClass;
   notificationEventId?: string;
+  notificationRecipientReasons?: string[];
   recipientUserId?: string | null;
   replyTargetId?: string | null;
   replyTargetType?: CommentTargetType | null;

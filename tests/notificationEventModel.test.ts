@@ -17,6 +17,7 @@ import {
   shouldSuppressE2eActorNotificationForRecipient,
 } from "../server/notifications/notificationIsolationPolicy";
 import { notificationPolicy } from "../server/notifications/policies/registry";
+import { registerFeedbackNotificationPresentationProvider } from "../server/feedback/feedbackNotificationPresentationProvider";
 import {
   parseDataSyncEventPayload,
   selectDataSyncRecipientMembership,
@@ -24,6 +25,8 @@ import {
 } from "../server/notifications/dataSyncNotificationModel";
 import { workLogSubmissionNotificationBody } from "../server/workLogs/workLogSubmissionNotification";
 import type { NotificationKind, NotificationTargetType } from "../src/types/orf";
+
+registerFeedbackNotificationPresentationProvider();
 
 test("personal notifications dedupe recipients and exclude the actor", () => {
   const recipients = resolveNotificationRecipients({

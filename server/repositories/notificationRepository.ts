@@ -1,7 +1,9 @@
 import type {
   AppNotification,
   CommentTargetType,
+  NotificationDeliveryClass,
   NotificationKind,
+  NotificationReceiptAttentionLevel,
   NotificationStream,
   NotificationTargetType,
 } from "../../src/types/orf";
@@ -55,13 +57,16 @@ type NotificationEventRow = {
   actor_avatar_updated_at: Date | string | null;
   actor_name: string;
   actor_user_id: string | null;
+  attention_level: NotificationReceiptAttentionLevel;
   body: string;
   created_at: Date | string;
   delivered_at: Date | string;
+  delivery_class: NotificationDeliveryClass;
   id: string;
   kind: NotificationKind;
   metadata: Record<string, string> | null;
   read_at: Date | string | null;
+  recipient_reasons: string[] | null;
   recipient_user_id: string;
   reply_target_id: string | null;
   reply_target_type: CommentTargetType | null;
@@ -83,7 +88,9 @@ type NotificationDeliveryEventRow = {
   actor_name: string;
   actor_user_id: string | null;
   attempts: number;
+  attention_level: NotificationReceiptAttentionLevel | null;
   body: string;
+  delivery_class: NotificationDeliveryClass | null;
   delivery_id: string;
   delivery_destination_id: string | null;
   delivery_recipient_user_id: string | null;
@@ -92,6 +99,7 @@ type NotificationDeliveryEventRow = {
   event_id: string;
   kind: NotificationKind;
   metadata: Record<string, string> | null;
+  recipient_reasons: string[] | null;
   reply_target_id: string | null;
   reply_target_type: CommentTargetType | null;
   stream: NotificationStream;
@@ -125,6 +133,15 @@ function normalizeSourceEventKey(value: string | null | undefined) {
   return value?.trim() || null;
 }
 
+function notificationRecipientReasons(value: readonly unknown[] | null | undefined) {
+  return Array.from(new Set(
+    (value ?? [])
+      .filter((reason): reason is string => typeof reason === "string")
+      .map((reason) => reason.trim())
+      .filter(Boolean),
+  ));
+}
+
 function isPgUniqueViolation(error: unknown) {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "23505");
 }
@@ -148,9 +165,12 @@ function metadataInputFromDelivery(row: NotificationDeliveryEventRow): Notificat
   return {
     actorName: row.actor_name,
     actorUserId: row.actor_user_id,
+    attentionLevel: row.attention_level ?? "normal",
     body: row.body,
+    deliveryClass: row.delivery_class ?? "ordinary",
     kind: row.kind,
     metadata: row.metadata ?? {},
+    recipientReasons: notificationRecipientReasons(row.recipient_reasons),
     replyTargetId: row.reply_target_id,
     replyTargetType: row.reply_target_type,
     stream: row.stream,
@@ -177,13 +197,16 @@ function toNotification(row: NotificationEventRow): AppNotification {
       : null,
     title: row.title,
     body: row.body,
+    deliveryClass: row.delivery_class ?? "ordinary",
     stream: row.stream,
     targetType: row.target_type,
     targetId: row.target_id,
     targetHref: row.target_href,
+    recipientReasons: notificationRecipientReasons(row.recipient_reasons),
     replyTargetType: row.reply_target_type,
     replyTargetId: row.reply_target_id,
     readAt: iso(row.read_at),
+    attentionLevel: row.attention_level ?? "normal",
     createdAt: iso(row.created_at) ?? nowIso(),
     metadata: row.metadata ?? {},
   };
@@ -651,6 +674,9 @@ async function listNotificationsForEvent(eventId: string): Promise<AppNotificati
         e.created_at,
         e.metadata,
         r.recipient_user_id::text,
+        r.recipient_reasons,
+        r.delivery_class,
+        r.attention_level,
         r.read_at,
         r.delivered_at
       FROM notification_events e
@@ -793,6 +819,9 @@ async function notificationReceiptProjection(input: { notificationId: string; us
         e.created_at,
         e.metadata,
         r.recipient_user_id::text,
+        r.recipient_reasons,
+        r.delivery_class,
+        r.attention_level,
         r.read_at,
         r.delivered_at
       FROM notification_events e
@@ -854,6 +883,9 @@ export async function listNotificationsForUser(userId: string, scope: RuntimeSco
         e.created_at,
         e.metadata,
         r.recipient_user_id::text,
+        r.recipient_reasons,
+        r.delivery_class,
+        r.attention_level,
         r.read_at,
         r.delivered_at
       FROM notification_events e
@@ -1039,9 +1071,15 @@ async function loadNotificationDeliveryEvent(deliveryId: string): Promise<Notifi
         e.reply_target_type,
         e.reply_target_id,
         e.created_at AS event_created_at,
-        e.metadata
+        e.metadata,
+        r.recipient_reasons,
+        r.delivery_class,
+        r.attention_level
       FROM notification_deliveries d
       INNER JOIN notification_events e ON e.id = d.event_id
+      LEFT JOIN notification_receipts r ON r.event_id = e.id
+        AND d.recipient_user_id IS NOT NULL
+        AND r.recipient_user_id = d.recipient_user_id
       WHERE d.id = $1
         AND d.channel = 'chat'
       LIMIT 1

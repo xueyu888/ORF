@@ -32,11 +32,8 @@ function inferredReplyTarget(
     const targetId = input.metadata?.targetId;
     return isCommentTargetType(targetType) && targetId ? { targetId, targetType } : null;
   }
-  if (input.targetType === "feedback") {
-    return { targetId: input.targetId, targetType: "feedback" };
-  }
-  if (input.targetType === "objective") {
-    return { targetId: input.targetId, targetType: "objective" };
+  if (isCommentTargetType(input.targetType)) {
+    return { targetId: input.targetId, targetType: input.targetType };
   }
   return null;
 }

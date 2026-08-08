@@ -12,6 +12,7 @@ import { publishNotificationEvent } from "../notifications/publisher";
 import { registerFeedbackRoutes } from "../routes/feedbackRoutes";
 import { registerFeedbackCommentTargetAdapter } from "./feedbackCommentTargetAdapter";
 import { feedbackNotificationPort } from "./feedbackNotificationPort";
+import { registerFeedbackNotificationPresentationProvider } from "./feedbackNotificationPresentationProvider";
 import { registerOrfFeedbackReferenceProvider } from "./feedbackReferenceProvider";
 
 async function listActiveFeedbackDigestRecipients() {
@@ -36,6 +37,7 @@ export function createOrfFeedbackServerHost(
     protocolVersion: 1,
     registerHttpRoutes() {
       registerOrfFeedbackReferenceProvider();
+      registerFeedbackNotificationPresentationProvider();
       registerFeedbackCommentTargetAdapter();
       registerFeedbackRoutes(app);
     },

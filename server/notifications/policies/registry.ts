@@ -1,7 +1,8 @@
 import type { NotificationKind } from "../../../src/types/orf";
 import type { NotificationPolicyDescriptor } from "../contracts";
+import { notificationPresentationPolicy } from "../presentationRegistry";
 
-export const notificationPolicyRegistry: Record<NotificationKind, NotificationPolicyDescriptor> = {
+export const notificationPolicyRegistry: Partial<Record<NotificationKind, NotificationPolicyDescriptor>> = {
   "challenge.application.approved": {
     kind: "challenge.application.approved",
     replyTarget: "notification-target",
@@ -34,31 +35,6 @@ export const notificationPolicyRegistry: Record<NotificationKind, NotificationPo
   },
   "data.sync.conflict": {
     kind: "data.sync.conflict",
-    replyTarget: "none",
-    stream: "personalNotification",
-  },
-  "feedback.comment.created": {
-    kind: "feedback.comment.created",
-    replyTarget: "notification-target",
-    stream: "personalNotification",
-  },
-  "feedback.created": {
-    kind: "feedback.created",
-    replyTarget: "notification-target",
-    stream: "personalNotification",
-  },
-  "feedback.lifecycle.changed": {
-    kind: "feedback.lifecycle.changed",
-    replyTarget: "notification-target",
-    stream: "personalNotification",
-  },
-  "feedback.assignee.changed": {
-    kind: "feedback.assignee.changed",
-    replyTarget: "notification-target",
-    stream: "personalNotification",
-  },
-  "feedback.assignee.digest": {
-    kind: "feedback.assignee.digest",
     replyTarget: "none",
     stream: "personalNotification",
   },
@@ -130,5 +106,9 @@ export const notificationPolicyRegistry: Record<NotificationKind, NotificationPo
 };
 
 export function notificationPolicy(kind: NotificationKind) {
-  return notificationPolicyRegistry[kind];
+  const policy = notificationPresentationPolicy(kind) ?? notificationPolicyRegistry[kind] ?? null;
+  if (!policy) {
+    throw new Error(`Notification policy is not registered for ${kind}.`);
+  }
+  return policy;
 }

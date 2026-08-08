@@ -51,7 +51,6 @@ const WORK_LOG_TARGET_PATH = "/work-logs";
 
 const urgentNotificationKinds = new Set<NotificationKind>([
   "data.sync.conflict",
-  "feedback.assignee.changed",
   "objective.alignment.requested",
   "objective.loot.submitted",
   "objective.peerReview.requested",
@@ -71,10 +70,6 @@ const toastNotificationKinds = new Set<NotificationKind>([
   "challenge.application.rejected",
   "comment.reply.created",
   "comment.thread.status.changed",
-  "feedback.assignee.digest",
-  "feedback.comment.created",
-  "feedback.created",
-  "feedback.lifecycle.changed",
   "objective.alignment.reviewed",
   "objective.challenge.accepted",
 ]);
@@ -155,7 +150,7 @@ export function attentionToastIntentFromNotification(input: DesktopAttentionToas
   const targetPath = normalizeAttentionTargetPath(input.notification.targetHref);
   if (!targetPath) return null;
   if (isCurrentAttentionTarget(targetPath, input.currentPath) && input.appAttentionState.activelyViewed) return null;
-  const level = notificationAttentionLevel(input.notification.kind);
+  const level = notificationAttentionLevel(input.notification);
   if (level === "badge") return null;
   return {
     body: cleanAttentionText(input.notification.body, "你有一条新的提醒"),
@@ -217,7 +212,7 @@ function attentionItemFromNotification(notification: AppNotification, input: Bui
     createdAt: notification.createdAt,
     eventId: notification.id,
     kind: notification.kind,
-    level: notificationDisplayLevel(notification.kind, targetPath, input),
+    level: notificationDisplayLevel(notification, targetPath, input),
     source: "notification",
     targetPath,
     title: cleanAttentionText(notification.title, "ORF 提醒"),
@@ -325,16 +320,17 @@ function workLogReminderTargetPath(reminder: WorkLogReminderState) {
   return firstMissingDate ? `${WORK_LOG_TARGET_PATH}?date=${encodeURIComponent(firstMissingDate)}&view=today` : WORK_LOG_TARGET_PATH;
 }
 
-function notificationDisplayLevel(kind: NotificationKind, targetPath: string, input: BuildAttentionStateInput): Exclude<AttentionLevel, "none"> {
-  return applyViewedTargetDowngrade(notificationAttentionLevel(kind), targetPath, input);
+function notificationDisplayLevel(notification: AppNotification, targetPath: string, input: BuildAttentionStateInput): Exclude<AttentionLevel, "none"> {
+  return applyViewedTargetDowngrade(notificationAttentionLevel(notification), targetPath, input);
 }
 
-function notificationAttentionLevel(kind: NotificationKind): Exclude<AttentionLevel, "none"> {
+function notificationAttentionLevel(notification: AppNotification): Exclude<AttentionLevel, "none"> {
+  const kind = notification.kind;
   if (urgentNotificationKinds.has(kind)) return "urgent";
   if (flashNotificationKinds.has(kind)) return "flash";
   if (toastNotificationKinds.has(kind)) return "toast";
   if (badgeNotificationKinds.has(kind)) return "badge";
-  return "toast";
+  return notification.attentionLevel === "action_required" ? "urgent" : "toast";
 }
 
 function applyViewedTargetDowngrade(

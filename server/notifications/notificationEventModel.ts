@@ -7,6 +7,11 @@ import type {
   NotificationStream,
   NotificationTargetType,
 } from "../../src/types/orf";
+import type {
+  NotificationAction,
+  NotificationPresentationActionInput,
+} from "./contracts";
+import { notificationPresentationActionFor } from "./presentationRegistry";
 import {
   matchOrfAttachmentMarkdownTokens,
   replaceOrfAttachmentMarkdownTokens,
@@ -24,21 +29,16 @@ export type NotificationContentInput = {
   title: string;
 };
 
-export type NotificationActionInput = NotificationContentInput & {
-  kind: NotificationKind;
-  targetType: NotificationTargetType;
-};
-
-export type NotificationAction = {
-  href: string;
-  label: string;
-} | null;
+export type NotificationActionInput = NotificationPresentationActionInput;
 
 export type NotificationMetadataInput = NotificationContentInput & {
   actorName: string;
   actorUserId?: string | null;
   kind: NotificationKind;
   metadata?: Record<string, string> | null;
+  attentionLevel?: NotificationRecipientAttentionLevel | null;
+  deliveryClass?: NotificationRecipientDeliveryClass | null;
+  recipientReasons?: readonly string[] | null;
   replyTargetId?: string | null;
   replyTargetType?: CommentTargetType | null;
   stream: NotificationStream;
@@ -118,10 +118,6 @@ function addNotificationRecipient(
     reasons: cleanRecipientReasons([...existing.reasons, ...next.reasons]),
     userId,
   });
-}
-
-function unreachableNotificationAction(_kind: never): NotificationAction {
-  return null;
 }
 
 function isCommentNotificationImageAttachment(attachment: CommentNotificationAttachmentFact) {
@@ -219,6 +215,8 @@ export function resolveNotificationRecipients(input: {
 export function notificationActionFor(input: NotificationActionInput): NotificationAction {
   const href = input.targetHref.trim();
   if (!href) return null;
+  const providerAction = notificationPresentationActionFor(input);
+  if (providerAction !== undefined) return providerAction;
 
   switch (input.kind) {
     case "objective.published":
@@ -247,14 +245,6 @@ export function notificationActionFor(input: NotificationActionInput): Notificat
     case "objective.settlement.updated":
     case "objective.settled":
       return { href, label: "打开统计" };
-    case "feedback.created":
-    case "feedback.lifecycle.changed":
-    case "feedback.assignee.changed":
-      return { href, label: "打开反馈" };
-    case "feedback.comment.created":
-      return { href, label: "打开评论" };
-    case "feedback.assignee.digest":
-      return { href, label: "打开反馈列表" };
     case "comment.reply.created":
     case "comment.thread.status.changed":
     case "comment.mention.created":
@@ -267,7 +257,7 @@ export function notificationActionFor(input: NotificationActionInput): Notificat
       return { href, label: "去补工作日志" };
   }
 
-  return unreachableNotificationAction(input.kind);
+  return null;
 }
 
 export function formatNotificationChatBody(input: NotificationActionInput) {
@@ -288,7 +278,10 @@ export function buildNotificationSystemMetadata(
     actorUserId: input.actorUserId?.trim() || null,
     kind: input.kind,
     metadata: input.metadata ?? {},
+    notificationAttentionLevel: input.attentionLevel ?? "normal",
+    notificationDeliveryClass: input.deliveryClass ?? "ordinary",
     notificationEventId: eventId,
+    notificationRecipientReasons: [...(input.recipientReasons ?? [])],
     recipientUserId: recipientUserId ?? null,
     replyTargetId: input.replyTargetId ?? null,
     replyTargetType: input.replyTargetType ?? null,
