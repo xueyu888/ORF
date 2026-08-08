@@ -188,63 +188,7 @@ export {
   isFeedbackIssueOpen,
 } from "../web/model/issue";
 export {
-  feedbackCauseGroupForCategory,
-  feedbackCauseGroupsForCategories,
-  feedbackMatchesCauseGroup,
-  teamFeedbackCauseOptions,
-  type TeamFeedbackCauseCategory,
-} from "../contracts/categories";
-export {
-  buildFeedbackIssueCurrentViewCsv,
-  feedbackIssueCsvExportFileName,
-} from "../web/transfer/currentViewCsv";
-export {
-  buildFeedbackIssueListItems,
-  feedbackIssueAssigneeOptions,
-  feedbackIssueAuthorOptions,
-  feedbackIssueListDefaultPageLimit,
-  feedbackIssueLabelOptions,
-  feedbackIssueListCountsForFilters,
-  filterFeedbackIssueListItems,
-  type FeedbackIssueListFilters,
-  type FeedbackIssueListItem,
-  type FeedbackIssueListState,
-} from "../contracts/issueList";
-export {
-  clearStoredFeedbackIssueListFilterParams,
-  feedbackIssueListFilterParamsFromPreferenceRecord,
-  feedbackIssueListFilterPreferenceKey,
-  feedbackIssueListFilterPreferenceRecordFromSearchParams,
-  feedbackIssueListFilterQueryFromSearchParams,
-  feedbackIssueListUrlStateFromSearchParams,
-  parseStoredFeedbackIssueListFilterParams,
-  readStoredFeedbackIssueListFilterParams,
-  type FeedbackIssueListUrlState,
-} from "../web/model/issueListViewState";
-export {
-  feedbackIssueListPageQuery,
-  mergeFeedbackIssueListReadModelPages,
-} from "../web/model/issueListPagination";
-export {
-  feedbackIssueLabelIndexItems,
-  feedbackIssueLabels,
-  feedbackIssueRelationSummaries,
-  type FeedbackIssueLabelIndexItem,
-  type FeedbackIssueLabelIndexSortKey,
-  type FeedbackIssueRelationSummary,
-} from "../web/model/issueMetadata";
-export {
-  feedbackAssigneeOptionsFromUsers,
-  ensureFeedbackAssigneeOption,
-  mergeFeedbackAssigneeOptions,
-  type FeedbackAssigneeOption,
-} from "../web/model/assigneeOptions";
-export {
-  useFeedbackAssigneeOptions,
   useFeedbackDashboardSummary,
-  useFeedbackIssueDetailReadModel,
-  useFeedbackIssueListReadModel,
-  useFeedbackIssueReadModel,
 } from "../web/hooks";
 export type {
   FeedbackCommentDraft,

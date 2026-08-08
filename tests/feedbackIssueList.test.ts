@@ -3,31 +3,25 @@ import test from "node:test";
 import {
   buildFeedbackIssueCurrentViewCsv,
   feedbackIssueCsvExportFileName,
-} from "@orf/feedback-module/web";
-import {
-  feedbackIssueListPageQuery,
-  mergeFeedbackIssueListReadModelPages,
-} from "@orf/feedback-module/web";
-import {
-  buildFeedbackIssueListItems,
-  feedbackIssueListCountsForFilters,
-  filterFeedbackIssueListItems,
-  type FeedbackIssueListFilters,
-  type FeedbackWebIssue,
-} from "@orf/feedback-module/web";
-import { feedbackIssueRelationSummaries } from "@orf/feedback-module/web";
-import {
   feedbackIssueListFilterParamsFromPreferenceRecord,
   feedbackIssueListFilterPreferenceRecordFromSearchParams,
   feedbackIssueListFilterQueryFromSearchParams,
+  feedbackIssueListPageQuery,
+  feedbackIssueRelationSummaries,
+  mergeFeedbackIssueListReadModelPages,
   parseStoredFeedbackIssueListFilterParams,
-} from "@orf/feedback-module/web";
+} from "@orf/feedback-module/testing";
 import {
   buildFeedbackDashboardSummary,
   buildFeedbackIssueListProjection,
+  buildFeedbackIssueListItems,
+  feedbackIssueListCountsForFilters,
   feedbackIssueListDefaultPageLimit,
   feedbackIssueListPaginationFromInput,
+  filterFeedbackIssueListItems,
   type FeedbackIssueReadModelData,
+  type FeedbackIssueListFilters,
+  type FeedbackWebIssue,
 } from "@orf/feedback-module/contracts";
 import type { OrfProject, OrfUser } from "../src/types/orf";
 

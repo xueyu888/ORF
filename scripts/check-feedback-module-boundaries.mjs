@@ -36,6 +36,7 @@ const errors = [];
 
 await checkPackageExports();
 await checkServerPublicBoundary();
+await checkWebPublicBoundary();
 await checkTsconfigPaths();
 await scanSourceImports();
 
@@ -121,6 +122,52 @@ async function checkServerPublicBoundary() {
           errors.push(`modules/feedback/src/public/server.ts must export ${name} from a protocol file, not ${rule.specifier}.`);
         }
       }
+    }
+  }
+}
+
+async function checkWebPublicBoundary() {
+  const publicWebPath = path.join(feedbackPackageDir, "src", "public", "web.ts");
+  const source = await fs.readFile(publicWebPath, "utf8");
+  const forbiddenRuntimeWebExports = [
+    "buildFeedbackIssueCurrentViewCsv",
+    "feedbackIssueCsvExportFileName",
+    "buildFeedbackIssueListItems",
+    "feedbackIssueAssigneeOptions",
+    "feedbackIssueAuthorOptions",
+    "feedbackIssueListDefaultPageLimit",
+    "feedbackIssueLabelOptions",
+    "feedbackIssueListCountsForFilters",
+    "filterFeedbackIssueListItems",
+    "clearStoredFeedbackIssueListFilterParams",
+    "feedbackIssueListFilterParamsFromPreferenceRecord",
+    "feedbackIssueListFilterPreferenceKey",
+    "feedbackIssueListFilterPreferenceRecordFromSearchParams",
+    "feedbackIssueListFilterQueryFromSearchParams",
+    "feedbackIssueListUrlStateFromSearchParams",
+    "parseStoredFeedbackIssueListFilterParams",
+    "readStoredFeedbackIssueListFilterParams",
+    "feedbackIssueListPageQuery",
+    "mergeFeedbackIssueListReadModelPages",
+    "feedbackIssueLabelIndexItems",
+    "feedbackIssueLabels",
+    "feedbackIssueRelationSummaries",
+    "feedbackAssigneeOptionsFromUsers",
+    "ensureFeedbackAssigneeOption",
+    "mergeFeedbackAssigneeOptions",
+    "useFeedbackAssigneeOptions",
+    "useFeedbackIssueDetailReadModel",
+    "useFeedbackIssueListReadModel",
+    "useFeedbackIssueReadModel",
+    "feedbackCauseGroupForCategory",
+    "feedbackCauseGroupsForCategories",
+    "feedbackMatchesCauseGroup",
+    "teamFeedbackCauseOptions",
+  ];
+
+  for (const name of forbiddenRuntimeWebExports) {
+    if (new RegExp(`\\b${name}\\b`).test(source)) {
+      errors.push(`modules/feedback/src/public/web.ts must not export ${name}; use contracts or @orf/feedback-module/testing as appropriate.`);
     }
   }
 }
