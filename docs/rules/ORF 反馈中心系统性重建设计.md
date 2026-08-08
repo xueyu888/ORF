@@ -1100,7 +1100,7 @@ GitLab 频道打开后未定位到第一条未读消息
 ### 服务端职责混杂
 
 - `orfFeedbackRepository` 同时承担 ID 生成、领域权限、持久化、通知、读模型回读的单文件结构。
-- `server/routes/feedbackRoutes.ts`、`server/feedback/*`、`feedbackSubscriptionRepository.ts` 中散落的反馈实现；迁入模块后不得保留包装转发文件。
+- `server/routes/feedbackRoutes.ts`、旧 `server/repositories/feedbackRepository.ts`、`feedbackSubscriptionRepository.ts` 中散落的反馈实现；迁入模块后不得保留包装转发文件。`server/feedback/*` 只允许保留宿主组合适配器，例如 HTTP host、命令适配器、通知端口、评论目标 adapter、引用 provider 和备份附件适配，不拥有反馈业务事实或旧读写模型。
 - 创建反馈后读取整个 `getOrfStateSnapshot` 再查找新反馈的写后回读。
 - 评论写入路径直接拼接反馈通知文案和收件人的实现。
 - 评论 target enum、target 查询和通知分支中硬编码 `feedback` 的实现，改由 `CommentTargetAdapter` 注册。
