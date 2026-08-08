@@ -102,6 +102,9 @@ export {
   commitFeedbackImportBatch,
   feedbackBackupZipFileName,
   preflightFeedbackImportCsv,
+  type FeedbackBackupAttachmentFile,
+  type FeedbackBackupAttachmentKind,
+  type FeedbackBackupZipInput,
   type FeedbackImportCommitResult,
   type FeedbackImportPreflight,
 } from "../server/transfer";

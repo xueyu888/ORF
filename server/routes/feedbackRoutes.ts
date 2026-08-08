@@ -9,7 +9,6 @@ import {
   feedbackTransitionInputSchema,
 } from "@orf/feedback-module/contracts";
 import {
-  buildFeedbackBackupZip,
   commitFeedbackImportBatch,
   feedbackBackupZipFileName,
   getFeedbackSubscriptionMode,
@@ -24,7 +23,6 @@ import { env } from "../env";
 import {
   getFeedbackIssueDetailReadModelData,
   getFeedbackIssueReadModelData,
-  getFeedbackIssueTransferReadModelData,
 } from "../readModels/feedbackIssueReadModel";
 import {
   addFeedbackRelation,
@@ -44,6 +42,10 @@ import {
 } from "../repositories/feedbackRepository";
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
+import {
+  buildFeedbackBackupZipForScope,
+  FeedbackBackupAttachmentUnavailableError,
+} from "../feedback/feedbackBackupExport";
 
 const feedbackParamsSchema = z.object({ feedbackId: z.string().min(1) });
 const feedbackRelationParamsSchema = z.object({ feedbackId: z.string().min(1), relationId: z.string().min(1) });
@@ -303,8 +305,15 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
     }
 
     const exportedAt = new Date().toISOString();
-    const data = await getFeedbackIssueTransferReadModelData({ scope: context.scope });
-    const body = buildFeedbackBackupZip(data, exportedAt);
+    let body: Buffer;
+    try {
+      body = await buildFeedbackBackupZipForScope({ exportedAt, scope: context.scope });
+    } catch (error) {
+      if (error instanceof FeedbackBackupAttachmentUnavailableError) {
+        return reply.code(409).send({ error: "Feedback backup attachment object is unavailable" });
+      }
+      throw error;
+    }
     reply.header("Content-Type", "application/zip");
     reply.header("Content-Disposition", contentDispositionHeader("attachment", feedbackBackupZipFileName(exportedAt)));
     reply.header("Cache-Control", "no-store");

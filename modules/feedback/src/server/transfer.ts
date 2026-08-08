@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { FeedbackImpact, FeedbackIssueReadModelData, FeedbackPriority } from "../contracts";
@@ -62,6 +62,33 @@ type StoredFeedbackImportSummary = FeedbackImportSummary & {
   records: FeedbackImportRecord[];
 };
 
+export type FeedbackBackupAttachmentKind = "comment" | "report";
+
+export type FeedbackBackupAttachmentFile = {
+  readonly attachmentId: string;
+  readonly content: Buffer;
+  readonly feedbackId: string;
+  readonly fileName: string;
+  readonly fileSize: number;
+  readonly kind: FeedbackBackupAttachmentKind;
+  readonly messageId?: string | null;
+  readonly mimeType: string;
+  readonly threadId?: string | null;
+};
+
+type FeedbackBackupAttachmentManifestEntry = ReturnType<typeof feedbackBackupAttachmentManifestEntry>;
+
+export type FeedbackBackupZipInput = {
+  readonly attachmentFiles: readonly FeedbackBackupAttachmentFile[];
+  readonly data: FeedbackIssueReadModelData;
+  readonly exportedAt: string;
+};
+
+type StoredZipFile = {
+  readonly content: Buffer | string;
+  readonly path: string;
+};
+
 const feedbackCurrentViewCsvVersion = "orf.feedback.current_view.v1";
 const impactValues = new Set<FeedbackImpact>(["low", "medium", "high", "critical"]);
 const priorityValues = new Set<FeedbackPriority>(["p0", "p1", "p2", "p3"]);
@@ -75,25 +102,120 @@ export function feedbackBackupZipFileName(exportedAt: string) {
   return `orf-feedback-backup-${stamp}.zip`;
 }
 
-export function buildFeedbackBackupZip(data: FeedbackIssueReadModelData, exportedAt: string) {
+export function buildFeedbackBackupZip(input: FeedbackBackupZipInput) {
+  const activity = input.data.feedback.flatMap((item) =>
+    item.activity.map((entry) => ({ ...entry, feedbackId: item.id })),
+  );
+  const relations = input.data.feedback.flatMap((item) =>
+    item.relations.map((relation) => ({ ...relation, feedbackId: item.id })),
+  );
+  const attachmentEntries = input.attachmentFiles.map(feedbackBackupAttachmentManifestEntry);
+  const jsonFiles: StoredZipFile[] = [
+    { path: "feedback.jsonl", content: jsonLines(input.data.feedback) },
+    { path: "comments.jsonl", content: jsonLines(input.data.comments) },
+    { path: "activity.jsonl", content: jsonLines(activity) },
+    { path: "relations.jsonl", content: jsonLines(relations) },
+    { path: "attachments.jsonl", content: jsonLines(attachmentEntries) },
+    { path: "projects.jsonl", content: jsonLines(input.data.projects) },
+    { path: "users.jsonl", content: jsonLines(input.data.users) },
+    { path: "reference-mappings/projects.jsonl", content: jsonLines(input.data.projects.map(projectReferenceMapping)) },
+    { path: "reference-mappings/users.jsonl", content: jsonLines(input.data.users.map(userReferenceMapping)) },
+  ];
+  const attachmentFiles: StoredZipFile[] = input.attachmentFiles.map((file) => ({
+    path: feedbackBackupAttachmentPath(file),
+    content: file.content,
+  }));
+  const contentFiles = [...jsonFiles, ...attachmentFiles];
+  const manifest = buildFeedbackBackupManifest({
+    attachmentEntries,
+    contentFiles,
+    data: input.data,
+    exportedAt: input.exportedAt,
+  });
+  const manifestFile = { path: "manifest.json", content: `${JSON.stringify(manifest, null, 2)}\n` };
+  return buildStoredZip([manifestFile, ...contentFiles]);
+}
+
+function buildFeedbackBackupManifest(input: {
+  attachmentEntries: readonly FeedbackBackupAttachmentManifestEntry[];
+  contentFiles: readonly StoredZipFile[];
+  data: FeedbackIssueReadModelData;
+  exportedAt: string;
+}) {
+  const reportAttachmentCount = input.attachmentEntries.filter((item) => item.kind === "report").length;
+  const commentAttachmentCount = input.attachmentEntries.filter((item) => item.kind === "comment").length;
   const manifest = {
     counts: {
-      comments: data.comments.length,
-      feedback: data.feedback.length,
-      projects: data.projects.length,
-      users: data.users.length,
+      activity: input.data.feedback.reduce((sum, item) => sum + item.activity.length, 0),
+      attachmentFiles: input.attachmentEntries.length,
+      commentAttachments: commentAttachmentCount,
+      comments: input.data.comments.length,
+      feedback: input.data.feedback.length,
+      projects: input.data.projects.length,
+      relations: input.data.feedback.reduce((sum, item) => sum + item.relations.length, 0),
+      reportAttachments: reportAttachmentCount,
+      users: input.data.users.length,
     },
-    exportedAt,
+    exportedAt: input.exportedAt,
+    files: input.contentFiles.map((file) => {
+      const content = zipFileContent(file.content);
+      return {
+        bytes: content.length,
+        path: file.path,
+        sha256: sha256(content),
+      };
+    }),
     version: "orf.feedback.backup.v1",
   };
 
-  return buildStoredZip([
-    { path: "manifest.json", content: `${JSON.stringify(manifest, null, 2)}\n` },
-    { path: "feedback.jsonl", content: jsonLines(data.feedback) },
-    { path: "comments.jsonl", content: jsonLines(data.comments) },
-    { path: "projects.jsonl", content: jsonLines(data.projects) },
-    { path: "users.jsonl", content: jsonLines(data.users) },
-  ]);
+  return manifest;
+}
+
+function feedbackBackupAttachmentManifestEntry(file: FeedbackBackupAttachmentFile) {
+  const path = feedbackBackupAttachmentPath(file);
+  return {
+    attachmentId: file.attachmentId,
+    bytes: file.content.length,
+    declaredFileSize: file.fileSize,
+    feedbackId: file.feedbackId,
+    fileName: file.fileName,
+    kind: file.kind,
+    messageId: file.messageId ?? null,
+    mimeType: file.mimeType,
+    path,
+    sha256: sha256(file.content),
+    threadId: file.threadId ?? null,
+  };
+}
+
+function feedbackBackupAttachmentPath(file: FeedbackBackupAttachmentFile) {
+  const owner = file.kind === "report"
+    ? `${safeZipSegment(file.feedbackId)}/${safeZipSegment(file.attachmentId)}`
+    : `${safeZipSegment(file.feedbackId)}/${safeZipSegment(file.threadId ?? "thread")}/${safeZipSegment(file.messageId ?? "message")}/${safeZipSegment(file.attachmentId)}`;
+  return `attachments/${file.kind}/${owner}/${safeZipSegment(file.fileName)}`;
+}
+
+function safeZipSegment(value: string) {
+  const normalized = value.trim().replace(/[\\/]+/g, "_").replace(/[\u0000-\u001f\u007f]+/g, "_");
+  return normalized && normalized !== "." && normalized !== ".." ? normalized : "unnamed";
+}
+
+function sha256(content: Buffer) {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+function projectReferenceMapping(project: FeedbackIssueReadModelData["projects"][number]) {
+  return { externalId: project.id, name: project.name };
+}
+
+function userReferenceMapping(user: FeedbackIssueReadModelData["users"][number]) {
+  return {
+    displayName: user.name,
+    email: user.email ?? null,
+    externalId: user.id,
+    role: user.role,
+    status: user.status,
+  };
 }
 
 export async function preflightFeedbackImportCsv(
@@ -379,14 +501,14 @@ function jsonLines(values: readonly unknown[]) {
   return values.map((value) => JSON.stringify(value)).join("\n") + (values.length > 0 ? "\n" : "");
 }
 
-function buildStoredZip(files: Array<{ content: string; path: string }>) {
+function buildStoredZip(files: readonly StoredZipFile[]) {
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   let offset = 0;
 
   for (const file of files) {
     const name = Buffer.from(file.path, "utf8");
-    const content = Buffer.from(file.content, "utf8");
+    const content = zipFileContent(file.content);
     const crc = crc32(content);
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
@@ -436,6 +558,10 @@ function buildStoredZip(files: Array<{ content: string; path: string }>) {
   end.writeUInt16LE(0, 20);
 
   return Buffer.concat([...localParts, ...centralParts, end]);
+}
+
+function zipFileContent(content: Buffer | string) {
+  return Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8");
 }
 
 const crc32Table = new Uint32Array(256).map((_, index) => {
