@@ -1,30 +1,139 @@
+import { z } from "zod";
 import { feedbackCommentPath, feedbackIssuePath } from "./links";
 
-export type FeedbackNotificationEventKind =
-  | "feedback.assignee.changed"
-  | "feedback.assignee.digest"
-  | "feedback.comment.created"
-  | "feedback.created"
-  | "feedback.lifecycle.changed";
+export const feedbackNotificationEventKindValues = [
+  "feedback.assignee.changed",
+  "feedback.assignee.digest",
+  "feedback.comment.created",
+  "feedback.created",
+  "feedback.lifecycle.changed",
+] as const;
 
-export type FeedbackNotificationProjectSnapshot = {
-  readonly id: string;
-  readonly name: string;
-} | null;
+export const feedbackNotificationEventKindSchema = z.enum(feedbackNotificationEventKindValues);
 
-export type FeedbackNotificationEventPlan = {
-  actorName: string;
-  actorUserId?: string | null;
-  body: string;
-  kind: FeedbackNotificationEventKind;
-  metadata: Record<string, string>;
-  recipientUserIds: string[];
-  targetHref: string;
-  targetId: string;
-  targetType: "feedback";
-  teamId: string;
-  title: string;
-};
+export type FeedbackNotificationEventKind = z.infer<typeof feedbackNotificationEventKindSchema>;
+
+const feedbackNotificationTextSchema = z.string();
+const feedbackNotificationNonEmptyTextSchema = z.string().trim().min(1);
+const feedbackNotificationActorSchema = z.object({
+  id: feedbackNotificationNonEmptyTextSchema.nullable().optional(),
+  name: feedbackNotificationNonEmptyTextSchema,
+});
+const feedbackNotificationUserSchema = z.object({
+  id: feedbackNotificationNonEmptyTextSchema.nullable().optional(),
+  name: feedbackNotificationNonEmptyTextSchema,
+}).nullable();
+const feedbackNotificationProjectSnapshotSchema = z.object({
+  id: feedbackNotificationNonEmptyTextSchema,
+  name: feedbackNotificationNonEmptyTextSchema,
+}).nullable();
+const feedbackNotificationFeedbackSnapshotSchema = z.object({
+  id: feedbackNotificationNonEmptyTextSchema,
+  project: feedbackNotificationProjectSnapshotSchema,
+  title: feedbackNotificationNonEmptyTextSchema,
+});
+const feedbackNotificationDigestItemSchema = z.object({
+  id: feedbackNotificationNonEmptyTextSchema,
+  impact: feedbackNotificationTextSchema,
+  title: feedbackNotificationNonEmptyTextSchema,
+  updatedAt: feedbackNotificationTextSchema,
+});
+
+export const feedbackNotificationPayloadV1Schema = z.discriminatedUnion("type", [
+  z.object({
+    version: z.literal(1),
+    type: z.literal("created"),
+    actor: feedbackNotificationActorSchema,
+    assignee: feedbackNotificationUserSchema,
+    feedback: feedbackNotificationFeedbackSnapshotSchema,
+  }),
+  z.object({
+    version: z.literal(1),
+    type: z.literal("assignee_changed"),
+    actor: feedbackNotificationActorSchema,
+    feedback: feedbackNotificationFeedbackSnapshotSchema,
+    nextAssignee: feedbackNotificationUserSchema,
+    previousAssignee: feedbackNotificationUserSchema,
+  }),
+  z.object({
+    version: z.literal(1),
+    type: z.literal("lifecycle_changed"),
+    actor: feedbackNotificationActorSchema,
+    feedback: feedbackNotificationFeedbackSnapshotSchema,
+    resolution: feedbackNotificationTextSchema.nullable(),
+    stage: feedbackNotificationNonEmptyTextSchema,
+  }),
+  z.object({
+    version: z.literal(1),
+    type: z.literal("comment_created"),
+    actor: feedbackNotificationActorSchema,
+    attachmentCount: z.number().int().nonnegative(),
+    commentExcerpt: feedbackNotificationTextSchema,
+    commentMessageId: feedbackNotificationNonEmptyTextSchema,
+    commentThreadId: feedbackNotificationNonEmptyTextSchema,
+    feedback: feedbackNotificationFeedbackSnapshotSchema,
+  }),
+  z.object({
+    version: z.literal(1),
+    type: z.literal("assignee_digest"),
+    assigneeUserId: feedbackNotificationNonEmptyTextSchema,
+    items: z.array(feedbackNotificationDigestItemSchema).readonly(),
+    localDate: feedbackNotificationNonEmptyTextSchema,
+    pendingCount: z.number().int().nonnegative(),
+  }),
+]);
+
+export type FeedbackNotificationPayloadV1 = z.infer<typeof feedbackNotificationPayloadV1Schema>;
+
+export const feedbackNotificationEventPlanSchema = z.object({
+  actorName: feedbackNotificationTextSchema,
+  actorUserId: feedbackNotificationTextSchema.nullable().optional(),
+  body: feedbackNotificationTextSchema,
+  kind: feedbackNotificationEventKindSchema,
+  metadata: z.record(z.string(), z.string()),
+  payload: feedbackNotificationPayloadV1Schema,
+  recipientUserIds: z.array(z.string()),
+  targetHref: feedbackNotificationTextSchema,
+  targetId: feedbackNotificationTextSchema,
+  targetType: z.literal("feedback"),
+  teamId: feedbackNotificationTextSchema,
+  title: feedbackNotificationTextSchema,
+});
+
+export type FeedbackNotificationProjectSnapshot = z.infer<typeof feedbackNotificationProjectSnapshotSchema>;
+export type FeedbackNotificationEventPlan = z.infer<typeof feedbackNotificationEventPlanSchema>;
+
+function actorSnapshot(input: { readonly actorName: string; readonly actorUserId?: string | null }) {
+  return {
+    id: input.actorUserId?.trim() || null,
+    name: input.actorName.trim(),
+  };
+}
+
+function userSnapshot(name: string | null | undefined) {
+  const normalizedName = name?.trim();
+  return normalizedName ? { id: null, name: normalizedName } : null;
+}
+
+function feedbackSnapshot(input: {
+  readonly feedbackId: string;
+  readonly project: FeedbackNotificationProjectSnapshot;
+  readonly title: string;
+}) {
+  return {
+    id: input.feedbackId,
+    project: input.project,
+    title: input.title,
+  };
+}
+
+function feedbackCommentAttachmentCount(metadata: Record<string, string>) {
+  return (metadata.commentImageAttachmentIds ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean)
+    .length;
+}
 
 export function planFeedbackCreatedNotification(input: {
   readonly actorName: string;
@@ -45,6 +154,13 @@ export function planFeedbackCreatedNotification(input: {
       assignee: input.assigneeName ?? "",
       feedbackTitle: input.title,
       ...feedbackProjectNotificationMetadata(input.project),
+    },
+    payload: {
+      version: 1,
+      type: "created",
+      actor: actorSnapshot(input),
+      assignee: userSnapshot(input.assigneeName),
+      feedback: feedbackSnapshot(input),
     },
     recipientUserIds: [...input.recipientUserIds],
     targetHref: feedbackNotificationTargetHref(input.feedbackId),
@@ -77,6 +193,14 @@ export function planFeedbackLifecycleChangedNotification(input: {
       feedbackTitle: input.title,
       ...feedbackProjectNotificationMetadata(input.project),
     },
+    payload: {
+      version: 1,
+      type: "lifecycle_changed",
+      actor: actorSnapshot(input),
+      feedback: feedbackSnapshot(input),
+      resolution: input.resolution ?? null,
+      stage: input.stage,
+    },
     recipientUserIds: [...input.recipientUserIds],
     targetHref: feedbackNotificationTargetHref(input.feedbackId),
     targetId: input.feedbackId,
@@ -105,6 +229,14 @@ export function planFeedbackAssigneeChangedNotification(input: {
       feedbackTitle: input.title,
       nextAssignee: input.nextAssigneeName ?? "",
       previousAssignee: input.previousAssigneeName ?? "",
+    },
+    payload: {
+      version: 1,
+      type: "assignee_changed",
+      actor: actorSnapshot(input),
+      feedback: feedbackSnapshot({ feedbackId: input.feedbackId, project: null, title: input.title }),
+      nextAssignee: userSnapshot(input.nextAssigneeName),
+      previousAssignee: userSnapshot(input.previousAssigneeName),
     },
     recipientUserIds: [...input.recipientUserIds],
     targetHref: feedbackNotificationTargetHref(input.feedbackId),
@@ -141,6 +273,16 @@ export function planFeedbackCommentCreatedNotification(input: {
       targetId: input.feedbackId,
       targetTitle: input.targetTitle,
       targetType: "feedback",
+    },
+    payload: {
+      version: 1,
+      type: "comment_created",
+      actor: actorSnapshot(input),
+      attachmentCount: feedbackCommentAttachmentCount(input.commentMetadata),
+      commentExcerpt: input.body,
+      commentMessageId: input.commentMessageId,
+      commentThreadId: input.commentThreadId,
+      feedback: feedbackSnapshot({ feedbackId: input.feedbackId, project: input.project, title: input.targetTitle }),
     },
     recipientUserIds: [...input.recipientUserIds],
     targetHref: feedbackCommentPath({

@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type { FeedbackNotificationEventPlan } from "../contracts";
+import { feedbackNotificationEventPlanSchema, type FeedbackNotificationEventPlan } from "../contracts";
 import {
   feedbackEventDispatches,
   feedbackEventDispatchRecipients,
@@ -235,39 +235,8 @@ export async function insertFeedbackNotificationDispatch(
 }
 
 function feedbackNotificationPlanFromPayload(payload: Record<string, unknown>): FeedbackNotificationEventPlan | null {
-  if (
-    typeof payload.actorName !== "string" ||
-    typeof payload.body !== "string" ||
-    typeof payload.kind !== "string" ||
-    typeof payload.targetHref !== "string" ||
-    typeof payload.targetId !== "string" ||
-    payload.targetType !== "feedback" ||
-    typeof payload.teamId !== "string" ||
-    typeof payload.title !== "string"
-  ) {
-    return null;
-  }
-
-  return {
-    actorName: payload.actorName,
-    actorUserId: typeof payload.actorUserId === "string" ? payload.actorUserId : null,
-    body: payload.body,
-    kind: payload.kind as FeedbackNotificationEventPlan["kind"],
-    metadata: isStringRecord(payload.metadata) ? payload.metadata : {},
-    recipientUserIds: Array.isArray(payload.recipientUserIds)
-      ? payload.recipientUserIds.filter((value): value is string => typeof value === "string")
-      : [],
-    targetHref: payload.targetHref,
-    targetId: payload.targetId,
-    targetType: "feedback",
-    teamId: payload.teamId,
-    title: payload.title,
-  };
-}
-
-function isStringRecord(value: unknown): value is Record<string, string> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  return Object.values(value).every((entry) => typeof entry === "string");
+  const parsed = feedbackNotificationEventPlanSchema.safeParse(payload);
+  return parsed.success ? parsed.data : null;
 }
 
 function dispatchErrorText(error: unknown) {

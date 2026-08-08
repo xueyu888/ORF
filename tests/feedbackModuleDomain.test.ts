@@ -5,6 +5,7 @@ import {
   canPreviewFeedbackReportAttachment,
   feedbackReportAttachmentDto,
   feedbackReportAttachmentPreviewKind,
+  feedbackNotificationEventPlanSchema,
   feedbackTransitionInputSchema,
   planFeedbackAssigneeChangedNotification,
   planFeedbackCommentCreatedNotification,
@@ -409,16 +410,53 @@ describe("feedback module domain", () => {
       "feedback.assignee.changed",
       "feedback.comment.created",
     ]);
+    assert.deepEqual(plans.map((plan) => plan.payload.type), [
+      "created",
+      "lifecycle_changed",
+      "assignee_changed",
+      "comment_created",
+    ]);
     for (const plan of plans) {
       assert.deepEqual(plan.recipientUserIds, recipients);
       assert.equal(plan.targetType, "feedback");
+      assert.equal(plan.payload.version, 1);
     }
+    assert.deepEqual(plans[0]?.payload, {
+      version: 1,
+      type: "created",
+      actor: { id: "actor-1", name: "薛雨" },
+      assignee: { id: null, name: "处理人" },
+      feedback: {
+        id: "feedback-1",
+        project,
+        title: "页面滚动位置异常",
+      },
+    });
+    assert.deepEqual(plans[3]?.payload, {
+      version: 1,
+      type: "comment_created",
+      actor: { id: "actor-1", name: "薛雨" },
+      attachmentCount: 1,
+      commentExcerpt: "薛雨 回复了反馈「页面滚动位置异常」：",
+      commentMessageId: "comment-1",
+      commentThreadId: "thread-1",
+      feedback: {
+        id: "feedback-1",
+        project,
+        title: "页面滚动位置异常",
+      },
+    });
     assert.deepEqual(plans[0]?.metadata, {
       assignee: "处理人",
       feedbackTitle: "页面滚动位置异常",
       projectId: "project-1",
       projectName: "客户端",
     });
+    assert.equal(feedbackNotificationEventPlanSchema.safeParse(plans[0]).success, true);
+    assert.equal(feedbackNotificationEventPlanSchema.safeParse({
+      ...plans[0],
+      payload: undefined,
+    }).success, false);
     assert.equal(plans[3]?.targetHref, "/feedback/feedback-1?comment=comment-1");
   });
 

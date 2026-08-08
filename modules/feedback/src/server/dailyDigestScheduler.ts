@@ -1,6 +1,7 @@
 import { and, eq, lt, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { feedback, feedbackDailyDigestRuns } from "../infrastructure/database/schema";
+import type { FeedbackNotificationPayloadV1 } from "../contracts";
 import {
   feedbackDailyDigestListHref,
   feedbackDailyDigestTargetId,
@@ -37,6 +38,7 @@ export type FeedbackDailyDigestNotificationInput = {
   readonly body: string;
   readonly kind: "feedback.assignee.digest";
   readonly metadata: Record<string, string>;
+  readonly payload: Extract<FeedbackNotificationPayloadV1, { type: "assignee_digest" }>;
   readonly recipientUserIds: string[];
   readonly targetHref: string;
   readonly targetId: string;
@@ -235,6 +237,14 @@ async function publishDigestForRecipient(input: {
         feedbackCount: String(items.length),
         localDate: input.localDate,
         targetTitle: "今日待处理反馈汇总",
+      },
+      payload: {
+        version: 1,
+        type: "assignee_digest",
+        assigneeUserId: input.recipient.userId,
+        items,
+        localDate: input.localDate,
+        pendingCount: items.length,
       },
       recipientUserIds: [input.recipient.userId],
       targetHref: feedbackDailyDigestListHref(input.recipient.userId),
