@@ -10,6 +10,7 @@ import {
   sortFeedbackDailyDigestItems,
   type FeedbackDailyDigestItem,
 } from "./dailyDigest";
+import { feedbackServerPollIntervalMs } from "./polling";
 
 export type FeedbackDailyDigestDatabase = Pick<NodePgDatabase<any>, "insert" | "select" | "update">;
 
@@ -339,7 +340,10 @@ export function startFeedbackDailyDigestScheduler(runtime: FeedbackDailyDigestRu
   };
 
   void tick();
-  const timer = setInterval(() => void tick(), runtime.config.pollIntervalMs);
+  const timer = setInterval(() => void tick(), feedbackServerPollIntervalMs({
+    configuredPollIntervalMs: runtime.config.pollIntervalMs,
+    defaultPollIntervalMs: 60_000,
+  }));
   return () => {
     clearInterval(timer);
     schedulerStarted = false;

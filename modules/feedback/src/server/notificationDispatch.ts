@@ -14,6 +14,7 @@ import {
   feedbackEventDispatchRecipients,
 } from "../infrastructure/database/schema";
 import { feedbackNowIso, makeFeedbackDispatchId } from "./ids";
+import { feedbackServerPollIntervalMs } from "./polling";
 
 const feedbackNotificationRecipientReasonValues = [
   "action_required",
@@ -380,7 +381,10 @@ export function startFeedbackNotificationDispatchWorker(input: {
 }) {
   let stopped = false;
   let running = false;
-  const pollIntervalMs = Math.max(5_000, input.pollIntervalMs ?? 30_000);
+  const pollIntervalMs = feedbackServerPollIntervalMs({
+    configuredPollIntervalMs: input.pollIntervalMs,
+    defaultPollIntervalMs: 30_000,
+  });
 
   const sweep = async () => {
     if (stopped || running) return;

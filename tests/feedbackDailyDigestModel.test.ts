@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   feedbackDailyDigestListHref,
   feedbackDailyDigestTargetId,
+  feedbackServerMinimumPollIntervalMs,
+  feedbackServerPollIntervalMs,
   formatFeedbackDailyDigestBody,
   shouldRunFeedbackDailyDigest,
   sortFeedbackDailyDigestItems,
@@ -28,6 +30,21 @@ test("feedback daily digest becomes due at the configured local 08:00 boundary",
     due: false,
     localDate: "2026-08-05",
   });
+});
+
+test("feedback server poll interval keeps database polling above the module minimum", () => {
+  assert.equal(
+    feedbackServerPollIntervalMs({ configuredPollIntervalMs: 1, defaultPollIntervalMs: 60_000 }),
+    feedbackServerMinimumPollIntervalMs,
+  );
+  assert.equal(
+    feedbackServerPollIntervalMs({ configuredPollIntervalMs: 60_000, defaultPollIntervalMs: 30_000 }),
+    60_000,
+  );
+  assert.equal(
+    feedbackServerPollIntervalMs({ defaultPollIntervalMs: 30_000 }),
+    30_000,
+  );
 });
 
 test("feedback daily digest target id is unique by team date and assignee", () => {

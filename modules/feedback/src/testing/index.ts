@@ -20,6 +20,10 @@ export {
   commitFeedbackImportBatch,
   preflightFeedbackImport,
 } from "../server/transfer";
+export {
+  feedbackServerMinimumPollIntervalMs,
+  feedbackServerPollIntervalMs,
+} from "../server/polling";
 
 export function feedbackEntityFixture(
   overrides: Partial<FeedbackEntitySnapshot> = {},
