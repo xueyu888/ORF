@@ -1,9 +1,10 @@
-import type { FeedbackImpact } from "./index";
+import type { FeedbackImpact, FeedbackPriority, FeedbackResolution, FeedbackStage } from "./index";
 import type { FeedbackWebCommentThread, FeedbackWebIssue, FeedbackWebProject, FeedbackWebUser } from "./readModel";
-import { feedbackImpactLabel, feedbackLifecycleLabel } from "./labels";
+import { feedbackImpactLabel, feedbackLifecycleLabel, feedbackPriorityLabel, feedbackResolutionLabel, feedbackStageLabel } from "./labels";
 
 export type FeedbackIssueListState = "assigned" | "open" | "verification" | "unread" | "triage" | "closed" | "all";
 export type FeedbackIssueSortKey = "updated-desc" | "updated-asc" | "created-desc" | "created-asc" | "comments-desc" | "comments-asc";
+export type FeedbackIssuePriorityFilter = "All" | "untriaged" | FeedbackPriority;
 
 export type FeedbackIssueListFilters = {
   assigneeUserId: string;
@@ -11,9 +12,12 @@ export type FeedbackIssueListFilters = {
   cause: string;
   impact: "All" | FeedbackImpact;
   listState: FeedbackIssueListState;
+  priority: FeedbackIssuePriorityFilter;
   projectId: string;
   query: string;
+  resolution: "All" | FeedbackResolution;
   sort: FeedbackIssueSortKey;
+  stage: "All" | FeedbackStage;
 };
 
 export type FeedbackIssueListFilterInput = {
@@ -21,9 +25,12 @@ export type FeedbackIssueListFilterInput = {
   author?: string | readonly string[] | null;
   impact?: string | readonly string[] | null;
   label?: string | readonly string[] | null;
+  priority?: string | readonly string[] | null;
   project?: string | readonly string[] | null;
   q?: string | readonly string[] | null;
+  resolution?: string | readonly string[] | null;
   sort?: string | readonly string[] | null;
+  stage?: string | readonly string[] | null;
   state?: string | readonly string[] | null;
 };
 
@@ -109,13 +116,16 @@ export type ParsedFeedbackIssueListQuery = {
   authorTerms: string[];
   impactTerms: string[];
   labelTerms: string[];
+  priorityTerms: string[];
   projectTerms: string[];
+  resolutionTerms: string[];
   sort: FeedbackIssueSortKey | null;
+  stageTerms: string[];
   stateTerms: FeedbackIssueListState[];
   text: string;
 };
 
-const queryQualifierPattern = /(?:^|\s)(is|status|assignee|owner|author|label|impact|project|sort):("[^"]+"|\S+)/gi;
+const queryQualifierPattern = /(?:^|\s)(is|status|assignee|owner|author|label|impact|priority|project|resolution|sort|stage):("[^"]+"|\S+)/gi;
 const impactValues = new Set<FeedbackImpact>(["low", "medium", "high", "critical"]);
 export const feedbackIssueListDefaultPageLimit = 40;
 const maxFeedbackIssueListPageLimit = 120;
@@ -126,9 +136,12 @@ export const defaultFeedbackIssueListFilters: FeedbackIssueListFilters = {
   cause: "All",
   impact: "All",
   listState: "open",
+  priority: "All",
   projectId: "All",
   query: "",
+  resolution: "All",
   sort: "updated-desc",
+  stage: "All",
 };
 
 export const emptyFeedbackIssueListProjection: FeedbackIssueListProjection = {
@@ -157,9 +170,12 @@ export function feedbackIssueListFiltersFromInput(input: FeedbackIssueListFilter
     cause: feedbackIssueListStringFilter(input.label, "All"),
     impact: feedbackIssueListImpactFilter(input.impact),
     listState: feedbackIssueListStateFilter(input.state),
+    priority: feedbackIssueListPriorityFilter(input.priority),
     projectId: feedbackIssueListStringFilter(input.project, "All"),
     query: feedbackIssueListInputValue(input.q),
+    resolution: feedbackIssueListResolutionFilter(input.resolution),
     sort: feedbackIssueSortForQueryValue(feedbackIssueListInputValue(input.sort)) ?? defaultFeedbackIssueListFilters.sort,
+    stage: feedbackIssueListStageFilter(input.stage),
   };
 }
 
@@ -348,7 +364,10 @@ function filterFeedbackIssueListMatches(
     .filter((item) => itemMatchesListState(item, listState))
     .filter((item) => filters.cause === "All" || labelMatches(item, filters.cause))
     .filter((item) => filters.impact === "All" || item.feedback.impact === filters.impact)
+    .filter((item) => filters.priority === "All" || priorityMatches(item.feedback.priority, filters.priority))
     .filter((item) => projectFilterMatches(item, filters.projectId))
+    .filter((item) => filters.resolution === "All" || item.feedback.resolution === filters.resolution)
+    .filter((item) => filters.stage === "All" || item.feedback.stage === filters.stage)
     .filter((item) => filters.assigneeUserId === "All" || item.feedback.assigneeUserId === filters.assigneeUserId)
     .filter((item) => filters.authorUserId === "All" || item.feedback.createdBy === filters.authorUserId)
     .filter((item) => parsedQuery.stateTerms.length === 0 || parsedQuery.stateTerms.some((state) => itemMatchesListState(item, state)))
@@ -356,7 +375,10 @@ function filterFeedbackIssueListMatches(
     .filter((item) => parsedQuery.authorTerms.every((term) => personMatches(item.feedback.createdBy ?? "", item.authorName, term)))
     .filter((item) => parsedQuery.labelTerms.every((term) => labelMatches(item, term)))
     .filter((item) => parsedQuery.impactTerms.every((term) => impactMatches(item.feedback.impact, term)))
+    .filter((item) => parsedQuery.priorityTerms.every((term) => priorityMatchesTerm(item.feedback.priority, term)))
     .filter((item) => parsedQuery.projectTerms.every((term) => projectMatches(item, term)))
+    .filter((item) => parsedQuery.resolutionTerms.every((term) => resolutionMatches(item.feedback.resolution, term)))
+    .filter((item) => parsedQuery.stageTerms.every((term) => stageMatches(item.feedback.stage, term)))
     .filter((item) => textMatches(item, parsedQuery.text));
 }
 
@@ -366,8 +388,11 @@ export function parseFeedbackIssueListQuery(query: string): ParsedFeedbackIssueL
     authorTerms: [],
     impactTerms: [],
     labelTerms: [],
+    priorityTerms: [],
     projectTerms: [],
+    resolutionTerms: [],
     sort: null,
+    stageTerms: [],
     stateTerms: [],
     text: "",
   };
@@ -405,12 +430,23 @@ export function parseFeedbackIssueListQuery(query: string): ParsedFeedbackIssueL
       parsed.impactTerms.push(value);
       continue;
     }
+    if (qualifier === "priority") {
+      parsed.priorityTerms.push(value);
+      continue;
+    }
     if (qualifier === "project") {
       parsed.projectTerms.push(value);
       continue;
     }
+    if (qualifier === "resolution") {
+      parsed.resolutionTerms.push(value);
+      continue;
+    }
     if (qualifier === "sort") {
       parsed.sort = feedbackIssueSortForQueryValue(value) ?? parsed.sort;
+    }
+    if (qualifier === "stage") {
+      parsed.stageTerms.push(value);
     }
   }
 
@@ -560,6 +596,35 @@ function impactMatches(impact: FeedbackImpact, term: string) {
   return normalizeSearchText(impact).includes(normalizedTerm) || normalizeSearchText(feedbackImpactLabel[impact]).includes(normalizedTerm);
 }
 
+function priorityMatches(priority: FeedbackPriority | null, filter: FeedbackIssuePriorityFilter) {
+  if (filter === "All") return true;
+  if (filter === "untriaged") return priority === null;
+  return priority === filter;
+}
+
+function priorityMatchesTerm(priority: FeedbackPriority | null, term: string) {
+  const normalizedTerm = normalizeSearchText(term);
+  if (!normalizedTerm) return true;
+  if (priority === null) {
+    return ["untriaged", "none", "null", "未分诊"].some((value) => normalizeSearchText(value).includes(normalizedTerm));
+  }
+  return normalizeSearchText(priority).includes(normalizedTerm) || normalizeSearchText(feedbackPriorityLabel[priority]).includes(normalizedTerm);
+}
+
+function resolutionMatches(resolution: FeedbackResolution | null, term: string) {
+  const normalizedTerm = normalizeSearchText(term);
+  if (!normalizedTerm) return true;
+  if (resolution === null) {
+    return ["none", "null", "无结论"].some((value) => normalizeSearchText(value).includes(normalizedTerm));
+  }
+  return normalizeSearchText(resolution).includes(normalizedTerm) || normalizeSearchText(feedbackResolutionLabel[resolution]).includes(normalizedTerm);
+}
+
+function stageMatches(stage: FeedbackStage, term: string) {
+  const normalizedTerm = normalizeSearchText(term);
+  return normalizeSearchText(stage).includes(normalizedTerm) || normalizeSearchText(feedbackStageLabel[stage]).includes(normalizedTerm);
+}
+
 function causeLabelTone(value: string): FeedbackIssueLabel["tone"] {
   if (/管理|流程|协作/.test(value)) return "gold";
   if (/技术|系统|质量|缺陷|bug/i.test(value)) return "accent";
@@ -591,6 +656,29 @@ function feedbackIssueListStateFilter(value: string | readonly string[] | null |
 function feedbackIssueListImpactFilter(value: string | readonly string[] | null | undefined): "All" | FeedbackImpact {
   const normalized = feedbackIssueListInputValue(value).toLowerCase();
   return impactValues.has(normalized as FeedbackImpact) ? normalized as FeedbackImpact : "All";
+}
+
+function feedbackIssueListPriorityFilter(value: string | readonly string[] | null | undefined): FeedbackIssuePriorityFilter {
+  const normalized = feedbackIssueListInputValue(value).toLowerCase();
+  if (normalized === "untriaged" || normalized === "none" || normalized === "null" || normalized === "未分诊") return "untriaged";
+  return feedbackIssueListLabelKey(normalized, feedbackPriorityLabel) ?? "All";
+}
+
+function feedbackIssueListResolutionFilter(value: string | readonly string[] | null | undefined): "All" | FeedbackResolution {
+  return feedbackIssueListLabelKey(feedbackIssueListInputValue(value), feedbackResolutionLabel) ?? "All";
+}
+
+function feedbackIssueListStageFilter(value: string | readonly string[] | null | undefined): "All" | FeedbackStage {
+  return feedbackIssueListLabelKey(feedbackIssueListInputValue(value), feedbackStageLabel) ?? "All";
+}
+
+function feedbackIssueListLabelKey<T extends string>(value: string, labels: Record<T, string>): T | null {
+  const normalized = normalizeSearchText(value);
+  if (!normalized) return null;
+  for (const key of Object.keys(labels) as T[]) {
+    if (normalizeSearchText(key) === normalized || normalizeSearchText(labels[key]) === normalized) return key;
+  }
+  return null;
 }
 
 function emptyFeedbackIssueListCounts(total = 0): FeedbackIssueListCounts {

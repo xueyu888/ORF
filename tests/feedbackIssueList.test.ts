@@ -160,6 +160,35 @@ test("feedback list exposes user work queues from viewer projections", () => {
   );
 });
 
+test("feedback list filters support explicit stage resolution and priority contracts", () => {
+  const feedbackItems = [
+    feedback({ id: "fb-open-priority", title: "打开高优", priority: "p1", stage: "open" }),
+    feedback({ id: "fb-pending-untriaged", title: "待验证未分诊", priority: null, resolution: "resolved", stage: "pending_verification" }),
+    feedback({ id: "fb-closed-priority", title: "已关闭 P1", closedAt: "2026-07-09", closedByUserId: "user-creator", priority: "p1", resolution: "resolved", stage: "closed" }),
+  ];
+
+  assert.deepEqual(
+    buildFeedbackIssueListProjection({
+      comments: [],
+      feedback: feedbackItems,
+      filters: filters({ listState: "all", priority: "p1", resolution: "resolved", stage: "closed" }),
+      projects,
+      users,
+    }).items.map((item) => item.feedback.id),
+    ["fb-closed-priority"],
+  );
+  assert.deepEqual(
+    buildFeedbackIssueListProjection({
+      comments: [],
+      feedback: feedbackItems,
+      filters: filters({ listState: "all", query: "stage:待验证 priority:未分诊 resolution:已解决" }),
+      projects,
+      users,
+    }).items.map((item) => item.feedback.id),
+    ["fb-pending-untriaged"],
+  );
+});
+
 test("feedback list projection uses cursor pagination after filtering and sorting", () => {
   const feedbackItems = [
     feedback({ id: "fb-first", title: "第一条", updatedAt: "2026-07-09" }),
@@ -355,6 +384,28 @@ test("feedback list user preference restores through canonical URL params", () =
   assert.equal(restored?.toString(), "project=project-client&state=closed&sort=created-desc");
 });
 
+test("feedback list user preference keeps lifecycle and priority filters", () => {
+  const record = feedbackIssueListFilterPreferenceRecordFromSearchParams(
+    new URLSearchParams({
+      priority: "none",
+      resolution: "resolved",
+      stage: "pending_verification",
+    }),
+  );
+
+  assert.deepEqual(record, {
+    values: {
+      priority: "untriaged",
+      resolution: "resolved",
+      stage: "pending_verification",
+    },
+    version: 1,
+  });
+
+  const restored = feedbackIssueListFilterParamsFromPreferenceRecord(record);
+  assert.equal(restored?.toString(), "stage=pending_verification&resolution=resolved&priority=untriaged");
+});
+
 test("feedback current-view CSV export uses stable contract columns and escapes user text", () => {
   const [item] = buildFeedbackIssueListItems({
     comments: [],
@@ -402,9 +453,12 @@ function filters(input: Partial<FeedbackIssueListFilters>): FeedbackIssueListFil
     cause: "All",
     impact: "All",
     listState: "all",
+    priority: "All",
     projectId: "All",
     query: "",
+    resolution: "All",
     sort: "updated-desc",
+    stage: "All",
     ...input,
   };
 }

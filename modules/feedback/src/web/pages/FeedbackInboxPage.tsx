@@ -63,9 +63,12 @@ export function FeedbackInboxPage() {
     cause,
     impact,
     listState,
+    priority,
     projectId,
     query,
+    resolution,
     sort,
+    stage,
   } = useMemo(() => feedbackIssueListUrlStateFromSearchParams(searchParams), [searchParamSignature, searchParams]);
   const [projectChannels, setProjectChannels] = useState<FeedbackWebProjectChatChannel[]>([]);
   const [projectChannelsLoading, setProjectChannelsLoading] = useState(false);
@@ -187,8 +190,11 @@ export function FeedbackInboxPage() {
   const hasActiveFilters =
     query.trim().length > 0 ||
     listState !== "open" ||
+    stage !== "All" ||
+    resolution !== "All" ||
     cause !== "All" ||
     impact !== "All" ||
+    priority !== "All" ||
     assigneeUserId !== "All" ||
     authorUserId !== "All" ||
     projectId !== "All" ||
@@ -196,8 +202,11 @@ export function FeedbackInboxPage() {
   const activeFilterCount = [
     query.trim().length > 0,
     listState !== "open",
+    stage !== "All",
+    resolution !== "All",
     cause !== "All",
     impact !== "All",
+    priority !== "All",
     assigneeUserId !== "All",
     authorUserId !== "All",
     projectId !== "All",

@@ -11,7 +11,19 @@ type StoredFeedbackIssueListFilterPreference = {
 export const feedbackIssueListFilterPreferenceKey = "feedback.issueList";
 
 const feedbackIssueListFilterStorageKey = "orf:feedback-issue-list-filters:v1";
-const feedbackIssueListFilterParamKeys = ["project", "q", "state", "assignee", "author", "label", "impact", "sort"] as const;
+const feedbackIssueListFilterParamKeys = [
+  "project",
+  "q",
+  "state",
+  "stage",
+  "resolution",
+  "assignee",
+  "author",
+  "label",
+  "impact",
+  "priority",
+  "sort",
+] as const;
 
 export function feedbackIssueListUrlStateFromSearchParams(searchParams: URLSearchParams): FeedbackIssueListUrlState {
   return feedbackIssueListFiltersFromInput({
@@ -19,9 +31,12 @@ export function feedbackIssueListUrlStateFromSearchParams(searchParams: URLSearc
     author: searchParams.get("author"),
     impact: searchParams.get("impact"),
     label: searchParams.get("label"),
+    priority: searchParams.get("priority"),
     project: searchParams.get("project"),
     q: searchParams.get("q"),
+    resolution: searchParams.get("resolution"),
     sort: searchParams.get("sort"),
+    stage: searchParams.get("stage"),
     state: searchParams.get("state"),
   });
 }
@@ -38,10 +53,13 @@ export function feedbackIssueListFilterQueryFromSearchParams(searchParams: URLSe
   if (state.projectId !== "All") next.set("project", state.projectId);
   if (query) next.set("q", query);
   if (state.listState !== "open") next.set("state", state.listState);
+  if (state.stage !== "All") next.set("stage", state.stage);
+  if (state.resolution !== "All") next.set("resolution", state.resolution);
   if (state.assigneeUserId !== "All") next.set("assignee", state.assigneeUserId);
   if (state.authorUserId !== "All") next.set("author", state.authorUserId);
   if (state.cause !== "All") next.set("label", state.cause);
   if (state.impact !== "All") next.set("impact", state.impact);
+  if (state.priority !== "All") next.set("priority", state.priority);
   if (state.sort !== "updated-desc") next.set("sort", state.sort);
 
   return next.toString();
@@ -57,10 +75,13 @@ export function feedbackIssueListFilterPreferenceRecordFromSearchParams(
   if (state.projectId !== "All") values.project = state.projectId;
   if (query) values.q = query;
   if (state.listState !== "open") values.state = state.listState;
+  if (state.stage !== "All") values.stage = state.stage;
+  if (state.resolution !== "All") values.resolution = state.resolution;
   if (state.assigneeUserId !== "All") values.assignee = state.assigneeUserId;
   if (state.authorUserId !== "All") values.author = state.authorUserId;
   if (state.cause !== "All") values.label = state.cause;
   if (state.impact !== "All") values.impact = state.impact;
+  if (state.priority !== "All") values.priority = state.priority;
   if (state.sort !== "updated-desc") values.sort = state.sort;
 
   return Object.keys(values).length > 0 ? { values, version: 1 } : null;
@@ -75,19 +96,25 @@ export function feedbackIssueListFilterParamsFromPreferenceRecord(
   const projectId = filterPreferenceStringValue(record, "project");
   const query = filterPreferenceStringValue(record, "q");
   const listState = filterPreferenceStringValue(record, "state");
+  const stage = filterPreferenceStringValue(record, "stage");
+  const resolution = filterPreferenceStringValue(record, "resolution");
   const assigneeUserId = filterPreferenceStringValue(record, "assignee");
   const authorUserId = filterPreferenceStringValue(record, "author");
   const cause = filterPreferenceStringValue(record, "label");
   const impact = filterPreferenceStringValue(record, "impact");
+  const priority = filterPreferenceStringValue(record, "priority");
   const sort = filterPreferenceStringValue(record, "sort");
 
   if (projectId) searchParams.set("project", projectId);
   if (query) searchParams.set("q", query);
   if (listState) searchParams.set("state", listState);
+  if (stage) searchParams.set("stage", stage);
+  if (resolution) searchParams.set("resolution", resolution);
   if (assigneeUserId) searchParams.set("assignee", assigneeUserId);
   if (authorUserId) searchParams.set("author", authorUserId);
   if (cause) searchParams.set("label", cause);
   if (impact) searchParams.set("impact", impact);
+  if (priority) searchParams.set("priority", priority);
   if (sort) searchParams.set("sort", sort);
 
   const queryString = feedbackIssueListFilterQueryFromSearchParams(searchParams);

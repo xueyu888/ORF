@@ -4,9 +4,13 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import {
   feedbackImpactLabel,
   feedbackImpactValues,
+  feedbackPriorityLabel,
   feedbackReportAttachmentDto,
+  feedbackResolutionLabel,
+  feedbackStageLabel,
   parseFeedbackIssueListQuery,
   type FeedbackIssueListFilters,
+  type FeedbackIssuePriorityFilter,
   type FeedbackIssueListState,
   type FeedbackActivityType,
   type FeedbackActorRole,
@@ -238,6 +242,9 @@ function feedbackListCandidateConditions(input: {
   pushCondition(conditions, feedbackListProjectCondition(filters.projectId));
   pushCondition(conditions, feedbackListLabelCondition(filters.cause));
   if (filters.impact !== "All") conditions.push(eq(feedback.impact, filters.impact));
+  pushCondition(conditions, feedbackListPriorityFilterCondition(filters.priority));
+  if (filters.resolution !== "All") conditions.push(eq(feedback.resolution, filters.resolution));
+  if (filters.stage !== "All") conditions.push(eq(feedback.stage, filters.stage));
   if (filters.assigneeUserId !== "All") conditions.push(eq(feedback.assigneeUserId, filters.assigneeUserId));
   if (filters.authorUserId !== "All") conditions.push(eq(feedback.createdBy, filters.authorUserId));
 
@@ -247,6 +254,15 @@ function feedbackListCandidateConditions(input: {
   for (const term of parsedQuery.impactTerms) {
     conditions.push(feedbackImpactTermCondition(term) ?? sql`false`);
   }
+  for (const term of parsedQuery.priorityTerms) {
+    conditions.push(feedbackPriorityTermCondition(term) ?? sql`false`);
+  }
+  for (const term of parsedQuery.resolutionTerms) {
+    conditions.push(feedbackResolutionTermCondition(term) ?? sql`false`);
+  }
+  for (const term of parsedQuery.stageTerms) {
+    conditions.push(feedbackStageTermCondition(term) ?? sql`false`);
+  }
   pushCondition(conditions, feedbackListStateTermsCondition(parsedQuery.stateTerms, input.viewerUserId));
   return conditions;
 }
@@ -255,6 +271,12 @@ function feedbackListProjectCondition(projectId: string): SQL<unknown> | null {
   if (projectId === "All") return null;
   if (projectId === "unassigned") return isNull(feedback.projectId);
   return eq(feedback.projectId, projectId);
+}
+
+function feedbackListPriorityFilterCondition(priority: FeedbackIssuePriorityFilter): SQL<unknown> | null {
+  if (priority === "All") return null;
+  if (priority === "untriaged") return isNull(feedback.priority);
+  return eq(feedback.priority, priority);
 }
 
 function feedbackListLabelCondition(term: string): SQL<unknown> | null {
@@ -284,6 +306,44 @@ function feedbackImpactTermCondition(term: string): SQL<unknown> | null {
     normalizeFeedbackListSearchText(feedbackImpactLabel[impact]).includes(normalizedTerm)
   );
   return matchingImpacts.length > 0 ? inArray(feedback.impact, matchingImpacts) : null;
+}
+
+function feedbackPriorityTermCondition(term: string): SQL<unknown> | null {
+  const normalizedTerm = normalizeFeedbackListSearchText(term);
+  if (!normalizedTerm) return null;
+  const matchingPriorities = feedbackListKeysMatchingTerm(feedbackPriorityLabel, normalizedTerm);
+  const conditions: SQL<unknown>[] = [];
+  if (["untriaged", "none", "null", "未分诊"].some((value) => normalizeFeedbackListSearchText(value).includes(normalizedTerm))) {
+    conditions.push(isNull(feedback.priority));
+  }
+  if (matchingPriorities.length > 0) conditions.push(inArray(feedback.priority, matchingPriorities));
+  return or(...conditions) ?? null;
+}
+
+function feedbackResolutionTermCondition(term: string): SQL<unknown> | null {
+  const normalizedTerm = normalizeFeedbackListSearchText(term);
+  if (!normalizedTerm) return null;
+  const matchingResolutions = feedbackListKeysMatchingTerm(feedbackResolutionLabel, normalizedTerm);
+  const conditions: SQL<unknown>[] = [];
+  if (["none", "null", "无结论"].some((value) => normalizeFeedbackListSearchText(value).includes(normalizedTerm))) {
+    conditions.push(isNull(feedback.resolution));
+  }
+  if (matchingResolutions.length > 0) conditions.push(inArray(feedback.resolution, matchingResolutions));
+  return or(...conditions) ?? null;
+}
+
+function feedbackStageTermCondition(term: string): SQL<unknown> | null {
+  const normalizedTerm = normalizeFeedbackListSearchText(term);
+  if (!normalizedTerm) return null;
+  const matchingStages = feedbackListKeysMatchingTerm(feedbackStageLabel, normalizedTerm);
+  return matchingStages.length > 0 ? inArray(feedback.stage, matchingStages) : null;
+}
+
+function feedbackListKeysMatchingTerm<T extends string>(labels: Record<T, string>, normalizedTerm: string): T[] {
+  return (Object.keys(labels) as T[]).filter((key) =>
+    normalizeFeedbackListSearchText(key).includes(normalizedTerm) ||
+    normalizeFeedbackListSearchText(labels[key]).includes(normalizedTerm)
+  );
 }
 
 function feedbackListStateTermsCondition(
