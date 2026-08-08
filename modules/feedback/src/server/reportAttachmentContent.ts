@@ -6,6 +6,7 @@ import {
   type FeedbackReportAttachmentPreviewKind,
 } from "../contracts";
 import { feedbackReportAttachments } from "../infrastructure/database/schema";
+import type { FeedbackReportAttachmentObjectRef } from "./reportAttachmentProtocol";
 
 export type FeedbackReportAttachmentContentDatabase = Pick<NodePgDatabase<any>, "select">;
 
@@ -24,16 +25,6 @@ export type FeedbackReportAttachmentContentFactsOutcome =
   | { status: "ok"; facts: FeedbackReportAttachmentContentFacts }
   | { status: "notFound" }
   | { status: "forbidden" };
-
-export type FeedbackReportAttachmentObjectRef = {
-  readonly feedbackId: string;
-  readonly fileName: string;
-  readonly fileSize: number;
-  readonly id: string;
-  readonly mimeType: string;
-  readonly objectKey: string;
-  readonly sortOrder: number;
-};
 
 export async function listFeedbackReportAttachmentObjectRefs(
   database: FeedbackReportAttachmentContentDatabase,

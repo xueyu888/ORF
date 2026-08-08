@@ -43,8 +43,8 @@ export {
   feedbackReportAttachmentResponseContentType,
   getFeedbackReportAttachmentContentFacts,
   listFeedbackReportAttachmentObjectRefs,
-  type FeedbackReportAttachmentObjectRef,
 } from "../server/reportAttachmentContent";
+export type { FeedbackReportAttachmentObjectRef } from "../server/reportAttachmentProtocol";
 export {
   getFeedbackAssignmentNotificationDispatchRecipients,
   getFeedbackLifecycleNotificationDispatchRecipients,
