@@ -14,8 +14,8 @@ type FeedbackIssueReadModelHookState = {
   reload: () => Promise<void>;
 };
 
-export function useFeedbackIssueReadModel(enabled = true, reloadKey = ""): FeedbackIssueReadModelHookState {
-  const load = useCallback(() => getFeedbackIssueReadModel(), []);
+export function useFeedbackIssueReadModel(enabled = true, reloadKey = "", query = ""): FeedbackIssueReadModelHookState {
+  const load = useCallback(() => getFeedbackIssueReadModel(query), [query]);
   return useFeedbackIssueReadModelLoader(load, enabled, reloadKey);
 }
 

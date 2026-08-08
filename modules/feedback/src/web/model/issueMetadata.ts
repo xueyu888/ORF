@@ -1,13 +1,20 @@
-import type { FeedbackImpact, FeedbackRelationType } from "../../contracts";
+import type { FeedbackRelationType } from "../../contracts";
+import {
+  feedbackIssueAssignee,
+  feedbackIssueAuthor,
+  feedbackIssueLabels,
+  isFeedbackIssueOpen,
+  type FeedbackIssueLabel,
+  type FeedbackIssuePerson,
+} from "../../contracts/issueList";
 import type { FeedbackWebCommentThread, FeedbackWebIssue, FeedbackWebRelation, FeedbackWebUser } from "../types";
-import { feedbackImpactLabel } from "../labels";
-import { isFeedbackIssueOpen } from "./issue";
-
-export type FeedbackIssueLabel = {
-  key: string;
-  name: string;
-  tone: "accent" | "danger" | "gold" | "neutral" | "warning";
-};
+export {
+  feedbackIssueAssignee,
+  feedbackIssueAuthor,
+  feedbackIssueLabels,
+  type FeedbackIssueLabel,
+  type FeedbackIssuePerson,
+} from "../../contracts/issueList";
 
 export type FeedbackIssueLabelIndexSortKey = "name-asc" | "feedback-desc" | "open-desc";
 
@@ -18,11 +25,6 @@ export type FeedbackIssueLabelIndexItem = FeedbackIssueLabel & {
   openCount: number;
 };
 
-export type FeedbackIssuePerson = {
-  avatarUrl: string | null;
-  id: string | null;
-  name: string;
-};
 export type FeedbackIssueLinkedFeedback = {
   direction: "incoming" | "outgoing" | "undirected";
   id: string;
@@ -30,22 +32,6 @@ export type FeedbackIssueLinkedFeedback = {
   title: string;
   type: FeedbackRelationType;
 };
-
-export function feedbackIssueLabels(feedback: Pick<FeedbackWebIssue, "causeCategories" | "impact">): FeedbackIssueLabel[] {
-  const causes = Array.from(new Set(feedback.causeCategories.map((cause) => cause.trim()).filter(Boolean)));
-  return [
-    ...causes.map((cause) => ({
-      key: `cause:${cause}`,
-      name: cause,
-      tone: causeLabelTone(cause),
-    })),
-    {
-      key: `impact:${feedback.impact}`,
-      name: feedbackImpactLabel[feedback.impact],
-      tone: impactTone(feedback.impact),
-    },
-  ];
-}
 
 export function feedbackIssueLabelIndexItems(
   feedbackItems: readonly Pick<FeedbackWebIssue, "causeCategories" | "impact" | "stage">[],
@@ -74,24 +60,6 @@ export function feedbackIssueLabelIndexItems(
   }
 
   return [...labelsByKey.values()].sort((left, right) => compareFeedbackIssueLabelIndexItems(left, right, sort));
-}
-
-export function feedbackIssueAssignee(feedback: Pick<FeedbackWebIssue, "assigneeUserId">, users: readonly FeedbackWebUser[]): FeedbackIssuePerson {
-  const user = feedback.assigneeUserId ? users.find((item) => item.id === feedback.assigneeUserId) ?? null : null;
-  return {
-    avatarUrl: user?.avatarUrl ?? null,
-    id: feedback.assigneeUserId || user?.id || null,
-    name: user?.name ?? "未指派",
-  };
-}
-
-export function feedbackIssueAuthor(feedback: Pick<FeedbackWebIssue, "createdBy">, users: readonly FeedbackWebUser[]): FeedbackIssuePerson {
-  const user = users.find((item) => item.id === feedback.createdBy) ?? null;
-  return {
-    avatarUrl: user?.avatarUrl ?? null,
-    id: user?.id ?? feedback.createdBy ?? null,
-    name: user?.name ?? "未知成员",
-  };
 }
 
 export function feedbackIssueParticipants(input: {
@@ -171,18 +139,4 @@ function compareNumberDescending(left: number, right: number) {
 
 function compareText(left: string, right: string) {
   return left.localeCompare(right, "zh-CN");
-}
-
-function causeLabelTone(value: string): FeedbackIssueLabel["tone"] {
-  if (/管理|流程|协作/.test(value)) return "gold";
-  if (/技术|系统|质量|缺陷|bug/i.test(value)) return "accent";
-  if (/风险|事故|阻塞/.test(value)) return "warning";
-  return "neutral";
-}
-
-function impactTone(value: FeedbackImpact): FeedbackIssueLabel["tone"] {
-  if (value === "critical") return "danger";
-  if (value === "high") return "warning";
-  if (value === "medium") return "accent";
-  return "neutral";
 }

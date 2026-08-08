@@ -1,10 +1,3 @@
-import type {
-  FeedbackImpact,
-  FeedbackPriority,
-  FeedbackRelationType,
-  FeedbackResolution,
-  FeedbackStage,
-} from "@orf/feedback-module/contracts";
 import type { EvidenceType, Impact, Priority, TaskStatus, WorkStatus } from "../types/orf";
 
 export const workStatusLabel: Record<WorkStatus, string> = {
@@ -12,21 +5,6 @@ export const workStatusLabel: Record<WorkStatus, string> = {
   "At Risk": "有风险",
   Blocked: "阻塞",
   Draft: "草稿",
-};
-
-export const feedbackStageLabel: Record<FeedbackStage, string> = {
-  open: "打开",
-  in_progress: "处理中",
-  pending_verification: "待验证",
-  closed: "已关闭",
-};
-
-export const feedbackResolutionLabel: Record<FeedbackResolution, string> = {
-  resolved: "已解决",
-  not_needed: "无需解决",
-  cannot_resolve: "无法解决",
-  duplicate: "重复反馈",
-  unspecified: "历史关闭",
 };
 
 export const taskStatusLabel: Record<TaskStatus, string> = {
@@ -50,37 +28,6 @@ export const impactLabel: Record<Impact, string> = {
   High: "高",
   Critical: "严重",
 };
-
-export const feedbackImpactLabel: Record<FeedbackImpact, string> = {
-  low: "低",
-  medium: "中",
-  high: "高",
-  critical: "严重",
-};
-
-export const feedbackPriorityLabel: Record<FeedbackPriority, string> = {
-  p0: "P0",
-  p1: "P1",
-  p2: "P2",
-  p3: "P3",
-};
-
-export const feedbackRelationTypeLabel: Record<FeedbackRelationType, string> = {
-  related: "相关",
-  duplicates: "重复",
-  blocks: "阻塞",
-};
-
-export function feedbackLifecycleLabel(input: {
-  resolution: FeedbackResolution | null;
-  stage: FeedbackStage;
-}) {
-  if (input.stage === "closed" && input.resolution) return feedbackResolutionLabel[input.resolution];
-  if (input.stage === "pending_verification" && input.resolution) {
-    return `待验证：${feedbackResolutionLabel[input.resolution]}`;
-  }
-  return feedbackStageLabel[input.stage];
-}
 
 export const evidenceTypeLabel: Record<EvidenceType, string> = {
   "Eval run": "评估运行",

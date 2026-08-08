@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 export * from "./links";
+export * from "./labels";
+export * from "./issueList";
 export * from "./notifications";
 export * from "./readModel";
 export * from "./reportAttachments";

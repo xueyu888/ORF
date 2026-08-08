@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   feedbackReferenceCardDataFromReadModel,
+  feedbackIssueListFiltersFromInput,
   feedbackImpactSchema,
   feedbackPrioritySchema,
   feedbackRelationTypeSchema,
@@ -23,6 +24,7 @@ import { projects } from "../db/schema";
 import { env } from "../env";
 import {
   getFeedbackIssueDetailReadModelData,
+  getFeedbackIssueListReadModelData,
   getFeedbackIssueReadModelData,
 } from "../readModels/feedbackIssueReadModel";
 import {
@@ -298,7 +300,11 @@ export function registerFeedbackRoutes(app: FastifyInstance) {
       return reply;
     }
 
-    return getFeedbackIssueReadModelData({ scope: context.scope, viewerUserId: context.user.id });
+    return getFeedbackIssueListReadModelData({
+      filters: feedbackIssueListFiltersFromInput(request.query as Record<string, string | string[] | null | undefined>),
+      scope: context.scope,
+      viewerUserId: context.user.id,
+    });
   });
 
   app.get("/api/feedback/assignees", async (request, reply) => {

@@ -105,8 +105,10 @@ export type FeedbackImportReferenceOptions = {
   projects: FeedbackWebProject[];
 };
 
-export async function getFeedbackIssueReadModel() {
-  return apiJson<FeedbackIssueReadModelData>("/api/feedback");
+export async function getFeedbackIssueReadModel(query = "") {
+  const normalizedQuery = query.trim().replace(/^\?/, "");
+  const suffix = normalizedQuery ? `?${normalizedQuery}` : "";
+  return apiJson<FeedbackIssueReadModelData>(`/api/feedback${suffix}`);
 }
 
 export async function getFeedbackIssueDetailReadModel(feedbackId: string) {

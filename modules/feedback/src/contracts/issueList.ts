@@ -1,8 +1,6 @@
-import type { FeedbackImpact } from "../../contracts";
-import type { FeedbackWebCommentThread, FeedbackWebIssue, FeedbackWebProject, FeedbackWebUser } from "../types";
-import { feedbackImpactLabel } from "../labels";
-import { feedbackIssueBodyPreview, feedbackIssueCommentCount, feedbackIssueDisplayId, feedbackIssueStateLabel, isFeedbackIssueOpen } from "./issue";
-import { feedbackIssueAssignee, feedbackIssueAuthor, feedbackIssueLabels, type FeedbackIssueLabel } from "./issueMetadata";
+import type { FeedbackImpact } from "./index";
+import type { FeedbackWebCommentThread, FeedbackWebIssue, FeedbackWebProject, FeedbackWebUser } from "./readModel";
+import { feedbackImpactLabel, feedbackLifecycleLabel } from "./labels";
 
 export type FeedbackIssueListState = "assigned" | "open" | "verification" | "unread" | "triage" | "closed" | "all";
 export type FeedbackIssueSortKey = "updated-desc" | "updated-asc" | "created-desc" | "created-asc" | "comments-desc" | "comments-asc";
@@ -18,7 +16,30 @@ export type FeedbackIssueListFilters = {
   sort: FeedbackIssueSortKey;
 };
 
+export type FeedbackIssueListFilterInput = {
+  assignee?: string | readonly string[] | null;
+  author?: string | readonly string[] | null;
+  impact?: string | readonly string[] | null;
+  label?: string | readonly string[] | null;
+  project?: string | readonly string[] | null;
+  q?: string | readonly string[] | null;
+  sort?: string | readonly string[] | null;
+  state?: string | readonly string[] | null;
+};
+
 export type FeedbackIssueListLabel = FeedbackIssueLabel;
+
+export type FeedbackIssueLabel = {
+  key: string;
+  name: string;
+  tone: "accent" | "danger" | "gold" | "neutral" | "warning";
+};
+
+export type FeedbackIssuePerson = {
+  avatarUrl: string | null;
+  id: string | null;
+  name: string;
+};
 
 export type FeedbackIssueListItem = {
   assigneeAvatarUrl: string | null;
@@ -34,6 +55,24 @@ export type FeedbackIssueListItem = {
   projectName: string | null;
 };
 
+export type FeedbackIssueListCounts = Record<FeedbackIssueListState, number>;
+
+export type FeedbackIssueListOption = {
+  label: string;
+  value: string;
+};
+
+export type FeedbackIssueListProjection = {
+  assigneeOptions: FeedbackIssueListOption[];
+  authorOptions: FeedbackIssueListOption[];
+  counts: FeedbackIssueListCounts;
+  filters: FeedbackIssueListFilters;
+  items: FeedbackIssueListItem[];
+  labelOptions: FeedbackIssueListOption[];
+  matchedCount: number;
+  totalCount: number;
+};
+
 type ParsedFeedbackIssueQuery = {
   assigneeTerms: string[];
   authorTerms: string[];
@@ -47,6 +86,62 @@ type ParsedFeedbackIssueQuery = {
 
 const queryQualifierPattern = /(?:^|\s)(is|status|assignee|owner|author|label|impact|project|sort):("[^"]+"|\S+)/gi;
 const impactValues = new Set<FeedbackImpact>(["low", "medium", "high", "critical"]);
+
+export const defaultFeedbackIssueListFilters: FeedbackIssueListFilters = {
+  assigneeUserId: "All",
+  authorUserId: "All",
+  cause: "All",
+  impact: "All",
+  listState: "open",
+  projectId: "All",
+  query: "",
+  sort: "updated-desc",
+};
+
+export const emptyFeedbackIssueListProjection: FeedbackIssueListProjection = {
+  assigneeOptions: [],
+  authorOptions: [],
+  counts: emptyFeedbackIssueListCounts(),
+  filters: defaultFeedbackIssueListFilters,
+  items: [],
+  labelOptions: [],
+  matchedCount: 0,
+  totalCount: 0,
+};
+
+export function feedbackIssueListFiltersFromInput(input: FeedbackIssueListFilterInput): FeedbackIssueListFilters {
+  return {
+    assigneeUserId: feedbackIssueListStringFilter(input.assignee, "All"),
+    authorUserId: feedbackIssueListStringFilter(input.author, "All"),
+    cause: feedbackIssueListStringFilter(input.label, "All"),
+    impact: feedbackIssueListImpactFilter(input.impact),
+    listState: feedbackIssueListStateFilter(input.state),
+    projectId: feedbackIssueListStringFilter(input.project, "All"),
+    query: feedbackIssueListInputValue(input.q),
+    sort: feedbackIssueSortForQueryValue(feedbackIssueListInputValue(input.sort)) ?? defaultFeedbackIssueListFilters.sort,
+  };
+}
+
+export function buildFeedbackIssueListProjection(input: {
+  comments: readonly FeedbackWebCommentThread[];
+  feedback: readonly FeedbackWebIssue[];
+  filters: FeedbackIssueListFilters;
+  projects?: readonly FeedbackWebProject[];
+  users: readonly FeedbackWebUser[];
+}): FeedbackIssueListProjection {
+  const items = buildFeedbackIssueListItems(input);
+  const filteredItems = filterFeedbackIssueListItems(items, input.filters);
+  return {
+    assigneeOptions: feedbackIssueAssigneeOptions(items),
+    authorOptions: feedbackIssueAuthorOptions(items),
+    counts: feedbackIssueListCountsForFilters(items, input.filters),
+    filters: input.filters,
+    items: filteredItems,
+    labelOptions: feedbackIssueLabelOptions(items),
+    matchedCount: filteredItems.length,
+    totalCount: items.length,
+  };
+}
 
 export function buildFeedbackIssueListItems(input: {
   comments: readonly FeedbackWebCommentThread[];
@@ -95,15 +190,7 @@ export function filterFeedbackIssueListItems(items: readonly FeedbackIssueListIt
 }
 
 export function feedbackIssueListCounts(items: readonly FeedbackIssueListItem[]) {
-  const counts: Record<FeedbackIssueListState, number> = {
-    all: items.length,
-    assigned: 0,
-    closed: 0,
-    open: 0,
-    triage: 0,
-    unread: 0,
-    verification: 0,
-  };
+  const counts = emptyFeedbackIssueListCounts(items.length);
   for (const item of items) {
     if (itemMatchesListState(item, "assigned")) counts.assigned += 1;
     if (itemMatchesListState(item, "closed")) counts.closed += 1;
@@ -235,6 +322,76 @@ function itemMatchesListState(item: FeedbackIssueListItem, state: FeedbackIssueL
   return item.feedback.requiresAction && item.feedback.stage === "pending_verification";
 }
 
+export function isFeedbackIssueOpen(feedback: Pick<FeedbackWebIssue, "stage">) {
+  return feedback.stage !== "closed";
+}
+
+export function feedbackIssueStateLabel(feedback: Pick<FeedbackWebIssue, "resolution" | "stage">) {
+  return feedbackLifecycleLabel(feedback);
+}
+
+export function feedbackIssueDisplayId(value: string) {
+  const normalized = value.replace(/^fb-/, "");
+  return normalized.length > 8 ? normalized.slice(0, 8) : normalized;
+}
+
+export function feedbackIssueBodyPreview(value: string) {
+  return feedbackMarkdownToPlainText(value, { attachmentText: "[附件]" });
+}
+
+export function feedbackIssueCommentCount(comments: readonly FeedbackWebCommentThread[], feedbackId: string) {
+  const messages = comments
+    .filter((thread) => thread.targetType === "feedback" && thread.targetId === feedbackId)
+    .flatMap((thread) => thread.messages)
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  return messages.length;
+}
+
+export function feedbackIssueLabels(feedback: Pick<FeedbackWebIssue, "causeCategories" | "impact">): FeedbackIssueLabel[] {
+  const causes = Array.from(new Set(feedback.causeCategories.map((cause) => cause.trim()).filter(Boolean)));
+  return [
+    ...causes.map((cause) => ({
+      key: `cause:${cause}`,
+      name: cause,
+      tone: causeLabelTone(cause),
+    })),
+    {
+      key: `impact:${feedback.impact}`,
+      name: feedbackImpactLabel[feedback.impact],
+      tone: impactTone(feedback.impact),
+    },
+  ];
+}
+
+export function feedbackIssueAssignee(feedback: Pick<FeedbackWebIssue, "assigneeUserId">, users: readonly FeedbackWebUser[]): FeedbackIssuePerson {
+  const user = feedback.assigneeUserId ? users.find((item) => item.id === feedback.assigneeUserId) ?? null : null;
+  return {
+    avatarUrl: user?.avatarUrl ?? null,
+    id: feedback.assigneeUserId || user?.id || null,
+    name: user?.name ?? "未指派",
+  };
+}
+
+export function feedbackIssueAuthor(feedback: Pick<FeedbackWebIssue, "createdBy">, users: readonly FeedbackWebUser[]): FeedbackIssuePerson {
+  const user = users.find((item) => item.id === feedback.createdBy) ?? null;
+  return {
+    avatarUrl: user?.avatarUrl ?? null,
+    id: user?.id ?? feedback.createdBy ?? null,
+    name: user?.name ?? "未知成员",
+  };
+}
+
+function feedbackMarkdownToPlainText(value: string, options: { attachmentText?: string } = {}) {
+  const attachmentText = options.attachmentText ?? "[附件]";
+  return value
+    .replace(/!\[[^\]]*]\([^)]+\)/g, attachmentText)
+    .replace(/\[([^\]]+)]\([^)]+\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/[*_~>#-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function compareFeedbackIssueListItems(left: FeedbackIssueListItem, right: FeedbackIssueListItem, sort: FeedbackIssueSortKey) {
   const direction = sort.endsWith("-asc") ? 1 : -1;
   if (sort.startsWith("comments")) {
@@ -294,6 +451,51 @@ function personMatches(userId: string, name: string, term: string) {
 function impactMatches(impact: FeedbackImpact, term: string) {
   const normalizedTerm = normalizeSearchText(term);
   return normalizeSearchText(impact).includes(normalizedTerm) || normalizeSearchText(feedbackImpactLabel[impact]).includes(normalizedTerm);
+}
+
+function causeLabelTone(value: string): FeedbackIssueLabel["tone"] {
+  if (/管理|流程|协作/.test(value)) return "gold";
+  if (/技术|系统|质量|缺陷|bug/i.test(value)) return "accent";
+  if (/风险|事故|阻塞/.test(value)) return "warning";
+  return "neutral";
+}
+
+function impactTone(value: FeedbackImpact): FeedbackIssueLabel["tone"] {
+  if (value === "critical") return "danger";
+  if (value === "high") return "warning";
+  if (value === "medium") return "accent";
+  return "neutral";
+}
+
+function feedbackIssueListInputValue(value: string | readonly string[] | null | undefined) {
+  const raw = Array.isArray(value) ? value[0] ?? "" : value ?? "";
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+function feedbackIssueListStringFilter(value: string | readonly string[] | null | undefined, fallback: string) {
+  return feedbackIssueListInputValue(value) || fallback;
+}
+
+function feedbackIssueListStateFilter(value: string | readonly string[] | null | undefined): FeedbackIssueListState {
+  const state = feedbackIssueListStateForQueryValue(feedbackIssueListInputValue(value));
+  return state ?? defaultFeedbackIssueListFilters.listState;
+}
+
+function feedbackIssueListImpactFilter(value: string | readonly string[] | null | undefined): "All" | FeedbackImpact {
+  const normalized = feedbackIssueListInputValue(value).toLowerCase();
+  return impactValues.has(normalized as FeedbackImpact) ? normalized as FeedbackImpact : "All";
+}
+
+function emptyFeedbackIssueListCounts(total = 0): FeedbackIssueListCounts {
+  return {
+    all: total,
+    assigned: 0,
+    closed: 0,
+    open: 0,
+    triage: 0,
+    unread: 0,
+    verification: 0,
+  };
 }
 
 export function feedbackIssueListStateForQueryValue(value: string): FeedbackIssueListState | null {

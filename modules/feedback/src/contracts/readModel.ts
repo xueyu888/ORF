@@ -8,6 +8,7 @@ import type {
   FeedbackStage,
   FeedbackSubscriptionMode,
 } from "./index";
+import { emptyFeedbackIssueListProjection, type FeedbackIssueListProjection } from "./issueList";
 
 export type FeedbackWebUserRole = "admin" | "member";
 export type FeedbackWebUserStatus = "active" | "disabled" | "pending" | "rejected";
@@ -123,6 +124,7 @@ export type FeedbackWebCommentThread = {
 export type FeedbackIssueReadModelData = {
   comments: FeedbackWebCommentThread[];
   feedback: FeedbackWebIssue[];
+  list?: FeedbackIssueListProjection;
   projects: FeedbackWebProject[];
   users: FeedbackWebUser[];
 };
@@ -145,6 +147,7 @@ export type FeedbackReferenceCardData = {
 export const emptyFeedbackIssueReadModelData: FeedbackIssueReadModelData = {
   comments: [],
   feedback: [],
+  list: emptyFeedbackIssueListProjection,
   projects: [],
   users: [],
 };

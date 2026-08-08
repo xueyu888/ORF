@@ -16,22 +16,16 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { feedbackCreatePath, feedbackLabelsPath } from "../../contracts/links";
+import { feedbackImpactLabel } from "../../contracts/labels";
 import { getProjectChatChannels, getUserPreferences, saveUserPreferences } from "../api";
 import { FeedbackTransferMenu } from "../components/transfer";
 import { FeedbackBadge, FeedbackButton, FeedbackEmptyState, FeedbackSelect, FeedbackTextInput } from "../components/controls";
-import { feedbackImpactLabel } from "../labels";
 import { canCreateTeamFeedback, canImportExportTeamFeedback } from "../model/capabilities";
 import { feedbackIssueHref, feedbackIssueStateLabel, isFeedbackIssueOpen } from "../model/issue";
 import {
-  buildFeedbackIssueListItems,
-  feedbackIssueAssigneeOptions,
-  feedbackIssueAuthorOptions,
-  feedbackIssueLabelOptions,
-  feedbackIssueListCountsForFilters,
-  filterFeedbackIssueListItems,
-  type FeedbackIssueListFilters,
+  emptyFeedbackIssueListProjection,
   type FeedbackIssueListItem,
-} from "../model/issueList";
+} from "../../contracts/issueList";
 import {
   buildFeedbackIssueCurrentViewCsv,
   feedbackIssueCsvExportFileName,
@@ -42,6 +36,7 @@ import {
   feedbackIssueListFilterParamsFromPreferenceRecord,
   feedbackIssueListFilterPreferenceKey,
   feedbackIssueListFilterPreferenceRecordFromSearchParams,
+  feedbackIssueListFilterQueryFromSearchParams,
   feedbackIssueListUrlStateFromSearchParams,
   readStoredFeedbackIssueListFilterParams,
 } from "../model/issueListViewState";
@@ -55,11 +50,13 @@ export function FeedbackInboxPage() {
   const host = useFeedbackWebHost();
   const { currentUser, feedbackInvalidationKey, notify } = host.useSession();
   const { UserAvatar } = host.components;
-  const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser), feedbackInvalidationKey);
-  const feedbackData = feedbackReadModel.data;
   const currentUserId = currentUser?.id ?? null;
   const suppressNextPreferenceRestoreRef = useRef(false);
   const searchParamSignature = searchParams.toString();
+  const listQuery = useMemo(() => feedbackIssueListFilterQueryFromSearchParams(searchParams), [searchParamSignature, searchParams]);
+  const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser), `${feedbackInvalidationKey}:${listQuery}`, listQuery);
+  const feedbackData = feedbackReadModel.data;
+  const issueList = feedbackData.list ?? emptyFeedbackIssueListProjection;
   const {
     assigneeUserId,
     authorUserId,
@@ -77,24 +74,13 @@ export function FeedbackInboxPage() {
     () => feedbackData.projects.find((project) => project.id === projectId) ?? null,
     [feedbackData.projects, projectId],
   );
-  const visibleFeedback = useMemo(() => currentUser?.status === "active" || currentUser?.role === "admin" ? feedbackData.feedback : [], [currentUser, feedbackData.feedback]);
   const canCreateFeedback = canCreateTeamFeedback(currentUser);
   const canImportExport = canImportExportTeamFeedback(currentUser);
-  const issueItems = useMemo(
-    () => buildFeedbackIssueListItems({ comments: feedbackData.comments, feedback: visibleFeedback, projects: feedbackData.projects, users: feedbackData.users }),
-    [feedbackData.comments, feedbackData.projects, feedbackData.users, visibleFeedback],
-  );
-  const issueFilters = useMemo<FeedbackIssueListFilters>(
-    () => ({ assigneeUserId, authorUserId, cause, impact, listState, projectId, query, sort }),
-    [assigneeUserId, authorUserId, cause, impact, listState, projectId, query, sort],
-  );
-  const issueCounts = useMemo(
-    () => feedbackIssueListCountsForFilters(issueItems, issueFilters),
-    [issueFilters, issueItems],
-  );
-  const labelOptions = useMemo(() => feedbackIssueLabelOptions(issueItems), [issueItems]);
-  const assigneeOptions = useMemo(() => feedbackIssueAssigneeOptions(issueItems), [issueItems]);
-  const authorOptions = useMemo(() => feedbackIssueAuthorOptions(issueItems), [issueItems]);
+  const issueFilters = issueList.filters;
+  const issueCounts = issueList.counts;
+  const labelOptions = issueList.labelOptions;
+  const assigneeOptions = issueList.assigneeOptions;
+  const authorOptions = issueList.authorOptions;
   const projectOptions = useMemo(
     () => [...feedbackData.projects].sort((left, right) => left.name.localeCompare(right.name, "zh-Hans-CN")),
     [feedbackData.projects],
@@ -196,10 +182,7 @@ export function FeedbackInboxPage() {
     };
   }, [selectedProject]);
 
-  const filteredFeedback = useMemo(
-    () => filterFeedbackIssueListItems(issueItems, issueFilters),
-    [issueFilters, issueItems],
-  );
+  const filteredFeedback = issueList.items;
 
   const hasActiveFilters =
     query.trim().length > 0 ||

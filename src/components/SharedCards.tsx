@@ -1,8 +1,8 @@
 import type { ElementType } from "react";
 import { Card, ConfidenceBadge, ProgressBar, StatusBadge } from "./ui";
+import { feedbackLifecycleLabel } from "@orf/feedback-module/contracts";
 import { feedbackIssueBodyPreview } from "@orf/feedback-module/web";
 import type { Feedback, Objective, Result } from "../types/orf";
-import { feedbackLifecycleLabel } from "../utils/labels";
 
 export function MetricCard({ title, value, delta, icon: Icon }: { title: string; value: string; delta: string; icon: ElementType }) {
   return (

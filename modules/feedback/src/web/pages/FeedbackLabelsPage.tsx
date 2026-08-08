@@ -14,7 +14,7 @@ import { useFeedbackIssueReadModel } from "../hooks";
 export function FeedbackLabelsPage() {
   const host = useFeedbackWebHost();
   const { currentUser, feedbackInvalidationKey } = host.useSession();
-  const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser), feedbackInvalidationKey);
+  const feedbackReadModel = useFeedbackIssueReadModel(Boolean(currentUser), feedbackInvalidationKey, "state=all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<FeedbackIssueLabelIndexSortKey>("name-asc");
   const visibleFeedback = useMemo(

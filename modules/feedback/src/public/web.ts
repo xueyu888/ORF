@@ -132,7 +132,7 @@ export {
   feedbackImpactLabel,
   feedbackLifecycleLabel,
   feedbackPriorityLabel,
-} from "../web/labels";
+} from "../contracts/labels";
 export {
   feedbackIssueBodyPreview,
   feedbackIssueDisplayId,
@@ -165,7 +165,7 @@ export {
   type FeedbackIssueListFilters,
   type FeedbackIssueListItem,
   type FeedbackIssueListState,
-} from "../web/model/issueList";
+} from "../contracts/issueList";
 export {
   clearStoredFeedbackIssueListFilterParams,
   feedbackIssueListFilterParamsFromPreferenceRecord,

@@ -1,17 +1,7 @@
-import type { FeedbackImpact } from "../../contracts";
 import type { FeedbackWebFilterPreferenceRecord } from "../types";
-import { feedbackIssueListStateForQueryValue, type FeedbackIssueListState, type FeedbackIssueSortKey } from "./issueList";
+import { feedbackIssueListFiltersFromInput, type FeedbackIssueListFilters } from "../../contracts/issueList";
 
-export type FeedbackIssueListUrlState = {
-  assigneeUserId: string;
-  authorUserId: string;
-  cause: string;
-  impact: "All" | FeedbackImpact;
-  listState: FeedbackIssueListState;
-  projectId: string;
-  query: string;
-  sort: FeedbackIssueSortKey;
-};
+export type FeedbackIssueListUrlState = FeedbackIssueListFilters;
 
 type StoredFeedbackIssueListFilterPreference = {
   query: string;
@@ -24,16 +14,16 @@ const feedbackIssueListFilterStorageKey = "orf:feedback-issue-list-filters:v1";
 const feedbackIssueListFilterParamKeys = ["project", "q", "state", "assignee", "author", "label", "impact", "sort"] as const;
 
 export function feedbackIssueListUrlStateFromSearchParams(searchParams: URLSearchParams): FeedbackIssueListUrlState {
-  return {
-    assigneeUserId: searchParams.get("assignee") || "All",
-    authorUserId: searchParams.get("author") || "All",
-    cause: searchParams.get("label") || "All",
-    impact: feedbackImpactParam(searchParams.get("impact")),
-    listState: feedbackListStateParam(searchParams.get("state")),
-    projectId: searchParams.get("project") || "All",
-    query: searchParams.get("q") ?? "",
-    sort: feedbackSortParam(searchParams.get("sort")),
-  };
+  return feedbackIssueListFiltersFromInput({
+    assignee: searchParams.get("assignee"),
+    author: searchParams.get("author"),
+    impact: searchParams.get("impact"),
+    label: searchParams.get("label"),
+    project: searchParams.get("project"),
+    q: searchParams.get("q"),
+    sort: searchParams.get("sort"),
+    state: searchParams.get("state"),
+  });
 }
 
 export function hasFeedbackIssueListFilterParams(searchParams: URLSearchParams) {
@@ -153,28 +143,6 @@ export function parseStoredFeedbackIssueListFilterParams(raw: string | null) {
   } catch {
     return null;
   }
-}
-
-function feedbackListStateParam(value: string | null): FeedbackIssueListState {
-  return value ? feedbackIssueListStateForQueryValue(value) ?? "open" : "open";
-}
-
-function feedbackImpactParam(value: string | null): "All" | FeedbackImpact {
-  if (value === "critical" || value === "high" || value === "medium" || value === "low") return value;
-  return "All";
-}
-
-function feedbackSortParam(value: string | null): FeedbackIssueSortKey {
-  if (
-    value === "updated-asc" ||
-    value === "created-desc" ||
-    value === "created-asc" ||
-    value === "comments-desc" ||
-    value === "comments-asc"
-  ) {
-    return value;
-  }
-  return "updated-desc";
 }
 
 function feedbackIssueListBrowserStorage() {

@@ -1,21 +1,19 @@
 import type { FeedbackTransitionType } from "../../contracts";
 import { feedbackIssuePath } from "../../contracts/links";
 import type { FeedbackWebCommentThread, FeedbackWebIssue } from "../types";
-import { feedbackLifecycleLabel } from "../labels";
-import { feedbackMarkdownToPlainText } from "../markdown";
+
+export {
+  feedbackIssueBodyPreview,
+  feedbackIssueCommentCount,
+  feedbackIssueDisplayId,
+  feedbackIssueStateLabel,
+  isFeedbackIssueOpen,
+} from "../../contracts/issueList";
 
 export type FeedbackIssueState = "open" | "closed";
 
 export function feedbackIssueState(feedback: Pick<FeedbackWebIssue, "stage">): FeedbackIssueState {
   return feedback.stage === "closed" ? "closed" : "open";
-}
-
-export function isFeedbackIssueOpen(feedback: Pick<FeedbackWebIssue, "stage">) {
-  return feedbackIssueState(feedback) === "open";
-}
-
-export function feedbackIssueStateLabel(feedback: Pick<FeedbackWebIssue, "resolution" | "stage">) {
-  return feedbackLifecycleLabel(feedback);
 }
 
 export function primaryFeedbackIssueTransition(feedback: Pick<FeedbackWebIssue, "stage">): FeedbackTransitionType {
@@ -27,18 +25,6 @@ export function primaryFeedbackIssueTransition(feedback: Pick<FeedbackWebIssue, 
 
 export function feedbackIssueThreads(comments: readonly FeedbackWebCommentThread[], feedbackId: string) {
   return comments.filter((thread) => thread.targetType === "feedback" && thread.targetId === feedbackId);
-}
-
-export function feedbackIssueCommentCount(comments: readonly FeedbackWebCommentThread[], feedbackId: string) {
-  const messages = feedbackIssueThreads(comments, feedbackId)
-    .flatMap((thread) => thread.messages)
-    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-  return messages.length;
-}
-
-export function feedbackIssueDisplayId(value: string) {
-  const normalized = value.replace(/^fb-/, "");
-  return normalized.length > 8 ? normalized.slice(0, 8) : normalized;
 }
 
 export function feedbackIssueHref(feedbackId: string) {
@@ -135,8 +121,4 @@ export function feedbackIssueIdsFromText(text: string) {
     if (feedbackId) ids.add(feedbackId);
   }
   return Array.from(ids);
-}
-
-export function feedbackIssueBodyPreview(value: string) {
-  return feedbackMarkdownToPlainText(value, { attachmentText: "[附件]" });
 }

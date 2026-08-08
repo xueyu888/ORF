@@ -4,7 +4,7 @@ import type {
   FeedbackRelationType,
   FeedbackResolution,
   FeedbackStage,
-} from "../contracts";
+} from "./index";
 
 export const feedbackStageLabel: Record<FeedbackStage, string> = {
   closed: "已关闭",

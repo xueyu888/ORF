@@ -1,5 +1,10 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { getFeedbackReadModelIssues, type FeedbackReadModelViewer } from "@orf/feedback-module/server";
+import {
+  buildFeedbackIssueListProjection,
+  defaultFeedbackIssueListFilters,
+  type FeedbackIssueListFilters,
+} from "@orf/feedback-module/contracts";
 import type {
   FeedbackIssueReadModelData,
   FeedbackWebCommentThread,
@@ -20,6 +25,7 @@ import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
 import { optional } from "./orfReadModelMappers";
 
 export type FeedbackIssueReadModelScope = {
+  filters?: FeedbackIssueListFilters;
   scope: RuntimeScope;
   viewerUserId?: string | null;
 };
@@ -56,6 +62,29 @@ export function mapProjectRows(projectRows: readonly ProjectRow[]): FeedbackWebP
 }
 
 export async function getFeedbackIssueReadModelData(scope: FeedbackIssueReadModelScope): Promise<FeedbackIssueReadModelData> {
+  return getFeedbackIssueReadModelDataForScope(scope);
+}
+
+export async function getFeedbackIssueListReadModelData(scope: FeedbackIssueReadModelScope): Promise<FeedbackIssueReadModelData> {
+  const data = await getFeedbackIssueReadModelDataForScope(scope);
+  const filters = scope.filters ?? defaultFeedbackIssueListFilters;
+  const list = buildFeedbackIssueListProjection({
+    comments: data.comments,
+    feedback: data.feedback,
+    filters,
+    projects: data.projects,
+    users: data.users,
+  });
+  const feedbackIds = new Set(list.items.map((item) => item.feedback.id));
+  return {
+    ...data,
+    comments: data.comments.filter((thread) => feedbackIds.has(thread.targetId)),
+    feedback: list.items.map((item) => item.feedback),
+    list,
+  };
+}
+
+async function getFeedbackIssueReadModelDataForScope(scope: FeedbackIssueReadModelScope): Promise<FeedbackIssueReadModelData> {
   const storageScopeId = feedbackReadModelStorageId(scope);
   const [projectRows, users] = await Promise.all([
     db.select().from(projects).where(eq(projects.teamId, storageScopeId)).orderBy(desc(projects.createdAt), desc(projects.id)),
