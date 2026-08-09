@@ -8,39 +8,10 @@ import {
   feedbackRelationTypeSchema,
   feedbackSubscriptionMutationModeSchema,
   feedbackTransitionInputSchema,
-} from "@orf/feedback-module/contracts";
-import { requireFeedbackInScope, requireUserScopeContext } from "../auth/accessPolicy";
-import { env } from "../env";
-import {
-  getFeedbackDashboardSummaryReadModelData,
-  getFeedbackIssueDetailReadModelData,
-  getFeedbackIssueListReadModelData,
-} from "../readModels/feedbackIssueReadModel";
-import {
-  addFeedbackRelation,
-  createFeedback,
-  getFeedbackReferences,
-  listFeedbackReferences,
-  searchFeedbackReferences,
-  getFeedbackReportAttachmentContent,
-  getFeedbackSubscription,
-  markFeedbackViewed,
-  removeFeedbackRelation,
-  transitionFeedback,
-  updateFeedbackAssignee,
-  updateFeedbackSubscription,
-  updateFeedbackMetadata,
-  type FeedbackCommandActor,
   type FeedbackCommandResult,
-} from "./feedbackCommandAdapter";
-import { listFeedbackAssigneeOptions } from "./feedbackAssigneeOptions";
-import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
-import { runtimeScopeStorageId } from "../repositories/runtimeScope";
-import {
-  commitFeedbackImportForScope,
-  preflightFeedbackImportForScope,
-  type FeedbackTransferActor,
-} from "./feedbackTransferAdapter";
+} from "../contracts";
+import type { FeedbackRequestContext } from "./applicationPorts";
+import type { FeedbackServerApplication } from "./application";
 
 const feedbackParamsSchema = z.object({ feedbackId: z.string().min(1) });
 const feedbackRelationParamsSchema = z.object({ feedbackId: z.string().min(1), relationId: z.string().min(1) });
@@ -105,6 +76,22 @@ const feedbackReferencesQuerySchema = z.object({
   q: z.string().trim().optional(),
 });
 
+type MultipartFilePart = {
+  readonly fieldname: string;
+  readonly filename: string;
+  readonly mimetype: string;
+  readonly type: "file";
+  toBuffer(): Promise<Buffer>;
+};
+
+type MultipartFieldPart = {
+  readonly fieldname: string;
+  readonly type: "field";
+  readonly value: unknown;
+};
+
+type MultipartPart = MultipartFilePart | MultipartFieldPart;
+
 function parseCauseCategories(value: string) {
   try {
     const parsed = JSON.parse(value) as unknown;
@@ -134,7 +121,7 @@ function normalizeOptionalId(value: string | null | undefined) {
   return value?.trim() || null;
 }
 
-function commandActor(context: NonNullable<Awaited<ReturnType<typeof requireUserScopeContext>>>): FeedbackCommandActor {
+function applicationActor(context: FeedbackRequestContext) {
   return {
     id: context.user.id,
     name: context.user.name,
@@ -144,27 +131,15 @@ function commandActor(context: NonNullable<Awaited<ReturnType<typeof requireUser
   };
 }
 
-function feedbackImportActor(context: NonNullable<Awaited<ReturnType<typeof requireUserScopeContext>>>): FeedbackTransferActor {
-  return {
-    id: context.user.id,
-    role: context.user.role,
-    status: context.user.status === "active" ? "active" : "inactive",
-    teamId: runtimeScopeStorageId(context.scope),
-  };
-}
-
-function requireActiveFeedbackTransferActor(
-  reply: FastifyReply,
-  context: NonNullable<Awaited<ReturnType<typeof requireUserScopeContext>>>,
-) {
+function requireActiveFeedbackTransferActor(reply: FastifyReply, context: FeedbackRequestContext) {
   if (context.user.status !== "active") {
     reply.code(403).send({ error: "Only active members can import or export feedback" });
     return null;
   }
-  return feedbackImportActor(context);
+  return applicationActor(context);
 }
 
-async function readCreateFeedbackBody(request: FastifyRequest) {
+async function readCreateFeedbackBody(request: FastifyRequest, uploadMaxBytes: number) {
   const contentType = request.headers["content-type"] ?? "";
   if (!contentType.includes("multipart/form-data")) {
     const body = createFeedbackBodySchema.parse(request.body);
@@ -182,7 +157,7 @@ async function readCreateFeedbackBody(request: FastifyRequest) {
 
   const fields: Record<string, string> = {};
   const attachments: Array<{ body: Buffer; clientId: string; fileName: string; mimeType: string }> = [];
-  for await (const part of request.parts({ limits: { fileSize: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES } })) {
+  for await (const part of multipartParts(request, uploadMaxBytes)) {
     if (part.type === "field" && typeof part.value === "string") {
       fields[part.fieldname] = part.value;
     }
@@ -212,7 +187,7 @@ async function readCreateFeedbackBody(request: FastifyRequest) {
   };
 }
 
-async function readFeedbackImportUpload(request: FastifyRequest) {
+async function readFeedbackImportUpload(request: FastifyRequest, uploadMaxBytes: number) {
   const contentType = request.headers["content-type"] ?? "";
   if (!contentType.includes("multipart/form-data")) {
     return null;
@@ -220,7 +195,7 @@ async function readFeedbackImportUpload(request: FastifyRequest) {
 
   let file: { body: Buffer; fileName: string; mimeType: string } | null = null;
   const fields: Record<string, string> = {};
-  for await (const part of request.parts({ limits: { fileSize: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES } })) {
+  for await (const part of multipartParts(request, uploadMaxBytes)) {
     if (part.type === "field" && typeof part.value === "string") {
       fields[part.fieldname] = part.value;
       continue;
@@ -235,6 +210,16 @@ async function readFeedbackImportUpload(request: FastifyRequest) {
   }
 
   return file ? { ...file, fields } : null;
+}
+
+function multipartParts(request: FastifyRequest, uploadMaxBytes: number): AsyncIterable<MultipartPart> {
+  const requestWithMultipart = request as FastifyRequest & {
+    parts?: (options: { limits: { fileSize: number } }) => AsyncIterable<MultipartPart>;
+  };
+  if (!requestWithMultipart.parts) {
+    throw new Error("Feedback multipart request handling is not registered.");
+  }
+  return requestWithMultipart.parts({ limits: { fileSize: uploadMaxBytes } });
 }
 
 function parseFeedbackImportReferenceMappings(value: string | undefined) {
@@ -293,15 +278,13 @@ function sendFeedbackCommandOutcome(reply: FastifyReply, outcome: FeedbackComman
   return { ok: true, changed: outcome.changed };
 }
 
-export function registerFeedbackHttpRoutes(app: FastifyInstance) {
+export function registerFeedbackHttpRoutes(app: FastifyInstance, feedback: FeedbackServerApplication) {
   app.get("/api/feedback", async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
 
     const listRequest = feedbackIssueListRequestFromInput(request.query as Record<string, string | string[] | null | undefined>);
-    return getFeedbackIssueListReadModelData({
+    return feedback.getIssueList({
       filters: listRequest.filters,
       pagination: listRequest.pagination,
       scope: context.scope,
@@ -310,25 +293,21 @@ export function registerFeedbackHttpRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/feedback/assignees", async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
 
-    const users = await listFeedbackAssigneeOptions(context.scope);
+    const users = await feedback.listAssigneeOptions(context.scope);
     return { users };
   });
 
   app.get("/api/feedback/references", async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
 
     const query = parseFeedbackReferenceQuery(request.query);
-    const byId = await getFeedbackReferences(query.ids, context.scope);
-    const bySearch = query.q ? await searchFeedbackReferences(query.q, context.scope, query.limit) : [];
-    const byRecent = query.ids.length === 0 && !query.q ? await listFeedbackReferences(context.scope, query.limit) : [];
+    const byId = await feedback.getReferences(context.scope, query.ids);
+    const bySearch = query.q ? await feedback.searchReferences(context.scope, query.q, query.limit) : [];
+    const byRecent = query.ids.length === 0 && !query.q ? await feedback.listReferences(context.scope, query.limit) : [];
     const seen = new Set<string>();
     return {
       feedback: [...byId, ...bySearch, ...byRecent].filter((item) => {
@@ -340,28 +319,20 @@ export function registerFeedbackHttpRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/feedback/summary", async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
 
-    return getFeedbackDashboardSummaryReadModelData({ scope: context.scope });
+    return feedback.getDashboardSummary(context.scope);
   });
 
   app.post("/api/feedback/imports/preflight", async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
     const actor = requireActiveFeedbackTransferActor(reply, context);
-    if (!actor) {
-      return reply;
-    }
+    if (!actor) return reply;
 
-    const file = await readFeedbackImportUpload(request);
-    if (!file) {
-      return reply.code(400).send({ error: "Feedback import file is required" });
-    }
+    const file = await readFeedbackImportUpload(request, feedbackPortsUploadLimit(feedback));
+    if (!file) return reply.code(400).send({ error: "Feedback import file is required" });
     if (isUnsupportedFeedbackImportArchive(file)) {
       return reply.code(400).send({ error: "Feedback import currently accepts CSV only" });
     }
@@ -373,250 +344,163 @@ export function registerFeedbackHttpRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: "Feedback import reference mappings are invalid" });
     }
 
-    return preflightFeedbackImportForScope({
-      actor,
+    return feedback.preflightImport({
       body: file.body,
       fileName: file.fileName,
       mimeType: file.mimeType,
       referenceMappings,
-      scope: context.scope,
-    });
+    }, actor);
   });
 
   app.post("/api/feedback/imports/:batchId/commit", async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
     const actor = requireActiveFeedbackTransferActor(reply, context);
-    if (!actor) {
-      return reply;
-    }
+    if (!actor) return reply;
 
     const params = feedbackImportParamsSchema.parse(request.params);
-    const result = await commitFeedbackImportForScope({ actor, batchId: params.batchId });
-    if (result.status === "notFound") {
-      return reply.code(404).send({ error: "Feedback import batch not found" });
-    }
-    if (result.status === "invalid") {
-      return reply.code(409).send({ error: "Feedback import batch is not ready to commit" });
-    }
-
-    if (result.createdFeedbackIds.length > 0) {
-      publishOrfDataInvalidation({
-        actorUserId: context.user.id,
-        models: ["feedback"],
-        reason: "feedback.changed",
-        teamId: runtimeScopeStorageId(context.scope),
-      });
-    }
+    const result = await feedback.commitImport(params.batchId, actor);
+    if (result.status === "notFound") return reply.code(404).send({ error: "Feedback import batch not found" });
+    if (result.status === "invalid") return reply.code(409).send({ error: "Feedback import batch is not ready to commit" });
     return { result };
   });
 
   app.get("/api/feedback/report-attachments/:attachmentId/content", async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
 
     const params = feedbackReportAttachmentParamsSchema.parse(request.params);
     const query = feedbackReportAttachmentContentQuerySchema.parse(request.query);
-    const outcome = await getFeedbackReportAttachmentContent(params.attachmentId, commandActor(context), query);
+    const outcome = await feedback.getReportAttachmentContent(params.attachmentId, applicationActor(context), query);
     if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Feedback report attachment not found" });
     }
-    if (outcome.status === "forbidden") {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
+    if (outcome.status === "forbidden") return reply.code(403).send({ error: "Forbidden" });
 
     reply.header("Cache-Control", "private, max-age=60");
     reply.header("Content-Disposition", contentDispositionHeader(outcome.contentDisposition, outcome.fileName));
     reply.header("Content-Type", outcome.contentType);
     reply.header("X-Content-Type-Options", "nosniff");
-    if (outcome.contentLength !== undefined) {
-      reply.header("Content-Length", outcome.contentLength);
-    }
+    if (outcome.contentLength !== undefined) reply.header("Content-Length", outcome.contentLength);
     return reply.send(outcome.body);
   });
 
   app.get("/api/feedback/:feedbackId/reference", async (request, reply) => {
     const params = feedbackParamsSchema.parse(request.params);
     const query = feedbackReferenceCardQuerySchema.parse(request.query);
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
 
-    const data = await getFeedbackIssueDetailReadModelData(params.feedbackId, { scope: context.scope, viewerUserId: context.user.id });
-    if (!data) {
-      return reply.code(404).send({ error: "Feedback not found" });
-    }
+    const data = await feedback.getIssueDetail(params.feedbackId, { scope: context.scope, viewerUserId: context.user.id });
+    if (!data) return reply.code(404).send({ error: "Feedback not found" });
 
     const reference = feedbackReferenceCardDataFromReadModel(data, {
       activityId: query.activity,
       commentMessageId: query.comment,
       feedbackId: params.feedbackId,
     });
-    if (!reference) {
-      return reply.code(404).send({ error: "Feedback reference not found" });
-    }
-
+    if (!reference) return reply.code(404).send({ error: "Feedback reference not found" });
     return { reference };
   });
 
   app.get("/api/feedback/:feedbackId", async (request, reply) => {
     const params = feedbackParamsSchema.parse(request.params);
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
 
-    const data = await getFeedbackIssueDetailReadModelData(params.feedbackId, { scope: context.scope, viewerUserId: context.user.id });
-    if (!data) {
-      return reply.code(404).send({ error: "Feedback not found" });
-    }
+    const data = await feedback.getIssueDetail(params.feedbackId, { scope: context.scope, viewerUserId: context.user.id });
+    if (!data) return reply.code(404).send({ error: "Feedback not found" });
     return data;
   });
 
   app.post("/api/feedback", async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
 
-    const body = await readCreateFeedbackBody(request);
-    const outcome = await createFeedback(body, commandActor(context));
-
-    if (outcome.status === "notFound") {
-      return reply.code(404).send({ error: "Runtime scope not found" });
-    }
-    if (outcome.status === "invalid") {
-      return reply.code(400).send({ error: "Feedback body is required" });
-    }
-    if (outcome.status === "invalidAssignee") {
-      return reply.code(409).send({ error: "Feedback assignee must be an active member" });
-    }
-    if (outcome.status === "invalidProject") {
-      return reply.code(409).send({ error: "Feedback project not found" });
-    }
-    if (outcome.status === "tooLarge") {
-      return reply.code(413).send({ error: "Attachment is too large" });
-    }
-
+    const body = await readCreateFeedbackBody(request, feedbackPortsUploadLimit(feedback));
+    const outcome = await feedback.createFeedback(body, applicationActor(context));
+    if (outcome.status === "notFound") return reply.code(404).send({ error: "Runtime scope not found" });
+    if (outcome.status === "invalid") return reply.code(400).send({ error: "Feedback body is required" });
+    if (outcome.status === "invalidAssignee") return reply.code(409).send({ error: "Feedback assignee must be an active member" });
+    if (outcome.status === "invalidProject") return reply.code(409).send({ error: "Feedback project not found" });
+    if (outcome.status === "tooLarge") return reply.code(413).send({ error: "Attachment is too large" });
     return { feedback: outcome.feedback };
   });
 
   app.post("/api/feedback/:feedbackId/transitions", async (request, reply) => {
     const params = feedbackParamsSchema.parse(request.params);
     const body = feedbackTransitionInputSchema.parse(request.body);
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    return sendFeedbackCommandOutcome(reply, await transitionFeedback(params.feedbackId, body, commandActor(context)));
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
+    return sendFeedbackCommandOutcome(reply, await feedback.transitionFeedback(params.feedbackId, body, applicationActor(context)));
   });
 
   app.patch("/api/feedback/:feedbackId/metadata", async (request, reply) => {
     const params = feedbackParamsSchema.parse(request.params);
     const body = updateFeedbackMetadataBodySchema.parse(request.body);
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    return sendFeedbackCommandOutcome(reply, await updateFeedbackMetadata(params.feedbackId, body, commandActor(context)));
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
+    return sendFeedbackCommandOutcome(reply, await feedback.updateMetadata(params.feedbackId, body, applicationActor(context)));
   });
 
   app.patch("/api/feedback/:feedbackId/assignee", async (request, reply) => {
     const params = feedbackParamsSchema.parse(request.params);
     const body = updateFeedbackAssigneeBodySchema.parse(request.body);
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    return sendFeedbackCommandOutcome(reply, await updateFeedbackAssignee(params.feedbackId, body, commandActor(context)));
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
+    return sendFeedbackCommandOutcome(reply, await feedback.updateAssignee(params.feedbackId, body, applicationActor(context)));
   });
 
   app.post("/api/feedback/:feedbackId/relations", async (request, reply) => {
     const params = feedbackParamsSchema.parse(request.params);
     const body = addFeedbackRelationBodySchema.parse(request.body);
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    return sendFeedbackCommandOutcome(reply, await addFeedbackRelation(params.feedbackId, body, commandActor(context)));
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
+    return sendFeedbackCommandOutcome(reply, await feedback.addRelation(params.feedbackId, body, applicationActor(context)));
   });
 
   app.delete("/api/feedback/:feedbackId/relations/:relationId", async (request, reply) => {
     const params = feedbackRelationParamsSchema.parse(request.params);
     const body = removeFeedbackRelationBodySchema.parse(request.body);
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    return sendFeedbackCommandOutcome(reply, await removeFeedbackRelation(params.feedbackId, params.relationId, body, commandActor(context)));
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
+    return sendFeedbackCommandOutcome(reply, await feedback.removeRelation(params.feedbackId, params.relationId, body, applicationActor(context)));
   });
 
   app.put("/api/feedback/:feedbackId/view", async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
     const params = feedbackParamsSchema.parse(request.params);
-    if (!(await requireFeedbackInScope(reply, params.feedbackId, context.scope))) {
-      return reply;
-    }
-
     const body = markFeedbackViewedBodySchema.parse(request.body);
-    return sendFeedbackCommandOutcome(reply, await markFeedbackViewed(params.feedbackId, body, commandActor(context)));
+    return sendFeedbackCommandOutcome(reply, await feedback.markViewed(params.feedbackId, body, applicationActor(context)));
   });
 
   app.get("/api/feedback/:feedbackId/subscription", async (request, reply) => {
     const params = feedbackParamsSchema.parse(request.params);
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-    if (!(await requireFeedbackInScope(reply, params.feedbackId, context.scope))) {
-      return reply;
-    }
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
 
-    const result = await getFeedbackSubscription(params.feedbackId, commandActor(context));
-    if (result.status === "notFound") {
-      return reply.code(404).send({ error: "Feedback not found" });
-    }
-    if (result.status === "invalid") {
-      return reply.code(400).send({ error: "Feedback subscription is invalid" });
-    }
-
+    const result = await feedback.getSubscription(params.feedbackId, applicationActor(context));
+    if (result.status === "notFound") return reply.code(404).send({ error: "Feedback not found" });
+    if (result.status === "invalid") return reply.code(400).send({ error: "Feedback subscription is invalid" });
     return { subscription: { mode: result.mode } };
   });
 
   app.put("/api/feedback/:feedbackId/subscription", async (request, reply) => {
     const params = feedbackParamsSchema.parse(request.params);
     const body = updateFeedbackSubscriptionBodySchema.parse(request.body);
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-    if (!(await requireFeedbackInScope(reply, params.feedbackId, context.scope))) {
-      return reply;
-    }
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
 
-    const result = await updateFeedbackSubscription(params.feedbackId, body.mode, commandActor(context));
-    if (result.status === "notFound") {
-      return reply.code(404).send({ error: "Feedback not found" });
-    }
-    if (result.status === "invalid") {
-      return reply.code(400).send({ error: "Feedback subscription is invalid" });
-    }
-
+    const result = await feedback.setSubscription(params.feedbackId, body.mode, applicationActor(context));
+    if (result.status === "notFound") return reply.code(404).send({ error: "Feedback not found" });
+    if (result.status === "invalid") return reply.code(400).send({ error: "Feedback subscription is invalid" });
     return { subscription: { mode: result.mode } };
   });
+}
+
+function feedbackPortsUploadLimit(feedback: FeedbackServerApplication) {
+  return feedback.uploadMaxBytes;
 }
 
 function contentDispositionHeader(disposition: "attachment" | "inline", fileName: string) {

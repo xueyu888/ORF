@@ -115,6 +115,9 @@ async function checkServerPublicBoundary() {
     },
   ];
   for (const block of exportBlocks(source)) {
+    if (block.specifier.startsWith("../server/")) {
+      errors.push(`modules/feedback/src/public/server.ts must not re-export internal server module ${block.specifier}; expose only registration protocols from public/server.ts.`);
+    }
     for (const rule of forbiddenTypeExports) {
       if (block.specifier !== rule.specifier) {
         continue;
@@ -214,6 +217,20 @@ async function checkWebPublicBoundary() {
   if (/\bexport\s+function\s+isFeedbackPath\b/.test(source)) {
     errors.push("modules/feedback/src/public/web.ts must not export isFeedbackPath; use contracts for route path checks.");
   }
+  if (/\bexport\s+const\s+feedbackWebContribution\b/.test(source)) {
+    errors.push("modules/feedback/src/public/web.ts must not export feedbackWebContribution; expose createFeedbackWebContribution as the single Web contribution factory.");
+  }
+  const runtimeExportPattern = /\bexport\s+(interface|class|const|function)\s+([A-Za-z0-9_]+)/g;
+  for (const match of source.matchAll(runtimeExportPattern)) {
+    const name = match[2] ?? "";
+    if (name !== "createFeedbackWebContribution") {
+      errors.push(`modules/feedback/src/public/web.ts must not export ${name}; Web public surface is the contribution factory plus host protocol type exports.`);
+    }
+  }
+  const typeDeclarationExportPattern = /\bexport\s+type\s+([A-Za-z0-9_]+)\b/g;
+  for (const match of source.matchAll(typeDeclarationExportPattern)) {
+    errors.push(`modules/feedback/src/public/web.ts must not export type declaration ${match[1]}; use an explicit protocol type export block if it is required by the host adapter.`);
+  }
 
   const forbiddenPathExports = [
     "feedbackCreatePath",
@@ -224,6 +241,9 @@ async function checkWebPublicBoundary() {
     "isFeedbackPath",
   ];
   for (const block of exportBlocks(source)) {
+    if (block.specifier === "../web/api" || block.specifier === "../web/hooks") {
+      errors.push(`modules/feedback/src/public/web.ts must not export ${block.specifier}; web public entry only exposes the contribution factory and host protocol types.`);
+    }
     for (const name of forbiddenPathExports) {
       if (new RegExp(`\\b${name}\\b`).test(block.names)) {
         errors.push(`modules/feedback/src/public/web.ts must not export ${name}; use contracts for route path helpers.`);
@@ -289,8 +309,16 @@ async function checkHostDriveFeedbackBoundary() {
 async function checkFeedbackLegacyRemovalBoundary() {
   const forbiddenFiles = [
     "server/feedback/feedbackDriveContextProvider.ts",
+    "server/feedback/feedbackAssigneeOptions.ts",
+    "server/feedback/feedbackCommandAdapter.ts",
+    "server/feedback/feedbackCommentTargetAdapter.ts",
+    "server/feedback/feedbackHttpRoutes.ts",
     "server/feedback/feedbackNotificationPresentationProvider.ts",
+    "server/feedback/feedbackNotificationRecipientDirectory.ts",
+    "server/feedback/feedbackProjectOptions.ts",
     "server/feedback/feedbackReferenceProvider.ts",
+    "server/feedback/feedbackTransferAdapter.ts",
+    "server/readModels/feedbackIssueReadModel.ts",
     "server/routes/feedbackRoutes.ts",
     "server/repositories/feedbackRepository.ts",
     "server/repositories/feedbackSubscriptionRepository.ts",
@@ -421,8 +449,7 @@ function canImportFeedbackTesting(relativePath) {
 
 function canImportFeedbackServer(relativePath) {
   return relativePath === "server/app.ts" ||
-    relativePath.startsWith("server/feedback/") ||
-    relativePath === "server/readModels/feedbackIssueReadModel.ts";
+    relativePath.startsWith("server/feedback/");
 }
 
 function canImportFeedbackWeb(relativePath) {

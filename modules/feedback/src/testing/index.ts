@@ -24,6 +24,9 @@ export {
   feedbackServerMinimumPollIntervalMs,
   feedbackServerPollIntervalMs,
 } from "../server/polling";
+export {
+  createFeedbackNotificationPresentationProvider,
+} from "../server/notificationPresentation";
 
 export function feedbackEntityFixture(
   overrides: Partial<FeedbackEntitySnapshot> = {},

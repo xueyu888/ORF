@@ -1,6 +1,5 @@
 import { createElement, type ComponentType } from "react";
 import type {
-  OrfWebModuleCommandItem,
   OrfWebModuleCommandSearch,
   OrfWebModuleContribution,
   OrfWebModuleRoute,
@@ -21,12 +20,15 @@ import { FeedbackIssuePage } from "../web/pages/FeedbackIssuePage";
 import { FeedbackLabelsPage } from "../web/pages/FeedbackLabelsPage";
 import type { FeedbackWebUser } from "../web/types";
 
-export interface FeedbackWebNavigationContribution {
+interface FeedbackWebNavigationContribution {
   readonly label: "反馈";
   readonly path: "/feedback";
 }
 
-export type FeedbackWebCommandItem = OrfWebModuleCommandItem & {
+type FeedbackWebCommandItem = {
+  readonly label: string;
+  readonly path: string;
+  readonly searchText: string;
   readonly type: "Feedback";
 };
 
@@ -34,7 +36,7 @@ type FeedbackWebCommandUser = Pick<FeedbackWebUser, "role" | "status">;
 type FeedbackWebCommandContribution = OrfWebModuleCommandSearch<FeedbackWebCommandUser>;
 type FeedbackWebRouteContribution = OrfWebModuleRouteDefinition;
 
-export interface FeedbackWebContributionDefinition extends Omit<OrfWebModuleContribution<FeedbackWebCommandUser>, "routes"> {
+interface FeedbackWebContributionDefinition extends Omit<OrfWebModuleContribution<FeedbackWebCommandUser>, "routes"> {
   readonly id: "feedback";
   readonly navigation: FeedbackWebNavigationContribution;
   readonly commands: readonly FeedbackWebCommandContribution[];
@@ -49,11 +51,11 @@ export interface FeedbackWebContributionDefinition extends Omit<OrfWebModuleCont
   };
 }
 
-export interface FeedbackWebContribution extends Omit<FeedbackWebContributionDefinition, "routes"> {
+interface FeedbackWebContribution extends Omit<FeedbackWebContributionDefinition, "routes"> {
   readonly routes: readonly OrfWebModuleRoute[];
 }
 
-export const feedbackWebContribution: FeedbackWebContributionDefinition = {
+const feedbackWebContribution: FeedbackWebContributionDefinition = {
   id: "feedback",
   navigation: {
     label: "反馈",
@@ -156,15 +158,6 @@ export function createFeedbackWebContribution(host: FeedbackWebHost): FeedbackWe
     ],
   };
 }
-export {
-  FeedbackWebApiError,
-  getFeedbackReferenceCard,
-  getFeedbackReferences,
-} from "../web/api";
-export type { FeedbackReferenceSummary } from "../web/types";
-export {
-  useFeedbackDashboardSummary,
-} from "../web/hooks";
 export type {
   FeedbackCommentDraft,
   FeedbackCommentDraftMode,
@@ -173,7 +166,6 @@ export type {
   FeedbackWebHost,
 } from "../web/runtime";
 export type {
-  FeedbackReferenceCardData,
   FeedbackWebAttachment,
   FeedbackWebUser,
 } from "../web/types";

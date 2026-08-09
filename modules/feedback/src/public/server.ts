@@ -1,7 +1,6 @@
+import type { FastifyInstance } from "fastify";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import {
-  feedbackNotificationEventKindValues,
-  type FeedbackNotificationEventKind,
   type FeedbackReferenceSummary,
 } from "../contracts";
 import {
@@ -16,18 +15,32 @@ import {
 } from "../server/dailyDigestScheduler";
 import {
   startFeedbackNotificationDispatchWorker,
-  type FeedbackNotificationDispatchDatabase,
 } from "../server/notificationDispatch";
+import {
+  createFeedbackServerApplication,
+} from "../server/application";
+import {
+  registerFeedbackHttpRoutes,
+} from "../server/httpRoutes";
+import {
+  createFeedbackCommentTargetAdapter,
+  type FeedbackCommentTargetAdapterContribution,
+} from "../server/commentTarget";
+import {
+  createFeedbackNotificationPresentationProvider,
+  type FeedbackNotificationPresentationProviderContribution,
+} from "../server/notificationPresentation";
 import type {
-  FeedbackNotificationPort,
-} from "../server/notificationProtocol";
+  FeedbackApplicationDatabase,
+  FeedbackServerApplicationPorts,
+} from "../server/applicationPorts";
 
 export type FeedbackModuleStop = () => Promise<void> | void;
 
 export interface FeedbackHttpRouteRegistration {
   readonly moduleId: "feedback";
   readonly mountPath: "/api/feedback";
-  register(): void;
+  register(app: FastifyInstance): void;
 }
 
 export interface FeedbackHttpRouteRegistry {
@@ -46,8 +59,8 @@ export interface FeedbackRuntimeLifecycleRegistry {
 
 export interface FeedbackCommentTargetRegistration {
   readonly moduleId: "feedback";
+  readonly adapter: FeedbackCommentTargetAdapterContribution;
   readonly type: "feedback";
-  register(): void;
 }
 
 export interface FeedbackCommentTargetRegistry {
@@ -83,49 +96,15 @@ export interface FeedbackDriveContextRegistry {
   registerProvider(provider: FeedbackDriveContextProviderContribution): void;
 }
 
-export interface FeedbackNotificationPolicyDescriptor {
-  readonly kind: string;
-  readonly replyTarget: "notification-target" | "metadata-comment-target" | "none";
-  readonly stream: "personalNotification";
-}
-
-export type FeedbackNotificationAction = {
-  readonly href: string;
-  readonly label: string;
-} | null;
-
-export interface FeedbackNotificationPresentationActionInput {
-  readonly body: string;
-  readonly kind: string;
-  readonly metadata?: Record<string, string> | null;
-  readonly targetHref: string;
-  readonly targetType: string;
-  readonly title: string;
-}
-
-export interface FeedbackNotificationPresentationProviderContribution {
-  readonly namespace: "feedback";
-  readonly kinds: readonly string[];
-  policy(kind: string): FeedbackNotificationPolicyDescriptor;
-  action(input: FeedbackNotificationPresentationActionInput): FeedbackNotificationAction;
-}
-
 export interface FeedbackNotificationPresentationRegistry {
   registerProvider(provider: FeedbackNotificationPresentationProviderContribution): void;
 }
 
-export type FeedbackServerDatabase =
-  & FeedbackReferenceDatabase
-  & FeedbackDailyDigestRuntime["database"]
-  & FeedbackNotificationDispatchDatabase
-  & Pick<NodePgDatabase<any>, "select">;
+export type FeedbackServerDatabase = FeedbackApplicationDatabase & FeedbackReferenceDatabase & Pick<NodePgDatabase<any>, "select">;
 
-export interface FeedbackRequiredPorts {
+export interface FeedbackRequiredPorts extends FeedbackServerApplicationPorts {
   readonly backgroundJobs: {
     readonly enabled: boolean;
-  };
-  readonly commentTarget: {
-    register(): void;
   };
   readonly database: FeedbackServerDatabase;
   readonly dailyDigest: {
@@ -133,68 +112,8 @@ export interface FeedbackRequiredPorts {
     readonly listActiveRecipients: FeedbackDailyDigestRuntime["listActiveRecipients"];
     readonly publishNotification: FeedbackDailyDigestRuntime["publishNotification"];
   };
-  readonly httpRoutes: {
-    register(): void;
-  };
   readonly log: FeedbackDailyDigestRuntime["log"];
-  readonly notificationDispatch: {
-    readonly publishNotification: FeedbackNotificationPort;
-  };
 }
-
-export {
-  markFeedbackViewed,
-  recordFeedbackCommentCreatedActivity,
-} from "../server/activity";
-export {
-  getFeedbackCommentNotificationFacts,
-  getFeedbackReferences,
-  lockFeedbackCommentTarget,
-  listFeedbackReferences,
-  resolveFeedbackCommentTarget,
-  searchFeedbackReferences,
-} from "../server/references";
-export {
-  getFeedbackDashboardSummary,
-  getFeedbackReadModelIssue,
-  getFeedbackReadModelIssues,
-  getFeedbackReadModelListPage,
-} from "../server/readModel";
-export type { FeedbackReadModelViewer } from "../server/readModelProtocol";
-export {
-  insertFeedbackNotificationDispatch,
-  publishFeedbackNotificationDispatch,
-} from "../server/notificationDispatch";
-export {
-  buildFeedbackAssigneeChangedNotificationDispatch,
-  buildFeedbackCommentCreatedNotificationDispatch,
-  buildFeedbackCreatedNotificationDispatch,
-  buildFeedbackLifecycleChangedNotificationDispatch,
-} from "../server/notificationDispatchPlans";
-export {
-  feedbackReportAttachmentResponseContentType,
-  getFeedbackReportAttachmentContentFacts,
-} from "../server/reportAttachmentContent";
-export {
-  getFeedbackAssignmentNotificationDispatchRecipients,
-  getFeedbackLifecycleNotificationDispatchRecipients,
-  getFeedbackOrdinaryNotificationDispatchRecipients,
-  getFeedbackSubscriptionMode,
-  setFeedbackSubscriptionMode,
-} from "../server/subscriptions";
-export {
-  addFeedbackIssueRelation,
-  createFeedbackDraft,
-  createFeedbackIssue,
-  removeFeedbackIssueRelation,
-  transitionFeedbackIssue,
-  updateFeedbackIssueAssignee,
-  updateFeedbackIssueMetadata,
-} from "../server/writeModel";
-export {
-  commitFeedbackImportBatch,
-  preflightFeedbackImport,
-} from "../server/transfer";
 
 export interface FeedbackServerHost {
   readonly protocolVersion: 1;
@@ -228,15 +147,16 @@ export function registerFeedbackServerModule(host: FeedbackServerHost): Feedback
   assertFeedbackServerHost(host);
   const taskStops: FeedbackModuleStop[] = [];
   let stopped = false;
+  const application = createFeedbackServerApplication(host.ports);
 
   try {
     host.references.registerProvider(createFeedbackReferenceProvider());
     host.driveContexts.registerProvider(createFeedbackDriveContextProvider(host.ports.database));
     host.notificationKinds.registerProvider(createFeedbackNotificationPresentationProvider());
     host.commentTargets.registerTarget({
+      adapter: createFeedbackCommentTargetAdapter(application),
       moduleId: "feedback",
       type: "feedback",
-      register: host.ports.commentTarget.register,
     });
     if (host.ports.backgroundJobs.enabled) {
       taskStops.push(host.lifecycle.registerTask({
@@ -256,17 +176,19 @@ export function registerFeedbackServerModule(host: FeedbackServerHost): Feedback
         start: () => startFeedbackNotificationDispatchWorker({
           database: host.ports.database,
           log: host.ports.log,
-          publishNotification: host.ports.notificationDispatch.publishNotification,
+          publishNotification: host.ports.notificationDispatch.publish,
         }),
       }));
     }
     host.http.registerRoutes({
       moduleId: "feedback",
       mountPath: "/api/feedback",
-      register: host.ports.httpRoutes.register,
+      register: (app) => registerFeedbackHttpRoutes(app, application),
     });
   } catch (error) {
-    stopFeedbackTasks(taskStops);
+    void stopFeedbackTasks(taskStops).catch((stopError) => {
+      host.ports.log.warn({ error: errorMessage(stopError) }, "Failed to stop feedback runtime tasks after registration failure.");
+    });
     throw error;
   }
 
@@ -336,43 +258,12 @@ function feedbackDriveContextReferences(items: readonly FeedbackReferenceSummary
   return items.map((item) => ({ id: item.id, title: item.title }));
 }
 
-function createFeedbackNotificationPresentationProvider(): FeedbackNotificationPresentationProviderContribution {
-  return {
-    namespace: "feedback",
-    kinds: feedbackNotificationEventKindValues,
-    policy(kind) {
-      return {
-        kind: assertFeedbackNotificationKind(kind),
-        replyTarget: kind === "feedback.assignee.digest" ? "none" : "notification-target",
-        stream: "personalNotification",
-      };
-    },
-    action(input) {
-      return {
-        href: input.targetHref,
-        label: feedbackNotificationActionLabel(assertFeedbackNotificationKind(input.kind)),
-      };
-    },
-  };
-}
-
-const feedbackNotificationKindSet = new Set<string>(feedbackNotificationEventKindValues);
-
-function assertFeedbackNotificationKind(kind: string): FeedbackNotificationEventKind {
-  if (!feedbackNotificationKindSet.has(kind)) {
-    throw new Error(`Unsupported feedback notification kind ${kind}.`);
-  }
-  return kind as FeedbackNotificationEventKind;
-}
-
-function feedbackNotificationActionLabel(kind: FeedbackNotificationEventKind) {
-  if (kind === "feedback.comment.created") return "打开评论";
-  if (kind === "feedback.assignee.digest") return "打开反馈列表";
-  return "打开反馈";
-}
-
 async function stopFeedbackTasks(taskStops: readonly FeedbackModuleStop[]) {
   for (const stop of [...taskStops].reverse()) {
     await stop();
   }
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }

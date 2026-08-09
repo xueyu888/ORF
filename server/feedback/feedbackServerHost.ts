@@ -7,12 +7,12 @@ import { db } from "../db/client";
 import { teamMembers, users } from "../db/schema";
 import { env } from "../env";
 import { publishNotificationEvent } from "../notifications/publisher";
-import { registerFeedbackCommentTargetAdapter } from "./feedbackCommentTargetAdapter";
-import { registerFeedbackHttpRoutes } from "./feedbackHttpRoutes";
-import { feedbackNotificationPort } from "./feedbackNotificationPort";
+import { registerCommentTargetAdapter, type CommentTargetAdapter } from "../comments/commentTargetAdapters";
 import { registerDriveContextProvider } from "../drive/driveContextProviderRegistry";
 import { registerNotificationPresentationProvider } from "../notifications/presentationRegistry";
 import { registerFeedbackReferenceProvider } from "../references/feedbackReferenceRegistry";
+import { runtimeScopeStorageId } from "../repositories/runtimeScope";
+import { createOrfFeedbackPorts } from "./feedbackHostPorts";
 
 async function listActiveFeedbackDigestRecipients() {
   return db
@@ -34,6 +34,21 @@ export function createOrfFeedbackServerHost(
   const startBackgroundJobs = options.startBackgroundJobs ?? true;
   const registeredHttpRoutes = new Set<string>();
   const registeredRuntimeTasks = new Set<string>();
+  const ports = createOrfFeedbackPorts({
+    dailyDigest: {
+      config: {
+        enabled: env.ORF_FEEDBACK_DAILY_DIGEST_ENABLED,
+        hour: env.ORF_FEEDBACK_DAILY_DIGEST_HOUR,
+        minute: env.ORF_FEEDBACK_DAILY_DIGEST_MINUTE,
+        pollIntervalMs: env.ORF_FEEDBACK_DAILY_DIGEST_POLL_INTERVAL_MS,
+        timeZone: env.ORF_FEEDBACK_DAILY_DIGEST_TIME_ZONE,
+      },
+      listActiveRecipients: listActiveFeedbackDigestRecipients,
+      publishNotification: publishNotificationEvent,
+    },
+    log: app.log,
+    startBackgroundJobs,
+  });
   return {
     protocolVersion: 1,
     http: {
@@ -45,7 +60,7 @@ export function createOrfFeedbackServerHost(
           throw new Error(`Feedback HTTP routes already registered at ${registration.mountPath}.`);
         }
         registeredHttpRoutes.add(registration.mountPath);
-        registration.register();
+        registration.register(app);
       },
     },
     lifecycle: {
@@ -63,7 +78,7 @@ export function createOrfFeedbackServerHost(
         if (registration.moduleId !== "feedback" || registration.type !== "feedback") {
           throw new Error(`Unsupported feedback comment target registration ${registration.type}.`);
         }
-        registration.register();
+        registerCommentTargetAdapter(commentTargetAdapterForOrf(registration.adapter));
       },
     },
     references: {
@@ -81,32 +96,100 @@ export function createOrfFeedbackServerHost(
         registerNotificationPresentationProvider(provider);
       },
     },
-    ports: {
-      backgroundJobs: {
-        enabled: startBackgroundJobs,
-      },
-      commentTarget: {
-        register: registerFeedbackCommentTargetAdapter,
-      },
-      database: db,
-      dailyDigest: {
-        config: {
-          enabled: env.ORF_FEEDBACK_DAILY_DIGEST_ENABLED,
-          hour: env.ORF_FEEDBACK_DAILY_DIGEST_HOUR,
-          minute: env.ORF_FEEDBACK_DAILY_DIGEST_MINUTE,
-          pollIntervalMs: env.ORF_FEEDBACK_DAILY_DIGEST_POLL_INTERVAL_MS,
-          timeZone: env.ORF_FEEDBACK_DAILY_DIGEST_TIME_ZONE,
+    ports,
+  };
+}
+
+function commentTargetAdapterForOrf(adapter: Parameters<FeedbackServerHost["commentTargets"]["registerTarget"]>[0]["adapter"]): CommentTargetAdapter {
+  return {
+    invalidationModel: adapter.invalidationModel,
+    protocolVersion: adapter.protocolVersion,
+    type: adapter.type,
+    resolve: adapter.resolve,
+    href: adapter.href,
+    canComment(actor, target) {
+      return adapter.canComment({
+        id: actor.id,
+        name: actor.name,
+        role: actor.role,
+        scope: actor.scope ? { storageScopeId: runtimeScopeStorageId(actor.scope) } : null,
+      }, {
+        storageScopeId: target.storageScopeId,
+        targetId: target.targetId,
+        targetType: "feedback",
+        title: target.title,
+      });
+    },
+    canRead(actor, target) {
+      return adapter.canRead({
+        id: actor.id,
+        name: actor.name,
+        role: actor.role,
+        scope: actor.scope ? { storageScopeId: runtimeScopeStorageId(actor.scope) } : null,
+      }, {
+        storageScopeId: target.storageScopeId,
+        targetId: target.targetId,
+        targetType: "feedback",
+        title: target.title,
+      });
+    },
+    lockForComment(database, target) {
+      return adapter.lockForComment(database, {
+        storageScopeId: target.storageScopeId,
+        targetId: target.targetId,
+        targetType: "feedback",
+        title: target.title,
+      });
+    },
+    onMessageCommitted(event, database) {
+      if (!adapter.onMessageCommitted) return Promise.resolve();
+      return adapter.onMessageCommitted({
+        actor: {
+          id: event.actor.id,
+          name: event.actor.name,
+          role: event.actor.role,
+          scope: event.actor.scope ? { storageScopeId: runtimeScopeStorageId(event.actor.scope) } : null,
         },
-        listActiveRecipients: listActiveFeedbackDigestRecipients,
-        publishNotification: publishNotificationEvent,
-      },
-      httpRoutes: {
-        register: () => registerFeedbackHttpRoutes(app),
-      },
-      log: app.log,
-      notificationDispatch: {
-        publishNotification: feedbackNotificationPort,
-      },
+        attachments: event.attachments,
+        body: event.body,
+        commentMessageId: event.commentMessageId,
+        commentThreadId: event.commentThreadId,
+        createdAt: event.createdAt,
+        mentionedUserIds: event.mentionedUserIds,
+        replyRecipientUserId: event.replyRecipientUserId,
+        replyToMessageId: event.replyToMessageId,
+        target: {
+          storageScopeId: event.target.storageScopeId,
+          targetId: event.target.targetId,
+          targetType: "feedback",
+          title: event.target.title,
+        },
+      }, database);
+    },
+    afterMessageCommitted(event, result) {
+      if (!adapter.afterMessageCommitted) return Promise.resolve();
+      return adapter.afterMessageCommitted({
+        actor: {
+          id: event.actor.id,
+          name: event.actor.name,
+          role: event.actor.role,
+          scope: event.actor.scope ? { storageScopeId: runtimeScopeStorageId(event.actor.scope) } : null,
+        },
+        attachments: event.attachments,
+        body: event.body,
+        commentMessageId: event.commentMessageId,
+        commentThreadId: event.commentThreadId,
+        createdAt: event.createdAt,
+        mentionedUserIds: event.mentionedUserIds,
+        replyRecipientUserId: event.replyRecipientUserId,
+        replyToMessageId: event.replyToMessageId,
+        target: {
+          storageScopeId: event.target.storageScopeId,
+          targetId: event.target.targetId,
+          targetType: "feedback",
+          title: event.target.title,
+        },
+      }, result);
     },
   };
 }
