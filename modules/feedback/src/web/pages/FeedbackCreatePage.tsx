@@ -126,7 +126,7 @@ export function FeedbackCreatePage() {
 
     setSubmitting(true);
     try {
-      const feedback = await createFeedback({
+      const feedbackId = await createFeedback({
         title: title.trim(),
         description: body,
         causeCategories: [cause.trim()],
@@ -136,7 +136,7 @@ export function FeedbackCreatePage() {
         attachments: referencedAttachments,
       });
       notify("反馈已捕获");
-      navigate(feedbackIssueHref(feedback.id));
+      navigate(feedbackIssueHref(feedbackId));
     } catch (error) {
       notify(feedbackMutationFailureMessage(error, "反馈保存失败"));
     } finally {

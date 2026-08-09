@@ -4,6 +4,7 @@ import {
   bigserial,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -29,7 +30,12 @@ import {
   type FeedbackResolution,
   type FeedbackStage,
 } from "../../contracts/index";
-import { notificationEvents, projects, teams, users } from "../../../../../server/db/schema";
+
+// The host owns these tables; feedback only declares the external keys required by its foreign-key contract.
+const feedbackHostTeamKeys = pgTable("teams", { id: text("id").notNull() });
+const feedbackHostProjectKeys = pgTable("projects", { id: text("id").notNull() });
+const feedbackHostUserKeys = pgTable("users", { id: uuid("id").notNull() });
+const feedbackHostNotificationEventKeys = pgTable("notification_events", { id: text("id").notNull() });
 
 export const feedbackStageEnum = pgEnum("feedback_stage", feedbackStageValues);
 export const feedbackResolutionEnum = pgEnum("feedback_resolution", feedbackResolutionValues);
@@ -44,24 +50,24 @@ export const feedback = pgTable(
     id: text("id").primaryKey(),
     teamId: text("team_id")
       .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
-    projectId: text("project_id").references(() => projects.id, { onDelete: "restrict" }),
+      .references(() => feedbackHostTeamKeys.id, { onDelete: "cascade" }),
+    projectId: text("project_id").references(() => feedbackHostProjectKeys.id, { onDelete: "restrict" }),
     title: text("title").notNull(),
     description: text("description").notNull(),
     stage: feedbackStageEnum("stage").$type<FeedbackStage>().notNull().default("open"),
     resolution: feedbackResolutionEnum("resolution").$type<FeedbackResolution>(),
     impact: feedbackImpactEnum("impact").$type<FeedbackImpact>().notNull().default("medium"),
     priority: feedbackPriorityEnum("priority").$type<FeedbackPriority>(),
-    assigneeUserId: uuid("assignee_user_id").references(() => users.id, { onDelete: "set null" }),
+    assigneeUserId: uuid("assignee_user_id").references(() => feedbackHostUserKeys.id, { onDelete: "set null" }),
     createdBy: uuid("created_by")
       .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
-    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+      .references(() => feedbackHostUserKeys.id, { onDelete: "restrict" }),
+    updatedBy: uuid("updated_by").references(() => feedbackHostUserKeys.id, { onDelete: "set null" }),
     version: integer("version").notNull().default(0),
     createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
     closedAt: timestamp("closed_at", { mode: "string", withTimezone: true }),
-    closedByUserId: uuid("closed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    closedByUserId: uuid("closed_by_user_id").references(() => feedbackHostUserKeys.id, { onDelete: "set null" }),
   },
   (table) => ({
     assigneeStage: index("feedback_assignee_stage_idx").on(table.teamId, table.assigneeUserId, table.stage),
@@ -102,7 +108,7 @@ export const feedbackReportAttachments = pgTable(
     id: text("id").primaryKey(),
     teamId: text("team_id")
       .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
+      .references(() => feedbackHostTeamKeys.id, { onDelete: "cascade" }),
     feedbackId: text("feedback_id")
       .notNull()
       .references(() => feedback.id, { onDelete: "cascade" }),
@@ -113,7 +119,7 @@ export const feedbackReportAttachments = pgTable(
     width: integer("width"),
     height: integer("height"),
     sortOrder: integer("sort_order").notNull().default(0),
-    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdBy: uuid("created_by").references(() => feedbackHostUserKeys.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
     sourceCommentAttachmentId: text("source_comment_attachment_id"),
   },
@@ -128,7 +134,7 @@ export const feedbackCauseCategories = pgTable(
   {
     teamId: text("team_id")
       .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
+      .references(() => feedbackHostTeamKeys.id, { onDelete: "cascade" }),
     feedbackId: text("feedback_id")
       .notNull()
       .references(() => feedback.id, { onDelete: "cascade" }),
@@ -147,7 +153,7 @@ export const feedbackRelations = pgTable(
     id: text("id").primaryKey(),
     teamId: text("team_id")
       .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
+      .references(() => feedbackHostTeamKeys.id, { onDelete: "cascade" }),
     sourceFeedbackId: text("source_feedback_id")
       .notNull()
       .references(() => feedback.id, { onDelete: "cascade" }),
@@ -155,7 +161,7 @@ export const feedbackRelations = pgTable(
       .notNull()
       .references(() => feedback.id, { onDelete: "cascade" }),
     type: feedbackRelationTypeEnum("type").$type<FeedbackRelationType>().notNull(),
-    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdBy: uuid("created_by").references(() => feedbackHostUserKeys.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
   },
   (table) => ({
@@ -181,11 +187,11 @@ export const feedbackActivityEvents = pgTable(
     id: text("id").primaryKey(),
     teamId: text("team_id")
       .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
+      .references(() => feedbackHostTeamKeys.id, { onDelete: "cascade" }),
     feedbackId: text("feedback_id")
       .notNull()
       .references(() => feedback.id, { onDelete: "cascade" }),
-    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    actorUserId: uuid("actor_user_id").references(() => feedbackHostUserKeys.id, { onDelete: "set null" }),
     activityType: feedbackActivityTypeEnum("activity_type").$type<FeedbackActivityType>().notNull(),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     sequence: bigserial("sequence", { mode: "number" }).notNull(),
@@ -203,13 +209,13 @@ export const feedbackUserViews = pgTable(
   {
     teamId: text("team_id")
       .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
+      .references(() => feedbackHostTeamKeys.id, { onDelete: "cascade" }),
     feedbackId: text("feedback_id")
       .notNull()
       .references(() => feedback.id, { onDelete: "cascade" }),
     userId: uuid("user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+      .references(() => feedbackHostUserKeys.id, { onDelete: "cascade" }),
     lastSeenSequence: bigint("last_seen_sequence", { mode: "number" }).notNull().default(0),
     updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
   },
@@ -224,13 +230,13 @@ export const feedbackParticipants = pgTable(
   {
     teamId: text("team_id")
       .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
+      .references(() => feedbackHostTeamKeys.id, { onDelete: "cascade" }),
     feedbackId: text("feedback_id")
       .notNull()
       .references(() => feedback.id, { onDelete: "cascade" }),
     userId: uuid("user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+      .references(() => feedbackHostUserKeys.id, { onDelete: "cascade" }),
     firstParticipatedAt: timestamp("first_participated_at", { mode: "string", withTimezone: true }).notNull(),
     lastParticipatedAt: timestamp("last_participated_at", { mode: "string", withTimezone: true }).notNull(),
   },
@@ -245,13 +251,13 @@ export const feedbackSubscriptions = pgTable(
   {
     teamId: text("team_id")
       .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
+      .references(() => feedbackHostTeamKeys.id, { onDelete: "cascade" }),
     feedbackId: text("feedback_id")
       .notNull()
       .references(() => feedback.id, { onDelete: "cascade" }),
     userId: uuid("user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+      .references(() => feedbackHostUserKeys.id, { onDelete: "cascade" }),
     mode: text("mode").$type<"subscribed" | "muted">().notNull(),
     createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
@@ -270,7 +276,7 @@ export const feedbackEventDispatches = pgTable(
     id: text("id").primaryKey(),
     teamId: text("team_id")
       .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
+      .references(() => feedbackHostTeamKeys.id, { onDelete: "cascade" }),
     activityEventId: text("activity_event_id")
       .notNull()
       .references(() => feedbackActivityEvents.id, { onDelete: "cascade" }),
@@ -278,7 +284,7 @@ export const feedbackEventDispatches = pgTable(
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
     status: text("status").$type<"failed" | "pending" | "published">().notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
-    notificationEventId: text("notification_event_id").references(() => notificationEvents.id, { onDelete: "set null" }),
+    notificationEventId: text("notification_event_id").references(() => feedbackHostNotificationEventKeys.id, { onDelete: "set null" }),
     lastError: text("last_error"),
     createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
@@ -299,7 +305,7 @@ export const feedbackEventDispatchRecipients = pgTable(
       .references(() => feedbackEventDispatches.id, { onDelete: "cascade" }),
     recipientUserId: uuid("recipient_user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+      .references(() => feedbackHostUserKeys.id, { onDelete: "cascade" }),
     reasons: jsonb("reasons").$type<string[]>().notNull().default([]),
     deliveryClass: text("delivery_class").$type<"direct" | "mandatory" | "ordinary">().notNull(),
     attentionLevel: text("attention_level").$type<"action_required" | "normal">().notNull(),
@@ -324,8 +330,8 @@ export const feedbackImportBatches = pgTable(
     id: text("id").primaryKey(),
     teamId: text("team_id")
       .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
-    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+      .references(() => feedbackHostTeamKeys.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").references(() => feedbackHostUserKeys.id, { onDelete: "set null" }),
     status: text("status").$type<"committed" | "failed" | "uploaded" | "validated">().notNull(),
     sourceKind: text("source_kind").notNull(),
     fileName: text("file_name"),
@@ -346,7 +352,7 @@ export const feedbackImportOrigins = pgTable(
   {
     teamId: text("team_id")
       .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
+      .references(() => feedbackHostTeamKeys.id, { onDelete: "cascade" }),
     sourceSystem: text("source_system").notNull(),
     externalId: text("external_id").notNull(),
     feedbackId: text("feedback_id")
@@ -366,22 +372,27 @@ export const feedbackDailyDigestRuns = pgTable(
   {
     teamId: text("team_id")
       .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
+      .references(() => feedbackHostTeamKeys.id, { onDelete: "cascade" }),
     assigneeUserId: uuid("assignee_user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    localDate: text("local_date").notNull(),
+      .references(() => feedbackHostUserKeys.id, { onDelete: "cascade" }),
+    localDate: date("local_date", { mode: "string" }).notNull(),
     status: text("status").$type<"failed" | "pending" | "sent">().notNull().default("pending"),
     feedbackCount: integer("feedback_count").notNull().default(0),
-    notificationEventId: text("notification_event_id").references(() => notificationEvents.id, { onDelete: "set null" }),
+    notificationEventId: text("notification_event_id").references(() => feedbackHostNotificationEventKeys.id, { onDelete: "set null" }),
     lastError: text("last_error"),
     attempts: integer("attempts").notNull().default(0),
     createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
   },
   (table) => ({
+    attemptsNonNegative: check("feedback_daily_digest_runs_attempts_check", sql`${table.attempts} >= 0`),
+    feedbackCountNonNegative: check("feedback_daily_digest_runs_feedback_count_check", sql`${table.feedbackCount} >= 0`),
     notificationEvent: index("feedback_daily_digest_runs_notification_event_idx").on(table.notificationEventId),
-    pk: primaryKey({ columns: [table.teamId, table.assigneeUserId, table.localDate] }),
+    pk: primaryKey({
+      columns: [table.teamId, table.assigneeUserId, table.localDate],
+      name: "feedback_daily_digest_runs_pk",
+    }),
     statusCheck: check("feedback_daily_digest_runs_status_check", sql`${table.status} IN ('pending', 'sent', 'failed')`),
     teamDate: index("feedback_daily_digest_runs_team_date_idx").on(table.teamId, table.localDate),
   }),

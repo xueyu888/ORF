@@ -12,7 +12,6 @@ import type {
   FeedbackReferenceCardData,
   FeedbackReferenceCardQuery,
   FeedbackSubscription,
-  FeedbackWebIssue,
   FeedbackWebProject,
   FeedbackWebProjectChatChannel,
   FeedbackWebUserPreferences,
@@ -160,7 +159,7 @@ export async function getFeedbackAssignees() {
   return apiJson<{ users: FeedbackWebUserSummary[] }>("/api/feedback/assignees");
 }
 
-export async function createFeedback(input: CreateFeedbackInput): Promise<FeedbackWebIssue> {
+export async function createFeedback(input: CreateFeedbackInput): Promise<string> {
   const formData = new FormData();
   formData.set("title", input.title);
   formData.set("causeCategories", JSON.stringify(input.causeCategories));
@@ -173,11 +172,11 @@ export async function createFeedback(input: CreateFeedbackInput): Promise<Feedba
     formData.set(`attachment:${attachment.id}`, attachment.file);
   }
 
-  const response = await apiJson<{ feedback: FeedbackWebIssue }>("/api/feedback", {
+  const response = await apiJson<{ feedbackId: string }>("/api/feedback", {
     method: "POST",
     body: formData,
   });
-  return response.feedback;
+  return response.feedbackId;
 }
 
 export async function transitionFeedback(feedbackId: string, command: FeedbackTransitionInput): Promise<void> {

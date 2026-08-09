@@ -424,7 +424,7 @@ export function registerFeedbackHttpRoutes(app: FastifyInstance, feedback: Feedb
     if (outcome.status === "invalidAssignee") return reply.code(409).send({ error: "Feedback assignee must be an active member" });
     if (outcome.status === "invalidProject") return reply.code(409).send({ error: "Feedback project not found" });
     if (outcome.status === "tooLarge") return reply.code(413).send({ error: "Attachment is too large" });
-    return { feedback: outcome.feedback };
+    return { feedbackId: outcome.feedbackId };
   });
 
   app.post("/api/feedback/:feedbackId/transitions", async (request, reply) => {

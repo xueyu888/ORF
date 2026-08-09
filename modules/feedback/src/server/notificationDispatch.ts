@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { feedbackNotificationEventPlanSchema, type FeedbackNotificationEventPlan } from "../contracts";
 import type {
@@ -41,7 +41,15 @@ type DispatchRow = {
   readonly idempotencyKey: string;
   readonly payload: Record<string, unknown>;
   readonly status: "failed" | "pending" | "published";
+  readonly updatedAt: string;
 };
+
+const feedbackNotificationRetryInitialMs = 30_000;
+const feedbackNotificationRetryMaximumMs = 30 * 60 * 1000;
+const feedbackNotificationClaimLeaseMs = 5 * 60 * 1000;
+const feedbackNotificationRetryMaximumExponent = Math.ceil(
+  Math.log2(feedbackNotificationRetryMaximumMs / feedbackNotificationRetryInitialMs),
+);
 
 const deliveryClassRank: Record<FeedbackNotificationDeliveryClass, number> = {
   ordinary: 0,
@@ -220,6 +228,53 @@ function dispatchErrorText(error: unknown) {
   return message.slice(0, 500);
 }
 
+export function feedbackNotificationRetryDelayMs(attempts: number) {
+  const completedAttempts = Math.max(1, Math.floor(attempts));
+  const exponent = Math.min(feedbackNotificationRetryMaximumExponent, completedAttempts - 1);
+  return Math.min(
+    feedbackNotificationRetryMaximumMs,
+    feedbackNotificationRetryInitialMs * (2 ** exponent),
+  );
+}
+
+function isFeedbackNotificationRetryDue(dispatch: DispatchRow, nowMs = Date.now()) {
+  const updatedAtMs = Date.parse(dispatch.updatedAt);
+  if (dispatch.status === "pending") {
+    return dispatch.attempts === 0
+      || !Number.isFinite(updatedAtMs)
+      || updatedAtMs + feedbackNotificationClaimLeaseMs <= nowMs;
+  }
+  if (dispatch.status !== "failed") return false;
+  return !Number.isFinite(updatedAtMs)
+    || updatedAtMs + feedbackNotificationRetryDelayMs(dispatch.attempts) <= nowMs;
+}
+
+function feedbackNotificationRetryableDispatchCondition(nowIso: string) {
+  const retryDelay = sql`
+    ${feedbackNotificationRetryInitialMs}
+    * power(
+      2,
+      least(
+        greatest(${feedbackEventDispatches.attempts} - 1, 0),
+        ${feedbackNotificationRetryMaximumExponent}
+      )
+    )
+  `;
+  return or(
+    and(
+      eq(feedbackEventDispatches.status, "pending"),
+      or(
+        eq(feedbackEventDispatches.attempts, 0),
+        sql`${feedbackEventDispatches.updatedAt} + (${feedbackNotificationClaimLeaseMs} * interval '1 millisecond') <= ${nowIso}::timestamptz`,
+      ),
+    ),
+    and(
+      eq(feedbackEventDispatches.status, "failed"),
+      sql`${feedbackEventDispatches.updatedAt} + (${retryDelay} * interval '1 millisecond') <= ${nowIso}::timestamptz`,
+    ),
+  );
+}
+
 async function markDispatchPublished(
   database: FeedbackNotificationDispatchDatabase,
   dispatch: DispatchRow,
@@ -233,12 +288,16 @@ async function markDispatchPublished(
       lastError: null,
       updatedAt: feedbackNowIso(),
     })
-    .where(eq(feedbackEventDispatches.id, dispatch.id));
+    .where(and(
+      eq(feedbackEventDispatches.id, dispatch.id),
+      eq(feedbackEventDispatches.status, "pending"),
+      eq(feedbackEventDispatches.attempts, dispatch.attempts),
+    ));
 }
 
 async function markDispatchFailed(
   database: FeedbackNotificationDispatchDatabase,
-  dispatchId: string,
+  dispatch: DispatchRow,
   error: unknown,
 ) {
   await database
@@ -248,29 +307,43 @@ async function markDispatchFailed(
       lastError: dispatchErrorText(error),
       updatedAt: feedbackNowIso(),
     })
-    .where(eq(feedbackEventDispatches.id, dispatchId));
+    .where(and(
+      eq(feedbackEventDispatches.id, dispatch.id),
+      eq(feedbackEventDispatches.status, "pending"),
+      eq(feedbackEventDispatches.attempts, dispatch.attempts),
+    ));
 }
 
 async function claimDispatchForPublish(
   database: FeedbackNotificationDispatchDatabase,
   dispatch: DispatchRow,
 ) {
-  if (dispatch.status !== "pending") {
+  if (!isFeedbackNotificationRetryDue(dispatch)) {
     return false;
   }
   const [claimed] = await database
     .update(feedbackEventDispatches)
     .set({
       attempts: sql`${feedbackEventDispatches.attempts} + 1`,
+      status: "pending",
       updatedAt: feedbackNowIso(),
     })
     .where(and(
       eq(feedbackEventDispatches.id, dispatch.id),
-      eq(feedbackEventDispatches.status, "pending"),
+      eq(feedbackEventDispatches.status, dispatch.status),
       eq(feedbackEventDispatches.attempts, dispatch.attempts),
     ))
-    .returning({ id: feedbackEventDispatches.id });
-  return Boolean(claimed);
+    .returning({
+      attempts: feedbackEventDispatches.attempts,
+      status: feedbackEventDispatches.status,
+      updatedAt: feedbackEventDispatches.updatedAt,
+    });
+  return claimed ? {
+    ...dispatch,
+    attempts: claimed.attempts,
+    status: claimed.status,
+    updatedAt: claimed.updatedAt,
+  } : null;
 }
 
 export async function publishFeedbackNotificationDispatch(
@@ -291,6 +364,7 @@ export async function publishFeedbackNotificationDispatch(
       idempotencyKey: feedbackEventDispatches.idempotencyKey,
       payload: feedbackEventDispatches.payload,
       status: feedbackEventDispatches.status,
+      updatedAt: feedbackEventDispatches.updatedAt,
     })
     .from(feedbackEventDispatches)
     .where(eq(feedbackEventDispatches.id, normalizedDispatchId))
@@ -301,13 +375,17 @@ export async function publishFeedbackNotificationDispatch(
   if (dispatch.status === "published") {
     return { status: "published" as const, notificationEventId: null };
   }
-  if (!(await claimDispatchForPublish(database, dispatch))) {
+  if (!isFeedbackNotificationRetryDue(dispatch)) {
+    return { status: "deferred" as const };
+  }
+  const claimedDispatch = await claimDispatchForPublish(database, dispatch);
+  if (!claimedDispatch) {
     return { status: "claimed" as const };
   }
 
   const plan = feedbackNotificationPlanFromPayload(dispatch.payload);
   if (!plan) {
-    await markDispatchFailed(database, dispatch.id, new Error("Invalid feedback notification dispatch payload."));
+    await markDispatchFailed(database, claimedDispatch, new Error("Invalid feedback notification dispatch payload."));
     return { status: "failed" as const };
   }
 
@@ -332,7 +410,7 @@ export async function publishFeedbackNotificationDispatch(
   const recipientUserIds = activeRecipients.map((recipient) => recipient.userId);
 
   if (recipientUserIds.length === 0) {
-    await markDispatchPublished(database, dispatch, null);
+    await markDispatchPublished(database, claimedDispatch, null);
     return { status: "published" as const, notificationEventId: null };
   }
 
@@ -346,10 +424,10 @@ export async function publishFeedbackNotificationDispatch(
       idempotencyKey: dispatch.idempotencyKey,
       recipients: activeRecipients,
     });
-    await markDispatchPublished(database, dispatch, result.notificationEventId ?? null);
+    await markDispatchPublished(database, claimedDispatch, result.notificationEventId ?? null);
     return { status: "published" as const, notificationEventId: result.notificationEventId ?? null };
   } catch (error) {
-    await markDispatchFailed(database, dispatch.id, error);
+    await markDispatchFailed(database, claimedDispatch, error);
     return { status: "failed" as const };
   }
 }
@@ -360,11 +438,15 @@ export async function publishPendingFeedbackNotificationDispatches(
   input: { readonly limit?: number } = {},
 ) {
   const limit = Math.max(1, Math.min(100, input.limit ?? 25));
+  const now = feedbackNowIso();
   const rows = await database
     .select({ id: feedbackEventDispatches.id })
     .from(feedbackEventDispatches)
-    .where(inArray(feedbackEventDispatches.status, ["pending"]))
-    .orderBy(asc(feedbackEventDispatches.updatedAt), asc(feedbackEventDispatches.id))
+    .where(feedbackNotificationRetryableDispatchCondition(now))
+    .orderBy(
+      asc(feedbackEventDispatches.updatedAt),
+      asc(feedbackEventDispatches.id),
+    )
     .limit(limit);
 
   for (const row of rows) {

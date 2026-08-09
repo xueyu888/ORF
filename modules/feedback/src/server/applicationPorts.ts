@@ -17,7 +17,6 @@ import type { FeedbackSubscriptionDatabase } from "./subscriptions";
 import type { FeedbackReportAttachmentContentDatabase } from "./reportAttachmentContent";
 import type { FeedbackNotificationDispatchDatabase } from "./notificationDispatch";
 import type { FeedbackDailyDigestRuntime } from "./dailyDigestScheduler";
-import type { FeedbackNotificationPort } from "./notificationProtocol";
 
 export type FeedbackApplicationDatabase =
   & NodePgDatabase<any>
@@ -132,6 +131,10 @@ export type FeedbackRealtimePort = {
   }): void | Promise<void>;
 };
 
+export type FeedbackApplicationLogPort = {
+  warn(data: Record<string, unknown>, message: string): void;
+};
+
 export type FeedbackNotificationContentPort = {
   buildCommentContent(input: {
     readonly attachments: readonly {
@@ -143,10 +146,6 @@ export type FeedbackNotificationContentPort = {
     readonly commentBody: string;
     readonly summary: string;
   }): { readonly body: string; readonly metadata: Record<string, string> };
-};
-
-export type FeedbackNotificationDispatchPort = {
-  readonly publish: FeedbackNotificationPort;
 };
 
 export type FeedbackReferenceQuery = {
@@ -169,8 +168,8 @@ export type FeedbackServerApplicationPorts = {
   readonly limits: {
     readonly uploadMaxBytes: number;
   };
+  readonly log: FeedbackApplicationLogPort;
   readonly notificationContent: FeedbackNotificationContentPort;
-  readonly notificationDispatch: FeedbackNotificationDispatchPort;
   readonly objectStorage: FeedbackObjectStoragePort;
   readonly projectDirectory: FeedbackProjectDirectoryPort;
   readonly realtime: FeedbackRealtimePort;

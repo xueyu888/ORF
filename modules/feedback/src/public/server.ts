@@ -16,6 +16,7 @@ import {
 import {
   startFeedbackNotificationDispatchWorker,
 } from "../server/notificationDispatch";
+import type { FeedbackNotificationPort } from "../server/notificationProtocol";
 import {
   createFeedbackServerApplication,
 } from "../server/application";
@@ -113,6 +114,9 @@ export interface FeedbackRequiredPorts extends FeedbackServerApplicationPorts {
     readonly publishNotification: FeedbackDailyDigestRuntime["publishNotification"];
   };
   readonly log: FeedbackDailyDigestRuntime["log"];
+  readonly notificationDispatch: {
+    readonly publish: FeedbackNotificationPort;
+  };
 }
 
 export interface FeedbackServerHost {

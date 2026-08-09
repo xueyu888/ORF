@@ -125,7 +125,7 @@ test("feedback daily digest schema guard keeps the per-assignee per-day idempote
     columns: [
       column("feedback_daily_digest_runs", "team_id"),
       column("feedback_daily_digest_runs", "assignee_user_id"),
-      column("feedback_daily_digest_runs", "local_date"),
+      column("feedback_daily_digest_runs", "local_date", "NO", "date"),
       column("feedback_daily_digest_runs", "status"),
       column("feedback_daily_digest_runs", "feedback_count"),
       column("feedback_daily_digest_runs", "notification_event_id", "YES"),
@@ -142,6 +142,14 @@ test("feedback daily digest schema guard keeps the per-assignee per-day idempote
       {
         constraintName: "feedback_daily_digest_runs_status_check",
         definition: "CHECK ((status = ANY (ARRAY['pending'::text, 'sent'::text, 'failed'::text])))",
+      },
+      {
+        constraintName: "feedback_daily_digest_runs_attempts_check",
+        definition: "CHECK ((attempts >= 0))",
+      },
+      {
+        constraintName: "feedback_daily_digest_runs_feedback_count_check",
+        definition: "CHECK ((feedback_count >= 0))",
       },
     ],
   }), []);
@@ -168,10 +176,17 @@ test("feedback daily digest schema guard keeps the per-assignee per-day idempote
   assert.match(errors.join("\n"), /last_error/);
   assert.match(errors.join("\n"), /primary key must include assignee_user_id/);
   assert.match(errors.join("\n"), /status pending is missing/);
+  assert.match(errors.join("\n"), /attempts must have a non-negative check constraint/);
+  assert.match(errors.join("\n"), /feedback_count must have a non-negative check constraint/);
 });
 
-function column(tableName: string, columnName: string, isNullable: "YES" | "NO" = "NO") {
-  return { columnName, isNullable, tableName };
+function column(
+  tableName: string,
+  columnName: string,
+  isNullable: "YES" | "NO" = "NO",
+  dataType?: string,
+) {
+  return { columnName, dataType, isNullable, tableName };
 }
 
 function rootColumn(columnName: string, isNullable: "YES" | "NO" = "NO") {

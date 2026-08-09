@@ -12,6 +12,7 @@ type NullableFlag = "YES" | "NO";
 
 export type RuntimeSchemaColumn = {
   columnName: string;
+  dataType?: string;
   isNullable: NullableFlag | string;
 };
 
@@ -640,6 +641,11 @@ export function validateFeedbackDailyDigestRunSchema(snapshot: {
     }
   }
 
+  const localDate = columnsByName.get("local_date");
+  if (localDate?.dataType && localDate.dataType !== "date") {
+    errors.push("feedback_daily_digest_runs.local_date must use the date type.");
+  }
+
   const constraintByName = new Map((snapshot.constraints ?? []).map((constraint) => [constraint.constraintName, constraint.definition.toLowerCase()]));
   const pkDefinition = constraintByName.get("feedback_daily_digest_runs_pk") ?? "";
   for (const columnName of ["team_id", "assignee_user_id", "local_date"]) {
@@ -652,6 +658,16 @@ export function validateFeedbackDailyDigestRunSchema(snapshot: {
   for (const status of ["pending", "sent", "failed"]) {
     if (!statusDefinition.includes(`'${status}'`)) {
       errors.push(`feedback_daily_digest_runs status ${status} is missing from the status guard.`);
+    }
+  }
+
+  for (const [constraintName, columnName] of [
+    ["feedback_daily_digest_runs_attempts_check", "attempts"],
+    ["feedback_daily_digest_runs_feedback_count_check", "feedback_count"],
+  ] as const) {
+    const definition = constraintByName.get(constraintName) ?? "";
+    if (!definition.includes(columnName) || !definition.includes(">= 0")) {
+      errors.push(`feedback_daily_digest_runs.${columnName} must have a non-negative check constraint.`);
     }
   }
 
@@ -1090,6 +1106,7 @@ export async function assertRuntimeDatabaseSchema() {
         select
           table_name as "tableName",
           column_name as "columnName",
+          data_type as "dataType",
           is_nullable as "isNullable"
         from information_schema.columns
         where table_schema = current_schema()

@@ -13,7 +13,6 @@ import {
   type FeedbackSubscriptionMutationMode,
   type FeedbackTransitionInput,
   type FeedbackWebCommentThread,
-  type FeedbackWebIssue,
   type FeedbackWebProject,
   type FeedbackWebUser,
 } from "../contracts";
@@ -58,10 +57,7 @@ import {
   feedbackReportAttachmentResponseContentType,
   getFeedbackReportAttachmentContentFacts,
 } from "./reportAttachmentContent";
-import {
-  insertFeedbackNotificationDispatch,
-  publishFeedbackNotificationDispatch,
-} from "./notificationDispatch";
+import { insertFeedbackNotificationDispatch } from "./notificationDispatch";
 import {
   commitFeedbackImportBatch,
   preflightFeedbackImport,
@@ -110,7 +106,7 @@ export type FeedbackApplicationActor = {
 };
 
 export type FeedbackApplicationCreateOutcome =
-  | { readonly status: "ok"; readonly feedback: FeedbackWebIssue }
+  | { readonly status: "ok"; readonly feedbackId: string }
   | { readonly status: "notFound" }
   | { readonly status: "invalid" }
   | { readonly status: "invalidAssignee" }
@@ -328,6 +324,7 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
     });
     if (report.status !== "ok") return { status: report.status };
 
+    let committed = false;
     try {
       const notificationDispatch = await this.prepareFeedbackCreatedNotificationDispatch({
         actorName: actor.name,
@@ -353,16 +350,21 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
         title: input.title,
       }, feedbackWriteActor(actor));
       if (created.status !== "ok") {
-        await this.ports.reportAttachments.deletePrepared(report.report.attachments);
+        await this.deletePreparedReportAttachments(report.report.attachments);
         return created;
       }
 
-      await this.publishFeedbackDispatch(created.notificationDispatchId);
-      await this.publishFeedbackChanged({ actorUserId: actor.id, feedbackId: created.feedbackId, scope: actor.scope });
-      const feedback = await this.getFeedbackFromReadModel(created.feedbackId, actor.scope, actor.id);
-      return feedback ? { status: "ok", feedback } : { status: "notFound" };
+      committed = true;
+      await this.publishFeedbackChangedAfterCommit({
+        actorUserId: actor.id,
+        feedbackId: created.feedbackId,
+        scope: actor.scope,
+      });
+      return { status: "ok", feedbackId: created.feedbackId };
     } catch (error) {
-      await this.ports.reportAttachments.deletePrepared(report.report.attachments);
+      if (!committed) {
+        await this.deletePreparedReportAttachments(report.report.attachments);
+      }
       throw error;
     }
   }
@@ -396,7 +398,7 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
     });
 
     if (result.status === "ok" && result.changed) {
-      await this.publishFeedbackChanged({ actorUserId: actor.id, feedbackId, scope: actor.scope });
+      await this.publishFeedbackChangedAfterCommit({ actorUserId: actor.id, feedbackId, scope: actor.scope });
     }
     return result;
   }
@@ -439,8 +441,7 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
 
     if (result.status !== "ok") return result;
     if (result.changed) {
-      await this.publishFeedbackDispatch(result.notificationDispatchId);
-      await this.publishFeedbackChanged({ actorUserId: actor.id, feedbackId, scope: actor.scope });
+      await this.publishFeedbackChangedAfterCommit({ actorUserId: actor.id, feedbackId, scope: actor.scope });
     }
     return { status: "ok", changed: result.changed };
   }
@@ -475,8 +476,7 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
 
     if (result.status !== "ok") return result;
     if (result.changed) {
-      await this.publishFeedbackDispatch(result.notificationDispatchId);
-      await this.publishFeedbackChanged({ actorUserId: actor.id, feedbackId, scope: actor.scope });
+      await this.publishFeedbackChangedAfterCommit({ actorUserId: actor.id, feedbackId, scope: actor.scope });
     }
     return { status: "ok", changed: result.changed };
   }
@@ -494,7 +494,7 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
     }, feedbackWriteActor(actor));
 
     if (result.status === "ok" && result.changed) {
-      await this.publishFeedbackChanged({ actorUserId: actor.id, feedbackId, scope: actor.scope });
+      await this.publishFeedbackChangedAfterCommit({ actorUserId: actor.id, feedbackId, scope: actor.scope });
     }
     return result;
   }
@@ -512,7 +512,7 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
     }, feedbackWriteActor(actor));
 
     if (result.status === "ok" && result.changed) {
-      await this.publishFeedbackChanged({ actorUserId: actor.id, feedbackId, scope: actor.scope });
+      await this.publishFeedbackChangedAfterCommit({ actorUserId: actor.id, feedbackId, scope: actor.scope });
     }
     return result;
   }
@@ -530,7 +530,7 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
       teamId: storageScopeIdFor(actor.scope),
     });
     if (result.status === "ok" && result.changed) {
-      await this.publishFeedbackChanged({ actorUserId: actor.id, feedbackId, scope: actor.scope });
+      await this.publishFeedbackChangedAfterCommit({ actorUserId: actor.id, feedbackId, scope: actor.scope });
     }
     return result;
   }
@@ -597,7 +597,7 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
       batchId,
     });
     if (result.status === "ok" && result.createdFeedbackIds.length > 0) {
-      await this.publishFeedbackChanged({ actorUserId: actor.id, scope: actor.scope });
+      await this.publishFeedbackChangedAfterCommit({ actorUserId: actor.id, scope: actor.scope });
     }
     return result;
   }
@@ -675,16 +675,10 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
       targetTitle: input.title,
       teamId: input.teamId,
     });
-    const dispatchId = await insertFeedbackNotificationDispatch(this.ports.database, {
+    await insertFeedbackNotificationDispatch(this.ports.database, {
       activityEventId: input.activityEventId,
       dispatch,
     });
-    await this.publishFeedbackDispatch(dispatchId);
-  }
-
-  async getFeedbackFromReadModel(feedbackId: string, scope: FeedbackScope, viewerUserId?: string | null) {
-    const data = await this.getIssueDetail(feedbackId, { scope, viewerUserId });
-    return data?.feedback.find((entry) => entry.id === feedbackId) ?? null;
   }
 
   private async prepareFeedbackCreatedNotificationDispatch(input: {
@@ -784,16 +778,36 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
     });
   }
 
-  private async publishFeedbackDispatch(dispatchId: string | null | undefined) {
-    await publishFeedbackNotificationDispatch(this.ports.database, dispatchId, this.ports.notificationDispatch.publish);
+  private async deletePreparedReportAttachments(attachments: readonly FeedbackPreparedReportAttachment[]) {
+    try {
+      await this.ports.reportAttachments.deletePrepared(attachments);
+    } catch (error) {
+      this.warn({ error: applicationErrorText(error) }, "Failed to delete uncommitted feedback report attachments.");
+    }
   }
 
-  private publishFeedbackChanged(input: {
+  private async publishFeedbackChangedAfterCommit(input: {
     readonly actorUserId?: string | null;
     readonly feedbackId?: string | null;
     readonly scope: FeedbackScope;
   }) {
-    return this.ports.realtime.publishFeedbackChanged(input);
+    try {
+      await this.ports.realtime.publishFeedbackChanged(input);
+    } catch (error) {
+      this.warn({
+        error: applicationErrorText(error),
+        feedbackId: input.feedbackId ?? null,
+        storageScopeId: input.scope.storageScopeId,
+      }, "Failed to publish feedback read-model invalidation after commit.");
+    }
+  }
+
+  private warn(data: Record<string, unknown>, message: string) {
+    try {
+      this.ports.log.warn(data, message);
+    } catch {
+      // Logging is observational and must not change an already committed command outcome.
+    }
   }
 
   private recipientDirectory(): FeedbackNotificationRecipientDirectory {
@@ -871,4 +885,8 @@ function feedbackLifecycleActionRequiredUserId(
 
 function uniqueUserIds(userIds: ReadonlyArray<string | null | undefined>) {
   return Array.from(new Set(userIds.map((userId) => userId?.trim()).filter((userId): userId is string => Boolean(userId))));
+}
+
+function applicationErrorText(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }

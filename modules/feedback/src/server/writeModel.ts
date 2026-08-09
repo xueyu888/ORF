@@ -8,8 +8,6 @@ import type {
   FeedbackImpact,
   FeedbackPriority,
   FeedbackRelationType,
-  FeedbackResolution,
-  FeedbackStage,
   FeedbackTransitionInput,
 } from "../contracts";
 import {
@@ -81,7 +79,7 @@ export type CreateFeedbackIssueWriteInput = {
 };
 
 export type CreateFeedbackIssueWriteResult =
-  | { status: "ok"; feedbackId: string; assigneeUserId?: string | null; notificationDispatchId?: string | null; projectId?: string | null; title: string }
+  | { status: "ok"; feedbackId: string }
   | { status: "notFound" }
   | { status: "invalid" };
 
@@ -108,15 +106,7 @@ export type UpdateFeedbackAssigneeWriteInput = {
 export type UpdateFeedbackAssigneeWriteResult =
   | FeedbackCommandFailure
   | { status: "ok"; changed: false }
-  | {
-      status: "ok";
-      changed: true;
-      nextAssigneeUserId?: string | null;
-      notificationDispatchId?: string | null;
-      previousAssigneeUserId?: string | null;
-      createdBy?: string | null;
-      title: string;
-    };
+  | { status: "ok"; changed: true };
 
 export type TransitionFeedbackIssueWriteInput = {
   readonly command: FeedbackTransitionInput;
@@ -126,17 +116,7 @@ export type TransitionFeedbackIssueWriteInput = {
 
 export type TransitionFeedbackIssueWriteResult =
   | FeedbackCommandFailure
-  | {
-      status: "ok";
-      changed: true;
-      assigneeUserId?: string | null;
-      createdBy?: string | null;
-      notificationDispatchId?: string | null;
-      projectId?: string | null;
-      resolution?: FeedbackResolution | null;
-      stage: FeedbackStage;
-      title: string;
-    };
+  | { status: "ok"; changed: true };
 
 export type AddFeedbackRelationWriteInput = {
   readonly expectedVersion: number;
@@ -246,7 +226,6 @@ export async function createFeedbackIssue(
     return { status: "invalid" };
   }
 
-  let notificationDispatchId: string | null = null;
   await database.transaction(async (tx) => {
     await tx.insert(feedback).values({
       id,
@@ -314,13 +293,13 @@ export async function createFeedbackIssue(
       payload: { title, assigneeUserId, projectId, priority: input.priority ?? null },
       createdAt,
     });
-    notificationDispatchId = await insertFeedbackNotificationDispatch(tx, {
+    await insertFeedbackNotificationDispatch(tx, {
       activityEventId,
       dispatch: input.notificationDispatch,
     });
   });
 
-  return { status: "ok", feedbackId: id, assigneeUserId, notificationDispatchId, projectId, title };
+  return { status: "ok", feedbackId: id };
 }
 
 export async function updateFeedbackIssueMetadata(
@@ -491,20 +470,12 @@ export async function updateFeedbackIssueAssignee(
       },
       createdAt: updatedAt,
     });
-    const notificationDispatchId = await insertFeedbackNotificationDispatch(tx, {
+    await insertFeedbackNotificationDispatch(tx, {
       activityEventId,
       dispatch: input.notificationDispatch,
     });
 
-    return {
-      status: "ok",
-      changed: true,
-      createdBy: target.createdBy,
-      nextAssigneeUserId,
-      notificationDispatchId,
-      previousAssigneeUserId: target.assigneeUserId,
-      title: target.title,
-    };
+    return { status: "ok", changed: true };
   });
 }
 
@@ -578,7 +549,7 @@ export async function transitionFeedbackIssue(
       },
       createdAt: occurredAt,
     });
-    const notificationDispatchId = await insertFeedbackNotificationDispatch(tx, {
+    await insertFeedbackNotificationDispatch(tx, {
       activityEventId,
       dispatch: input.notificationDispatch?.({
         assigneeUserId: target.assigneeUserId,
@@ -592,17 +563,7 @@ export async function transitionFeedbackIssue(
       }) ?? null,
     });
 
-    return {
-      status: "ok",
-      changed: true,
-      assigneeUserId: target.assigneeUserId,
-      createdBy: target.createdBy,
-      notificationDispatchId,
-      projectId: target.projectId,
-      stage: outcome.value.feedback.stage,
-      resolution: outcome.value.feedback.resolution,
-      title: target.title,
-    };
+    return { status: "ok", changed: true };
   });
 }
 

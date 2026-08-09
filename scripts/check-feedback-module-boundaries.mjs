@@ -42,6 +42,7 @@ await checkHostFeedbackChatReferenceBoundary();
 await checkHostCommentTargetBoundary();
 await checkHostDriveFeedbackBoundary();
 await checkFeedbackLegacyRemovalBoundary();
+await checkDrizzleSchemaComposition();
 await checkTsconfigPaths();
 await scanSourceImports();
 
@@ -387,6 +388,18 @@ async function checkTsconfigPaths() {
   }
 }
 
+async function checkDrizzleSchemaComposition() {
+  const source = await fs.readFile(path.join(rootDir, "drizzle.config.ts"), "utf8");
+  for (const schemaPath of [
+    "./server/db/schema.ts",
+    "./modules/feedback/src/infrastructure/database/schema.ts",
+  ]) {
+    if (!source.includes(`"${schemaPath}"`)) {
+      errors.push(`drizzle.config.ts must collect ${schemaPath} from the database composition root.`);
+    }
+  }
+}
+
 async function scanSourceImports() {
   for (const filePath of await listSourceFiles(rootDir)) {
     const relativePath = slash(path.relative(rootDir, filePath));
@@ -433,6 +446,10 @@ function checkSpecifier(relativePath, specifier) {
   }
 
   const resolved = slash(path.relative(rootDir, path.resolve(rootDir, path.dirname(relativePath), specifier)));
+  if (relativePath.startsWith("modules/feedback/") && !resolved.startsWith("modules/feedback/")) {
+    errors.push(`${relativePath} imports host source through ${specifier}; feedback may depend only on its own internals or explicit package protocols.`);
+    return;
+  }
   if (resolved.startsWith("modules/feedback/src/") && !relativePath.startsWith("modules/feedback/")) {
     const key = legacyDeepImportKey(relativePath, specifier);
     if (allowedLegacyDeepImports.has(key)) {
