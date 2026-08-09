@@ -9073,33 +9073,6 @@ button:disabled {
   line-height: 1.7;
 }
 
-.work-logs-editor .orf-rich-text-editor-template-overlay {
-  line-height: 1.7;
-}
-
-.work-logs-body-template-overlay {
-  white-space: pre-wrap;
-}
-
-.work-logs-editor.orf-rich-text-editor-with-template-overlay .orf-rich-text-editor-content {
-  color: transparent;
-  caret-color: var(--orf-text-primary);
-}
-
-.work-logs-editor.orf-rich-text-editor-with-template-overlay
-  .orf-rich-text-editor-content::selection {
-  background: color-mix(in srgb, var(--orf-accent) 22%, transparent);
-  color: transparent;
-}
-
-.work-logs-body-template-text {
-  color: var(--orf-text-primary);
-}
-
-.work-logs-body-template-hint {
-  color: var(--orf-text-faint);
-}
-
 .work-logs-editor-template-action {
   display: inline-flex;
   min-height: 28px;
@@ -16181,19 +16154,6 @@ body[data-dragging-floating="true"] {
   min-width: 0;
   width: 100%;
   max-width: 100%;
-}
-
-.orf-rich-text-editor-template-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
-  padding: 9px 10px;
-  color: transparent;
-  font-size: 14px;
-  line-height: 1.72;
-  overflow-wrap: break-word;
 }
 
 .orf-rich-text-editor-content {

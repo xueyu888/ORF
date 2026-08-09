@@ -63,7 +63,6 @@ import {
   formatWorkLogProgressEstimate,
   moveWorkLogEditorSession,
   parseWorkLogProgressEstimateInput,
-  parseWorkLogStatusUpdateMarkdown,
   suggestionMatchesWorkLogDraft,
   validateWorkLogEditorDraft,
   workLogBodyMarkdownHasUserContent,
@@ -79,7 +78,6 @@ import {
   workLogEntryTargetLabel,
   workLogSuggestionLabel,
   workLogStatusUpdateTemplateMarkdown,
-  workLogStatusUpdateTemplateSections,
   type WorkLogClassificationChoice,
   type WorkLogEditorDraft,
   type WorkLogEditorDraftPatch,
@@ -1539,7 +1537,6 @@ function WorkLogBodyMarkdownEditor({
   onChange: (bodyMarkdown: string) => void;
   value: string;
 }) {
-  const templateBody = useMemo(() => parseWorkLogStatusUpdateMarkdown(value), [value]);
   const canApplyTemplate = value !== workLogStatusUpdateTemplateMarkdown;
 
   return (
@@ -1565,42 +1562,8 @@ function WorkLogBodyMarkdownEditor({
         </button>
       }
       submitOnEnter={false}
-      templateOverlay={
-        templateBody ? (
-          <WorkLogBodyTemplateOverlay templateBody={templateBody} />
-        ) : undefined
-      }
       value={value}
     />
-  );
-}
-
-function WorkLogBodyTemplateOverlay({
-  templateBody,
-}: {
-  templateBody: NonNullable<ReturnType<typeof parseWorkLogStatusUpdateMarkdown>>;
-}) {
-  return (
-    <div className="work-logs-body-template-overlay">
-      {workLogStatusUpdateTemplateSections.map((section, index) => (
-        <span key={section.key}>
-          <span className="work-logs-body-template-text">
-            **{section.label}**
-          </span>
-          {"\n"}
-          {templateBody[section.key].trim() ? (
-            <span className="work-logs-body-template-text">
-              {templateBody[section.key]}
-            </span>
-          ) : (
-            <span className="work-logs-body-template-hint">
-              {section.placeholder}
-            </span>
-          )}
-          {index < workLogStatusUpdateTemplateSections.length - 1 ? "\n" : ""}
-        </span>
-      ))}
-    </div>
   );
 }
 
