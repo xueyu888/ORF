@@ -69,7 +69,6 @@ import {
   workLogBodyMarkdownUserContent,
   workLogDraftPatchFromClassificationSelect,
   workLogDraftPatchFromSuggestion,
-  workLogEditorDraftHasContent,
   workLogEditorDraftFromEntry,
   workLogEditorDraftPreservesExistingClassification,
   workLogEditorSessionShouldFollowViewDate,
@@ -530,7 +529,27 @@ export function WorkLogsPage() {
     void loadReport(reportMonth, reportScope, true);
   }, [activityExpanded, loadActivity, loadMyDay, loadReport, reportMonth, reportScope, viewDate, workLogsInvalidationKey]);
 
+  const persistEditorSessionDraft = (session: WorkLogEditorSession | null) => {
+    if (!session || session.userId !== currentUser?.id) return;
+    if (session.draft.editingEntryId) return;
+    const selectedObjective = session.draft.objectiveId
+      ? objectiveOptionsById.get(session.draft.objectiveId) ?? null
+      : null;
+    try {
+      writeStoredWorkLogEditorDraft({
+        draft: session.draft,
+        selectedObjective,
+        userId: session.userId,
+        workDate: session.workDate,
+      });
+    } catch {
+      // Draft autosave is best-effort local recovery and must not block date navigation.
+    }
+  };
+
   const changeDate = (date: string) => {
+    if (!isDateOnlyString(date)) return;
+    persistEditorSessionDraft(editorSessionRef.current);
     const query = new URLSearchParams(location.search);
     query.set("date", date);
     query.delete("entry");
@@ -625,68 +644,27 @@ export function WorkLogsPage() {
       date === currentSession.workDate
     ) return;
     const currentDraft = currentSession.draft;
+    if (!currentDraft.editingEntryId) return;
     const selectedObjective = currentDraft.objectiveId
       ? objectiveOptionsById.get(currentDraft.objectiveId) ?? null
       : null;
-    if (currentDraft.editingEntryId) {
-      const moveResult = moveStoredWorkLogEditorDraft({
-        draft: currentDraft,
-        fromWorkDate: currentSession.workDate,
-        selectedObjective,
-        toWorkDate: date,
-        userId: currentUser.id,
-      });
-      if (moveResult === "targetOccupied") {
-        setError(`${date} 已有未提交草稿，请先提交或清空该日期草稿。`);
-        return;
-      } else if (moveResult === "unavailable") {
-        setError("本机草稿暂时无法迁移，但这条历史日志的填写日期已在编辑器中改变。");
-      } else {
-        setError("");
-      }
-      commitEditorSession(moveWorkLogEditorSession(currentSession, date));
+    const moveResult = moveStoredWorkLogEditorDraft({
+      draft: currentDraft,
+      fromWorkDate: currentSession.workDate,
+      selectedObjective,
+      toWorkDate: date,
+      userId: currentUser.id,
+    });
+    if (moveResult === "targetOccupied") {
+      setError(`${date} 已有未提交草稿，请先提交或清空该日期草稿。`);
       return;
-    }
-    if (workLogEditorDraftHasContent(currentDraft)) {
-      const moveResult = moveStoredWorkLogEditorDraft({
-        draft: currentDraft,
-        fromWorkDate: currentSession.workDate,
-        selectedObjective,
-        toWorkDate: date,
-        userId: currentUser.id,
-      });
-      if (moveResult === "targetOccupied") {
-        setError(`${date} 已有未提交草稿，请先提交或清空该日期草稿。`);
-        return;
-      }
-      if (moveResult === "unavailable") {
-        setError("本机草稿暂时无法迁移，填写日期未改变。请稍后重试。");
-        return;
-      }
-      commitEditorSession(moveWorkLogEditorSession(currentSession, date));
+    } else if (moveResult === "unavailable") {
+      setError("本机草稿暂时无法迁移，但这条历史日志的填写日期已在编辑器中改变。");
     } else {
-      let storedDraft = readStoredWorkLogEditorDraft({ userId: currentUser.id, workDate: date });
-      if (storedDraft?.draft.editingEntryId) {
-        const storedEditingEntryId = storedDraft.draft.editingEntryId;
-        const cachedTargetDay = workLogDaySnapshot(date);
-        if (!cachedTargetDay) {
-          setError(`${date} 有历史日志编辑草稿，请先通过顶部查看日期打开。`);
-          return;
-        }
-        if (!cachedTargetDay.entries.some((entry) => entry.id === storedEditingEntryId)) {
-          clearStoredWorkLogEditorDraft({ userId: currentUser.id, workDate: date });
-          storedDraft = null;
-        }
-      }
-      replaceEditorSession({
-        draft: storedDraft?.draft ?? blankWorkLogEditorDraft(),
-        userId: currentUser.id,
-        workDate: date,
-      });
-      setSelectedObjectiveCache(storedDraft?.selectedObjective ? [storedDraft.selectedObjective] : []);
-      setClassificationObservation(null);
+      setError("");
     }
-    setError("");
+    commitEditorSession(moveWorkLogEditorSession(currentSession, date));
+    changeDate(date);
   };
 
   const editingEntry = editorDraft.editingEntryId
@@ -1092,7 +1070,7 @@ export function WorkLogsPage() {
               <div className="work-logs-panel-heading">
                 <div>
                   <h2>我的日志</h2>
-                  <p>{currentUser?.name ?? ""}</p>
+                  <p>{currentUser?.name ? `${currentUser.name} · ${viewDate}` : viewDate}</p>
                 </div>
                 <div className="work-logs-editor-heading-actions">
                   {canManageWorkLogCategories && classificationSuggestionEnabled && (
@@ -1391,24 +1369,26 @@ function WorkLogEditorCard({
   };
   return (
     <section className="work-logs-draft-entry">
-      <div className="work-logs-entry-date-control">
-        <div className="work-logs-entry-date-label">
-          <CalendarDays className="h-4 w-4" />
-          <div>
-            <span>填写日期</span>
-            <small>{draft.editingEntryId ? "可把这条日志移到其他日期" : "这条日志实际归属的日期"}</small>
+      {draft.editingEntryId && (
+        <div className="work-logs-entry-date-control">
+          <div className="work-logs-entry-date-label">
+            <CalendarDays className="h-4 w-4" />
+            <div>
+              <span>填写日期</span>
+              <small>可把这条日志移到其他日期</small>
+            </div>
           </div>
+          <FantasyDatePicker
+            ariaLabel="选择移动日期"
+            disabled={disabled}
+            onChange={onWorkDateChange}
+            value={workDate}
+          >
+            <CalendarDays className="h-4 w-4" />
+            <span>{workDate}</span>
+          </FantasyDatePicker>
         </div>
-        <FantasyDatePicker
-          ariaLabel="选择填写日期"
-          disabled={disabled}
-          onChange={onWorkDateChange}
-          value={workDate}
-        >
-          <CalendarDays className="h-4 w-4" />
-          <span>{workDate}</span>
-        </FantasyDatePicker>
-      </div>
+      )}
       <div className="work-logs-draft-entry-header">
         <FantasySelectMenu
           ariaLabel="日志归类"

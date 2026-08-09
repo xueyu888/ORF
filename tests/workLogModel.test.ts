@@ -210,7 +210,7 @@ test("work log progress estimate label is shared by page and chat card", () => {
   assert.equal(formatWorkLogProgressEstimate(72, { compact: true }), "进28%");
 });
 
-test("work log editor session keeps draft ownership across refresh and resets for the next entry", () => {
+test("work log editor session follows the active date while preserving draft ownership", () => {
   const initial = createWorkLogEditorSession({
     userId: "user-1",
     workDate: "2026-07-14",
@@ -224,9 +224,17 @@ test("work log editor session keeps draft ownership across refresh and resets fo
     workLogEditorSessionShouldFollowViewDate(
       editing,
       "user-1",
-      "2026-07-13",
+      "2026-07-14",
     ),
     false,
+  );
+  assert.equal(
+    workLogEditorSessionShouldFollowViewDate(
+      editing,
+      "user-1",
+      "2026-07-13",
+    ),
+    true,
   );
 
   const moved = moveWorkLogEditorSession(editing, "2026-07-13");

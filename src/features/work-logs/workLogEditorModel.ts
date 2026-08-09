@@ -282,7 +282,7 @@ export function workLogEditorSessionShouldFollowViewDate(
   viewDate: string,
 ) {
   if (!session || session.userId !== userId) return true;
-  return session.workDate !== viewDate && !workLogEditorDraftHasContent(session.draft);
+  return session.workDate !== viewDate;
 }
 
 export function applyWorkLogEditorDraftPatch(
