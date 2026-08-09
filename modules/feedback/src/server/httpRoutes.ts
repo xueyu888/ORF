@@ -279,6 +279,14 @@ function sendFeedbackCommandOutcome(reply: FastifyReply, outcome: FeedbackComman
 }
 
 export function registerFeedbackHttpRoutes(app: FastifyInstance, feedback: FeedbackServerApplication) {
+  const updateFeedbackAssigneeRoute = async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = feedbackParamsSchema.parse(request.params);
+    const body = updateFeedbackAssigneeBodySchema.parse(request.body);
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
+    return sendFeedbackCommandOutcome(reply, await feedback.updateAssignee(params.feedbackId, body, applicationActor(context)));
+  };
+
   app.get("/api/feedback", async (request, reply) => {
     const context = await feedback.actor.requireUserScopeContext(request, reply);
     if (!context) return reply;
@@ -443,13 +451,8 @@ export function registerFeedbackHttpRoutes(app: FastifyInstance, feedback: Feedb
     return sendFeedbackCommandOutcome(reply, await feedback.updateMetadata(params.feedbackId, body, applicationActor(context)));
   });
 
-  app.patch("/api/feedback/:feedbackId/assignee", async (request, reply) => {
-    const params = feedbackParamsSchema.parse(request.params);
-    const body = updateFeedbackAssigneeBodySchema.parse(request.body);
-    const context = await feedback.actor.requireUserScopeContext(request, reply);
-    if (!context) return reply;
-    return sendFeedbackCommandOutcome(reply, await feedback.updateAssignee(params.feedbackId, body, applicationActor(context)));
-  });
+  app.put("/api/feedback/:feedbackId/assignee", updateFeedbackAssigneeRoute);
+  app.patch("/api/feedback/:feedbackId/assignee", updateFeedbackAssigneeRoute);
 
   app.post("/api/feedback/:feedbackId/relations", async (request, reply) => {
     const params = feedbackParamsSchema.parse(request.params);

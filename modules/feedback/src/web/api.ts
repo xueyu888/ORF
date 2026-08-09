@@ -195,7 +195,7 @@ export async function updateFeedbackMetadata(feedbackId: string, input: UpdateFe
 
 export async function updateFeedbackAssignee(feedbackId: string, assigneeUserId: string | null, expectedVersion: number): Promise<void> {
   await apiRequest(`/api/feedback/${encodeURIComponent(feedbackId)}/assignee`, {
-    method: "PATCH",
+    method: "PUT",
     body: JSON.stringify({ assigneeUserId, expectedVersion }),
   });
 }

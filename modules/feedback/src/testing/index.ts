@@ -27,6 +27,9 @@ export {
 export {
   createFeedbackNotificationPresentationProvider,
 } from "../server/notificationPresentation";
+export {
+  updateFeedbackAssignee as updateFeedbackAssigneeForTesting,
+} from "../web/api";
 
 export function feedbackEntityFixture(
   overrides: Partial<FeedbackEntitySnapshot> = {},
