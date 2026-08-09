@@ -69,6 +69,7 @@ import {
   workLogBodyMarkdownUserContent,
   workLogDraftPatchFromClassificationSelect,
   workLogDraftPatchFromSuggestion,
+  workLogEditorDraftEditingWorkDate,
   workLogEditorDraftFromEntry,
   workLogEditorDraftPreservesExistingClassification,
   workLogEditorSessionShouldFollowViewDate,
@@ -434,12 +435,18 @@ export function WorkLogsPage() {
     }
 
     const storedDraft = readStoredWorkLogEditorDraft({ userId, workDate: viewDate });
-    const cachedDay = workLogDaySnapshot(viewDate);
+    const storedEditingEntryId = storedDraft?.draft.editingEntryId;
+    const storedEditingEntryWorkDate = storedDraft
+      ? workLogEditorDraftEditingWorkDate(storedDraft.draft, viewDate)
+      : viewDate;
+    const cachedDay = isDateOnlyString(storedEditingEntryWorkDate)
+      ? workLogDaySnapshot(storedEditingEntryWorkDate)
+      : workLogDaySnapshot(viewDate);
     const storedDraftAvailable = Boolean(
       storedDraft &&
-        (!storedDraft.draft.editingEntryId ||
+        (!storedEditingEntryId ||
           !cachedDay ||
-          cachedDay.entries.some((entry) => entry.id === storedDraft.draft.editingEntryId)),
+          cachedDay.entries.some((entry) => entry.id === storedEditingEntryId)),
     );
     if (storedDraft && !storedDraftAvailable) {
       clearStoredWorkLogEditorDraft({ userId, workDate: viewDate });
@@ -472,7 +479,10 @@ export function WorkLogsPage() {
     ) {
       return;
     }
-    const daySnapshot = workLogDaySnapshot(viewDate);
+    const editingEntryWorkDate = workLogEditorDraftEditingWorkDate(session.draft, session.workDate);
+    const daySnapshot = isDateOnlyString(editingEntryWorkDate)
+      ? workLogDaySnapshot(editingEntryWorkDate)
+      : workLogDaySnapshot(viewDate);
     if (!daySnapshot || daySnapshot.entries.some((entry) => entry.id === editingEntryId)) {
       return;
     }
@@ -667,10 +677,12 @@ export function WorkLogsPage() {
     changeDate(date);
   };
 
+  const editingEntryWorkDate = workLogEditorDraftEditingWorkDate(editorDraft, editorWorkDate);
   const editingEntry = editorDraft.editingEntryId
     ? ([
+        ...(editingEntryWorkDate === viewDate ? myEntries : []),
+        ...(isDateOnlyString(editingEntryWorkDate) ? workLogDaySnapshot(editingEntryWorkDate)?.entries ?? [] : []),
         ...(editorWorkDate === viewDate ? myEntries : workLogDaySnapshot(editorWorkDate)?.entries ?? []),
-        ...myEntries,
         ...(workLogDaySnapshot(viewDate)?.entries ?? []),
       ].find((entry) => entry.id === editorDraft.editingEntryId) ?? null)
     : null;
@@ -731,7 +743,12 @@ export function WorkLogsPage() {
     if (saveDisabled || !submittedSession) return;
     const submittedDraft = submittedSession.draft;
     const submittedDraftInput = canonicalWorkLogEditorDraft(submittedDraft);
-    const originalEditingWorkDate = editingEntry?.workDate ?? submittedSession.workDate;
+    const originalEditingWorkDateCandidate = submittedDraft.editingEntryId
+      ? workLogEditorDraftEditingWorkDate(submittedDraft, editingEntry?.workDate ?? submittedSession.workDate)
+      : submittedSession.workDate;
+    const originalEditingWorkDate = isDateOnlyString(originalEditingWorkDateCandidate)
+      ? originalEditingWorkDateCandidate
+      : submittedSession.workDate;
     const selectedObjective = submittedDraftInput.objectiveId
       ? objectiveOptionsById.get(submittedDraftInput.objectiveId)
       : undefined;

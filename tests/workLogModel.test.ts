@@ -41,6 +41,7 @@ import {
   workLogBodyMarkdownHasUserContent,
   workLogBodyMarkdownUserContent,
   workLogDraftPatchFromClassificationSelect,
+  workLogEditorDraftEditingWorkDate,
   workLogEditorDraftFromEntry,
   workLogEditorDraftPreservesExistingClassification,
   workLogEditorSessionShouldFollowViewDate,
@@ -381,6 +382,11 @@ test("work log edit save returns to the same entry baseline for continued editin
     userId: "user-1",
     workDate: entry.workDate,
   });
+  assert.equal(workLogEditorDraftEditingWorkDate(editingSession.draft, editingSession.workDate), entry.workDate);
+  const movedEditingSession = moveWorkLogEditorSession(editingSession, "2026-07-15");
+  assert.equal(movedEditingSession.workDate, "2026-07-15");
+  assert.equal(workLogEditorDraftEditingWorkDate(movedEditingSession.draft, movedEditingSession.workDate), entry.workDate);
+
   const savedEntry: WorkLogEntry = {
     ...entry,
     bodyMarkdown: "第一次内容，已更新",
@@ -396,6 +402,7 @@ test("work log edit save returns to the same entry baseline for continued editin
   });
 
   assert.equal(afterSave.draft.editingEntryId, entry.id);
+  assert.equal(workLogEditorDraftEditingWorkDate(afterSave.draft, afterSave.workDate), savedEntry.workDate);
   assert.equal(afterSave.revision, editingSession.revision + 1);
   assert.equal(afterSave.workDate, savedEntry.workDate);
   assert.deepEqual(

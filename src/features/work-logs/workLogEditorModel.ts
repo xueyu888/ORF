@@ -15,6 +15,7 @@ export type WorkLogEditorDraft = {
   categoryNameSnapshot?: string | null;
   classificationKind: WorkLogClassificationKind;
   editingEntryId: string | null;
+  editingEntryWorkDateSnapshot: string | null;
   objectiveId: string;
   objectiveTitleSnapshot?: string | null;
   preserveExistingClassification?: boolean;
@@ -137,6 +138,7 @@ export const blankWorkLogEditorDraft = (): WorkLogEditorDraft => ({
   categoryName: "",
   classificationKind: "uncategorized",
   editingEntryId: null,
+  editingEntryWorkDateSnapshot: null,
   objectiveId: "",
   progressEstimatePercent: null,
 });
@@ -276,6 +278,14 @@ export function moveWorkLogEditorSession(
   };
 }
 
+export function workLogEditorDraftEditingWorkDate(
+  draft: WorkLogEditorDraft,
+  fallbackWorkDate: string,
+) {
+  if (!draft.editingEntryId) return fallbackWorkDate;
+  return draft.editingEntryWorkDateSnapshot?.trim() || fallbackWorkDate;
+}
+
 export function workLogEditorSessionShouldFollowViewDate(
   session: WorkLogEditorSession | null,
   userId: string,
@@ -361,6 +371,7 @@ export function workLogEditorDraftFromEntry(entry: WorkLogEntry): WorkLogEditorD
     categoryNameSnapshot: entry.categoryNameSnapshot,
     classificationKind: classification.kind,
     editingEntryId: entry.id,
+    editingEntryWorkDateSnapshot: entry.workDate,
     objectiveId: classification.kind === "objective" ? entry.objectiveIdSnapshot ?? "" : "",
     objectiveTitleSnapshot: entry.objectiveTitleSnapshot,
     preserveExistingClassification,

@@ -56,6 +56,7 @@ function parseStoredDraft(value: unknown): WorkLogEditorDraft {
     categoryNameSnapshot: cleanNullableString(value.categoryNameSnapshot, 120),
     classificationKind: cleanClassificationKind(value.classificationKind),
     editingEntryId: cleanNullableString(value.editingEntryId, 200),
+    editingEntryWorkDateSnapshot: cleanNullableString(value.editingEntryWorkDateSnapshot, 32),
     objectiveId: cleanString(value.objectiveId, 200).trim(),
     objectiveTitleSnapshot: cleanNullableString(value.objectiveTitleSnapshot, 200),
     preserveExistingClassification: value.preserveExistingClassification === true,
