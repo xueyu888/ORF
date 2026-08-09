@@ -30,7 +30,7 @@ import {
 import { isObjectiveChallenger } from "../../src/domain/orfObjectiveParticipants";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { db } from "../db/client";
-import { objectives, teamMembers, users, workLogCategories, workLogClassificationDecisions, workLogEntries } from "../db/schema";
+import { commentThreads, objectives, teamMembers, users, workLogCategories, workLogClassificationDecisions, workLogEntries } from "../db/schema";
 import { publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
 import type { AuthenticatedOrfUser } from "../auth/accessPolicy";
 import type { RuntimeScope } from "./runtimeScope";
@@ -913,11 +913,14 @@ export async function deleteMyWorkLogEntry(
     return { status: "notFound" };
   }
 
-  await db.delete(workLogEntries).where(eq(workLogEntries.id, existing.id));
+  await db.transaction(async (tx) => {
+    await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "workLog"), eq(commentThreads.targetId, existing.id)));
+    await tx.delete(workLogEntries).where(eq(workLogEntries.id, existing.id));
+  });
 
   publishRealtimeReadModelInvalidation(storageScopeId, {
     actorUserId: user.id,
-    models: ["workLogs"],
+    models: ["taskManagement", "workLogs"],
     reason: "workLog.changed",
     target: { id: `${user.id}:${existing.workDate}`, type: "workLog" },
   });

@@ -196,6 +196,7 @@ function filterComments(data: TaskManagementData, ids: {
   checklistItemIds: Set<string>;
 }) {
   return data.comments.filter((thread) => {
+    if (thread.targetType === "workLog") return true;
     if (thread.targetType === "objective") return ids.objectiveIds.has(thread.targetId);
     if (thread.targetType === "result") return ids.resultIds.has(thread.targetId);
     if (thread.targetType === "task") return ids.taskIds.has(thread.targetId);

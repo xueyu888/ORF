@@ -8807,6 +8807,20 @@ button:disabled {
   white-space: nowrap;
 }
 
+.work-logs-comment-button.orf-action-button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 820;
+  white-space: nowrap;
+}
+
+.work-logs-activity-meta .work-logs-comment-button {
+  min-height: 26px;
+  padding: 0 8px;
+}
+
 .work-logs-activity-markdown {
   margin-top: 9px;
   color: var(--orf-text-secondary);
@@ -10927,6 +10941,18 @@ button.work-logs-team-cell:focus-visible {
   .work-logs-report-controls {
     flex-wrap: wrap;
     justify-content: flex-start;
+  }
+
+  .work-logs-activity-meta {
+    flex-wrap: wrap;
+  }
+
+  .work-logs-activity-meta time {
+    margin-left: 0;
+  }
+
+  .work-logs-activity-meta .work-logs-comment-button {
+    margin-left: auto;
   }
 
   .work-logs-estimate-inputs {

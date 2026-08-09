@@ -261,8 +261,14 @@ function groupRuntimeEnumRows(rows: RuntimeEnumRow[]) {
   }, {});
 }
 
-export function validateFeedbackCommentTargetSchema(snapshot: RuntimeEnumSnapshot) {
-  return snapshot.labels.includes("feedback") ? [] : ["comment_target_type enum must include feedback."];
+export function validateCommentTargetSchema(snapshot: RuntimeEnumSnapshot) {
+  const errors: string[] = [];
+  for (const label of ["feedback", "workLog"]) {
+    if (!snapshot.labels.includes(label)) {
+      errors.push(`comment_target_type enum must include ${label}.`);
+    }
+  }
+  return errors;
 }
 
 export function validateNotificationStreamEnum(snapshot: RuntimeEnumSnapshot) {
@@ -1222,7 +1228,7 @@ export async function assertRuntimeDatabaseSchema() {
       constraints: [],
     }),
     ...validateFeedbackLifecycleEnums(groupRuntimeEnumRows(feedbackLifecycleEnumsResult.rows)),
-    ...validateFeedbackCommentTargetSchema({
+    ...validateCommentTargetSchema({
       labels: commentTargetTypeResult.rows.map((row) => row.label),
     }),
     ...validateNotificationStreamEnum({

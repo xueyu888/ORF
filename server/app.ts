@@ -36,6 +36,7 @@ import { registerWorkLogRoutes } from "./routes/workLogRoutes";
 import { registerLocalSettlementRoutes } from "./routes/localSettlementRoutes";
 import { createOrfFeedbackServerHost } from "./feedback/feedbackServerHost";
 import { startReestimateAutoFreezeScheduler } from "./orf/reestimateAutoFreezeScheduler";
+import { registerWorkLogCommentTargetAdapter } from "./workLogs/workLogCommentTarget";
 import { startWorkLogReminderScheduler } from "./workLogs/workLogReminderScheduler";
 import { ensurePrivateSettingsStorage } from "./settings/settingsStorage";
 
@@ -110,6 +111,7 @@ export async function buildServer(options: {
   if (options.registerOptionalIntegrations ?? true) {
     registerOptionalIntegrations(app);
   }
+  registerWorkLogCommentTargetAdapter();
   registerAuthRoutes(app);
 
   registerRealtimeRoutes(app);

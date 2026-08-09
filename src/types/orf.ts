@@ -776,7 +776,7 @@ export interface OrfRules {
   autoCreateReviewSummary: boolean;
 }
 
-export type CommentTargetType = "objective" | "result" | "task" | "subtask" | "feedback";
+export type CommentTargetType = "objective" | "result" | "task" | "subtask" | "feedback" | "workLog";
 export type CommentStatus = "open" | "resolved";
 export type CommentAttachmentPreviewKind = "download" | "image" | "markdown" | "pdf" | "text";
 

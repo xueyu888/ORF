@@ -11,6 +11,7 @@ import {
   Folder,
   Image,
   Loader2,
+  MessageCircle,
   NotebookPen,
   PencilLine,
   Plus,
@@ -38,6 +39,8 @@ import { FantasySelectMenu } from "../components/FantasySelectMenu";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, IconButton } from "../components/ui";
 import { UserAvatar } from "../components/UserAvatar";
+import { hasPermission } from "../config/permissions";
+import { CommentPanel, type CommentReplyInput } from "../features/challenge/comments/CommentPanel";
 import { RelatedResourcesPanel } from "../features/drive/RelatedResourcesPanel";
 import { driveNodeMetaLabel, formatDriveDateTime } from "../features/drive/drivePresentation";
 import {
@@ -109,6 +112,7 @@ import {
 } from "../state/readModelQueries";
 import { useOrf } from "../state/OrfProvider";
 import type {
+  CommentThread,
   WorkLogActivityItem,
   WorkLogCategoryOption,
   WorkLogClassificationSuggestion,
@@ -125,6 +129,12 @@ import {
   readStoredWorkLogEditorDraft,
   writeStoredWorkLogEditorDraft,
 } from "../features/work-logs/workLogDraftStorage";
+import {
+  workLogCommentCountForEntry,
+  workLogCommentTargetForEntry,
+  workLogCommentThreadsForEntry,
+  type WorkLogCommentTarget,
+} from "../features/work-logs/workLogCommentModel";
 import { workLogActivityCollapsedLimit, workLogActivityExpandedLimit } from "../features/work-logs/workLogReadModelConfig";
 import {
   addCalendarDays,
@@ -213,13 +223,20 @@ export function WorkLogsPage() {
   const viewDate = dateFromSearch(location.search);
   const viewMode = viewFromSearch(location.search);
   const linkedWorkLogEntryId = workLogEntryIdFromSearch(location.search);
+  const linkedCommentId = commentIdFromSearch(location.search);
   const {
+    addComment,
     currentUser,
+    deleteCommentMessage,
     dismissSystemBroadcast,
+    loadCommentMentionableUsers,
     notify,
     readModelInvalidations,
     refreshWorkLogReminderState,
+    state,
     systemBroadcasts,
+    updateCommentMessage,
+    uploadCommentAttachment,
   } = useOrf();
   const [objectives, setObjectives] = useState<WorkLogObjectiveOption[]>(() => workLogObjectivesSnapshot()?.objectives ?? []);
   const [objectiveSearchQuery, setObjectiveSearchQuery] = useState("");
@@ -266,6 +283,7 @@ export function WorkLogsPage() {
   const [error, setError] = useState("");
   const [reportError, setReportError] = useState("");
   const [workLogResourceRevision, setWorkLogResourceRevision] = useState(0);
+  const [commentTarget, setCommentTarget] = useState<WorkLogCommentTarget | null>(null);
   const activityEntryElementsRef = useRef(new Map<string, HTMLElement>());
   const handledWorkLogsInvalidationKeyRef = useRef("");
   const editorDraft = editorSession?.draft ?? blankWorkLogEditorDraft();
@@ -275,6 +293,11 @@ export function WorkLogsPage() {
   );
   const canWrite =
     currentUser?.role === "admin" || currentUser?.role === "member";
+  const currentMember = currentUser?.name ?? "User";
+  const workLogCommentThreads = useMemo(
+    () => state.comments.filter((thread) => thread.targetType === "workLog"),
+    [state.comments],
+  );
   const canManageWorkLogCategories = canUseWorkLogCategories(currentUser);
   const canSelectWorkLogCategories = canManageWorkLogCategories || categories.length > 0;
   const canSaveWithoutObjective = canSaveUnscopedWorkLog(currentUser);
@@ -995,6 +1018,22 @@ export function WorkLogsPage() {
     [linkedWorkLogEntryId, visibleActivityEntries],
   );
   const reportRange = useMemo(() => monthRange(reportMonth), [reportMonth]);
+  const openWorkLogComments = useCallback((entry: WorkLogEntry | WorkLogActivityItem) => {
+    setCommentTarget(workLogCommentTargetForEntry(entry));
+  }, []);
+  const linkedCommentEntry = useMemo(() => {
+    if (!linkedWorkLogEntryId) return null;
+    return (
+      myEntries.find((entry) => entry.id === linkedWorkLogEntryId) ??
+      displayedActivityEntries.find((entry) => entry.id === linkedWorkLogEntryId) ??
+      null
+    );
+  }, [displayedActivityEntries, linkedWorkLogEntryId, myEntries]);
+
+  useEffect(() => {
+    if (!linkedCommentId || !linkedCommentEntry) return;
+    setCommentTarget(workLogCommentTargetForEntry(linkedCommentEntry));
+  }, [linkedCommentEntry, linkedCommentId]);
 
   useEffect(() => {
     if (!linkedWorkLogEntryId || !linkedActivityEntryVisible) return;
@@ -1048,10 +1087,12 @@ export function WorkLogsPage() {
                       <h3>{activityDateLabel(group.date)}</h3>
                       {group.entries.map((entry) => (
                         <WorkLogActivityCard
+                          commentCount={workLogCommentCountForEntry(workLogCommentThreads, entry.id)}
                           currentUserId={currentUser?.id ?? null}
                           entry={entry}
                           key={entry.id}
                           linked={entry.id === linkedWorkLogEntryId}
+                          onComment={openWorkLogComments}
                           onRegisterElement={(entryId, element) => {
                             if (element) activityEntryElementsRef.current.set(entryId, element);
                             else activityEntryElementsRef.current.delete(entryId);
@@ -1215,11 +1256,13 @@ export function WorkLogsPage() {
                   />
                   <WorkLogHistoryList
                     canEditResources={Boolean(currentUser)}
+                    commentThreads={workLogCommentThreads}
                     currentEditingEntryId={editorDraft.editingEntryId}
                     deletingEntryId={deletingEntryId}
                     entries={myEntries}
                     linkedEntryId={linkedActivityEntryVisible ? null : linkedWorkLogEntryId}
                     notify={notify}
+                    onComment={openWorkLogComments}
                     onDelete={deleteEntry}
                     onEdit={editExistingEntry}
                     saving={saving}
@@ -1244,6 +1287,41 @@ export function WorkLogsPage() {
           reportError={reportError}
           reportMonth={reportMonth}
           scope={reportScope}
+        />
+      )}
+
+      {commentTarget && (
+        <CommentPanel
+          key={`${commentTarget.type}:${commentTarget.id}`}
+          canManageAllComments={hasPermission(currentUser, state.permissionRules, "comment.manage")}
+          currentMember={currentMember}
+          currentUserAvatarUrl={currentUser?.avatarUrl}
+          currentUserId={currentUser?.id ?? ""}
+          focusedCommentId={linkedCommentId}
+          onAddComment={(body, replyInput?: CommentReplyInput) =>
+            addComment({
+              targetType: commentTarget.type,
+              targetId: commentTarget.id,
+              targetTitle: commentTarget.title,
+              body,
+              author: currentMember,
+              parentMessageId: replyInput?.parentMessageId,
+              replyToMessageId: replyInput?.replyToMessageId,
+              replyToAuthor: replyInput?.replyToAuthor,
+            })
+          }
+          onClose={() => setCommentTarget(null)}
+          onDeleteComment={deleteCommentMessage}
+          onLoadMentionableUsers={loadCommentMentionableUsers}
+          onUpdateComment={updateCommentMessage}
+          onUploadAttachment={async (file) => {
+            const upload = await uploadCommentAttachment({ file, targetId: commentTarget.id, targetType: commentTarget.type });
+            return upload ? { markdown: upload.markdown, previewUrl: upload.attachment.contentUrl } : null;
+          }}
+          targetId={commentTarget.id}
+          targetTitle={commentTarget.title}
+          targetType={commentTarget.type}
+          threads={workLogCommentThreadsForEntry(workLogCommentThreads, commentTarget.id)}
         />
       )}
     </PageScaffold>
@@ -1777,22 +1855,26 @@ function iconForDriveNode(node: DriveNode) {
 
 function WorkLogHistoryList({
   canEditResources,
+  commentThreads,
   currentEditingEntryId,
   deletingEntryId,
   entries,
   linkedEntryId,
   notify,
+  onComment,
   onDelete,
   onEdit,
   onResourceChanged,
   saving,
 }: {
   canEditResources: boolean;
+  commentThreads: readonly CommentThread[];
   currentEditingEntryId: string | null;
   deletingEntryId: string | null;
   entries: WorkLogEntry[];
   linkedEntryId: string | null;
   notify: (message: string) => void;
+  onComment: (entry: WorkLogEntry) => void;
   onDelete: (entry: WorkLogEntry) => void;
   onEdit: (entry: WorkLogEntry) => void;
   onResourceChanged: () => void;
@@ -1854,6 +1936,11 @@ function WorkLogHistoryList({
                       {formatWorkLogProgressEstimate(entry.remainingEstimatePercent)}
                     </span>
                   )}
+                  <WorkLogCommentButton
+                    count={workLogCommentCountForEntry(commentThreads, entry.id)}
+                    label={`评论日志：${workLogEntryTargetLabel(entry)}`}
+                    onClick={() => onComment(entry)}
+                  />
                   <Button
                     type="button"
                     size="sm"
@@ -1908,14 +1995,18 @@ function WorkLogHistoryList({
 }
 
 function WorkLogActivityCard({
+  commentCount,
   currentUserId,
   entry,
   linked,
+  onComment,
   onRegisterElement,
 }: {
+  commentCount: number;
   currentUserId: string | null;
   entry: WorkLogActivityItem;
   linked: boolean;
+  onComment: (entry: WorkLogActivityItem) => void;
   onRegisterElement: (entryId: string, element: HTMLElement | null) => void;
 }) {
   const authorName = entry.authorCurrentName ?? entry.authorNameSnapshot;
@@ -1937,6 +2028,11 @@ function WorkLogActivityCard({
           <strong>{authorName}</strong>
           {entry.authorUserId === currentUserId && <span>我</span>}
           <time>{formatActivityTime(entry.updatedAt)}</time>
+          <WorkLogCommentButton
+            count={commentCount}
+            label={`评论日志：${authorName}`}
+            onClick={() => onComment(entry)}
+          />
         </div>
         <div className="work-logs-activity-target">
           {classification.kind === "objective" ? (
@@ -1968,6 +2064,30 @@ function WorkLogActivityCard({
         <WorkLogMarkdown body={entry.bodyMarkdown} />
       </div>
     </article>
+  );
+}
+
+function WorkLogCommentButton({
+  count,
+  label,
+  onClick,
+}: {
+  count: number;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="secondary"
+      className="work-logs-comment-button"
+      aria-label={label}
+      onClick={onClick}
+    >
+      <MessageCircle className="h-4 w-4" />
+      {count > 0 ? `评论 ${count}` : "评论"}
+    </Button>
   );
 }
 
@@ -2531,6 +2651,11 @@ function dateFromSearch(search: string) {
 
 function workLogEntryIdFromSearch(search: string) {
   const value = new URLSearchParams(search).get("entry")?.trim();
+  return value || null;
+}
+
+function commentIdFromSearch(search: string) {
+  const value = new URLSearchParams(search).get("comment")?.trim();
   return value || null;
 }
 

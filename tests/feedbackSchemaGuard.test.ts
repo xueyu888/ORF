@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  validateCommentTargetSchema,
   validateFeedbackDailyDigestRunSchema,
   validateFeedbackLifecycleEnums,
   validateFeedbackMetadataSubscriptionSchema,
@@ -118,6 +119,13 @@ test("feedback lifecycle enum guard rejects old status enum and validates module
   assert.match(errors.join("\n"), /feedback_impact enum/);
   assert.match(errors.join("\n"), /feedback_stage enum/);
   assert.match(errors.join("\n"), /feedback_status enum must be dropped/);
+});
+
+test("comment target enum guard includes feedback and work log targets", () => {
+  assert.deepEqual(validateCommentTargetSchema({ labels: ["objective", "result", "task", "subtask", "feedback", "workLog"] }), []);
+
+  const errors = validateCommentTargetSchema({ labels: ["objective", "result", "task", "subtask", "feedback"] });
+  assert.deepEqual(errors, ["comment_target_type enum must include workLog."]);
 });
 
 test("feedback daily digest schema guard keeps the per-assignee per-day idempotency key", () => {
