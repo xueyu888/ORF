@@ -8696,6 +8696,8 @@ button:disabled {
 
 .work-logs-activity-list {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   padding-top: 14px;
 }
@@ -8720,6 +8722,7 @@ button:disabled {
 
 .work-logs-activity-entry {
   display: grid;
+  min-width: 0;
   grid-template-columns: 38px minmax(0, 1fr);
   gap: 12px;
   padding: 12px;
@@ -8830,12 +8833,16 @@ button:disabled {
 
 .work-logs-draft-list {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   padding-top: 14px;
 }
 
 .work-logs-draft-entry {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--orf-border);
@@ -8992,6 +8999,8 @@ button:disabled {
 
 .work-logs-estimate-control {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 9px;
   padding: 10px;
   border: 1px solid var(--orf-border);
@@ -9236,6 +9245,8 @@ button:disabled {
 
 .work-logs-day-resources-list {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 3px;
 }
 
@@ -9330,10 +9341,15 @@ button:disabled {
 
 .work-logs-history-list {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
 }
 
 .work-logs-history-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   padding: 11px;
   border: 1px solid var(--orf-border);
   border-radius: 8px;
@@ -11086,6 +11102,35 @@ button.work-logs-team-cell:focus-visible {
   .orf-loot-metric-actions,
   .orf-loot-metric-evidence {
     margin-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .work-logs-panel {
+    padding: 10px;
+  }
+
+  .work-logs-draft-entry,
+  .work-logs-activity-entry,
+  .work-logs-history-entry,
+  .work-logs-day-resources {
+    padding: 10px;
+  }
+
+  .work-logs-estimate-control {
+    padding: 9px;
+  }
+
+  .work-logs-estimate-inputs {
+    gap: 8px;
+  }
+
+  .work-logs-estimate-inputs input[type="number"] {
+    width: 58px;
+  }
+
+  .work-logs-estimate-inputs button {
+    padding: 0 8px;
   }
 }
 
