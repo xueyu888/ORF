@@ -979,10 +979,14 @@ function IssueSidebar({
   }, [feedback.assigneeUserId, feedback.id]);
 
   useEffect(() => {
-    setRelationDraft((current) => ({
-      ...current,
-      targetFeedbackId: relationTargets.some((item) => item.id === current.targetFeedbackId) ? current.targetFeedbackId : "",
-    }));
+    setRelationDraft((current) => {
+      const targetFeedbackId = relationTargets.some((item) => item.id === current.targetFeedbackId)
+        ? current.targetFeedbackId
+        : "";
+      return targetFeedbackId === current.targetFeedbackId
+        ? current
+        : { ...current, targetFeedbackId };
+    });
   }, [feedback.id, relationTargets]);
 
   const toggleCause = (cause: string) => {
