@@ -1,42 +1,51 @@
 /* loot.css: owned styles only; global visual semantics come from design tokens. */
 .orf-loot-page-grid {
-  --orf-loot-border: color-mix(in srgb, var(--orf-border-strong) 82%, transparent);
-  --orf-loot-panel-bg: color-mix(in srgb, var(--orf-bg-elevated) 94%, transparent);
-  --orf-loot-panel-strong-bg: color-mix(in srgb, var(--orf-bg-elevated) 98%, transparent);
-  --orf-loot-muted-bg: color-mix(in srgb, var(--orf-bg-muted) 82%, var(--orf-bg-elevated));
-  --orf-loot-table-head-bg: color-mix(in srgb, var(--orf-bg-muted) 74%, var(--orf-bg-elevated));
-  --orf-loot-table-stripe-bg: color-mix(in srgb, var(--orf-bg-muted) 36%, transparent);
+  --orf-loot-border: var(--orf-material-content-hairline);
+  --orf-loot-panel-bg: color-mix(in srgb, var(--orf-material-content-secondary) 72%, transparent);
+  --orf-loot-panel-strong-bg: color-mix(in srgb, var(--orf-material-content-primary) 84%, transparent);
+  --orf-loot-muted-bg: color-mix(in srgb, var(--orf-material-content-tertiary) 70%, transparent);
+  --orf-loot-table-head-bg: color-mix(in srgb, var(--orf-material-content-tertiary) 82%, transparent);
+  --orf-loot-table-stripe-bg: color-mix(in srgb, var(--orf-material-content-secondary) 42%, transparent);
   display: grid;
   width: 100%;
   min-width: 0;
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid var(--orf-loot-border);
-  border-radius: var(--orf-radius-card);
-  background: var(--orf-surface-panel);
-  box-shadow: var(--orf-shadow-card);
-}
-
-.orf-loot-page-grid > .orf-card {
+  gap: 14px;
+  overflow: visible;
   border: 0;
-  border-bottom: 1px solid var(--orf-loot-border);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.orf-loot-page-grid > .orf-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--orf-loot-border);
+  border-radius: 20px;
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--orf-material-content-shine) 13%, transparent), transparent 38%),
+    var(--orf-loot-panel-strong-bg);
+  box-shadow: var(--orf-material-content-shadow);
   backdrop-filter: none;
 }
 
-.orf-loot-page-grid > .orf-card:last-child {
-  border-bottom: 0;
-}
-
 .orf-loot-page-grid:has(> .orf-loot-inactive-panel) {
-  max-width: 900px;
+  max-width: 960px;
   margin-inline: auto;
 }
 
 .orf-loot-context-card {
-  background: color-mix(in srgb, var(--orf-bg-muted) 42%, var(--orf-surface-panel));
+  background:
+    linear-gradient(108deg, color-mix(in srgb, var(--orf-accent-soft) 42%, transparent), transparent 42%),
+    var(--orf-loot-panel-strong-bg) !important;
+}
+
+body:has(.orf-loot-page-grid) .orf-page-context {
+  border-color: var(--orf-material-content-hairline);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 72%, transparent);
+  box-shadow: var(--orf-material-content-shadow-soft);
+  padding: 12px 14px;
 }
 
 .orf-loot-context-main {
@@ -130,8 +139,8 @@
 
 .orf-loot-review-card {
   border-color: var(--orf-loot-border);
-  background: transparent;
-  box-shadow: none;
+  background: var(--orf-loot-panel-strong-bg);
+  box-shadow: var(--orf-material-content-shadow);
   backdrop-filter: none;
 }
 
@@ -154,16 +163,18 @@
 .orf-loot-review-form,
 .orf-loot-section {
   display: grid;
+  min-width: 0;
   gap: 14px;
 }
 
 .orf-loot-review-result,
 .orf-loot-panel {
   display: grid;
+  min-width: 0;
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--orf-loot-border);
-  border-radius: 8px;
+  border-radius: 16px;
   background: var(--orf-loot-panel-bg);
 }
 
@@ -190,7 +201,7 @@
 
 .orf-loot-panel-heading-actions .orf-control {
   min-height: 30px;
-  border-radius: 8px;
+  border-radius: 999px;
   padding: 0 10px;
   font-size: 12px;
 }
@@ -220,7 +231,7 @@
   gap: 4px;
   min-width: 0;
   border: 1px solid var(--orf-loot-border);
-  border-radius: 8px;
+  border-radius: 14px;
   background: var(--orf-loot-muted-bg);
   padding: 9px 10px;
 }
@@ -256,7 +267,7 @@
   display: grid;
   gap: 8px;
   border: 1px solid var(--orf-loot-border);
-  border-radius: 8px;
+  border-radius: 14px;
   background: var(--orf-loot-muted-bg);
   color: var(--orf-text-secondary);
   font-size: 13px;
@@ -299,9 +310,9 @@
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  border: 1px solid rgba(45, 143, 179, 0.18);
-  border-radius: 8px;
-  background: rgba(226, 247, 252, 0.42);
+  border: 1px solid color-mix(in srgb, var(--orf-accent-border) 64%, var(--orf-loot-border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--orf-accent-soft) 54%, var(--orf-loot-muted-bg));
   color: var(--orf-text-secondary);
   font-size: 12px;
   line-height: 1.55;
@@ -309,8 +320,8 @@
 }
 
 .orf-loot-peer-review-notice-warning {
-  border-color: rgba(204, 139, 38, 0.28);
-  background: rgba(255, 247, 224, 0.58);
+  border-color: var(--orf-warning-border);
+  background: color-mix(in srgb, var(--orf-warning-bg) 76%, var(--orf-loot-muted-bg));
 }
 
 .orf-loot-peer-review-notice-inline {
@@ -326,7 +337,7 @@
 
 .orf-loot-peer-review-stats div {
   border: 1px solid var(--orf-loot-border);
-  border-radius: 8px;
+  border-radius: 14px;
   background: var(--orf-loot-muted-bg);
   padding: 10px 12px;
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-bg-elevated) 74%, transparent);
@@ -372,7 +383,7 @@
   gap: 10px;
   overflow: hidden;
   border: 1px solid var(--orf-loot-border);
-  border-radius: 8px;
+  border-radius: 14px;
   background: var(--orf-loot-panel-strong-bg);
   padding: 12px;
 }
@@ -429,9 +440,9 @@
 }
 
 .orf-loot-peer-review-status-warning {
-  border-color: rgba(204, 139, 38, 0.28);
-  background: rgba(255, 247, 224, 0.7);
-  color: #9a5f05;
+  border-color: var(--orf-warning-border);
+  background: var(--orf-warning-bg);
+  color: var(--orf-warning-text);
 }
 
 .orf-loot-peer-review-block-title {
@@ -448,7 +459,7 @@
 
 .orf-loot-peer-review-allocation-row div {
   border: 1px solid var(--orf-loot-border);
-  border-radius: 8px;
+  border-radius: 14px;
   background: var(--orf-loot-muted-bg);
   padding: 9px 10px;
 }
@@ -516,10 +527,10 @@
   gap: 10px;
   min-width: 0;
   border: 1px solid var(--orf-loot-border);
-  border-radius: 8px;
+  border-radius: 14px;
   background: var(--orf-loot-panel-strong-bg);
   padding: 12px;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-bg-elevated) 78%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 28%, transparent);
 }
 
 .orf-loot-metric-card[data-claim="completed"],
@@ -549,7 +560,7 @@
   justify-content: center;
   border: 1px solid var(--orf-loot-border);
   border-radius: 999px;
-  background: var(--orf-bg-elevated);
+  background: color-mix(in srgb, var(--orf-material-content-control) 84%, transparent);
   color: var(--orf-text-muted);
   transition:
     background-color 140ms ease,
@@ -609,7 +620,7 @@
   gap: 6px;
   border: 1px solid var(--orf-loot-border);
   border-radius: 999px;
-  background: var(--orf-bg-elevated);
+  background: color-mix(in srgb, var(--orf-material-content-control) 84%, transparent);
   color: var(--orf-text-secondary);
   font-size: 12px;
   font-weight: 600;
@@ -647,25 +658,28 @@
   width: 100%;
   height: 38px;
   min-width: 0;
-  border-radius: 8px;
-  background: var(--orf-loot-panel-strong-bg);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orf-material-content-control) 82%, transparent);
   box-shadow: inset 0 0 0 1px var(--orf-loot-border);
 }
 
 .orf-loot-select .orf-select-trigger:hover,
 .orf-loot-select.orf-select-menu-open .orf-select-trigger {
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--orf-material-content-control-hover);
   box-shadow:
-    inset 0 0 0 1px rgba(45, 143, 179, 0.34),
-    0 8px 18px rgba(22, 125, 159, 0.08);
+    inset 0 0 0 1px color-mix(in srgb, var(--orf-accent-border) 68%, transparent),
+    0 8px 18px color-mix(in srgb, var(--orf-accent) 10%, transparent);
 }
 
 .orf-loot-table-wrap {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   border: 1px solid var(--orf-loot-border);
-  border-radius: 8px;
+  border-radius: 16px;
   background: var(--orf-loot-panel-strong-bg);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-bg-elevated) 78%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 28%, transparent);
 }
 
 .orf-loot-table {
@@ -861,40 +875,53 @@
 }
 
 .orf-loot-result-badge-success {
-  border-color: rgba(47, 148, 105, 0.24);
-  background: rgba(228, 248, 238, 0.74);
-  color: #1d6f4d;
+  border-color: var(--orf-success-border);
+  background: var(--orf-success-bg);
+  color: var(--orf-success-text);
 }
 
 .orf-loot-result-badge-info {
-  border-color: rgba(45, 143, 179, 0.24);
-  background: rgba(226, 247, 252, 0.74);
+  border-color: var(--orf-accent-border);
+  background: var(--orf-accent-soft);
   color: var(--orf-accent-text);
 }
 
 .orf-loot-result-badge-warning {
-  border-color: rgba(190, 126, 37, 0.28);
-  background: rgba(255, 243, 217, 0.82);
-  color: #9a5d12;
+  border-color: var(--orf-warning-border);
+  background: var(--orf-warning-bg);
+  color: var(--orf-warning-text);
 }
 
 .orf-loot-total-pill {
-  border-color: rgba(47, 148, 105, 0.22);
-  background: rgba(228, 248, 238, 0.7);
-  color: #1d6f4d;
+  border-color: var(--orf-success-border);
+  background: var(--orf-success-bg);
+  color: var(--orf-success-text);
 }
 
 .orf-loot-total-pill-warning {
-  border-color: rgba(190, 126, 37, 0.28);
-  background: rgba(255, 243, 217, 0.82);
-  color: #9a5d12;
+  border-color: var(--orf-warning-border);
+  background: var(--orf-warning-bg);
+  color: var(--orf-warning-text);
 }
 
 .orf-loot-percent-input {
   width: 96px;
   min-height: 32px;
+  border-radius: 999px;
   padding: 0 9px;
   font-size: 13px;
+}
+
+.orf-loot-page-grid textarea.orf-input {
+  border-color: var(--orf-loot-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--orf-material-content-control) 80%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 28%, transparent);
+}
+
+.orf-loot-page-grid textarea.orf-input:focus-visible {
+  border-color: var(--orf-accent-border);
+  box-shadow: var(--orf-focus-ring);
 }
 
 .orf-loot-target-percent {
@@ -925,6 +952,11 @@
 }
 
 @media (max-width: 560px) {
+
+body:has(.orf-loot-page-grid) .orf-page-context,
+  .orf-loot-page-grid > .orf-card {
+    border-radius: 18px;
+  }
 
 .orf-loot-inactive-state {
     grid-template-columns: 40px minmax(0, 1fr);
