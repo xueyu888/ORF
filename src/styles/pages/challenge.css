@@ -10,6 +10,7 @@
 .orf-draggable-floating button {
   border-radius: 50%;
 }
+
 .orf-block-actions {
   opacity: 0;
 }
@@ -44,7 +45,6 @@
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  backdrop-filter: none;
 }
 
 .orf-task-toolbar-actions {
@@ -72,7 +72,6 @@
   border: 1px solid rgba(255, 255, 255, 0.34);
   border-radius: 999px;
   clip-path: none;
-  backdrop-filter: blur(16px) saturate(1.16);
 }
 
 .orf-task-toolbar .orf-floating-control::before {
@@ -102,7 +101,6 @@
   box-shadow:
     0 18px 42px rgba(31, 49, 74, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  backdrop-filter: blur(18px) saturate(1.12);
 }
 
 .orf-project-section:hover,
@@ -326,7 +324,6 @@
     0 22px 52px rgba(98, 77, 48, 0.14),
     0 1px 0 rgba(255, 255, 255, 0.86) inset,
     inset 0 0 0 1px rgba(255, 255, 255, 0.54);
-  backdrop-filter: blur(14px);
   transition:
     box-shadow 160ms ease,
     transform 160ms ease;
@@ -499,7 +496,6 @@
   line-height: 1;
   padding: 0 10px;
   white-space: nowrap;
-  backdrop-filter: blur(12px) saturate(1.08);
 }
 
 .orf-objective-admin-strip {
@@ -545,7 +541,6 @@
   background: var(--orf-surface-control-solid);
   padding: 5px 5px 5px 11px;
   box-shadow: none;
-  backdrop-filter: none;
 }
 
 .orf-objective-application-main {
@@ -853,7 +848,6 @@
   box-shadow:
     0 14px 32px rgba(31, 49, 74, 0.075),
     inset 0 1px 0 rgba(255, 255, 255, 0.34);
-  backdrop-filter: none;
 }
 
 .orf-metric-inspector-header {
@@ -925,7 +919,6 @@
   box-shadow:
     0 8px 18px rgba(31, 49, 74, 0.04),
     inset 0 1px 0 rgba(255, 255, 255, 0.36);
-  backdrop-filter: none;
 }
 
 .orf-metric-inspector-detail {
@@ -1048,7 +1041,7 @@
     will-change: auto;
   }
 
-  .orf-metric-inspector-header {
+.orf-metric-inspector-header {
     position: sticky;
     top: -14px;
     z-index: 2;
@@ -1193,7 +1186,6 @@
   box-shadow:
     0 14px 32px rgba(31, 49, 74, 0.075),
     inset 0 1px 0 rgba(255, 255, 255, 0.34);
-  backdrop-filter: blur(18px) saturate(1.14);
 }
 
 .orf-challenge-workbench .orf-objective-panel::before {
@@ -1352,7 +1344,6 @@
     0 8px 18px rgba(31, 49, 74, 0.055),
     inset 0 1px 0 rgba(255, 255, 255, 0.42);
   text-shadow: none;
-  backdrop-filter: blur(12px) saturate(1.08);
 }
 
 .orf-challenge-workbench .orf-row-loot-action::before {
@@ -1569,7 +1560,6 @@
     0 12px 28px rgba(98, 77, 48, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.86),
     inset 0 -1px 0 rgba(215, 173, 95, 0.18);
-  backdrop-filter: blur(12px);
 }
 
 .orf-block-action-button {
@@ -2606,7 +2596,6 @@
   border-radius: 14px;
   background: var(--orf-surface-panel);
   box-shadow: var(--orf-shadow-card);
-  backdrop-filter: blur(18px) saturate(1.04);
 }
 
 .orf-challenge-workbench .orf-dashboard-metric {
@@ -2624,7 +2613,6 @@
   box-shadow: none;
   padding: 14px 18px;
   text-align: left;
-  backdrop-filter: none;
   transform: none;
 }
 
@@ -2700,7 +2688,6 @@
   background: var(--orf-surface-control);
   padding: 3px;
   box-shadow: none;
-  backdrop-filter: none;
 }
 
 .orf-challenge-workbench .orf-scope-tab {
@@ -2728,14 +2715,12 @@
   border-radius: var(--orf-radius-control);
   background: var(--orf-surface-control);
   box-shadow: none;
-  backdrop-filter: none;
 }
 
 .orf-challenge-workbench .orf-project-section {
   overflow: hidden;
   border-radius: 14px;
   box-shadow: var(--orf-shadow-card);
-  backdrop-filter: blur(18px) saturate(1.04);
 }
 
 .orf-challenge-workbench .orf-project-header {
@@ -2765,7 +2750,6 @@
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  backdrop-filter: none;
   transform: none;
 }
 
@@ -2805,7 +2789,6 @@
 
 .orf-challenge-workbench :is(.orf-row-loot-action, .orf-comment-count-badge, .orf-objective-base-points-chip, .orf-objective-base-points-editor) {
   border-radius: var(--orf-radius-control);
-  backdrop-filter: none;
 }
 
 @media (max-width: 900px) {
@@ -2854,13 +2837,13 @@
     gap: 10px;
   }
 
-  .orf-challenge-workbench .orf-block-action-button,
+.orf-challenge-workbench .orf-block-action-button,
   .orf-challenge-workbench .orf-metric-icon-button {
     width: 36px;
     height: 36px;
   }
 
-  .orf-challenge-workbench .orf-team-dashboard {
+.orf-challenge-workbench .orf-team-dashboard {
     display: grid;
     grid-auto-columns: minmax(144px, 46vw);
     grid-auto-flow: column;
@@ -2871,11 +2854,11 @@
     scrollbar-width: none;
   }
 
-  .orf-challenge-workbench .orf-team-dashboard::-webkit-scrollbar {
+.orf-challenge-workbench .orf-team-dashboard::-webkit-scrollbar {
     display: none;
   }
 
-  .orf-challenge-workbench .orf-dashboard-metric,
+.orf-challenge-workbench .orf-dashboard-metric,
   .orf-challenge-workbench .orf-dashboard-metric:nth-child(n) {
     min-height: 70px;
     grid-template-columns: 22px minmax(0, 1fr);
@@ -2886,45 +2869,45 @@
     padding: 10px 12px;
   }
 
-  .orf-challenge-workbench .orf-dashboard-metric:first-child {
+.orf-challenge-workbench .orf-dashboard-metric:first-child {
     border-left: 0;
   }
 
-  .orf-challenge-workbench .orf-dashboard-emblem {
+.orf-challenge-workbench .orf-dashboard-emblem {
     width: 22px;
     height: 22px;
   }
 
-  .orf-challenge-workbench .orf-dashboard-emblem > svg {
+.orf-challenge-workbench .orf-dashboard-emblem > svg {
     width: 15px;
     height: 15px;
   }
 
-  .orf-challenge-workbench .orf-dashboard-metric .text-3xl {
+.orf-challenge-workbench .orf-dashboard-metric .text-3xl {
     font-size: 18px;
   }
 
-  .orf-challenge-workbench .orf-dashboard-metric > div:nth-child(2) {
+.orf-challenge-workbench .orf-dashboard-metric > div:nth-child(2) {
     display: grid;
     align-items: center;
     gap: 1px;
   }
 
-  .orf-challenge-workbench .orf-dashboard-metric .text-xs {
+.orf-challenge-workbench .orf-dashboard-metric .text-xs {
     overflow: hidden;
     font-size: 10px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .orf-main-content[data-page-skin="true"] .orf-task-toolbar {
+.orf-main-content[data-page-skin="true"] .orf-task-toolbar {
     display: grid;
     gap: 8px;
     border-radius: 14px;
     padding: 8px;
   }
 
-  .orf-challenge-workbench .orf-task-toolbar-actions {
+.orf-challenge-workbench .orf-task-toolbar-actions {
     display: flex;
     width: 100%;
     min-width: 0;
@@ -2936,24 +2919,24 @@
     scrollbar-width: none;
   }
 
-  .orf-challenge-workbench .orf-task-toolbar-actions::-webkit-scrollbar {
+.orf-challenge-workbench .orf-task-toolbar-actions::-webkit-scrollbar {
     display: none;
   }
 
-  .orf-challenge-workbench .orf-task-toolbar-actions > * {
+.orf-challenge-workbench .orf-task-toolbar-actions > * {
     flex: 0 0 auto;
   }
 
-  .orf-challenge-workbench[data-mobile-objective-focus="true"] .orf-task-toolbar {
+.orf-challenge-workbench[data-mobile-objective-focus="true"] .orf-task-toolbar {
     display: none;
   }
 
-  .orf-mobile-challenge-overview {
+.orf-mobile-challenge-overview {
     display: grid;
     gap: 12px;
   }
 
-  .orf-mobile-challenge-overview-header {
+.orf-mobile-challenge-overview-header {
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
@@ -2961,7 +2944,7 @@
     padding: 8px 2px 0;
   }
 
-  .orf-mobile-challenge-eyebrow {
+.orf-mobile-challenge-eyebrow {
     display: block;
     margin-bottom: 3px;
     color: var(--orf-accent-text);
@@ -2971,7 +2954,7 @@
     text-transform: uppercase;
   }
 
-  .orf-mobile-challenge-overview-header h2 {
+.orf-mobile-challenge-overview-header h2 {
     margin: 0;
     color: var(--orf-text-primary);
     font-size: 18px;
@@ -2979,18 +2962,18 @@
     line-height: 1.25;
   }
 
-  .orf-mobile-challenge-total {
+.orf-mobile-challenge-total {
     flex: 0 0 auto;
     color: var(--orf-text-muted);
     font-size: 12px;
   }
 
-  .orf-mobile-challenge-summary {
+.orf-mobile-challenge-summary {
     display: flex;
     gap: 8px;
   }
 
-  .orf-mobile-challenge-summary > span {
+.orf-mobile-challenge-summary > span {
     display: inline-flex;
     min-width: 0;
     height: 30px;
@@ -3004,19 +2987,19 @@
     font-size: 12px;
   }
 
-  .orf-mobile-challenge-summary svg {
+.orf-mobile-challenge-summary svg {
     width: 14px;
     height: 14px;
     color: var(--orf-accent-text);
     stroke-width: 1.8;
   }
 
-  .orf-mobile-objective-list {
+.orf-mobile-objective-list {
     display: grid;
     gap: 10px;
   }
 
-  .orf-mobile-objective-card {
+.orf-mobile-objective-card {
     display: grid;
     width: 100%;
     min-width: 0;
@@ -3031,17 +3014,17 @@
     transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
   }
 
-  .orf-mobile-objective-card:active {
+.orf-mobile-objective-card:active {
     transform: scale(0.99);
   }
 
-  .orf-mobile-objective-card:focus-visible {
+.orf-mobile-objective-card:focus-visible {
     outline: 0;
     border-color: var(--orf-focus-border);
     box-shadow: var(--orf-focus-ring), var(--orf-shadow-card);
   }
 
-  .orf-mobile-objective-card-topline,
+.orf-mobile-objective-card-topline,
   .orf-mobile-objective-evidence,
   .orf-mobile-objective-progress-row {
     display: flex;
@@ -3049,12 +3032,12 @@
     align-items: center;
   }
 
-  .orf-mobile-objective-card-topline {
+.orf-mobile-objective-card-topline {
     justify-content: space-between;
     gap: 12px;
   }
 
-  .orf-mobile-objective-project {
+.orf-mobile-objective-project {
     overflow: hidden;
     color: var(--orf-text-muted);
     font-size: 11px;
@@ -3063,7 +3046,7 @@
     white-space: nowrap;
   }
 
-  .orf-mobile-objective-status {
+.orf-mobile-objective-status {
     display: inline-flex;
     flex: 0 0 auto;
     min-height: 24px;
@@ -3077,18 +3060,18 @@
     font-weight: 650;
   }
 
-  .orf-mobile-objective-status[data-tone="active"],
+.orf-mobile-objective-status[data-tone="active"],
   .orf-mobile-objective-status[data-tone="review"] {
     border-color: color-mix(in srgb, var(--orf-accent) 36%, var(--orf-border));
     color: var(--orf-accent-text);
   }
 
-  .orf-mobile-objective-status[data-tone="warning"] {
+.orf-mobile-objective-status[data-tone="warning"] {
     border-color: color-mix(in srgb, var(--orf-warning-text) 38%, var(--orf-border));
     color: var(--orf-warning-text);
   }
 
-  .orf-mobile-objective-card > strong {
+.orf-mobile-objective-card > strong {
     display: -webkit-box;
     overflow: hidden;
     font-size: 15px;
@@ -3098,33 +3081,33 @@
     -webkit-line-clamp: 2;
   }
 
-  .orf-mobile-objective-evidence {
+.orf-mobile-objective-evidence {
     flex-wrap: wrap;
     gap: 5px 12px;
     color: var(--orf-text-muted);
     font-size: 11px;
   }
 
-  .orf-mobile-objective-evidence > span {
+.orf-mobile-objective-evidence > span {
     display: inline-flex;
     align-items: center;
     gap: 4px;
   }
 
-  .orf-mobile-objective-evidence svg {
+.orf-mobile-objective-evidence svg {
     width: 13px;
     height: 13px;
     stroke-width: 1.8;
   }
 
-  .orf-mobile-objective-progress-row {
+.orf-mobile-objective-progress-row {
     gap: 9px;
     color: var(--orf-text-muted);
     font-size: 11px;
     font-weight: 650;
   }
 
-  .orf-mobile-objective-progress {
+.orf-mobile-objective-progress {
     height: 4px;
     flex: 1;
     overflow: hidden;
@@ -3132,21 +3115,21 @@
     background: var(--orf-bg-muted-strong);
   }
 
-  .orf-mobile-objective-progress > span {
+.orf-mobile-objective-progress > span {
     display: block;
     height: 100%;
     border-radius: inherit;
     background: var(--orf-accent);
   }
 
-  .orf-mobile-objective-progress-row > svg {
+.orf-mobile-objective-progress-row > svg {
     width: 16px;
     height: 16px;
     color: var(--orf-text-muted);
     stroke-width: 1.8;
   }
 
-  .orf-mobile-challenge-focus-bar {
+.orf-mobile-challenge-focus-bar {
     position: sticky;
     top: 0;
     z-index: 24;
@@ -3158,7 +3141,7 @@
     padding: 8px 2px 12px;
   }
 
-  .orf-mobile-challenge-focus-bar > button {
+.orf-mobile-challenge-focus-bar > button {
     display: inline-flex;
     width: fit-content;
     min-height: 34px;
@@ -3173,31 +3156,31 @@
     font-weight: 650;
   }
 
-  .orf-mobile-challenge-focus-bar > button:focus-visible {
+.orf-mobile-challenge-focus-bar > button:focus-visible {
     outline: 0;
     box-shadow: var(--orf-focus-ring);
   }
 
-  .orf-mobile-challenge-focus-bar > button svg {
+.orf-mobile-challenge-focus-bar > button svg {
     width: 15px;
     height: 15px;
     stroke-width: 1.8;
   }
 
-  .orf-mobile-challenge-focus-bar > span {
+.orf-mobile-challenge-focus-bar > span {
     display: grid;
     gap: 2px;
     min-width: 0;
   }
 
-  .orf-mobile-challenge-focus-bar small {
+.orf-mobile-challenge-focus-bar small {
     color: var(--orf-accent-text);
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.08em;
   }
 
-  .orf-mobile-challenge-focus-bar strong {
+.orf-mobile-challenge-focus-bar strong {
     overflow: hidden;
     color: var(--orf-text-primary);
     font-size: 16px;
@@ -3207,11 +3190,11 @@
     white-space: nowrap;
   }
 
-  .orf-challenge-workbench[data-mobile-objective-focus="true"] .orf-project-section {
+.orf-challenge-workbench[data-mobile-objective-focus="true"] .orf-project-section {
     border-radius: 16px;
   }
 
-  .orf-challenge-workbench[data-mobile-objective-focus="true"] [data-challenge-row-target] {
+.orf-challenge-workbench[data-mobile-objective-focus="true"] [data-challenge-row-target] {
     scroll-margin-top: 92px;
   }
 }
@@ -3222,101 +3205,7 @@
    hierarchy of scene, instrument rail, project sheet, and local interaction
    states; capsules remain reserved for compact filters, statuses, and actions. */
 .orf-app-shell[data-page-scene="page_tasks_background"] {
-  --orf-bg-app: #dcebf4;
   --orf-bg-page: transparent;
-  --orf-text-primary: #142941;
-  --orf-text-secondary: #425b72;
-  --orf-text-muted: #687e91;
-  --orf-text-faint: #98a8b4;
-  --orf-border: rgba(36, 75, 101, 0.13);
-  --orf-border-strong: rgba(31, 72, 101, 0.22);
-  --orf-accent: #0786a1;
-  --orf-accent-hover: #056e87;
-  --orf-accent-soft: rgba(7, 134, 161, 0.13);
-  --orf-accent-border: rgba(7, 134, 161, 0.34);
-  --orf-accent-text: #076f89;
-  --orf-surface-chrome: rgba(244, 250, 252, 0.54);
-  --orf-surface-panel: rgba(248, 252, 253, 0.65);
-  --orf-surface-elevated: #fbfdfd;
-  --orf-surface-control: rgba(247, 251, 252, 0.56);
-  --orf-surface-control-hover: rgba(255, 255, 255, 0.74);
-  --orf-workbench-hairline: rgba(35, 75, 102, 0.15);
-  --orf-workbench-hairline-strong: rgba(35, 75, 102, 0.24);
-  --orf-topbar-surface: rgba(241, 248, 251, 0.66);
-  --orf-topbar-surface-strong: rgba(250, 253, 253, 0.86);
-  --orf-topbar-control-bg: rgba(248, 252, 253, 0.62);
-  --orf-topbar-control-hover-bg: rgba(255, 255, 255, 0.84);
-  --orf-topbar-control-border: rgba(39, 75, 103, 0.15);
-  --orf-topbar-control-text: #243c53;
-  --orf-topbar-control-muted: #6b8092;
-  --tasks-glass-panel: rgba(247, 251, 252, 0.64);
-  --tasks-glass-rail: rgba(240, 248, 251, 0.57);
-  --tasks-glass-control: rgba(251, 253, 253, 0.55);
-  --tasks-glass-header: rgba(230, 243, 248, 0.5);
-  --tasks-glass-float: rgba(251, 253, 253, 0.7);
-  --tasks-glass-border: rgba(255, 255, 255, 0.7);
-  --tasks-glass-shine: rgba(255, 255, 255, 0.82);
-  --tasks-glass-shadow: 0 22px 52px rgba(20, 55, 79, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.76);
-  --tasks-glass-filter: blur(26px) saturate(1.1);
-  --tasks-glass-control-filter: blur(17px) saturate(1.05);
-  --orf-page-safety-overlay:
-    radial-gradient(circle at 74% 12%, rgba(255, 255, 255, 0.04), transparent 34%),
-    linear-gradient(112deg, rgba(215, 235, 244, 0.08) 0%, rgba(255, 252, 244, 0.02) 52%, rgba(202, 229, 240, 0.07) 100%);
-  --orf-sidebar-bg-overlay:
-    linear-gradient(105deg, rgba(7, 28, 51, 0.5) 0%, rgba(9, 45, 73, 0.33) 60%, rgba(10, 61, 91, 0.16) 100%),
-    linear-gradient(180deg, rgba(3, 17, 34, 0.03), rgba(3, 17, 34, 0.4));
-  --orf-sidebar-selected-bg: rgba(134, 220, 237, 0.2);
-  --orf-sidebar-hover-bg: rgba(134, 220, 237, 0.13);
-  --orf-sidebar-divider: rgba(220, 242, 248, 0.14);
-  --orf-sidebar-text: #f7fcff;
-  --orf-sidebar-text-muted: #c0d9e7;
-  --orf-sidebar-icon: #e8f8fc;
-}
-
-html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_tasks_background"] {
-  --orf-bg-app: #08172a;
-  --orf-bg-page: transparent;
-  --orf-text-primary: #f2f7fb;
-  --orf-text-secondary: #c4d4e1;
-  --orf-text-muted: #95aaba;
-  --orf-text-faint: #687e91;
-  --orf-border: rgba(178, 214, 232, 0.14);
-  --orf-border-strong: rgba(183, 220, 240, 0.24);
-  --orf-accent: #45b9d2;
-  --orf-accent-hover: #64c9df;
-  --orf-accent-soft: rgba(69, 185, 210, 0.16);
-  --orf-accent-border: rgba(95, 205, 228, 0.35);
-  --orf-accent-text: #8ad9e9;
-  --orf-surface-chrome: rgba(5, 20, 37, 0.56);
-  --orf-surface-panel: rgba(7, 22, 40, 0.65);
-  --orf-surface-elevated: #14283b;
-  --orf-surface-control: rgba(8, 28, 48, 0.58);
-  --orf-surface-control-hover: rgba(18, 47, 70, 0.74);
-  --orf-workbench-hairline: rgba(179, 217, 236, 0.14);
-  --orf-workbench-hairline-strong: rgba(184, 222, 242, 0.23);
-  --orf-topbar-surface: rgba(7, 23, 42, 0.7);
-  --orf-topbar-surface-strong: rgba(14, 37, 58, 0.88);
-  --orf-topbar-control-bg: rgba(12, 34, 55, 0.64);
-  --orf-topbar-control-hover-bg: rgba(24, 54, 77, 0.88);
-  --orf-topbar-control-border: rgba(172, 211, 233, 0.17);
-  --orf-topbar-control-text: #e1edf4;
-  --orf-topbar-control-muted: #90a7b8;
-  --tasks-glass-panel: rgba(5, 18, 34, 0.66);
-  --tasks-glass-rail: rgba(8, 27, 47, 0.59);
-  --tasks-glass-control: rgba(9, 31, 52, 0.57);
-  --tasks-glass-header: rgba(16, 48, 70, 0.52);
-  --tasks-glass-float: rgba(7, 25, 44, 0.72);
-  --tasks-glass-border: rgba(166, 217, 239, 0.2);
-  --tasks-glass-shine: rgba(207, 239, 251, 0.2);
-  --tasks-glass-shadow: 0 24px 58px rgba(1, 8, 17, 0.43), inset 0 1px 0 rgba(205, 237, 250, 0.15);
-  --tasks-glass-filter: blur(26px) saturate(1.09);
-  --tasks-glass-control-filter: blur(17px) saturate(1.04);
-  --orf-page-safety-overlay:
-    radial-gradient(circle at 74% 14%, rgba(72, 153, 188, 0.035), transparent 34%),
-    linear-gradient(112deg, rgba(2, 9, 19, 0.34) 0%, rgba(5, 16, 29, 0.2) 52%, rgba(2, 10, 20, 0.31) 100%);
-  --orf-sidebar-bg-overlay:
-    linear-gradient(105deg, rgba(2, 10, 22, 0.62) 0%, rgba(4, 23, 39, 0.47) 60%, rgba(5, 36, 55, 0.26) 100%),
-    linear-gradient(180deg, rgba(1, 7, 16, 0.06), rgba(1, 7, 16, 0.48));
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"],
@@ -3328,102 +3217,32 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_tasks_back
   background: transparent;
 }
 
-.orf-app-shell[data-page-scene="page_tasks_background"] .orf-main-content[data-page-skin="true"]::before {
-  background: var(--orf-page-safety-overlay);
-}
-
-.orf-app-shell[data-page-scene="page_tasks_background"] :is(.orf-main-content-skin-layer, .orf-topbar-skin-layer) {
-  --orf-visual-bg-filter: saturate(1.04) contrast(0.99);
-}
-
-html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_tasks_background"] :is(.orf-main-content-skin-layer, .orf-topbar-skin-layer) {
-  --orf-visual-bg-filter: brightness(0.76) saturate(0.95) contrast(0.98);
-}
-
-.orf-app-shell[data-page-scene="page_tasks_background"] .orf-sidebar::after {
-  opacity: 0.72;
-}
-
-.orf-app-shell[data-page-scene="page_tasks_background"] .orf-sidebar-background-image {
-  opacity: 1;
-  filter: saturate(1.04) contrast(0.98) brightness(0.98);
-}
-
-html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_tasks_background"] .orf-sidebar::after {
-  opacity: 0.78;
-}
-
-html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_tasks_background"] .orf-sidebar-background-image {
-  opacity: 0.92;
-  filter: saturate(0.96) contrast(0.96) brightness(0.84);
-}
-
-.orf-app-shell[data-page-scene="page_tasks_background"] :is(
-  .orf-sidebar-brand-title,
-  .orf-sidebar-group-title,
-  .orf-sidebar-link,
-  .orf-sidebar-user-name,
-  .orf-attention-workbar-trigger
-) {
-  text-shadow: 0 1px 3px rgba(0, 8, 22, 0.82);
-}
-
-.orf-app-shell[data-page-scene="page_tasks_background"] :is(.orf-sidebar-link-active, .orf-sidebar-link-inactive:hover) {
-  -webkit-backdrop-filter: blur(16px) saturate(1.08);
-  backdrop-filter: blur(16px) saturate(1.08);
-}
-
-.orf-app-shell[data-page-scene="page_tasks_background"] .orf-topbar {
-  border-bottom-color: var(--tasks-glass-border);
-  background: transparent;
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--tasks-glass-shine) 52%, transparent);
-}
-
-.orf-app-shell[data-page-scene="page_tasks_background"] .orf-topbar::before {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  content: "";
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--tasks-glass-shine) 12%, transparent), transparent 46%),
-    var(--tasks-glass-rail);
-  pointer-events: none;
-  -webkit-backdrop-filter: var(--tasks-glass-filter);
-  backdrop-filter: var(--tasks-glass-filter);
-}
-
-.orf-app-shell[data-page-scene="page_tasks_background"] .orf-topbar::after {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tasks-glass-shine) 28%, transparent), transparent 74%);
-}
-
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-challenge-workbench {
-  --orf-workbench-shadow: var(--tasks-glass-shadow);
+  --orf-workbench-shadow: var(--orf-material-content-shadow);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-team-dashboard {
-  border-color: var(--tasks-glass-border);
+  border-color: var(--orf-material-content-hairline);
   background:
-    linear-gradient(112deg, color-mix(in srgb, var(--tasks-glass-shine) 18%, transparent), transparent 38%),
-    var(--tasks-glass-panel);
-  box-shadow: var(--tasks-glass-shadow);
-  -webkit-backdrop-filter: var(--tasks-glass-filter);
-  backdrop-filter: var(--tasks-glass-filter);
+    linear-gradient(112deg, color-mix(in srgb, var(--orf-material-content-shine) 18%, transparent), transparent 38%),
+    var(--orf-material-content-primary);
+  box-shadow: var(--orf-material-content-shadow);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-dashboard-metric {
-  border-color: color-mix(in srgb, var(--tasks-glass-border) 62%, var(--orf-workbench-hairline));
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 62%, var(--orf-workbench-hairline));
   transition: background-color 150ms ease;
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-dashboard-metric:hover {
-  background: color-mix(in srgb, var(--tasks-glass-shine) 15%, transparent);
+  background: color-mix(in srgb, var(--orf-material-content-shine) 15%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-dashboard-emblem {
-  border: 1px solid color-mix(in srgb, var(--orf-dashboard-color) 22%, var(--tasks-glass-border));
+  border: 1px solid color-mix(in srgb, var(--orf-dashboard-color) 22%, var(--orf-material-content-hairline));
   border-radius: 50%;
   background: color-mix(in srgb, var(--orf-dashboard-color) 11%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tasks-glass-shine) 54%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 54%, transparent);
   color: var(--orf-dashboard-color);
 }
 
@@ -3437,28 +3256,24 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_tasks_back
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-task-toolbar {
-  border: 1px solid var(--tasks-glass-border);
+  border: 1px solid var(--orf-material-content-hairline);
   border-radius: 16px;
   background:
-    linear-gradient(112deg, color-mix(in srgb, var(--tasks-glass-shine) 14%, transparent), transparent 42%),
-    var(--tasks-glass-rail);
-  box-shadow: 0 16px 34px color-mix(in srgb, var(--orf-text-primary) 11%, transparent), inset 0 1px 0 color-mix(in srgb, var(--tasks-glass-shine) 64%, transparent);
+    linear-gradient(112deg, color-mix(in srgb, var(--orf-material-content-shine) 14%, transparent), transparent 42%),
+    var(--orf-material-content-secondary);
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--orf-text-primary) 11%, transparent), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 64%, transparent);
   padding: 9px 10px;
-  -webkit-backdrop-filter: var(--tasks-glass-filter);
-  backdrop-filter: var(--tasks-glass-filter);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-scope-tabs {
-  border-color: color-mix(in srgb, var(--tasks-glass-border) 66%, var(--orf-workbench-hairline));
-  background: color-mix(in srgb, var(--tasks-glass-control) 84%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tasks-glass-shine) 54%, transparent);
-  -webkit-backdrop-filter: var(--tasks-glass-control-filter);
-  backdrop-filter: var(--tasks-glass-control-filter);
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 66%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--orf-material-content-control) 84%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 54%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-scope-tab-active {
-  background: color-mix(in srgb, var(--tasks-glass-float) 92%, var(--orf-accent-soft));
-  box-shadow: 0 5px 14px color-mix(in srgb, var(--orf-text-primary) 10%, transparent), inset 0 1px 0 var(--tasks-glass-shine);
+  background: color-mix(in srgb, var(--orf-material-floating) 92%, var(--orf-accent-soft));
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--orf-text-primary) 10%, transparent), inset 0 1px 0 var(--orf-material-content-shine);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-challenge-workbench :is(
@@ -3466,11 +3281,9 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_tasks_back
   .orf-toolbar-project-create,
   .orf-task-toolbar .orf-floating-control
 ) {
-  border-color: color-mix(in srgb, var(--tasks-glass-border) 64%, var(--orf-workbench-hairline));
-  background: var(--tasks-glass-control);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tasks-glass-shine) 54%, transparent);
-  -webkit-backdrop-filter: var(--tasks-glass-control-filter);
-  backdrop-filter: var(--tasks-glass-control-filter);
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 64%, var(--orf-workbench-hairline));
+  background: var(--orf-material-content-control);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 54%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-challenge-workbench :is(
@@ -3480,31 +3293,29 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_tasks_back
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-challenge-workbench .orf-select-menu-open .orf-floating-control {
   border-color: var(--orf-accent-border);
   background: var(--orf-surface-control-hover);
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--orf-text-primary) 10%, transparent), inset 0 1px 0 var(--tasks-glass-shine);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--orf-text-primary) 10%, transparent), inset 0 1px 0 var(--orf-material-content-shine);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-project-section {
-  border-color: var(--tasks-glass-border);
+  border-color: var(--orf-material-content-hairline);
   background:
-    linear-gradient(124deg, color-mix(in srgb, var(--tasks-glass-shine) 15%, transparent), transparent 35%),
-    var(--tasks-glass-panel);
-  box-shadow: var(--tasks-glass-shadow);
-  -webkit-backdrop-filter: var(--tasks-glass-filter);
-  backdrop-filter: var(--tasks-glass-filter);
+    linear-gradient(124deg, color-mix(in srgb, var(--orf-material-content-shine) 15%, transparent), transparent 35%),
+    var(--orf-material-content-primary);
+  box-shadow: var(--orf-material-content-shadow);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-project-header {
-  border-bottom-color: color-mix(in srgb, var(--tasks-glass-border) 56%, var(--orf-workbench-hairline));
+  border-bottom-color: color-mix(in srgb, var(--orf-material-content-hairline) 56%, var(--orf-workbench-hairline));
   background:
     linear-gradient(90deg, color-mix(in srgb, rgb(var(--orf-project-accent, 28, 132, 163)) 8%, transparent), transparent 34%),
-    var(--tasks-glass-header);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tasks-glass-shine) 56%, transparent);
+    var(--orf-material-content-secondary);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 56%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-project-header:is(:hover, :focus-within) {
   background:
     linear-gradient(90deg, color-mix(in srgb, rgb(var(--orf-project-accent, 28, 132, 163)) 12%, transparent), transparent 38%),
-    color-mix(in srgb, var(--tasks-glass-header) 86%, var(--tasks-glass-shine));
+    color-mix(in srgb, var(--orf-material-content-secondary) 86%, var(--orf-material-content-shine));
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-project-title {
@@ -3512,7 +3323,7 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_tasks_back
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-challenge-workbench :is(.orf-objective-panel, .orf-objective-panel-editable, .orf-objective-panel-frozen) {
-  border-color: color-mix(in srgb, var(--tasks-glass-border) 46%, var(--orf-workbench-hairline));
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 46%, var(--orf-workbench-hairline));
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-challenge-workbench .orf-objective-panel:hover {
@@ -3520,7 +3331,7 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_tasks_back
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-challenge-workbench :is(.orf-objective-header, .orf-result-row, .orf-task-row, .orf-subtask-row):is(:hover, :focus-within) {
-  background: color-mix(in srgb, var(--tasks-glass-shine) 17%, transparent);
+  background: color-mix(in srgb, var(--orf-material-content-shine) 17%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-challenge-workbench :is(
@@ -3530,13 +3341,11 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_tasks_back
   .orf-objective-project-menu
 ),
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-metric-inspector-panel {
-  border-color: var(--tasks-glass-border);
+  border-color: var(--orf-material-content-hairline);
   background:
-    linear-gradient(132deg, color-mix(in srgb, var(--tasks-glass-shine) 16%, transparent), transparent 42%),
-    var(--tasks-glass-float);
-  box-shadow: var(--tasks-glass-shadow);
-  -webkit-backdrop-filter: var(--tasks-glass-filter);
-  backdrop-filter: var(--tasks-glass-filter);
+    linear-gradient(132deg, color-mix(in srgb, var(--orf-material-content-shine) 16%, transparent), transparent 42%),
+    var(--orf-material-floating);
+  box-shadow: var(--orf-material-content-shadow);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .orf-metric-inspector-detail,
@@ -3547,11 +3356,9 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_tasks_back
   .orf-objective-reestimate-due-input,
   .orf-objective-project-create input
 ) {
-  border-color: color-mix(in srgb, var(--tasks-glass-border) 54%, var(--orf-workbench-hairline));
-  background: var(--tasks-glass-control);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tasks-glass-shine) 45%, transparent);
-  -webkit-backdrop-filter: var(--tasks-glass-control-filter);
-  backdrop-filter: var(--tasks-glass-control-filter);
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 54%, var(--orf-workbench-hairline));
+  background: var(--orf-material-content-control);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 45%, transparent);
 }
 
 body:has(.orf-app-shell[data-page-scene="page_tasks_background"]) .orf-select-popover,
@@ -3562,8 +3369,6 @@ body:has(.orf-app-shell[data-page-scene="page_tasks_background"]) .orf-confirm-d
     linear-gradient(132deg, rgba(255, 255, 255, 0.16), transparent 44%),
     rgba(247, 251, 252, 0.89);
   box-shadow: 0 24px 58px rgba(5, 27, 43, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  -webkit-backdrop-filter: blur(26px) saturate(1.08);
-  backdrop-filter: blur(26px) saturate(1.08);
 }
 
 body:has(.orf-app-shell[data-page-scene="page_tasks_background"]) .orf-select-option {
@@ -3588,46 +3393,42 @@ html[data-orf-appearance="dark"] body:has(.orf-app-shell[data-page-scene="page_t
 
 .orf-app-shell[data-page-scene="page_tasks_background"] .fixed.inset-0:has(> [role="dialog"].orf-card) {
   background: rgba(4, 15, 25, 0.55);
-  -webkit-backdrop-filter: blur(10px) saturate(0.92);
-  backdrop-filter: blur(10px) saturate(0.92);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] [role="dialog"].orf-card {
-  border-color: var(--tasks-glass-border);
+  border-color: var(--orf-material-content-hairline);
   border-radius: 22px;
   background:
-    linear-gradient(132deg, color-mix(in srgb, var(--tasks-glass-shine) 17%, transparent), transparent 44%),
-    var(--tasks-glass-float);
-  box-shadow: var(--tasks-glass-shadow);
-  -webkit-backdrop-filter: var(--tasks-glass-filter);
-  backdrop-filter: var(--tasks-glass-filter);
+    linear-gradient(132deg, color-mix(in srgb, var(--orf-material-content-shine) 17%, transparent), transparent 44%),
+    var(--orf-material-floating);
+  box-shadow: var(--orf-material-content-shadow);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] [role="dialog"].orf-card .orf-drag-handle {
-  border-color: color-mix(in srgb, var(--tasks-glass-border) 58%, var(--orf-workbench-hairline));
-  background: color-mix(in srgb, var(--tasks-glass-header) 74%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tasks-glass-shine) 52%, transparent);
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 58%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 74%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 52%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] [role="dialog"].orf-card .orf-surface-muted {
-  border-color: color-mix(in srgb, var(--tasks-glass-border) 55%, var(--orf-workbench-hairline));
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 55%, var(--orf-workbench-hairline));
   border-radius: 14px;
-  background: var(--tasks-glass-control);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tasks-glass-shine) 46%, transparent);
+  background: var(--orf-material-content-control);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 46%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] [role="dialog"].orf-card label {
-  border-color: color-mix(in srgb, var(--tasks-glass-border) 55%, var(--orf-workbench-hairline));
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 55%, var(--orf-workbench-hairline));
   border-radius: var(--orf-radius-control);
-  background: color-mix(in srgb, var(--tasks-glass-control) 82%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tasks-glass-shine) 42%, transparent);
+  background: color-mix(in srgb, var(--orf-material-content-control) 82%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 42%, transparent);
   transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] [role="dialog"].orf-card label:is(:hover, :focus-within) {
   border-color: var(--orf-accent-border);
   background: var(--orf-surface-control-hover);
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--orf-text-primary) 10%, transparent), inset 0 1px 0 var(--tasks-glass-shine);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--orf-text-primary) 10%, transparent), inset 0 1px 0 var(--orf-material-content-shine);
 }
 
 .orf-app-shell[data-page-scene="page_tasks_background"] [role="dialog"].orf-card input[type="checkbox"] {
@@ -3637,7 +3438,7 @@ html[data-orf-appearance="dark"] body:has(.orf-app-shell[data-page-scene="page_t
   appearance: none;
   border: 1px solid var(--orf-border-strong);
   border-radius: 50%;
-  background: var(--tasks-glass-control);
+  background: var(--orf-material-content-control);
   box-shadow: inset 0 1px 2px color-mix(in srgb, var(--orf-text-primary) 8%, transparent);
 }
 
@@ -3656,39 +3457,33 @@ html[data-orf-appearance="dark"] body:has(.orf-app-shell[data-page-scene="page_t
   .orf-app-shell[data-page-scene="page_tasks_background"] .orf-task-toolbar,
   .orf-app-shell[data-page-scene="page_tasks_background"] .orf-mobile-objective-card,
   .orf-app-shell[data-page-scene="page_tasks_background"] .orf-project-section {
-    border-color: var(--tasks-glass-border);
+    border-color: var(--orf-material-content-hairline);
     background:
-      linear-gradient(128deg, color-mix(in srgb, var(--tasks-glass-shine) 15%, transparent), transparent 42%),
-      var(--tasks-glass-panel);
-    box-shadow: 0 16px 36px color-mix(in srgb, var(--orf-text-primary) 15%, transparent), inset 0 1px 0 color-mix(in srgb, var(--tasks-glass-shine) 64%, transparent);
-    -webkit-backdrop-filter: var(--tasks-glass-filter);
-    backdrop-filter: var(--tasks-glass-filter);
+      linear-gradient(128deg, color-mix(in srgb, var(--orf-material-content-shine) 15%, transparent), transparent 42%),
+      var(--orf-material-content-primary);
+    box-shadow: 0 16px 36px color-mix(in srgb, var(--orf-text-primary) 15%, transparent), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 64%, transparent);
   }
 
-  .orf-app-shell[data-page-scene="page_tasks_background"] .orf-task-toolbar {
+.orf-app-shell[data-page-scene="page_tasks_background"] .orf-task-toolbar {
     border-radius: 16px;
   }
 
-  .orf-app-shell[data-page-scene="page_tasks_background"] .orf-mobile-objective-card {
+.orf-app-shell[data-page-scene="page_tasks_background"] .orf-mobile-objective-card {
     border-radius: 18px;
   }
 
-  .orf-app-shell[data-page-scene="page_tasks_background"] .orf-mobile-challenge-summary > span,
+.orf-app-shell[data-page-scene="page_tasks_background"] .orf-mobile-challenge-summary > span,
   .orf-app-shell[data-page-scene="page_tasks_background"] .orf-mobile-objective-status,
   .orf-app-shell[data-page-scene="page_tasks_background"] .orf-mobile-challenge-focus-bar > button {
-    border-color: color-mix(in srgb, var(--tasks-glass-border) 58%, var(--orf-workbench-hairline));
-    background: var(--tasks-glass-control);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tasks-glass-shine) 48%, transparent);
-    -webkit-backdrop-filter: var(--tasks-glass-control-filter);
-    backdrop-filter: var(--tasks-glass-control-filter);
+    border-color: color-mix(in srgb, var(--orf-material-content-hairline) 58%, var(--orf-workbench-hairline));
+    background: var(--orf-material-content-control);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 48%, transparent);
   }
 
-  .orf-app-shell[data-page-scene="page_tasks_background"] .orf-mobile-challenge-focus-bar {
-    border-bottom-color: var(--tasks-glass-border);
-    background: var(--tasks-glass-float);
-    box-shadow: 0 14px 28px color-mix(in srgb, var(--orf-text-primary) 16%, transparent), inset 0 -1px 0 var(--tasks-glass-border);
-    -webkit-backdrop-filter: var(--tasks-glass-filter);
-    backdrop-filter: var(--tasks-glass-filter);
+.orf-app-shell[data-page-scene="page_tasks_background"] .orf-mobile-challenge-focus-bar {
+    border-bottom-color: var(--orf-material-content-hairline);
+    background: var(--orf-material-floating);
+    box-shadow: 0 14px 28px color-mix(in srgb, var(--orf-text-primary) 16%, transparent), inset 0 -1px 0 var(--orf-material-content-hairline);
   }
 }
 

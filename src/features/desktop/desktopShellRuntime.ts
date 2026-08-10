@@ -83,6 +83,12 @@ export type DesktopWorkbenchZoomResult = {
   status: "error" | "success" | "unsupported";
 };
 
+export type DesktopAppearanceModeResult = {
+  data?: { appearanceMode: "dark" | "light"; backgroundColor: string };
+  reason?: string;
+  status: "error" | "success" | "unsupported";
+};
+
 type DesktopShellBridge = {
   closeWindow?: () => Promise<DesktopShellWindowResult>;
   getLaunchAtLoginState?: () => Promise<DesktopShellLaunchAtLoginResult>;
@@ -91,6 +97,7 @@ type DesktopShellBridge = {
   minimizeWindow?: () => Promise<DesktopShellWindowResult>;
   onOpenTarget?: (handler: (targetPath: string) => void) => (() => void);
   onWindowStateChange?: (handler: (state: DesktopWindowState) => void) => (() => void);
+  setAppearanceMode?: (payload: { appearanceMode: "dark" | "light" }) => Promise<DesktopAppearanceModeResult>;
   setAttentionState?: (payload: DesktopAttentionPayload) => Promise<DesktopAttentionResult>;
   setChatUnreadCount?: (payload: { count: number }) => Promise<DesktopShellUnreadResult>;
   setLaunchAtLoginEnabled?: (payload: { enabled: boolean }) => Promise<DesktopShellLaunchAtLoginResult>;
@@ -141,6 +148,18 @@ export async function syncDesktopAttentionState(payload: DesktopAttentionPayload
 
 export function isDesktopShellAvailable() {
   return typeof window !== "undefined" && Boolean(window.orfDesktopShell);
+}
+
+export async function syncDesktopAppearanceMode(appearanceMode: "dark" | "light"): Promise<DesktopAppearanceModeResult> {
+  if (typeof window === "undefined" || !window.orfDesktopShell?.setAppearanceMode) {
+    return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
+  }
+  try {
+    const result = await window.orfDesktopShell.setAppearanceMode({ appearanceMode });
+    return result?.status ? result : { status: "error", reason: "desktop_shell_bridge_invalid_result" };
+  } catch {
+    return { status: "error", reason: "desktop_shell_bridge_failed" };
+  }
 }
 
 export async function getDesktopLaunchAtLoginState(): Promise<DesktopShellLaunchAtLoginResult> {

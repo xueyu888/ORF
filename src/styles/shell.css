@@ -74,7 +74,7 @@
   transition: none;
 }
 
-.orf-sidebar > *:not(.orf-sidebar-background-frame) {
+.orf-sidebar > *:not(.orf-sidebar-background-frame):not(.orf-sidebar-material) {
   position: relative;
   z-index: 2;
 }
@@ -91,20 +91,7 @@
   border-bottom: 1px solid var(--orf-topbar-border);
 }
 
-.orf-topbar::after {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  content: "";
-  opacity: 0;
-  pointer-events: none;
-}
-
-.orf-topbar[data-topbar-skin="true"]::after {
-  opacity: var(--orf-visual-bg-overlay-opacity, 0.58);
-}
-
-.orf-topbar > *:not(.orf-topbar-skin-frame) {
+.orf-topbar > *:not(.orf-topbar-skin-frame):not(.orf-topbar-material) {
   position: relative;
   z-index: 2;
 }
@@ -1246,49 +1233,13 @@
   padding: var(--orf-page-padding-y) var(--orf-page-padding-x);
 }
 
-.orf-main-content::before {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  content: "";
-  background-position:
-    center,
-    center,
-    center;
-  background-repeat: no-repeat, no-repeat, repeat;
-  background-size: cover, cover, auto;
-  pointer-events: none;
-}
-
-.orf-main-content[data-page-skin="true"]::before {
-  position: fixed;
-  inset: var(--orf-content-bg-top) 0 var(--orf-content-bg-bottom) var(--orf-content-bg-left);
-  background:
-    linear-gradient(
-      90deg,
-      rgba(237, 243, 247, 0.36) 0%,
-      rgba(255, 255, 255, 0.12) 44%,
-      rgba(237, 243, 247, 0.3) 100%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.16) 0%,
-      rgba(237, 243, 247, 0.12) 42%,
-      rgba(237, 243, 247, 0.2) 100%
-    );
-  background-position: center, center;
-  background-repeat: no-repeat, no-repeat;
-  background-size: cover, cover;
-  opacity: var(--orf-visual-bg-overlay-opacity, 0.58);
-}
-
 .orf-main-content-skin-frame {
   position: fixed;
   inset: var(--orf-content-bg-top) 0 var(--orf-content-bg-bottom) var(--orf-content-bg-left);
   z-index: 0;
 }
 
-.orf-main-content > *:not(.orf-main-content-skin-frame) {
+.orf-main-content > *:not(.orf-main-content-skin-frame):not(.orf-workspace-material) {
   position: relative;
   z-index: 2;
 }
@@ -2089,14 +2040,6 @@ html[data-orf-display-ready="true"] .orf-mobile-bottom-nav-item {
   background: var(--orf-bg-app);
 }
 
-.orf-main-content::before {
-  background: var(--orf-page-safety-overlay);
-}
-
-.orf-main-content[data-page-skin="true"]::before {
-  opacity: 1;
-}
-
 .orf-topbar-title.orf-text-primary {
   color: var(--orf-text-primary);
 }
@@ -2305,11 +2248,9 @@ html[data-orf-display-ready="true"] .orf-mobile-bottom-nav-item {
 .orf-main-content[data-page-skin="true"] .orf-page-context {
   border: 1px solid color-mix(in srgb, var(--orf-border) 76%, transparent);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--orf-surface-panel) 82%, transparent);
+  background: var(--orf-material-content-secondary);
   box-shadow: 0 1px 2px rgba(17, 34, 48, 0.04);
   padding: 10px 12px;
-  -webkit-backdrop-filter: blur(14px) saturate(1.02);
-  backdrop-filter: blur(14px) saturate(1.02);
 }
 
 .orf-mobile-bottom-nav-label {
@@ -2360,32 +2301,8 @@ html[data-orf-display-ready="true"] .orf-mobile-bottom-nav-item {
 
 .orf-topbar {
   border-bottom-color: var(--orf-workbench-hairline);
-  background: color-mix(in srgb, var(--orf-surface-content-solid) 96%, transparent);
+  background: transparent;
   box-shadow: 0 1px 0 var(--orf-workbench-hairline);
-  -webkit-backdrop-filter: blur(8px) saturate(1.02);
-  backdrop-filter: blur(8px) saturate(1.02);
-}
-
-.orf-topbar::after {
-  background: color-mix(in srgb, var(--orf-surface-content-solid) 96%, transparent);
-}
-
-.orf-main-content:not([data-page-skin="true"])::before {
-  background: var(--orf-surface-content-solid);
-}
-
-html[data-orf-appearance="dark"] .orf-main-content:not([data-page-skin="true"])::before {
-  background: var(--orf-surface-content-solid);
-}
-
-.orf-sidebar-background-image {
-  opacity: 0.9;
-  filter: saturate(0.96) contrast(0.94);
-}
-
-html[data-orf-appearance="dark"] .orf-sidebar-background-image {
-  opacity: 0.78;
-  filter: saturate(0.84) contrast(0.9) brightness(0.78);
 }
 
 .orf-sidebar-link {

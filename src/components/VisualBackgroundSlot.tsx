@@ -5,7 +5,6 @@ type VisualBackgroundSlotProps = {
   crop: VisualBackgroundCrop;
   frameClassName: string;
   imageClassName?: string;
-  imageFilter?: string;
   imageUrl: string | null;
   loading?: "eager" | "lazy";
   onImageError?: () => void;
@@ -15,7 +14,6 @@ export function VisualBackgroundSlot({
   crop,
   frameClassName,
   imageClassName,
-  imageFilter,
   imageUrl,
   loading = "eager",
   onImageError,
@@ -33,17 +31,16 @@ export function VisualBackgroundSlot({
         loading={loading}
         decoding="async"
         onError={onImageError}
-        style={visualBackgroundSlotStyle(crop, imageFilter)}
+        style={visualBackgroundSlotStyle(crop)}
       />
     </span>
   );
 }
 
-function visualBackgroundSlotStyle(crop: VisualBackgroundCrop, imageFilter?: string) {
+function visualBackgroundSlotStyle(crop: VisualBackgroundCrop) {
   return {
     "--orf-visual-bg-center-x": `${crop.centerX * 100}%`,
     "--orf-visual-bg-center-y": `${crop.centerY * 100}%`,
-    "--orf-visual-bg-filter": imageFilter,
     "--orf-visual-bg-zoom": crop.zoom,
   } as CSSProperties;
 }

@@ -477,8 +477,8 @@
   z-index: 0;
   display: block;
   max-width: none;
-  filter: saturate(0.95) contrast(0.96);
-  opacity: 0.9;
+  filter: none;
+  opacity: 1;
   transform-origin: top left;
   user-select: none;
   pointer-events: none;
@@ -494,18 +494,8 @@
   width: min(78%, 720px);
   aspect-ratio: var(--orf-skin-preview-frame-ratio, 16 / 9);
   border: 2px solid rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.24);
+  background: transparent;
   transform: translate3d(-50%, -50%, 0);
-  pointer-events: none;
-}
-
-.orf-skin-preview-frame-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.2), transparent 28%, transparent 72%, rgba(255, 255, 255, 0.18)),
-    rgb(255 255 255 / calc(var(--orf-skin-preview-overlay-opacity, 0.58) * 0.34));
   pointer-events: none;
 }
 

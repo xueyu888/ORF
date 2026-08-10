@@ -1872,7 +1872,6 @@ html[data-orf-appearance="dark"] .orf-app-shell .orf-drive-docx-page,
 .orf-drive-page > .orf-drive-panel {
   border-radius: 14px;
   background: var(--orf-surface-panel-solid);
-  backdrop-filter: none;
 }
 
 .orf-drive-panel {
@@ -2217,12 +2216,12 @@ html[data-orf-appearance="dark"] .orf-app-shell .orf-drive-docx-page,
     display: none;
   }
 
-  .orf-drive-workbench-grid[data-mobile-pane="details"] .orf-drive-preview-column {
+.orf-drive-workbench-grid[data-mobile-pane="details"] .orf-drive-preview-column {
     border-top: 0;
     padding: 0;
   }
 
-  .orf-drive-mobile-filter-trigger {
+.orf-drive-mobile-filter-trigger {
     display: grid;
     width: 100%;
     min-height: 38px;
@@ -2238,12 +2237,12 @@ html[data-orf-appearance="dark"] .orf-app-shell .orf-drive-docx-page,
     text-align: left;
   }
 
-  .orf-drive-mobile-filter-trigger > span {
+.orf-drive-mobile-filter-trigger > span {
     color: var(--orf-text-primary);
     font-weight: 650;
   }
 
-  .orf-drive-mobile-filter-trigger > strong {
+.orf-drive-mobile-filter-trigger > strong {
     display: inline-grid;
     min-width: 20px;
     height: 20px;
@@ -2256,23 +2255,23 @@ html[data-orf-appearance="dark"] .orf-app-shell .orf-drive-docx-page,
     font-weight: 750;
   }
 
-  .orf-drive-mobile-filter-trigger > svg:last-child {
+.orf-drive-mobile-filter-trigger > svg:last-child {
     transition: transform 160ms ease;
   }
 
-  .orf-drive-mobile-filter-trigger[aria-expanded="true"] > svg:last-child {
+.orf-drive-mobile-filter-trigger[aria-expanded="true"] > svg:last-child {
     transform: rotate(180deg);
   }
 
-  .orf-drive-filter-region {
+.orf-drive-filter-region {
     display: none;
   }
 
-  .orf-drive-filter-region.is-mobile-open {
+.orf-drive-filter-region.is-mobile-open {
     display: block;
   }
 
-  .orf-drive-mobile-detail-header {
+.orf-drive-mobile-detail-header {
     position: sticky;
     z-index: 6;
     top: 8px;
@@ -2286,7 +2285,7 @@ html[data-orf-appearance="dark"] .orf-app-shell .orf-drive-docx-page,
     padding: 10px 12px;
   }
 
-  .orf-drive-mobile-detail-header > button {
+.orf-drive-mobile-detail-header > button {
     display: inline-grid;
     width: 40px;
     height: 40px;
@@ -2297,20 +2296,20 @@ html[data-orf-appearance="dark"] .orf-app-shell .orf-drive-docx-page,
     color: var(--orf-text-primary);
   }
 
-  .orf-drive-mobile-detail-header > div {
+.orf-drive-mobile-detail-header > div {
     display: grid;
     min-width: 0;
     gap: 2px;
   }
 
-  .orf-drive-mobile-detail-header span,
+.orf-drive-mobile-detail-header span,
   .orf-drive-mobile-detail-header small {
     color: var(--orf-text-muted);
     font-size: 10px;
     font-weight: 600;
   }
 
-  .orf-drive-mobile-detail-header strong {
+.orf-drive-mobile-detail-header strong {
     overflow: hidden;
     color: var(--orf-text-primary);
     font-size: 13px;
@@ -2319,7 +2318,7 @@ html[data-orf-appearance="dark"] .orf-app-shell .orf-drive-docx-page,
     white-space: nowrap;
   }
 
-  .orf-drive-mobile-detail-header > small {
+.orf-drive-mobile-detail-header > small {
     max-width: 88px;
     overflow: hidden;
     border: 1px solid var(--orf-border);
@@ -2330,7 +2329,7 @@ html[data-orf-appearance="dark"] .orf-app-shell .orf-drive-docx-page,
     white-space: nowrap;
   }
 
-  .orf-drive-workbench-grid[data-mobile-pane="details"] .orf-drive-preview-stack {
+.orf-drive-workbench-grid[data-mobile-pane="details"] .orf-drive-preview-stack {
     padding: 0 12px 12px;
   }
 }
@@ -2341,105 +2340,7 @@ html[data-orf-appearance="dark"] .orf-app-shell .orf-drive-docx-page,
    panes share a frame but use different optical density: navigation stays
    ambient, the index stays scannable, and preview/details remain most stable. */
 .orf-app-shell[data-page-scene="page_resources_background"] {
-  --orf-bg-app: #e4ecef;
   --orf-bg-page: transparent;
-  --orf-text-primary: #172d37;
-  --orf-text-secondary: #405d68;
-  --orf-text-muted: #6d838b;
-  --orf-text-faint: #9caab0;
-  --orf-border: rgba(43, 76, 89, 0.14);
-  --orf-border-strong: rgba(37, 73, 87, 0.24);
-  --orf-accent: #087d96;
-  --orf-accent-hover: #066b81;
-  --orf-accent-soft: rgba(8, 125, 150, 0.12);
-  --orf-accent-border: rgba(8, 125, 150, 0.34);
-  --orf-accent-text: #076d83;
-  --orf-surface-chrome: rgba(244, 249, 250, 0.57);
-  --orf-surface-panel: rgba(247, 250, 250, 0.64);
-  --orf-surface-elevated: #fbfdfd;
-  --orf-surface-control: rgba(248, 251, 251, 0.61);
-  --orf-surface-control-hover: rgba(255, 255, 255, 0.8);
-  --orf-workbench-hairline: rgba(43, 77, 90, 0.15);
-  --orf-workbench-hairline-strong: rgba(39, 76, 90, 0.25);
-  --orf-topbar-surface: rgba(242, 248, 249, 0.68);
-  --orf-topbar-surface-strong: rgba(251, 253, 253, 0.88);
-  --orf-topbar-control-bg: rgba(248, 251, 251, 0.65);
-  --orf-topbar-control-hover-bg: rgba(255, 255, 255, 0.86);
-  --orf-topbar-control-border: rgba(45, 78, 90, 0.16);
-  --orf-topbar-control-text: #294650;
-  --orf-topbar-control-muted: #70868e;
-  --drive-glass-frame: rgba(241, 247, 248, 0.5);
-  --drive-glass-nav: rgba(244, 249, 249, 0.56);
-  --drive-glass-index: rgba(248, 251, 251, 0.64);
-  --drive-glass-preview: rgba(251, 252, 252, 0.7);
-  --drive-glass-control: rgba(251, 253, 253, 0.63);
-  --drive-glass-well: rgba(238, 246, 247, 0.45);
-  --drive-glass-float: rgba(250, 252, 252, 0.88);
-  --drive-glass-border: rgba(255, 255, 255, 0.72);
-  --drive-glass-shine: rgba(255, 255, 255, 0.84);
-  --drive-glass-shadow: 0 24px 58px rgba(24, 54, 66, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.78);
-  --drive-glass-filter: blur(28px) saturate(1.08);
-  --drive-control-filter: blur(16px) saturate(1.04);
-  --orf-page-safety-overlay:
-    radial-gradient(circle at 64% 10%, rgba(255, 255, 255, 0.045), transparent 36%),
-    linear-gradient(116deg, rgba(216, 234, 238, 0.08) 0%, rgba(255, 255, 255, 0.02) 54%, rgba(205, 228, 234, 0.07) 100%);
-  --orf-sidebar-bg-overlay:
-    linear-gradient(105deg, rgba(5, 23, 41, 0.5) 0%, rgba(7, 39, 59, 0.33) 60%, rgba(8, 52, 72, 0.16) 100%),
-    linear-gradient(180deg, rgba(2, 14, 26, 0.03), rgba(2, 14, 26, 0.41));
-  --orf-sidebar-selected-bg: rgba(118, 207, 219, 0.21);
-  --orf-sidebar-hover-bg: rgba(118, 207, 219, 0.13);
-  --orf-sidebar-divider: rgba(218, 241, 243, 0.14);
-  --orf-sidebar-text: #f7fcfd;
-  --orf-sidebar-text-muted: #c0d9df;
-  --orf-sidebar-icon: #e7f8fa;
-}
-
-html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_resources_background"] {
-  --orf-bg-app: #081722;
-  --orf-bg-page: transparent;
-  --orf-text-primary: #f0f6f8;
-  --orf-text-secondary: #c1d2d8;
-  --orf-text-muted: #91a7ae;
-  --orf-text-faint: #647b84;
-  --orf-border: rgba(169, 207, 217, 0.14);
-  --orf-border-strong: rgba(178, 216, 226, 0.24);
-  --orf-accent: #45b9d0;
-  --orf-accent-hover: #67c9da;
-  --orf-accent-soft: rgba(69, 185, 208, 0.16);
-  --orf-accent-border: rgba(87, 198, 219, 0.35);
-  --orf-accent-text: #8ad7e5;
-  --orf-surface-chrome: rgba(5, 20, 29, 0.59);
-  --orf-surface-panel: rgba(7, 22, 31, 0.68);
-  --orf-surface-elevated: #142832;
-  --orf-surface-control: rgba(9, 29, 39, 0.61);
-  --orf-surface-control-hover: rgba(20, 48, 59, 0.77);
-  --orf-workbench-hairline: rgba(171, 210, 220, 0.14);
-  --orf-workbench-hairline-strong: rgba(180, 219, 229, 0.23);
-  --orf-topbar-surface: rgba(6, 22, 31, 0.72);
-  --orf-topbar-surface-strong: rgba(15, 38, 48, 0.88);
-  --orf-topbar-control-bg: rgba(10, 31, 41, 0.66);
-  --orf-topbar-control-hover-bg: rgba(23, 53, 64, 0.88);
-  --orf-topbar-control-border: rgba(168, 207, 217, 0.17);
-  --orf-topbar-control-text: #e0edf1;
-  --orf-topbar-control-muted: #8ea7ae;
-  --drive-glass-frame: rgba(5, 19, 28, 0.57);
-  --drive-glass-nav: rgba(6, 21, 30, 0.6);
-  --drive-glass-index: rgba(7, 23, 32, 0.68);
-  --drive-glass-preview: rgba(8, 24, 33, 0.74);
-  --drive-glass-control: rgba(10, 31, 41, 0.62);
-  --drive-glass-well: rgba(7, 26, 36, 0.54);
-  --drive-glass-float: rgba(8, 24, 33, 0.91);
-  --drive-glass-border: rgba(165, 215, 225, 0.2);
-  --drive-glass-shine: rgba(205, 239, 245, 0.18);
-  --drive-glass-shadow: 0 26px 64px rgba(0, 7, 12, 0.48), inset 0 1px 0 rgba(202, 237, 243, 0.14);
-  --drive-glass-filter: blur(28px) saturate(1.07);
-  --drive-control-filter: blur(16px) saturate(1.03);
-  --orf-page-safety-overlay:
-    radial-gradient(circle at 66% 11%, rgba(70, 169, 187, 0.035), transparent 36%),
-    linear-gradient(116deg, rgba(1, 9, 15, 0.35) 0%, rgba(5, 17, 24, 0.2) 54%, rgba(1, 9, 15, 0.32) 100%);
-  --orf-sidebar-bg-overlay:
-    linear-gradient(105deg, rgba(1, 9, 17, 0.63) 0%, rgba(3, 19, 29, 0.48) 60%, rgba(4, 31, 42, 0.27) 100%),
-    linear-gradient(180deg, rgba(1, 6, 11, 0.06), rgba(1, 6, 11, 0.49));
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"],
@@ -2451,94 +2352,26 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_resources_
   background: transparent;
 }
 
-.orf-app-shell[data-page-scene="page_resources_background"] .orf-main-content[data-page-skin="true"]::before {
-  background: var(--orf-page-safety-overlay);
-}
-
-.orf-app-shell[data-page-scene="page_resources_background"] :is(.orf-main-content-skin-layer, .orf-topbar-skin-layer) {
-  --orf-visual-bg-filter: saturate(1.03) contrast(0.99);
-}
-
-html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_resources_background"] :is(.orf-main-content-skin-layer, .orf-topbar-skin-layer) {
-  --orf-visual-bg-filter: brightness(0.75) saturate(0.94) contrast(0.98);
-}
-
-.orf-app-shell[data-page-scene="page_resources_background"] .orf-sidebar::after {
-  opacity: 0.72;
-}
-
-.orf-app-shell[data-page-scene="page_resources_background"] .orf-sidebar-background-image {
-  opacity: 1;
-  filter: saturate(1.03) contrast(0.98) brightness(0.98);
-}
-
-html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_resources_background"] .orf-sidebar::after {
-  opacity: 0.78;
-}
-
-html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_resources_background"] .orf-sidebar-background-image {
-  opacity: 0.92;
-  filter: saturate(0.95) contrast(0.96) brightness(0.84);
-}
-
-.orf-app-shell[data-page-scene="page_resources_background"] :is(
-  .orf-sidebar-brand-title,
-  .orf-sidebar-group-title,
-  .orf-sidebar-link,
-  .orf-sidebar-user-name,
-  .orf-attention-workbar-trigger
-) {
-  text-shadow: 0 1px 3px rgba(0, 8, 18, 0.82);
-}
-
-.orf-app-shell[data-page-scene="page_resources_background"] :is(.orf-sidebar-link-active, .orf-sidebar-link-inactive:hover) {
-  -webkit-backdrop-filter: blur(16px) saturate(1.07);
-  backdrop-filter: blur(16px) saturate(1.07);
-}
-
-.orf-app-shell[data-page-scene="page_resources_background"] .orf-topbar {
-  border-bottom-color: var(--drive-glass-border);
-  background: transparent;
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--drive-glass-shine) 52%, transparent);
-}
-
-.orf-app-shell[data-page-scene="page_resources_background"] .orf-topbar::before {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  content: "";
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--drive-glass-shine) 12%, transparent), transparent 46%),
-    var(--drive-glass-frame);
-  pointer-events: none;
-  -webkit-backdrop-filter: var(--drive-glass-filter);
-  backdrop-filter: var(--drive-glass-filter);
-}
-
-.orf-app-shell[data-page-scene="page_resources_background"] .orf-topbar::after {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--drive-glass-shine) 28%, transparent), transparent 74%);
-}
-
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-page {
-  --orf-chat-panel-surface: var(--drive-glass-preview);
-  --orf-chat-panel-header-surface: var(--drive-glass-control);
-  --orf-chat-panel-border: var(--drive-glass-border);
+  --orf-chat-panel-surface: var(--orf-material-content-primary);
+  --orf-chat-panel-header-surface: var(--orf-material-content-control);
+  --orf-chat-panel-border: var(--orf-material-content-hairline);
   --orf-chat-panel-border-strong: var(--orf-workbench-hairline-strong);
   --orf-chat-panel-text: var(--orf-text-secondary);
   --orf-chat-panel-text-strong: var(--orf-text-primary);
   --orf-chat-panel-text-muted: var(--orf-text-muted);
   --orf-chat-panel-placeholder: var(--orf-text-faint);
-  --orf-chat-panel-control-bg: var(--drive-glass-control);
+  --orf-chat-panel-control-bg: var(--orf-material-content-control);
   --orf-chat-panel-control-hover-bg: var(--orf-surface-control-hover);
-  --orf-chat-panel-control-disabled-bg: color-mix(in srgb, var(--drive-glass-control) 64%, transparent);
+  --orf-chat-panel-control-disabled-bg: color-mix(in srgb, var(--orf-material-content-control) 64%, transparent);
   --orf-chat-panel-control-disabled-text: var(--orf-text-faint);
-  --orf-chat-panel-item-bg: var(--drive-glass-control);
-  --orf-chat-panel-item-hover-bg: color-mix(in srgb, var(--drive-glass-control) 72%, var(--orf-accent-soft));
-  --orf-chat-panel-empty-bg: var(--drive-glass-well);
-  --orf-chat-panel-chip-bg: var(--drive-glass-control);
+  --orf-chat-panel-item-bg: var(--orf-material-content-control);
+  --orf-chat-panel-item-hover-bg: color-mix(in srgb, var(--orf-material-content-control) 72%, var(--orf-accent-soft));
+  --orf-chat-panel-empty-bg: var(--orf-material-content-tertiary);
+  --orf-chat-panel-chip-bg: var(--orf-material-content-control);
   --orf-chat-panel-chip-active-bg: var(--orf-accent-soft);
   --orf-chat-panel-chip-active-text: var(--orf-accent-text);
-  --orf-chat-panel-preview-frame-bg: var(--drive-glass-well);
+  --orf-chat-panel-preview-frame-bg: var(--orf-material-content-tertiary);
   border-color: transparent;
   background: transparent;
   box-shadow: none;
@@ -2546,34 +2379,32 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_resources_
 
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-page > .orf-drive-panel {
   overflow: hidden;
-  border: 1px solid var(--drive-glass-border);
+  border: 1px solid var(--orf-material-content-hairline);
   border-radius: 20px;
   background:
-    linear-gradient(128deg, color-mix(in srgb, var(--drive-glass-shine) 14%, transparent), transparent 42%),
-    var(--drive-glass-frame);
-  box-shadow: var(--drive-glass-shadow);
-  -webkit-backdrop-filter: var(--drive-glass-filter);
-  backdrop-filter: var(--drive-glass-filter);
+    linear-gradient(128deg, color-mix(in srgb, var(--orf-material-content-shine) 14%, transparent), transparent 42%),
+    var(--orf-material-content-primary);
+  box-shadow: var(--orf-material-content-shadow);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-sidebar {
-  background: var(--drive-glass-nav);
+  background: var(--orf-material-content-secondary);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-main {
-  background: var(--drive-glass-index);
+  background: var(--orf-material-content-primary);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-preview-column {
-  background: var(--drive-glass-preview);
+  background: var(--orf-material-content-primary);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] :is(.orf-drive-main, .orf-drive-preview-column) {
-  border-color: color-mix(in srgb, var(--drive-glass-border) 62%, var(--orf-workbench-hairline));
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 62%, var(--orf-workbench-hairline));
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] :is(.orf-drive-workbench-header, .orf-drive-main-heading) {
-  border-color: color-mix(in srgb, var(--drive-glass-border) 52%, var(--orf-workbench-hairline));
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 52%, var(--orf-workbench-hairline));
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] :is(
@@ -2593,9 +2424,9 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_resources_
   .orf-drive-resource-card:hover,
   .orf-drive-resource-card-active
 ) {
-  border-color: color-mix(in srgb, var(--orf-accent-border) 64%, var(--drive-glass-border));
-  background: color-mix(in srgb, var(--drive-glass-control) 70%, var(--orf-accent-soft));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--drive-glass-shine) 42%, transparent);
+  border-color: color-mix(in srgb, var(--orf-accent-border) 64%, var(--orf-material-content-hairline));
+  background: color-mix(in srgb, var(--orf-material-content-control) 70%, var(--orf-accent-soft));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 42%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] :is(
@@ -2606,16 +2437,14 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_resources_
   .orf-drive-create input,
   .orf-drive-mobile-filter-trigger
 ) {
-  border-color: color-mix(in srgb, var(--drive-glass-border) 58%, var(--orf-workbench-hairline));
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 58%, var(--orf-workbench-hairline));
   border-radius: var(--orf-radius-control);
-  background: var(--drive-glass-control);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--drive-glass-shine) 46%, transparent);
-  -webkit-backdrop-filter: var(--drive-control-filter);
-  backdrop-filter: var(--drive-control-filter);
+  background: var(--orf-material-content-control);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 46%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-searchbar {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--drive-glass-border) 58%, var(--orf-workbench-hairline)), inset 0 1px 0 color-mix(in srgb, var(--drive-glass-shine) 46%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orf-material-content-hairline) 58%, var(--orf-workbench-hairline)), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 46%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-searchbar select {
@@ -2627,14 +2456,14 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_resources_
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-filter-chips button:is(:hover, .is-active) {
-  background: color-mix(in srgb, var(--drive-glass-control) 72%, var(--orf-accent-soft));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--drive-glass-shine) 40%, transparent);
+  background: color-mix(in srgb, var(--orf-material-content-control) 72%, var(--orf-accent-soft));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 40%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-tree {
-  border-color: color-mix(in srgb, var(--drive-glass-border) 48%, var(--orf-workbench-hairline));
-  background: color-mix(in srgb, var(--drive-glass-well) 60%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--drive-glass-shine) 32%, transparent);
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 48%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--orf-material-content-tertiary) 60%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 32%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] :is(
@@ -2642,14 +2471,14 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_resources_
   .orf-drive-folder-preview,
   .orf-drive-details
 ) {
-  border-color: color-mix(in srgb, var(--drive-glass-border) 52%, var(--orf-workbench-hairline));
-  background: color-mix(in srgb, var(--drive-glass-preview) 82%, transparent);
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 52%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--orf-material-content-primary) 82%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-folder-preview-icon {
-  border-color: color-mix(in srgb, var(--drive-glass-border) 58%, var(--orf-workbench-hairline));
-  background: var(--drive-glass-control);
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--orf-text-primary) 9%, transparent), inset 0 1px 0 color-mix(in srgb, var(--drive-glass-shine) 52%, transparent);
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 58%, var(--orf-workbench-hairline));
+  background: var(--orf-material-content-control);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--orf-text-primary) 9%, transparent), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 52%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] :is(
@@ -2663,9 +2492,9 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_resources_
   .orf-drive-activity-list > div,
   .orf-drive-context-item
 ) {
-  border-color: color-mix(in srgb, var(--drive-glass-border) 46%, var(--orf-workbench-hairline));
-  background: var(--drive-glass-well);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--drive-glass-shine) 34%, transparent);
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 46%, var(--orf-workbench-hairline));
+  background: var(--orf-material-content-tertiary);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 34%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] :is(
@@ -2680,14 +2509,12 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_resources_
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-actions-popover {
-  border-color: var(--drive-glass-border);
+  border-color: var(--orf-material-content-hairline);
   border-radius: 18px;
   background:
-    linear-gradient(132deg, color-mix(in srgb, var(--drive-glass-shine) 15%, transparent), transparent 44%),
-    var(--drive-glass-float);
-  box-shadow: var(--drive-glass-shadow);
-  -webkit-backdrop-filter: var(--drive-glass-filter);
-  backdrop-filter: var(--drive-glass-filter);
+    linear-gradient(132deg, color-mix(in srgb, var(--orf-material-content-shine) 15%, transparent), transparent 44%),
+    var(--orf-material-floating);
+  box-shadow: var(--orf-material-content-shadow);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-actions-popover button {
@@ -2704,8 +2531,6 @@ body:has(.orf-app-shell[data-page-scene="page_resources_background"]) :is(
     linear-gradient(132deg, rgba(255, 255, 255, 0.15), transparent 44%),
     rgba(249, 252, 252, 0.91);
   box-shadow: 0 28px 72px rgba(7, 30, 41, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.82);
-  -webkit-backdrop-filter: blur(28px) saturate(1.07);
-  backdrop-filter: blur(28px) saturate(1.07);
 }
 
 html[data-orf-appearance="dark"] body:has(.orf-app-shell[data-page-scene="page_resources_background"]) :is(
@@ -2723,24 +2548,22 @@ html[data-orf-appearance="dark"] body:has(.orf-app-shell[data-page-scene="page_r
   .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-page > .orf-drive-panel {
     border-radius: 18px;
     background:
-      linear-gradient(128deg, color-mix(in srgb, var(--drive-glass-shine) 14%, transparent), transparent 42%),
-      var(--drive-glass-index);
-    box-shadow: 0 18px 42px color-mix(in srgb, var(--orf-text-primary) 16%, transparent), inset 0 1px 0 color-mix(in srgb, var(--drive-glass-shine) 62%, transparent);
+      linear-gradient(128deg, color-mix(in srgb, var(--orf-material-content-shine) 14%, transparent), transparent 42%),
+      var(--orf-material-content-primary);
+    box-shadow: 0 18px 42px color-mix(in srgb, var(--orf-text-primary) 16%, transparent), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 62%, transparent);
   }
 
-  .orf-app-shell[data-page-scene="page_resources_background"] :is(.orf-drive-sidebar, .orf-drive-main, .orf-drive-preview-column) {
+.orf-app-shell[data-page-scene="page_resources_background"] :is(.orf-drive-sidebar, .orf-drive-main, .orf-drive-preview-column) {
     background: transparent;
   }
 
-  .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-preview-column {
+.orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-preview-column {
     scroll-margin-top: calc(var(--orf-mobile-topbar-height) + 8px);
   }
 
-  .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-mobile-detail-header {
-    border-color: color-mix(in srgb, var(--drive-glass-border) 58%, var(--orf-workbench-hairline));
-    background: var(--drive-glass-preview);
-    -webkit-backdrop-filter: var(--drive-glass-filter);
-    backdrop-filter: var(--drive-glass-filter);
+.orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-mobile-detail-header {
+    border-color: color-mix(in srgb, var(--orf-material-content-hairline) 58%, var(--orf-workbench-hairline));
+    background: var(--orf-material-content-primary);
   }
 }
 

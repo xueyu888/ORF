@@ -1,16 +1,16 @@
 import { Eye, Info, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import {
-  type CSSProperties,
   useEffect,
   useRef,
   useState,
 } from "react";
 import { NavLink } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
-import { orfAssetLibrary } from "../config/assetLibrary";
 import { canShowFrontend, canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
 import type { VisualBackgroundCrop } from "../domain/settings/visualBackgrounds";
+import { VisualMaterialLayer } from "../features/appearance/material/VisualMaterialLayer";
+import type { AdaptiveMaterial } from "../features/appearance/material/materialTokens";
 import { AttentionWorkbar } from "../features/attention/AttentionWorkbar";
 import { useOrf } from "../state/OrfProvider";
 import { ImagePreviewDialog } from "./ImagePreviewDialog";
@@ -29,16 +29,16 @@ const sidebarGroups = [
 
 export function Sidebar({
   backgroundCrop,
-  backgroundOverlayOpacity,
   backgroundUrl,
   collapsed,
+  material,
   onCollapsedChange,
   onOpenClientUpdateCenter,
 }: {
   backgroundCrop: VisualBackgroundCrop;
-  backgroundOverlayOpacity: number;
   backgroundUrl: string;
   collapsed: boolean;
+  material: AdaptiveMaterial;
   onCollapsedChange: (collapsed: boolean) => void;
   onOpenClientUpdateCenter: () => void;
 }) {
@@ -46,7 +46,6 @@ export function Sidebar({
   const visibleGroups = sidebarGroups
     .map((group) => ({ ...group, items: group.items.filter((item) => canShowFrontendPath(currentUser, item.path)) }))
     .filter((group) => group.items.length > 0);
-  const sidebarBackground = orfAssetLibrary.sidebar.characterGuideBackground;
   const backgroundImageUrl = backgroundUrl;
   const [failedBackgroundUrl, setFailedBackgroundUrl] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -95,27 +94,23 @@ export function Sidebar({
     throw new Error(`Sidebar background image failed to load: ${backgroundImageUrl}`);
   }
 
-  const sidebarStyle = {
-    "--orf-sidebar-bg-overlay-opacity": backgroundOverlayOpacity,
-  } as CSSProperties;
-
   return (
     <aside
       className={[
         "orf-sidebar sticky top-0 flex h-screen shrink-0 flex-col",
         collapsed ? "orf-sidebar-collapsed" : "orf-sidebar-expanded",
       ].join(" ")}
-      style={sidebarStyle}
+      data-material-content-tone={material.contentTone}
       aria-label="主导航"
     >
       <VisualBackgroundSlot
         frameClassName="orf-sidebar-background-frame"
         imageClassName="orf-sidebar-background-image"
-        imageFilter={sidebarBackground.filter}
         imageUrl={backgroundImageUrl}
         onImageError={() => setFailedBackgroundUrl(backgroundImageUrl)}
         crop={backgroundCrop}
       />
+      <VisualMaterialLayer className="orf-sidebar-material" material={material} role="sidebar" />
       <div className="orf-sidebar-brand flex items-center justify-between border-b px-4">
         <div className="orf-sidebar-brand-main flex items-center gap-2.5">
           <div className="orf-sidebar-logo flex h-10 w-10 items-center justify-center shadow-sm">

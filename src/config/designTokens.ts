@@ -151,7 +151,6 @@ export const designCssVariables = {
   "--orf-sidebar-logo-bg": designTokens.color.sidebarLogoBg,
   "--orf-sidebar-workspace-logo-bg": designTokens.color.sidebarWorkspaceLogoBg,
   "--orf-sidebar-workspace-logo-text": designTokens.color.sidebarWorkspaceLogoText,
-  "--orf-sidebar-bg-overlay": "linear-gradient(90deg, rgba(7, 21, 31, 0.64) 0%, rgba(8, 29, 41, 0.46) 58%, rgba(9, 35, 48, 0.32) 100%), linear-gradient(180deg, rgba(5, 19, 28, 0.18) 0%, rgba(5, 20, 29, 0.52) 100%)",
   "--orf-topbar-surface": "rgba(245, 248, 248, 0.84)",
   "--orf-topbar-surface-strong": "rgba(252, 253, 252, 0.94)",
   "--orf-topbar-border": "rgba(42, 61, 68, 0.13)",
@@ -175,7 +174,6 @@ export const designCssVariables = {
   "--orf-workbench-hairline": "rgba(30, 42, 48, 0.105)",
   "--orf-workbench-hairline-strong": "rgba(30, 42, 48, 0.17)",
   "--orf-workbench-shadow": "0 1px 2px rgba(19, 29, 34, 0.035), 0 8px 22px rgba(19, 29, 34, 0.035)",
-  "--orf-page-safety-overlay": "linear-gradient(90deg, rgba(238, 244, 244, 0.46), rgba(250, 252, 251, 0.22) 52%, rgba(235, 241, 241, 0.42)), linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(226, 235, 235, 0.34))",
   "--orf-avatar-border": designTokens.color.avatarBorder,
   "--orf-avatar-bg": designTokens.color.avatarBg,
   "--orf-avatar-text": designTokens.color.avatarText,
@@ -194,10 +192,10 @@ export const designCssVariables = {
   "--orf-border-width": designTokens.border.width,
   "--orf-shadow-card": designTokens.shadow.card,
   "--orf-page-glow": "#e9edee",
-  "--orf-type-display-weight": "650",
-  "--orf-type-title-weight": "620",
-  "--orf-type-body-weight": "450",
-  "--orf-type-label-weight": "560",
+  "--orf-type-display-weight": "600",
+  "--orf-type-title-weight": "600",
+  "--orf-type-body-weight": "400",
+  "--orf-type-label-weight": "500",
 } as const;
 
 const darkDesignCssVariables = {
@@ -258,7 +256,6 @@ const darkDesignCssVariables = {
   "--orf-sidebar-logo-bg": "rgba(7, 13, 21, 0.76)",
   "--orf-sidebar-workspace-logo-bg": "rgba(232, 247, 247, 0.9)",
   "--orf-sidebar-workspace-logo-text": "#0a8c68",
-  "--orf-sidebar-bg-overlay": "linear-gradient(90deg, rgba(5, 11, 17, 0.78) 0%, rgba(6, 14, 21, 0.66) 58%, rgba(7, 18, 26, 0.52) 100%), linear-gradient(180deg, rgba(3, 8, 13, 0.34) 0%, rgba(3, 9, 14, 0.68) 100%)",
   "--orf-topbar-surface": "rgba(17, 21, 25, 0.86)",
   "--orf-topbar-surface-strong": "rgba(27, 32, 37, 0.94)",
   "--orf-topbar-border": "rgba(183, 207, 226, 0.15)",
@@ -282,7 +279,6 @@ const darkDesignCssVariables = {
   "--orf-workbench-hairline": "rgba(205, 218, 225, 0.12)",
   "--orf-workbench-hairline-strong": "rgba(211, 224, 231, 0.2)",
   "--orf-workbench-shadow": "0 1px 2px rgba(0, 0, 0, 0.24)",
-  "--orf-page-safety-overlay": "linear-gradient(90deg, rgba(10, 14, 18, 0.66), rgba(15, 20, 24, 0.5) 52%, rgba(9, 13, 17, 0.64)), linear-gradient(180deg, rgba(18, 23, 28, 0.34), rgba(7, 10, 14, 0.68))",
   "--orf-shadow-card": "0 1px 2px rgba(0, 0, 0, 0.26), 0 12px 30px rgba(0, 0, 0, 0.16)",
   "--orf-page-glow": "#0e1115",
 } as const satisfies Partial<Record<keyof typeof designCssVariables, string>>;

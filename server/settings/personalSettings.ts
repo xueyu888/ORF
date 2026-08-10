@@ -68,7 +68,17 @@ export type PersonalBackgroundsData = Awaited<ReturnType<typeof listVisualBackgr
   preferences: UserPreferences;
 };
 
-type StoredUserPreferences = Omit<UserPreferences, "appBackground">;
+type StoredUserPreferencesMigration = {
+  appBackgroundV2?: unknown;
+};
+
+type StoredUserPreferences = Omit<UserPreferences, "appBackground"> & {
+  migration?: StoredUserPreferencesMigration;
+};
+
+type RawStoredUserPreferences = Partial<UserPreferences> & Record<string, unknown> & {
+  migration?: StoredUserPreferencesMigration;
+};
 
 export const userPreferencesPatchSchema = z.object({
   defaultLandingPath: z.string().nullable().optional(),
@@ -185,15 +195,33 @@ function normalizeUserPreferences(userId: string, input: Partial<UserPreferences
   };
 }
 
+function personalBackgroundsNeedMigration(input: Partial<UserPreferences> | null | undefined) {
+  const rawBackgrounds = input?.backgrounds && typeof input.backgrounds === "object" ? input.backgrounds : {};
+  if (input?.appBackground) return true;
+  return Object.values(rawBackgrounds).some((config) => {
+    if (!config || typeof config !== "object") return false;
+    const candidate = config as { material?: unknown; migration?: unknown; version?: unknown };
+    return candidate.version !== 3 || !candidate.material || !candidate.migration;
+  });
+}
+
 async function readPreferencesJson(userId: string) {
   const raw = await readFile(userPreferencesPath(userId), "utf8");
-  return JSON.parse(raw) as Partial<UserPreferences>;
+  return JSON.parse(raw) as RawStoredUserPreferences;
 }
 
 export async function readUserPreferences(userId: string) {
   await ensurePrivateSettingsStorage();
   try {
-    return normalizeUserPreferences(userId, await readPreferencesJson(userId));
+    const rawPreferences = await readPreferencesJson(userId);
+    const preferences = normalizeUserPreferences(userId, rawPreferences);
+    if (personalBackgroundsNeedMigration(rawPreferences)) {
+      const migration = rawPreferences.appBackground
+        ? { ...rawPreferences.migration, appBackgroundV2: rawPreferences.appBackground }
+        : rawPreferences.migration;
+      await writeUserPreferences(preferences, migration).catch(() => undefined);
+    }
+    return preferences;
   } catch {
     return defaultUserPreferences(userId);
   }
@@ -204,7 +232,7 @@ export async function deleteUserPersonalSettings(userId: string) {
   await rm(userSettingsDir(userId), { recursive: true, force: true });
 }
 
-async function writeUserPreferences(preferences: UserPreferences) {
+async function writeUserPreferences(preferences: UserPreferences, migrationOverride?: StoredUserPreferencesMigration) {
   await ensurePrivateSettingsStorage();
   const directory = userSettingsDir(preferences.userId);
   await mkdir(directory, { recursive: true });
@@ -212,7 +240,9 @@ async function writeUserPreferences(preferences: UserPreferences) {
   const tempPath = `${targetPath}.${process.pid}.${Date.now().toString(36)}.${randomUUID()}.tmp`;
 
   try {
-    await writeFile(tempPath, `${JSON.stringify(storedUserPreferences(preferences), null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    const existing = await readPreferencesJson(preferences.userId).catch(() => null);
+    const migration = migrationOverride ?? existing?.migration;
+    await writeFile(tempPath, `${JSON.stringify(storedUserPreferences(preferences, migration, existing), null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     await rename(tempPath, targetPath);
   } catch (error) {
     await rm(tempPath, { force: true }).catch(() => undefined);
@@ -220,9 +250,19 @@ async function writeUserPreferences(preferences: UserPreferences) {
   }
 }
 
-function storedUserPreferences(preferences: UserPreferences): StoredUserPreferences {
+function storedUserPreferences(
+  preferences: UserPreferences,
+  migration?: StoredUserPreferencesMigration,
+  existing?: RawStoredUserPreferences | null,
+): StoredUserPreferences {
   const { appBackground: _legacyProjection, ...stored } = preferences;
-  return stored;
+  const {
+    appBackground: _legacyStoredAppBackground,
+    migration: _storedMigration,
+    ...preserved
+  } = existing ?? {};
+  const next = { ...preserved, ...stored } as StoredUserPreferences;
+  return migration && Object.keys(migration).length > 0 ? { ...next, migration } : next;
 }
 
 async function updateUserPreferences<T>(userId: string, mutator: (preferences: UserPreferences) => T | Promise<T>) {

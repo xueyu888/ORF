@@ -4,6 +4,7 @@
 .orf-system-management-tabs a {
   border-radius: var(--orf-radius-control);
 }
+
 .orf-user-management-page {
   position: relative;
   isolation: isolate;
@@ -763,154 +764,21 @@
 /* Member administration scene
    ---------------------------
    Account facts remain in the existing members read model. This route-level
-   material contract only separates navigation chrome, dense reading glass,
+   material contract only separates navigation chrome, dense reading surfaces,
    semantic account state and temporary dialog surfaces. */
 body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] {
-  --orf-bg-app: #dfe7ee;
   --orf-bg-page: transparent;
-  --orf-bg-card: rgba(238, 247, 251, 0.5);
-  --orf-bg-elevated: rgba(245, 250, 253, 0.78);
-  --orf-bg-muted: rgba(218, 231, 239, 0.48);
-  --orf-bg-row-hover: rgba(211, 232, 241, 0.55);
-  --orf-text-primary: #1b2c3e;
-  --orf-text-secondary: #40566c;
-  --orf-text-muted: #5d7287;
-  --orf-text-faint: #8796a6;
-  --orf-border: rgba(46, 75, 98, 0.17);
-  --orf-border-strong: rgba(42, 71, 94, 0.27);
-  --orf-accent: #237f98;
-  --orf-accent-hover: #1c6b82;
-  --orf-accent-soft: rgba(35, 127, 152, 0.14);
-  --orf-accent-border: rgba(35, 127, 152, 0.36);
-  --orf-accent-text: #176e86;
-  --orf-surface-chrome: rgba(220, 236, 244, 0.39);
-  --orf-surface-panel: rgba(233, 243, 248, 0.42);
-  --orf-surface-panel-solid: rgba(239, 247, 251, 0.58);
-  --orf-surface-content-solid: rgba(244, 249, 252, 0.66);
-  --orf-surface-elevated: rgba(246, 250, 253, 0.8);
-  --orf-surface-control: rgba(240, 247, 251, 0.46);
-  --orf-surface-control-solid: rgba(243, 249, 252, 0.72);
-  --orf-surface-control-hover: rgba(249, 252, 254, 0.72);
-  --orf-workbench-hairline: rgba(47, 75, 98, 0.17);
-  --orf-workbench-hairline-strong: rgba(43, 72, 95, 0.27);
-  --orf-topbar-surface: rgba(225, 238, 246, 0.43);
-  --orf-topbar-surface-strong: rgba(242, 248, 252, 0.7);
-  --orf-topbar-control-bg: rgba(240, 247, 251, 0.5);
-  --orf-topbar-control-hover-bg: rgba(250, 252, 254, 0.74);
-  --orf-topbar-control-border: rgba(46, 75, 98, 0.18);
-  --orf-topbar-control-text: #263d52;
-  --orf-topbar-control-muted: #65788c;
-  --members-glass-ambient: rgba(218, 233, 242, 0.39);
-  --members-glass-panel: rgba(228, 241, 247, 0.43);
-  --members-glass-reading: rgba(237, 246, 250, 0.56);
-  --members-glass-row: rgba(250, 253, 254, 0.26);
-  --members-glass-control: rgba(239, 247, 251, 0.45);
-  --members-glass-header: rgba(204, 226, 237, 0.36);
-  --members-glass-float: rgba(241, 249, 252, 0.78);
-  --members-glass-border: rgba(255, 255, 255, 0.6);
-  --members-glass-shine: rgba(255, 255, 255, 0.82);
-  --members-glass-shadow: 0 22px 54px rgba(24, 48, 68, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.72);
-  --members-glass-shadow-soft: 0 14px 34px rgba(24, 48, 68, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.62);
-  --members-glass-filter: blur(20px) saturate(1.14);
-  --members-control-filter: blur(14px) saturate(1.09);
   --members-cyan: #237f98;
   --members-cyan-soft: rgba(35, 127, 152, 0.14);
   --members-gold: #a66c22;
   --members-gold-soft: rgba(184, 124, 44, 0.15);
-  --orf-page-safety-overlay:
-    radial-gradient(circle at 76% 11%, rgba(220, 239, 246, 0.07), transparent 34%),
-    linear-gradient(112deg, rgba(198, 222, 233, 0.07), rgba(246, 237, 217, 0.025) 55%, rgba(196, 219, 232, 0.06));
-  --orf-sidebar-bg-overlay:
-    linear-gradient(105deg, rgba(5, 23, 38, 0.46), rgba(9, 41, 58, 0.29) 62%, rgba(18, 68, 82, 0.12)),
-    linear-gradient(180deg, rgba(3, 13, 24, 0.02), rgba(3, 14, 25, 0.36));
-  --orf-sidebar-selected-bg: rgba(125, 211, 225, 0.19);
-  --orf-sidebar-hover-bg: rgba(125, 211, 225, 0.12);
-  --orf-sidebar-divider: rgba(220, 237, 244, 0.14);
-  --orf-sidebar-text: #f8fbfd;
-  --orf-sidebar-text-muted: #c5d7e0;
-  --orf-sidebar-icon: #eef9fc;
 }
 
 html[data-orf-appearance="dark"] body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] {
-  --orf-bg-app: #07151e;
-  --orf-bg-page: transparent;
-  --orf-bg-card: rgba(6, 23, 33, 0.5);
-  --orf-bg-elevated: rgba(8, 29, 41, 0.78);
-  --orf-bg-muted: rgba(18, 45, 59, 0.5);
-  --orf-bg-row-hover: rgba(33, 68, 83, 0.5);
-  --orf-text-primary: #eef6f9;
-  --orf-text-secondary: #c5d5dc;
-  --orf-text-muted: #a4b7c0;
-  --orf-text-faint: #758b97;
-  --orf-border: rgba(169, 206, 219, 0.17);
-  --orf-border-strong: rgba(178, 216, 229, 0.27);
-  --orf-accent: #72c6d8;
-  --orf-accent-hover: #8bd5e4;
-  --orf-accent-soft: rgba(114, 198, 216, 0.16);
-  --orf-accent-border: rgba(114, 198, 216, 0.38);
-  --orf-accent-text: #9adce9;
-  --orf-surface-chrome: rgba(5, 21, 31, 0.43);
-  --orf-surface-panel: rgba(6, 24, 35, 0.45);
-  --orf-surface-panel-solid: rgba(7, 27, 39, 0.58);
-  --orf-surface-content-solid: rgba(8, 30, 43, 0.67);
-  --orf-surface-elevated: rgba(9, 31, 44, 0.8);
-  --orf-surface-control: rgba(10, 34, 47, 0.48);
-  --orf-surface-control-solid: rgba(12, 38, 52, 0.72);
-  --orf-surface-control-hover: rgba(27, 57, 72, 0.72);
-  --orf-workbench-hairline: rgba(169, 206, 219, 0.17);
-  --orf-workbench-hairline-strong: rgba(178, 216, 229, 0.27);
-  --orf-topbar-surface: rgba(4, 20, 30, 0.47);
-  --orf-topbar-surface-strong: rgba(10, 35, 48, 0.7);
-  --orf-topbar-control-bg: rgba(9, 31, 44, 0.51);
-  --orf-topbar-control-hover-bg: rgba(25, 57, 72, 0.74);
-  --orf-topbar-control-border: rgba(169, 206, 219, 0.18);
-  --orf-topbar-control-text: #e4eff3;
-  --orf-topbar-control-muted: #9db0ba;
-  --members-glass-ambient: rgba(4, 20, 30, 0.4);
-  --members-glass-panel: rgba(5, 24, 35, 0.46);
-  --members-glass-reading: rgba(6, 28, 40, 0.57);
-  --members-glass-row: rgba(24, 55, 69, 0.27);
-  --members-glass-control: rgba(9, 33, 46, 0.46);
-  --members-glass-header: rgba(24, 55, 69, 0.4);
-  --members-glass-float: rgba(6, 27, 39, 0.79);
-  --members-glass-border: rgba(181, 218, 230, 0.24);
-  --members-glass-shine: rgba(224, 240, 245, 0.18);
-  --members-glass-shadow: 0 24px 58px rgba(0, 7, 12, 0.5), inset 0 1px 0 rgba(224, 240, 245, 0.14);
-  --members-glass-shadow-soft: 0 16px 38px rgba(0, 7, 12, 0.37), inset 0 1px 0 rgba(224, 240, 245, 0.12);
-  --members-glass-filter: blur(20px) saturate(1.11);
-  --members-control-filter: blur(14px) saturate(1.07);
   --members-cyan: #72c6d8;
   --members-cyan-soft: rgba(114, 198, 216, 0.16);
   --members-gold: #e1b15f;
   --members-gold-soft: rgba(225, 177, 95, 0.16);
-  --orf-page-safety-overlay:
-    radial-gradient(circle at 76% 11%, rgba(66, 124, 143, 0.04), transparent 34%),
-    linear-gradient(112deg, rgba(1, 9, 14, 0.33), rgba(4, 16, 23, 0.2) 55%, rgba(1, 10, 15, 0.29));
-  --orf-sidebar-bg-overlay:
-    linear-gradient(105deg, rgba(1, 8, 13, 0.6), rgba(2, 20, 29, 0.42) 62%, rgba(4, 37, 48, 0.2)),
-    linear-gradient(180deg, rgba(1, 6, 9, 0.04), rgba(1, 7, 11, 0.45));
-}
-
-body:has(.orf-user-management-page) {
-  --members-portal-float: rgba(241, 249, 252, 0.82);
-  --members-portal-control: rgba(235, 245, 250, 0.68);
-  --members-portal-border: rgba(255, 255, 255, 0.74);
-  --members-portal-hairline: rgba(43, 72, 95, 0.25);
-  --members-portal-shine: rgba(255, 255, 255, 0.82);
-  --members-portal-text: #1b2c3e;
-  --members-portal-secondary: #40566c;
-  --members-portal-muted: #5d7287;
-}
-
-html[data-orf-appearance="dark"] body:has(.orf-user-management-page) {
-  --members-portal-float: rgba(6, 27, 39, 0.84);
-  --members-portal-control: rgba(10, 35, 49, 0.72);
-  --members-portal-border: rgba(181, 218, 230, 0.26);
-  --members-portal-hairline: rgba(178, 216, 229, 0.22);
-  --members-portal-shine: rgba(224, 240, 245, 0.17);
-  --members-portal-text: #eef6f9;
-  --members-portal-secondary: #c5d5dc;
-  --members-portal-muted: #a4b7c0;
 }
 
 body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"],
@@ -922,80 +790,10 @@ body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_
   background: transparent;
 }
 
-body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] .orf-main-content[data-page-skin="true"]::before {
-  background: var(--orf-page-safety-overlay);
-}
-
-body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] :is(.orf-main-content-skin-layer, .orf-topbar-skin-layer) {
-  --orf-visual-bg-filter: saturate(1.03) contrast(0.99);
-}
-
-html[data-orf-appearance="dark"] body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] :is(.orf-main-content-skin-layer, .orf-topbar-skin-layer) {
-  --orf-visual-bg-filter: brightness(0.76) saturate(0.94) contrast(0.98);
-}
-
-body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] .orf-sidebar::after {
-  opacity: 0.69;
-}
-
-body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] .orf-sidebar-background-image {
-  opacity: 1;
-  filter: saturate(1.03) contrast(0.99) brightness(0.99);
-}
-
-html[data-orf-appearance="dark"] body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] .orf-sidebar::after {
-  opacity: 0.75;
-}
-
-html[data-orf-appearance="dark"] body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] .orf-sidebar-background-image {
-  opacity: 0.94;
-  filter: saturate(0.95) contrast(0.98) brightness(0.85);
-}
-
-body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] :is(
-  .orf-sidebar-brand-title,
-  .orf-sidebar-group-title,
-  .orf-sidebar-link,
-  .orf-sidebar-user-name,
-  .orf-attention-workbar-trigger
-) {
-  text-shadow: 0 1px 3px rgba(0, 8, 14, 0.82);
-}
-
-body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] :is(.orf-sidebar-link-active, .orf-sidebar-link-inactive:hover) {
-  -webkit-backdrop-filter: blur(16px) saturate(1.07);
-  backdrop-filter: blur(16px) saturate(1.07);
-}
-
-body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] .orf-topbar {
-  border-bottom-color: var(--members-glass-border);
-  background: transparent;
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--members-glass-shine) 48%, transparent);
-}
-
-body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] .orf-topbar::before {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  content: "";
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--members-glass-shine) 12%, transparent), transparent 46%),
-    var(--members-glass-ambient);
-  pointer-events: none;
-  -webkit-backdrop-filter: var(--members-glass-filter);
-  backdrop-filter: var(--members-glass-filter);
-}
-
-body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] .orf-topbar::after {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--members-glass-shine) 24%, transparent), transparent 76%);
-}
-
 body:has(.orf-user-management-page) .orf-system-management-tabs {
-  border-color: var(--members-glass-border);
-  background: var(--members-glass-control);
-  box-shadow: var(--members-glass-shadow-soft);
-  -webkit-backdrop-filter: var(--members-control-filter);
-  backdrop-filter: var(--members-control-filter);
+  border-color: var(--orf-material-content-hairline);
+  background: var(--orf-material-content-control);
+  box-shadow: var(--orf-material-content-shadow-soft);
 }
 
 body:has(.orf-user-management-page) .orf-system-management-tabs a {
@@ -1005,42 +803,38 @@ body:has(.orf-user-management-page) .orf-system-management-tabs a {
 body:has(.orf-user-management-page) .orf-system-management-tabs a:is(:hover, :focus-visible),
 body:has(.orf-user-management-page) .orf-system-management-tab-active,
 body:has(.orf-user-management-page) .orf-system-management-tab-active:hover {
-  background: color-mix(in srgb, var(--members-cyan-soft) 72%, var(--members-glass-control)) !important;
+  background: color-mix(in srgb, var(--members-cyan-soft) 72%, var(--orf-material-content-control)) !important;
   color: var(--orf-accent-text) !important;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orf-accent-border) 72%, transparent), 0 6px 16px color-mix(in srgb, var(--members-cyan) 12%, transparent);
 }
 
 body:has(.orf-user-management-page) .orf-user-table-shell {
-  border-color: var(--members-glass-border);
+  border-color: var(--orf-material-content-hairline);
   border-radius: 18px;
   background:
-    linear-gradient(126deg, color-mix(in srgb, var(--members-glass-shine) 16%, transparent), transparent 38%),
+    linear-gradient(126deg, color-mix(in srgb, var(--orf-material-content-shine) 16%, transparent), transparent 38%),
     linear-gradient(300deg, color-mix(in srgb, var(--members-cyan-soft) 24%, transparent), transparent 50%),
-    var(--members-glass-reading);
-  box-shadow: var(--members-glass-shadow);
-  -webkit-backdrop-filter: var(--members-glass-filter);
-  backdrop-filter: var(--members-glass-filter);
+    var(--orf-material-content-primary);
+  box-shadow: var(--orf-material-content-shadow);
 }
 
 body:has(.orf-user-management-page) .orf-user-toolbar {
-  border-bottom-color: color-mix(in srgb, var(--members-glass-border) 48%, var(--orf-workbench-hairline));
+  border-bottom-color: color-mix(in srgb, var(--orf-material-content-hairline) 48%, var(--orf-workbench-hairline));
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--members-cyan-soft) 34%, transparent), transparent 54%),
-    var(--members-glass-panel);
+    var(--orf-material-content-primary);
 }
 
 body:has(.orf-user-management-page) :is(.orf-user-search, .orf-user-select, .orf-permission-metrics span) {
-  border-color: color-mix(in srgb, var(--members-glass-border) 52%, var(--orf-workbench-hairline));
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 52%, var(--orf-workbench-hairline));
   border-radius: 999px;
-  background: var(--members-glass-control);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--members-glass-shine) 48%, transparent);
-  -webkit-backdrop-filter: var(--members-control-filter);
-  backdrop-filter: var(--members-control-filter);
+  background: var(--orf-material-content-control);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 48%, transparent);
 }
 
 body:has(.orf-user-management-page) .orf-user-search:focus-within {
   border-color: var(--orf-accent-border);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--orf-accent) 13%, transparent), inset 0 1px 0 color-mix(in srgb, var(--members-glass-shine) 52%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--orf-accent) 13%, transparent), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 52%, transparent);
 }
 
 body:has(.orf-user-management-page) .orf-user-search svg {
@@ -1054,7 +848,7 @@ body:has(.orf-user-management-page) .orf-user-toolbar > .orf-user-toolbar-action
 }
 
 body:has(.orf-user-management-page) .orf-user-table thead {
-  background: color-mix(in srgb, var(--members-glass-header) 72%, transparent);
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 72%, transparent);
 }
 
 body:has(.orf-user-management-page) .orf-user-table th {
@@ -1063,37 +857,37 @@ body:has(.orf-user-management-page) .orf-user-table th {
 }
 
 body:has(.orf-user-management-page) .orf-user-table :is(th, td) {
-  border-color: color-mix(in srgb, var(--members-glass-border) 42%, var(--orf-workbench-hairline));
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 42%, var(--orf-workbench-hairline));
 }
 
 body:has(.orf-user-management-page) .orf-user-table tbody tr,
 body:has(.orf-user-management-page) .orf-user-table tbody tr:nth-child(even) {
-  background: color-mix(in srgb, var(--members-glass-row) 42%, transparent);
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 42%, transparent);
   transition: background 150ms ease, box-shadow 150ms ease;
 }
 
 body:has(.orf-user-management-page) .orf-user-table tbody tr:nth-child(even) {
-  background: color-mix(in srgb, var(--members-glass-row) 62%, var(--members-cyan-soft));
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 62%, var(--members-cyan-soft));
 }
 
 body:has(.orf-user-management-page) .orf-user-table tbody tr:hover {
-  background: color-mix(in srgb, var(--members-glass-row) 74%, var(--members-cyan-soft));
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 74%, var(--members-cyan-soft));
   box-shadow: inset 3px 0 0 var(--orf-accent);
 }
 
 body:has(.orf-user-management-page) .orf-user-row-avatar {
-  border-color: color-mix(in srgb, var(--members-glass-shine) 74%, var(--members-glass-border));
+  border-color: color-mix(in srgb, var(--orf-material-content-shine) 74%, var(--orf-material-content-hairline));
   box-shadow: 0 7px 16px color-mix(in srgb, var(--orf-text-primary) 14%, transparent), 0 0 0 1px color-mix(in srgb, var(--members-cyan) 20%, transparent);
 }
 
 body:has(.orf-user-management-page) :is(.orf-user-role-select, .orf-user-current, .orf-user-status) {
   border-radius: 999px;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--members-glass-shine) 42%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 42%, transparent);
 }
 
 body:has(.orf-user-management-page) :is(.orf-user-role-admin, .orf-user-role-member) {
-  border-color: color-mix(in srgb, var(--members-glass-border) 48%, var(--orf-workbench-hairline));
-  background: var(--members-glass-control);
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 48%, var(--orf-workbench-hairline));
+  background: var(--orf-material-content-control);
 }
 
 body:has(.orf-user-management-page) .orf-user-role-admin {
@@ -1105,16 +899,16 @@ body:has(.orf-user-management-page) .orf-user-role-member {
 }
 
 body:has(.orf-user-management-page) .orf-user-actions .orf-action-icon-button {
-  border-color: color-mix(in srgb, var(--members-glass-border) 44%, var(--orf-workbench-hairline));
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 44%, var(--orf-workbench-hairline));
   border-radius: 50%;
-  background: var(--members-glass-control);
+  background: var(--orf-material-content-control);
   color: var(--orf-text-secondary);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--members-glass-shine) 44%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 44%, transparent);
 }
 
 body:has(.orf-user-management-page) .orf-user-actions .orf-action-icon-button:hover:not(:disabled) {
   border-color: var(--orf-accent-border);
-  background: color-mix(in srgb, var(--members-glass-control) 66%, var(--members-cyan-soft));
+  background: color-mix(in srgb, var(--orf-material-content-control) 66%, var(--members-cyan-soft));
   color: var(--orf-accent-text);
 }
 
@@ -1125,91 +919,85 @@ body:has(.orf-user-management-page) .orf-user-actions .orf-action-button-danger:
 }
 
 body:has(.orf-user-management-page) .orf-user-empty {
-  background: color-mix(in srgb, var(--members-glass-row) 54%, transparent);
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 54%, transparent);
 }
 
 body:has(.orf-user-management-page) .orf-user-dialog-backdrop {
   background:
     radial-gradient(circle at 50% 34%, color-mix(in srgb, var(--members-cyan) 13%, transparent), transparent 42%),
     rgba(3, 12, 18, 0.58);
-  -webkit-backdrop-filter: blur(12px) saturate(0.92);
-  backdrop-filter: blur(12px) saturate(0.92);
 }
 
 body:has(.orf-user-management-page) .orf-user-dialog {
-  border-color: color-mix(in srgb, var(--members-portal-border) 54%, var(--members-portal-hairline));
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 54%, var(--orf-material-content-hairline));
   border-radius: 20px;
   background:
-    linear-gradient(132deg, color-mix(in srgb, var(--members-portal-shine) 16%, transparent), transparent 40%),
-    var(--members-portal-float);
-  color: var(--members-portal-text);
-  box-shadow: 0 28px 78px rgba(0, 8, 13, 0.44), inset 0 1px 0 color-mix(in srgb, var(--members-portal-shine) 64%, transparent);
-  -webkit-backdrop-filter: blur(26px) saturate(1.12);
-  backdrop-filter: blur(26px) saturate(1.12);
+    linear-gradient(132deg, color-mix(in srgb, var(--orf-material-content-shine) 16%, transparent), transparent 40%),
+    var(--orf-material-floating);
+  color: var(--orf-text-primary);
+  box-shadow: 0 28px 78px rgba(0, 8, 13, 0.44), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 64%, transparent);
 }
 
 body:has(.orf-user-management-page) .orf-user-dialog :is(input, select) {
-  border-color: color-mix(in srgb, var(--members-portal-border) 46%, var(--members-portal-hairline));
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 46%, var(--orf-material-content-hairline));
   border-radius: 999px;
-  background: var(--members-portal-control);
-  color: var(--members-portal-text);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--members-portal-shine) 42%, transparent);
+  background: var(--orf-material-content-control);
+  color: var(--orf-text-primary);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 42%, transparent);
 }
 
 body:has(.orf-user-management-page) .orf-user-dialog :is(input, select):focus-visible {
-  border-color: color-mix(in srgb, #4fb6ca 56%, var(--members-portal-hairline));
-  box-shadow: 0 0 0 3px rgba(79, 182, 202, 0.14), inset 0 1px 0 color-mix(in srgb, var(--members-portal-shine) 48%, transparent);
+  border-color: color-mix(in srgb, #4fb6ca 56%, var(--orf-material-content-hairline));
+  box-shadow: 0 0 0 3px rgba(79, 182, 202, 0.14), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 48%, transparent);
 }
 
 body:has(.orf-user-management-page) .orf-confirm-dialog {
-  border-color: color-mix(in srgb, var(--members-portal-border) 54%, var(--members-portal-hairline));
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 54%, var(--orf-material-content-hairline));
   border-radius: 20px;
   background:
-    linear-gradient(132deg, color-mix(in srgb, var(--members-portal-shine) 15%, transparent), transparent 42%),
-    var(--members-portal-float);
-  color: var(--members-portal-text);
-  box-shadow: 0 30px 82px rgba(0, 8, 13, 0.5), inset 0 1px 0 color-mix(in srgb, var(--members-portal-shine) 62%, transparent);
-  -webkit-backdrop-filter: blur(26px) saturate(1.1);
-  backdrop-filter: blur(26px) saturate(1.1);
+    linear-gradient(132deg, color-mix(in srgb, var(--orf-material-content-shine) 15%, transparent), transparent 42%),
+    var(--orf-material-floating);
+  color: var(--orf-text-primary);
+  box-shadow: 0 30px 82px rgba(0, 8, 13, 0.5), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 62%, transparent);
 }
 
 body:has(.orf-user-management-page) .orf-confirm-dialog :is(.orf-confirm-dialog-header, .orf-confirm-dialog-actions) {
-  border-color: color-mix(in srgb, var(--members-portal-border) 34%, var(--members-portal-hairline));
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 34%, var(--orf-material-content-hairline));
 }
 
 body:has(.orf-user-management-page) .orf-confirm-dialog-description {
-  color: var(--members-portal-secondary);
+  color: var(--orf-text-secondary);
 }
 
 body:has(.orf-user-management-page) .orf-confirm-dialog-header > div > span {
-  color: var(--members-portal-muted);
+  color: var(--orf-text-muted);
 }
 
 body:has(.orf-user-management-page) .orf-confirm-dialog-actions {
-  background: color-mix(in srgb, var(--members-portal-control) 62%, transparent);
+  background: color-mix(in srgb, var(--orf-material-content-control) 62%, transparent);
 }
 
 @media (max-width: 560px) {
   body:has(.orf-user-management-page) .orf-user-table-shell {
     border-radius: 16px;
-    box-shadow: 0 16px 38px color-mix(in srgb, var(--orf-text-primary) 15%, transparent), inset 0 1px 0 color-mix(in srgb, var(--members-glass-shine) 58%, transparent);
+    box-shadow: 0 16px 38px color-mix(in srgb, var(--orf-text-primary) 15%, transparent), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 58%, transparent);
   }
 
-  body:has(.orf-user-management-page) .orf-user-table tbody {
+body:has(.orf-user-management-page) .orf-user-table tbody {
     gap: 8px;
     padding: 8px;
   }
 
-  body:has(.orf-user-management-page) .orf-user-table tbody tr,
+body:has(.orf-user-management-page) .orf-user-table tbody tr,
   body:has(.orf-user-management-page) .orf-user-table tbody tr:nth-child(even) {
-    border: 1px solid color-mix(in srgb, var(--members-glass-border) 42%, var(--orf-workbench-hairline));
+    border: 1px solid color-mix(in srgb, var(--orf-material-content-hairline) 42%, var(--orf-workbench-hairline));
     border-radius: 14px;
-    background: color-mix(in srgb, var(--members-glass-row) 58%, transparent);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--members-glass-shine) 32%, transparent);
+    background: color-mix(in srgb, var(--orf-material-content-secondary) 58%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 32%, transparent);
   }
 
-  body:has(.orf-user-management-page) .orf-user-table td:nth-child(6) {
-    border-top-color: color-mix(in srgb, var(--members-glass-border) 38%, var(--orf-workbench-hairline));
+body:has(.orf-user-management-page) .orf-user-table td:nth-child(6) {
+    border-top-color: color-mix(in srgb, var(--orf-material-content-hairline) 38%, var(--orf-workbench-hairline));
   }
 }
 
@@ -1335,11 +1123,11 @@ body:has(.orf-user-management-page) .orf-confirm-dialog-actions {
     align-items: stretch;
   }
 
-  .orf-permission-category-tabs {
+.orf-permission-category-tabs {
     width: 100%;
   }
 
-  .orf-permission-browser-controls > p {
+.orf-permission-browser-controls > p {
     padding-inline: 4px;
   }
 }
@@ -1351,21 +1139,21 @@ body:has(.orf-user-management-page) .orf-confirm-dialog-actions {
     padding: 12px;
   }
 
-  .orf-permission-search {
+.orf-permission-search {
     height: 42px;
   }
 
-  .orf-permission-category-tabs button {
+.orf-permission-category-tabs button {
     height: 34px;
     padding-inline: 12px;
   }
 
-  .orf-role-permission-table tbody tr.orf-permission-empty-row {
+.orf-role-permission-table tbody tr.orf-permission-empty-row {
     display: block;
     padding: 0;
   }
 
-  .orf-role-permission-table tbody tr.orf-permission-empty-row td {
+.orf-role-permission-table tbody tr.orf-permission-empty-row td {
     display: grid;
     height: 180px;
     place-items: center;
@@ -1430,7 +1218,6 @@ body:has(.orf-user-management-page) .orf-confirm-dialog-actions {
   box-shadow: var(--orf-shadow-card);
   clip-path: none;
   color: var(--orf-text-primary);
-  backdrop-filter: none;
 }
 
 .orf-user-toolbar,
@@ -1925,7 +1712,7 @@ body:has(.orf-user-management-page) .orf-confirm-dialog-actions {
     gap: 6px;
   }
 
-  .orf-user-actions .orf-action-icon-button.orf-action-button-sm {
+.orf-user-actions .orf-action-icon-button.orf-action-button-sm {
     width: 40px;
     min-width: 40px;
     height: 40px;

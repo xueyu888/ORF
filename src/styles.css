@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./styles/foundation.css";
+@import "./styles/material.css";
 @import "./styles/controls.css";
 @import "./styles/overlays.css";
 @import "./styles/shell.css";

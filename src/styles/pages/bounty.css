@@ -42,28 +42,14 @@
   --orf-topbar-control-muted: #6f7c90;
   --orf-topbar-primary-bg: #1973c6;
   --orf-topbar-primary-hover-bg: #125ea7;
-  --bounty-glass-panel: rgba(247, 250, 251, 0.58);
-  --bounty-glass-control: rgba(250, 252, 253, 0.52);
-  --bounty-glass-float: rgba(255, 255, 255, 0.42);
-  --bounty-glass-micro: rgba(242, 248, 251, 0.42);
-  --bounty-glass-header: rgba(231, 240, 246, 0.53);
-  --bounty-glass-border: rgba(255, 255, 255, 0.62);
-  --bounty-glass-shine: rgba(255, 255, 255, 0.78);
-  --bounty-glass-shadow: 0 24px 60px rgba(13, 43, 70, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.74);
-  --bounty-glass-filter: blur(28px) saturate(1.12);
-  --bounty-glass-micro-filter: blur(18px) saturate(1.04);
-  --orf-page-safety-overlay:
-    radial-gradient(circle at 72% 16%, rgba(255, 255, 255, 0.05), transparent 38%),
-    linear-gradient(115deg, rgba(219, 235, 246, 0.1) 0%, rgba(255, 248, 232, 0.03) 54%, rgba(207, 226, 240, 0.08) 100%);
-  --orf-sidebar-bg-overlay:
-    linear-gradient(105deg, rgba(8, 29, 58, 0.52) 0%, rgba(12, 48, 82, 0.34) 62%, rgba(14, 66, 100, 0.18) 100%),
-    linear-gradient(180deg, rgba(4, 20, 42, 0.04), rgba(4, 18, 38, 0.42));
-  --orf-sidebar-selected-bg: rgba(151, 211, 246, 0.2);
-  --orf-sidebar-hover-bg: rgba(151, 211, 246, 0.13);
-  --orf-sidebar-divider: rgba(218, 239, 250, 0.14);
-  --orf-sidebar-text: #f8fbff;
-  --orf-sidebar-text-muted: #bed5e6;
-  --orf-sidebar-icon: #e8f5fc;
+  --bounty-surface-panel: var(--orf-material-content-primary);
+  --bounty-surface-control: var(--orf-material-content-control);
+  --bounty-surface-float: var(--orf-material-content-secondary);
+  --bounty-surface-micro: var(--orf-material-content-tertiary);
+  --bounty-surface-header: var(--orf-material-content-secondary);
+  --bounty-surface-border: var(--orf-material-content-hairline-strong);
+  --bounty-surface-shine: color-mix(in srgb, var(--orf-text-primary) 8%, transparent);
+  --bounty-surface-shadow: var(--orf-workbench-shadow);
 }
 
 html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] {
@@ -106,22 +92,6 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] {
   --orf-topbar-control-muted: #93a2b9;
   --orf-topbar-primary-bg: #3e87cf;
   --orf-topbar-primary-hover-bg: #55a0e5;
-  --bounty-glass-panel: rgba(7, 20, 41, 0.58);
-  --bounty-glass-control: rgba(9, 27, 52, 0.52);
-  --bounty-glass-float: rgba(8, 24, 48, 0.44);
-  --bounty-glass-micro: rgba(7, 21, 42, 0.5);
-  --bounty-glass-header: rgba(17, 42, 76, 0.56);
-  --bounty-glass-border: rgba(174, 216, 255, 0.2);
-  --bounty-glass-shine: rgba(210, 233, 255, 0.22);
-  --bounty-glass-shadow: 0 26px 64px rgba(1, 7, 18, 0.42), inset 0 1px 0 rgba(202, 229, 255, 0.16);
-  --bounty-glass-filter: blur(28px) saturate(1.1);
-  --bounty-glass-micro-filter: blur(18px) saturate(1.03);
-  --orf-page-safety-overlay:
-    radial-gradient(circle at 74% 18%, rgba(85, 145, 208, 0.04), transparent 36%),
-    linear-gradient(115deg, rgba(4, 11, 25, 0.36) 0%, rgba(7, 17, 34, 0.22) 54%, rgba(3, 9, 22, 0.34) 100%);
-  --orf-sidebar-bg-overlay:
-    linear-gradient(105deg, rgba(3, 11, 26, 0.64) 0%, rgba(6, 22, 42, 0.48) 62%, rgba(8, 34, 59, 0.28) 100%),
-    linear-gradient(180deg, rgba(2, 8, 20, 0.08), rgba(2, 8, 20, 0.5));
 }
 
 .orf-app-shell[data-bounty-hall="true"],
@@ -134,98 +104,30 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] {
   background: transparent;
 }
 
-.orf-app-shell[data-bounty-hall="true"] .orf-sidebar::after {
-  opacity: 0.72;
-}
-
-.orf-app-shell[data-bounty-hall="true"] .orf-sidebar-background-image {
-  opacity: 1;
-  filter: saturate(1.04) contrast(0.98) brightness(0.98);
-}
-
-html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] .orf-sidebar::after {
-  opacity: 0.78;
-}
-
-html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] .orf-sidebar-background-image {
-  opacity: 0.92;
-  filter: saturate(0.96) contrast(0.96) brightness(0.84);
-}
-
-.orf-app-shell[data-bounty-hall="true"] :is(
-  .orf-sidebar-brand-title,
-  .orf-sidebar-group-title,
-  .orf-sidebar-link,
-  .orf-sidebar-user-name,
-  .orf-attention-workbar-trigger
-) {
-  text-shadow: 0 1px 3px rgba(0, 8, 22, 0.82);
-}
-
-.orf-app-shell[data-bounty-hall="true"] .orf-sidebar-link-active,
-.orf-app-shell[data-bounty-hall="true"] .orf-sidebar-link-inactive:hover {
-  -webkit-backdrop-filter: blur(16px) saturate(1.08);
-  backdrop-filter: blur(16px) saturate(1.08);
-}
-
-.orf-app-shell[data-bounty-hall="true"]
-  .orf-main-content[data-page-skin="true"]::before {
-  background: var(--orf-page-safety-overlay);
-}
-
-.orf-app-shell[data-bounty-hall="true"] .orf-main-content-skin-layer,
-.orf-app-shell[data-bounty-hall="true"] .orf-topbar-skin-layer {
-  --orf-visual-bg-filter: saturate(1.04) contrast(0.99);
-}
-
-html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] .orf-main-content-skin-layer,
-html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] .orf-topbar-skin-layer {
-  --orf-visual-bg-filter: brightness(0.78) saturate(0.94) contrast(0.97);
-}
-
 .orf-app-shell[data-bounty-hall="true"] .orf-topbar {
-  border-bottom-color: var(--bounty-glass-border);
+  border-bottom-color: var(--bounty-surface-border);
   background: transparent;
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--bounty-glass-shine) 54%, transparent);
-}
-
-.orf-app-shell[data-bounty-hall="true"] .orf-topbar::before {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  content: "";
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--bounty-glass-shine) 12%, transparent), transparent 44%),
-    var(--bounty-glass-float);
-  pointer-events: none;
-  -webkit-backdrop-filter: var(--bounty-glass-filter);
-  backdrop-filter: var(--bounty-glass-filter);
-}
-
-.orf-app-shell[data-bounty-hall="true"] .orf-topbar::after {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bounty-glass-shine) 30%, transparent), transparent 72%);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--bounty-surface-shine) 54%, transparent);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-hall-tab {
-  border-color: color-mix(in srgb, var(--bounty-glass-border) 52%, transparent);
-  background: var(--bounty-glass-micro);
+  border-color: color-mix(in srgb, var(--bounty-surface-border) 52%, transparent);
+  background: var(--bounty-surface-micro);
   color: #2d506d;
   text-shadow: 0 1px 1px rgba(255, 255, 255, 0.56);
-  -webkit-backdrop-filter: var(--bounty-glass-micro-filter);
-  backdrop-filter: var(--bounty-glass-micro-filter);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-hall-tab[data-active="true"] {
   border-color: var(--orf-accent-border);
-  background: var(--bounty-glass-control);
+  background: var(--bounty-surface-control);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-hall-tab:is(:hover, :focus-visible) {
   border-color: var(--orf-accent-border);
-  background: var(--bounty-glass-control);
+  background: var(--bounty-surface-control);
   color: var(--orf-text-primary);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--bounty-glass-shine) 54%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--bounty-surface-shine) 54%, transparent),
     0 8px 20px rgba(8, 35, 62, 0.11);
 }
 
@@ -244,10 +146,8 @@ html[data-orf-appearance="dark"]
 .orf-workbench-surface .bounty-command-surface,
 .orf-workbench-surface .bounty-list-table {
   border-color: var(--orf-workbench-hairline);
-  background: var(--bounty-glass-panel);
-  box-shadow: var(--bounty-glass-shadow);
-  -webkit-backdrop-filter: var(--bounty-glass-filter);
-  backdrop-filter: var(--bounty-glass-filter);
+  background: var(--bounty-surface-panel);
+  box-shadow: var(--bounty-surface-shadow);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .orf-workbench-surface .bounty-list-table {
@@ -255,10 +155,10 @@ html[data-orf-appearance="dark"]
   background:
     radial-gradient(circle at 94% 20%, rgba(225, 242, 250, 0.12), transparent 36%),
     linear-gradient(118deg, rgba(255, 255, 255, 0.13) 0%, transparent 46%, rgba(218, 238, 249, 0.08) 100%),
-    var(--bounty-glass-panel);
+    var(--bounty-surface-panel);
   box-shadow:
-    var(--bounty-glass-shadow),
-    inset 1px 0 0 color-mix(in srgb, var(--bounty-glass-shine) 32%, transparent),
+    var(--bounty-surface-shadow),
+    inset 1px 0 0 color-mix(in srgb, var(--bounty-surface-shine) 32%, transparent),
     inset -1px 0 0 color-mix(in srgb, var(--orf-workbench-hairline) 72%, transparent),
     inset 0 -1px 0 color-mix(in srgb, var(--orf-workbench-hairline-strong) 58%, transparent);
 }
@@ -270,7 +170,7 @@ html[data-orf-appearance="dark"]
   background:
     radial-gradient(circle at 94% 20%, rgba(104, 165, 221, 0.07), transparent 36%),
     linear-gradient(118deg, rgba(124, 185, 240, 0.07) 0%, transparent 48%, rgba(4, 12, 28, 0.12) 100%),
-    var(--bounty-glass-panel);
+    var(--bounty-surface-panel);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-list-table::before,
@@ -286,7 +186,7 @@ html[data-orf-appearance="dark"]
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-list-table::before {
   top: 0;
-  background: linear-gradient(90deg, transparent, var(--bounty-glass-shine) 16%, var(--bounty-glass-shine) 84%, transparent);
+  background: linear-gradient(90deg, transparent, var(--bounty-surface-shine) 16%, var(--bounty-surface-shine) 84%, transparent);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-list-table::after {
@@ -296,42 +196,42 @@ html[data-orf-appearance="dark"]
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-stat-card-cyan {
   border-color: rgba(75, 168, 202, 0.28);
-  background: linear-gradient(135deg, rgba(89, 190, 225, 0.13), rgba(255, 255, 255, 0.14)), var(--bounty-glass-float);
+  background: linear-gradient(135deg, rgba(89, 190, 225, 0.13), rgba(255, 255, 255, 0.14)), var(--bounty-surface-float);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-stat-card-blue {
   border-color: rgba(86, 117, 202, 0.25);
-  background: linear-gradient(135deg, rgba(83, 116, 210, 0.12), rgba(255, 255, 255, 0.14)), var(--bounty-glass-float);
+  background: linear-gradient(135deg, rgba(83, 116, 210, 0.12), rgba(255, 255, 255, 0.14)), var(--bounty-surface-float);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-stat-card-orange {
   border-color: rgba(183, 116, 79, 0.25);
-  background: linear-gradient(135deg, rgba(205, 124, 82, 0.12), rgba(255, 255, 255, 0.14)), var(--bounty-glass-float);
+  background: linear-gradient(135deg, rgba(205, 124, 82, 0.12), rgba(255, 255, 255, 0.14)), var(--bounty-surface-float);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-stat-card-gold {
   border-color: rgba(170, 128, 52, 0.27);
-  background: linear-gradient(135deg, rgba(209, 167, 79, 0.14), rgba(255, 255, 255, 0.14)), var(--bounty-glass-float);
+  background: linear-gradient(135deg, rgba(209, 167, 79, 0.14), rgba(255, 255, 255, 0.14)), var(--bounty-surface-float);
 }
 
 html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] .bounty-stat-card-cyan {
   border-color: rgba(99, 194, 227, 0.27);
-  background: linear-gradient(135deg, rgba(44, 142, 181, 0.16), rgba(4, 15, 32, 0.08)), var(--bounty-glass-float);
+  background: linear-gradient(135deg, rgba(44, 142, 181, 0.16), rgba(4, 15, 32, 0.08)), var(--bounty-surface-float);
 }
 
 html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] .bounty-stat-card-blue {
   border-color: rgba(118, 153, 237, 0.26);
-  background: linear-gradient(135deg, rgba(74, 111, 207, 0.16), rgba(4, 15, 32, 0.08)), var(--bounty-glass-float);
+  background: linear-gradient(135deg, rgba(74, 111, 207, 0.16), rgba(4, 15, 32, 0.08)), var(--bounty-surface-float);
 }
 
 html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] .bounty-stat-card-orange {
   border-color: rgba(222, 148, 109, 0.25);
-  background: linear-gradient(135deg, rgba(179, 91, 65, 0.16), rgba(4, 15, 32, 0.08)), var(--bounty-glass-float);
+  background: linear-gradient(135deg, rgba(179, 91, 65, 0.16), rgba(4, 15, 32, 0.08)), var(--bounty-surface-float);
 }
 
 html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] .bounty-stat-card-gold {
   border-color: rgba(225, 180, 90, 0.27);
-  background: linear-gradient(135deg, rgba(178, 133, 45, 0.17), rgba(4, 15, 32, 0.08)), var(--bounty-glass-float);
+  background: linear-gradient(135deg, rgba(178, 133, 45, 0.17), rgba(4, 15, 32, 0.08)), var(--bounty-surface-float);
 }
 
 .bounty-hall-page.orf-workbench-surface .bounty-stat-card-cyan .bounty-stat-icon {
@@ -400,14 +300,12 @@ html[data-orf-appearance="dark"] .bounty-hall-page.orf-workbench-surface .bounty
   gap: 10px;
   border: 1px solid var(--orf-workbench-hairline);
   border-radius: 999px;
-  background: var(--bounty-glass-control);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bounty-glass-shine) 62%, transparent), 0 8px 24px rgba(10, 38, 65, 0.1);
+  background: var(--bounty-surface-control);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bounty-surface-shine) 62%, transparent), 0 8px 24px rgba(10, 38, 65, 0.1);
   color: var(--orf-text-primary);
   font-size: 13px;
   font-weight: var(--orf-type-label-weight, 560);
   padding: 0 15px;
-  -webkit-backdrop-filter: var(--bounty-glass-filter);
-  backdrop-filter: var(--bounty-glass-filter);
 }
 
 .orf-workbench-surface .bounty-cycle-pill svg {
@@ -430,11 +328,9 @@ html[data-orf-appearance="dark"] .bounty-hall-page.orf-workbench-surface .bounty
   gap: 8px;
   border: 1px solid var(--orf-workbench-hairline);
   border-radius: 999px;
-  background: var(--bounty-glass-float);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bounty-glass-shine) 54%, transparent), 0 8px 24px rgba(10, 38, 65, 0.08);
+  background: var(--bounty-surface-float);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bounty-surface-shine) 54%, transparent), 0 8px 24px rgba(10, 38, 65, 0.08);
   padding: 0 12px;
-  -webkit-backdrop-filter: var(--bounty-glass-filter);
-  backdrop-filter: var(--bounty-glass-filter);
 }
 
 .orf-workbench-surface .bounty-stat-card:first-child {
@@ -488,10 +384,8 @@ html[data-orf-appearance="dark"] .bounty-hall-page.orf-workbench-surface .bounty
 .orf-workbench-surface .bounty-select-label select,
 .orf-workbench-surface .bounty-select-label .orf-select-trigger {
   border-color: var(--orf-workbench-hairline);
-  background: var(--bounty-glass-control);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bounty-glass-shine) 52%, transparent), 0 8px 26px rgba(10, 38, 65, 0.09);
-  -webkit-backdrop-filter: var(--bounty-glass-filter);
-  backdrop-filter: var(--bounty-glass-filter);
+  background: var(--bounty-surface-control);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bounty-surface-shine) 52%, transparent), 0 8px 26px rgba(10, 38, 65, 0.09);
 }
 
 .orf-workbench-surface .bounty-search-box {
@@ -616,11 +510,9 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] .bounty
   border-radius: 14px;
   background:
     radial-gradient(circle at 50% 18%, color-mix(in srgb, var(--orf-accent) 7%, transparent), transparent 42%),
-    var(--bounty-glass-panel);
-  box-shadow: var(--bounty-glass-shadow);
+    var(--bounty-surface-panel);
+  box-shadow: var(--bounty-surface-shadow);
   padding: 30px 24px;
-  -webkit-backdrop-filter: var(--bounty-glass-filter);
-  backdrop-filter: var(--bounty-glass-filter);
 }
 
 .orf-workbench-surface .bounty-empty-icon {
@@ -689,8 +581,6 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] .bounty
   box-shadow:
     0 12px 28px rgba(10, 38, 65, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.68);
-  -webkit-backdrop-filter: blur(18px) saturate(1.06);
-  backdrop-filter: blur(18px) saturate(1.06);
 }
 
 html[data-orf-appearance="dark"] .bounty-modal {
@@ -759,31 +649,27 @@ html[data-orf-appearance="dark"] body:has(.orf-app-shell[data-bounty-hall="true"
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-metric-detail-panel {
-  border-color: var(--bounty-glass-border);
+  border-color: var(--bounty-surface-border);
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--bounty-glass-shine) 18%, transparent), transparent 48%),
-    var(--bounty-glass-panel);
-  box-shadow: var(--bounty-glass-shadow);
-  -webkit-backdrop-filter: var(--bounty-glass-filter);
-  backdrop-filter: var(--bounty-glass-filter);
+    linear-gradient(135deg, color-mix(in srgb, var(--bounty-surface-shine) 18%, transparent), transparent 48%),
+    var(--bounty-surface-panel);
+  box-shadow: var(--bounty-surface-shadow);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-metric-detail-panel .orf-metric-inspector-detail {
-  border-color: color-mix(in srgb, var(--bounty-glass-border) 72%, var(--orf-border));
+  border-color: color-mix(in srgb, var(--bounty-surface-border) 72%, var(--orf-border));
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--bounty-glass-shine) 14%, transparent), transparent 52%),
-    color-mix(in srgb, var(--bounty-glass-control) 82%, transparent);
+    linear-gradient(135deg, color-mix(in srgb, var(--bounty-surface-shine) 14%, transparent), transparent 52%),
+    color-mix(in srgb, var(--bounty-surface-control) 82%, transparent);
   box-shadow:
     0 12px 28px rgba(10, 38, 65, 0.08),
-    inset 0 1px 0 color-mix(in srgb, var(--bounty-glass-shine) 48%, transparent);
-  -webkit-backdrop-filter: var(--bounty-glass-micro-filter);
-  backdrop-filter: var(--bounty-glass-micro-filter);
+    inset 0 1px 0 color-mix(in srgb, var(--bounty-surface-shine) 48%, transparent);
 }
 
 html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] .bounty-metric-detail-panel .orf-metric-inspector-detail {
   box-shadow:
     0 14px 30px rgba(1, 7, 18, 0.22),
-    inset 0 1px 0 color-mix(in srgb, var(--bounty-glass-shine) 42%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--bounty-surface-shine) 42%, transparent);
 }
 
 .orf-workbench-surface .bounty-list-table {
@@ -798,12 +684,12 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-bounty-hall="true"] .bounty
   font-size: 11px;
   padding: 0 12px;
   border-color: var(--orf-workbench-hairline);
-  background: linear-gradient(90deg, rgba(222, 238, 248, 0.12), rgba(255, 246, 224, 0.06)), var(--bounty-glass-header);
+  background: linear-gradient(90deg, rgba(222, 238, 248, 0.12), rgba(255, 246, 224, 0.06)), var(--bounty-surface-header);
   font-weight: var(--orf-type-label-weight, 560);
 }
 
 html[data-orf-appearance="dark"] .orf-workbench-surface .bounty-list-head {
-  background: linear-gradient(90deg, rgba(85, 154, 213, 0.09), rgba(6, 18, 36, 0.08)), var(--bounty-glass-header);
+  background: linear-gradient(90deg, rgba(85, 154, 213, 0.09), rgba(6, 18, 36, 0.08)), var(--bounty-surface-header);
 }
 
 .orf-workbench-surface .bounty-list-row {
@@ -831,7 +717,7 @@ html[data-orf-appearance="dark"]
   background: color-mix(in srgb, var(--orf-surface-control-hover) 78%, transparent);
   box-shadow:
     inset 2px 0 0 color-mix(in srgb, var(--orf-accent) 72%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--bounty-glass-shine) 22%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--bounty-surface-shine) 22%, transparent);
   transform: none;
 }
 
@@ -852,7 +738,7 @@ html[data-orf-appearance="dark"]
   border-color: var(--orf-accent-border);
   background: var(--orf-surface-control-hover);
   color: var(--orf-text-primary);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bounty-glass-shine) 44%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bounty-surface-shine) 44%, transparent);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .orf-workbench-surface :is(
@@ -884,11 +770,9 @@ html[data-orf-appearance="dark"]
 
 .orf-workbench-surface .bounty-result-summary-toggle {
   border-color: color-mix(in srgb, var(--orf-accent-border) 72%, var(--orf-border));
-  background: var(--bounty-glass-micro);
+  background: var(--bounty-surface-micro);
   color: var(--orf-accent-text);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bounty-glass-shine) 38%, transparent);
-  -webkit-backdrop-filter: var(--bounty-glass-micro-filter);
-  backdrop-filter: var(--bounty-glass-micro-filter);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bounty-surface-shine) 38%, transparent);
 }
 
 .orf-workbench-surface .bounty-result-summary-toggle:is(:hover, :focus-visible),
