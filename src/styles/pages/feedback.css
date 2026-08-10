@@ -10,7 +10,7 @@
   --feedback-signal-soft: rgba(217, 119, 69, 0.13);
 }
 
-html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_feedback_background"] {
+.orf-app-shell[data-page-scene="page_feedback_background"][data-workspace-material-content-tone="light"] {
   --feedback-signal: #f09a68;
   --feedback-signal-soft: rgba(240, 154, 104, 0.15);
 }

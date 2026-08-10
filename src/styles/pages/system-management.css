@@ -774,7 +774,7 @@ body:has(.orf-user-table-shell) .orf-app-shell[data-page-scene="page_system_back
   --members-gold-soft: rgba(184, 124, 44, 0.15);
 }
 
-html[data-orf-appearance="dark"] body:has(.orf-user-table-shell) .orf-app-shell[data-page-scene="page_system_background"] {
+body:has(.orf-user-table-shell) .orf-app-shell[data-page-scene="page_system_background"][data-workspace-material-content-tone="light"] {
   --members-cyan: #72c6d8;
   --members-cyan-soft: rgba(114, 198, 216, 0.16);
   --members-gold: #e1b15f;
@@ -1732,7 +1732,7 @@ body:has(.orf-role-permissions-shell) .orf-app-shell[data-page-scene="page_syste
   --permission-gold-soft: rgba(187, 128, 43, 0.14);
 }
 
-html[data-orf-appearance="dark"] body:has(.orf-role-permissions-shell) .orf-app-shell[data-page-scene="page_system_background"] {
+body:has(.orf-role-permissions-shell) .orf-app-shell[data-page-scene="page_system_background"][data-workspace-material-content-tone="light"] {
   --permission-cyan: #72c8d9;
   --permission-gold: #e0b665;
   --permission-gold-soft: rgba(224, 182, 101, 0.14);

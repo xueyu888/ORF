@@ -94,7 +94,10 @@
     0 2px 10px rgba(15, 23, 42, 0.08);
 }
 
-html[data-orf-appearance="dark"] .orf-chat-floating-image-preview {
+body:has(.orf-app-shell[data-chat-page="true"][data-workspace-material-content-tone="light"])
+  .orf-chat-floating-image-preview,
+html[data-orf-appearance="dark"] body:has(.orf-chat-image-popout-page)
+  .orf-chat-floating-image-preview {
   --orf-chat-image-window-border: rgba(119, 137, 160, 0.42);
   --orf-chat-image-window-surface: #111a27;
   --orf-chat-image-window-header: #162232;
@@ -623,74 +626,6 @@ html[data-orf-appearance="dark"] .orf-chat-floating-image-preview {
   min-height: 0;
   overflow: hidden;
   background: transparent;
-}
-
-/* The selected background, not the theme label, decides the readable chat
-   palette. Appearance remains the fallback for visually neutral scenes. */
-.orf-app-shell[data-chat-page="true"][data-workspace-material-content-tone="dark"]
-  .orf-chat-page {
-  --orf-material-content-container: rgba(246, 249, 248, 0.14);
-  --orf-material-content-primary: rgba(252, 253, 252, 0.64);
-  --orf-material-content-secondary: rgba(246, 249, 248, 0.48);
-  --orf-material-content-tertiary: rgba(238, 243, 242, 0.36);
-  --orf-material-content-control: rgba(255, 255, 255, 0.54);
-  --orf-material-content-control-hover: rgba(255, 255, 255, 0.74);
-  --orf-material-content-hairline: rgba(26, 42, 48, 0.16);
-  --orf-material-content-hairline-strong: rgba(26, 42, 48, 0.24);
-  --orf-material-content-shine: rgba(255, 255, 255, 0.72);
-  --orf-material-content-shadow: 0 18px 44px rgba(21, 45, 51, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.58);
-  --orf-material-content-shadow-soft: 0 10px 26px rgba(21, 45, 51, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  --orf-material-floating: rgba(252, 253, 252, 0.9);
-  --orf-material-modal: rgba(249, 251, 250, 0.94);
-  --orf-bg-card: rgba(255, 255, 255, 0.88);
-  --orf-bg-elevated: #ffffff;
-  --orf-bg-muted: rgba(237, 242, 247, 0.84);
-  --orf-bg-muted-strong: rgba(216, 226, 236, 0.9);
-  --orf-bg-row-hover: rgba(22, 133, 169, 0.09);
-  --orf-border: rgba(15, 23, 42, 0.1);
-  --orf-border-strong: rgba(15, 23, 42, 0.16);
-  --orf-text-primary: #142033;
-  --orf-text-secondary: #4b5b72;
-  --orf-text-muted: #718096;
-  --orf-text-faint: #9aa7b8;
-  --orf-accent: #1685a9;
-  --orf-accent-hover: #0f6e8c;
-  --orf-accent-soft: rgba(22, 133, 169, 0.11);
-  --orf-accent-border: rgba(22, 133, 169, 0.22);
-  --orf-accent-text: #0f6e8c;
-}
-
-.orf-app-shell[data-chat-page="true"][data-workspace-material-content-tone="light"]
-  .orf-chat-page {
-  --orf-material-content-container: rgba(24, 29, 34, 0.18);
-  --orf-material-content-primary: rgba(24, 29, 34, 0.66);
-  --orf-material-content-secondary: rgba(30, 36, 42, 0.5);
-  --orf-material-content-tertiary: rgba(38, 45, 51, 0.38);
-  --orf-material-content-control: rgba(42, 49, 56, 0.56);
-  --orf-material-content-control-hover: rgba(52, 60, 68, 0.74);
-  --orf-material-content-hairline: rgba(205, 218, 225, 0.18);
-  --orf-material-content-hairline-strong: rgba(211, 224, 231, 0.28);
-  --orf-material-content-shine: rgba(225, 240, 244, 0.16);
-  --orf-material-content-shadow: 0 20px 48px rgba(0, 5, 9, 0.34), inset 0 1px 0 rgba(225, 240, 244, 0.12);
-  --orf-material-content-shadow-soft: 0 12px 30px rgba(0, 5, 9, 0.24), inset 0 1px 0 rgba(225, 240, 244, 0.1);
-  --orf-material-floating: rgba(25, 30, 36, 0.9);
-  --orf-material-modal: rgba(22, 27, 32, 0.94);
-  --orf-bg-card: rgba(24, 29, 34, 0.86);
-  --orf-bg-elevated: #1b2025;
-  --orf-bg-muted: rgba(37, 43, 49, 0.78);
-  --orf-bg-muted-strong: rgba(50, 57, 64, 0.82);
-  --orf-bg-row-hover: rgba(80, 190, 212, 0.1);
-  --orf-border: rgba(205, 218, 225, 0.13);
-  --orf-border-strong: rgba(211, 224, 231, 0.23);
-  --orf-text-primary: #edf1f3;
-  --orf-text-secondary: #bdc6cc;
-  --orf-text-muted: #8f9aa2;
-  --orf-text-faint: #68747c;
-  --orf-accent: #45aabe;
-  --orf-accent-hover: #62bfd0;
-  --orf-accent-soft: rgba(69, 170, 190, 0.16);
-  --orf-accent-border: rgba(98, 191, 208, 0.3);
-  --orf-accent-text: #91d9e5;
 }
 
 .orf-chat-page-with-panel {

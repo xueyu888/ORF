@@ -2311,7 +2311,7 @@ body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) .orf-selec
   background: rgba(8, 127, 142, 0.11);
 }
 
-html[data-orf-appearance="dark"] body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) :is(.orf-select-popover, .orf-date-popover) {
+body:has(.orf-app-shell[data-page-scene="page_work_logs_background"][data-workspace-material-content-tone="light"]) :is(.orf-select-popover, .orf-date-popover) {
   border-color: rgba(170, 221, 215, 0.2);
   background:
     linear-gradient(132deg, rgba(113, 205, 204, 0.06), transparent 44%),
@@ -2319,7 +2319,7 @@ html[data-orf-appearance="dark"] body:has(.orf-app-shell[data-page-scene="page_w
   box-shadow: 0 26px 62px rgba(0, 6, 9, 0.58), inset 0 1px 0 rgba(207, 239, 234, 0.14);
 }
 
-html[data-orf-appearance="dark"] body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) .orf-select-option:is(:hover, :focus-visible) {
+body:has(.orf-app-shell[data-page-scene="page_work_logs_background"][data-workspace-material-content-tone="light"]) .orf-select-option:is(:hover, :focus-visible) {
   background: rgba(66, 185, 196, 0.15);
 }
 

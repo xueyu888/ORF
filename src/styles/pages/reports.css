@@ -832,7 +832,7 @@
   --reports-source-other: #8291a4;
 }
 
-html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_reports_background"] {
+.orf-app-shell[data-page-scene="page_reports_background"][data-workspace-material-content-tone="light"] {
   --reports-gold: #e4b968;
   --reports-gold-soft: rgba(228, 185, 104, 0.16);
   --reports-silver: #b7c9d7;
