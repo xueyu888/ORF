@@ -766,7 +766,7 @@
    Account facts remain in the existing members read model. This route-level
    material contract only separates navigation chrome, dense reading surfaces,
    semantic account state and temporary dialog surfaces. */
-body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] {
+body:has(.orf-user-table-shell) .orf-app-shell[data-page-scene="page_system_background"] {
   --orf-bg-page: transparent;
   --members-cyan: #237f98;
   --members-cyan-soft: rgba(35, 127, 152, 0.14);
@@ -774,41 +774,41 @@ body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_
   --members-gold-soft: rgba(184, 124, 44, 0.15);
 }
 
-html[data-orf-appearance="dark"] body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] {
+html[data-orf-appearance="dark"] body:has(.orf-user-table-shell) .orf-app-shell[data-page-scene="page_system_background"] {
   --members-cyan: #72c6d8;
   --members-cyan-soft: rgba(114, 198, 216, 0.16);
   --members-gold: #e1b15f;
   --members-gold-soft: rgba(225, 177, 95, 0.16);
 }
 
-body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"],
-body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"]::before {
+body:has(.orf-user-table-shell) .orf-app-shell[data-page-scene="page_system_background"],
+body:has(.orf-user-table-shell) .orf-app-shell[data-page-scene="page_system_background"]::before {
   background: var(--orf-bg-app);
 }
 
-body:has(.orf-user-management-page) .orf-app-shell[data-page-scene="page_system_background"] :is(.orf-shell-body, .orf-main-content) {
+body:has(.orf-user-table-shell) .orf-app-shell[data-page-scene="page_system_background"] :is(.orf-shell-body, .orf-main-content) {
   background: transparent;
 }
 
-body:has(.orf-user-management-page) .orf-system-management-tabs {
+body:has(.orf-user-table-shell) .orf-system-management-tabs {
   border-color: var(--orf-material-content-hairline);
   background: var(--orf-material-content-control);
   box-shadow: var(--orf-material-content-shadow-soft);
 }
 
-body:has(.orf-user-management-page) .orf-system-management-tabs a {
+body:has(.orf-user-table-shell) .orf-system-management-tabs a {
   border-radius: 999px;
 }
 
-body:has(.orf-user-management-page) .orf-system-management-tabs a:is(:hover, :focus-visible),
-body:has(.orf-user-management-page) .orf-system-management-tab-active,
-body:has(.orf-user-management-page) .orf-system-management-tab-active:hover {
+body:has(.orf-user-table-shell) .orf-system-management-tabs a:is(:hover, :focus-visible),
+body:has(.orf-user-table-shell) .orf-system-management-tab-active,
+body:has(.orf-user-table-shell) .orf-system-management-tab-active:hover {
   background: color-mix(in srgb, var(--members-cyan-soft) 72%, var(--orf-material-content-control)) !important;
   color: var(--orf-accent-text) !important;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orf-accent-border) 72%, transparent), 0 6px 16px color-mix(in srgb, var(--members-cyan) 12%, transparent);
 }
 
-body:has(.orf-user-management-page) .orf-user-table-shell {
+body:has(.orf-user-table-shell) .orf-user-table-shell {
   border-color: var(--orf-material-content-hairline);
   border-radius: 18px;
   background:
@@ -818,87 +818,87 @@ body:has(.orf-user-management-page) .orf-user-table-shell {
   box-shadow: var(--orf-material-content-shadow);
 }
 
-body:has(.orf-user-management-page) .orf-user-toolbar {
+body:has(.orf-user-table-shell) .orf-user-toolbar {
   border-bottom-color: color-mix(in srgb, var(--orf-material-content-hairline) 48%, var(--orf-workbench-hairline));
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--members-cyan-soft) 34%, transparent), transparent 54%),
     var(--orf-material-content-primary);
 }
 
-body:has(.orf-user-management-page) :is(.orf-user-search, .orf-user-select, .orf-permission-metrics span) {
+body:has(.orf-user-table-shell) :is(.orf-user-search, .orf-user-select, .orf-permission-metrics span) {
   border-color: color-mix(in srgb, var(--orf-material-content-hairline) 52%, var(--orf-workbench-hairline));
   border-radius: 999px;
   background: var(--orf-material-content-control);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 48%, transparent);
 }
 
-body:has(.orf-user-management-page) .orf-user-search:focus-within {
+body:has(.orf-user-table-shell) .orf-user-search:focus-within {
   border-color: var(--orf-accent-border);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--orf-accent) 13%, transparent), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 52%, transparent);
 }
 
-body:has(.orf-user-management-page) .orf-user-search svg {
+body:has(.orf-user-table-shell) .orf-user-search svg {
   color: var(--members-cyan);
 }
 
-body:has(.orf-user-management-page) .orf-user-toolbar > .orf-user-toolbar-actions > .orf-action-button {
+body:has(.orf-user-table-shell) .orf-user-toolbar > .orf-user-toolbar-actions > .orf-action-button {
   border-radius: 999px;
   background: linear-gradient(135deg, var(--orf-accent), color-mix(in srgb, var(--orf-accent) 74%, #6ed2dd));
   box-shadow: 0 10px 24px color-mix(in srgb, var(--orf-accent) 22%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
-body:has(.orf-user-management-page) .orf-user-table thead {
+body:has(.orf-user-table-shell) .orf-user-table thead {
   background: color-mix(in srgb, var(--orf-material-content-secondary) 72%, transparent);
 }
 
-body:has(.orf-user-management-page) .orf-user-table th {
+body:has(.orf-user-table-shell) .orf-user-table th {
   background: transparent;
   color: var(--orf-text-secondary);
 }
 
-body:has(.orf-user-management-page) .orf-user-table :is(th, td) {
+body:has(.orf-user-table-shell) .orf-user-table :is(th, td) {
   border-color: color-mix(in srgb, var(--orf-material-content-hairline) 42%, var(--orf-workbench-hairline));
 }
 
-body:has(.orf-user-management-page) .orf-user-table tbody tr,
-body:has(.orf-user-management-page) .orf-user-table tbody tr:nth-child(even) {
+body:has(.orf-user-table-shell) .orf-user-table tbody tr,
+body:has(.orf-user-table-shell) .orf-user-table tbody tr:nth-child(even) {
   background: color-mix(in srgb, var(--orf-material-content-secondary) 42%, transparent);
   transition: background 150ms ease, box-shadow 150ms ease;
 }
 
-body:has(.orf-user-management-page) .orf-user-table tbody tr:nth-child(even) {
+body:has(.orf-user-table-shell) .orf-user-table tbody tr:nth-child(even) {
   background: color-mix(in srgb, var(--orf-material-content-secondary) 62%, var(--members-cyan-soft));
 }
 
-body:has(.orf-user-management-page) .orf-user-table tbody tr:hover {
+body:has(.orf-user-table-shell) .orf-user-table tbody tr:hover {
   background: color-mix(in srgb, var(--orf-material-content-secondary) 74%, var(--members-cyan-soft));
   box-shadow: inset 3px 0 0 var(--orf-accent);
 }
 
-body:has(.orf-user-management-page) .orf-user-row-avatar {
+body:has(.orf-user-table-shell) .orf-user-row-avatar {
   border-color: color-mix(in srgb, var(--orf-material-content-shine) 74%, var(--orf-material-content-hairline));
   box-shadow: 0 7px 16px color-mix(in srgb, var(--orf-text-primary) 14%, transparent), 0 0 0 1px color-mix(in srgb, var(--members-cyan) 20%, transparent);
 }
 
-body:has(.orf-user-management-page) :is(.orf-user-role-select, .orf-user-current, .orf-user-status) {
+body:has(.orf-user-table-shell) :is(.orf-user-role-select, .orf-user-current, .orf-user-status) {
   border-radius: 999px;
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 42%, transparent);
 }
 
-body:has(.orf-user-management-page) :is(.orf-user-role-admin, .orf-user-role-member) {
+body:has(.orf-user-table-shell) :is(.orf-user-role-admin, .orf-user-role-member) {
   border-color: color-mix(in srgb, var(--orf-material-content-hairline) 48%, var(--orf-workbench-hairline));
   background: var(--orf-material-content-control);
 }
 
-body:has(.orf-user-management-page) .orf-user-role-admin {
+body:has(.orf-user-table-shell) .orf-user-role-admin {
   color: var(--members-gold);
 }
 
-body:has(.orf-user-management-page) .orf-user-role-member {
+body:has(.orf-user-table-shell) .orf-user-role-member {
   color: var(--members-cyan);
 }
 
-body:has(.orf-user-management-page) .orf-user-actions .orf-action-icon-button {
+body:has(.orf-user-table-shell) .orf-user-actions .orf-action-icon-button {
   border-color: color-mix(in srgb, var(--orf-material-content-hairline) 44%, var(--orf-workbench-hairline));
   border-radius: 50%;
   background: var(--orf-material-content-control);
@@ -906,29 +906,29 @@ body:has(.orf-user-management-page) .orf-user-actions .orf-action-icon-button {
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 44%, transparent);
 }
 
-body:has(.orf-user-management-page) .orf-user-actions .orf-action-icon-button:hover:not(:disabled) {
+body:has(.orf-user-table-shell) .orf-user-actions .orf-action-icon-button:hover:not(:disabled) {
   border-color: var(--orf-accent-border);
   background: color-mix(in srgb, var(--orf-material-content-control) 66%, var(--members-cyan-soft));
   color: var(--orf-accent-text);
 }
 
-body:has(.orf-user-management-page) .orf-user-actions .orf-action-button-danger:hover:not(:disabled) {
+body:has(.orf-user-table-shell) .orf-user-actions .orf-action-button-danger:hover:not(:disabled) {
   border-color: var(--orf-danger-border);
   background: var(--orf-danger-bg);
   color: var(--orf-danger-text);
 }
 
-body:has(.orf-user-management-page) .orf-user-empty {
+body:has(.orf-user-table-shell) .orf-user-empty {
   background: color-mix(in srgb, var(--orf-material-content-secondary) 54%, transparent);
 }
 
-body:has(.orf-user-management-page) .orf-user-dialog-backdrop {
+body:has(.orf-user-table-shell) .orf-user-dialog-backdrop {
   background:
     radial-gradient(circle at 50% 34%, color-mix(in srgb, var(--members-cyan) 13%, transparent), transparent 42%),
     rgba(3, 12, 18, 0.58);
 }
 
-body:has(.orf-user-management-page) .orf-user-dialog {
+body:has(.orf-user-table-shell) .orf-user-dialog {
   border-color: color-mix(in srgb, var(--orf-material-content-hairline) 54%, var(--orf-material-content-hairline));
   border-radius: 20px;
   background:
@@ -938,7 +938,7 @@ body:has(.orf-user-management-page) .orf-user-dialog {
   box-shadow: 0 28px 78px rgba(0, 8, 13, 0.44), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 64%, transparent);
 }
 
-body:has(.orf-user-management-page) .orf-user-dialog :is(input, select) {
+body:has(.orf-user-table-shell) .orf-user-dialog :is(input, select) {
   border-color: color-mix(in srgb, var(--orf-material-content-hairline) 46%, var(--orf-material-content-hairline));
   border-radius: 999px;
   background: var(--orf-material-content-control);
@@ -946,12 +946,12 @@ body:has(.orf-user-management-page) .orf-user-dialog :is(input, select) {
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 42%, transparent);
 }
 
-body:has(.orf-user-management-page) .orf-user-dialog :is(input, select):focus-visible {
+body:has(.orf-user-table-shell) .orf-user-dialog :is(input, select):focus-visible {
   border-color: color-mix(in srgb, #4fb6ca 56%, var(--orf-material-content-hairline));
   box-shadow: 0 0 0 3px rgba(79, 182, 202, 0.14), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 48%, transparent);
 }
 
-body:has(.orf-user-management-page) .orf-confirm-dialog {
+body:has(.orf-user-table-shell) .orf-confirm-dialog {
   border-color: color-mix(in srgb, var(--orf-material-content-hairline) 54%, var(--orf-material-content-hairline));
   border-radius: 20px;
   background:
@@ -961,48 +961,48 @@ body:has(.orf-user-management-page) .orf-confirm-dialog {
   box-shadow: 0 30px 82px rgba(0, 8, 13, 0.5), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 62%, transparent);
 }
 
-body:has(.orf-user-management-page) .orf-confirm-dialog :is(.orf-confirm-dialog-header, .orf-confirm-dialog-actions) {
+body:has(.orf-user-table-shell) .orf-confirm-dialog :is(.orf-confirm-dialog-header, .orf-confirm-dialog-actions) {
   border-color: color-mix(in srgb, var(--orf-material-content-hairline) 34%, var(--orf-material-content-hairline));
 }
 
-body:has(.orf-user-management-page) .orf-confirm-dialog-description {
+body:has(.orf-user-table-shell) .orf-confirm-dialog-description {
   color: var(--orf-text-secondary);
 }
 
-body:has(.orf-user-management-page) .orf-confirm-dialog-header > div > span {
+body:has(.orf-user-table-shell) .orf-confirm-dialog-header > div > span {
   color: var(--orf-text-muted);
 }
 
-body:has(.orf-user-management-page) .orf-confirm-dialog-actions {
+body:has(.orf-user-table-shell) .orf-confirm-dialog-actions {
   background: color-mix(in srgb, var(--orf-material-content-control) 62%, transparent);
 }
 
 @media (max-width: 560px) {
-  body:has(.orf-user-management-page) .orf-user-table-shell {
+  body:has(.orf-user-table-shell) .orf-user-table-shell {
     border-radius: 16px;
     box-shadow: 0 16px 38px color-mix(in srgb, var(--orf-text-primary) 15%, transparent), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 58%, transparent);
   }
 
-body:has(.orf-user-management-page) .orf-user-table tbody {
+body:has(.orf-user-table-shell) .orf-user-table tbody {
     gap: 8px;
     padding: 8px;
   }
 
-body:has(.orf-user-management-page) .orf-user-table tbody tr,
-  body:has(.orf-user-management-page) .orf-user-table tbody tr:nth-child(even) {
+body:has(.orf-user-table-shell) .orf-user-table tbody tr,
+  body:has(.orf-user-table-shell) .orf-user-table tbody tr:nth-child(even) {
     border: 1px solid color-mix(in srgb, var(--orf-material-content-hairline) 42%, var(--orf-workbench-hairline));
     border-radius: 14px;
     background: color-mix(in srgb, var(--orf-material-content-secondary) 58%, transparent);
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 32%, transparent);
   }
 
-body:has(.orf-user-management-page) .orf-user-table td:nth-child(6) {
+body:has(.orf-user-table-shell) .orf-user-table td:nth-child(6) {
     border-top-color: color-mix(in srgb, var(--orf-material-content-hairline) 38%, var(--orf-workbench-hairline));
   }
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  body:has(.orf-user-management-page) :is(.orf-user-table-shell, .orf-user-dialog) {
+  body:has(.orf-user-table-shell) :is(.orf-user-table-shell, .orf-user-dialog) {
     background: var(--orf-surface-elevated);
   }
 }
@@ -1718,5 +1718,279 @@ body:has(.orf-user-management-page) .orf-user-table td:nth-child(6) {
     height: 40px;
     min-height: 40px;
     border-radius: 50%;
+  }
+}
+
+/* Permission administration scene
+   -------------------------------
+   The permission matrix is one dense reading surface. It uses the shared
+   content materials for hierarchy and keeps role state, filtering and
+   permission decisions semantically distinct without introducing blur. */
+body:has(.orf-role-permissions-shell) .orf-app-shell[data-page-scene="page_system_background"] {
+  --permission-cyan: #167f99;
+  --permission-gold: #a97027;
+  --permission-gold-soft: rgba(187, 128, 43, 0.14);
+}
+
+html[data-orf-appearance="dark"] body:has(.orf-role-permissions-shell) .orf-app-shell[data-page-scene="page_system_background"] {
+  --permission-cyan: #72c8d9;
+  --permission-gold: #e0b665;
+  --permission-gold-soft: rgba(224, 182, 101, 0.14);
+}
+
+body:has(.orf-role-permissions-shell) .orf-system-management-tabs {
+  border-color: var(--orf-material-content-hairline);
+  background: color-mix(in srgb, var(--orf-material-content-control) 88%, transparent);
+  box-shadow: var(--orf-material-content-shadow-soft);
+}
+
+body:has(.orf-role-permissions-shell) .orf-system-management-tabs a:is(:hover, :focus-visible),
+body:has(.orf-role-permissions-shell) .orf-system-management-tab-active,
+body:has(.orf-role-permissions-shell) .orf-system-management-tab-active:hover {
+  background: color-mix(in srgb, var(--orf-accent-soft) 68%, var(--orf-material-content-control)) !important;
+  color: var(--orf-accent-text) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orf-accent-border) 68%, transparent), 0 7px 18px color-mix(in srgb, var(--permission-cyan) 12%, transparent);
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-permissions-shell {
+  overflow: hidden;
+  border: 1px solid var(--orf-material-content-hairline);
+  border-radius: 20px;
+  background:
+    linear-gradient(128deg, color-mix(in srgb, var(--orf-material-content-shine) 14%, transparent), transparent 34%),
+    color-mix(in srgb, var(--orf-material-content-primary) 82%, transparent);
+  box-shadow: var(--orf-material-content-shadow);
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-action-bar {
+  display: flex;
+  min-height: 66px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--orf-material-content-hairline);
+  background:
+    linear-gradient(104deg, color-mix(in srgb, var(--permission-gold-soft) 46%, transparent), transparent 32%),
+    linear-gradient(286deg, color-mix(in srgb, var(--orf-accent-soft) 42%, transparent), transparent 38%),
+    color-mix(in srgb, var(--orf-material-content-secondary) 84%, transparent);
+  padding: 12px 16px;
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-tabs {
+  display: inline-flex;
+  gap: 8px;
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-tabs button {
+  min-height: 38px;
+  gap: 9px;
+  border: 1px solid var(--orf-material-content-hairline);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orf-material-content-control) 78%, transparent);
+  color: var(--orf-text-secondary);
+  padding: 0 15px;
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 42%, transparent);
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-tabs button:hover {
+  border-color: var(--orf-material-content-hairline-strong);
+  background: var(--orf-material-content-control-hover);
+  color: var(--orf-text-primary);
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-tabs .orf-role-tab-active {
+  border-color: color-mix(in srgb, var(--permission-gold) 48%, var(--orf-accent-border)) !important;
+  background:
+    linear-gradient(118deg, color-mix(in srgb, var(--permission-gold-soft) 54%, transparent), transparent 56%),
+    color-mix(in srgb, var(--orf-accent-soft) 74%, var(--orf-material-content-control)) !important;
+  color: var(--orf-accent-text) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--permission-gold) 18%, transparent), 0 7px 18px color-mix(in srgb, var(--permission-cyan) 12%, transparent);
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-tabs .orf-role-tab-active span:last-child {
+  color: var(--permission-gold) !important;
+}
+
+body:has(.orf-role-permissions-shell) .orf-permission-metrics span {
+  height: 32px;
+  border-color: var(--orf-material-content-hairline);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orf-material-content-control) 72%, transparent);
+  color: var(--orf-text-muted);
+  padding-inline: 11px;
+}
+
+body:has(.orf-role-permissions-shell) .orf-permission-browser-controls {
+  border-bottom-color: var(--orf-material-content-hairline);
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 62%, transparent);
+  padding: 12px 14px;
+}
+
+body:has(.orf-role-permissions-shell) :is(.orf-permission-search, .orf-permission-category-tabs) {
+  border-color: var(--orf-material-content-hairline);
+  background: color-mix(in srgb, var(--orf-material-content-control) 76%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 32%, transparent);
+}
+
+body:has(.orf-role-permissions-shell) .orf-permission-search:focus-within {
+  border-color: var(--orf-accent-border);
+  box-shadow: var(--orf-focus-ring);
+}
+
+body:has(.orf-role-permissions-shell) .orf-permission-category-tabs button:is(:hover, .is-active) {
+  background: color-mix(in srgb, var(--orf-accent-soft) 70%, var(--orf-material-content-control));
+  color: var(--orf-accent-text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orf-accent-border) 56%, transparent), 0 4px 12px color-mix(in srgb, var(--permission-cyan) 9%, transparent);
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-permission-table-wrap {
+  background: color-mix(in srgb, var(--orf-material-content-primary) 68%, transparent);
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-permission-table {
+  color: var(--orf-text-primary);
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-permission-table thead th {
+  height: 42px;
+  border-color: var(--orf-material-content-hairline);
+  background: color-mix(in srgb, var(--orf-material-content-tertiary) 86%, transparent);
+  color: var(--orf-text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-permission-table tbody tr,
+body:has(.orf-role-permissions-shell) .orf-role-permission-table tbody tr:nth-child(even) {
+  background: transparent;
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-permission-table tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 42%, transparent);
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-permission-table tbody tr:hover {
+  background: color-mix(in srgb, var(--orf-accent-soft) 36%, var(--orf-material-content-control));
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-permission-table :is(th, td) {
+  height: 46px;
+  border-color: var(--orf-material-content-hairline);
+  padding: 9px 13px;
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-stage-cell {
+  border-right-color: var(--orf-material-content-hairline);
+  background: color-mix(in srgb, var(--permission-gold-soft) 54%, transparent);
+  color: var(--permission-gold);
+  font-weight: 650;
+}
+
+body:has(.orf-role-permissions-shell) .orf-permission-key-cell {
+  color: var(--orf-text-secondary);
+  font-size: 11px;
+  font-weight: 550;
+}
+
+body:has(.orf-role-permissions-shell) .orf-permission-toggle {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  border-color: var(--orf-material-content-hairline);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--orf-material-content-control) 74%, transparent);
+  color: var(--orf-text-muted);
+  padding: 0;
+}
+
+body:has(.orf-role-permissions-shell) .orf-permission-toggle-on {
+  border-color: color-mix(in srgb, var(--orf-accent-border) 82%, transparent);
+  background: color-mix(in srgb, var(--orf-accent-soft) 78%, var(--orf-material-content-control));
+  color: var(--orf-accent-text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orf-accent-border) 42%, transparent), 0 5px 14px color-mix(in srgb, var(--permission-cyan) 13%, transparent);
+}
+
+body:has(.orf-role-permissions-shell) .orf-role-permission-footer {
+  min-height: 48px;
+  border-color: var(--orf-material-content-hairline);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--permission-gold-soft) 36%, transparent), transparent 44%),
+    color-mix(in srgb, var(--orf-material-content-secondary) 68%, transparent);
+  color: var(--orf-text-muted);
+  padding: 11px 16px;
+  font-weight: 550;
+}
+
+@media (max-width: 900px) {
+  body:has(.orf-role-permissions-shell) .orf-role-action-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  body:has(.orf-role-permissions-shell) .orf-user-toolbar-actions {
+    display: flex;
+    width: 100%;
+  }
+
+  body:has(.orf-role-permissions-shell) .orf-user-toolbar-actions > .orf-action-button {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  body:has(.orf-role-permissions-shell) .orf-role-permissions-shell {
+    border-radius: 18px;
+  }
+
+  body:has(.orf-role-permissions-shell) .orf-role-action-bar {
+    padding: 13px;
+  }
+
+  body:has(.orf-role-permissions-shell) .orf-role-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body:has(.orf-role-permissions-shell) .orf-role-tabs button {
+    min-width: 0;
+    min-height: 42px;
+  }
+
+  body:has(.orf-role-permissions-shell) .orf-permission-browser-controls {
+    padding: 12px;
+  }
+
+  body:has(.orf-role-permissions-shell) .orf-role-permission-table tbody {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  body:has(.orf-role-permissions-shell) .orf-role-permission-table tbody tr,
+  body:has(.orf-role-permissions-shell) .orf-role-permission-table tbody tr:nth-child(even) {
+    border: 1px solid var(--orf-material-content-hairline);
+    border-radius: 16px;
+    background:
+      linear-gradient(128deg, color-mix(in srgb, var(--orf-material-content-shine) 12%, transparent), transparent 42%),
+      color-mix(in srgb, var(--orf-material-content-secondary) 76%, transparent);
+    padding: 13px;
+  }
+
+  body:has(.orf-role-permissions-shell) .orf-role-permission-table tbody tr:hover {
+    background: color-mix(in srgb, var(--orf-accent-soft) 30%, var(--orf-material-content-secondary));
+  }
+
+  body:has(.orf-role-permissions-shell) .orf-role-permission-table :is(th, td) {
+    height: auto;
+    padding: 0;
+  }
+
+  body:has(.orf-role-permissions-shell) .orf-role-stage-cell {
+    background: transparent;
+  }
+
+  body:has(.orf-role-permissions-shell) .orf-role-permission-footer {
+    padding-inline: 13px;
   }
 }
