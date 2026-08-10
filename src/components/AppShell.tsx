@@ -313,6 +313,7 @@ function AppShellFrame() {
           data-page-scene={pageBackgroundScene ?? "none"}
           data-mobile-primary-action={mobilePrimaryAction}
           data-orf-appearance={appearanceMode}
+          data-workspace-material-content-tone={workspaceMaterial.contentTone}
           data-desktop-chrome={desktopChromeEnabled ? "true" : "false"}
           data-desktop-compact={compactDesktopChrome ? "true" : "false"}
           data-display-contrast={displayPreferences.contrast}

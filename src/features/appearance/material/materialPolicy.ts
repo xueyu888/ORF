@@ -97,11 +97,9 @@ function mixChannel(base: number, environment: number, amount: number) {
 function backdropTone(input: MaterialPolicyInput) {
   if (input.preferences.tone === "soft-light") return "soft-light" as const;
   if (input.preferences.tone === "soft-dark") return "soft-dark" as const;
-  if (input.role === "sidebar") {
-    const { darkPixelShare, lightPixelShare, luminanceP50 } = input.analysis;
-    if (luminanceP50 < 0.46 || darkPixelShare > lightPixelShare + 0.18) return "soft-dark" as const;
-    if (luminanceP50 > 0.56 || lightPixelShare > darkPixelShare + 0.18) return "soft-light" as const;
-  }
+  const { darkPixelShare, lightPixelShare, luminanceP50 } = input.analysis;
+  if (luminanceP50 < 0.46 || darkPixelShare > lightPixelShare + 0.18) return "soft-dark" as const;
+  if (luminanceP50 > 0.56 || lightPixelShare > darkPixelShare + 0.18) return "soft-light" as const;
   return input.appearance === "dark" ? "soft-dark" as const : "soft-light" as const;
 }
 

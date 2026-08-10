@@ -315,9 +315,20 @@ function ChatMessageMoreMenu({
     const panelWidth = panelRect?.width ?? 180;
     const panelHeight = panelRect?.height ?? Math.min(320, actions.length * 32 + 8);
     const topbarBottom = document.querySelector<HTMLElement>(".orf-topbar")?.getBoundingClientRect().bottom ?? 0;
-    const bottomNavigationTop = document.querySelector<HTMLElement>(".orf-mobile-bottom-nav")?.getBoundingClientRect().top ?? window.innerHeight;
+    const bottomNavigation = document.querySelector<HTMLElement>(".orf-mobile-bottom-nav");
+    const bottomNavigationRect = bottomNavigation?.getBoundingClientRect();
+    const bottomNavigationTop = bottomNavigationRect && bottomNavigationRect.height > 0
+      ? bottomNavigationRect.top
+      : window.innerHeight;
+    const messageSurface = anchor.closest<HTMLElement>(".orf-chat-main, .orf-chat-thread-panel");
+    const composerRect = messageSurface?.querySelector<HTMLElement>(":scope > .orf-chat-composer")?.getBoundingClientRect();
+    const composerTop = composerRect && composerRect.height > 0 ? composerRect.top : window.innerHeight;
     const safeTop = Math.max(viewportPadding, topbarBottom + viewportPadding);
-    const safeBottom = Math.min(window.innerHeight - viewportPadding, bottomNavigationTop - viewportPadding);
+    const safeBottom = Math.min(
+      window.innerHeight - viewportPadding,
+      bottomNavigationTop - viewportPadding,
+      composerTop - viewportPadding,
+    );
     const belowTop = anchorRect.bottom + gap;
     const aboveTop = anchorRect.top - panelHeight - gap;
     const hasEnoughBelow = belowTop + panelHeight <= safeBottom;
