@@ -404,7 +404,11 @@ export function FeedbackInboxPage() {
         ) : feedbackReadModel.error ? (
           <FeedbackEmptyState title="反馈读取失败" description={feedbackReadModel.error} />
         ) : !hasActiveFilters && issueCounts.all === 0 ? (
-          <FeedbackEmptyState title="还没有反馈" description="新反馈出现后，会在这里进入分诊、处理和验证队列。" />
+          <FeedbackEmptyState
+            description="新反馈出现后，会在这里进入分诊、处理和验证队列。"
+            icon={<Inbox />}
+            title="还没有反馈"
+          />
         ) : (
           <FeedbackEmptyState title="没有匹配的反馈" description="调整搜索或筛选条件后再看。" />
         )}

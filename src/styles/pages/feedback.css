@@ -202,10 +202,27 @@ html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_feedback_b
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--orf-accent-soft) 80%, transparent), 0 0 14px color-mix(in srgb, var(--orf-accent) 42%, transparent);
 }
 
-.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-list > .feedback-empty-state {
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-issue-list,
+  .feedback-label-list
+) > .feedback-empty-state {
+  min-height: 154px;
+  justify-items: center;
+  place-content: center;
+  border: 0;
+  border-radius: 0;
   background:
-    radial-gradient(circle at 50% 32%, color-mix(in srgb, var(--orf-accent-soft) 46%, transparent), transparent 44%),
+    radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--orf-accent-soft) 54%, transparent), transparent 40%),
     color-mix(in srgb, var(--orf-material-content-secondary) 42%, transparent);
+  text-align: center;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-empty-state-icon {
+  border-color: color-mix(in srgb, var(--orf-accent-border) 74%, var(--orf-material-content-hairline));
+  background: color-mix(in srgb, var(--orf-material-content-control) 66%, var(--orf-accent-soft));
+  box-shadow:
+    0 12px 28px color-mix(in srgb, var(--orf-accent) 14%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 74%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-list-footer {

@@ -63,7 +63,7 @@ export function FeedbackLabelsPage() {
             ))}
           </div>
         ) : (
-          <FeedbackEmptyState title="没有匹配的分类" description="调整搜索条件后再看。" />
+          <FeedbackEmptyState description="调整搜索条件后再看。" icon={<Tag />} title="没有匹配的分类" />
         )}
       </section>
     </div>
