@@ -19,9 +19,9 @@ type MaterialPolicyInput = {
 };
 
 const roleParameters: Record<PersistentMaterialRole, { opacity: number; blur: number; shadow: number }> = {
-  sidebar: { opacity: 0.5, blur: 22, shadow: 0.22 },
-  topbar: { opacity: 0.43, blur: 18, shadow: 0.12 },
-  workspace: { opacity: 0.58, blur: 17, shadow: 0.08 },
+  sidebar: { opacity: 0.4, blur: 22, shadow: 0.2 },
+  topbar: { opacity: 0.35, blur: 18, shadow: 0.1 },
+  workspace: { opacity: 0.41, blur: 17, shadow: 0.07 },
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -80,8 +80,8 @@ export function deriveAdaptiveMaterial(input: MaterialPolicyInput): AdaptiveMate
       + extremeShare * 0.08
       + focusStability
       + (tone === "soft-dark" ? 0.035 : 0),
-    input.role === "topbar" ? 0.22 : 0.28,
-    input.role === "workspace" ? 0.72 : 0.66,
+    input.role === "topbar" ? 0.18 : input.role === "workspace" ? 0.22 : 0.24,
+    input.role === "workspace" ? 0.58 : 0.56,
   );
 
   return {
