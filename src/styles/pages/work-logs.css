@@ -1272,7 +1272,7 @@
   justify-content: center;
   gap: 7px;
   border: 1px solid var(--orf-border);
-  border-radius: 8px;
+  border-radius: var(--orf-radius-control);
   background: var(--orf-bg-card);
   color: var(--orf-text-primary);
   padding: 0 10px;
@@ -1283,7 +1283,7 @@
 .work-logs-report-scope {
   padding: 3px;
   border: 1px solid var(--orf-border);
-  border-radius: 9px;
+  border-radius: var(--orf-radius-control);
   background: var(--orf-bg-muted);
 }
 
@@ -1294,7 +1294,7 @@
   justify-content: center;
   gap: 6px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--orf-radius-control);
   background: transparent;
   color: var(--orf-text-secondary);
   padding: 0 10px;
@@ -1695,7 +1695,7 @@ button.work-logs-team-cell:focus-visible {
   flex: 0 0 auto;
   place-items: center;
   border: 1px solid var(--orf-border);
-  border-radius: 7px;
+  border-radius: 50%;
   background: var(--orf-bg-card);
   color: var(--orf-text-secondary);
   font-size: 18px;
@@ -2273,7 +2273,7 @@ button.work-logs-team-cell:focus-visible {
   border-radius: var(--orf-radius-control);
 }
 
-.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-report-popover,
+body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) .work-logs-report-popover,
 .orf-app-shell[data-page-scene="page_work_logs_background"] .work-log-reminder-modal {
   border-color: var(--orf-material-content-hairline);
   border-radius: 20px;
@@ -2283,12 +2283,12 @@ button.work-logs-team-cell:focus-visible {
   box-shadow: var(--orf-material-content-shadow);
 }
 
-.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-report-popover-header button {
+body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) .work-logs-report-popover-header button {
   border-radius: 50%;
   background: var(--orf-material-content-control);
 }
 
-.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-report-popover-entry {
+body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) .work-logs-report-popover-entry {
   border-color: color-mix(in srgb, var(--orf-material-content-hairline) 48%, var(--orf-workbench-hairline));
   background: var(--orf-material-content-control);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 40%, transparent);
