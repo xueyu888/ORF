@@ -134,7 +134,7 @@ type AdaptiveMaterial = {
 | --- | --- | ---: | --- |
 | `sidebar` | AppShell | 是 | 全局导航材质 |
 | `topbar` | AppShell | 是 | 窗口标题、搜索和全局操作 |
-| `workspace` | AppShell | 是 | 当前页面的环境底座 |
+| `workspace` | AppShell / AuthPage | 是 | 当前页面或登录入口的环境底座 |
 | `content` | 页面/组件 | 否 | 表格、列表、编辑器、统计面板、设置分组 |
 | `floating` | 通用浮层 | 临时允许 | Popover、菜单、搜索结果、预览、Toast |
 | `modal` | 通用弹窗 | 临时允许 | Dialog 与需要隔离注意力的确认流程 |

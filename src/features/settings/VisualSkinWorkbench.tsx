@@ -308,6 +308,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
             userId: currentUser.id,
             imageUrl: selectedBackground.url,
             crop: draftCrop,
+            material: nextConfig.material,
           }).catch(() => undefined);
         }
       }

@@ -1,7 +1,10 @@
 import {
   defaultVisualBackgroundCrop,
+  defaultVisualMaterialPreferences,
   normalizeVisualBackgroundCrop,
+  normalizeVisualMaterialPreferences,
   type VisualBackgroundCrop,
+  type VisualMaterialPreferences,
 } from "../domain/settings/visualBackgrounds";
 
 const storageKey = "orf.loginBackgroundPreview.v1";
@@ -11,6 +14,7 @@ const previewMaxHeight = 1200;
 export type CachedLoginBackgroundPreview = {
   crop: VisualBackgroundCrop;
   dataUrl: string;
+  material: VisualMaterialPreferences;
   updatedAt: string;
   userId: string;
 };
@@ -53,6 +57,7 @@ export function readCachedLoginBackgroundPreview(): CachedLoginBackgroundPreview
     return {
       userId: parsed.userId,
       dataUrl: parsed.dataUrl,
+      material: normalizeVisualMaterialPreferences(parsed.material ?? defaultVisualMaterialPreferences),
       updatedAt: parsed.updatedAt,
       crop: normalizeVisualBackgroundCrop(parsed.crop ?? parsed.placement ?? defaultVisualBackgroundCrop),
     };
@@ -64,6 +69,7 @@ export function readCachedLoginBackgroundPreview(): CachedLoginBackgroundPreview
 export async function cacheLoginBackgroundPreview(input: {
   crop: VisualBackgroundCrop;
   imageUrl: string;
+  material: VisualMaterialPreferences;
   userId: string;
 }) {
   if (!canUseStorage()) return;
@@ -78,6 +84,7 @@ export async function cacheLoginBackgroundPreview(input: {
   const preview: CachedLoginBackgroundPreview = {
     userId: input.userId,
     dataUrl: canvas.toDataURL("image/jpeg", 0.86),
+    material: normalizeVisualMaterialPreferences(input.material),
     updatedAt: new Date().toISOString(),
     crop: normalizeVisualBackgroundCrop(input.crop),
   };

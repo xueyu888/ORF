@@ -25,9 +25,6 @@ export const visualSkinSlots = [
   { scene: "page_feedback_background", label: "反馈", group: "页面", kind: "page", previewShape: "page" },
   { scene: "page_reports_background", label: "统计", group: "页面", kind: "page", previewShape: "page" },
   { scene: "page_system_background", label: "系统管理", group: "页面", kind: "page", previewShape: "page" },
-  { scene: "page_dashboard_background", label: "仪表盘", group: "页面", kind: "page", previewShape: "page" },
-  { scene: "page_strategy_map_background", label: "战略地图", group: "页面", kind: "page", previewShape: "page" },
-  { scene: "page_ai_evaluation_background", label: "AI 评估", group: "页面", kind: "page", previewShape: "page" },
   { scene: "page_loot_background", label: "目标战利品", group: "页面", kind: "page", previewShape: "page" },
 ] as const satisfies readonly VisualSkinSlotDescriptor[];
 

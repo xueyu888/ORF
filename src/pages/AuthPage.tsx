@@ -5,6 +5,9 @@ import { useNavigate } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
 import { VisualBackgroundSlot } from "../components/VisualBackgroundSlot";
 import { Button, IconButton } from "../components/ui";
+import { readCachedAppearanceMode } from "../features/appearance/appearanceMode";
+import { VisualMaterialLayer } from "../features/appearance/material/VisualMaterialLayer";
+import { useAdaptiveMaterial } from "../features/appearance/material/useAdaptiveMaterial";
 import { DesktopWindowControls } from "../features/desktop/DesktopWindowControls";
 import { isDesktopShellAvailable } from "../features/desktop/desktopShellRuntime";
 import {
@@ -21,7 +24,9 @@ import { getUserPreferences, getVisualBackgrounds } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import {
   defaultVisualBackgroundCrop,
+  defaultVisualMaterialPreferences,
   type VisualBackgroundCrop,
+  type VisualMaterialPreferences,
 } from "../domain/settings/visualBackgrounds";
 import { readCachedLoginBackgroundPreview } from "../utils/loginBackgroundCache";
 import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
@@ -32,6 +37,7 @@ type AuthHeroOption = {
   crop: VisualBackgroundCrop;
   id: string;
   label: string;
+  material: VisualMaterialPreferences;
   src: string;
 };
 
@@ -44,7 +50,7 @@ const authHeroModules = import.meta.glob("../assets/auth/*.{png,jpg,jpeg,webp,av
 const authHeroOptions: AuthHeroOption[] = Object.entries(authHeroModules)
   .map(([path, src]) => {
     const label = path.split("/").at(-1) ?? path;
-    return { id: path, label, crop: defaultVisualBackgroundCrop, src };
+    return { id: path, label, crop: defaultVisualBackgroundCrop, material: defaultVisualMaterialPreferences, src };
   })
   .sort((first, second) => {
     if (first.label === defaultAuthHeroFile) {
@@ -70,6 +76,7 @@ export function AuthPage() {
           id: `cached-login-background:${cached.userId}`,
           label: "本机登录页",
           crop: cached.crop,
+          material: cached.material,
           src: cached.dataUrl,
         }
       : null;
@@ -87,6 +94,7 @@ export function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [viewportSize, setViewportSize] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
 
   const applySavedAccount = async (account: SavedCredentialAccount) => {
     setEmail(account.email);
@@ -113,6 +121,12 @@ export function AuthPage() {
 
   useEffect(() => {
     setDesktopChromeEnabled(isDesktopShellAvailable());
+  }, []);
+
+  useEffect(() => {
+    const updateViewportSize = () => setViewportSize({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener("resize", updateViewportSize);
+    return () => window.removeEventListener("resize", updateViewportSize);
   }, []);
 
   useEffect(() => {
@@ -179,6 +193,7 @@ export function AuthPage() {
             id: background.id,
             label: background.fileName,
             crop: data.config.crops[background.id] ?? defaultVisualBackgroundCrop,
+            material: data.config.material,
             src: background.url,
           }));
           const visibleOptions = cachedHero ? [cachedHero, ...options] : options;
@@ -286,6 +301,15 @@ export function AuthPage() {
   const busyLabel = mode === "login" ? "正在登录" : "正在创建";
   const heroOptions = configuredHeroOptions.length > 0 ? configuredHeroOptions : cachedHero ? [cachedHero, ...authHeroOptions] : authHeroOptions;
   const selectedHero = heroOptions.find((option) => option.id === selectedHeroId) ?? heroOptions[0];
+  const loginMaterial = useAdaptiveMaterial({
+    appearance: readCachedAppearanceMode(),
+    crop: selectedHero?.crop ?? defaultVisualBackgroundCrop,
+    highContrast: document.documentElement.dataset.orfDisplayContrast === "high",
+    imageUrl: selectedHero?.src ?? null,
+    preferences: selectedHero?.material ?? defaultVisualMaterialPreferences,
+    role: "workspace",
+    viewport: viewportSize,
+  });
   const rememberLabel = credentialProvider === "desktop" ? "记住到本机" : "让浏览器记住";
 
   return (
@@ -296,6 +320,7 @@ export function AuthPage() {
         imageUrl={selectedHero?.src ?? null}
         crop={selectedHero?.crop ?? defaultVisualBackgroundCrop}
       />
+      <VisualMaterialLayer className="orf-auth-material" material={loginMaterial} role="workspace" />
       {heroOptions.length > 1 && <span className="orf-auth-top-gradient" aria-hidden="true" />}
       {desktopChromeEnabled && (
         <div className="orf-auth-desktop-chrome" aria-label="窗口标题栏">
