@@ -2019,3 +2019,299 @@
   border-radius: var(--orf-radius-control);
   padding: 3px;
 }
+
+/* System settings scene
+   ---------------------
+   Runtime limits, integrations and the visual workbench are separate tools.
+   This route keeps them on independent content materials so the page
+   background remains present without turning configuration rows into glass. */
+body:has(.orf-settings-page-single) .orf-settings-detail {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-detail-heading {
+  gap: 5px;
+  min-width: 0;
+  padding-inline: 2px;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-detail-heading > span {
+  color: var(--orf-accent-text);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-detail-heading p {
+  color: var(--orf-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+body:has(.orf-settings-page-single) .orf-system-settings-workspace-tabs {
+  justify-self: end;
+  border-color: var(--orf-material-content-hairline);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orf-material-content-control) 82%, transparent);
+  box-shadow: var(--orf-material-content-shadow-soft);
+}
+
+body:has(.orf-settings-page-single) .orf-system-settings-workspace-tabs > button {
+  min-height: 38px;
+  border-radius: 999px;
+  color: var(--orf-text-muted);
+}
+
+body:has(.orf-settings-page-single) .orf-system-settings-workspace-tabs > button:hover {
+  background: var(--orf-material-content-control-hover);
+  color: var(--orf-text-primary);
+}
+
+body:has(.orf-settings-page-single) .orf-system-settings-workspace-tabs > button[aria-selected="true"] {
+  background: color-mix(in srgb, var(--orf-accent-soft) 72%, var(--orf-material-content-control));
+  color: var(--orf-accent-text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orf-accent-border) 64%, transparent), 0 7px 18px color-mix(in srgb, var(--orf-accent) 11%, transparent);
+}
+
+body:has(.orf-settings-page-single) .orf-system-settings-workspace-panel {
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-sections {
+  gap: 14px;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-background-section {
+  overflow: hidden;
+  border: 1px solid var(--orf-material-content-hairline);
+  border-radius: 20px;
+  background:
+    linear-gradient(128deg, color-mix(in srgb, var(--orf-material-content-shine) 14%, transparent), transparent 36%),
+    color-mix(in srgb, var(--orf-material-content-primary) 82%, transparent);
+  box-shadow: var(--orf-material-content-shadow);
+}
+
+body:has(.orf-settings-page-single) .orf-settings-background-section:first-child {
+  border-top: 1px solid var(--orf-material-content-hairline);
+}
+
+body:has(.orf-settings-page-single) .orf-settings-section-header {
+  min-height: 70px;
+  border-bottom: 1px solid var(--orf-material-content-hairline);
+  background:
+    linear-gradient(104deg, color-mix(in srgb, var(--orf-accent-soft) 35%, transparent), transparent 34%),
+    color-mix(in srgb, var(--orf-material-content-secondary) 76%, transparent);
+  padding: 14px 18px;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-section-header h2 {
+  color: var(--orf-text-primary);
+  font-size: 17px;
+  font-weight: 650;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-section-header p {
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-background-controls {
+  gap: 12px 18px;
+  padding: 17px 18px 18px;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-background-label {
+  align-items: center;
+  color: var(--orf-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-background-label svg {
+  color: var(--orf-accent-text);
+}
+
+body:has(.orf-settings-page-single) :is(
+  .orf-settings-number-input,
+  .orf-settings-unit-select,
+  .orf-settings-gitlab-select
+) {
+  min-height: 38px;
+  border-color: var(--orf-material-content-hairline);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orf-material-content-control) 80%, transparent);
+  color: var(--orf-text-primary);
+  font-weight: 550;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 34%, transparent);
+}
+
+body:has(.orf-settings-page-single) :is(
+  .orf-settings-number-input,
+  .orf-settings-gitlab-select
+):focus-visible {
+  border-color: var(--orf-accent-border);
+  box-shadow: var(--orf-focus-ring);
+}
+
+body:has(.orf-settings-page-single) .orf-settings-selected-text {
+  color: var(--orf-text-secondary);
+  font-weight: 550;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-gitlab-body {
+  gap: 14px;
+  padding: 16px 18px 18px;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-gitlab-summary {
+  gap: 7px;
+}
+
+body:has(.orf-settings-page-single) :is(.orf-settings-gitlab-badge, .orf-settings-gitlab-group) {
+  min-height: 28px;
+  border-color: var(--orf-material-content-hairline);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orf-material-content-control) 72%, transparent);
+  color: var(--orf-text-muted);
+  padding-inline: 10px;
+  font-size: 11px;
+  font-weight: 550;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-gitlab-badge-active {
+  border-color: color-mix(in srgb, var(--orf-accent-border) 72%, transparent);
+  background: color-mix(in srgb, var(--orf-accent-soft) 68%, var(--orf-material-content-control));
+  color: var(--orf-accent-text);
+}
+
+body:has(.orf-settings-page-single) .orf-settings-gitlab-create {
+  gap: 9px;
+  border: 1px solid var(--orf-material-content-hairline);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--orf-material-content-tertiary) 62%, transparent);
+  padding: 11px;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-gitlab-events {
+  gap: 5px;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-gitlab-events label {
+  min-height: 32px;
+  border-color: var(--orf-material-content-hairline);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orf-material-content-control) 72%, transparent);
+  color: var(--orf-text-secondary);
+  padding-inline: 9px;
+  font-size: 11px;
+  font-weight: 550;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-gitlab-table {
+  overflow: hidden;
+  border-color: var(--orf-material-content-hairline);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 58%, transparent);
+}
+
+body:has(.orf-settings-page-single) .orf-settings-gitlab-row {
+  border-color: var(--orf-material-content-hairline);
+}
+
+body:has(.orf-settings-page-single) .orf-settings-gitlab-head {
+  background: color-mix(in srgb, var(--orf-material-content-tertiary) 76%, transparent);
+  color: var(--orf-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+body:has(.orf-settings-page-single) .orf-settings-background-state {
+  color: var(--orf-text-muted);
+  font-weight: 550;
+}
+
+body:has(.orf-settings-page-single) .orf-system-settings-appearance-panel .orf-skin-workbench {
+  overflow: hidden;
+  border: 1px solid var(--orf-material-content-hairline);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--orf-material-content-primary) 82%, transparent);
+  box-shadow: var(--orf-material-content-shadow);
+}
+
+body:has(.orf-settings-page-single) .orf-skin-workbench-heading {
+  border-color: var(--orf-material-content-hairline);
+  background:
+    linear-gradient(106deg, color-mix(in srgb, var(--orf-accent-soft) 35%, transparent), transparent 40%),
+    color-mix(in srgb, var(--orf-material-content-secondary) 76%, transparent);
+}
+
+body:has(.orf-settings-page-single) .orf-skin-slot-rail {
+  border-color: var(--orf-material-content-hairline);
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 62%, transparent);
+}
+
+body:has(.orf-settings-page-single) .orf-skin-editor {
+  background: color-mix(in srgb, var(--orf-material-content-primary) 72%, transparent);
+}
+
+body:has(.orf-settings-page-single) :is(.orf-skin-segmented, .orf-skin-page-target) {
+  border-color: var(--orf-material-content-hairline);
+  background: color-mix(in srgb, var(--orf-material-content-control) 76%, transparent);
+}
+
+body:has(.orf-settings-page-single) .orf-skin-inspector,
+body:has(.orf-settings-page-single) .orf-skin-gallery-shell {
+  border-color: var(--orf-material-content-hairline);
+}
+
+body:has(.orf-settings-page-single) :is(.orf-skin-gallery-card, .orf-skin-empty-upload) {
+  border-color: var(--orf-material-content-hairline);
+  background: color-mix(in srgb, var(--orf-material-content-control) 72%, transparent);
+}
+
+@media (max-width: 760px) {
+  body:has(.orf-settings-page-single) .orf-settings-detail {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  body:has(.orf-settings-page-single) .orf-system-settings-workspace-tabs,
+  body:has(.orf-settings-page-single) .orf-system-settings-workspace-panel {
+    grid-column: 1;
+  }
+
+  body:has(.orf-settings-page-single) .orf-system-settings-workspace-tabs {
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  body:has(.orf-settings-page-single) .orf-settings-background-section,
+  body:has(.orf-settings-page-single) .orf-system-settings-appearance-panel .orf-skin-workbench {
+    border-radius: 18px;
+  }
+
+  body:has(.orf-settings-page-single) .orf-settings-section-header {
+    min-height: 0;
+    padding: 14px;
+  }
+
+  body:has(.orf-settings-page-single) :is(.orf-settings-background-controls, .orf-settings-gitlab-body) {
+    padding: 14px;
+  }
+
+  body:has(.orf-settings-page-single) .orf-settings-gitlab-create {
+    padding: 10px;
+  }
+}
