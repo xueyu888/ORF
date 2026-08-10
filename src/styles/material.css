@@ -101,22 +101,7 @@ html[data-orf-appearance="dark"] {
   inset: 0;
 }
 
-.orf-sidebar[data-material-content-tone="dark"] {
-  --orf-sidebar-divider: rgba(26, 46, 54, 0.14);
-  --orf-sidebar-icon: #213840;
-  --orf-sidebar-text: #15292f;
-  --orf-sidebar-text-muted: #587078;
-  --orf-sidebar-link-text: #294149;
-  --orf-sidebar-command-text: #15292f;
-  --orf-sidebar-control-bg: rgba(255, 255, 255, 0.4);
-  --orf-sidebar-control-hover-bg: rgba(255, 255, 255, 0.62);
-  --orf-sidebar-selected-bg: rgba(20, 126, 150, 0.15);
-  --orf-sidebar-hover-bg: rgba(255, 255, 255, 0.34);
-  --orf-sidebar-text-shadow: 0 1px 1px rgba(255, 255, 255, 0.48);
-  --orf-sidebar-icon-shadow: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.42));
-}
-
-.orf-sidebar[data-material-content-tone="light"] {
+.orf-sidebar {
   --orf-sidebar-divider: rgba(218, 237, 242, 0.14);
   --orf-sidebar-icon: #edf8fa;
   --orf-sidebar-text: #f3fafb;
