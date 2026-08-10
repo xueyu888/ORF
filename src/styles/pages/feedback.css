@@ -1,43 +1,609 @@
-/* feedback.css: owned styles only; global visual semantics come from design tokens. */
-.orf-main-content[data-page-skin="true"] .feedback-issue-header {
-  border: 1px solid color-mix(in srgb, var(--orf-border) 76%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--orf-surface-panel) 84%, transparent);
-  box-shadow: 0 1px 2px rgba(17, 34, 48, 0.05);
-  margin-bottom: 14px;
-  padding: 10px 12px;
-  -webkit-backdrop-filter: blur(14px) saturate(1.02);
-  backdrop-filter: blur(14px) saturate(1.02);
+/* Feedback scene material contract
+   --------------------------------
+   Feedback is an issue-response console: queues and lifecycle state stay
+   precise, while the surrounding material borrows colour and light from the
+   configured scene. Cards remain reading surfaces; capsules are reserved for
+   compact controls, filters, state and short actions. */
+.orf-app-shell[data-page-scene="page_feedback_background"] {
+  --orf-bg-app: #dfe9ea;
+  --orf-bg-page: transparent;
+  --orf-bg-card: rgba(249, 252, 250, 0.72);
+  --orf-bg-elevated: rgba(252, 253, 250, 0.9);
+  --orf-bg-muted: rgba(228, 240, 240, 0.62);
+  --orf-bg-row-hover: rgba(223, 243, 242, 0.58);
+  --orf-text-primary: #172d33;
+  --orf-text-secondary: #3f5d64;
+  --orf-text-muted: #688087;
+  --orf-text-faint: #96a8ab;
+  --orf-border: rgba(38, 77, 84, 0.14);
+  --orf-border-strong: rgba(32, 73, 82, 0.24);
+  --orf-accent: #0a8696;
+  --orf-accent-hover: #087382;
+  --orf-accent-soft: rgba(10, 134, 150, 0.13);
+  --orf-accent-border: rgba(10, 134, 150, 0.36);
+  --orf-accent-text: #087586;
+  --orf-surface-chrome: rgba(239, 248, 247, 0.54);
+  --orf-surface-panel: rgba(246, 251, 249, 0.6);
+  --orf-surface-panel-solid: rgba(248, 252, 250, 0.88);
+  --orf-surface-content-solid: rgba(252, 253, 250, 0.92);
+  --orf-surface-elevated: rgba(252, 253, 250, 0.9);
+  --orf-surface-control: rgba(248, 252, 250, 0.58);
+  --orf-surface-control-solid: rgba(247, 251, 249, 0.88);
+  --orf-surface-control-hover: rgba(255, 255, 252, 0.78);
+  --orf-workbench-hairline: rgba(42, 79, 86, 0.15);
+  --orf-workbench-hairline-strong: rgba(36, 76, 84, 0.24);
+  --orf-topbar-surface: rgba(238, 248, 247, 0.62);
+  --orf-topbar-surface-strong: rgba(251, 253, 250, 0.84);
+  --orf-topbar-control-bg: rgba(248, 252, 250, 0.62);
+  --orf-topbar-control-hover-bg: rgba(255, 255, 252, 0.84);
+  --orf-topbar-control-border: rgba(42, 78, 85, 0.16);
+  --orf-topbar-control-text: #24434a;
+  --orf-topbar-control-muted: #6f868b;
+  --feedback-glass-ambient: rgba(233, 245, 244, 0.48);
+  --feedback-glass-panel: rgba(244, 250, 248, 0.6);
+  --feedback-glass-reading: rgba(251, 253, 250, 0.72);
+  --feedback-glass-row: rgba(255, 255, 252, 0.34);
+  --feedback-glass-control: rgba(248, 252, 250, 0.54);
+  --feedback-glass-header: rgba(222, 240, 240, 0.46);
+  --feedback-glass-inspector: rgba(238, 248, 247, 0.66);
+  --feedback-glass-float: rgba(250, 253, 250, 0.84);
+  --feedback-glass-border: rgba(255, 255, 255, 0.66);
+  --feedback-glass-shine: rgba(255, 255, 255, 0.82);
+  --feedback-glass-shadow: 0 22px 54px rgba(21, 54, 60, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.76);
+  --feedback-glass-shadow-soft: 0 14px 34px rgba(21, 54, 60, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.66);
+  --feedback-glass-filter: blur(27px) saturate(1.1);
+  --feedback-control-filter: blur(17px) saturate(1.06);
+  --feedback-signal: #d97745;
+  --feedback-signal-soft: rgba(217, 119, 69, 0.13);
+  --orf-page-safety-overlay:
+    radial-gradient(circle at 74% 12%, rgba(255, 247, 225, 0.06), transparent 34%),
+    linear-gradient(112deg, rgba(211, 234, 235, 0.08) 0%, rgba(255, 248, 230, 0.025) 52%, rgba(195, 226, 229, 0.07) 100%);
+  --orf-sidebar-bg-overlay:
+    linear-gradient(105deg, rgba(5, 24, 39, 0.48) 0%, rgba(7, 40, 56, 0.31) 60%, rgba(9, 57, 70, 0.14) 100%),
+    linear-gradient(180deg, rgba(2, 15, 25, 0.03), rgba(2, 15, 25, 0.38));
+  --orf-sidebar-selected-bg: rgba(112, 211, 216, 0.2);
+  --orf-sidebar-hover-bg: rgba(112, 211, 216, 0.13);
+  --orf-sidebar-divider: rgba(218, 242, 242, 0.14);
+  --orf-sidebar-text: #f7fdfd;
+  --orf-sidebar-text-muted: #c0dcdf;
+  --orf-sidebar-icon: #e8fbfa;
 }
 
-.feedback-issue-page .feedback-issue-query-panel {
-  border-radius: var(--orf-radius-card);
+html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_feedback_background"] {
+  --orf-bg-app: #08171c;
+  --orf-bg-page: transparent;
+  --orf-bg-card: rgba(9, 27, 33, 0.72);
+  --orf-bg-elevated: rgba(12, 31, 37, 0.9);
+  --orf-bg-muted: rgba(18, 44, 50, 0.66);
+  --orf-bg-row-hover: rgba(37, 77, 82, 0.54);
+  --orf-text-primary: #eff8f6;
+  --orf-text-secondary: #c3d7d4;
+  --orf-text-muted: #94aaa8;
+  --orf-text-faint: #687f7e;
+  --orf-border: rgba(177, 218, 213, 0.15);
+  --orf-border-strong: rgba(184, 226, 220, 0.25);
+  --orf-accent: #4fc2cd;
+  --orf-accent-hover: #70d2da;
+  --orf-accent-soft: rgba(79, 194, 205, 0.17);
+  --orf-accent-border: rgba(101, 211, 219, 0.38);
+  --orf-accent-text: #8bdae0;
+  --orf-surface-chrome: rgba(5, 20, 25, 0.55);
+  --orf-surface-panel: rgba(7, 23, 29, 0.61);
+  --orf-surface-panel-solid: rgba(9, 27, 33, 0.86);
+  --orf-surface-content-solid: rgba(11, 29, 35, 0.91);
+  --orf-surface-elevated: rgba(12, 31, 37, 0.9);
+  --orf-surface-control: rgba(13, 34, 40, 0.58);
+  --orf-surface-control-solid: rgba(14, 35, 41, 0.88);
+  --orf-surface-control-hover: rgba(26, 55, 61, 0.76);
+  --orf-workbench-hairline: rgba(175, 218, 212, 0.15);
+  --orf-workbench-hairline-strong: rgba(185, 226, 220, 0.24);
+  --orf-topbar-surface: rgba(6, 22, 28, 0.66);
+  --orf-topbar-surface-strong: rgba(15, 38, 44, 0.86);
+  --orf-topbar-control-bg: rgba(12, 34, 40, 0.62);
+  --orf-topbar-control-hover-bg: rgba(26, 56, 62, 0.84);
+  --orf-topbar-control-border: rgba(174, 216, 211, 0.18);
+  --orf-topbar-control-text: #e1efed;
+  --orf-topbar-control-muted: #91a9a7;
+  --feedback-glass-ambient: rgba(6, 24, 30, 0.53);
+  --feedback-glass-panel: rgba(7, 24, 30, 0.62);
+  --feedback-glass-reading: rgba(10, 28, 34, 0.72);
+  --feedback-glass-row: rgba(20, 46, 51, 0.34);
+  --feedback-glass-control: rgba(12, 34, 40, 0.57);
+  --feedback-glass-header: rgba(20, 51, 56, 0.5);
+  --feedback-glass-inspector: rgba(7, 25, 31, 0.7);
+  --feedback-glass-float: rgba(8, 27, 33, 0.84);
+  --feedback-glass-border: rgba(178, 228, 221, 0.2);
+  --feedback-glass-shine: rgba(216, 244, 239, 0.18);
+  --feedback-glass-shadow: 0 24px 58px rgba(0, 7, 10, 0.46), inset 0 1px 0 rgba(216, 244, 239, 0.14);
+  --feedback-glass-shadow-soft: 0 16px 38px rgba(0, 7, 10, 0.34), inset 0 1px 0 rgba(216, 244, 239, 0.12);
+  --feedback-glass-filter: blur(27px) saturate(1.08);
+  --feedback-control-filter: blur(17px) saturate(1.04);
+  --feedback-signal: #f09a68;
+  --feedback-signal-soft: rgba(240, 154, 104, 0.15);
+  --orf-page-safety-overlay:
+    radial-gradient(circle at 74% 12%, rgba(78, 170, 174, 0.035), transparent 34%),
+    linear-gradient(112deg, rgba(1, 10, 14, 0.34) 0%, rgba(5, 18, 22, 0.2) 52%, rgba(1, 11, 15, 0.3) 100%);
+  --orf-sidebar-bg-overlay:
+    linear-gradient(105deg, rgba(1, 9, 16, 0.6) 0%, rgba(3, 20, 28, 0.43) 60%, rgba(4, 33, 40, 0.22) 100%),
+    linear-gradient(180deg, rgba(1, 6, 10, 0.05), rgba(1, 7, 11, 0.46));
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"],
+.orf-app-shell[data-page-scene="page_feedback_background"]::before {
+  background: var(--orf-bg-app);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(.orf-shell-body, .orf-main-content) {
+  background: transparent;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .orf-main-content[data-page-skin="true"]::before {
+  background: var(--orf-page-safety-overlay);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(.orf-main-content-skin-layer, .orf-topbar-skin-layer) {
+  --orf-visual-bg-filter: saturate(1.04) contrast(0.99);
+}
+
+html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_feedback_background"] :is(.orf-main-content-skin-layer, .orf-topbar-skin-layer) {
+  --orf-visual-bg-filter: brightness(0.77) saturate(0.95) contrast(0.98);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .orf-sidebar::after {
+  opacity: 0.7;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .orf-sidebar-background-image {
+  opacity: 1;
+  filter: saturate(1.04) contrast(0.99) brightness(0.99);
+}
+
+html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_feedback_background"] .orf-sidebar::after {
+  opacity: 0.76;
+}
+
+html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_feedback_background"] .orf-sidebar-background-image {
+  opacity: 0.94;
+  filter: saturate(0.96) contrast(0.97) brightness(0.86);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .orf-sidebar-brand-title,
+  .orf-sidebar-group-title,
+  .orf-sidebar-link,
+  .orf-sidebar-user-name,
+  .orf-attention-workbar-trigger
+) {
+  text-shadow: 0 1px 3px rgba(0, 8, 18, 0.82);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(.orf-sidebar-link-active, .orf-sidebar-link-inactive:hover) {
+  -webkit-backdrop-filter: blur(16px) saturate(1.07);
+  backdrop-filter: blur(16px) saturate(1.07);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .orf-topbar {
+  border-bottom-color: var(--feedback-glass-border);
+  background: transparent;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--feedback-glass-shine) 50%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .orf-topbar::before {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  content: "";
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--feedback-glass-shine) 12%, transparent), transparent 46%),
+    var(--feedback-glass-ambient);
+  pointer-events: none;
+  -webkit-backdrop-filter: var(--feedback-glass-filter);
+  backdrop-filter: var(--feedback-glass-filter);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .orf-topbar::after {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--feedback-glass-shine) 26%, transparent), transparent 76%);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .orf-feedback-workbench {
+  color: var(--orf-text-primary);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-issue-header,
+  .feedback-issue-detail-header,
+  .feedback-index-header,
+  .feedback-create-header
+) {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 16px;
+  border: 1px solid var(--feedback-glass-border);
+  border-radius: 18px;
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--feedback-glass-shine) 16%, transparent), transparent 42%),
+    var(--feedback-glass-ambient);
+  padding: 13px 15px;
+  box-shadow: var(--feedback-glass-shadow-soft);
+  -webkit-backdrop-filter: var(--feedback-glass-filter);
+  backdrop-filter: var(--feedback-glass-filter);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-issue-header,
+  .feedback-issue-detail-header,
+  .feedback-index-header,
+  .feedback-create-header
+)::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  border-radius: inherit;
+  background: linear-gradient(116deg, color-mix(in srgb, var(--feedback-signal-soft) 32%, transparent), transparent 34%);
+  pointer-events: none;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-issue-header > *,
+  .feedback-issue-detail-header > *,
+  .feedback-index-header > *,
+  .feedback-create-header > *
+) {
+  position: relative;
+  z-index: 1;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-issue-title-block h1,
+  .feedback-issue-detail-title-block h2,
+  .feedback-index-title-block h1,
+  .feedback-create-heading h1
+) {
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-button,
+  .feedback-transfer-trigger,
+  .feedback-mobile-filter-toggle,
+  .feedback-issue-state-button,
+  .feedback-select select,
+  .feedback-text-input input,
+  .feedback-issue-sidebar-input,
+  .feedback-create-sidebar-field select,
+  .feedback-create-title-field input
+) {
+  border-color: color-mix(in srgb, var(--feedback-glass-border) 54%, var(--orf-workbench-hairline));
+  background: var(--feedback-glass-control);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--feedback-glass-shine) 48%, transparent);
+  -webkit-backdrop-filter: var(--feedback-control-filter);
+  backdrop-filter: var(--feedback-control-filter);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-button,
+  .feedback-transfer-trigger,
+  .feedback-mobile-filter-toggle,
+  .feedback-issue-state-button
+):is(:hover, :focus-visible) {
+  border-color: var(--orf-accent-border);
+  background: color-mix(in srgb, var(--feedback-glass-control) 76%, var(--orf-accent-soft));
+  color: var(--orf-accent-text);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-button[data-variant="primary"] {
+  border-color: color-mix(in srgb, var(--orf-accent) 76%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--orf-accent) 92%, white 8%), var(--orf-accent-hover));
+  color: #f8ffff;
+  box-shadow: 0 9px 22px color-mix(in srgb, var(--orf-accent) 24%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-button[data-variant="primary"]:hover {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--orf-accent-hover) 88%, white 12%), var(--orf-accent-hover));
+  color: #fff;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-transfer-trigger {
+  border-color: var(--orf-accent-border);
+  background: color-mix(in srgb, var(--feedback-glass-control) 74%, var(--orf-accent-soft));
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--orf-accent) 13%, transparent), inset 0 1px 0 color-mix(in srgb, var(--feedback-glass-shine) 54%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-project-chat-panel,
+  .feedback-index-toolbar,
+  .feedback-label-list,
+  .feedback-create-editor-card,
+  .feedback-create-sidebar
+) {
+  border-color: var(--feedback-glass-border);
+  border-radius: 18px;
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--feedback-glass-shine) 14%, transparent), transparent 40%),
+    var(--feedback-glass-panel);
+  box-shadow: var(--feedback-glass-shadow);
+  -webkit-backdrop-filter: var(--feedback-glass-filter);
+  backdrop-filter: var(--feedback-glass-filter);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page :is(
+  .feedback-issue-query-panel,
+  .feedback-issue-work-queue,
+  .feedback-issue-list
+) {
+  border-color: var(--feedback-glass-border);
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--feedback-glass-shine) 12%, transparent), transparent 40%),
+    var(--feedback-glass-panel);
+  -webkit-backdrop-filter: var(--feedback-glass-filter);
+  backdrop-filter: var(--feedback-glass-filter);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-query-panel {
+  box-shadow: var(--feedback-glass-shadow);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-work-queue {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--feedback-glass-header) 72%, transparent), transparent 64%),
+    var(--feedback-glass-panel);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-list {
+  box-shadow: var(--feedback-glass-shadow);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-list-head {
+  border-color: color-mix(in srgb, var(--feedback-glass-border) 48%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--feedback-glass-header) 52%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-state-button[data-active="true"] {
+  border-color: var(--orf-accent-border);
+  background: color-mix(in srgb, var(--feedback-glass-control) 68%, var(--orf-accent-soft));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--orf-accent) 12%, transparent), inset 0 1px 0 var(--feedback-glass-shine);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-row {
+  border-color: color-mix(in srgb, var(--feedback-glass-border) 42%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--feedback-glass-row) 72%, transparent);
+  transition: background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-row:is(:hover, :focus-visible) {
+  position: relative;
+  z-index: 1;
+  background: color-mix(in srgb, var(--feedback-glass-row) 68%, var(--orf-accent-soft));
+  box-shadow: inset 3px 0 0 var(--orf-accent), 0 10px 24px color-mix(in srgb, var(--orf-text-primary) 8%, transparent);
+  outline: 0;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-row[data-requires-action="true"] {
+  box-shadow: inset 3px 0 0 var(--feedback-signal);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-row[data-unread="true"] {
+  background: color-mix(in srgb, var(--feedback-glass-row) 70%, var(--orf-accent-soft));
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-row-unread-dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--orf-accent-soft) 80%, transparent), 0 0 14px color-mix(in srgb, var(--orf-accent) 42%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-list > .feedback-empty-state {
+  background:
+    radial-gradient(circle at 50% 32%, color-mix(in srgb, var(--orf-accent-soft) 46%, transparent), transparent 44%),
+    color-mix(in srgb, var(--feedback-glass-row) 42%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-list-footer {
+  border-color: color-mix(in srgb, var(--feedback-glass-border) 44%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--feedback-glass-header) 42%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page :is(
+  .feedback-issue-original-card,
+  .feedback-issue-comment-card,
+  .feedback-issue-event-list,
+  .feedback-issue-composer
+) {
+  border-color: var(--feedback-glass-border);
+  border-radius: 18px;
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--feedback-glass-shine) 13%, transparent), transparent 40%),
+    var(--feedback-glass-reading);
+  box-shadow: var(--feedback-glass-shadow-soft);
+  -webkit-backdrop-filter: var(--feedback-glass-filter);
+  backdrop-filter: var(--feedback-glass-filter);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .feedback-issue-comment-card {
+  box-shadow: var(--feedback-glass-shadow-soft);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .feedback-issue-event-list {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--orf-accent-soft) 32%, transparent), transparent 54%),
+    var(--feedback-glass-ambient);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .feedback-issue-composer {
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--feedback-glass-shine) 15%, transparent), transparent 40%),
+    var(--feedback-glass-panel);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .orf-rich-text-editor {
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--feedback-glass-border) 56%, var(--orf-workbench-hairline));
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--feedback-glass-reading) 82%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--feedback-glass-shine) 46%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .orf-rich-text-editor :is(.orf-rich-text-toolbar, .orf-rich-text-footer) {
+  border-color: color-mix(in srgb, var(--feedback-glass-border) 42%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--feedback-glass-header) 46%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-sidebar {
+  border-color: var(--feedback-glass-border);
+  border-radius: 20px;
+  background:
+    linear-gradient(132deg, color-mix(in srgb, var(--feedback-glass-shine) 13%, transparent), transparent 42%),
+    var(--feedback-glass-inspector);
+  box-shadow: var(--feedback-glass-shadow);
+  -webkit-backdrop-filter: var(--feedback-glass-filter);
+  backdrop-filter: var(--feedback-glass-filter);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-inspector-heading {
+  border-color: color-mix(in srgb, var(--feedback-glass-border) 50%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--feedback-glass-header) 68%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-inspector-body > :is(.orf-related-resources, .feedback-issue-sidebar-block) {
+  border-color: color-mix(in srgb, var(--feedback-glass-border) 42%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--feedback-glass-row) 54%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-sidebar-input {
+  border-radius: var(--orf-radius-control);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(.feedback-label-row, .feedback-import-summary span, .feedback-import-field-mappings span) {
+  border-color: color-mix(in srgb, var(--feedback-glass-border) 44%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--feedback-glass-row) 74%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-label-row:hover {
+  background: color-mix(in srgb, var(--feedback-glass-row) 68%, var(--orf-accent-soft));
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-create-title-field input {
+  border-radius: 999px;
+  background: var(--feedback-glass-reading);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(.feedback-transfer-popover, .feedback-transfer-dialog) {
+  border-color: var(--feedback-glass-border);
+  border-radius: 18px;
+  background:
+    linear-gradient(132deg, color-mix(in srgb, var(--feedback-glass-shine) 15%, transparent), transparent 42%),
+    var(--feedback-glass-float);
+  box-shadow: var(--feedback-glass-shadow);
+  -webkit-backdrop-filter: var(--feedback-glass-filter);
+  backdrop-filter: var(--feedback-glass-filter);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-transfer-popover :is(a, button) {
+  border-color: color-mix(in srgb, var(--feedback-glass-border) 40%, var(--orf-workbench-hairline));
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-transfer-dialog footer {
+  border-color: color-mix(in srgb, var(--feedback-glass-border) 46%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--feedback-glass-float) 94%, transparent);
+  -webkit-backdrop-filter: var(--feedback-glass-filter);
+  backdrop-filter: var(--feedback-glass-filter);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-import-dropzone {
+  border-color: color-mix(in srgb, var(--orf-accent-border) 70%, var(--feedback-glass-border));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--feedback-glass-control) 76%, var(--orf-accent-soft));
 }
 
 .feedback-mobile-filter-toggle {
-  font-weight: 600;
+  font-weight: 650;
 }
 
 @media (max-width: 900px) {
-
-.orf-main-content[data-page-skin="true"] .feedback-issue-header {
-    gap: 10px;
+  .orf-app-shell[data-page-scene="page_feedback_background"] :is(
+    .feedback-issue-header,
+    .feedback-issue-detail-header,
+    .feedback-index-header,
+    .feedback-create-header
+  ) {
+    gap: 12px;
     margin-bottom: 12px;
-    padding: 10px;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 720px) {
+  .orf-app-shell[data-page-scene="page_feedback_background"] :is(
+    .feedback-issue-header,
+    .feedback-issue-detail-header,
+    .feedback-index-header,
+    .feedback-create-header
+  ) {
+    border-radius: 16px;
+    background:
+      linear-gradient(126deg, color-mix(in srgb, var(--feedback-glass-shine) 17%, transparent), transparent 44%),
+      color-mix(in srgb, var(--feedback-glass-ambient) 90%, var(--feedback-glass-panel));
+    box-shadow: 0 14px 34px color-mix(in srgb, var(--orf-text-primary) 14%, transparent), inset 0 1px 0 color-mix(in srgb, var(--feedback-glass-shine) 64%, transparent);
+  }
+
+  .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-work-queue {
+    background:
+      linear-gradient(90deg, color-mix(in srgb, var(--feedback-glass-header) 72%, transparent), transparent 68%),
+      var(--feedback-glass-panel);
+  }
+
+  .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-list,
+  .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-work-queue {
+    -webkit-backdrop-filter: var(--feedback-glass-filter);
+    backdrop-filter: var(--feedback-glass-filter);
+  }
+
+  .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page :is(
+    .feedback-issue-original-card,
+    .feedback-issue-comment-card,
+    .feedback-issue-event-list,
+    .feedback-issue-composer
+  ) {
+    border-radius: 16px;
+  }
+
+  .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-inspector-dialog {
+    border-color: var(--feedback-glass-border);
+    background:
+      linear-gradient(132deg, color-mix(in srgb, var(--feedback-glass-shine) 13%, transparent), transparent 42%),
+      var(--feedback-glass-float);
+    box-shadow: 0 -26px 70px rgba(0, 8, 12, 0.42), inset 0 1px 0 color-mix(in srgb, var(--feedback-glass-shine) 58%, transparent);
+    -webkit-backdrop-filter: var(--feedback-glass-filter);
+    backdrop-filter: var(--feedback-glass-filter);
+  }
+
+  .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-transfer-dialog {
+    border-radius: 22px 22px 0 0;
   }
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-
-.feedback-issue-page .feedback-issue-query-panel {
+  .orf-app-shell[data-page-scene="page_feedback_background"] :is(
+    .feedback-issue-header,
+    .feedback-issue-detail-header,
+    .feedback-index-header,
+    .feedback-create-header,
+    .feedback-project-chat-panel,
+    .feedback-issue-query-panel,
+    .feedback-issue-work-queue,
+    .feedback-issue-list,
+    .feedback-index-toolbar,
+    .feedback-label-list,
+    .feedback-issue-original-card,
+    .feedback-issue-comment-card,
+    .feedback-issue-event-list,
+    .feedback-issue-composer,
+    .feedback-issue-sidebar,
+    .feedback-create-editor-card,
+    .feedback-create-sidebar,
+    .feedback-transfer-popover,
+    .feedback-transfer-dialog,
+    .feedback-issue-inspector-dialog
+  ) {
     background: var(--orf-surface-elevated);
   }
-}
-
-.feedback-issue-page .feedback-issue-query-panel {
-  border-color: var(--orf-workbench-hairline);
-  background: var(--orf-surface-panel-solid);
-  box-shadow: var(--orf-workbench-shadow);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
 }
