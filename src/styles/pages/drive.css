@@ -2388,15 +2388,15 @@ html[data-orf-appearance="dark"] .orf-app-shell .orf-drive-docx-page,
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-sidebar {
-  background: var(--orf-material-content-secondary);
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 88%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-main {
-  background: var(--orf-material-content-primary);
+  background: color-mix(in srgb, var(--orf-material-content-primary) 82%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-preview-column {
-  background: var(--orf-material-content-primary);
+  background: color-mix(in srgb, var(--orf-material-content-primary) 86%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_resources_background"] :is(.orf-drive-main, .orf-drive-preview-column) {
