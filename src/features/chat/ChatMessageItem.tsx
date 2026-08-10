@@ -853,36 +853,6 @@ export function ChatMessageItem({
           {onThread && !message.rootMessageId && (
             <IconButton icon={Reply} label={message.replyCount > 0 ? "打开回复" : "回复"} onClick={() => onThread(message.id, { focusComposer: true })} />
           )}
-          <IconButton
-            className="orf-chat-message-primary-action"
-            icon={copyMessageAction.icon}
-            label={copyMessageAction.label}
-            onClick={copyMessageAction.onSelect}
-          />
-          {saveAction && (
-            <IconButton
-              className={clsx(saveAction.active && "orf-chat-message-action-active")}
-              icon={saveAction.icon}
-              label={saveAction.label}
-              onClick={saveAction.onSelect}
-            />
-          )}
-          {editAction && (
-            <IconButton
-              className="orf-chat-message-primary-action"
-              icon={editAction.icon}
-              label={editAction.label}
-              onClick={editAction.onSelect}
-            />
-          )}
-          {deleteAction && (
-            <IconButton
-              className="orf-chat-message-danger-action"
-              icon={deleteAction.icon}
-              label={deleteAction.label}
-              onClick={deleteAction.onSelect}
-            />
-          )}
           {hasMoreActions && (
             <div className="orf-chat-message-more-anchor" ref={moreMenuRef} onKeyDown={handleMoreTriggerKeyDown}>
               <IconButton

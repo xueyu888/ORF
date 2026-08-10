@@ -1,6 +1,15 @@
 /* Chat keeps the proven collaboration layout; this module owns only chat structure and states. */
 .orf-app-shell[data-chat-page="true"] {
+  --orf-chat-floating: rgba(252, 253, 252, 0.94);
+  --orf-chat-modal-surface: rgba(249, 251, 251, 0.94);
+  --orf-chat-overlay: rgba(15, 23, 42, 0.46);
   min-width: 0;
+}
+
+.orf-app-shell[data-chat-page="true"][data-orf-appearance="dark"] {
+  --orf-chat-floating: rgba(27, 45, 66, 0.96);
+  --orf-chat-modal-surface: rgba(24, 41, 61, 0.94);
+  --orf-chat-overlay: rgba(4, 8, 14, 0.72);
 }
 
 .orf-chat-page[data-resizing-sidebar="true"] .orf-chat-sidebar-resize-handle,
@@ -65,7 +74,7 @@
   min-height: 360px;
   overflow: hidden;
   border: 1px solid var(--orf-chat-image-window-border);
-  border-radius: 8px;
+  border-radius: 18px;
   background: var(--orf-chat-image-window-surface);
   color: var(--orf-chat-image-window-control-strong);
   box-shadow:
@@ -87,7 +96,7 @@ html[data-orf-appearance="dark"] .orf-chat-floating-image-preview {
 }
 
 .orf-chat-floating-image-preview[data-window-mode="maximized"] {
-  border-radius: 6px;
+  border-radius: 10px;
 }
 
 .orf-chat-image-popout-page {
@@ -480,6 +489,7 @@ html[data-orf-appearance="dark"] .orf-chat-floating-image-preview {
     height: auto !important;
     min-width: 0;
     min-height: 0;
+    border-radius: 16px;
   }
 
 .orf-chat-floating-image-preview-header {
@@ -584,6 +594,9 @@ html[data-orf-appearance="dark"] .orf-chat-floating-image-preview {
   --orf-chat-divider: color-mix(in srgb, var(--orf-material-content-hairline) 72%, transparent);
   --orf-chat-divider-strong: var(--orf-material-content-hairline-strong);
   --orf-chat-elevated: rgba(252, 253, 252, 0.88);
+  --orf-chat-floating: rgba(252, 253, 252, 0.94);
+  --orf-chat-modal-surface: rgba(249, 251, 251, 0.94);
+  --orf-chat-overlay: rgba(15, 23, 42, 0.46);
   --orf-chat-message-hover: color-mix(in srgb, var(--orf-accent) 7%, transparent);
   --orf-chat-message-pinned: color-mix(in srgb, var(--orf-warning-bg) 24%, var(--orf-chat-canvas));
   --orf-chat-message-pinned-hover: color-mix(in srgb, var(--orf-warning-bg) 38%, var(--orf-chat-canvas));
@@ -732,9 +745,9 @@ html[data-orf-appearance="dark"] .orf-chat-floating-image-preview {
   width: min(240px, calc(100vw - 24px));
   gap: 4px;
   border: 1px solid var(--orf-chat-divider-strong);
-  border-radius: var(--orf-radius-card);
-  background: var(--orf-chat-elevated);
-  box-shadow: var(--orf-workbench-shadow);
+  border-radius: 18px;
+  background: var(--orf-chat-floating);
+  box-shadow: 0 18px 48px color-mix(in srgb, #000 20%, transparent);
   padding: 6px;
 }
 
@@ -746,7 +759,7 @@ html[data-orf-appearance="dark"] .orf-chat-floating-image-preview {
   align-items: center;
   gap: 10px;
   border: 0;
-  border-radius: var(--orf-radius-card);
+  border-radius: 999px;
   background: transparent;
   color: var(--orf-text-primary);
   padding: 8px 10px;
@@ -777,6 +790,7 @@ html[data-orf-appearance="dark"] .orf-chat-floating-image-preview {
 }
 
 .orf-chat-sidebar-create-menu strong {
+  color: var(--orf-text-primary);
   font-size: 13px;
   font-weight: 650;
   line-height: 1.2;
@@ -2363,12 +2377,12 @@ html[data-orf-appearance="dark"] .orf-chat-floating-image-preview {
   max-width: calc(100% - 16px);
   overflow-x: auto;
   border: 1px solid var(--orf-chat-divider-strong);
-  border-radius: var(--orf-radius-control);
-  background: var(--orf-chat-elevated);
+  border-radius: 999px;
+  background: var(--orf-chat-floating);
   opacity: 0;
   padding: 2px;
   pointer-events: none;
-  box-shadow: var(--orf-workbench-shadow);
+  box-shadow: 0 12px 30px color-mix(in srgb, #000 18%, transparent);
   scrollbar-width: none;
   transform: translateY(-2px);
   transition:
@@ -2444,7 +2458,7 @@ html[data-orf-appearance="dark"] .orf-chat-floating-image-preview {
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: var(--orf-radius-control);
+  border-radius: 50%;
   background: transparent;
   padding: 0;
   line-height: 1;
@@ -2469,10 +2483,10 @@ html[data-orf-appearance="dark"] .orf-chat-floating-image-preview {
   max-height: min(320px, calc(100dvh - 16px));
   overflow-y: auto;
   border: 1px solid var(--orf-chat-divider-strong);
-  border-radius: var(--orf-radius-control);
-  background: var(--orf-chat-elevated);
-  padding: 4px;
-  box-shadow: var(--orf-workbench-shadow);
+  border-radius: 18px;
+  background: var(--orf-chat-floating);
+  padding: 6px;
+  box-shadow: 0 18px 48px color-mix(in srgb, #000 22%, transparent);
 }
 
 .orf-chat-message-more-menu button {
@@ -2544,7 +2558,7 @@ html[data-orf-appearance="dark"] .orf-chat-floating-image-preview {
 }
 
 .orf-chat-attachments-single-image {
-  max-width: min(100%, 820px);
+  max-width: min(100%, 680px);
 }
 
 button.orf-chat-image-attachment,
@@ -2565,7 +2579,7 @@ button.orf-chat-image-attachment {
 }
 
 .orf-chat-attachments-single-image button.orf-chat-image-attachment {
-  width: min(820px, 100%);
+  width: min(680px, 100%);
 }
 
 .orf-chat-image-attachment img {
@@ -2790,11 +2804,11 @@ button.orf-chat-image-attachment {
   max-height: calc(100dvh - var(--orf-topbar-height) - 16px);
   flex-direction: column;
   gap: 8px;
-  border: 1px solid var(--orf-border);
-  border-radius: var(--orf-radius-card);
-  background: var(--orf-bg-elevated);
-  padding: 8px;
-  box-shadow: var(--orf-shadow-card);
+  border: 1px solid var(--orf-chat-divider-strong);
+  border-radius: 20px;
+  background: var(--orf-chat-floating);
+  padding: 10px;
+  box-shadow: 0 22px 56px color-mix(in srgb, #000 24%, transparent);
 }
 
 .orf-chat-emoji-search {
@@ -2802,9 +2816,9 @@ button.orf-chat-image-attachment {
   height: 32px;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--orf-border);
+  border: 1px solid var(--orf-chat-divider);
   border-radius: 999px;
-  background: var(--orf-surface-control-solid);
+  background: var(--orf-chat-control);
   padding: 0 8px;
   color: var(--orf-text-muted);
 }
@@ -4610,7 +4624,9 @@ button.orf-chat-image-attachment {
   z-index: 80;
   display: grid;
   place-items: center;
-  background: rgba(15, 23, 42, 0.42);
+  background: var(--orf-chat-overlay);
+  -webkit-backdrop-filter: blur(6px) saturate(1.04);
+  backdrop-filter: blur(6px) saturate(1.04);
   padding: 20px;
 }
 
@@ -4621,10 +4637,12 @@ button.orf-chat-image-attachment {
   max-height: min(760px, calc(100vh - 40px));
   max-height: min(760px, calc(100dvh - 40px));
   overflow: hidden;
-  border: 1px solid var(--orf-border);
-  border-radius: var(--orf-radius-card);
-  background: var(--orf-bg-elevated);
-  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.22);
+  border: 1px solid var(--orf-chat-divider-strong);
+  border-radius: 24px;
+  background: var(--orf-chat-modal-surface);
+  box-shadow:
+    0 34px 90px rgba(15, 23, 42, 0.28),
+    inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 54%, transparent);
 }
 
 .orf-chat-modal header,
@@ -4634,13 +4652,14 @@ button.orf-chat-image-attachment {
   justify-content: space-between;
   gap: 10px;
   flex: 0 0 auto;
-  border-bottom: 1px solid var(--orf-border);
+  border-bottom: 1px solid var(--orf-chat-divider);
+  background: color-mix(in srgb, var(--orf-chat-header) 74%, transparent);
   padding: 12px 14px;
 }
 
 .orf-chat-modal footer {
   justify-content: flex-end;
-  border-top: 1px solid var(--orf-border);
+  border-top: 1px solid var(--orf-chat-divider);
   border-bottom: 0;
 }
 
@@ -4818,8 +4837,8 @@ button.orf-chat-image-attachment {
   max-height: calc(100vh - 40px);
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.32);
-  border-radius: var(--orf-radius-card);
-  background: var(--orf-bg-elevated);
+  border-radius: 22px;
+  background: var(--orf-chat-modal-surface);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.3);
 }
 
@@ -4829,7 +4848,7 @@ button.orf-chat-image-attachment {
   align-items: center;
   gap: 8px;
   border-bottom: 1px solid var(--orf-border);
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--orf-chat-header);
   padding: 10px 12px;
 }
 
@@ -5520,6 +5539,9 @@ button.orf-chat-image-attachment,
   --orf-chat-divider: rgba(179, 205, 232, 0.14);
   --orf-chat-divider-strong: rgba(190, 216, 242, 0.23);
   --orf-chat-elevated: rgba(30, 48, 69, 0.86);
+  --orf-chat-floating: rgba(27, 45, 66, 0.96);
+  --orf-chat-modal-surface: rgba(24, 41, 61, 0.94);
+  --orf-chat-overlay: rgba(4, 8, 14, 0.72);
   background: transparent;
   color: var(--orf-text-primary);
   scrollbar-color: rgba(167, 179, 196, 0.45) transparent;
@@ -5947,8 +5969,12 @@ button.orf-chat-image-attachment,
 .orf-app-shell[data-chat-page="true"][data-orf-appearance="dark"]
   .orf-chat-attachment-preview-panel {
   border-color: var(--orf-chat-divider-strong);
-  background: var(--orf-chat-elevated);
+  background: var(--orf-chat-floating);
   box-shadow: var(--orf-workbench-shadow);
+}
+
+.orf-app-shell[data-chat-page="true"][data-orf-appearance="dark"] .orf-chat-modal {
+  background: var(--orf-chat-modal-surface);
 }
 
 .orf-app-shell[data-chat-page="true"][data-orf-appearance="dark"]
@@ -6167,7 +6193,9 @@ button.orf-chat-image-attachment,
 .orf-app-shell[data-chat-page="true"][data-orf-appearance="dark"]
   .orf-chat-composer {
   border-top-color: var(--orf-chat-divider);
-  background: var(--orf-chat-panel);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--orf-material-content-shine) 7%, transparent), transparent 48%),
+    var(--orf-chat-composer-surface);
 }
 
 .orf-app-shell[data-chat-page="true"][data-orf-appearance="dark"]
@@ -6199,6 +6227,16 @@ button.orf-chat-image-attachment,
   border-color: var(--orf-chat-panel-border, var(--orf-chat-divider-strong));
   background: var(--orf-chat-control);
   color: var(--orf-chat-panel-text-strong, var(--orf-text-primary));
+}
+
+.orf-app-shell[data-chat-page="true"][data-orf-appearance="dark"]
+  .orf-chat-modal
+  .orf-chat-user-picker-search
+  input {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
 }
 
 .orf-app-shell[data-chat-page="true"][data-orf-appearance="dark"]
@@ -6336,7 +6374,7 @@ button.orf-chat-image-attachment,
 .orf-app-shell[data-chat-page="true"][data-orf-appearance="dark"]
   .orf-chat-attachment-preview-panel
   header {
-  background: #222d40;
+  background: var(--orf-chat-header);
 }
 
 .orf-app-shell[data-chat-page="true"][data-orf-appearance="dark"]
@@ -6493,9 +6531,9 @@ html[data-orf-display-contrast="high"] .orf-chat-message {
 .orf-app-shell[data-chat-page="true"] .orf-chat-header-more-menu,
 .orf-app-shell[data-chat-page="true"] .orf-chat-message-more-menu,
 .orf-app-shell[data-chat-page="true"] .orf-chat-emoji-popover {
-  border-color: var(--orf-border-strong);
-  border-radius: var(--orf-radius-card);
-  background: var(--orf-surface-panel-solid);
+  border-color: var(--orf-chat-divider-strong);
+  border-radius: 18px;
+  background: var(--orf-chat-floating);
   box-shadow: 0 18px 44px color-mix(in srgb, #000 22%, transparent);
 }
 
@@ -6540,7 +6578,7 @@ html[data-orf-display-contrast="high"] .orf-chat-message {
   .orf-chat-message-more-menu,
 .orf-app-shell[data-chat-page="true"][data-orf-appearance="dark"]
   .orf-chat-emoji-popover {
-  background: var(--orf-surface-panel-solid);
+  background: var(--orf-chat-floating);
 }
 
 .orf-app-shell[data-chat-page="true"] .orf-chat-user-picker-list {
@@ -6558,7 +6596,7 @@ html[data-orf-display-contrast="high"] .orf-chat-message {
   min-height: 50px;
   border: 1px solid var(--orf-border);
   border-radius: 999px;
-  background: var(--orf-surface-control-solid);
+  background: var(--orf-chat-control);
   padding: 9px 12px;
 }
 
