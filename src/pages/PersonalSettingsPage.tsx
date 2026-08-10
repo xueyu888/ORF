@@ -471,7 +471,7 @@ export function PersonalSettingsPage() {
                     <span>高对比度</span>
                   </span>
                   <input
-                    className="h-5 w-5 shrink-0 accent-[var(--orf-accent)]"
+                    className="orf-preference-switch shrink-0"
                     type="checkbox"
                     checked={displayPreferences.contrast === "high"}
                     disabled={!preferences || busy}
@@ -500,7 +500,7 @@ export function PersonalSettingsPage() {
                     <span className="block text-sm orf-text-secondary">当前用户的页面提示。</span>
                   </span>
                   <input
-                    className="h-5 w-5 accent-[var(--orf-accent)]"
+                    className="orf-preference-switch shrink-0"
                     type="checkbox"
                     checked={preferences?.notificationDisplay.toastEnabled ?? true}
                     disabled={!preferences || busy}
@@ -526,7 +526,7 @@ export function PersonalSettingsPage() {
                     </span>
                   </span>
                   <input
-                    className="h-5 w-5 shrink-0 accent-[var(--orf-accent)]"
+                    className="orf-preference-switch shrink-0"
                     type="checkbox"
                     checked={launchAtLoginState?.enabled ?? false}
                     disabled={launchAtLoginDisabled}

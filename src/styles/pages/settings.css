@@ -2242,7 +2242,8 @@ body:has(.orf-settings-page-single) .orf-settings-background-state {
   font-weight: 550;
 }
 
-body:has(.orf-settings-page-single) .orf-system-settings-appearance-panel .orf-skin-workbench {
+body:has(.orf-settings-page-single) .orf-system-settings-appearance-panel .orf-skin-workbench,
+body:has(.orf-personal-settings-page) .orf-personal-settings-page > .orf-skin-workbench {
   overflow: hidden;
   border: 1px solid var(--orf-material-content-hairline);
   border-radius: 20px;
@@ -2250,33 +2251,33 @@ body:has(.orf-settings-page-single) .orf-system-settings-appearance-panel .orf-s
   box-shadow: var(--orf-material-content-shadow);
 }
 
-body:has(.orf-settings-page-single) .orf-skin-workbench-heading {
+:is(body:has(.orf-settings-page-single), body:has(.orf-personal-settings-page)) .orf-skin-workbench-heading {
   border-color: var(--orf-material-content-hairline);
   background:
     linear-gradient(106deg, color-mix(in srgb, var(--orf-accent-soft) 35%, transparent), transparent 40%),
     color-mix(in srgb, var(--orf-material-content-secondary) 76%, transparent);
 }
 
-body:has(.orf-settings-page-single) .orf-skin-slot-rail {
+:is(body:has(.orf-settings-page-single), body:has(.orf-personal-settings-page)) .orf-skin-slot-rail {
   border-color: var(--orf-material-content-hairline);
   background: color-mix(in srgb, var(--orf-material-content-secondary) 62%, transparent);
 }
 
-body:has(.orf-settings-page-single) .orf-skin-editor {
+:is(body:has(.orf-settings-page-single), body:has(.orf-personal-settings-page)) .orf-skin-editor {
   background: color-mix(in srgb, var(--orf-material-content-primary) 72%, transparent);
 }
 
-body:has(.orf-settings-page-single) :is(.orf-skin-segmented, .orf-skin-page-target) {
+:is(body:has(.orf-settings-page-single), body:has(.orf-personal-settings-page)) :is(.orf-skin-segmented, .orf-skin-page-target) {
   border-color: var(--orf-material-content-hairline);
   background: color-mix(in srgb, var(--orf-material-content-control) 76%, transparent);
 }
 
-body:has(.orf-settings-page-single) .orf-skin-inspector,
-body:has(.orf-settings-page-single) .orf-skin-gallery-shell {
+:is(body:has(.orf-settings-page-single), body:has(.orf-personal-settings-page)) .orf-skin-inspector,
+:is(body:has(.orf-settings-page-single), body:has(.orf-personal-settings-page)) .orf-skin-gallery-shell {
   border-color: var(--orf-material-content-hairline);
 }
 
-body:has(.orf-settings-page-single) :is(.orf-skin-gallery-card, .orf-skin-empty-upload) {
+:is(body:has(.orf-settings-page-single), body:has(.orf-personal-settings-page)) :is(.orf-skin-gallery-card, .orf-skin-empty-upload) {
   border-color: var(--orf-material-content-hairline);
   background: color-mix(in srgb, var(--orf-material-content-control) 72%, transparent);
 }
@@ -2298,7 +2299,8 @@ body:has(.orf-settings-page-single) :is(.orf-skin-gallery-card, .orf-skin-empty-
   }
 
   body:has(.orf-settings-page-single) .orf-settings-background-section,
-  body:has(.orf-settings-page-single) .orf-system-settings-appearance-panel .orf-skin-workbench {
+  body:has(.orf-settings-page-single) .orf-system-settings-appearance-panel .orf-skin-workbench,
+  body:has(.orf-personal-settings-page) .orf-personal-settings-page > .orf-skin-workbench {
     border-radius: 18px;
   }
 
@@ -2313,5 +2315,246 @@ body:has(.orf-settings-page-single) :is(.orf-skin-gallery-card, .orf-skin-empty-
 
   body:has(.orf-settings-page-single) .orf-settings-gitlab-create {
     padding: 10px;
+  }
+}
+
+/* Personal settings scene
+   -----------------------
+   Identity, navigation, appearance and client preferences are distinct
+   responsibilities. Each receives its own content material while the page
+   background remains the shared ambient layer. */
+body:has(.orf-personal-settings-page) .orf-personal-settings-page {
+  gap: 14px;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-overview {
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 14px;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-profile {
+  overflow: hidden;
+  border: 1px solid var(--orf-material-content-hairline);
+  border-radius: 20px;
+  background:
+    linear-gradient(112deg, color-mix(in srgb, var(--orf-accent-soft) 34%, transparent), transparent 38%),
+    color-mix(in srgb, var(--orf-material-content-primary) 82%, transparent);
+  box-shadow: var(--orf-material-content-shadow);
+  padding: 18px 20px;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-card-heading {
+  border-color: var(--orf-material-content-hairline);
+  padding-bottom: 10px;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-card-heading span {
+  font-size: 17px;
+  font-weight: 650;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-card-heading small {
+  color: var(--orf-text-muted);
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.02em;
+}
+
+body:has(.orf-personal-settings-page) .orf-avatar-preview-trigger {
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px var(--orf-material-content-hairline), 0 9px 24px color-mix(in srgb, var(--orf-accent) 14%, transparent);
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-profile > .mt-4 {
+  border-color: var(--orf-material-content-hairline);
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-preferences {
+  display: grid;
+  overflow: visible;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-personal-settings-card-heading,
+body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-settings-inline-error {
+  grid-column: 1 / -1;
+  grid-row: auto;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-personal-settings-card-heading {
+  border: 0;
+  padding: 0 2px 2px;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-section {
+  gap: 14px;
+  align-self: stretch;
+  border: 1px solid var(--orf-material-content-hairline);
+  border-radius: 20px;
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--orf-material-content-shine) 13%, transparent), transparent 38%),
+    color-mix(in srgb, var(--orf-material-content-primary) 82%, transparent);
+  box-shadow: var(--orf-material-content-shadow);
+  padding: 18px;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-navigation-section {
+  grid-column: 1 / span 4;
+  grid-row: auto / span 1;
+  padding-right: 18px;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-appearance-section {
+  grid-column: 5 / -1;
+  grid-row: auto / span 2;
+  border-left: 1px solid var(--orf-material-content-hairline);
+  padding-left: 18px;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-notification-section {
+  grid-column: 1 / span 4;
+  grid-row: auto;
+  border-top: 1px solid var(--orf-material-content-hairline);
+  padding-top: 18px;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-preferences:has(> .orf-settings-inline-error) > :is(
+    .orf-personal-settings-navigation-section,
+    .orf-personal-settings-appearance-section,
+    .orf-personal-settings-notification-section
+  ) {
+  grid-row: auto;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-section-heading {
+  gap: 4px;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-section-heading > span {
+  font-size: 15px;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-section-heading > small {
+  color: var(--orf-text-muted);
+  font-weight: 500;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-page .orf-control {
+  min-height: 38px;
+  border-color: var(--orf-material-content-hairline);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orf-material-content-control) 80%, transparent);
+  color: var(--orf-text-primary);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 34%, transparent);
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-page .orf-control:focus-visible {
+  border-color: var(--orf-accent-border);
+  box-shadow: var(--orf-focus-ring);
+}
+
+body:has(.orf-personal-settings-page) .orf-appearance-mode-picker {
+  border-color: var(--orf-material-content-hairline);
+  background: color-mix(in srgb, var(--orf-material-content-control) 78%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 30%, transparent);
+}
+
+body:has(.orf-personal-settings-page) .orf-appearance-mode-option {
+  min-height: 54px;
+}
+
+body:has(.orf-personal-settings-page) .orf-appearance-mode-option:hover {
+  background: var(--orf-material-content-control-hover);
+}
+
+body:has(.orf-personal-settings-page) .orf-appearance-mode-option[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--orf-accent-border) 68%, transparent);
+  background: color-mix(in srgb, var(--orf-accent-soft) 68%, var(--orf-material-content-control));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orf-accent-border) 48%, transparent), 0 8px 20px color-mix(in srgb, var(--orf-accent) 10%, transparent);
+}
+
+body:has(.orf-personal-settings-page) :is(.orf-personal-settings-display-block, .orf-personal-settings-toggle-row) {
+  border-color: var(--orf-material-content-hairline);
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-theme-note {
+  border: 1px solid color-mix(in srgb, var(--orf-accent-border) 60%, transparent);
+  border-left-width: 1px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--orf-accent-soft) 54%, var(--orf-material-content-tertiary));
+  padding: 11px 13px;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-setting-row + .orf-personal-settings-setting-row {
+  border-color: var(--orf-material-content-hairline);
+}
+
+body:has(.orf-personal-settings-page) .orf-preference-switch {
+  width: 42px;
+  height: 24px;
+  appearance: none;
+  border: 1px solid var(--orf-material-content-hairline);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 10px 50%, var(--orf-text-faint) 0 7px, transparent 8px),
+    color-mix(in srgb, var(--orf-material-content-control) 86%, transparent);
+  box-shadow: inset 0 1px 3px color-mix(in srgb, var(--orf-text-primary) 8%, transparent);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+body:has(.orf-personal-settings-page) .orf-preference-switch:checked {
+  border-color: color-mix(in srgb, var(--orf-accent) 72%, transparent);
+  background:
+    radial-gradient(circle at calc(100% - 10px) 50%, #fff 0 7px, transparent 8px),
+    color-mix(in srgb, var(--orf-accent) 78%, var(--orf-material-content-control));
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--orf-accent) 19%, transparent);
+}
+
+body:has(.orf-personal-settings-page) .orf-preference-switch:focus-visible {
+  outline: 0;
+  box-shadow: var(--orf-focus-ring);
+}
+
+body:has(.orf-personal-settings-page) .orf-preference-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.44;
+}
+
+@media (max-width: 760px) {
+  body:has(.orf-personal-settings-page) .orf-personal-settings-profile,
+  body:has(.orf-personal-settings-page) .orf-personal-settings-section {
+    border-radius: 18px;
+    padding: 16px;
+  }
+
+  body:has(.orf-personal-settings-page) .orf-personal-settings-profile,
+  body:has(.orf-personal-settings-page) .orf-personal-settings-preferences {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-personal-settings-card-heading,
+  body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-settings-inline-error,
+  body:has(.orf-personal-settings-page) .orf-personal-settings-section {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  body:has(.orf-personal-settings-page) .orf-personal-settings-navigation-section,
+  body:has(.orf-personal-settings-page) .orf-personal-settings-appearance-section,
+  body:has(.orf-personal-settings-page) .orf-personal-settings-notification-section {
+    border-top: 1px solid var(--orf-material-content-hairline);
+    border-left: 1px solid var(--orf-material-content-hairline);
+    padding: 16px;
+  }
+
+  body:has(.orf-personal-settings-page) .orf-personal-settings-profile > .mt-4 {
+    border-color: var(--orf-material-content-hairline);
   }
 }
