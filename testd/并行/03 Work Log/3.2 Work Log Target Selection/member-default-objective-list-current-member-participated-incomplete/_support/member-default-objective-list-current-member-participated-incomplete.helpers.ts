@@ -47,7 +47,7 @@ export async function openWorkLogDefaultObjectiveList(page: Page) {
 }
 
 export function workLogDefaultObjectiveOption(page: Page, title: string) {
-  return page.locator(".orf-fantasy-select-option").filter({ hasText: title });
+  return page.locator(".orf-select-option").filter({ hasText: title });
 }
 
 export function workLogErrorMessage(page: Page) {

@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from "@playwright/test";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { chatChannelMembers, chatChannels, chatSyncEvents } from "../../../../../../server/db/schema";
 import type { CapturedResponse } from "../../../../../_operators/common.context";
-import { readResponseBody } from "../../../../../_operators/common.helpers";
+import { applicationConfirmDialog, readResponseBody } from "../../../../../_operators/common.helpers";
 import { db } from "../../../../../_operators/testd-db-client";
 
 const RESPONSE_TIMEOUT_MS = 10_000;
@@ -58,11 +58,10 @@ export async function deleteMemberFromPage(
       response.url().endsWith(`/api/users/${encodeURIComponent(input.userId)}`),
     { timeout: RESPONSE_TIMEOUT_MS },
   );
-  page.once("dialog", async (dialog) => {
-    await dialog.accept();
-  });
-
   await memberDeleteButton(page, input.memberName).click();
+  const dialog = applicationConfirmDialog(page, "删除账号");
+  await expect(dialog.locator(".orf-confirm-dialog-description")).toContainText(input.memberName);
+  await dialog.getByRole("button", { name: "删除账号", exact: true }).click();
   const response = await responsePromise;
   return {
     ok: response.ok(),

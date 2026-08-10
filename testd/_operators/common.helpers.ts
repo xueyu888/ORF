@@ -118,6 +118,12 @@ export async function dismissWorkLogReminderModalIfVisible(page: Page) {
   return true;
 }
 
+export function applicationConfirmDialog(page: Page, title?: string) {
+  return title
+    ? page.getByRole("alertdialog", { name: title, exact: true }).first()
+    : page.getByRole("alertdialog").first();
+}
+
 export async function readBrowserSession(page: Page): Promise<BrowserSession> {
   if (!page.url().startsWith("about:")) {
     try {

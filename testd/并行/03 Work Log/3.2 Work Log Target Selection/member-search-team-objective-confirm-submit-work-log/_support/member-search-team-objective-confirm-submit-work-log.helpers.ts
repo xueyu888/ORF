@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { and, eq, ilike, sql } from "drizzle-orm";
 import { objectives, users, workLogEntries } from "../../../../../../server/db/schema";
 import { localDateString } from "../../../../../../src/utils/date";
-import { readResponseBody, readTestObjective } from "../../../../../_operators/common.helpers";
+import { applicationConfirmDialog, readResponseBody, readTestObjective } from "../../../../../_operators/common.helpers";
 import { db } from "../../../../../_operators/testd-db-client";
 import type {
   ObjectiveFixtureExpectation,
@@ -11,7 +11,6 @@ import type {
 } from "./member-search-team-objective-confirm-submit-work-log.context";
 
 const RESPONSE_TIMEOUT_MS = 5_000;
-const submittedConfirmMessages = new WeakMap<Page, string>();
 
 export function todayWorkDate() {
   return localDateString(new Date());
@@ -67,7 +66,7 @@ export function workLogClassificationSearchInput(page: Page) {
 }
 
 export function workLogClassificationOption(page: Page, title: string) {
-  return page.locator(".orf-fantasy-select-option").filter({ hasText: title });
+  return page.locator(".orf-select-option").filter({ hasText: title });
 }
 
 export async function fillWorkLogObjectiveSearch(page: Page, objectiveTitle: string) {
@@ -89,7 +88,16 @@ export function workLogErrorMessage(page: Page) {
   return page.locator(".work-logs-error");
 }
 
-export async function submitTodayWorkLogWithConfirm(page: Page, expectedMessage: string) {
+export async function openTodayWorkLogSubmitConfirm(page: Page) {
+  await submitWorkLogButton(page).click();
+  await expect(applicationConfirmDialog(page, "确认提交工作日志")).toBeVisible();
+}
+
+export function workLogSubmitConfirmMessage(page: Page) {
+  return applicationConfirmDialog(page, "确认提交工作日志").locator(".orf-confirm-dialog-description");
+}
+
+export async function confirmTodayWorkLogSubmit(page: Page) {
   const responsePromise = page
     .waitForResponse(
       (response) =>
@@ -103,28 +111,9 @@ export async function submitTodayWorkLogWithConfirm(page: Page, expectedMessage:
       }
       return response;
     });
-
-  const dialogPromise = new Promise<void>((resolve, reject) => {
-    page.once("dialog", async (dialog) => {
-      try {
-        const message = dialog.message();
-        expect(message).toContain(expectedMessage);
-        submittedConfirmMessages.set(page, message);
-        await dialog.accept();
-        resolve();
-      } catch (error) {
-        reject(error);
-      }
-    });
-  });
-
-  await submitWorkLogButton(page).click();
-  await dialogPromise;
+  const dialog = applicationConfirmDialog(page, "确认提交工作日志");
+  await dialog.getByRole("button", { name: "继续提交", exact: true }).click();
   await responsePromise;
-}
-
-export function submittedConfirmMessage(page: Page) {
-  return submittedConfirmMessages.get(page) ?? "";
 }
 
 export function workLogHistory(page: Page) {

@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { and, eq, ilike, sql } from "drizzle-orm";
 import { users, workLogEntries } from "../../../../../../server/db/schema";
 import { localDateString } from "../../../../../../src/utils/date";
-import { readResponseBody } from "../../../../../_operators/common.helpers";
+import { applicationConfirmDialog, readResponseBody } from "../../../../../_operators/common.helpers";
 import { db } from "../../../../../_operators/testd-db-client";
 import { createStableUuid } from "../../../../../_shared/ids";
 import type {
@@ -81,7 +81,7 @@ export async function selectWorkLogObjective(page: Page, objectiveTitle: string)
   await workLogClassificationControl(page).click();
   await page.getByLabel("搜索日志归类", { exact: true }).fill(objectiveTitle);
   await page
-    .locator(".orf-fantasy-select-option")
+    .locator(".orf-select-option")
     .filter({ hasText: objectiveTitle })
     .first()
     .click();
@@ -119,7 +119,14 @@ export function workLogDeleteButton(page: Page, bodyMarker: string) {
   return workLogHistoryEntry(page, bodyMarker).getByRole("button", { name: /^删除日志：/ });
 }
 
-export async function deleteWorkLog(page: Page, bodyMarker: string) {
+export async function openDeleteWorkLogConfirm(page: Page, bodyMarker: string) {
+  await workLogDeleteButton(page, bodyMarker).click();
+  const dialog = applicationConfirmDialog(page, "删除工作日志");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".orf-confirm-dialog-description")).toContainText("删除这条工作日志");
+}
+
+export async function confirmDeleteWorkLog(page: Page) {
   const responsePromise = page
     .waitForResponse(
       (response) =>
@@ -134,12 +141,8 @@ export async function deleteWorkLog(page: Page, bodyMarker: string) {
       return response;
     });
 
-  page.once("dialog", async (dialog) => {
-    expect(dialog.message()).toContain("删除这条工作日志");
-    await dialog.accept();
-  });
-
-  await workLogDeleteButton(page, bodyMarker).click();
+  const dialog = applicationConfirmDialog(page, "删除工作日志");
+  await dialog.getByRole("button", { name: "删除日志", exact: true }).click();
   await responsePromise;
 }
 

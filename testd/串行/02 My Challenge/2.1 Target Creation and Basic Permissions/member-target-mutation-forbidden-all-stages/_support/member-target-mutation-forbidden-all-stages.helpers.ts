@@ -1,4 +1,4 @@
-import { expect, type Dialog, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { and, asc, eq, ilike } from "drizzle-orm";
 import { normalizePermissionKeys, type PermissionKey } from "../../../../../../src/config/permissions";
 import { initialOrfState } from "../../../../../../src/data/initialOrfState";
@@ -90,23 +90,14 @@ export async function clickEditForStageTargets(page: Page, targets: readonly Obj
 }
 
 export async function clickDeleteForStageTargets(page: Page, targets: readonly ObjectiveStageTargetData[]): Promise<ObjectiveDeleteUiResult> {
-  let dialogCount = 0;
   let deniedNoticeCount = 0;
-  const dialogHandler = async (dialog: Dialog) => {
-    dialogCount += 1;
-    await dialog.dismiss();
-  };
-  page.on("dialog", dialogHandler);
-  try {
-    for (const target of targets) {
-      await clearPermissionToasts(page);
-      await clickObjectiveMenuAction(page, target.title, "删除");
-      await expect(permissionToast(page, "没有删除目标权限")).toHaveCount(1);
-      deniedNoticeCount += 1;
-    }
-  } finally {
-    page.off("dialog", dialogHandler);
+  for (const target of targets) {
+    await clearPermissionToasts(page);
+    await clickObjectiveMenuAction(page, target.title, "删除");
+    await expect(permissionToast(page, "没有删除目标权限")).toHaveCount(1);
+    deniedNoticeCount += 1;
   }
+  const dialogCount = await page.getByRole("alertdialog").count();
   return { targetCount: targets.length, deniedNoticeCount, dialogCount };
 }
 
