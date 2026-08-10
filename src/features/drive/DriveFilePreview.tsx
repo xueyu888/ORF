@@ -7,6 +7,7 @@ import { IconButton } from "../../components/ui";
 import type { Drive, DrivePreviewKind } from "../../types/orf";
 import { OrfRichTextMarkdownViewer } from "../rich-text/OrfRichTextMarkdownViewer";
 import { drivePreviewKindLabel, drivePreviewUrl, formatDriveFileSize } from "./drivePresentation";
+import { driveMobileViewportQuery } from "./useDriveMobileViewport";
 
 type DriveDocxPreviewState =
   | { status: "loading"; html?: undefined; message?: undefined }
@@ -135,7 +136,7 @@ export function DriveFilePreviewPopoutPage() {
 
   if (!payload) {
     return (
-      <main className="orf-drive-file-popout-page" data-chat-theme="light">
+      <main className="orf-drive-file-popout-page" data-orf-appearance="light">
         <section className="orf-drive-file-popout-empty" role="alert">
           <h1>文件预览已失效</h1>
           <p>请从 ORF 里重新打开该文件。</p>
@@ -146,7 +147,7 @@ export function DriveFilePreviewPopoutPage() {
   }
 
   return (
-    <main className="orf-drive-file-popout-page" data-chat-theme={payload.theme}>
+    <main className="orf-drive-file-popout-page" data-orf-appearance={payload.theme}>
       <DriveFilePreviewChrome
         className="orf-drive-file-preview-window is-popout"
         file={payload.file}
@@ -240,7 +241,7 @@ export function canOpenDriveFilePreview(file?: Drive | null) {
 }
 
 export function openDriveFilePreviewPopoutWindow(file: Drive) {
-  if (typeof window === "undefined" || window.matchMedia("(max-width: 768px)").matches) return false;
+  if (typeof window === "undefined" || window.matchMedia(driveMobileViewportQuery).matches) return false;
   const normalizedFile = normalizeDriveFilePreviewFile(file);
   if (!normalizedFile || !canOpenDriveFilePreview(normalizedFile)) return false;
   const popoutId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -653,7 +654,7 @@ function readDriveFilePreviewPayload(popoutId?: string) {
 
 function currentDrivePreviewTheme() {
   if (typeof document === "undefined") return "light";
-  return document.querySelector(".orf-app-shell")?.getAttribute("data-chat-theme") === "dark" ? "dark" : "light";
+  return document.querySelector(".orf-app-shell")?.getAttribute("data-orf-appearance") === "dark" ? "dark" : "light";
 }
 
 function driveFilePreviewPayloadKey(popoutId: string) {

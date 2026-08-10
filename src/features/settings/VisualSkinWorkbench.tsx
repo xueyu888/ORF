@@ -72,8 +72,6 @@ function backgroundSourceInfo(id: string) {
   const [sceneRaw, scopeRaw] = decodedId.split("/");
   const slotLabel = sceneRaw === "app_background"
     ? "旧版外壳"
-    : sceneRaw === "page_chat_background"
-      ? "旧聊天页"
     : visualSkinSlots.find((item) => item.scene === sceneRaw)?.label ?? "未知槽位";
   const scopeLabel = scopeRaw === "personal"
     ? "个人图库"
@@ -153,6 +151,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
   const [deleteStatus, setDeleteStatus] = useState<RequestStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pageTargetScenes, setPageTargetScenes] = useState<PageVisualBackgroundScene[]>([]);
+  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
 
   const slot = visualSkinSlotByScene(scene);
   const selectedBackground = backgroundList.find((background) => background.id === selectedBackgroundId) ?? null;
@@ -383,6 +382,13 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
 
   return (
     <section className="orf-skin-workbench" data-scope={scope}>
+      <header className="orf-skin-workbench-heading">
+        <div>
+          <span>{scope === "system" ? "系统视觉" : "个性化背景"}</span>
+          <h2>背景工作台</h2>
+        </div>
+        <p>为登录、导航和业务页面分别配置背景；界面材质与明暗外观保持统一。</p>
+      </header>
       <aside className="orf-skin-slot-rail" aria-label="皮肤槽位">
         {groupedSlots.map(([group, items]) => (
           <div className="orf-skin-slot-group" key={group}>
@@ -442,7 +448,18 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
             onCropChange={updateCrop}
           />
 
-          <div className="orf-skin-inspector">
+          <button
+            type="button"
+            className="orf-skin-mobile-inspector-toggle"
+            aria-controls="orf-skin-inspector"
+            aria-expanded={mobileInspectorOpen}
+            onClick={() => setMobileInspectorOpen((open) => !open)}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            <span>{mobileInspectorOpen ? "收起精细调整" : "位置、蒙层与切换"}</span>
+          </button>
+
+          <div id="orf-skin-inspector" className="orf-skin-inspector" data-mobile-open={mobileInspectorOpen ? "true" : "false"}>
             {isPageSlot && (
               <div className="orf-skin-inspector-section">
                 <div className="orf-skin-inspector-title">

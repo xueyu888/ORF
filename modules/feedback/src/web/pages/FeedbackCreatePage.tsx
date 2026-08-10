@@ -97,7 +97,7 @@ export function FeedbackCreatePage() {
   if (!canCreateFeedback) {
     return (
       <div className="orf-feedback-workbench feedback-issue-detail-page">
-        <FeedbackEmptyState title="当前账号不能创建反馈" description="反馈创建需要 active 成员身份。" />
+        <FeedbackEmptyState title="当前账号不能创建反馈" description="反馈创建需要启用中的成员身份。" />
         <Link className="feedback-issue-back-link" to={feedbackRootPath}>
           <ArrowLeft aria-hidden="true" />
           返回反馈列表
@@ -183,7 +183,7 @@ export function FeedbackCreatePage() {
                 onUploadAttachment={uploadLocalAttachment}
                 placeholder="描述反馈..."
                 showSubmitButton={false}
-                submitLabel="创建 issue"
+                submitLabel="创建反馈"
                 submitOnEnter={false}
               />
               {referencedAttachments.length > 0 && (
@@ -245,7 +245,7 @@ export function FeedbackCreatePage() {
         <div className="feedback-create-submit-row">
           <FeedbackButton disabled={submitting} type="submit">
             <Check aria-hidden="true" />
-            {submitting ? "创建中..." : "创建 issue"}
+            {submitting ? "创建中..." : "创建反馈"}
           </FeedbackButton>
         </div>
       </form>

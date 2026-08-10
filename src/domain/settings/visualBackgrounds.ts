@@ -8,6 +8,9 @@ export const pageVisualBackgroundScenes = [
   "page_bounties_background",
   "page_tasks_background",
   "page_work_logs_background",
+  "page_chat_background",
+  "page_resources_background",
+  "page_settings_background",
   "page_feedback_background",
   "page_reports_background",
   "page_system_background",
@@ -23,7 +26,7 @@ export const visualBackgroundScenes = [
 ] as const;
 
 export const legacyVisualBackgroundScenes = ["app_background"] as const;
-export const legacyVisualBackgroundStorageScenes = ["page_chat_background"] as const;
+export const legacyVisualBackgroundStorageScenes = [] as const;
 export const visualBackgroundScopes = ["default", "system", "personal"] as const;
 export const legacyVisualBackgroundScopes = ["user"] as const;
 

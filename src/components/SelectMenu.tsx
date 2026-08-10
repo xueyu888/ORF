@@ -4,7 +4,7 @@ import type { CSSProperties, ReactNode, RefObject } from "react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-export type FantasySelectOption<Value extends string> = {
+export type SelectOption<Value extends string> = {
   value: Value;
   label: string;
   description?: string;
@@ -20,7 +20,7 @@ type PopoverPosition = {
   top: number;
 };
 
-export function FantasySelectMenu<Value extends string>({
+export function SelectMenu<Value extends string>({
   ariaLabel,
   className,
   disabled = false,
@@ -42,7 +42,7 @@ export function FantasySelectMenu<Value extends string>({
   leadingIcon?: ReactNode;
   onChange: (value: Value) => void;
   onSearchQueryChange?: (query: string) => void;
-  options: Array<FantasySelectOption<Value>>;
+  options: Array<SelectOption<Value>>;
   placeholder?: string;
   searchable?: boolean;
   searchPlaceholder?: string;
@@ -60,7 +60,7 @@ export function FantasySelectMenu<Value extends string>({
   const menuId = useId();
   const selected = options.find((option) => option.value === value);
   const selectedLabel = selected?.label ?? placeholder;
-  const visibleOptions = searchable ? filterFantasySelectOptions(options, searchQuery) : options;
+  const visibleOptions = searchable ? filterSelectOptions(options, searchQuery) : options;
   const selectedValues = new Set<Value>([value]);
 
   const updateSearchQuery = useCallback((query: string) => {
@@ -149,7 +149,7 @@ export function FantasySelectMenu<Value extends string>({
     }
   }, [open, searchable, searchQuery, selectedLabel, variant, visibleOptions.length]);
 
-  const selectOption = useCallback((option: FantasySelectOption<Value>) => {
+  const selectOption = useCallback((option: SelectOption<Value>) => {
     if (option.disabled || disabled) return;
     updateSearchQuery("");
     setOpen(false);
@@ -168,7 +168,7 @@ export function FantasySelectMenu<Value extends string>({
   return (
     <div
       ref={rootRef}
-      className={clsx("orf-fantasy-select-menu", `orf-fantasy-select-menu-${variant}`, open && "orf-fantasy-select-menu-open", disabled && "orf-fantasy-select-menu-disabled", className)}
+      className={clsx("orf-select-menu", `orf-select-menu-${variant}`, open && "orf-select-menu-open", disabled && "orf-select-menu-disabled", className)}
       data-no-row-edit={stopPropagation ? "true" : undefined}
       onClick={stopPropagation ? (event) => event.stopPropagation() : undefined}
       onDoubleClick={stopPropagation ? (event) => event.stopPropagation() : undefined}
@@ -178,7 +178,7 @@ export function FantasySelectMenu<Value extends string>({
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label={ariaLabel}
-        className={clsx("orf-fantasy-select-trigger", variant === "filter" && "orf-floating-control")}
+        className={clsx("orf-select-trigger", variant === "filter" && "orf-floating-control")}
         disabled={disabled}
         onClick={() => {
           if (!open) {
@@ -189,11 +189,11 @@ export function FantasySelectMenu<Value extends string>({
         title={title}
         type="button"
       >
-        {leadingIcon && <span className="orf-fantasy-select-icon" aria-hidden="true">{leadingIcon}</span>}
-        <span className="orf-fantasy-select-value">{selectedLabel}</span>
-        <ChevronDown className="orf-fantasy-select-chevron" aria-hidden="true" />
+        {leadingIcon && <span className="orf-select-icon" aria-hidden="true">{leadingIcon}</span>}
+        <span className="orf-select-value">{selectedLabel}</span>
+        <ChevronDown className="orf-select-chevron" aria-hidden="true" />
       </button>
-      <FantasySelectPopover
+      <SelectPopover
         ariaLabel={ariaLabel}
         menuId={menuId}
         onSelect={selectOption}
@@ -214,7 +214,7 @@ export function FantasySelectMenu<Value extends string>({
   );
 }
 
-export function FantasyMultiSelectMenu<Value extends string>({
+export function MultiSelectMenu<Value extends string>({
   allValue,
   ariaLabel,
   className,
@@ -236,7 +236,7 @@ export function FantasyMultiSelectMenu<Value extends string>({
   disabled?: boolean;
   leadingIcon?: ReactNode;
   onChange: (values: Value[]) => void;
-  options: Array<FantasySelectOption<Value>>;
+  options: Array<SelectOption<Value>>;
   placeholder?: string;
   searchable?: boolean;
   searchPlaceholder?: string;
@@ -253,8 +253,8 @@ export function FantasyMultiSelectMenu<Value extends string>({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const menuId = useId();
   const selectedValues = new Set(values);
-  const visibleOptions = searchable ? filterFantasySelectOptions(options, searchQuery) : options;
-  const selectedLabel = fantasyMultiSelectLabel({ allValue, options, placeholder, values });
+  const visibleOptions = searchable ? filterSelectOptions(options, searchQuery) : options;
+  const selectedLabel = multiSelectLabel({ allValue, options, placeholder, values });
 
   const updateSearchQuery = useCallback((query: string) => {
     setSearchQuery(query);
@@ -341,7 +341,7 @@ export function FantasyMultiSelectMenu<Value extends string>({
     }
   }, [open, searchable, searchQuery, selectedLabel, variant, visibleOptions.length]);
 
-  const selectOption = useCallback((option: FantasySelectOption<Value>) => {
+  const selectOption = useCallback((option: SelectOption<Value>) => {
     if (option.disabled || disabled) return;
     if (allValue && option.value === allValue) {
       onChange([]);
@@ -368,7 +368,7 @@ export function FantasyMultiSelectMenu<Value extends string>({
   return (
     <div
       ref={rootRef}
-      className={clsx("orf-fantasy-select-menu", "orf-fantasy-select-menu-multi", `orf-fantasy-select-menu-${variant}`, open && "orf-fantasy-select-menu-open", disabled && "orf-fantasy-select-menu-disabled", className)}
+      className={clsx("orf-select-menu", "orf-select-menu-multi", `orf-select-menu-${variant}`, open && "orf-select-menu-open", disabled && "orf-select-menu-disabled", className)}
       data-no-row-edit={stopPropagation ? "true" : undefined}
       onClick={stopPropagation ? (event) => event.stopPropagation() : undefined}
       onDoubleClick={stopPropagation ? (event) => event.stopPropagation() : undefined}
@@ -378,7 +378,7 @@ export function FantasyMultiSelectMenu<Value extends string>({
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label={ariaLabel}
-        className={clsx("orf-fantasy-select-trigger", variant === "filter" && "orf-floating-control")}
+        className={clsx("orf-select-trigger", variant === "filter" && "orf-floating-control")}
         disabled={disabled}
         onClick={() => {
           if (!open) {
@@ -389,11 +389,11 @@ export function FantasyMultiSelectMenu<Value extends string>({
         title={title}
         type="button"
       >
-        {leadingIcon && <span className="orf-fantasy-select-icon" aria-hidden="true">{leadingIcon}</span>}
-        <span className="orf-fantasy-select-value">{selectedLabel}</span>
-        <ChevronDown className="orf-fantasy-select-chevron" aria-hidden="true" />
+        {leadingIcon && <span className="orf-select-icon" aria-hidden="true">{leadingIcon}</span>}
+        <span className="orf-select-value">{selectedLabel}</span>
+        <ChevronDown className="orf-select-chevron" aria-hidden="true" />
       </button>
-      <FantasySelectPopover
+      <SelectPopover
         ariaLabel={ariaLabel}
         menuId={menuId}
         multiselect
@@ -415,9 +415,9 @@ export function FantasyMultiSelectMenu<Value extends string>({
   );
 }
 
-function fantasyMultiSelectLabel<Value extends string>(input: {
+function multiSelectLabel<Value extends string>(input: {
   allValue?: Value;
-  options: Array<FantasySelectOption<Value>>;
+  options: Array<SelectOption<Value>>;
   placeholder: string;
   values: readonly Value[];
 }) {
@@ -432,26 +432,26 @@ function fantasyMultiSelectLabel<Value extends string>(input: {
   return `${labels[0]}等 ${labels.length} 项`;
 }
 
-export function filterFantasySelectOptions<Value extends string>(options: Array<FantasySelectOption<Value>>, query: string) {
-  const normalizedQuery = normalizeFantasySelectSearchText(query);
+export function filterSelectOptions<Value extends string>(options: Array<SelectOption<Value>>, query: string) {
+  const normalizedQuery = normalizeSelectSearchText(query);
   if (!normalizedQuery) return options;
-  return options.filter((option) => option.alwaysVisible || fantasySelectOptionMatchesSearch(option, normalizedQuery));
+  return options.filter((option) => option.alwaysVisible || selectOptionMatchesSearch(option, normalizedQuery));
 }
 
-export function hasFantasySelectOptionSearchMatch<Value extends string>(options: Array<FantasySelectOption<Value>>, query: string) {
-  const normalizedQuery = normalizeFantasySelectSearchText(query);
-  return !normalizedQuery || options.some((option) => fantasySelectOptionMatchesSearch(option, normalizedQuery));
+export function hasSelectOptionSearchMatch<Value extends string>(options: Array<SelectOption<Value>>, query: string) {
+  const normalizedQuery = normalizeSelectSearchText(query);
+  return !normalizedQuery || options.some((option) => selectOptionMatchesSearch(option, normalizedQuery));
 }
 
-function fantasySelectOptionMatchesSearch<Value extends string>(option: FantasySelectOption<Value>, normalizedQuery: string) {
-  return [option.label, option.description, option.value].some((value) => normalizeFantasySelectSearchText(value ?? "").includes(normalizedQuery));
+function selectOptionMatchesSearch<Value extends string>(option: SelectOption<Value>, normalizedQuery: string) {
+  return [option.label, option.description, option.value].some((value) => normalizeSelectSearchText(value ?? "").includes(normalizedQuery));
 }
 
-function normalizeFantasySelectSearchText(value: string) {
+function normalizeSelectSearchText(value: string) {
   return value.trim().toLocaleLowerCase();
 }
 
-function FantasySelectPopover<Value extends string>({
+function SelectPopover<Value extends string>({
   ariaLabel,
   menuId,
   onSelect,
@@ -472,10 +472,10 @@ function FantasySelectPopover<Value extends string>({
   ariaLabel: string;
   menuId: string;
   multiselect?: boolean;
-  onSelect: (option: FantasySelectOption<Value>) => void;
+  onSelect: (option: SelectOption<Value>) => void;
   onSearchQueryChange: (query: string) => void;
   open: boolean;
-  options: Array<FantasySelectOption<Value>>;
+  options: Array<SelectOption<Value>>;
   popoverRef: (node: HTMLDivElement | null) => void;
   position: PopoverPosition | null;
   searchable: boolean;
@@ -483,7 +483,7 @@ function FantasySelectPopover<Value extends string>({
   searchPlaceholder: string;
   searchQuery: string;
   selectedValues: ReadonlySet<Value>;
-  visibleOptions: Array<FantasySelectOption<Value>>;
+  visibleOptions: Array<SelectOption<Value>>;
   variant: "filter" | "chip";
 }) {
   if (!open || typeof document === "undefined") return null;
@@ -500,15 +500,15 @@ function FantasySelectPopover<Value extends string>({
       ref={popoverRef}
       id={menuId}
       className={clsx(
-        "orf-fantasy-select-popover",
-        `orf-fantasy-select-popover-${variant}`,
-        searchable && "orf-fantasy-select-popover-searchable",
-        position?.placement === "top" && "orf-fantasy-select-popover-top",
+        "orf-select-popover",
+        `orf-select-popover-${variant}`,
+        searchable && "orf-select-popover-searchable",
+        position?.placement === "top" && "orf-select-popover-top",
       )}
       style={style}
     >
       {searchable && (
-        <label className="orf-fantasy-select-search">
+        <label className="orf-select-search">
           <Search className="h-4 w-4" aria-hidden="true" />
           <input
             ref={searchInputRef}
@@ -527,30 +527,30 @@ function FantasySelectPopover<Value extends string>({
           />
         </label>
       )}
-      <div className="orf-fantasy-select-options" role="listbox" aria-label={ariaLabel} aria-multiselectable={multiselect ? true : undefined}>
+      <div className="orf-select-options" role="listbox" aria-label={ariaLabel} aria-multiselectable={multiselect ? true : undefined}>
         {visibleOptions.map((option) => {
           const selectedOption = selectedValues.has(option.value);
           return (
             <button
               key={option.value}
               aria-selected={selectedOption}
-              className={clsx("orf-fantasy-select-option", selectedOption && "orf-fantasy-select-option-selected")}
-              data-fantasy-select-option-value={option.value}
+              className={clsx("orf-select-option", selectedOption && "orf-select-option-selected")}
+              data-select-option-value={option.value}
               disabled={option.disabled}
               onClick={() => onSelect(option)}
               role="option"
               type="button"
             >
-              <span className="orf-fantasy-select-option-rune" aria-hidden="true" />
-              <span className="orf-fantasy-select-option-copy">
-                <span className="orf-fantasy-select-option-label">{option.label}</span>
-                {option.description && <span className="orf-fantasy-select-option-description">{option.description}</span>}
+              <span className="orf-select-option-rune" aria-hidden="true" />
+              <span className="orf-select-option-copy">
+                <span className="orf-select-option-label">{option.label}</span>
+                {option.description && <span className="orf-select-option-description">{option.description}</span>}
               </span>
-              {selectedOption && <Check className="orf-fantasy-select-option-check" aria-hidden="true" />}
+              {selectedOption && <Check className="orf-select-option-check" aria-hidden="true" />}
             </button>
           );
         })}
-        {searchable && !hasFantasySelectOptionSearchMatch(options, searchQuery) && <div className="orf-fantasy-select-empty">没有匹配项</div>}
+        {searchable && !hasSelectOptionSearchMatch(options, searchQuery) && <div className="orf-select-empty">没有匹配项</div>}
       </div>
     </div>,
     document.body,

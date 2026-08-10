@@ -23,15 +23,20 @@ import { DesktopWindowControls } from "../features/desktop/DesktopWindowControls
 import { ChatFloatingImagePreviewProvider } from "../features/chat/ChatFloatingImagePreview";
 import { isDesktopShellAvailable, setDesktopWorkbenchZoomLevel } from "../features/desktop/desktopShellRuntime";
 import { applyDisplayPreferencesToDocument, nextWorkbenchZoomLevel } from "../features/display/displayPreferences";
+import {
+  applyAppearanceModeToDocument,
+  cacheAppearanceMode,
+  defaultAppearanceMode,
+  readCachedAppearanceMode,
+  type AppearanceMode,
+} from "../features/appearance/appearanceMode";
 import { WorkbenchNavigationControls, WorkbenchNavigationProvider, useWorkbenchNavigation } from "../features/workbench-navigation";
 import { useHorizontalPanelResize } from "../hooks/useHorizontalPanelResize";
 import { useVisualBackground } from "../hooks/useVisualBackground";
 import {
-  defaultChatTheme,
   defaultUserDisplayPreferences,
   normalizeSidebarWidth,
   sidebarLayoutLimits,
-  type ChatTheme,
   type UserDisplayPreferences,
 } from "../domain/settings/personalPreferences";
 import {
@@ -45,6 +50,7 @@ import type { VisualBackgroundSelection } from "../utils/visualBackgrounds";
 import { preloadProductionRouteExperience } from "../routing/routePreload";
 
 const shellMainMinimumWidthPx = 640;
+const desktopCompactSidebarBreakpointPx = 1180;
 const feedbackCreatePath = requiredWebModuleAction("feedback", "createPath");
 
 function clampShellSidebarWidth(width: number, viewportWidth: number) {
@@ -72,12 +78,12 @@ function AppShellFrame() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState<number>(sidebarLayoutLimits.expandedWidthPx.default);
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
-  const [chatTheme, setChatTheme] = useState<ChatTheme>(defaultChatTheme);
+  const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>(readCachedAppearanceMode);
   const [displayPreferences, setDisplayPreferences] = useState<UserDisplayPreferences>(defaultUserDisplayPreferences);
   const [clientUpdateCenter, setClientUpdateCenter] = useState<{ notice?: string; open: boolean }>({ open: false });
   const shellDisplayPath = location.pathname;
   const isChatPage = location.pathname.startsWith("/chat");
-  const pageBackgroundScene = isChatPage ? null : pageVisualBackgroundSceneForPath(location.pathname);
+  const pageBackgroundScene = pageVisualBackgroundSceneForPath(location.pathname);
   const sidebarBackground = useVisualBackground("sidebar_background");
   const topbarBackground = useVisualBackground("topbar_background");
   const pageBackground = useVisualBackground(pageBackgroundScene);
@@ -102,7 +108,7 @@ function AppShellFrame() {
     if (!currentUser) {
       setSidebarCollapsed(false);
       setSidebarWidth(sidebarLayoutLimits.expandedWidthPx.default);
-      setChatTheme(defaultChatTheme);
+      setAppearanceMode(readCachedAppearanceMode());
       setDisplayPreferences(defaultUserDisplayPreferences);
       return undefined;
     }
@@ -113,7 +119,7 @@ function AppShellFrame() {
           if (!cancelled) {
             setSidebarCollapsed(preferences.sidebarCollapsed ?? false);
             setSidebarWidth(normalizeSidebarWidth(preferences.sidebarWidth));
-            setChatTheme(preferences.chatTheme);
+            setAppearanceMode(preferences.chatTheme ?? defaultAppearanceMode);
             setDisplayPreferences(preferences.display ?? defaultUserDisplayPreferences);
           }
         })
@@ -128,6 +134,11 @@ function AppShellFrame() {
       unsubscribe();
     };
   }, [currentUser]);
+
+  useEffect(() => {
+    applyAppearanceModeToDocument(appearanceMode);
+    cacheAppearanceMode(appearanceMode);
+  }, [appearanceMode]);
 
   useEffect(() => {
     const cleanup = applyDisplayPreferencesToDocument(displayPreferences, { includeWorkbenchZoom: !desktopChromeEnabled });
@@ -149,6 +160,8 @@ function AppShellFrame() {
   }, []);
 
   const visibleSidebarWidth = clampShellSidebarWidth(sidebarWidth, viewportWidth);
+  const compactDesktopChrome = desktopChromeEnabled && viewportWidth < desktopCompactSidebarBreakpointPx;
+  const effectiveSidebarCollapsed = sidebarCollapsed || compactDesktopChrome;
   const createSidebarWidthResolver = useCallback(() => {
     const startWidth = visibleSidebarWidth;
     return (deltaX: number) => clampShellSidebarWidth(startWidth + deltaX, viewportWidth);
@@ -163,7 +176,7 @@ function AppShellFrame() {
 
   const shellSidebarResize = useHorizontalPanelResize<HTMLButtonElement>({
     createValueResolver: createSidebarWidthResolver,
-    disabled: sidebarCollapsed,
+    disabled: effectiveSidebarCollapsed,
     onChange: setSidebarWidth,
     onCommit: commitSidebarWidth,
   });
@@ -232,6 +245,12 @@ function AppShellFrame() {
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
   const canCreateFeedback = canCreateTeamFeedback(currentUser);
   const isBountyHall = !isChatPage && shellDisplayPath.startsWith("/bounties");
+  const isFeedbackPage = shellDisplayPath.startsWith("/feedback");
+  const mobilePrimaryAction = isFeedbackPage
+    ? "feedback"
+    : isBountyHall || shellDisplayPath.startsWith("/tasks")
+      ? "objective"
+      : "none";
   const shellStyle = {
     "--orf-sidebar-width": `${visibleSidebarWidth}px`,
   } as CSSProperties;
@@ -242,11 +261,14 @@ function AppShellFrame() {
           className="orf-app-shell flex min-h-screen"
           data-bounty-hall={isBountyHall ? "true" : "false"}
           data-chat-page={isChatPage ? "true" : "false"}
-          data-chat-theme={chatTheme}
+          data-feedback-page={isFeedbackPage ? "true" : "false"}
+          data-mobile-primary-action={mobilePrimaryAction}
+          data-orf-appearance={appearanceMode}
           data-desktop-chrome={desktopChromeEnabled ? "true" : "false"}
+          data-desktop-compact={compactDesktopChrome ? "true" : "false"}
           data-display-contrast={displayPreferences.contrast}
           data-display-density={displayPreferences.density}
-          data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
+          data-sidebar-collapsed={effectiveSidebarCollapsed ? "true" : "false"}
           data-resizing-shell-sidebar={shellSidebarResize.resizing ? "true" : "false"}
           style={shellStyle}
         >
@@ -254,7 +276,7 @@ function AppShellFrame() {
             backgroundUrl={sidebarBackgroundUrl}
             backgroundCrop={sidebarBackgroundCrop}
             backgroundOverlayOpacity={sidebarBackgroundOverlayOpacity}
-            collapsed={sidebarCollapsed}
+            collapsed={effectiveSidebarCollapsed}
             onCollapsedChange={handleSidebarCollapsedChange}
             onOpenClientUpdateCenter={() => setClientUpdateCenter({ open: true })}
           />
@@ -263,7 +285,7 @@ function AppShellFrame() {
             className="orf-panel-resize-handle orf-shell-sidebar-resize-handle"
             aria-label="拖动调整全局侧边栏宽度"
             aria-orientation="vertical"
-            disabled={sidebarCollapsed}
+            disabled={effectiveSidebarCollapsed}
             title="拖动调整全局侧边栏宽度"
             {...shellSidebarResize.handleProps}
           />
@@ -299,14 +321,24 @@ function AppShellFrame() {
                 </button>
               </div>
               {!isBountyHall && canCreateFeedback && (
-                <Button className="orf-topbar-action-button" size="sm" variant="secondary" onClick={() => workbenchNavigation.open(feedbackCreatePath, { source: "user" })}>
+                <Button
+                  className="orf-topbar-action-button orf-topbar-feedback-action"
+                  size="sm"
+                  variant={isFeedbackPage ? "primary" : "secondary"}
+                  onClick={() => workbenchNavigation.open(feedbackCreatePath, { source: "user" })}
+                >
                   <MessageSquarePlus className="h-4 w-4" />
                   新建反馈
                 </Button>
               )}
               <div className="orf-topbar-actions ml-auto flex shrink-0 items-center gap-1.5">
                 {canCreateObjective && (
-                  <Button className="orf-topbar-action-button" size="sm" onClick={() => workbenchNavigation.open("/tasks?create=objective", { source: "user" })}>
+                  <Button
+                    className="orf-topbar-action-button orf-topbar-objective-action"
+                    size="sm"
+                    variant={isFeedbackPage ? "secondary" : "primary"}
+                    onClick={() => workbenchNavigation.open("/tasks?create=objective", { source: "user" })}
+                  >
                     <Flag className="h-4 w-4" />
                     新建目标
                   </Button>

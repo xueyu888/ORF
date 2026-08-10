@@ -96,7 +96,6 @@ export function Sidebar({
   }
 
   const sidebarStyle = {
-    "--orf-sidebar-bg-overlay": sidebarBackground.overlay,
     "--orf-sidebar-bg-overlay-opacity": backgroundOverlayOpacity,
   } as CSSProperties;
 

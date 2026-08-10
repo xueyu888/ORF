@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import {
   Activity,
+  ArrowLeft,
   ChevronDown,
   ChevronRight,
   Clock3,
@@ -22,6 +23,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  SlidersHorizontal,
   Target,
   Trash2,
   Unlink,
@@ -40,6 +42,7 @@ import {
   formatDriveDateTime as formatDateTime,
   formatDriveFileSize as formatFileSize,
 } from "./drivePresentation";
+import { useDriveMobileViewport } from "./useDriveMobileViewport";
 import type { ApiUploadProgress } from "../../state/apiClient";
 import type {
   ChatMessage,
@@ -81,6 +84,8 @@ type DriveSearchFilters = {
   updated: DriveSearchUpdatedRange;
   uploaderId: string;
 };
+
+type DriveMobilePane = "browse" | "details";
 
 type DriveBrowserProps = {
   bootstrap: DriveBootstrap | null;
@@ -194,6 +199,8 @@ export function DriveBrowser({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
   const [loadingFolderIds, setLoadingFolderIds] = useState<Set<string>>(new Set());
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [mobilePane, setMobilePane] = useState<DriveMobilePane>(initialSelectedNodeId ? "details" : "browse");
   const [mode, setMode] = useState<DriveMode>("browse");
   const [newFolderName, setNewFolderName] = useState("");
   const [resourceLoading, setResourceLoading] = useState(false);
@@ -214,6 +221,7 @@ export function DriveBrowser({
   const previewColumnRef = useRef<HTMLElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const versionInputRef = useRef<HTMLInputElement | null>(null);
+  const mobileViewport = useDriveMobileViewport();
 
   useEffect(() => {
     loadDetailsRef.current = onLoadDetails;
@@ -233,8 +241,10 @@ export function DriveBrowser({
 
   useEffect(() => {
     initialSelectedNodeIdRef.current = initialSelectedNodeId;
-    if (initialSelectedNodeId) setSelectedNodeId(initialSelectedNodeId);
-  }, [initialSelectedNodeId]);
+    if (!initialSelectedNodeId) return;
+    setSelectedNodeId(initialSelectedNodeId);
+    if (mobileViewport) setMobilePane("details");
+  }, [initialSelectedNodeId, mobileViewport]);
 
   useEffect(() => {
     if (!bootstrap) {
@@ -299,6 +309,9 @@ export function DriveBrowser({
         : mode === "search" ? `${searchResults.length} 项搜索结果`
           : `${trashNodes.length} 项可恢复资源`;
   const uploadTargetLabel = uploadTarget?.name ?? "未选择上传位置";
+  const activeFilterCount = Object.entries(searchFilters).reduce((count, [key, value]) => (
+    value === defaultDriveSearchFilters[key as keyof DriveSearchFilters] ? count : count + 1
+  ), 0);
 
   useEffect(() => {
     const nodeId = selectedNodeId;
@@ -757,10 +770,9 @@ export function DriveBrowser({
 
   const selectResourceNode = (nodeId: string) => {
     setSelectedNodeId(nodeId);
-    if (typeof window === "undefined" || !window.matchMedia("(max-width: 768px)").matches) return;
-    window.setTimeout(() => {
-      previewColumnRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
-    }, 120);
+    if (!mobileViewport) return;
+    setMobilePane("details");
+    window.setTimeout(() => previewColumnRef.current?.scrollIntoView({ block: "start", behavior: "auto" }), 0);
   };
 
   const actions = (
@@ -837,7 +849,7 @@ export function DriveBrowser({
       {loading && !bootstrap ? (
         <div className="orf-drive-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载云盘</div>
       ) : bootstrap ? (
-        <div className="orf-drive-workbench-grid">
+        <div className="orf-drive-workbench-grid" data-mobile-pane={mobilePane}>
           <aside className="orf-drive-sidebar" aria-label="资源集合">
             <div className="orf-drive-workbench-header">
               <div className="orf-drive-workbench-title">
@@ -919,15 +931,32 @@ export function DriveBrowser({
               </select>
               <Button size="sm" variant="secondary">搜索</Button>
             </form>
-            <DriveSearchFacets
-              activeFilters={searchFilters}
-              currentUserId={currentUserId}
-              onChangePreviewKind={(nextPreviewKind) => {
-                updateSearchFilter("previewKind", nextPreviewKind);
-              }}
-              onChangeFilter={updateSearchFilter}
-              uploaderOptions={uploaderOptions}
-            />
+            <button
+              type="button"
+              className="orf-drive-mobile-filter-trigger"
+              aria-expanded={mobileFiltersOpen}
+              aria-controls="orf-drive-mobile-filters"
+              onClick={() => setMobileFiltersOpen((open) => !open)}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              <span>筛选资源</span>
+              {activeFilterCount > 0 ? <strong>{activeFilterCount}</strong> : null}
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <div
+              id="orf-drive-mobile-filters"
+              className={clsx("orf-drive-filter-region", mobileFiltersOpen && "is-mobile-open")}
+            >
+              <DriveSearchFacets
+                activeFilters={searchFilters}
+                currentUserId={currentUserId}
+                onChangePreviewKind={(nextPreviewKind) => {
+                  updateSearchFilter("previewKind", nextPreviewKind);
+                }}
+                onChangeFilter={updateSearchFilter}
+                uploaderOptions={uploaderOptions}
+              />
+            </div>
 
             <div className="orf-drive-tree" role={mode === "browse" ? "tree" : "list"}>
               {resourceLoading ? (
@@ -950,6 +979,16 @@ export function DriveBrowser({
           </main>
 
           <section ref={previewColumnRef} className="orf-drive-preview-column" aria-label="资源预览和详情">
+            <div className="orf-drive-mobile-detail-header">
+              <button type="button" aria-label="返回资源浏览" onClick={() => setMobilePane("browse")}>
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div>
+                <span>资源详情</span>
+                <strong>{effectiveNode?.name ?? "未选择资源"}</strong>
+              </div>
+              <small>{effectiveNode ? driveNodeMetaLabel(effectiveNode) : ""}</small>
+            </div>
             <DrivePreview
               canWrite={canMutateDrive}
               contextOptions={contextOptions}

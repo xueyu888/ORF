@@ -81,7 +81,7 @@ export function ChallengeRowActions({
           <button
             type="button"
             aria-label={addButtonLabel}
-            className="orf-block-action-button pointer-events-auto flex h-7 w-7 items-center justify-center rounded text-[#667085] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]"
+            className="orf-block-action-button orf-text-muted orf-hover-text pointer-events-auto flex h-7 w-7 items-center justify-center rounded transition hover:bg-[var(--orf-bg-muted)]"
             onClick={() => {
               onActiveActionChange(actionId);
               if (shouldShowAddMenu) {
@@ -101,7 +101,7 @@ export function ChallengeRowActions({
                 <button
                   key={item.label}
                   type="button"
-                  className="orf-block-menu-item flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-[#344054] transition hover:bg-[var(--orf-bg-muted)]"
+                  className="orf-block-menu-item orf-text-secondary flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition hover:bg-[var(--orf-bg-muted)]"
                   onClick={() => {
                     item.onAdd();
                     onOpenActionChange(null);
@@ -120,7 +120,7 @@ export function ChallengeRowActions({
           type="button"
           aria-label={dragItem ? "按住拖拽，点击打开块菜单" : "打开块菜单"}
           className={clsx(
-            "orf-block-action-button pointer-events-auto flex h-7 w-7 items-center justify-center rounded text-[#98a2b3] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]",
+            "orf-block-action-button orf-text-faint orf-hover-text pointer-events-auto flex h-7 w-7 items-center justify-center rounded transition hover:bg-[var(--orf-bg-muted)]",
             dragItem && "orf-block-drag-handle",
           )}
           draggable={Boolean(dragItem)}
@@ -150,7 +150,7 @@ export function ChallengeRowActions({
                   type="button"
                   className={clsx(
                     "orf-block-menu-item flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition hover:bg-[var(--orf-bg-muted)]",
-                    item.tone === "danger" ? "text-[#d92d20]" : "text-[#344054]",
+                    item.tone === "danger" ? "orf-danger-text" : "orf-text-secondary",
                   )}
                   onClick={() => {
                     const nextOpenActionId = item.onAction();
@@ -171,7 +171,7 @@ export function ChallengeRowActions({
                   type="button"
                   className={clsx(
                     "orf-block-menu-item flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition hover:bg-[var(--orf-bg-muted)]",
-                    item.action === "delete" ? "text-[#d92d20]" : "text-[#344054]",
+                    item.action === "delete" ? "orf-danger-text" : "orf-text-secondary",
                   )}
                   onClick={() => {
                     onAction(item.action);
@@ -220,7 +220,7 @@ export function DisclosureAction({
     <button
       type="button"
       aria-label={label}
-      className={clsx("orf-disclosure-action z-[70] flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#344054] transition hover:bg-[var(--orf-bg-card)]", className)}
+      className={clsx("orf-disclosure-action orf-text-secondary z-[70] flex h-6 w-6 shrink-0 items-center justify-center rounded transition hover:bg-[var(--orf-bg-card)]", className)}
       data-challenge-disclosure-action="true"
       data-visible={visible ? "true" : undefined}
       onClick={() => {

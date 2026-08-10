@@ -1,6 +1,6 @@
 import { CalendarDays, Filter, FolderKanban, Plus, UserRound } from "lucide-react";
 import { useState } from "react";
-import { FantasyMultiSelectMenu, FantasySelectMenu, type FantasySelectOption } from "../../../components/FantasySelectMenu";
+import { MultiSelectMenu, SelectMenu, type SelectOption } from "../../../components/SelectMenu";
 import { Button, IconButton } from "../../../components/ui";
 import {
   challengeStatusFilterMenuValues,
@@ -46,7 +46,7 @@ export function ChallengeToolbar({
   onProjectChange: (project: ChallengeProjectFilter) => void;
   onStatusChange: (status: ChallengeStatusFilterSelection) => void;
   project: ChallengeProjectFilter;
-  projectOptions: Array<FantasySelectOption<ChallengeProjectFilter>>;
+  projectOptions: Array<SelectOption<ChallengeProjectFilter>>;
   showMemberFilter: boolean;
   scope: ChallengeScope;
   status: ChallengeStatusFilterSelection;
@@ -111,7 +111,7 @@ export function ChallengeToolbar({
             </Button>
           )
         )}
-        <FantasySelectMenu
+        <SelectMenu
           ariaLabel="挑战项目"
           className="orf-filter-chip orf-project-filter-chip"
           leadingIcon={<FolderKanban className="h-4 w-4" />}
@@ -121,7 +121,7 @@ export function ChallengeToolbar({
           searchPlaceholder="搜索项目"
           value={project}
         />
-        <FantasySelectMenu
+        <SelectMenu
           ariaLabel="挑战周期"
           className="orf-filter-chip"
           leadingIcon={<CalendarDays className="h-4 w-4" />}
@@ -132,7 +132,7 @@ export function ChallengeToolbar({
           value={cycle}
         />
         {showMemberFilter && (
-          <FantasySelectMenu
+          <SelectMenu
             ariaLabel="挑战成员"
             className="orf-filter-chip"
             leadingIcon={<UserRound className="h-4 w-4" />}
@@ -143,7 +143,7 @@ export function ChallengeToolbar({
             value={member}
           />
         )}
-        <FantasyMultiSelectMenu
+        <MultiSelectMenu
           ariaLabel="挑战状态"
           className="orf-filter-chip"
           allValue="all"

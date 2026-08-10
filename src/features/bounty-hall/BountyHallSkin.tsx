@@ -3,48 +3,19 @@ import { Leaf, Search, X, type LucideIcon } from "lucide-react";
 import { Children, isValidElement } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
-import { FantasySelectMenu, type FantasySelectOption } from "../../components/FantasySelectMenu";
-import { Button, IconButton, actionButtonClassName, type ButtonSize } from "../../components/ui";
-import "./bounty-hall-skin.css";
+import { SelectMenu, type SelectOption } from "../../components/SelectMenu";
+import { Button, IconButton, type ButtonSize, type ButtonVariant } from "../../components/ui";
 
-type ButtonVariant = "primary" | "secondary" | "blue" | "dark" | "ghost" | "danger";
 type BadgeTone = "neutral" | "accent" | "gold" | "warning" | "success" | "danger";
-
-export function BountyPanel({
-  children,
-  className,
-  count,
-  title,
-}: {
-  children: ReactNode;
-  className?: string;
-  count?: string;
-  title?: string;
-}) {
-  return (
-    <section className={clsx("bounty-panel", className)}>
-      {title && (
-        <div className="bounty-panel-head">
-          <h3>{title}</h3>
-          {count && <span>{count}</span>}
-        </div>
-      )}
-      <div className="bounty-panel-body">{children}</div>
-    </section>
-  );
-}
 
 export function BountyCardSurface({
   children,
   className,
-  priority,
 }: {
   children: ReactNode;
   className?: string;
-  priority?: boolean;
 }) {
-  return <article className={clsx("bounty-card", priority && "bounty-card-priority", className)}>{children}</article>;
+  return <article className={clsx("bounty-card", className)}>{children}</article>;
 }
 
 export function BountyButton({
@@ -75,7 +46,7 @@ export function BountyButton({
   );
 }
 
-export function BountyIconButton({
+function BountyIconButton({
   className,
   icon: Icon,
   label,
@@ -87,14 +58,6 @@ export function BountyIconButton({
   onClick?: () => void;
 }) {
   return <IconButton className={className} icon={Icon} label={label} onClick={onClick} type="button" />;
-}
-
-export function BountyLinkButton({ children, className, to }: { children: ReactNode; className?: string; to: string }) {
-  return (
-    <Link className={actionButtonClassName({ className, variant: "secondary" })} to={to}>
-      {children}
-    </Link>
-  );
 }
 
 export function BountyBadge({ children, tone = "neutral" }: { children: ReactNode; tone?: BadgeTone }) {
@@ -149,7 +112,7 @@ export function BountySelect({
   return (
     <div className="bounty-select-label">
       <span>{label}</span>
-      <FantasySelectMenu
+      <SelectMenu
         ariaLabel={label}
         className="bounty-select-menu"
         onChange={onChange}
@@ -161,7 +124,7 @@ export function BountySelect({
   );
 }
 
-function bountySelectOptionsFromChildren(children: ReactNode): Array<FantasySelectOption<string>> {
+function bountySelectOptionsFromChildren(children: ReactNode): Array<SelectOption<string>> {
   return Children.toArray(children).flatMap((child) => {
     if (!isValidElement(child)) return [];
 
@@ -219,8 +182,6 @@ export function BountyDialog({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <BountyIconButton className="bounty-modal-close" icon={X} label="关闭" onClick={onClose} />
-        <span className="bounty-corner-mark bounty-corner-tl" aria-hidden="true" />
-        <span className="bounty-corner-mark bounty-corner-br" aria-hidden="true" />
         <header className="bounty-modal-head">
           <h2>{title}</h2>
           {subtitle && <p>{subtitle}</p>}
@@ -231,17 +192,4 @@ export function BountyDialog({
     </div>,
     document.body,
   );
-}
-
-export function BountyMetricBox({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bounty-metric-box">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-export function BountyInfoLine({ children }: { children: ReactNode }) {
-  return <div className="bounty-info-line">{children}</div>;
 }

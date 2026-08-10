@@ -35,8 +35,6 @@ const developmentOnlyPages = import.meta.env.DEV
   ? {
       AIEvaluationPage: lazyDevelopmentPage(() => import("./pages/AIEvaluationPage"), "AIEvaluationPage"),
       DashboardPage: lazyDevelopmentPage(() => import("./pages/DashboardPage"), "DashboardPage"),
-      FantasyUiPreviewPage: lazyDevelopmentPage(() => import("./features/fantasy-ui"), "FantasyUiPreviewPage"),
-      GenshinUIKitPreviewPage: lazyDevelopmentPage(() => import("./features/genshin-ui-kit"), "GenshinUIKitPreviewPage"),
       StrategyMapPage: lazyDevelopmentPage(() => import("./pages/StrategyMapPage"), "StrategyMapPage"),
     }
   : null;
@@ -47,15 +45,10 @@ export function App() {
       <Route path="auth" element={<AuthRoute />} />
       <Route path="chat/image-popout/:popoutId" element={<ChatImagePopoutPage />} />
       <Route path="drive/file-preview-popout/:popoutId" element={<DriveFilePreviewPopoutPage />} />
-      {developmentOnlyPages && (
-        <Route path={relativeRoutePath(developmentRoutes.genshinUiKitPreview)} element={<LazyRoute><developmentOnlyPages.GenshinUIKitPreviewPage /></LazyRoute>} />
-      )}
       <Route element={<RequireAuth />}>
         {developmentOnlyPages && (
           <>
             <Route path={relativeRoutePath(developmentRoutes.dashboard)} element={<LazyRoute><developmentOnlyPages.DashboardPage /></LazyRoute>} />
-            <Route path={relativeRoutePath(developmentRoutes.fantasyUi)} element={<LazyRoute><developmentOnlyPages.FantasyUiPreviewPage /></LazyRoute>} />
-            <Route path={relativeRoutePath(developmentRoutes.genshinUiKit)} element={<LazyRoute><developmentOnlyPages.GenshinUIKitPreviewPage /></LazyRoute>} />
             <Route path={relativeRoutePath(developmentRoutes.strategyMap)} element={<LazyRoute><developmentOnlyPages.StrategyMapPage /></LazyRoute>} />
             <Route path={relativeRoutePath(developmentRoutes.aiEvaluation)} element={<LazyRoute><developmentOnlyPages.AIEvaluationPage /></LazyRoute>} />
           </>

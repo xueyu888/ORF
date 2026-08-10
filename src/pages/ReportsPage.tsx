@@ -1,7 +1,7 @@
 import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Minus, Target, TrendingDown, TrendingUp, Trophy, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { buildFantasyDateGrid, fantasyMonthLabel } from "../components/FantasyDatePicker";
+import { buildDateGrid, monthLabel } from "../components/DatePicker";
 import { PageScaffold } from "../components/PageScaffold";
 import { UserAvatar } from "../components/UserAvatar";
 import { Button, Card, IconButton, ProgressBar } from "../components/ui";
@@ -104,10 +104,7 @@ export function ReportsPage() {
   }, [linkedObjectiveId, linkedSettlementDate, searchParams]);
 
   return (
-    <PageScaffold
-      title="统计"
-      subtitle="成员积分、完成率和排名变化。"
-    >
+    <PageScaffold title="统计">
       <ReportsPeriodCard
         customDateBoundary={customDateBoundary}
         customRange={customRange}
@@ -190,29 +187,32 @@ export function ReportsPage() {
         </div>
 
         {rows.length > 0 ? (
-          <div className="orf-table-wrap">
-            <table className="orf-data-table reports-data-table">
-              <thead>
-                <tr>
-                  <th scope="col">排名</th>
-                  <th scope="col">成员</th>
-                  <th scope="col">积分</th>
-                  <th scope="col">积分占比</th>
-                  <th scope="col">完成率</th>
-                  <th scope="col">变化</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <LeaderboardRowItem
-                    key={row.userId}
-                    maxPoints={maxPoints}
-                    row={row}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="orf-table-wrap reports-desktop-leaderboard">
+              <table className="orf-data-table reports-data-table">
+                <thead>
+                  <tr>
+                    <th scope="col">排名</th>
+                    <th scope="col">成员</th>
+                    <th scope="col">积分</th>
+                    <th scope="col">积分占比</th>
+                    <th scope="col">完成率</th>
+                    <th scope="col">变化</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <LeaderboardRowItem
+                      key={row.userId}
+                      maxPoints={maxPoints}
+                      row={row}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <MobileLeaderboard maxPoints={maxPoints} rows={rows} />
+          </>
         ) : (
           <div className="reports-empty-state">暂无积分记录</div>
         )}
@@ -347,7 +347,7 @@ function ReportsPeriodCard({
             />
             <div className="reports-calendar-title">
               <CalendarDays className="h-4 w-4" />
-              <span>{fantasyMonthLabel(displayMonth)}</span>
+              <span>{monthLabel(displayMonth)}</span>
             </div>
             <IconButton
               icon={ChevronRight}
@@ -376,6 +376,31 @@ function ReportsPeriodCard({
   );
 }
 
+function MobileLeaderboard({ maxPoints, rows }: { maxPoints: number; rows: LeaderboardRow[] }) {
+  return (
+    <ol className="reports-mobile-leaderboard" aria-label="成员积分排行榜">
+      {rows.map((row) => {
+        const percentage = Math.max(0, Math.min(100, (row.points / maxPoints) * 100));
+        return (
+          <li key={row.userId} data-rank={row.rank <= 3 ? row.rank : undefined}>
+            <span className="reports-mobile-rank" aria-label={`第 ${row.rank} 名`}>{row.rank}</span>
+            <UserAvatar avatarUrl={row.avatarUrl} className="reports-mobile-member-avatar" frame={false} name={row.memberName} />
+            <div className="reports-mobile-member-copy">
+              <strong>{row.memberName}</strong>
+              <span>{row.points.toFixed(1)} 分 · {row.completionRate}% 完成</span>
+            </div>
+            <RankChange change={row.rankChange} />
+            <div className="reports-mobile-progress">
+              <ProgressBar value={percentage} />
+              <span>相对榜首 {Math.round(percentage)}%</span>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function SettlementCalendar({
   dailySummaryByDate,
   displayMonth,
@@ -389,9 +414,9 @@ function SettlementCalendar({
   rangeBounds: LeaderboardRangeBounds | null;
   selectedDate: string;
 }) {
-  const cells = buildFantasyDateGrid(displayMonth, selectedDate);
+  const cells = buildDateGrid(displayMonth, selectedDate);
   return (
-    <div className="reports-calendar-grid" role="grid" aria-label={`${fantasyMonthLabel(displayMonth)}每日结算分`}>
+    <div className="reports-calendar-grid" role="grid" aria-label={`${monthLabel(displayMonth)}每日结算分`}>
       {["一", "二", "三", "四", "五", "六", "日"].map((label) => (
         <div className="reports-calendar-weekday" key={label} role="columnheader">
           {label}

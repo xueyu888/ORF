@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 import { type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChatReactionEmoji } from "./ChatReactionEmoji";
+import { chatFloatingLayerRoot } from "./chatFloatingLayer";
 import { searchChatReactionOptions } from "./chatReactions";
 
 type ChatReactionPickerProps = {
@@ -150,6 +151,9 @@ export function ChatReactionPicker({
     visibility: position ? "visible" : "hidden",
   };
 
+  const portalRoot = chatFloatingLayerRoot();
+  if (!portalRoot) return null;
+
   return createPortal(
     <div className="orf-chat-emoji-popover" ref={panelRef} role="dialog" aria-label={label} style={style} onKeyDown={handlePickerKeyDown}>
       <label className="orf-chat-emoji-search">
@@ -182,6 +186,6 @@ export function ChatReactionPicker({
         )}
       </div>
     </div>,
-    document.body,
+    portalRoot,
   );
 }

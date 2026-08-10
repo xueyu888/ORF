@@ -4,7 +4,8 @@ import { createPortal } from "react-dom";
 import type { CSSProperties, FormEvent, MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { FantasyDatePicker } from "../../../components/FantasyDatePicker";
+import { DatePicker } from "../../../components/DatePicker";
+import { useConfirmDialog } from "../../../components/ConfirmDialog";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon, type MetricIconTone } from "../../../components/OrfIconAssets";
 import { UserAvatar } from "../../../components/UserAvatar";
@@ -217,13 +218,19 @@ function ProjectHeader({
   onDeleteProject: (projectId: string) => Promise<boolean>;
   project: ObjectiveProjectGroup;
 }) {
-  const handleDeleteProject = () => {
+  const confirm = useConfirmDialog();
+  const handleDeleteProject = async () => {
     if (!project.projectId || project.isUnassigned) return;
     const message =
       project.objectiveCount > 0
         ? `删除项目「${project.name}」？项目下 ${project.objectiveCount} 个目标不会删除，会移到“未归属目标”。`
         : `删除项目「${project.name}」？`;
-    if (!window.confirm(message)) return;
+    if (!await confirm({
+      title: "删除项目",
+      description: message,
+      confirmLabel: "删除项目",
+      tone: "danger",
+    })) return;
     void onDeleteProject(project.projectId);
   };
 
@@ -431,7 +438,7 @@ function ObjectivePanel({
             />
           ) : (
             <EditableTitlePreview
-              className={clsx("orf-objective-title min-w-0 truncate font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}
+              className={clsx("orf-objective-title min-w-0 truncate font-bold", complete ? "orf-text-muted line-through" : "orf-text-primary")}
               editable={handlers.canEditTargetTitle(target)}
               selected={isEditingTarget}
               title={group.objective.title}
@@ -1232,7 +1239,7 @@ function MetricRow({
             />
           ) : (
             <EditableTitlePreview
-              className={clsx("orf-result-title truncate font-semibold", complete ? "text-[#98a2b3] line-through" : temporary ? "text-[#475467]" : "text-[#1d2939]")}
+              className={clsx("orf-result-title truncate font-semibold", complete ? "orf-text-muted line-through" : temporary ? "orf-text-secondary" : "orf-text-primary")}
               editable={handlers.canEditTargetTitle(target)}
               selected={selected || isEditingTarget}
               title={title}
@@ -1380,7 +1387,7 @@ function ActionRow({
             />
           ) : (
             <EditableTitlePreview
-              className={clsx("orf-task-title min-w-0 truncate font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : temporary ? "text-[#475467]" : "text-[#1d2939]")}
+              className={clsx("orf-task-title min-w-0 truncate font-medium", complete ? "orf-text-muted line-through" : status === "active" ? "orf-accent-text" : temporary ? "orf-text-secondary" : "orf-text-primary")}
               editable={handlers.canEditTargetTitle(target)}
               selected={isSameTarget(handlers.editingTarget, target)}
               title={title}
@@ -1517,7 +1524,7 @@ function SubActionRow({
           />
         ) : (
           <EditableTitlePreview
-            className={clsx("orf-subtask-title truncate font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : temporary ? "text-[#475467]" : "text-[#344054]")}
+            className={clsx("orf-subtask-title truncate font-medium", complete ? "orf-text-muted line-through" : status === "active" ? "orf-accent-text" : temporary ? "orf-text-secondary" : "orf-text-secondary")}
             editable={handlers.canEditTargetTitle(target)}
             selected={isSameTarget(handlers.editingTarget, target)}
             title={title}
@@ -1632,10 +1639,10 @@ function ProgressValue({ value }: { value: number }) {
 
   return (
     <div className="orf-progress-value orf-progress-value-neutral flex items-center gap-2">
-      <div className="orf-progress-track h-1.5 w-16 overflow-hidden rounded-full bg-[#dfe4eb]">
-        <div className="h-full rounded-full bg-[#7f8da3]" style={{ width: `${bounded}%` }} />
+      <div className="orf-progress-track h-1.5 w-16 overflow-hidden rounded-full">
+        <div className="orf-progress-fill h-full rounded-full" style={{ width: `${bounded}%` }} />
       </div>
-      <span className="orf-progress-value-label w-9 text-right font-bold text-[#344054]">{bounded}%</span>
+      <span className="orf-progress-value-label orf-text-primary w-9 text-right font-semibold">{bounded}%</span>
     </div>
   );
 }
@@ -1817,7 +1824,7 @@ function ObjectiveDeadlineCell({
 
   if (canEdit) {
     return (
-      <FantasyDatePicker
+      <DatePicker
         ariaLabel={`修改目标截止日期，当前 ${value || "未设置"}`}
         disabled={isSaving}
         min={minimumValue}
@@ -1828,7 +1835,7 @@ function ObjectiveDeadlineCell({
         value={value}
       >
         <DateStack primary={value || "未设置"} />
-      </FantasyDatePicker>
+      </DatePicker>
     );
   }
 
@@ -1921,11 +1928,11 @@ function TimeValue({ className, icon: Icon, subtle, title, value }: { className?
   return (
     <span
       aria-label={title ? title.replace(/\n/g, "；") : undefined}
-      className={clsx("orf-time-value inline-flex h-7 min-w-0 items-center gap-2 whitespace-nowrap text-sm font-medium", subtle ? "text-[#667085]" : "text-[#344054]", className)}
+      className={clsx("orf-time-value inline-flex h-7 min-w-0 items-center gap-2 whitespace-nowrap text-sm font-medium", subtle ? "orf-text-muted" : "orf-text-secondary", className)}
       tabIndex={title ? 0 : undefined}
       title={title ?? value}
     >
-      <Icon className={clsx("h-4 w-4", subtle ? "text-[#98a2b3]" : "text-[#667085]")} />
+      <Icon className={clsx("h-4 w-4", subtle ? "orf-text-faint" : "orf-text-muted")} />
       <span className="orf-time-value-text">{value}</span>
     </span>
   );
@@ -2023,7 +2030,7 @@ function AvatarStack({ people }: { people: AvatarStackPerson[] }) {
     };
   }, [popoverOpen]);
 
-  if (people.length === 0) return <span className="orf-avatar-stack orf-avatar-stack-empty font-medium text-[#98a2b3]">未分配</span>;
+  if (people.length === 0) return <span className="orf-avatar-stack orf-avatar-stack-empty orf-text-muted font-medium">未分配</span>;
 
   return (
     <div className="orf-avatar-stack" title={people.map((person) => person.name).join("、")}>

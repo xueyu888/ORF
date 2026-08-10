@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Save } from "lucide-react";
+import { Save, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "../components/ui";
 import { permissionDefinitions, rolePermissionKeys, type PermissionKey } from "../config/permissions";
@@ -7,6 +7,14 @@ import { useOrf } from "../state/OrfProvider";
 import type { PermissionRule, UserRole } from "../types/orf";
 
 const roles: UserRole[] = ["member", "admin"];
+type PermissionCategory = (typeof permissionDefinitions)[number]["category"];
+type PermissionCategoryFilter = PermissionCategory | "all";
+
+const permissionCategories = [...new Set(permissionDefinitions.map((permission) => permission.category))] as PermissionCategory[];
+const permissionCategoryCounts = new Map(permissionCategories.map((category) => [
+  category,
+  permissionDefinitions.filter((permission) => permission.category === category).length,
+]));
 
 const roleLabel: Record<UserRole, string> = {
   admin: "管理员",
@@ -41,6 +49,10 @@ function permissionRuleSignature(permissionRules: readonly PermissionRule[], rol
 export function PermissionsPage() {
   const { state, updateRolePermissionRules } = useOrf();
   const [selectedRole, setSelectedRole] = useState<UserRole>("member");
+  const [selectedCategory, setSelectedCategory] = useState<PermissionCategoryFilter>(() => (
+    typeof window !== "undefined" && window.matchMedia("(max-width: 560px)").matches ? permissionCategories[0] : "all"
+  ));
+  const [permissionQuery, setPermissionQuery] = useState("");
   const [draftPermissionRules, setDraftPermissionRules] = useState(state.permissionRules);
   const [isSavingPermissions, setIsSavingPermissions] = useState(false);
   const savedPermissionRules = state.permissionRules;
@@ -57,6 +69,15 @@ export function PermissionsPage() {
   );
 
   const selectedRolePermissions = useMemo(() => new Set(rolePermissionKeys(draftPermissionRules, selectedRole)), [draftPermissionRules, selectedRole]);
+  const visiblePermissionDefinitions = useMemo(() => {
+    const normalizedQuery = permissionQuery.trim().toLocaleLowerCase("zh-CN");
+    return permissionDefinitions.filter((permission) => {
+      if (selectedCategory !== "all" && permission.category !== selectedCategory) return false;
+      if (!normalizedQuery) return true;
+      return [permission.category, permission.key, permission.label, permission.location]
+        .some((value) => value.toLocaleLowerCase("zh-CN").includes(normalizedQuery));
+    });
+  }, [permissionQuery, selectedCategory]);
 
   const handleDraftPermissionChange = (key: PermissionKey, allowed: boolean) => {
     setDraftPermissionRules((current) => setRolePermissionAllowed(current, selectedRole, key, allowed));
@@ -105,6 +126,46 @@ export function PermissionsPage() {
           </div>
         </div>
 
+        <div className="orf-permission-browser-controls">
+          <label className="orf-permission-search">
+            <Search className="h-4 w-4" aria-hidden="true" />
+            <input
+              type="search"
+              value={permissionQuery}
+              placeholder="搜索权限名称、key 或使用位置"
+              onChange={(event) => setPermissionQuery(event.target.value)}
+            />
+          </label>
+          <div className="orf-permission-category-tabs" role="tablist" aria-label="按业务域筛选权限">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedCategory === "all"}
+              className={clsx(selectedCategory === "all" && "is-active")}
+              onClick={() => setSelectedCategory("all")}
+            >
+              <span>全部</span>
+              <strong>{permissionDefinitions.length}</strong>
+            </button>
+            {permissionCategories.map((category) => (
+              <button
+                key={category}
+                type="button"
+                role="tab"
+                aria-selected={selectedCategory === category}
+                className={clsx(selectedCategory === category && "is-active")}
+                onClick={() => setSelectedCategory(category)}
+              >
+                <span>{category}</span>
+                <strong>{permissionCategoryCounts.get(category)}</strong>
+              </button>
+            ))}
+          </div>
+          <p>
+            显示 <strong>{visiblePermissionDefinitions.length}</strong> / {permissionDefinitions.length} 项权限
+          </p>
+        </div>
+
         <div className="orf-role-permission-table-wrap">
           <table className="orf-role-permission-table">
             <thead>
@@ -117,7 +178,7 @@ export function PermissionsPage() {
               </tr>
             </thead>
             <tbody>
-              {permissionDefinitions.map((permission) => {
+              {visiblePermissionDefinitions.map((permission) => {
                 const allowed = selectedRole === "admin" || selectedRolePermissions.has(permission.key);
                 const locked = selectedRole === "admin";
 
@@ -144,6 +205,11 @@ export function PermissionsPage() {
                   </tr>
                 );
               })}
+              {visiblePermissionDefinitions.length === 0 ? (
+                <tr className="orf-permission-empty-row">
+                  <td colSpan={5}>没有匹配的权限，试试其他业务域或关键词。</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>

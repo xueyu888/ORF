@@ -1,4 +1,4 @@
-import { ShieldAlert, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ShieldAlert, X } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { IconButton } from "../../../components/ui";
 import { canApplyForObjectiveChallenge } from "../../../domain/orfLifecycle";
@@ -213,26 +213,56 @@ function objectiveDescriptionText(description: string) {
 }
 
 function ResultPreview({ item, onOpenMetricDetail }: { item: BountyItem; onOpenMetricDetail: (result: Result) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const hiddenResultCount = Math.max(0, item.results.length - 2);
+  const visibleResults = expanded ? item.results : item.results.slice(0, 2);
+
+  useEffect(() => {
+    if (expanded && hiddenResultCount === 0) setExpanded(false);
+  }, [expanded, hiddenResultCount]);
+
   return (
     <>
-      <span className="bounty-result-summary">{resultCountLabel(item)}</span>
-      <div className="bounty-result-preview" aria-label="指标预览">
+      {hiddenResultCount > 0 ? (
+        <button
+          type="button"
+          className="bounty-result-summary bounty-result-summary-toggle"
+          aria-expanded={expanded}
+          aria-label={expanded ? `收起${resultCountLabel(item)}` : `展开全部${resultCountLabel(item)}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            setExpanded((current) => !current);
+          }}
+          onDoubleClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <span>{resultCountLabel(item)}</span>
+          {expanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+        </button>
+      ) : (
+        <span className="bounty-result-summary">{resultCountLabel(item)}</span>
+      )}
+      <div className="bounty-result-preview" aria-label="指标预览" data-expanded={expanded ? "true" : undefined}>
         {item.results.length > 0 ? (
-          item.results.map((result) => (
-            <button
-              key={result.id}
-              type="button"
-              className="bounty-result-preview-item"
-              aria-label={`查看指标详情：${result.title}`}
-              title={result.title}
-              onClick={(event) => {
-                event.stopPropagation();
-                onOpenMetricDetail(result);
-              }}
-            >
-              <strong>{result.title}</strong>
-            </button>
-          ))
+          <>
+            {visibleResults.map((result) => (
+              <button
+                key={result.id}
+                type="button"
+                className="bounty-result-preview-item"
+                aria-label={`查看指标详情：${result.title}`}
+                title={result.title}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenMetricDetail(result);
+                }}
+                onDoubleClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                <strong>{result.title}</strong>
+              </button>
+            ))}
+          </>
         ) : (
           <div className="bounty-result-preview-empty">待定义指标</div>
         )}

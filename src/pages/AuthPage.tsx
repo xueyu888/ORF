@@ -1,4 +1,4 @@
-import { Check, Eye, EyeOff, LockKeyhole, Mail, Sparkles, Trash2, User } from "lucide-react";
+import { Check, Eye, EyeOff, LockKeyhole, Mail, Trash2, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -280,10 +280,10 @@ export function AuthPage() {
     navigate(landingPath);
   };
 
-  const title = mode === "login" ? "Sign in" : "Register";
-  const primaryLabel = mode === "login" ? "Sign In" : "Create Account";
-  const switchLabel = mode === "login" ? "Register" : "Sign In";
-  const busyLabel = mode === "login" ? "Signing In" : "Creating";
+  const title = mode === "login" ? "登录" : "创建账号";
+  const primaryLabel = mode === "login" ? "登录" : "创建账号";
+  const switchLabel = mode === "login" ? "注册新账号" : "返回登录";
+  const busyLabel = mode === "login" ? "正在登录" : "正在创建";
   const heroOptions = configuredHeroOptions.length > 0 ? configuredHeroOptions : cachedHero ? [cachedHero, ...authHeroOptions] : authHeroOptions;
   const selectedHero = heroOptions.find((option) => option.id === selectedHeroId) ?? heroOptions[0];
   const rememberLabel = credentialProvider === "desktop" ? "记住到本机" : "让浏览器记住";
@@ -365,12 +365,12 @@ export function AuthPage() {
         <form className="orf-auth-form" onSubmit={submit} noValidate>
           {mode === "register" && (
             <AuthPill icon={User}>
-              <label className="sr-only" htmlFor="auth-name">Name</label>
+              <label className="sr-only" htmlFor="auth-name">姓名</label>
               <input
                 id="auth-name"
                 className="orf-auth-input"
                 autoComplete="name"
-                placeholder="Name"
+                placeholder="姓名"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 required
@@ -379,13 +379,13 @@ export function AuthPage() {
           )}
 
           <AuthPill icon={Mail}>
-            <label className="sr-only" htmlFor="auth-email">Email</label>
+            <label className="sr-only" htmlFor="auth-email">邮箱</label>
             <input
               id="auth-email"
               className="orf-auth-input"
               type="email"
               autoComplete={mode === "login" ? "username" : "email"}
-              placeholder="Email"
+              placeholder="邮箱"
               value={email}
               onChange={(event) => {
                 const nextEmail = event.target.value;
@@ -400,13 +400,13 @@ export function AuthPage() {
           </AuthPill>
 
           <AuthPill icon={LockKeyhole}>
-            <label className="sr-only" htmlFor="auth-password">Password</label>
+            <label className="sr-only" htmlFor="auth-password">密码</label>
             <input
               id="auth-password"
               className="orf-auth-input"
               type={showPassword ? "text" : "password"}
               autoComplete={mode === "login" ? "current-password" : "new-password"}
-              placeholder="Password"
+              placeholder="密码"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               required
@@ -414,8 +414,8 @@ export function AuthPage() {
             <button
               className="orf-auth-eye"
               type="button"
-              aria-label={showPassword ? "Hide password" : "Show password"}
-              title={showPassword ? "Hide password" : "Show password"}
+              aria-label={showPassword ? "隐藏密码" : "显示密码"}
+              title={showPassword ? "隐藏密码" : "显示密码"}
               onClick={() => setShowPassword((value) => !value)}
             >
               {showPassword ? <EyeOff className="h-6 w-6" /> : <Eye className="h-6 w-6" />}
@@ -441,15 +441,13 @@ export function AuthPage() {
           )}
 
           <Button className="orf-auth-submit-action" size="lg" type="submit" disabled={!authReady || submitting}>
-            <Sparkles className="h-5 w-5" />
             <span>{submitting ? busyLabel : primaryLabel}</span>
-            <Sparkles className="h-5 w-5" />
           </Button>
         </form>
 
-        <div className="orf-auth-separator" aria-hidden="true">
+        <div className="orf-auth-separator">
           <span />
-          <Sparkles className="h-6 w-6" />
+          <small>{mode === "login" ? "还没有账号？" : "已有账号？"}</small>
           <span />
         </div>
 

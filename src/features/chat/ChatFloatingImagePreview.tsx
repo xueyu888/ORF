@@ -35,6 +35,7 @@ import {
   selectChatAttachmentPreviewImage,
   type ChatAttachmentImagePreviewState,
 } from "./chatAttachmentPreview";
+import { chatMobileViewportQuery } from "./useChatMobileViewport";
 
 type ChatFloatingImagePreviewContextValue = {
   openImagePreview: (preview: ChatAttachmentImagePreviewState) => void;
@@ -993,7 +994,7 @@ function isChatImageWindowInteractiveTarget(target: EventTarget | null) {
 }
 
 function isChatImageWindowMobileViewport() {
-  return typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
+  return typeof window !== "undefined" && window.matchMedia(chatMobileViewportQuery).matches;
 }
 
 function imageDimension(value?: number | null) {

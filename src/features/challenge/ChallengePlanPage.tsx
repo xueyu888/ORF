@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { CommentPanel, type CommentReplyInput } from "./comments/CommentPanel";
+import { useConfirmDialog } from "../../components/ConfirmDialog";
 import { ChallengeToolbar } from "./components/ChallengeToolbar";
 import { ChallengeTree } from "./components/ChallengeTree";
 import { MetricInspectorPanel } from "./components/MetricInspectorPanel";
+import { MobileChallengeFocusBar, MobileChallengeOverview } from "./components/MobileChallengeOverview";
 import { TeamDashboard } from "./components/TeamDashboard";
 import { canShowFrontend } from "../../config/frontendVisibility";
 import { hasPermission } from "../../config/permissions";
@@ -18,6 +20,7 @@ import type { Objective, ObjectiveSettlementEvent, OrfProject, OrfState, Result 
 import { localDateString } from "../../utils/date";
 import { applyListItemAnchor, createListItemAnchor, listContainsAnchoredItem, type ListItemAnchor } from "../interaction/listItemAnchor";
 import { useChallengeReadModelData, type ChallengeReadModelState } from "./hooks/useChallengeReadModelData";
+import { useChallengeMobileViewport } from "./hooks/useChallengeMobileViewport";
 import { challengeLinkForTarget, parseChallengeTargetHash, type ChallengeUrlTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canDropItem } from "./model/challengeDragDrop";
@@ -225,6 +228,7 @@ function peerReviewActionStatusesEqual(left: PeerReviewActionStatusByObjectiveId
 }
 
 export function ChallengePlanPage() {
+  const confirm = useConfirmDialog();
   const {
     addComment,
     approveChallengeApplication,
@@ -283,6 +287,7 @@ export function ChallengePlanPage() {
   const [statusFilters, setStatusFilters] = useState<ChallengeStatusFilterSelection>([]);
   const [collapsedBountyIds, setCollapsedBountyIds] = useState<Set<string>>(() => new Set());
   const [collapsedActionIds, setCollapsedActionIds] = useState<Set<string>>(() => new Set());
+  const [mobileFocusedObjectiveId, setMobileFocusedObjectiveId] = useState<string | null>(null);
   const [commentTarget, setCommentTarget] = useState<ChallengeCommentTarget | null>(null);
   const [selectedMetricId, setSelectedMetricId] = useState<string | null>(null);
   const [metricInspectorCollapsed, setMetricInspectorCollapsed] = useState(false);
@@ -309,6 +314,7 @@ export function ChallengePlanPage() {
   const filterPreferenceTouchedRef = useRef(false);
   const now = useMinuteNow();
   const today = localDateString(now);
+  const mobileViewport = useChallengeMobileViewport();
 
   useEffect(() => {
     if (!canShowAllChallenges) {
@@ -510,6 +516,11 @@ export function ChallengePlanPage() {
     () => applyListItemAnchor(creationAnchoredGroups, objectiveInteractionAnchor, objectiveGroupId),
     [creationAnchoredGroups, objectiveInteractionAnchor],
   );
+  const mobileFocusedGroup = useMemo(
+    () => displayedGroups.find((group) => group.objective.id === mobileFocusedObjectiveId) ?? null,
+    [displayedGroups, mobileFocusedObjectiveId],
+  );
+  const challengeTreeGroups = mobileViewport && mobileFocusedGroup ? [mobileFocusedGroup] : displayedGroups;
   const commentCounts = useMemo(() => commentCountsByTarget(challengeState.comments), [challengeState.comments]);
   const hasContentFilters = cycleFilter !== "all" || effectiveMemberFilter !== "all" || statusFilters.length > 0;
   const hasActiveFilters = hasContentFilters || projectFilter !== "all";
@@ -517,6 +528,11 @@ export function ChallengePlanPage() {
     () => projectsForChallengeTree(challengeState.projects, displayedGroups, hasContentFilters, projectFilter),
     [challengeState.projects, displayedGroups, hasContentFilters, projectFilter],
   );
+  const challengeTreeVisibleProjects = useMemo(() => {
+    if (!mobileViewport || !mobileFocusedGroup) return visibleProjects;
+    const projectId = mobileFocusedGroup.objective.projectId?.trim();
+    return projectId ? challengeState.projects.filter((project) => project.id === projectId) : [];
+  }, [challengeState.projects, mobileFocusedGroup, mobileViewport, visibleProjects]);
   const displayedMetricIds = useMemo(
     () => new Set(displayedGroups.flatMap((group) => group.bounties.map((bounty) => bounty.result.id))),
     [displayedGroups],
@@ -526,6 +542,21 @@ export function ChallengePlanPage() {
     : showAll
       ? "当前还没有挑战内容。"
       : "当前没有与你的挑战目标相关的内容。";
+
+  useEffect(() => {
+    if (!mobileViewport) {
+      setMobileFocusedObjectiveId(null);
+      setCollapsedActionIds(new Set());
+      return;
+    }
+    if (mobileFocusedObjectiveId && !mobileFocusedGroup) {
+      setMobileFocusedObjectiveId(null);
+    }
+  }, [mobileFocusedGroup, mobileFocusedObjectiveId, mobileViewport]);
+
+  useEffect(() => {
+    if (mobileViewport && draftGroup) setMobileFocusedObjectiveId(draftGroup.objective.id);
+  }, [draftGroup, mobileViewport]);
 
   useEffect(() => {
     const objectiveIds = peerReviewActionObjectiveIdsKey ? peerReviewActionObjectiveIdsKey.split(peerReviewActionObjectiveIdSeparator) : [];
@@ -766,6 +797,17 @@ export function ChallengePlanPage() {
 
     const objectiveId = objectiveIdForLinkedChallengeTarget(linkedChallengeTarget, challengeState) ?? objectiveIdForLinkedChallengeTarget(linkedChallengeTarget, state);
     if (!objectiveId) return;
+    const parentActionId = parentActionIdForLinkedSubAction(linkedChallengeTarget, challengeState) ?? parentActionIdForLinkedSubAction(linkedChallengeTarget, state);
+    if (mobileViewport) {
+      const sourceTasks = challengeState.tasks.length > 0 ? challengeState.tasks : state.tasks;
+      const collapsedIds = new Set(
+        sourceTasks
+          .filter((task) => task.linkedObjectiveId === objectiveId && task.checklist.length > 0 && task.id !== parentActionId)
+          .map((task) => task.id),
+      );
+      setCollapsedActionIds(collapsedIds);
+      setMobileFocusedObjectiveId(objectiveId);
+    }
     appliedLinkedTargetRef.current = linkedTargetKey;
     filterPreferenceTouchedRef.current = true;
     setObjectiveInteractionAnchor(null);
@@ -776,11 +818,10 @@ export function ChallengePlanPage() {
     if (statusFilters.length > 0) setStatusFilters([]);
     if (projectFilter !== "all") setProjectFilter("all");
 
-    const parentActionId = parentActionIdForLinkedSubAction(linkedChallengeTarget, challengeState) ?? parentActionIdForLinkedSubAction(linkedChallengeTarget, state);
     if (parentActionId) {
       setCollapsedActionIds((items) => (items.has(parentActionId) ? withoutItem(items, parentActionId) : items));
     }
-  }, [canShowAllChallenges, challengeState, cycleFilter, linkedChallengeTarget, memberFilter, projectFilter, scope, state, statusFilters]);
+  }, [canShowAllChallenges, challengeState, cycleFilter, linkedChallengeTarget, memberFilter, mobileViewport, projectFilter, scope, state, statusFilters]);
 
   useEffect(() => {
     if (!linkedChallengeTarget) return undefined;
@@ -1246,7 +1287,7 @@ export function ChallengePlanPage() {
     return updateResultDetails(target.id, details);
   };
 
-  const deleteTarget = (target: ChallengeTarget) => {
+  const deleteTarget = async (target: ChallengeTarget) => {
     if (target.type === "objective" && target.id === draftObjectiveId) {
       const cancelled = cancelObjectiveCreationSession(objectiveCreationSession);
       setObjectiveCreationSession(cancelled.session);
@@ -1261,7 +1302,12 @@ export function ChallengePlanPage() {
     }
 
     if (!requireTargetPermission(target, "delete")) return;
-    if (!window.confirm(deleteConfirmMessage(target, challengeState))) return;
+    if (!await confirm({
+      title: "删除工作项",
+      description: deleteConfirmMessage(target, challengeState),
+      confirmLabel: "确认删除",
+      tone: "danger",
+    })) return;
 
     if (childCreationOverlayMatchesTarget(childCreationSession, target)) setChildCreationSession(clearSubmittedChildCreation);
     if (target.type === "objective") deleteObjective(target.id);
@@ -1463,6 +1509,7 @@ export function ChallengePlanPage() {
   return (
     <div
       className="orf-challenge-workbench grid gap-4"
+      data-mobile-objective-focus={mobileFocusedGroup ? "true" : undefined}
       onFocusCapture={(event) => releaseObjectiveInteractionAnchorOutside(event.target)}
       onPointerDown={(event) => {
         releaseObjectiveInteractionAnchorOutside(event.target);
@@ -1473,7 +1520,7 @@ export function ChallengePlanPage() {
     >
       <div className="orf-challenge-workspace">
         <div className="orf-challenge-tree-pane">
-          {showAll && <TeamDashboard groups={filteredGroups} />}
+          {showAll && (!mobileViewport || !mobileFocusedGroup) && <TeamDashboard groups={filteredGroups} />}
           <ChallengeToolbar
             canShowAll={canShowAllChallenges}
             canManageProjects={currentUser?.role === "admin"}
@@ -1493,9 +1540,25 @@ export function ChallengePlanPage() {
             scope={scope}
             status={statusFilters}
           />
-          <ChallengeTree
+          {mobileViewport && !mobileFocusedGroup ? (
+            <MobileChallengeOverview
+              groups={displayedGroups}
+              onSelect={(objectiveId) => {
+                const group = displayedGroups.find((item) => item.objective.id === objectiveId);
+                setCollapsedActionIds(new Set(group?.actions.filter((action) => action.checklist.length > 0).map((action) => action.id) ?? []));
+                setMobileFocusedObjectiveId(objectiveId);
+                window.requestAnimationFrame(() => document.querySelector(".orf-main-content")?.scrollTo({ behavior: "smooth", top: 0 }));
+              }}
+              projects={challengeState.projects}
+            />
+          ) : (
+            <>
+              {mobileViewport && mobileFocusedGroup ? (
+                <MobileChallengeFocusBar objectiveTitle={mobileFocusedGroup.objective.title} onBack={() => setMobileFocusedObjectiveId(null)} />
+              ) : null}
+              <ChallengeTree
             emptyText={emptyText}
-            groups={displayedGroups}
+            groups={challengeTreeGroups}
             handlers={{
               activeActionId,
               collapsedActionIds,
@@ -1578,8 +1641,10 @@ export function ChallengePlanPage() {
             now={now}
             projects={challengeState.projects}
             scope={scope}
-            visibleProjects={visibleProjects}
-          />
+            visibleProjects={challengeTreeVisibleProjects}
+              />
+            </>
+          )}
         </div>
         {selectedMetric && !metricInspectorCollapsed ? (
           <MetricInspectorPanel

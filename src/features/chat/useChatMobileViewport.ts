@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export const chatMobileViewportQuery = "(max-width: 768px)";
+export const chatMobileViewportQuery = "(max-width: 900px)";
 
 function isChatMobileViewport() {
   return typeof window !== "undefined" && window.matchMedia(chatMobileViewportQuery).matches;

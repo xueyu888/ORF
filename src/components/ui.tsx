@@ -33,7 +33,7 @@ export function Card({
   return <div className={clsx("orf-card", interactive && "orf-card-hover", className)}>{children}</div>;
 }
 
-export type ButtonVariant = "primary" | "secondary" | "blue" | "dark" | "ghost" | "danger";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 
 export function actionButtonClassName({
@@ -99,7 +99,7 @@ export function IconButton({
 
 export function StatusBadge({ status }: { status: WorkStatus | TaskStatus | Priority }) {
   return (
-    <span className={clsx("orf-status-tag inline-flex h-7 min-w-[66px] items-center justify-center px-3 text-xs font-bold leading-none", statusClasses[status])}>
+    <span className={clsx("orf-status-tag inline-flex h-7 min-w-[66px] items-center justify-center px-3 text-xs font-semibold leading-none", statusClasses[status])}>
       {statusLabel(status)}
     </span>
   );
@@ -107,7 +107,7 @@ export function StatusBadge({ status }: { status: WorkStatus | TaskStatus | Prio
 
 export function ConfidenceBadge({ value }: { value: number }) {
   const color = value >= 75 ? "orf-badge-success" : value >= 60 ? "orf-badge-warning" : "orf-badge-danger";
-  return <span className={clsx("orf-status-tag inline-flex h-7 min-w-[66px] items-center justify-center px-3 text-xs font-bold leading-none", color)}>信心 {value}%</span>;
+  return <span className={clsx("orf-status-tag inline-flex h-7 min-w-[66px] items-center justify-center px-3 text-xs font-semibold leading-none", color)}>信心 {value}%</span>;
 }
 
 export function ProgressBar({ value, className }: { value: number; className?: string }) {

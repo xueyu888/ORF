@@ -1,8 +1,5 @@
 {
   "dashboard": "/dashboard",
   "strategyMap": "/strategy-map",
-  "aiEvaluation": "/ai-evaluation",
-  "fantasyUi": "/fantasy-ui",
-  "genshinUiKit": "/genshin-ui-kit",
-  "genshinUiKitPreview": "/preview/genshin-ui-kit"
+  "aiEvaluation": "/ai-evaluation"
 }

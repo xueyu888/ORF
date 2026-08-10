@@ -1,5 +1,6 @@
 import { hallTabs } from "../model/bountyHallItems";
 import type { HallTab } from "../model/bountyHallTypes";
+import "./bounty-hall-tabs.css";
 
 export function BountyHallTabs({
   activeTab,

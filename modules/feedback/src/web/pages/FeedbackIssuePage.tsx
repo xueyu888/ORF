@@ -12,14 +12,17 @@ import {
   RotateCcw,
   Save,
   Send,
+  SlidersHorizontal,
   Trash2,
+  X,
   XCircle,
 } from "lucide-react";
 import { teamFeedbackCauseOptions, type FeedbackCommandResolution, type FeedbackImpact, type FeedbackPriority, type FeedbackRelationType, type FeedbackTransitionInput } from "../../contracts";
 import { feedbackRootPath } from "../../contracts/links";
 import { feedbackImpactLabel, feedbackLifecycleLabel, feedbackPriorityLabel, feedbackRelationTypeLabel, feedbackResolutionLabel } from "../../contracts/labels";
-import type { FormEvent, MutableRefObject } from "react";
+import type { FormEvent, MutableRefObject, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { addFeedbackRelation, feedbackMutationFailureMessage, getFeedbackSubscription, markFeedbackViewed, removeFeedbackRelation, transitionFeedback, updateFeedbackAssignee, updateFeedbackMetadata, updateFeedbackSubscription } from "../api";
 import { FeedbackBadge, FeedbackButton, FeedbackEmptyState } from "../components/controls";
@@ -107,6 +110,7 @@ export function FeedbackIssuePage() {
   const [mentionableUsers, setMentionableUsers] = useState<FeedbackCommentMentionUser[]>([]);
   const [subscriptionMode, setSubscriptionMode] = useState<FeedbackSubscriptionMode>("none");
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const commentElementRefs = useRef(new Map<string, HTMLElement>());
   const markedViewSequenceRef = useRef<string | null>(null);
   const assigneeOptions = useFeedbackAssigneeOptions(users, currentUser);
@@ -165,6 +169,7 @@ export function FeedbackIssuePage() {
     setDraftMode({ type: "default" });
     setEditState(null);
     setImagePreview(null);
+    setInspectorOpen(false);
   }, [feedbackId]);
 
   useEffect(() => {
@@ -368,6 +373,16 @@ export function FeedbackIssuePage() {
             <MessageSquare aria-hidden="true" />
             回复
           </FeedbackButton>
+          <FeedbackButton
+            aria-controls="feedback-issue-inspector"
+            aria-expanded={inspectorOpen}
+            className="feedback-issue-inspector-trigger"
+            onClick={() => setInspectorOpen(true)}
+            variant="secondary"
+          >
+            <SlidersHorizontal aria-hidden="true" />
+            属性
+          </FeedbackButton>
         </div>
       </header>
 
@@ -453,7 +468,11 @@ export function FeedbackIssuePage() {
           </div>
         </section>
 
-        <aside className="feedback-issue-sidebar" aria-label="反馈属性">
+        <FeedbackIssueInspector
+          feedback={feedback}
+          open={inspectorOpen}
+          onClose={() => setInspectorOpen(false)}
+        >
           <RelatedResourcesPanel canEdit={Boolean(currentUser)} contextId={feedback.id} contextType="feedback" notify={notify} />
           <FeedbackSubscriptionControls
             disabled={subscriptionLoading}
@@ -500,12 +519,91 @@ export function FeedbackIssuePage() {
             projects={projects}
             users={users}
           />
-        </aside>
+        </FeedbackIssueInspector>
       </main>
 
       {imagePreview && <ImagePreviewDialog preview={imagePreview} onClose={() => setImagePreview(null)} />}
     </div>
   );
+}
+
+function FeedbackIssueInspector({
+  children,
+  feedback,
+  onClose,
+  open,
+}: {
+  children: ReactNode;
+  feedback: FeedbackWebIssue;
+  onClose: () => void;
+  open: boolean;
+}) {
+  const mobileViewport = useFeedbackInspectorMobileViewport();
+
+  useEffect(() => {
+    if (!mobileViewport || !open) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mobileViewport, onClose, open]);
+
+  const inspector = (
+    <aside
+      aria-label="反馈属性"
+      className={mobileViewport ? "feedback-issue-inspector-dialog" : "feedback-issue-sidebar"}
+      id="feedback-issue-inspector"
+    >
+      <header className="feedback-issue-inspector-heading">
+        <span>
+          <small>反馈检查器</small>
+          <strong>属性与处理</strong>
+        </span>
+        <span className="feedback-issue-inspector-identity">
+          <IssueStateBadge feedback={feedback} />
+          <span>#{feedbackIssueDisplayId(feedback.id)}</span>
+        </span>
+        {mobileViewport ? (
+          <button aria-label="关闭反馈属性" onClick={onClose} type="button">
+            <X aria-hidden="true" />
+          </button>
+        ) : null}
+      </header>
+      <div className="feedback-issue-inspector-body">{children}</div>
+    </aside>
+  );
+
+  if (!mobileViewport) return inspector;
+  if (!open) return null;
+  return createPortal(
+    <div className="feedback-issue-inspector-backdrop" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      {inspector}
+    </div>,
+    document.body,
+  );
+}
+
+function useFeedbackInspectorMobileViewport() {
+  const query = "(max-width: 720px)";
+  const [mobile, setMobile] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const sync = () => setMobile(media.matches);
+    media.addEventListener("change", sync);
+    sync();
+    return () => media.removeEventListener("change", sync);
+  }, []);
+
+  return mobile;
 }
 
 function OriginalFeedbackCard({

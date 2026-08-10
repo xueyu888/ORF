@@ -39,7 +39,7 @@ export function BountyRowActions({
 
   if (isCurrentChallenger || currentApplicationStatus === "approved") {
     return (
-      <BountyButton variant="blue" onClick={onOpenChallengeWork} disabled={processing}>
+      <BountyButton variant="primary" onClick={onOpenChallengeWork} disabled={processing}>
         <ArrowRight className="h-4 w-4" />
         进入目标
       </BountyButton>

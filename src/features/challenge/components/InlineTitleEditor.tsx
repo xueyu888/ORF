@@ -71,6 +71,7 @@ export function InlineTitleEditor({
             onCancel();
           }
         }}
+        placeholder="输入标题"
         value={draft}
       />
     </form>

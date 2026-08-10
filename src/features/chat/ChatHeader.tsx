@@ -93,8 +93,10 @@ export function ChatHeader({
         <span>{title}</span>
       </button>
       <div className="orf-chat-header-meta">
-        <Users className="h-4 w-4" />
-        <span>{channel.memberCount}</span>
+        <span className="orf-chat-header-member-count">
+          <Users className="h-3.5 w-3.5" />
+          <span>{channel.memberCount}</span>
+        </span>
         {headerText && <span className="orf-chat-header-description truncate" title={headerText}>{headerText}</span>}
         {memberNames && <span className="orf-chat-header-member-names truncate">{memberNames}</span>}
       </div>

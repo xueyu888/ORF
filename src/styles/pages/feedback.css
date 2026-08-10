@@ -1,0 +1,43 @@
+/* feedback.css: owned styles only; global visual semantics come from design tokens. */
+.orf-main-content[data-page-skin="true"] .feedback-issue-header {
+  border: 1px solid color-mix(in srgb, var(--orf-border) 76%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--orf-surface-panel) 84%, transparent);
+  box-shadow: 0 1px 2px rgba(17, 34, 48, 0.05);
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  -webkit-backdrop-filter: blur(14px) saturate(1.02);
+  backdrop-filter: blur(14px) saturate(1.02);
+}
+
+.feedback-issue-page .feedback-issue-query-panel {
+  border-radius: var(--orf-radius-card);
+}
+
+.feedback-mobile-filter-toggle {
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+
+.orf-main-content[data-page-skin="true"] .feedback-issue-header {
+    gap: 10px;
+    margin-bottom: 12px;
+    padding: 10px;
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+
+.feedback-issue-page .feedback-issue-query-panel {
+    background: var(--orf-surface-elevated);
+  }
+}
+
+.feedback-issue-page .feedback-issue-query-panel {
+  border-color: var(--orf-workbench-hairline);
+  background: var(--orf-surface-panel-solid);
+  box-shadow: var(--orf-workbench-shadow);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}

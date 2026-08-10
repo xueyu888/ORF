@@ -138,7 +138,7 @@ function createMainWindow(clientUrl, options = {}) {
     frame: false,
     backgroundColor: "#f6f8fb",
     autoHideMenuBar: true,
-    show: options.show !== false,
+    show: false,
     webPreferences: desktopBrowserWindowWebPreferences(),
   });
   const webContentsId = mainWindow.webContents.id;
@@ -169,8 +169,13 @@ function createMainWindow(clientUrl, options = {}) {
 
   mainWindow.webContents.on("did-create-window", (childWindow, details) => {
     const childUrl = new URL(details.url);
-    if (!isChatImagePopoutUrl(childUrl)) return;
-    centerAndRevealChatImagePopoutWindow(childWindow, mainWindow);
+    if (isChatImagePopoutUrl(childUrl)) {
+      centerAndRevealChatImagePopoutWindow(childWindow, mainWindow);
+      return;
+    }
+    if (isDriveFilePreviewPopoutUrl(childUrl)) {
+      revealDesktopWindowWhenReady(childWindow);
+    }
   });
 
   mainWindow.webContents.on("will-navigate", (event, url) => {
@@ -212,6 +217,10 @@ function createMainWindow(clientUrl, options = {}) {
       desktopShellState.mainWindow = null;
     }
   });
+
+  if (options.show !== false) {
+    mainWindow.once("ready-to-show", () => revealDesktopWindow(mainWindow));
+  }
 
   void mainWindow.loadURL(clientUrl.toString());
   updateDesktopUnreadState();
@@ -273,6 +282,22 @@ function centerAndRevealChatImagePopoutWindow(popoutWindow, parentWindow) {
   });
 }
 
+function revealDesktopWindow(targetWindow) {
+  if (targetWindow.isDestroyed()) return;
+  if (targetWindow.isMinimized()) targetWindow.restore();
+  targetWindow.show();
+  targetWindow.focus();
+}
+
+function revealDesktopWindowWhenReady(targetWindow) {
+  if (targetWindow.isDestroyed()) return;
+  if (targetWindow.webContents.isLoadingMainFrame()) {
+    targetWindow.once("ready-to-show", () => revealDesktopWindow(targetWindow));
+    return;
+  }
+  revealDesktopWindow(targetWindow);
+}
+
 function clampWindowDimension(value, minimum, available) {
   const maximum = Math.max(1, available);
   const effectiveMinimum = Math.min(minimum, maximum);
@@ -288,7 +313,7 @@ function driveFilePreviewPopoutBrowserWindowOptions() {
     minHeight: 640,
     minWidth: 900,
     resizable: true,
-    show: true,
+    show: false,
     title: "ORF 文件预览",
     width: 1180,
     webPreferences: desktopBrowserWindowWebPreferences(),
@@ -696,10 +721,10 @@ function showMainWindow(targetPath) {
   const clientUrl = desktopShellState.clientUrl ?? resolveClientUrl();
   desktopShellState.clientUrl = clientUrl;
   const currentWindow = desktopShellState.mainWindow;
-  const targetWindow = currentWindow && !currentWindow.isDestroyed() ? currentWindow : createMainWindow(clientUrl);
-  if (targetWindow.isMinimized()) targetWindow.restore();
-  targetWindow.show();
-  targetWindow.focus();
+  const targetWindow = currentWindow && !currentWindow.isDestroyed()
+    ? currentWindow
+    : createMainWindow(clientUrl, { show: false });
+  revealDesktopWindowWhenReady(targetWindow);
   if (isSafeDesktopTargetPath(targetPath)) {
     openDesktopTargetInWindow(targetWindow, targetPath);
   }

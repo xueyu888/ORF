@@ -38,7 +38,7 @@ export function FeedbackLabelsPage() {
         <div className="feedback-index-summary">
           <Tag aria-hidden="true" />
           <strong>{labels.length}</strong>
-          <span>Categories</span>
+          <span>个分类</span>
         </div>
       </header>
 

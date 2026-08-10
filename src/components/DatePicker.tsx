@@ -13,7 +13,7 @@ type PopoverPosition = {
   top: number;
 };
 
-export type FantasyDateCell = {
+export type DateCell = {
   date: Date;
   day: number;
   disabled: boolean;
@@ -23,7 +23,7 @@ export type FantasyDateCell = {
   value: string;
 };
 
-export function buildFantasyDateGrid(displayMonth: Date, selectedValue: string, minValue?: string): FantasyDateCell[] {
+export function buildDateGrid(displayMonth: Date, selectedValue: string, minValue?: string): DateCell[] {
   const monthStart = new Date(displayMonth.getFullYear(), displayMonth.getMonth(), 1);
   const mondayOffset = (monthStart.getDay() + 6) % 7;
   const gridStart = new Date(monthStart);
@@ -47,11 +47,11 @@ export function buildFantasyDateGrid(displayMonth: Date, selectedValue: string, 
   });
 }
 
-export function fantasyMonthLabel(date: Date) {
+export function monthLabel(date: Date) {
   return `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, "0")}月`;
 }
 
-export function FantasyDatePicker({
+export function DatePicker({
   ariaLabel,
   children,
   className,
@@ -174,7 +174,7 @@ export function FantasyDatePicker({
   return (
     <div
       ref={rootRef}
-      className={clsx("orf-fantasy-date-picker", open && "orf-fantasy-date-picker-open", className)}
+      className={clsx("orf-date-picker", open && "orf-date-picker-open", className)}
       data-no-row-edit={stopPropagation ? "true" : undefined}
       {...stopEvents}
     >
@@ -183,7 +183,7 @@ export function FantasyDatePicker({
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={ariaLabel}
-        className={clsx("orf-fantasy-date-trigger", triggerClassName)}
+        className={clsx("orf-date-trigger", triggerClassName)}
         disabled={disabled}
         onClick={openPicker}
         role="button"
@@ -192,7 +192,7 @@ export function FantasyDatePicker({
       >
         {children}
       </button>
-      <FantasyDatePopover
+      <DatePopover
         dialogId={dialogId}
         displayMonth={displayMonth}
         min={min}
@@ -207,7 +207,7 @@ export function FantasyDatePicker({
   );
 }
 
-function FantasyDatePopover({
+function DatePopover({
   dialogId,
   displayMonth,
   min,
@@ -230,7 +230,7 @@ function FantasyDatePopover({
 }) {
   if (!open || typeof document === "undefined") return null;
 
-  const cells = buildFantasyDateGrid(displayMonth, value, min);
+  const cells = buildDateGrid(displayMonth, value, min);
   const todayValue = localDateString(new Date());
   const todayDisabled = Boolean(min && todayValue < min);
   const style: CSSProperties = {
@@ -244,37 +244,37 @@ function FantasyDatePopover({
     <div
       ref={popoverRef}
       aria-label="选择目标截止日期"
-      className={clsx("orf-fantasy-date-popover", position?.placement === "top" && "orf-fantasy-date-popover-top")}
+      className={clsx("orf-date-popover", position?.placement === "top" && "orf-date-popover-top")}
       id={dialogId}
       role="dialog"
       style={style}
     >
-      <div className="orf-fantasy-date-header">
+      <div className="orf-date-header">
         <button
           aria-label="上个月"
-          className="orf-fantasy-date-nav"
+          className="orf-date-nav"
           onClick={() => onDisplayMonthChange(addMonths(displayMonth, -1))}
           type="button"
         >
           <ChevronLeft aria-hidden="true" />
         </button>
-        <div className="orf-fantasy-date-title">
+        <div className="orf-date-title">
           <CalendarDays aria-hidden="true" />
-          <span>{fantasyMonthLabel(displayMonth)}</span>
+          <span>{monthLabel(displayMonth)}</span>
         </div>
         <button
           aria-label="下个月"
-          className="orf-fantasy-date-nav"
+          className="orf-date-nav"
           onClick={() => onDisplayMonthChange(addMonths(displayMonth, 1))}
           type="button"
         >
           <ChevronRight aria-hidden="true" />
         </button>
       </div>
-      <div className="orf-fantasy-date-weekdays" aria-hidden="true">
+      <div className="orf-date-weekdays" aria-hidden="true">
         {["一", "二", "三", "四", "五", "六", "日"].map((day) => <span key={day}>{day}</span>)}
       </div>
-      <div className="orf-fantasy-date-grid" role="grid" aria-label={fantasyMonthLabel(displayMonth)}>
+      <div className="orf-date-grid" role="grid" aria-label={monthLabel(displayMonth)}>
         {cells.map((cell) => (
           <button
             key={cell.value}
@@ -282,10 +282,10 @@ function FantasyDatePopover({
             aria-label={`${cell.value}${cell.disabled ? "，不可选择" : ""}`}
             aria-selected={cell.isSelected}
             className={clsx(
-              "orf-fantasy-date-day",
-              !cell.inMonth && "orf-fantasy-date-day-outside",
-              cell.isToday && "orf-fantasy-date-day-today",
-              cell.isSelected && "orf-fantasy-date-day-selected",
+              "orf-date-day",
+              !cell.inMonth && "orf-date-day-outside",
+              cell.isToday && "orf-date-day-today",
+              cell.isSelected && "orf-date-day-selected",
             )}
             disabled={cell.disabled}
             onClick={() => onSelect(cell.value)}
@@ -296,9 +296,9 @@ function FantasyDatePopover({
           </button>
         ))}
       </div>
-      <div className="orf-fantasy-date-footer">
+      <div className="orf-date-footer">
         <button
-          className="orf-fantasy-date-today"
+          className="orf-date-today"
           disabled={todayDisabled}
           onClick={() => {
             onDisplayMonthChange(monthForValue(todayValue));

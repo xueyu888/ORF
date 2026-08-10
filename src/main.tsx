@@ -3,11 +3,12 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { App } from "./App";
 import { AppErrorBoundary, fallbackContentForError } from "./components/AppFallback";
-import { applyDesignTokens } from "./config/designTokens";
+import { ConfirmDialogProvider } from "./components/ConfirmDialog";
+import { initializeAppearanceMode } from "./features/appearance/appearanceMode";
 import { OrfProvider } from "./state/OrfProvider";
 import "./styles.css";
 
-applyDesignTokens();
+initializeAppearanceMode();
 
 const rootElement = document.getElementById("root");
 
@@ -23,12 +24,14 @@ try {
       <React.StrictMode>
         <AppErrorBoundary>
           <BrowserRouter>
-            <OrfProvider>
-              <Routes>
-                <Route path="/" element={<Navigate to="/bounties" replace />} />
-                <Route path="/*" element={<App />} />
-              </Routes>
-            </OrfProvider>
+            <ConfirmDialogProvider>
+              <OrfProvider>
+                <Routes>
+                  <Route path="/" element={<Navigate to="/bounties" replace />} />
+                  <Route path="/*" element={<App />} />
+                </Routes>
+              </OrfProvider>
+            </ConfirmDialogProvider>
           </BrowserRouter>
         </AppErrorBoundary>
       </React.StrictMode>,

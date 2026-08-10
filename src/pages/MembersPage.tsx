@@ -1,8 +1,11 @@
 import { clsx } from "clsx";
 import { Ban, CheckCircle2, ChevronDown, Edit3, KeyRound, Plus, Search, Trash2, X, XCircle } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button, IconButton } from "../components/ui";
+import { useConfirmDialog } from "../components/ConfirmDialog";
 import { userAccountLifecycleActions } from "../domain/userAccountLifecycle";
+import { userRoleLabel, userStatusLabel } from "../domain/userPresentation";
 import { UserAvatar } from "../components/UserAvatar";
 import { useOrf } from "../state/OrfProvider";
 import type { OrfUser, UserRole } from "../types/orf";
@@ -17,18 +20,6 @@ type UserDialogState = {
 } | null;
 
 const roles: UserRole[] = ["member", "admin"];
-
-const roleLabel: Record<UserRole, string> = {
-  admin: "管理员",
-  member: "成员",
-};
-
-const userStatusLabel: Record<OrfUser["status"], string> = {
-  pending: "待审核",
-  active: "启用",
-  rejected: "已拒绝",
-  disabled: "已停用",
-};
 
 function formatLastOnlineAt(value: string | null | undefined) {
   if (!value) {
@@ -49,6 +40,7 @@ function formatLastOnlineAt(value: string | null | undefined) {
 }
 
 export function MembersPage() {
+  const confirm = useConfirmDialog();
   const {
     approveRegistrationRequest,
     createUser,
@@ -180,7 +172,12 @@ export function MembersPage() {
       return;
     }
 
-    if (!window.confirm(`拒绝「${user.name}」的注册申请？`)) {
+    if (!await confirm({
+      title: "拒绝注册申请",
+      description: `拒绝「${user.name}」的注册申请？`,
+      confirmLabel: "拒绝申请",
+      tone: "danger",
+    })) {
       return;
     }
 
@@ -194,7 +191,12 @@ export function MembersPage() {
       return;
     }
 
-    if (!window.confirm(`停用用户「${user.name}」？`)) {
+    if (!await confirm({
+      title: "停用用户",
+      description: `停用用户「${user.name}」？`,
+      confirmLabel: "停用用户",
+      tone: "danger",
+    })) {
       return;
     }
 
@@ -208,7 +210,11 @@ export function MembersPage() {
       return;
     }
 
-    if (!window.confirm(`启用用户「${user.name}」？`)) {
+    if (!await confirm({
+      title: "启用用户",
+      description: `启用用户「${user.name}」？`,
+      confirmLabel: "启用用户",
+    })) {
       return;
     }
 
@@ -222,7 +228,12 @@ export function MembersPage() {
       return;
     }
 
-    if (!window.confirm(`删除账号「${user.name}」？这会清理 ORF 用户、成员关系和已绑定登录身份；如果该成员已被 ORF 业务记录引用，后端会拒绝删除。`)) {
+    if (!await confirm({
+      title: "删除账号",
+      description: `删除账号「${user.name}」？这会清理 ORF 用户、成员关系和已绑定登录身份；如果该成员已被 ORF 业务记录引用，后端会拒绝删除。`,
+      confirmLabel: "删除账号",
+      tone: "danger",
+    })) {
       return;
     }
 
@@ -298,7 +309,7 @@ export function MembersPage() {
                     <td>{user.email}</td>
                     <td>
                       <span className={clsx("orf-user-role-select", user.role === "admin" ? "orf-user-role-admin" : "orf-user-role-member")}>
-                        <span>{roleLabel[user.role]}</span>
+                        <span>{userRoleLabel[user.role]}</span>
                       </span>
                     </td>
                     <td>
@@ -358,7 +369,7 @@ export function MembersPage() {
         </div>
       </section>
 
-      {dialog && (
+      {dialog && typeof document !== "undefined" && createPortal(
         <div className="orf-user-dialog-backdrop" role="presentation" onMouseDown={closeDialog}>
           <form
             className="orf-user-dialog"
@@ -427,7 +438,8 @@ export function MembersPage() {
               </Button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
