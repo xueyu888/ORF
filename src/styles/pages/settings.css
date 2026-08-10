@@ -2031,11 +2031,13 @@ body:has(.orf-settings-page-single) .orf-settings-detail {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px 18px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  padding: 0;
+  border: 1px solid var(--orf-material-content-hairline);
+  border-radius: 20px;
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--orf-material-content-shine) 14%, transparent), transparent 42%),
+    color-mix(in srgb, var(--orf-material-content-secondary) 76%, transparent);
+  box-shadow: var(--orf-material-content-shadow-soft);
+  padding: 13px 14px 13px 18px;
 }
 
 body:has(.orf-settings-page-single) .orf-settings-detail-heading {
@@ -2045,15 +2047,15 @@ body:has(.orf-settings-page-single) .orf-settings-detail-heading {
 }
 
 body:has(.orf-settings-page-single) .orf-settings-detail-heading > span {
-  color: var(--orf-accent-text);
-  font-size: 10px;
+  color: var(--orf-text-primary);
+  font-size: 16px;
   font-weight: 650;
-  letter-spacing: 0.12em;
+  letter-spacing: -0.01em;
 }
 
 body:has(.orf-settings-page-single) .orf-settings-detail-heading p {
-  color: var(--orf-text-muted);
-  font-size: 13px;
+  color: var(--orf-text-secondary);
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -2388,8 +2390,19 @@ body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-
 }
 
 body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-personal-settings-card-heading {
-  border: 0;
-  padding: 0 2px 2px;
+  min-height: 58px;
+  align-items: center;
+  border: 1px solid var(--orf-material-content-hairline);
+  border-radius: 18px;
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--orf-material-content-shine) 14%, transparent), transparent 42%),
+    color-mix(in srgb, var(--orf-material-content-secondary) 74%, transparent);
+  box-shadow: var(--orf-material-content-shadow-soft);
+  padding: 12px 16px;
+}
+
+body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-personal-settings-card-heading small {
+  color: var(--orf-text-secondary);
 }
 
 body:has(.orf-personal-settings-page) .orf-personal-settings-section {
