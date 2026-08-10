@@ -1026,3 +1026,469 @@
     font-size: 12px;
   }
 }
+
+/* Reports scene material contract
+   -------------------------------
+   Reports are an analytical observatory: the period controller and summary
+   strip stay light and responsive, while the leaderboard keeps a steadier
+   reading surface. Environmental colour may enter the glass, but never alter
+   the meaning of points, rank changes or settlement state. */
+.orf-app-shell[data-page-scene="page_reports_background"] {
+  --orf-bg-app: #e3e8f0;
+  --orf-bg-page: transparent;
+  --orf-bg-card: rgba(249, 251, 255, 0.72);
+  --orf-bg-elevated: rgba(252, 253, 255, 0.9);
+  --orf-bg-muted: rgba(230, 236, 247, 0.62);
+  --orf-bg-row-hover: rgba(226, 234, 250, 0.62);
+  --orf-text-primary: #1b293d;
+  --orf-text-secondary: #405269;
+  --orf-text-muted: #586a82;
+  --orf-text-faint: #8794a8;
+  --orf-border: rgba(49, 65, 96, 0.14);
+  --orf-border-strong: rgba(44, 62, 95, 0.24);
+  --orf-accent: #5269c7;
+  --orf-accent-hover: #465ab0;
+  --orf-accent-soft: rgba(82, 105, 199, 0.13);
+  --orf-accent-border: rgba(82, 105, 199, 0.36);
+  --orf-accent-text: #465bb6;
+  --orf-surface-chrome: rgba(242, 246, 253, 0.55);
+  --orf-surface-panel: rgba(246, 249, 254, 0.61);
+  --orf-surface-panel-solid: rgba(249, 251, 255, 0.88);
+  --orf-surface-content-solid: rgba(251, 252, 255, 0.92);
+  --orf-surface-elevated: rgba(252, 253, 255, 0.9);
+  --orf-surface-control: rgba(247, 250, 255, 0.57);
+  --orf-surface-control-solid: rgba(248, 250, 255, 0.88);
+  --orf-surface-control-hover: rgba(255, 255, 255, 0.8);
+  --orf-workbench-hairline: rgba(48, 64, 96, 0.15);
+  --orf-workbench-hairline-strong: rgba(43, 61, 95, 0.24);
+  --orf-topbar-surface: rgba(241, 246, 253, 0.63);
+  --orf-topbar-surface-strong: rgba(251, 252, 255, 0.85);
+  --orf-topbar-control-bg: rgba(248, 250, 255, 0.62);
+  --orf-topbar-control-hover-bg: rgba(255, 255, 255, 0.84);
+  --orf-topbar-control-border: rgba(48, 65, 96, 0.16);
+  --orf-topbar-control-text: #263650;
+  --orf-topbar-control-muted: #748299;
+  --reports-glass-ambient: rgba(224, 235, 249, 0.4);
+  --reports-glass-panel: rgba(235, 243, 253, 0.43);
+  --reports-glass-reading: rgba(242, 248, 255, 0.54);
+  --reports-glass-row: rgba(255, 255, 255, 0.27);
+  --reports-glass-control: rgba(243, 248, 255, 0.43);
+  --reports-glass-header: rgba(211, 225, 246, 0.35);
+  --reports-glass-float: rgba(246, 250, 255, 0.76);
+  --reports-glass-border: rgba(255, 255, 255, 0.58);
+  --reports-glass-shine: rgba(255, 255, 255, 0.84);
+  --reports-glass-shadow: 0 22px 54px rgba(25, 38, 70, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  --reports-glass-shadow-soft: 0 14px 34px rgba(25, 38, 70, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+  --reports-glass-filter: blur(20px) saturate(1.15);
+  --reports-control-filter: blur(14px) saturate(1.1);
+  --reports-gold: #b77928;
+  --reports-gold-soft: rgba(197, 138, 49, 0.14);
+  --reports-cyan: #218aa8;
+  --reports-cyan-soft: rgba(33, 138, 168, 0.13);
+  --orf-page-safety-overlay:
+    radial-gradient(circle at 72% 13%, rgba(255, 243, 207, 0.055), transparent 34%),
+    linear-gradient(112deg, rgba(212, 224, 242, 0.08) 0%, rgba(249, 242, 225, 0.025) 52%, rgba(201, 216, 241, 0.07) 100%);
+  --orf-sidebar-bg-overlay:
+    linear-gradient(105deg, rgba(6, 22, 42, 0.49) 0%, rgba(9, 37, 60, 0.31) 60%, rgba(16, 55, 78, 0.14) 100%),
+    linear-gradient(180deg, rgba(4, 14, 27, 0.03), rgba(4, 14, 27, 0.38));
+  --orf-sidebar-selected-bg: rgba(132, 197, 222, 0.2);
+  --orf-sidebar-hover-bg: rgba(132, 197, 222, 0.13);
+  --orf-sidebar-divider: rgba(222, 235, 245, 0.14);
+  --orf-sidebar-text: #f8fbff;
+  --orf-sidebar-text-muted: #c5d6e4;
+  --orf-sidebar-icon: #ebf6fd;
+}
+
+html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_reports_background"] {
+  --orf-bg-app: #091321;
+  --orf-bg-page: transparent;
+  --orf-bg-card: rgba(10, 21, 38, 0.73);
+  --orf-bg-elevated: rgba(13, 26, 45, 0.9);
+  --orf-bg-muted: rgba(22, 38, 61, 0.66);
+  --orf-bg-row-hover: rgba(44, 62, 94, 0.55);
+  --orf-text-primary: #f1f5fc;
+  --orf-text-secondary: #c7d1e2;
+  --orf-text-muted: #aab7c9;
+  --orf-text-faint: #7f8ea3;
+  --orf-border: rgba(178, 194, 222, 0.15);
+  --orf-border-strong: rgba(187, 203, 231, 0.25);
+  --orf-accent: #8da3ff;
+  --orf-accent-hover: #a5b6ff;
+  --orf-accent-soft: rgba(141, 163, 255, 0.17);
+  --orf-accent-border: rgba(154, 176, 255, 0.38);
+  --orf-accent-text: #b5c2ff;
+  --orf-surface-chrome: rgba(7, 16, 30, 0.56);
+  --orf-surface-panel: rgba(8, 19, 35, 0.63);
+  --orf-surface-panel-solid: rgba(10, 22, 39, 0.86);
+  --orf-surface-content-solid: rgba(12, 24, 42, 0.91);
+  --orf-surface-elevated: rgba(13, 26, 45, 0.9);
+  --orf-surface-control: rgba(14, 28, 47, 0.59);
+  --orf-surface-control-solid: rgba(15, 29, 49, 0.88);
+  --orf-surface-control-hover: rgba(30, 47, 73, 0.77);
+  --orf-workbench-hairline: rgba(178, 194, 222, 0.15);
+  --orf-workbench-hairline-strong: rgba(188, 204, 232, 0.24);
+  --orf-topbar-surface: rgba(7, 17, 31, 0.67);
+  --orf-topbar-surface-strong: rgba(17, 32, 53, 0.87);
+  --orf-topbar-control-bg: rgba(14, 29, 49, 0.63);
+  --orf-topbar-control-hover-bg: rgba(31, 50, 77, 0.85);
+  --orf-topbar-control-border: rgba(177, 193, 220, 0.18);
+  --orf-topbar-control-text: #e4eaf4;
+  --orf-topbar-control-muted: #96a5ba;
+  --reports-glass-ambient: rgba(5, 16, 32, 0.42);
+  --reports-glass-panel: rgba(7, 20, 38, 0.46);
+  --reports-glass-reading: rgba(8, 22, 41, 0.55);
+  --reports-glass-row: rgba(29, 49, 77, 0.29);
+  --reports-glass-control: rgba(13, 30, 52, 0.45);
+  --reports-glass-header: rgba(28, 48, 78, 0.39);
+  --reports-glass-float: rgba(8, 22, 41, 0.76);
+  --reports-glass-border: rgba(190, 213, 244, 0.24);
+  --reports-glass-shine: rgba(220, 231, 248, 0.18);
+  --reports-glass-shadow: 0 24px 58px rgba(0, 5, 14, 0.48), inset 0 1px 0 rgba(220, 231, 248, 0.14);
+  --reports-glass-shadow-soft: 0 16px 38px rgba(0, 5, 14, 0.36), inset 0 1px 0 rgba(220, 231, 248, 0.12);
+  --reports-glass-filter: blur(20px) saturate(1.12);
+  --reports-control-filter: blur(14px) saturate(1.08);
+  --reports-gold: #e4b661;
+  --reports-gold-soft: rgba(228, 182, 97, 0.16);
+  --reports-cyan: #6ec8df;
+  --reports-cyan-soft: rgba(110, 200, 223, 0.15);
+  --orf-page-safety-overlay:
+    radial-gradient(circle at 72% 13%, rgba(91, 117, 197, 0.04), transparent 34%),
+    linear-gradient(112deg, rgba(1, 7, 17, 0.34) 0%, rgba(6, 14, 28, 0.2) 52%, rgba(2, 8, 19, 0.3) 100%);
+  --orf-sidebar-bg-overlay:
+    linear-gradient(105deg, rgba(1, 7, 16, 0.61) 0%, rgba(3, 17, 31, 0.43) 60%, rgba(5, 28, 45, 0.22) 100%),
+    linear-gradient(180deg, rgba(1, 5, 11, 0.05), rgba(1, 6, 13, 0.46));
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"],
+.orf-app-shell[data-page-scene="page_reports_background"]::before {
+  background: var(--orf-bg-app);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] :is(.orf-shell-body, .orf-main-content) {
+  background: transparent;
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .orf-main-content[data-page-skin="true"]::before {
+  background: var(--orf-page-safety-overlay);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] :is(.orf-main-content-skin-layer, .orf-topbar-skin-layer) {
+  --orf-visual-bg-filter: saturate(1.04) contrast(0.99);
+}
+
+html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_reports_background"] :is(.orf-main-content-skin-layer, .orf-topbar-skin-layer) {
+  --orf-visual-bg-filter: brightness(0.77) saturate(0.95) contrast(0.98);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .orf-sidebar::after {
+  opacity: 0.7;
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .orf-sidebar-background-image {
+  opacity: 1;
+  filter: saturate(1.04) contrast(0.99) brightness(0.99);
+}
+
+html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_reports_background"] .orf-sidebar::after {
+  opacity: 0.76;
+}
+
+html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_reports_background"] .orf-sidebar-background-image {
+  opacity: 0.94;
+  filter: saturate(0.96) contrast(0.97) brightness(0.86);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] :is(
+  .orf-sidebar-brand-title,
+  .orf-sidebar-group-title,
+  .orf-sidebar-link,
+  .orf-sidebar-user-name,
+  .orf-attention-workbar-trigger
+) {
+  text-shadow: 0 1px 3px rgba(0, 8, 18, 0.82);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] :is(.orf-sidebar-link-active, .orf-sidebar-link-inactive:hover) {
+  -webkit-backdrop-filter: blur(16px) saturate(1.07);
+  backdrop-filter: blur(16px) saturate(1.07);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .orf-topbar {
+  border-bottom-color: var(--reports-glass-border);
+  background: transparent;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--reports-glass-shine) 50%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .orf-topbar::before {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  content: "";
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--reports-glass-shine) 12%, transparent), transparent 46%),
+    var(--reports-glass-ambient);
+  pointer-events: none;
+  -webkit-backdrop-filter: var(--reports-glass-filter);
+  backdrop-filter: var(--reports-glass-filter);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .orf-topbar::after {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--reports-glass-shine) 26%, transparent), transparent 76%);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] :is(
+  .reports-period-card,
+  .orf-page[aria-label="统计"] .orf-stat-grid,
+  .reports-leaderboard-card,
+  .reports-linked-settlement-card
+) {
+  border-color: var(--reports-glass-border);
+  border-radius: 18px;
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--reports-glass-shine) 17%, transparent), transparent 38%),
+    linear-gradient(302deg, color-mix(in srgb, var(--reports-cyan-soft) 24%, transparent), transparent 46%),
+    var(--reports-glass-panel);
+  box-shadow: var(--reports-glass-shadow);
+  -webkit-backdrop-filter: var(--reports-glass-filter);
+  backdrop-filter: var(--reports-glass-filter);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-leaderboard-card {
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--reports-glass-shine) 16%, transparent), transparent 38%),
+    linear-gradient(300deg, color-mix(in srgb, var(--orf-accent-soft) 30%, transparent), transparent 52%),
+    var(--reports-glass-reading);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .orf-page[aria-label="统计"] .orf-stat-grid {
+  overflow: hidden;
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--reports-cyan-soft) 48%, transparent), transparent 44%),
+    linear-gradient(290deg, color-mix(in srgb, var(--reports-gold-soft) 42%, transparent), transparent 36%),
+    var(--reports-glass-panel);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .orf-page[aria-label="统计"] .orf-stat-card {
+  border-color: color-mix(in srgb, var(--reports-glass-border) 44%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--reports-glass-row) 54%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .orf-page[aria-label="统计"] .orf-stat-card:hover {
+  background: color-mix(in srgb, var(--reports-glass-row) 72%, var(--orf-accent-soft));
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .orf-page[aria-label="统计"] .orf-stat-icon {
+  width: 28px;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, currentColor 24%, var(--reports-glass-border));
+  border-radius: 50%;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--reports-glass-shine) 52%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .orf-page[aria-label="统计"] .orf-stat-icon-accent {
+  background: var(--orf-accent-soft);
+  color: var(--orf-accent-text);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .orf-page[aria-label="统计"] .orf-stat-icon-success {
+  background: var(--reports-cyan-soft);
+  color: var(--reports-cyan);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .orf-page[aria-label="统计"] .orf-stat-icon-warning {
+  background: var(--reports-gold-soft);
+  color: var(--reports-gold);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .orf-page[aria-label="统计"] .orf-stat-value {
+  letter-spacing: -0.025em;
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] :is(
+  .reports-period-summary,
+  .reports-period-card .orf-segmented-control,
+  .reports-period-card .orf-action-button,
+  .reports-leaderboard-count,
+  .reports-calendar-month-total
+) {
+  border-color: color-mix(in srgb, var(--reports-glass-border) 54%, var(--orf-workbench-hairline));
+  background: var(--reports-glass-control);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--reports-glass-shine) 48%, transparent);
+  -webkit-backdrop-filter: var(--reports-control-filter);
+  backdrop-filter: var(--reports-control-filter);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-period-card :is(.orf-action-button, .orf-segmented-option):is(:hover, :focus-visible),
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-period-card .orf-segmented-option.is-active {
+  border-color: var(--orf-accent-border);
+  background: color-mix(in srgb, var(--reports-glass-control) 72%, var(--orf-accent-soft));
+  color: var(--orf-accent-text);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-period-summary {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--orf-accent-soft) 36%, transparent), transparent 72%),
+    var(--reports-glass-control);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-calendar-shell {
+  border-color: color-mix(in srgb, var(--reports-glass-border) 48%, var(--orf-workbench-hairline));
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-calendar-day {
+  border-color: color-mix(in srgb, var(--reports-glass-border) 46%, var(--orf-workbench-hairline));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--reports-glass-row) 78%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--reports-glass-shine) 36%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-calendar-day:is(:hover, :focus-visible) {
+  border-color: var(--orf-accent-border);
+  background: color-mix(in srgb, var(--reports-glass-row) 66%, var(--orf-accent-soft));
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--orf-text-primary) 9%, transparent), inset 0 1px 0 var(--reports-glass-shine);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-calendar-day[data-in-range="true"] {
+  border-color: color-mix(in srgb, var(--orf-accent-border) 70%, var(--reports-glass-border));
+  background: color-mix(in srgb, var(--reports-glass-row) 66%, var(--orf-accent-soft));
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-calendar-day[data-has-points="true"] {
+  border-color: color-mix(in srgb, var(--reports-cyan) 32%, var(--reports-glass-border));
+  background: color-mix(in srgb, var(--reports-glass-row) 70%, var(--reports-cyan-soft));
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-calendar-day[data-points-tone="negative"] {
+  border-color: color-mix(in srgb, var(--orf-danger-text) 30%, var(--reports-glass-border));
+  background: color-mix(in srgb, var(--reports-glass-row) 70%, var(--orf-danger-bg));
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-calendar-day[data-selected="true"] {
+  border-color: var(--orf-accent-border);
+  background: color-mix(in srgb, var(--reports-glass-row) 58%, var(--orf-accent-soft));
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--orf-accent) 16%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--orf-accent-text) 25%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-calendar-day-points {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--reports-glass-float) 80%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--reports-glass-shine) 50%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-leaderboard-heading {
+  padding-bottom: 2px;
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-data-table thead {
+  background: color-mix(in srgb, var(--reports-glass-header) 52%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-data-table :is(th, td) {
+  border-color: color-mix(in srgb, var(--reports-glass-border) 42%, var(--orf-workbench-hairline));
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-data-table tbody tr {
+  background: color-mix(in srgb, var(--reports-glass-row) 42%, transparent);
+  transition: background 150ms ease, box-shadow 150ms ease;
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-data-table tbody tr:hover {
+  background: color-mix(in srgb, var(--reports-glass-row) 68%, var(--orf-accent-soft));
+  box-shadow: inset 3px 0 0 var(--orf-accent);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-rank {
+  border-color: color-mix(in srgb, var(--reports-glass-border) 46%, var(--orf-workbench-hairline));
+  border-radius: 50%;
+  background: var(--reports-glass-control);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--reports-glass-shine) 48%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-data-table tbody tr[data-rank="1"] .reports-rank,
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-mobile-leaderboard > li[data-rank="1"] .reports-mobile-rank {
+  border-color: color-mix(in srgb, var(--reports-gold) 38%, var(--reports-glass-border));
+  background: var(--reports-gold-soft);
+  color: var(--reports-gold);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--reports-gold) 18%, transparent), inset 0 1px 0 color-mix(in srgb, var(--reports-glass-shine) 46%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-progress-meter .orf-progress-track,
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-mobile-progress .orf-progress-track {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--reports-glass-border) 38%, var(--orf-workbench-hairline));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--reports-glass-header) 58%, transparent) !important;
+  box-shadow: inset 0 1px 3px color-mix(in srgb, var(--orf-text-primary) 10%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-progress-meter .orf-progress-track > div,
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-mobile-progress .orf-progress-track > div {
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--orf-accent), var(--reports-cyan)) !important;
+  box-shadow: 0 0 16px color-mix(in srgb, var(--reports-cyan) 28%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-linked-settlement-card {
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--reports-cyan-soft) 62%, transparent), transparent 54%),
+    var(--reports-glass-panel);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-linked-settlement-icon {
+  border: 1px solid color-mix(in srgb, var(--reports-cyan) 28%, var(--reports-glass-border));
+  border-radius: 50%;
+  background: var(--reports-cyan-soft);
+  color: var(--reports-cyan);
+}
+
+.orf-app-shell[data-page-scene="page_reports_background"] .reports-empty-state {
+  border-color: color-mix(in srgb, var(--reports-glass-border) 48%, var(--orf-workbench-hairline));
+  background:
+    radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--orf-accent-soft) 48%, transparent), transparent 46%),
+    color-mix(in srgb, var(--reports-glass-row) 62%, transparent);
+}
+
+@media (max-width: 760px) {
+  .orf-app-shell[data-page-scene="page_reports_background"] :is(
+    .reports-period-card,
+    .orf-page[aria-label="统计"] .orf-stat-grid,
+    .reports-leaderboard-card,
+    .reports-linked-settlement-card
+  ) {
+    border-radius: 16px;
+    box-shadow: 0 15px 36px color-mix(in srgb, var(--orf-text-primary) 14%, transparent), inset 0 1px 0 color-mix(in srgb, var(--reports-glass-shine) 64%, transparent);
+  }
+
+  .orf-app-shell[data-page-scene="page_reports_background"] .reports-mobile-leaderboard {
+    border-color: color-mix(in srgb, var(--reports-glass-border) 44%, var(--orf-workbench-hairline));
+  }
+
+  .orf-app-shell[data-page-scene="page_reports_background"] .reports-mobile-leaderboard > li {
+    border-color: color-mix(in srgb, var(--reports-glass-border) 42%, var(--orf-workbench-hairline));
+    background: color-mix(in srgb, var(--reports-glass-row) 50%, transparent);
+  }
+
+  .orf-app-shell[data-page-scene="page_reports_background"] .reports-mobile-leaderboard > li[data-rank="1"] {
+    background: linear-gradient(90deg, color-mix(in srgb, var(--reports-gold-soft) 68%, transparent), transparent 78%);
+  }
+
+  .orf-app-shell[data-page-scene="page_reports_background"] .reports-mobile-rank {
+    border-color: color-mix(in srgb, var(--reports-glass-border) 46%, var(--orf-workbench-hairline));
+    background: var(--reports-glass-control);
+  }
+
+  .orf-app-shell[data-page-scene="page_reports_background"] .reports-calendar-day {
+    border-radius: 14px;
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .orf-app-shell[data-page-scene="page_reports_background"] :is(
+    .reports-period-card,
+    .orf-page[aria-label="统计"] .orf-stat-grid,
+    .reports-leaderboard-card,
+    .reports-linked-settlement-card
+  ) {
+    background: var(--orf-surface-elevated);
+  }
+}
