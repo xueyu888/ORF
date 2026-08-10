@@ -262,6 +262,7 @@ function AppShellFrame() {
           data-bounty-hall={isBountyHall ? "true" : "false"}
           data-chat-page={isChatPage ? "true" : "false"}
           data-feedback-page={isFeedbackPage ? "true" : "false"}
+          data-page-scene={pageBackgroundScene ?? "none"}
           data-mobile-primary-action={mobilePrimaryAction}
           data-orf-appearance={appearanceMode}
           data-desktop-chrome={desktopChromeEnabled ? "true" : "false"}
