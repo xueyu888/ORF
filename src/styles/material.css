@@ -112,6 +112,8 @@ html[data-orf-appearance="dark"] {
   --orf-sidebar-control-hover-bg: rgba(255, 255, 255, 0.62);
   --orf-sidebar-selected-bg: rgba(20, 126, 150, 0.15);
   --orf-sidebar-hover-bg: rgba(255, 255, 255, 0.34);
+  --orf-sidebar-text-shadow: 0 1px 1px rgba(255, 255, 255, 0.48);
+  --orf-sidebar-icon-shadow: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.42));
 }
 
 .orf-sidebar[data-material-content-tone="light"] {
@@ -121,6 +123,8 @@ html[data-orf-appearance="dark"] {
   --orf-sidebar-text-muted: #abc2ca;
   --orf-sidebar-link-text: #e6f1f3;
   --orf-sidebar-command-text: #f5fafb;
+  --orf-sidebar-text-shadow: 0 1px 2px rgba(4, 12, 17, 0.72), 0 3px 10px rgba(4, 12, 17, 0.28);
+  --orf-sidebar-icon-shadow: drop-shadow(0 1px 2px rgba(4, 12, 17, 0.62));
 }
 
 .orf-topbar[data-material-content-tone="dark"] {

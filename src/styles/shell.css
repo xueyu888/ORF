@@ -2053,7 +2053,11 @@ html[data-orf-display-ready="true"] .orf-mobile-bottom-nav-item {
 .orf-sidebar-group-title,
 .orf-sidebar-link,
 .orf-sidebar-user-name {
-  text-shadow: none;
+  text-shadow: var(--orf-sidebar-text-shadow, none);
+}
+
+.orf-sidebar-icon {
+  filter: var(--orf-sidebar-icon-shadow, none);
 }
 
 .orf-sidebar-link {

@@ -18,10 +18,72 @@ type MaterialPolicyInput = {
   unfocused?: boolean;
 };
 
-const roleParameters: Record<PersistentMaterialRole, { opacity: number; blur: number; shadow: number }> = {
-  sidebar: { opacity: 0.4, blur: 22, shadow: 0.2 },
-  topbar: { opacity: 0.35, blur: 18, shadow: 0.1 },
-  workspace: { opacity: 0.41, blur: 17, shadow: 0.07 },
+type RoleMaterialParameters = {
+  opacity: number;
+  opacityMin: number;
+  opacityMax: number;
+  opacityExposureResponse: number;
+  opacityComplexityResponse: number;
+  opacityExtremeResponse: number;
+  blur: number;
+  blurMin: number;
+  blurMax: number;
+  blurComplexityResponse: number;
+  blurExposureResponse: number;
+  unfocusedOffset: number;
+  darkToneOffset: number;
+  shadow: number;
+};
+
+const roleParameters: Record<PersistentMaterialRole, RoleMaterialParameters> = {
+  sidebar: {
+    opacity: 0.26,
+    opacityMin: 0.12,
+    opacityMax: 0.34,
+    opacityExposureResponse: 0.2,
+    opacityComplexityResponse: 0.06,
+    opacityExtremeResponse: 0.035,
+    blur: 2,
+    blurMin: 1.5,
+    blurMax: 4,
+    blurComplexityResponse: 2,
+    blurExposureResponse: 0.75,
+    unfocusedOffset: 0.02,
+    darkToneOffset: 0.02,
+    shadow: 0.12,
+  },
+  topbar: {
+    opacity: 0.35,
+    opacityMin: 0.18,
+    opacityMax: 0.56,
+    opacityExposureResponse: 0.24,
+    opacityComplexityResponse: 0.14,
+    opacityExtremeResponse: 0.08,
+    blur: 18,
+    blurMin: 12,
+    blurMax: 30,
+    blurComplexityResponse: 9,
+    blurExposureResponse: 3,
+    unfocusedOffset: 0.045,
+    darkToneOffset: 0.035,
+    shadow: 0.1,
+  },
+  workspace: {
+    opacity: 0.41,
+    opacityMin: 0.22,
+    opacityMax: 0.58,
+    opacityExposureResponse: 0.21,
+    opacityComplexityResponse: 0.14,
+    opacityExtremeResponse: 0.08,
+    blur: 17,
+    blurMin: 12,
+    blurMax: 30,
+    blurComplexityResponse: 9,
+    blurExposureResponse: 3,
+    unfocusedOffset: 0.045,
+    darkToneOffset: 0.035,
+    shadow: 0.07,
+  },
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -35,6 +97,11 @@ function mixChannel(base: number, environment: number, amount: number) {
 function backdropTone(input: MaterialPolicyInput) {
   if (input.preferences.tone === "soft-light") return "soft-light" as const;
   if (input.preferences.tone === "soft-dark") return "soft-dark" as const;
+  if (input.role === "sidebar") {
+    const { darkPixelShare, lightPixelShare, luminanceP50 } = input.analysis;
+    if (luminanceP50 < 0.46 || darkPixelShare > lightPixelShare + 0.18) return "soft-dark" as const;
+    if (luminanceP50 > 0.56 || lightPixelShare > darkPixelShare + 0.18) return "soft-light" as const;
+  }
   return input.appearance === "dark" ? "soft-dark" as const : "soft-light" as const;
 }
 
@@ -72,23 +139,28 @@ export function deriveAdaptiveMaterial(input: MaterialPolicyInput): AdaptiveMate
   }
 
   const extremeShare = input.analysis.darkPixelShare + input.analysis.lightPixelShare;
-  const focusStability = input.unfocused ? 0.045 : 0;
   const tintOpacity = clamp(
     role.opacity
-      - exposure * (input.role === "workspace" ? 0.21 : 0.24)
-      + input.analysis.complexity * 0.14
-      + extremeShare * 0.08
-      + focusStability
-      + (tone === "soft-dark" ? 0.035 : 0),
-    input.role === "topbar" ? 0.18 : input.role === "workspace" ? 0.22 : 0.24,
-    input.role === "workspace" ? 0.58 : 0.56,
+      - exposure * role.opacityExposureResponse
+      + input.analysis.complexity * role.opacityComplexityResponse
+      + extremeShare * role.opacityExtremeResponse
+      + (input.unfocused ? role.unfocusedOffset : 0)
+      + (tone === "soft-dark" ? role.darkToneOffset : 0),
+    role.opacityMin,
+    role.opacityMax,
   );
 
   return {
     backdropTone: tone,
     tintColor,
     tintOpacity,
-    blurRadius: clamp(role.blur + input.analysis.complexity * 9 - exposure * 3, 12, 30),
+    blurRadius: clamp(
+      role.blur
+        + input.analysis.complexity * role.blurComplexityResponse
+        - exposure * role.blurExposureResponse,
+      role.blurMin,
+      role.blurMax,
+    ),
     saturation: clamp(1.04 + input.analysis.saturation * 0.18, 1.04, 1.2),
     noiseOpacity: clamp(0.008 + input.analysis.complexity * 0.012, 0.008, 0.02),
     borderLightOpacity: tone === "soft-dark" ? 0.14 : 0.48,
