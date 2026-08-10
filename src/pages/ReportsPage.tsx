@@ -1,10 +1,10 @@
-import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Minus, Target, TrendingDown, TrendingUp, Trophy, Users } from "lucide-react";
+import { Award, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Medal, Minus, Target, TrendingDown, TrendingUp, Trophy, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { buildDateGrid, monthLabel } from "../components/DatePicker";
 import { PageScaffold } from "../components/PageScaffold";
 import { UserAvatar } from "../components/UserAvatar";
-import { Button, Card, IconButton, ProgressBar } from "../components/ui";
+import { Button, Card, IconButton } from "../components/ui";
 import {
   buildLeaderboardRangeBounds,
   buildLeaderboardRows,
@@ -19,6 +19,7 @@ import {
   type SettlementDaySummary,
   type TimeRange,
 } from "../domain/reportsLeaderboard";
+import { LeaderboardSourceBar } from "../features/reports/LeaderboardSourceBar";
 import { useOrf } from "../state/OrfProvider";
 import { reportsPageSnapshot } from "../state/readModelQueries";
 import { isDateOnlyString, localDateString } from "../utils/date";
@@ -49,6 +50,7 @@ export function ReportsPage() {
   const [customRange, setCustomRange] = useState<LeaderboardDateRange>(() => defaultCustomRange(linkedSettlementDate));
   const [customDateBoundary, setCustomDateBoundary] = useState<CustomDateBoundary>("end");
   const [calendarDisplayMonth, setCalendarDisplayMonth] = useState(() => monthForDate(linkedSettlementDate));
+  const [heatmapExpanded, setHeatmapExpanded] = useState(false);
   const appliedReportsLinkRef = useRef("");
 
   const reportsProjection = reportsData ?? reportsPageSnapshot() ?? emptyReportsData;
@@ -61,7 +63,6 @@ export function ReportsPage() {
     () => buildLeaderboardRows(reportsProjection, timeRange, leaderboardRangeSelection),
     [leaderboardRangeSelection, reportsProjection, timeRange],
   );
-  const summary = useMemo(() => buildReportSummary(rows), [rows]);
   const settlementDaySummaries = useMemo(() => buildSettlementDaySummaries(reportsProjection.pointLedger), [reportsProjection.pointLedger]);
   const settlementDaySummaryByDate = useMemo(
     () => new Map(settlementDaySummaries.map((item) => [item.date, item])),
@@ -108,14 +109,13 @@ export function ReportsPage() {
       <ReportsPeriodCard
         customDateBoundary={customDateBoundary}
         customRange={customRange}
-        dailySummaryByDate={settlementDaySummaryByDate}
-        displayMonth={calendarDisplayMonth}
         endDate={endDate}
         onCustomDateBoundaryChange={(boundary) => {
           setCustomDateBoundary(boundary);
           setCalendarDisplayMonth(monthForDate(customRange[boundary]));
         }}
         onDisplayMonthChange={setCalendarDisplayMonth}
+        onRevealHeatmap={() => setHeatmapExpanded(true)}
         onSelectDate={timeRange === "custom" ? changeCustomDate : changeEndDate}
         onShiftEndDate={(amount) => changeEndDate(shiftLeaderboardEndDate(endDate, timeRange, amount))}
         onTimeRangeChange={changeTimeRange}
@@ -123,41 +123,6 @@ export function ReportsPage() {
         timeRange={timeRange}
         today={today}
       />
-
-      <div className="orf-stat-grid">
-        <Card className="orf-stat-card">
-          <div className="orf-stat-icon orf-stat-icon-accent">
-            <Users className="h-4 w-4" />
-          </div>
-          <div className="orf-stat-label">上榜成员</div>
-          <div className="orf-stat-value">{summary.memberCount}</div>
-          <div className="orf-stat-note">当前范围内有积分记录</div>
-        </Card>
-        <Card className="orf-stat-card">
-          <div className="orf-stat-icon orf-stat-icon-success">
-            <BarChart3 className="h-4 w-4" />
-          </div>
-          <div className="orf-stat-label">总积分</div>
-          <div className="orf-stat-value">{summary.totalPoints.toFixed(1)}</div>
-          <div className="orf-stat-note">按成员目标结果汇总</div>
-        </Card>
-        <Card className="orf-stat-card">
-          <div className="orf-stat-icon orf-stat-icon-info">
-            <Target className="h-4 w-4" />
-          </div>
-          <div className="orf-stat-label">平均完成率</div>
-          <div className="orf-stat-value">{summary.averageCompletion}%</div>
-          <div className="orf-stat-note">只统计当前榜单成员</div>
-        </Card>
-        <Card className="orf-stat-card">
-          <div className="orf-stat-icon orf-stat-icon-warning">
-            <Trophy className="h-4 w-4" />
-          </div>
-          <div className="orf-stat-label">榜首</div>
-          <div className="orf-stat-value orf-stat-value-compact">{summary.leaderName}</div>
-          <div className="orf-stat-note">{rankChangeSummary(summary, timeRange)}</div>
-        </Card>
-      </div>
 
       {linkedSettlement && (
         <Card className="reports-linked-settlement-card">
@@ -178,7 +143,7 @@ export function ReportsPage() {
         <div className="reports-leaderboard-heading">
           <div>
             <h2>成员积分排行榜</h2>
-            <p>{leaderboardDescription(timeRange, rangeBounds)}</p>
+            <p>{leaderboardDescription(timeRange, rangeBounds)} 移入积分色段可以查看来源。</p>
           </div>
           <div className="reports-leaderboard-count">
             <Trophy className="h-4 w-4" />
@@ -187,36 +152,25 @@ export function ReportsPage() {
         </div>
 
         {rows.length > 0 ? (
-          <>
-            <div className="orf-table-wrap reports-desktop-leaderboard">
-              <table className="orf-data-table reports-data-table">
-                <thead>
-                  <tr>
-                    <th scope="col">排名</th>
-                    <th scope="col">成员</th>
-                    <th scope="col">积分</th>
-                    <th scope="col">积分占比</th>
-                    <th scope="col">完成率</th>
-                    <th scope="col">变化</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <LeaderboardRowItem
-                      key={row.userId}
-                      maxPoints={maxPoints}
-                      row={row}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <MobileLeaderboard maxPoints={maxPoints} rows={rows} />
-          </>
+          <Leaderboard rows={rows} maxPoints={maxPoints} />
         ) : (
           <div className="reports-empty-state">暂无积分记录</div>
         )}
       </Card>
+
+      <ReportsSettlementHeatmap
+        customDateBoundary={customDateBoundary}
+        customRange={customRange}
+        dailySummaryByDate={settlementDaySummaryByDate}
+        displayMonth={calendarDisplayMonth}
+        expanded={heatmapExpanded}
+        onExpandedChange={setHeatmapExpanded}
+        onDisplayMonthChange={setCalendarDisplayMonth}
+        onSelectDate={timeRange === "custom" ? changeCustomDate : changeEndDate}
+        rangeBounds={rangeBounds}
+        selectedDate={timeRange === "custom" ? customRange[customDateBoundary] : endDate}
+        timeRange={timeRange}
+      />
     </PageScaffold>
   );
 }
@@ -224,11 +178,10 @@ export function ReportsPage() {
 function ReportsPeriodCard({
   customDateBoundary,
   customRange,
-  dailySummaryByDate,
-  displayMonth,
   endDate,
   onCustomDateBoundaryChange,
   onDisplayMonthChange,
+  onRevealHeatmap,
   onSelectDate,
   onShiftEndDate,
   onTimeRangeChange,
@@ -238,11 +191,10 @@ function ReportsPeriodCard({
 }: {
   customDateBoundary: CustomDateBoundary;
   customRange: LeaderboardDateRange;
-  dailySummaryByDate: Map<string, SettlementDaySummary>;
-  displayMonth: Date;
   endDate: string;
   onCustomDateBoundaryChange: (boundary: CustomDateBoundary) => void;
   onDisplayMonthChange: (date: Date) => void;
+  onRevealHeatmap: () => void;
   onSelectDate: (date: string) => void;
   onShiftEndDate: (amount: number) => void;
   onTimeRangeChange: (value: TimeRange) => void;
@@ -250,24 +202,20 @@ function ReportsPeriodCard({
   timeRange: TimeRange;
   today: string;
 }) {
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const monthTotal = settlementMonthTotal(dailySummaryByDate, displayMonth);
   const selectedCalendarDate = timeRange === "custom" ? customRange[customDateBoundary] : endDate;
   const changeCustomBoundary = (boundary: CustomDateBoundary) => {
     onCustomDateBoundaryChange(boundary);
-    setCalendarOpen(true);
+    onRevealHeatmap();
   };
-  const openCalendarForEndDate = () => {
+  const showEndDateMonth = () => {
     onDisplayMonthChange(monthForDate(endDate));
-    setCalendarOpen(true);
+    onRevealHeatmap();
   };
   const selectDate = (date: string) => {
     onSelectDate(date);
-    setCalendarOpen(true);
   };
   const changeTimeRange = (value: TimeRange) => {
     onTimeRangeChange(value);
-    setCalendarOpen(false);
   };
   return (
     <Card className="reports-period-card">
@@ -316,7 +264,7 @@ function ReportsPeriodCard({
                 onClick={() => onShiftEndDate(-1)}
                 size="sm"
               />
-              <Button aria-expanded={calendarOpen} className="reports-period-date-button" onClick={openCalendarForEndDate} size="sm" type="button" variant="secondary">
+              <Button className="reports-period-date-button" onClick={showEndDateMonth} size="sm" type="button" variant="secondary">
                 <CalendarDays className="h-4 w-4" />
                 {endDate}
               </Button>
@@ -335,40 +283,106 @@ function ReportsPeriodCard({
           )}
         </div>
       </div>
+    </Card>
+  );
+}
 
-      {calendarOpen && timeRange !== "all" && (
-        <div className="reports-calendar-shell">
-          <div className="reports-calendar-header">
-            <IconButton
-              icon={ChevronLeft}
-              label="上个月"
-              onClick={() => onDisplayMonthChange(addDisplayMonths(displayMonth, -1))}
-              size="sm"
-            />
-            <div className="reports-calendar-title">
-              <CalendarDays className="h-4 w-4" />
-              <span>{monthLabel(displayMonth)}</span>
+function Leaderboard({ maxPoints, rows }: { maxPoints: number; rows: LeaderboardRow[] }) {
+  return (
+    <div className="reports-leaderboard-body">
+      <div aria-hidden="true" className="reports-ranking-columns">
+        <span>排名</span>
+        <span>成员</span>
+        <span>积分</span>
+        <span>积分来源</span>
+        <span>完成率</span>
+        <span>变化</span>
+      </div>
+      <ol className="reports-ranking-list" aria-label="成员积分完整排名">
+        {rows.map((row) => (
+          <LeaderboardRowItem key={row.userId} maxPoints={maxPoints} row={row} />
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function ReportsSettlementHeatmap({
+  customDateBoundary,
+  customRange,
+  dailySummaryByDate,
+  displayMonth,
+  expanded,
+  onExpandedChange,
+  onDisplayMonthChange,
+  onSelectDate,
+  rangeBounds,
+  selectedDate,
+  timeRange,
+}: {
+  customDateBoundary: CustomDateBoundary;
+  customRange: LeaderboardDateRange;
+  dailySummaryByDate: Map<string, SettlementDaySummary>;
+  displayMonth: Date;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+  onDisplayMonthChange: (date: Date) => void;
+  onSelectDate: (date: string) => void;
+  rangeBounds: LeaderboardRangeBounds | null;
+  selectedDate: string;
+  timeRange: TimeRange;
+}) {
+  const monthTotal = settlementMonthTotal(dailySummaryByDate, displayMonth);
+  const monthEntries = Array.from(dailySummaryByDate.values()).filter((summary) => summary.date.startsWith(monthKey(displayMonth)));
+  const maxAbsolutePoints = Math.max(1, ...monthEntries.map((summary) => Math.abs(summary.points)));
+  const selectedRangeLabel = timeRange === "custom"
+    ? `${customRange.start} 至 ${customRange.end} · 正在选择${customDateBoundary === "start" ? "开始" : "结束"}日期`
+    : timeRange === "all"
+      ? "查看每天的积分结算强度"
+      : `${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}`;
+
+  return (
+    <Card className="reports-heatmap-card" data-expanded={expanded}>
+      <div className="reports-heatmap-heading">
+        <div>
+          <div className="reports-heatmap-title-row">
+            <span className="reports-summary-icon reports-summary-icon-cyan"><CalendarDays className="h-4 w-4" /></span>
+            <h2>结算节奏</h2>
+          </div>
+          <p>{expanded ? selectedRangeLabel : "按日期查看积分结算强度"}</p>
+        </div>
+        <Button aria-expanded={expanded} onClick={() => onExpandedChange(!expanded)} size="sm" type="button" variant="secondary">
+          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          {expanded ? "收起" : "展开"}
+        </Button>
+      </div>
+      {expanded && (
+        <div className="reports-heatmap-body">
+          <div className="reports-heatmap-toolbar">
+            <div className="reports-heatmap-controls">
+              <IconButton icon={ChevronLeft} label="上个月" onClick={() => onDisplayMonthChange(addDisplayMonths(displayMonth, -1))} size="sm" />
+              <div className="reports-calendar-title"><span>{monthLabel(displayMonth)}</span></div>
+              <IconButton icon={ChevronRight} label="下个月" onClick={() => onDisplayMonthChange(addDisplayMonths(displayMonth, 1))} size="sm" />
+              <div className="reports-calendar-month-total">
+                <span>本月结算</span>
+                <strong>{formatSignedPoints(monthTotal)} 分</strong>
+              </div>
             </div>
-            <IconButton
-              icon={ChevronRight}
-              label="下个月"
-              onClick={() => onDisplayMonthChange(addDisplayMonths(displayMonth, 1))}
-              size="sm"
-            />
-            <div className="reports-calendar-month-total">
-              <span>本月结算</span>
-              <strong>{formatSignedPoints(monthTotal)} 分</strong>
+            <div className="reports-heatmap-legend" aria-label="结算强度图例">
+              <span>结算强度</span>
+              {[1, 2, 3, 4].map((intensity) => <i data-intensity={intensity} key={intensity} />)}
+              <span>高</span>
+              <i data-negative="true" />
+              <span>扣减</span>
             </div>
-            <Button onClick={() => setCalendarOpen(false)} size="sm" type="button" variant="secondary">
-              收起
-            </Button>
           </div>
           <SettlementCalendar
             dailySummaryByDate={dailySummaryByDate}
             displayMonth={displayMonth}
-            onSelectDate={selectDate}
+            maxAbsolutePoints={maxAbsolutePoints}
+            onSelectDate={timeRange === "all" ? undefined : onSelectDate}
             rangeBounds={rangeBounds}
-            selectedDate={selectedCalendarDate}
+            selectedDate={selectedDate}
           />
         </div>
       )}
@@ -376,41 +390,18 @@ function ReportsPeriodCard({
   );
 }
 
-function MobileLeaderboard({ maxPoints, rows }: { maxPoints: number; rows: LeaderboardRow[] }) {
-  return (
-    <ol className="reports-mobile-leaderboard" aria-label="成员积分排行榜">
-      {rows.map((row) => {
-        const percentage = Math.max(0, Math.min(100, (row.points / maxPoints) * 100));
-        return (
-          <li key={row.userId} data-rank={row.rank <= 3 ? row.rank : undefined}>
-            <span className="reports-mobile-rank" aria-label={`第 ${row.rank} 名`}>{row.rank}</span>
-            <UserAvatar avatarUrl={row.avatarUrl} className="reports-mobile-member-avatar" frame={false} name={row.memberName} />
-            <div className="reports-mobile-member-copy">
-              <strong>{row.memberName}</strong>
-              <span>{row.points.toFixed(1)} 分 · {row.completionRate}% 完成</span>
-            </div>
-            <RankChange change={row.rankChange} />
-            <div className="reports-mobile-progress">
-              <ProgressBar value={percentage} />
-              <span>相对榜首 {Math.round(percentage)}%</span>
-            </div>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
 function SettlementCalendar({
   dailySummaryByDate,
   displayMonth,
+  maxAbsolutePoints,
   onSelectDate,
   rangeBounds,
   selectedDate,
 }: {
   dailySummaryByDate: Map<string, SettlementDaySummary>;
   displayMonth: Date;
-  onSelectDate: (date: string) => void;
+  maxAbsolutePoints: number;
+  onSelectDate?: (date: string) => void;
   rangeBounds: LeaderboardRangeBounds | null;
   selectedDate: string;
 }) {
@@ -433,6 +424,7 @@ function SettlementCalendar({
             aria-selected={cell.value === selectedDate}
             className="reports-calendar-day"
             data-has-points={hasLedger}
+            data-intensity={hasLedger ? settlementIntensity(summary?.points ?? 0, maxAbsolutePoints) : undefined}
             data-in-range={inActiveRange}
             data-outside-month={!cell.inMonth}
             data-points-tone={pointsTone(summary?.points ?? 0)}
@@ -441,7 +433,8 @@ function SettlementCalendar({
             data-selected={cell.value === selectedDate}
             data-today={cell.isToday}
             key={cell.value}
-            onClick={() => onSelectDate(cell.value)}
+            disabled={!onSelectDate}
+            onClick={() => onSelectDate?.(cell.value)}
             role="gridcell"
             type="button"
           >
@@ -476,30 +469,32 @@ function TimeRangeControl({ onChange, timeRange }: { onChange: (value: TimeRange
 }
 
 function LeaderboardRowItem({ maxPoints, row }: { maxPoints: number; row: LeaderboardRow }) {
-  const percentage = Math.max(0, Math.min(100, (row.points / maxPoints) * 100));
-
   return (
-    <tr data-rank={row.rank <= 3 ? row.rank : undefined}>
-      <td data-label="排名">
-        <span className="reports-rank">{row.rank}</span>
-      </td>
-      <td data-label="成员">
-        <div className="reports-member">
-          <UserAvatar avatarUrl={row.avatarUrl} className="reports-member-avatar" frame={false} name={row.memberName} />
-          <span className="reports-member-name">{row.memberName}</span>
+    <li data-rank={row.rank <= 3 ? row.rank : undefined}>
+      <RankBadge rank={row.rank} />
+      <div className="reports-member">
+        <UserAvatar avatarUrl={row.avatarUrl} className="reports-member-avatar" frame={false} name={row.memberName} />
+        <div>
+          <strong>{row.memberName}</strong>
         </div>
-      </td>
-      <td className="reports-number-cell" data-label="积分">{row.points.toFixed(1)}</td>
-      <td className="reports-progress-cell" data-label="积分占比">
-        <div className="reports-progress-meter" aria-label={`积分占榜首 ${Math.round(percentage)}%`}>
-          <ProgressBar value={percentage} />
-        </div>
-      </td>
-      <td className="reports-number-cell" data-label="完成率">{row.completionRate}%</td>
-      <td data-label="变化">
-        <RankChange change={row.rankChange} />
-      </td>
-    </tr>
+      </div>
+      <div className="reports-row-points"><strong>{row.points.toFixed(1)}</strong><span>积分</span></div>
+      <div className="reports-row-source">
+        <LeaderboardSourceBar maxPoints={maxPoints} pointSources={row.pointSources} points={row.points} />
+        <span>{row.pointSources.length} 个目标来源</span>
+      </div>
+      <div className="reports-row-completion"><strong>{row.completionRate}%</strong><span>完成率</span></div>
+      <RankChange change={row.rankChange} />
+    </li>
+  );
+}
+
+function RankBadge({ rank }: { rank: number }) {
+  const Icon = rank === 1 ? Trophy : rank === 2 ? Medal : rank === 3 ? Award : null;
+  return (
+    <span aria-label={`第 ${rank} 名`} className="reports-rank" data-rank={rank <= 3 ? rank : undefined}>
+      {Icon ? <Icon className="h-4 w-4" /> : rank}
+    </span>
   );
 }
 
@@ -539,21 +534,6 @@ function RankChange({ change }: { change: LeaderboardRankChange }) {
   );
 }
 
-function buildReportSummary(rows: LeaderboardRow[]) {
-  const totalPoints = rows.reduce((total, row) => total + row.points, 0);
-  const averageCompletion = rows.length === 0 ? 0 : Math.round(rows.reduce((total, row) => total + row.completionRate, 0) / rows.length);
-
-  return {
-    averageCompletion,
-    downCount: rows.filter((row) => row.rankChange.kind === "moved" && row.rankChange.direction === "down").length,
-    leaderName: rows[0]?.memberName ?? "暂无",
-    memberCount: rows.length,
-    newCount: rows.filter((row) => row.rankChange.kind === "new").length,
-    totalPoints,
-    upCount: rows.filter((row) => row.rankChange.kind === "moved" && row.rankChange.direction === "up").length,
-  };
-}
-
 function previousRangeLabel(timeRange: TimeRange) {
   if (timeRange === "month") return "上一月度窗口";
   if (timeRange === "quarter") return "上一季度窗口";
@@ -571,23 +551,6 @@ function leaderboardDescription(timeRange: TimeRange, rangeBounds: LeaderboardRa
   }
 
   return `${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}（含结束日）的积分和完成率，并对比${previousRangeLabel(timeRange)}排名。`;
-}
-
-function rankChangeSummary(summary: ReturnType<typeof buildReportSummary>, timeRange: TimeRange) {
-  if (timeRange === "all") {
-    return "全部时间无上一周期";
-  }
-  if (timeRange === "custom") {
-    return "自定义范围无上一周期";
-  }
-
-  const parts = [
-    summary.upCount > 0 ? `${summary.upCount} 人上升` : "",
-    summary.downCount > 0 ? `${summary.downCount} 人下降` : "",
-    summary.newCount > 0 ? `${summary.newCount} 人新上榜` : "",
-  ].filter(Boolean);
-
-  return parts.length > 0 ? `较${previousRangeLabel(timeRange)}：${parts.join("，")}` : `较${previousRangeLabel(timeRange)}暂无变化`;
 }
 
 function periodRangeSummary(timeRange: TimeRange, rangeBounds: LeaderboardRangeBounds | null) {
@@ -656,10 +619,19 @@ function addDisplayMonths(value: Date, amount: number) {
 }
 
 function settlementMonthTotal(dailySummaryByDate: Map<string, SettlementDaySummary>, displayMonth: Date) {
-  const monthKey = `${displayMonth.getFullYear()}-${String(displayMonth.getMonth() + 1).padStart(2, "0")}`;
+  const selectedMonthKey = monthKey(displayMonth);
   return Array.from(dailySummaryByDate.values())
-    .filter((summary) => summary.date.startsWith(monthKey))
+    .filter((summary) => summary.date.startsWith(selectedMonthKey))
     .reduce((total, summary) => total + summary.points, 0);
+}
+
+function monthKey(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function settlementIntensity(points: number, maxAbsolutePoints: number) {
+  if (points === 0) return 1;
+  return Math.max(1, Math.min(4, Math.ceil((Math.abs(points) / maxAbsolutePoints) * 4)));
 }
 
 function pointsTone(points: number) {

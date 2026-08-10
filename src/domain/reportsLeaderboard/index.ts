@@ -30,10 +30,21 @@ export type LeaderboardRankChange =
   | { kind: "flat"; previousRank: number }
   | { kind: "moved"; delta: number; direction: "down" | "up"; previousRank: number };
 
+export type LeaderboardPointSource = {
+  entryCount: number;
+  latestSettlementAt: string;
+  objectiveId: string;
+  objectiveTitle: string;
+  points: number;
+  primaryReason: string;
+  reasonCount: number;
+};
+
 export type LeaderboardRow = {
   avatarUrl?: string | null;
   completionRate: number;
   memberName: string;
+  pointSources: LeaderboardPointSource[];
   points: number;
   rank: number;
   rankChange: LeaderboardRankChange;
@@ -64,6 +75,9 @@ type RollingTimeRange = Exclude<TimeRange, "all" | "custom">;
 type ObjectiveCompletionCounts = { completed: number; total: number };
 type ObjectiveAcceptanceReviewSummary = {
   hasFailedAcceptance: boolean;
+};
+type MutablePointSource = Omit<LeaderboardPointSource, "primaryReason" | "reasonCount"> & {
+  reasons: Set<string>;
 };
 
 const windowMonthsByRange: Record<RollingTimeRange, number> = {
@@ -230,6 +244,27 @@ function buildPeriodRows(
   }
 
   const objectiveById = new Map(objectives.map((objective) => [objective.id, objective]));
+  const pointSourcesByUserId = new Map<string, Map<string, MutablePointSource>>();
+  for (const entry of ledger) {
+    if (!entry.userId) continue;
+    const sources = pointSourcesByUserId.get(entry.userId) ?? new Map<string, MutablePointSource>();
+    const objective = objectiveById.get(entry.objectiveId);
+    const current = sources.get(entry.objectiveId) ?? {
+      entryCount: 0,
+      latestSettlementAt: "",
+      objectiveId: entry.objectiveId,
+      objectiveTitle: objective?.title?.trim() || "未命名目标",
+      points: 0,
+      reasons: new Set<string>(),
+    };
+    const reason = entry.reason.trim();
+    current.entryCount += 1;
+    current.points += entry.points;
+    current.latestSettlementAt = [current.latestSettlementAt, ledgerPeriodAt(entry)].filter(Boolean).sort().at(-1) ?? "";
+    if (reason) current.reasons.add(reason);
+    sources.set(entry.objectiveId, current);
+    pointSourcesByUserId.set(entry.userId, sources);
+  }
   const objectiveCounts = new Map<string, ObjectiveCompletionCounts>();
   const seenParticipation = new Set<string>();
   for (const entry of ledger) {
@@ -253,10 +288,25 @@ function buildPeriodRows(
       const counts = objectiveCounts.get(userId) ?? { completed: 0, total: 0 };
       const points = pointsByUserId.get(userId) ?? 0;
       const displayProfile = displayProfiles.get(userId);
+      const pointSources = Array.from(pointSourcesByUserId.get(userId)?.values() ?? [])
+        .map((source): LeaderboardPointSource => {
+          const reasons = Array.from(source.reasons);
+          return {
+            entryCount: source.entryCount,
+            latestSettlementAt: source.latestSettlementAt,
+            objectiveId: source.objectiveId,
+            objectiveTitle: source.objectiveTitle,
+            points: source.points,
+            primaryReason: reasons[0] ?? "目标结算",
+            reasonCount: reasons.length,
+          };
+        })
+        .sort((left, right) => Math.abs(right.points) - Math.abs(left.points) || left.objectiveTitle.localeCompare(right.objectiveTitle));
       return {
         avatarUrl: displayProfile?.avatarUrl ?? null,
         completionRate: counts.total > 0 ? Math.round((counts.completed / counts.total) * 100) : 0,
         memberName: displayProfile?.name ?? ledgerNameByUserId.get(userId) ?? userId,
+        pointSources,
         points,
         userId,
       };
