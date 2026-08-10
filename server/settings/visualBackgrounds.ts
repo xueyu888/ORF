@@ -15,7 +15,9 @@ import {
   visualBackgroundCropLimits,
   legacyVisualBackgroundOverlayLimits,
   visualMaterialExposureLimits,
+  visualMaterialStrengthLimits,
   visualMaterialTones,
+  visualMaterialPreferencesNeedMigration,
   legacyVisualBackgroundScenes,
   legacyVisualBackgroundStorageScenes,
   legacyVisualBackgroundScopes,
@@ -65,6 +67,8 @@ const backgroundMaterialPreferencesSchema = z
   .object({
     tone: z.enum(visualMaterialTones).optional(),
     exposure: z.coerce.number().min(visualMaterialExposureLimits.min).max(visualMaterialExposureLimits.max).optional(),
+    overlayStrength: z.coerce.number().min(visualMaterialStrengthLimits.min).max(visualMaterialStrengthLimits.max).optional(),
+    blurStrength: z.coerce.number().min(visualMaterialStrengthLimits.min).max(visualMaterialStrengthLimits.max).optional(),
     reduceTransparency: z.boolean().optional(),
   })
   .optional();
@@ -75,7 +79,7 @@ const backgroundMigrationSchema = z
   .optional();
 export const backgroundSceneConfigSchema = z
   .object({
-    version: z.union([z.literal(2), z.literal(3)]).optional(),
+    version: z.union([z.literal(2), z.literal(3), z.literal(4)]).optional(),
     fitMode: backgroundFitModeSchema.optional(),
     mode: backgroundModeSchema,
     fixedBackgroundId: z.string().nullable(),
@@ -90,9 +94,9 @@ export const backgroundSceneConfigSchema = z
   })
   .transform((config) => {
     const legacyOverlayOpacity = config.migration?.overlayOpacityV2
-      ?? (config.version === 3 || config.material ? undefined : config.overlayOpacity ?? defaultLegacyVisualBackgroundOverlayOpacity);
+      ?? (config.version === 3 || config.version === 4 || config.material ? undefined : config.overlayOpacity ?? defaultLegacyVisualBackgroundOverlayOpacity);
     return {
-      version: 3 as const,
+      version: 4 as const,
       fitMode: "cover-crop" as const,
       mode: config.mode,
       fixedBackgroundId: config.fixedBackgroundId,
@@ -334,7 +338,9 @@ function visualSettingsNeedMigration(input: RawSystemSettingsFile | null | undef
     const config = backgrounds[scene];
     if (!config || typeof config !== "object") return true;
     const candidate = config as { material?: unknown; migration?: unknown; version?: unknown };
-    return candidate.version !== 3 || !candidate.material || !candidate.migration;
+    return candidate.version !== 4
+      || visualMaterialPreferencesNeedMigration(candidate.material)
+      || !candidate.migration;
   });
 }
 

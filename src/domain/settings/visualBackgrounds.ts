@@ -51,6 +51,8 @@ export type VisualMaterialTone = (typeof visualMaterialTones)[number];
 export type VisualMaterialPreferences = {
   tone: VisualMaterialTone;
   exposure: number;
+  overlayStrength: number;
+  blurStrength: number;
   reduceTransparency: boolean;
 };
 
@@ -65,7 +67,7 @@ export type VisualBackgroundCrop = {
 };
 
 export type VisualBackgroundConfig = {
-  version: 3;
+  version: 4;
   fitMode: VisualBackgroundFitMode;
   mode: VisualBackgroundMode;
   fixedBackgroundId: string | null;
@@ -94,6 +96,11 @@ export const visualMaterialExposureLimits = {
   max: 1,
 } as const;
 
+export const visualMaterialStrengthLimits = {
+  min: 0,
+  max: 1,
+} as const;
+
 export const defaultVisualBackgroundCrop: VisualBackgroundCrop = {
   centerX: 0.5,
   centerY: 0.5,
@@ -104,6 +111,8 @@ export const defaultLegacyVisualBackgroundOverlayOpacity = 0.58;
 export const defaultVisualMaterialPreferences: VisualMaterialPreferences = {
   tone: "auto",
   exposure: 0.64,
+  overlayStrength: 1,
+  blurStrength: 1,
   reduceTransparency: false,
 };
 
@@ -189,6 +198,18 @@ export function normalizeVisualMaterialPreferences(
         ? defaultVisualMaterialPreferences.exposure
         : legacyOverlayOpacityToExposure(legacyOverlayOpacity),
     ),
+    overlayStrength: clampNumber(
+      input?.overlayStrength,
+      visualMaterialStrengthLimits.min,
+      visualMaterialStrengthLimits.max,
+      defaultVisualMaterialPreferences.overlayStrength,
+    ),
+    blurStrength: clampNumber(
+      input?.blurStrength,
+      visualMaterialStrengthLimits.min,
+      visualMaterialStrengthLimits.max,
+      defaultVisualMaterialPreferences.blurStrength,
+    ),
     reduceTransparency: typeof input?.reduceTransparency === "boolean"
       ? input.reduceTransparency
       : defaultVisualMaterialPreferences.reduceTransparency,
@@ -209,7 +230,7 @@ export function normalizeVisualBackgroundMigration(
 
 export function defaultVisualBackgroundConfig(): VisualBackgroundConfig {
   return {
-    version: 3,
+    version: 4,
     fitMode: "cover-crop",
     mode: "fixed",
     fixedBackgroundId: null,
@@ -226,13 +247,23 @@ function recordValue(input: unknown): Record<string, unknown> {
   return typeof input === "object" && input !== null ? input as Record<string, unknown> : {};
 }
 
+export function visualMaterialPreferencesNeedMigration(input: unknown) {
+  const material = recordValue(input);
+  return [material.overlayStrength, material.blurStrength].some((value) => (
+    typeof value !== "number"
+      || !Number.isFinite(value)
+      || value < visualMaterialStrengthLimits.min
+      || value > visualMaterialStrengthLimits.max
+  ));
+}
+
 export function normalizeVisualBackgroundConfig(input: unknown): VisualBackgroundConfig {
   const raw = recordValue(input);
   const fallback = defaultVisualBackgroundConfig();
   const materialInput = recordValue(raw.material) as Partial<VisualMaterialPreferences>;
   const migrationInput = recordValue(raw.migration) as Partial<VisualBackgroundMigration>;
   const legacyOverlayOpacity = migrationInput.overlayOpacityV2
-    ?? (raw.version === 3 || raw.material ? undefined : raw.overlayOpacity ?? defaultLegacyVisualBackgroundOverlayOpacity);
+    ?? (raw.version === 3 || raw.version === 4 || raw.material ? undefined : raw.overlayOpacity ?? defaultLegacyVisualBackgroundOverlayOpacity);
   const rawCrops = recordValue(raw.crops ?? raw.placements);
   const crops = Object.fromEntries(
     Object.entries(rawCrops).map(([backgroundId, crop]) => [backgroundId, normalizeVisualBackgroundCrop(recordValue(crop))]),
@@ -242,7 +273,7 @@ export function normalizeVisualBackgroundConfig(input: unknown): VisualBackgroun
   const switchOrder = raw.switchOrder === "sequential" ? "sequential" : "random";
 
   return {
-    version: 3,
+    version: 4,
     fitMode: "cover-crop",
     mode,
     fixedBackgroundId: typeof raw.fixedBackgroundId === "string" ? raw.fixedBackgroundId : null,

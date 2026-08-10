@@ -108,6 +108,8 @@ export function deriveAdaptiveMaterial(input: MaterialPolicyInput): AdaptiveMate
   const tone = backdropTone(input);
   const contentTone = tone === "soft-dark" ? "light" as const : "dark" as const;
   const exposure = clamp(input.preferences.exposure, 0, 1);
+  const overlayStrength = clamp(input.preferences.overlayStrength, 0, 1);
+  const blurStrength = clamp(input.preferences.blurStrength, 0, 1);
   const environmentStrength = clamp(
     0.1 + exposure * 0.24 + input.analysis.saturation * 0.08,
     0.1,
@@ -124,12 +126,12 @@ export function deriveAdaptiveMaterial(input: MaterialPolicyInput): AdaptiveMate
     return {
       backdropTone: tone,
       tintColor,
-      tintOpacity: mustReduce ? 0.97 : 0.92,
+      tintOpacity: mustReduce ? 0.97 : 0.92 * overlayStrength,
       blurRadius: 0,
       saturation: 1,
       noiseOpacity: 0,
-      borderLightOpacity: tone === "soft-dark" ? 0.1 : 0.42,
-      borderDarkOpacity: tone === "soft-dark" ? 0.3 : 0.12,
+      borderLightOpacity: (tone === "soft-dark" ? 0.1 : 0.42) * (mustReduce ? 1 : overlayStrength),
+      borderDarkOpacity: (tone === "soft-dark" ? 0.3 : 0.12) * (mustReduce ? 1 : overlayStrength),
       shadowOpacity: role.shadow,
       contentTone,
       transparency,
@@ -137,7 +139,7 @@ export function deriveAdaptiveMaterial(input: MaterialPolicyInput): AdaptiveMate
   }
 
   const extremeShare = input.analysis.darkPixelShare + input.analysis.lightPixelShare;
-  const tintOpacity = clamp(
+  const adaptiveTintOpacity = clamp(
     role.opacity
       - exposure * role.opacityExposureResponse
       + input.analysis.complexity * role.opacityComplexityResponse
@@ -147,22 +149,24 @@ export function deriveAdaptiveMaterial(input: MaterialPolicyInput): AdaptiveMate
     role.opacityMin,
     role.opacityMax,
   );
+  const tintOpacity = adaptiveTintOpacity * overlayStrength;
+  const adaptiveBlurRadius = clamp(
+    role.blur
+      + input.analysis.complexity * role.blurComplexityResponse
+      - exposure * role.blurExposureResponse,
+    role.blurMin,
+    role.blurMax,
+  );
 
   return {
     backdropTone: tone,
     tintColor,
     tintOpacity,
-    blurRadius: clamp(
-      role.blur
-        + input.analysis.complexity * role.blurComplexityResponse
-        - exposure * role.blurExposureResponse,
-      role.blurMin,
-      role.blurMax,
-    ),
+    blurRadius: adaptiveBlurRadius * blurStrength,
     saturation: clamp(1.04 + input.analysis.saturation * 0.18, 1.04, 1.2),
-    noiseOpacity: clamp(0.008 + input.analysis.complexity * 0.012, 0.008, 0.02),
-    borderLightOpacity: tone === "soft-dark" ? 0.14 : 0.48,
-    borderDarkOpacity: tone === "soft-dark" ? 0.34 : 0.13,
+    noiseOpacity: clamp(0.008 + input.analysis.complexity * 0.012, 0.008, 0.02) * overlayStrength,
+    borderLightOpacity: (tone === "soft-dark" ? 0.14 : 0.48) * overlayStrength,
+    borderDarkOpacity: (tone === "soft-dark" ? 0.34 : 0.13) * overlayStrength,
     shadowOpacity: role.shadow,
     contentTone,
     transparency,

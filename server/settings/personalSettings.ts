@@ -26,6 +26,7 @@ import {
 import {
   acceptsLegacyAppBackgroundScene,
   legacyVisualBackgroundStorageScenes,
+  visualMaterialPreferencesNeedMigration,
   visualBackgroundScenes,
   type AnyVisualBackgroundStorageScene,
   type VisualBackgroundScene as CanonicalBackgroundScene,
@@ -201,7 +202,9 @@ function personalBackgroundsNeedMigration(input: Partial<UserPreferences> | null
   return Object.values(rawBackgrounds).some((config) => {
     if (!config || typeof config !== "object") return false;
     const candidate = config as { material?: unknown; migration?: unknown; version?: unknown };
-    return candidate.version !== 3 || !candidate.material || !candidate.migration;
+    return candidate.version !== 4
+      || visualMaterialPreferencesNeedMigration(candidate.material)
+      || !candidate.migration;
   });
 }
 

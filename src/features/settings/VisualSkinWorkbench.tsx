@@ -21,6 +21,7 @@ import {
   normalizeVisualBackgroundCrop,
   visualBackgroundCropLimits,
   visualMaterialExposureLimits,
+  visualMaterialStrengthLimits,
   type VisualBackgroundConfig,
   type VisualBackgroundCrop,
   type VisualMaterialPreferences,
@@ -105,7 +106,7 @@ function cropFromConfig(config: VisualBackgroundConfig, imageId: string | null |
 function configWithCrop(config: VisualBackgroundConfig, imageId: string, crop: VisualBackgroundCrop): VisualBackgroundConfig {
   return {
     ...config,
-    version: 3,
+    version: 4,
     fitMode: "cover-crop",
     fixedBackgroundId: imageId,
     crops: {
@@ -177,6 +178,8 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
         draftConfig.switchIntervalMinutes !== data.config.switchIntervalMinutes ||
         draftConfig.material.tone !== data.config.material.tone ||
         draftConfig.material.exposure !== data.config.material.exposure ||
+        draftConfig.material.overlayStrength !== data.config.material.overlayStrength ||
+        draftConfig.material.blurStrength !== data.config.material.blurStrength ||
         draftConfig.material.reduceTransparency !== data.config.material.reduceTransparency ||
         !cropEquals(draftCrop, persistedCrop)),
   );
@@ -273,7 +276,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
     const nextConfig = configWithCrop(
       {
         ...draftConfig,
-        version: 3,
+        version: 4,
         fitMode: "cover-crop",
         switchIntervalMinutes: clamp(draftConfig.switchIntervalMinutes, 1, 1440),
       },
@@ -590,6 +593,14 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
                 ]}
                 onChange={(value) => setMaterial({ tone: value as VisualMaterialPreferences["tone"] })}
               />
+              <SegmentedControl
+                value={draftConfig.material.reduceTransparency ? "reduced" : "adaptive"}
+                options={[
+                  { label: "自适应", value: "adaptive" },
+                  { label: "减少透明", value: "reduced" },
+                ]}
+                onChange={(value) => setMaterial({ reduceTransparency: value === "reduced" })}
+              />
               <SkinSlider
                 label="背景生命力"
                 max={visualMaterialExposureLimits.max}
@@ -599,13 +610,25 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
                 format={(value) => `${Math.round(value * 100)}%`}
                 onChange={(value) => setMaterial({ exposure: value })}
               />
-              <SegmentedControl
-                value={draftConfig.material.reduceTransparency ? "reduced" : "adaptive"}
-                options={[
-                  { label: "自适应", value: "adaptive" },
-                  { label: "减少透明", value: "reduced" },
-                ]}
-                onChange={(value) => setMaterial({ reduceTransparency: value === "reduced" })}
+              <SkinSlider
+                disabled={draftConfig.material.reduceTransparency}
+                label="遮罩"
+                max={visualMaterialStrengthLimits.max}
+                min={visualMaterialStrengthLimits.min}
+                step={0.01}
+                value={draftConfig.material.overlayStrength}
+                format={(value) => `${Math.round(value * 100)}%`}
+                onChange={(value) => setMaterial({ overlayStrength: value })}
+              />
+              <SkinSlider
+                disabled={draftConfig.material.reduceTransparency}
+                label="模糊"
+                max={visualMaterialStrengthLimits.max}
+                min={visualMaterialStrengthLimits.min}
+                step={0.01}
+                value={draftConfig.material.blurStrength}
+                format={(value) => `${Math.round(value * 100)}%`}
+                onChange={(value) => setMaterial({ blurStrength: value })}
               />
             </div>
 
