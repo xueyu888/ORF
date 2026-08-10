@@ -2156,8 +2156,373 @@ button.work-logs-team-cell:focus-visible {
 
 .work-logs-panel {
   border-color: var(--orf-workbench-hairline);
-  background: var(--orf-surface-panel-solid);
-  box-shadow: var(--orf-workbench-shadow);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+}
+
+/* Work-log scene material contract
+   --------------------------------
+   Work logs use an editorial hierarchy: a stable writing sheet over a softer
+   ambient journal surface. Capsules are reserved for navigation, compact
+   choices, status, and short actions rather than used as generic containers. */
+.orf-app-shell[data-page-scene="page_work_logs_background"] {
+  --orf-bg-app: #e4ecec;
+  --orf-bg-page: transparent;
+  --orf-text-primary: #192d35;
+  --orf-text-secondary: #465f67;
+  --orf-text-muted: #6e8388;
+  --orf-text-faint: #9eacad;
+  --orf-border: rgba(48, 82, 89, 0.13);
+  --orf-border-strong: rgba(42, 78, 86, 0.23);
+  --orf-accent: #087f8e;
+  --orf-accent-hover: #076b78;
+  --orf-accent-soft: rgba(8, 127, 142, 0.12);
+  --orf-accent-border: rgba(8, 127, 142, 0.33);
+  --orf-accent-text: #086c79;
+  --orf-surface-chrome: rgba(246, 250, 249, 0.56);
+  --orf-surface-panel: rgba(250, 251, 248, 0.66);
+  --orf-surface-elevated: #fcfdf9;
+  --orf-surface-control: rgba(249, 251, 249, 0.58);
+  --orf-surface-control-hover: rgba(255, 255, 252, 0.78);
+  --orf-workbench-hairline: rgba(45, 80, 87, 0.15);
+  --orf-workbench-hairline-strong: rgba(45, 80, 87, 0.24);
+  --orf-topbar-surface: rgba(244, 249, 248, 0.67);
+  --orf-topbar-surface-strong: rgba(252, 253, 249, 0.88);
+  --orf-topbar-control-bg: rgba(250, 252, 250, 0.64);
+  --orf-topbar-control-hover-bg: rgba(255, 255, 252, 0.86);
+  --orf-topbar-control-border: rgba(47, 79, 87, 0.15);
+  --orf-topbar-control-text: #274149;
+  --orf-topbar-control-muted: #70878c;
+  --worklogs-glass-panel: rgba(249, 251, 248, 0.65);
+  --worklogs-glass-ambient: rgba(244, 249, 247, 0.56);
+  --worklogs-glass-control: rgba(251, 252, 249, 0.58);
+  --worklogs-glass-header: rgba(232, 243, 240, 0.5);
+  --worklogs-glass-float: rgba(251, 252, 248, 0.72);
+  --worklogs-writing-sheet: rgba(255, 255, 251, 0.76);
+  --worklogs-glass-border: rgba(255, 255, 255, 0.72);
+  --worklogs-glass-shine: rgba(255, 255, 255, 0.84);
+  --worklogs-glass-shadow: 0 22px 52px rgba(27, 57, 62, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  --worklogs-glass-filter: blur(26px) saturate(1.08);
+  --worklogs-control-filter: blur(17px) saturate(1.04);
+  --orf-page-safety-overlay:
+    radial-gradient(circle at 70% 13%, rgba(255, 255, 255, 0.04), transparent 35%),
+    linear-gradient(112deg, rgba(221, 237, 236, 0.08) 0%, rgba(255, 252, 242, 0.025) 52%, rgba(207, 229, 229, 0.07) 100%);
+  --orf-sidebar-bg-overlay:
+    linear-gradient(105deg, rgba(7, 28, 46, 0.5) 0%, rgba(8, 43, 64, 0.33) 60%, rgba(9, 57, 79, 0.16) 100%),
+    linear-gradient(180deg, rgba(3, 17, 30, 0.03), rgba(3, 17, 30, 0.4));
+  --orf-sidebar-selected-bg: rgba(130, 217, 220, 0.2);
+  --orf-sidebar-hover-bg: rgba(130, 217, 220, 0.13);
+  --orf-sidebar-divider: rgba(220, 242, 242, 0.14);
+  --orf-sidebar-text: #f7fcfc;
+  --orf-sidebar-text-muted: #c1dbde;
+  --orf-sidebar-icon: #e8faf9;
+}
+
+html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_work_logs_background"] {
+  --orf-bg-app: #0a171c;
+  --orf-bg-page: transparent;
+  --orf-text-primary: #f1f7f5;
+  --orf-text-secondary: #c5d6d3;
+  --orf-text-muted: #97aaa8;
+  --orf-text-faint: #687d7d;
+  --orf-border: rgba(181, 217, 211, 0.14);
+  --orf-border-strong: rgba(188, 225, 219, 0.24);
+  --orf-accent: #42b9c4;
+  --orf-accent-hover: #64cbd3;
+  --orf-accent-soft: rgba(66, 185, 196, 0.16);
+  --orf-accent-border: rgba(94, 204, 214, 0.35);
+  --orf-accent-text: #88d9df;
+  --orf-surface-chrome: rgba(6, 20, 25, 0.57);
+  --orf-surface-panel: rgba(9, 22, 27, 0.67);
+  --orf-surface-elevated: #17282c;
+  --orf-surface-control: rgba(11, 30, 36, 0.59);
+  --orf-surface-control-hover: rgba(23, 50, 55, 0.74);
+  --orf-workbench-hairline: rgba(179, 217, 211, 0.14);
+  --orf-workbench-hairline-strong: rgba(185, 224, 217, 0.23);
+  --orf-topbar-surface: rgba(8, 23, 29, 0.71);
+  --orf-topbar-surface-strong: rgba(18, 39, 44, 0.88);
+  --orf-topbar-control-bg: rgba(14, 35, 41, 0.65);
+  --orf-topbar-control-hover-bg: rgba(27, 56, 61, 0.88);
+  --orf-topbar-control-border: rgba(175, 213, 208, 0.17);
+  --orf-topbar-control-text: #e2efed;
+  --orf-topbar-control-muted: #92aaa8;
+  --worklogs-glass-panel: rgba(8, 21, 27, 0.68);
+  --worklogs-glass-ambient: rgba(8, 24, 30, 0.58);
+  --worklogs-glass-control: rgba(11, 31, 37, 0.59);
+  --worklogs-glass-header: rgba(20, 48, 52, 0.52);
+  --worklogs-glass-float: rgba(9, 26, 31, 0.74);
+  --worklogs-writing-sheet: rgba(12, 27, 32, 0.78);
+  --worklogs-glass-border: rgba(170, 221, 215, 0.2);
+  --worklogs-glass-shine: rgba(210, 241, 236, 0.2);
+  --worklogs-glass-shadow: 0 24px 58px rgba(1, 8, 11, 0.44), inset 0 1px 0 rgba(207, 239, 234, 0.15);
+  --worklogs-glass-filter: blur(26px) saturate(1.07);
+  --worklogs-control-filter: blur(17px) saturate(1.03);
+  --orf-page-safety-overlay:
+    radial-gradient(circle at 72% 14%, rgba(68, 157, 162, 0.035), transparent 35%),
+    linear-gradient(112deg, rgba(2, 10, 14, 0.34) 0%, rgba(6, 18, 22, 0.21) 52%, rgba(2, 10, 14, 0.31) 100%);
+  --orf-sidebar-bg-overlay:
+    linear-gradient(105deg, rgba(2, 10, 19, 0.62) 0%, rgba(4, 22, 32, 0.47) 60%, rgba(5, 34, 45, 0.26) 100%),
+    linear-gradient(180deg, rgba(1, 7, 13, 0.06), rgba(1, 7, 13, 0.48));
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"],
+.orf-app-shell[data-page-scene="page_work_logs_background"]::before {
+  background: var(--orf-bg-app);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] :is(.orf-shell-body, .orf-main-content) {
+  background: transparent;
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .orf-main-content[data-page-skin="true"]::before {
+  background: var(--orf-page-safety-overlay);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] :is(.orf-main-content-skin-layer, .orf-topbar-skin-layer) {
+  --orf-visual-bg-filter: saturate(1.03) contrast(0.99);
+}
+
+html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_work_logs_background"] :is(.orf-main-content-skin-layer, .orf-topbar-skin-layer) {
+  --orf-visual-bg-filter: brightness(0.76) saturate(0.94) contrast(0.98);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .orf-sidebar::after {
+  opacity: 0.72;
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .orf-sidebar-background-image {
+  opacity: 1;
+  filter: saturate(1.03) contrast(0.98) brightness(0.98);
+}
+
+html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_work_logs_background"] .orf-sidebar::after {
+  opacity: 0.78;
+}
+
+html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_work_logs_background"] .orf-sidebar-background-image {
+  opacity: 0.92;
+  filter: saturate(0.95) contrast(0.96) brightness(0.84);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] :is(
+  .orf-sidebar-brand-title,
+  .orf-sidebar-group-title,
+  .orf-sidebar-link,
+  .orf-sidebar-user-name,
+  .orf-attention-workbar-trigger
+) {
+  text-shadow: 0 1px 3px rgba(0, 8, 18, 0.82);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] :is(.orf-sidebar-link-active, .orf-sidebar-link-inactive:hover) {
+  -webkit-backdrop-filter: blur(16px) saturate(1.07);
+  backdrop-filter: blur(16px) saturate(1.07);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .orf-topbar {
+  border-bottom-color: var(--worklogs-glass-border);
+  background: transparent;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--worklogs-glass-shine) 52%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .orf-topbar::before {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  content: "";
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--worklogs-glass-shine) 12%, transparent), transparent 46%),
+    var(--worklogs-glass-ambient);
+  pointer-events: none;
+  -webkit-backdrop-filter: var(--worklogs-glass-filter);
+  backdrop-filter: var(--worklogs-glass-filter);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .orf-topbar::after {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--worklogs-glass-shine) 28%, transparent), transparent 74%);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-view-tabs,
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-date-control :is(.orf-date-trigger, .orf-control) {
+  border-color: color-mix(in srgb, var(--worklogs-glass-border) 64%, var(--orf-workbench-hairline));
+  background: var(--worklogs-glass-control);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--worklogs-glass-shine) 54%, transparent);
+  -webkit-backdrop-filter: var(--worklogs-control-filter);
+  backdrop-filter: var(--worklogs-control-filter);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-view-tab-active {
+  background: color-mix(in srgb, var(--worklogs-glass-float) 91%, var(--orf-accent-soft));
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--orf-text-primary) 10%, transparent), inset 0 1px 0 var(--worklogs-glass-shine);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-date-control > .orf-control:is(:hover, :focus-visible),
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-date-control .orf-date-trigger:is(:hover, :focus-visible) {
+  border-color: var(--orf-accent-border);
+  background: var(--orf-surface-control-hover);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--orf-text-primary) 10%, transparent), inset 0 1px 0 var(--worklogs-glass-shine);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-panel {
+  border-color: var(--worklogs-glass-border);
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--worklogs-glass-shine) 15%, transparent), transparent 38%),
+    var(--worklogs-glass-panel);
+  box-shadow: var(--worklogs-glass-shadow);
+  -webkit-backdrop-filter: var(--worklogs-glass-filter);
+  backdrop-filter: var(--worklogs-glass-filter);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-activity-panel {
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--worklogs-glass-shine) 13%, transparent), transparent 38%),
+    var(--worklogs-glass-ambient);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-editor-panel {
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--worklogs-glass-shine) 17%, transparent), transparent 38%),
+    var(--worklogs-glass-panel);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-panel-heading {
+  border-color: color-mix(in srgb, var(--worklogs-glass-border) 54%, var(--orf-workbench-hairline));
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] :is(
+  .work-logs-objective-select .orf-select-trigger,
+  .work-logs-entry-date-control .orf-date-trigger,
+  .work-logs-estimate-inputs input[type="number"],
+  .work-logs-estimate-inputs button,
+  .work-logs-editor-template-action
+) {
+  border-color: color-mix(in srgb, var(--worklogs-glass-border) 55%, var(--orf-workbench-hairline));
+  background: var(--worklogs-glass-control);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--worklogs-glass-shine) 46%, transparent);
+  -webkit-backdrop-filter: var(--worklogs-control-filter);
+  backdrop-filter: var(--worklogs-control-filter);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] :is(.work-logs-entry-date-control, .work-logs-estimate-control) {
+  border-color: color-mix(in srgb, var(--worklogs-glass-border) 48%, var(--orf-workbench-hairline));
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-editor.orf-rich-text-editor {
+  border-color: color-mix(in srgb, var(--worklogs-glass-border) 58%, var(--orf-workbench-hairline));
+  background: var(--worklogs-writing-sheet);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--worklogs-glass-shine) 56%, transparent), 0 12px 28px color-mix(in srgb, var(--orf-text-primary) 7%, transparent);
+  -webkit-backdrop-filter: var(--worklogs-control-filter);
+  backdrop-filter: var(--worklogs-control-filter);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-editor :is(.orf-rich-text-toolbar, .orf-rich-text-footer) {
+  border-color: color-mix(in srgb, var(--worklogs-glass-border) 48%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--worklogs-glass-header) 56%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] :is(
+  .work-logs-day-resources-empty,
+  .work-logs-history-empty,
+  .work-logs-activity-entry,
+  .work-logs-history-entry,
+  .work-logs-report-summary-card,
+  .work-logs-calendar-grid,
+  .work-logs-team-matrix
+) {
+  border-color: color-mix(in srgb, var(--worklogs-glass-border) 46%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--worklogs-glass-control) 76%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--worklogs-glass-shine) 38%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] :is(.work-logs-history-entry-active, .work-logs-activity-entry-linked, .work-logs-history-entry-linked) {
+  border-color: var(--orf-accent-border);
+  background: color-mix(in srgb, var(--worklogs-glass-control) 72%, var(--orf-accent-soft));
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-ai-suggestion-slot {
+  border-color: color-mix(in srgb, var(--worklogs-glass-border) 52%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--worklogs-glass-control) 78%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--worklogs-glass-shine) 42%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-ai-suggestion-slot button {
+  border-radius: var(--orf-radius-control);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-report-popover,
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-log-reminder-modal {
+  border-color: var(--worklogs-glass-border);
+  border-radius: 20px;
+  background:
+    linear-gradient(132deg, color-mix(in srgb, var(--worklogs-glass-shine) 16%, transparent), transparent 44%),
+    var(--worklogs-glass-float);
+  box-shadow: var(--worklogs-glass-shadow);
+  -webkit-backdrop-filter: var(--worklogs-glass-filter);
+  backdrop-filter: var(--worklogs-glass-filter);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-report-popover-header button {
+  border-radius: 50%;
+  background: var(--worklogs-glass-control);
+}
+
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-report-popover-entry {
+  border-color: color-mix(in srgb, var(--worklogs-glass-border) 48%, var(--orf-workbench-hairline));
+  background: var(--worklogs-glass-control);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--worklogs-glass-shine) 40%, transparent);
+}
+
+body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) :is(.orf-select-popover, .orf-date-popover) {
+  border-color: rgba(255, 255, 255, 0.68);
+  border-radius: 18px;
+  background:
+    linear-gradient(132deg, rgba(255, 255, 255, 0.16), transparent 44%),
+    rgba(249, 251, 248, 0.9);
+  box-shadow: 0 24px 58px rgba(8, 29, 33, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: blur(26px) saturate(1.07);
+  backdrop-filter: blur(26px) saturate(1.07);
+}
+
+body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) .orf-select-option {
+  border-radius: var(--orf-radius-control);
+}
+
+body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) .orf-select-option:is(:hover, :focus-visible) {
+  background: rgba(8, 127, 142, 0.11);
+}
+
+html[data-orf-appearance="dark"] body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) :is(.orf-select-popover, .orf-date-popover) {
+  border-color: rgba(170, 221, 215, 0.2);
+  background:
+    linear-gradient(132deg, rgba(113, 205, 204, 0.06), transparent 44%),
+    rgba(8, 21, 27, 0.91);
+  box-shadow: 0 26px 62px rgba(0, 6, 9, 0.58), inset 0 1px 0 rgba(207, 239, 234, 0.14);
+}
+
+html[data-orf-appearance="dark"] body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) .orf-select-option:is(:hover, :focus-visible) {
+  background: rgba(66, 185, 196, 0.15);
+}
+
+@media (max-width: 900px) {
+  .orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-panel {
+    background:
+      linear-gradient(128deg, color-mix(in srgb, var(--worklogs-glass-shine) 15%, transparent), transparent 42%),
+      var(--worklogs-glass-panel);
+    box-shadow: 0 16px 36px color-mix(in srgb, var(--orf-text-primary) 15%, transparent), inset 0 1px 0 color-mix(in srgb, var(--worklogs-glass-shine) 64%, transparent);
+  }
+
+  .orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-activity-panel {
+    background:
+      linear-gradient(128deg, color-mix(in srgb, var(--worklogs-glass-shine) 13%, transparent), transparent 42%),
+      var(--worklogs-glass-ambient);
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .orf-app-shell[data-page-scene="page_work_logs_background"] :is(
+    .work-logs-panel,
+    .work-logs-report-popover,
+    .work-log-reminder-modal
+  ),
+  body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) :is(.orf-select-popover, .orf-date-popover) {
+    background: var(--orf-surface-elevated);
+  }
 }
