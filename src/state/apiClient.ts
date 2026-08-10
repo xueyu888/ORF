@@ -47,14 +47,15 @@ import type { ChatSyncResponse } from "../domain/chatSync";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
 import type { ChatTheme, UserDisplayPreferences, WorkspaceLayoutPreferences } from "../domain/settings/personalPreferences";
 import type { FilterPreferenceRecord, UserFilterPreferences } from "../domain/settings/filterPreferences";
-import type {
-  VisualBackgroundConfig,
-  VisualBackgroundCrop,
-  VisualBackgroundFitMode,
-  VisualBackgroundMode,
-  VisualBackgroundScene,
-  VisualBackgroundSwitchOrder,
-  VisualBackgroundSwitchTrigger,
+import {
+  normalizeVisualBackgroundConfig,
+  type VisualBackgroundConfig,
+  type VisualBackgroundCrop,
+  type VisualBackgroundFitMode,
+  type VisualBackgroundMode,
+  type VisualBackgroundScene,
+  type VisualBackgroundSwitchOrder,
+  type VisualBackgroundSwitchTrigger,
 } from "../domain/settings/visualBackgrounds";
 import type {
   ClientReleaseInfo,
@@ -334,6 +335,26 @@ type ApiEnvelope<T> = {
   message: string;
   data: T;
 };
+
+function normalizeVisualBackgroundsData<T extends VisualBackgroundsData>(data: T): T {
+  return {
+    ...data,
+    config: normalizeVisualBackgroundConfig(data.config),
+  };
+}
+
+function normalizeUserPreferencesPayload(preferences: UserPreferences): UserPreferences {
+  return {
+    ...preferences,
+    appBackground: preferences.appBackground ? normalizeVisualBackgroundConfig(preferences.appBackground) : null,
+    backgrounds: Object.fromEntries(
+      Object.entries(preferences.backgrounds ?? {}).map(([scene, config]) => [
+        scene,
+        config ? normalizeVisualBackgroundConfig(config) : null,
+      ]),
+    ) as UserPreferences["backgrounds"],
+  };
+}
 
 export const API_AUTHENTICATION_EXPIRED_EVENT = "orf:api-authentication-expired";
 
@@ -1209,7 +1230,7 @@ export async function getWorkLogReport(input: {
 
 export async function getVisualBackgrounds(scene: VisualBackgroundScene) {
   const response = await apiJson<ApiEnvelope<VisualBackgroundsData>>(`/api/settings/visual/backgrounds?scene=${encodeURIComponent(scene)}`);
-  return response.data;
+  return normalizeVisualBackgroundsData(response.data);
 }
 
 export async function getChatSettings() {
@@ -1329,11 +1350,12 @@ export async function saveVisualBackgroundConfig(scene: VisualBackgroundScene, c
 }
 
 function cacheUserPreferences(preferences: UserPreferences) {
+  const normalizedPreferences = normalizeUserPreferencesPayload(preferences);
   userPreferencesCache = {
-    preferences,
-    userId: preferences.userId,
+    preferences: normalizedPreferences,
+    userId: normalizedPreferences.userId,
   };
-  return preferences;
+  return normalizedPreferences;
 }
 
 export function invalidateUserPreferencesCache(userId?: string | null) {
@@ -1383,7 +1405,10 @@ export async function saveUserPreferences(input: UserPreferencesPatch) {
 
 export async function getPersonalBackgrounds(scene: VisualBackgroundScene = "sidebar_background") {
   const response = await apiJson<ApiEnvelope<PersonalBackgroundsData>>(`/api/settings/personal/backgrounds?scene=${encodeURIComponent(scene)}`);
-  return response.data;
+  return {
+    ...normalizeVisualBackgroundsData(response.data),
+    preferences: normalizeUserPreferencesPayload(response.data.preferences),
+  };
 }
 
 export async function uploadPersonalBackground(scene: VisualBackgroundScene, file: File) {

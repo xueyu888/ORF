@@ -12,9 +12,10 @@ import {
   countTodayWorkLogEntriesByMemberAndObjective,
   dbWorkLogEntryByBodyMarker,
   dbWorkLogEntryForTodayByMemberAndMarker,
-  deleteWorkLog,
+  confirmDeleteWorkLog,
   deleteWorkLogsByBodyMarker,
   loginAsMember,
+  openDeleteWorkLogConfirm,
   openWorkLogTodayView,
   prepareTodayWorkLogEntry,
   readSessionUserName,
@@ -79,14 +80,14 @@ export const memberDeleteResubmitTodayWorkLogOperators: OperatorRegistry<TestCon
       await workLogDeleteButton(ctx.page, requiredString(params, "bodyMarker")).click();
     },
 
-    delete: async ({ ctx, params }) => {
-      await deleteWorkLog(ctx.page, requiredString(params, "bodyMarker"));
+    open_confirm: async ({ ctx, params }) => {
+      await openDeleteWorkLogConfirm(ctx.page, requiredString(params, "bodyMarker"));
     },
   },
 
   "page.work_logs.delete_confirm": {
-    confirm: async () => {
-      // 确认弹窗由 page.work_logs.delete_action.delete 内部处理，保留该 operator 让文档动作可一一回链。
+    confirm: async ({ ctx }) => {
+      await confirmDeleteWorkLog(ctx.page);
     },
   },
 

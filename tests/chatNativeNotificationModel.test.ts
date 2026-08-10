@@ -897,6 +897,14 @@ test("Win11 desktop shell uses separate crisp taskbar and tray sizes with no num
   assert.doesNotMatch(source, /createUnreadBadgeRgba/);
 });
 
+test("Win11 desktop windows wait for their first rendered frame before becoming visible", () => {
+  const source = readFileSync(new URL("../clients/desktop/main.cjs", import.meta.url), "utf8");
+
+  assert.match(source, /function createMainWindow[\s\S]*?show: false,[\s\S]*?mainWindow\.once\("ready-to-show", \(\) => revealDesktopWindow\(mainWindow\)\)/);
+  assert.match(source, /function driveFilePreviewPopoutBrowserWindowOptions[\s\S]*?show: false,/);
+  assert.match(source, /isDriveFilePreviewPopoutUrl\(childUrl\)[\s\S]*?revealDesktopWindowWhenReady\(childWindow\)/);
+});
+
 test("Win11 desktop shutdown stops the attention icon timer through its lifecycle owner", () => {
   const source = readFileSync(new URL("../clients/desktop/main.cjs", import.meta.url), "utf8");
 

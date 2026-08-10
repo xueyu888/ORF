@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Check, GitBranch, Loader2, MessageSquare, Plus, Power, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Check, GitBranch, Loader2, MessageSquare, Palette, Plus, Power, RefreshCw, Settings2, Trash2, Upload } from "lucide-react";
 import { type KeyboardEvent, useEffect, useState } from "react";
 import {
   getGitLabOrfChatSettings,
@@ -40,17 +40,58 @@ function parseGbInput(value: string) {
 }
 
 export function SystemSettingsPage() {
+  const [activeWorkspace, setActiveWorkspace] = useState<"system" | "appearance">("system");
+
   return (
     <div className="orf-settings-page orf-settings-page-single">
       <section className="orf-settings-detail" aria-label="设置详情">
         <div className="orf-settings-detail-heading">
-          <span>System Config</span>
-          <p>管理全站视觉、聊天和系统级策略。</p>
+          <span>系统配置</span>
+          <p>{activeWorkspace === "system" ? "管理聊天限制与外部消息集成。" : "配置登录、导航和业务页面的全站背景。"}</p>
         </div>
 
-        <div className="orf-settings-sections">
+        <div className="orf-system-settings-workspace-tabs" role="tablist" aria-label="系统设置工作区">
+          <button
+            aria-controls="orf-system-settings-runtime"
+            aria-selected={activeWorkspace === "system"}
+            id="orf-system-settings-runtime-tab"
+            onClick={() => setActiveWorkspace("system")}
+            role="tab"
+            type="button"
+          >
+            <Settings2 aria-hidden="true" />
+            系统与集成
+          </button>
+          <button
+            aria-controls="orf-system-settings-appearance"
+            aria-selected={activeWorkspace === "appearance"}
+            id="orf-system-settings-appearance-tab"
+            onClick={() => setActiveWorkspace("appearance")}
+            role="tab"
+            type="button"
+          >
+            <Palette aria-hidden="true" />
+            背景工作台
+          </button>
+        </div>
+
+        <div
+          aria-labelledby="orf-system-settings-runtime-tab"
+          className="orf-settings-sections orf-system-settings-workspace-panel"
+          hidden={activeWorkspace !== "system"}
+          id="orf-system-settings-runtime"
+          role="tabpanel"
+        >
           <ChatSettingSection />
           <GitLabOrfChatSettingSection />
+        </div>
+        <div
+          aria-labelledby="orf-system-settings-appearance-tab"
+          className="orf-settings-sections orf-system-settings-workspace-panel orf-system-settings-appearance-panel"
+          hidden={activeWorkspace !== "appearance"}
+          id="orf-system-settings-appearance"
+          role="tabpanel"
+        >
           <VisualSkinWorkbench scope="system" />
         </div>
       </section>

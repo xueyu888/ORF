@@ -97,7 +97,7 @@ export function DrivePage() {
   }, [currentUser]);
 
   return (
-    <PageScaffold title="资源" subtitle="团队文件、文件夹、搜索和预览。">
+    <PageScaffold title="资源">
       <div className="orf-drive-page">
         <DriveBrowser
           bootstrap={bootstrap}

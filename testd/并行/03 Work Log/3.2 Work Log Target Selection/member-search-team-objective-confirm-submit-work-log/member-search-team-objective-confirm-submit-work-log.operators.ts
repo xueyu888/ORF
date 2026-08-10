@@ -12,6 +12,7 @@ import {
   apiMyDayEntryFieldEquals,
   dbWorkLogEntryByBodyMarker,
   dbWorkLogEntryForTodayByMemberAndMarker,
+  confirmTodayWorkLogSubmit,
   defaultWorkLogObjectivesContain,
   deleteObjectivesByTitlePrefix,
   deleteWorkLogsByBodyMarker,
@@ -19,14 +20,13 @@ import {
   loginAsMember,
   objectiveFixtureMatches,
   objectivesByTitlePrefixAbsent,
+  openTodayWorkLogSubmitConfirm,
   openWorkLogClassification,
   openWorkLogTodayView,
   readSessionUserName,
   requiredWorkLogEntry,
   searchedWorkLogObjectivesContain,
   selectWorkLogObjectiveSearchResult,
-  submittedConfirmMessage,
-  submitTodayWorkLogWithConfirm,
   submitWorkLogButton,
   userByNameAbsent,
   workLogClassificationControl,
@@ -35,6 +35,7 @@ import {
   workLogErrorMessage,
   workLogHistoryEntry,
   workLogNotice,
+  workLogSubmitConfirmMessage,
   workLogToast,
   workLogViewTab,
 } from "./_support/member-search-team-objective-confirm-submit-work-log.helpers";
@@ -111,18 +112,18 @@ export const memberSearchTeamObjectiveConfirmSubmitWorkLogOperators:
         await expect(submitWorkLogButton(ctx.page)).toBeDisabled();
       },
 
-      submit_with_confirm: async ({ ctx, params }) => {
-        await submitTodayWorkLogWithConfirm(ctx.page, requiredString(params, "confirmMessage"));
+      open_confirm: async ({ ctx }) => {
+        await openTodayWorkLogSubmitConfirm(ctx.page);
       },
     },
 
-    "page.work_logs.browser_confirm": {
+    "page.work_logs.confirm_dialog": {
       message_visible: async ({ ctx, params }) => {
-        expect(submittedConfirmMessage(ctx.page)).toContain(requiredString(params, "confirmMessage"));
+        await expect(workLogSubmitConfirmMessage(ctx.page)).toContainText(requiredString(params, "confirmMessage"));
       },
 
-      confirm: async () => {
-        // 原生确认弹窗已在提交算子中接受；该算子保留文档步骤到 StepSpec 的一一回链。
+      confirm: async ({ ctx }) => {
+        await confirmTodayWorkLogSubmit(ctx.page);
       },
     },
 

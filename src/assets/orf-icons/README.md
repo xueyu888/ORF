@@ -16,7 +16,6 @@ Canonical icons and visual assets for ORF hierarchy rows and app surfaces. Runti
 | `sidebar-energy-bg.png` | Sidebar atmospheric background. |
 | `sidebar-character-guide-bg.png` | Sidebar character guide background. |
 
-Fantasy UI reference boards and button assets live in `src/features/fantasy-ui/assets/`.
-Runtime components should reference registered image assets through `src/config/assetLibrary.ts`; large reference boards should stay as source/reference material and should not be imported into the app bundle unless a specific screen needs to render them.
+Runtime components should reference registered image assets through `src/config/assetLibrary.ts`.
 
 Challenge status rules live in `docs/backend/ORF 任务管理页面 - 后端.md`.

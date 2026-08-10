@@ -85,8 +85,8 @@ export const memberDeleteResubmitTodayWorkLogCase = {
   Action: {
     description: "成员删除当天原始日志并重新填写提交当天日志",
     steps: [
-      { source: { caseStepId: "Action-1", method: "playwright" }, id: "work_logs.delete_original", title: "点击 本用例原始日志的 \"删除\" 操作", object: "page.work_logs.delete_action", operator: "delete", params: { bodyMarkerFrom: "data.originalLogBodyMarker" } },
-      { source: { caseStepId: "Action-2", method: "playwright" }, id: "work_logs.delete_confirm", title: "在 删除工作日志确认弹窗中点击 \"确定\" 操作", object: "page.work_logs.delete_confirm", operator: "confirm" },
+      { source: { caseStepId: "Action-1", method: "playwright" }, id: "work_logs.delete_original", title: "点击 本用例原始日志的 \"删除\" 操作", object: "page.work_logs.delete_action", operator: "open_confirm", params: { bodyMarkerFrom: "data.originalLogBodyMarker" } },
+      { source: { caseStepId: "Action-2", method: "playwright" }, id: "work_logs.delete_confirm", title: "在 删除工作日志确认框中点击 \"删除日志\" 操作", object: "page.work_logs.delete_confirm", operator: "confirm" },
       { source: { caseStepId: "Action-3", method: "playwright" }, id: "work_logs.select_objective", title: "在 \"日志归类\" 控件中选择目标 `E2E-TARGET-WORK-LOG-DELETE-RESUBMIT-TODAY`", object: "page.work_logs.classification", operator: "select_objective", params: { objectiveTitleFrom: "data.objectiveTitle" } },
       { source: { caseStepId: "Action-4", method: "playwright" }, id: "work_logs.fill_resubmitted_progress", title: "在 \"目标进度估计百分比\" 输入框输入 `45`", object: "page.work_logs.progress_estimate_input", operator: "fill", params: { valueFrom: "data.resubmittedProgressEstimatePercent" } },
       { source: { caseStepId: "Action-5", method: "playwright" }, id: "work_logs.duration_input.absent", title: "\"记录时间分钟数\" 输入框 应不存在", object: "page.work_logs.duration_input", operator: "absent" },

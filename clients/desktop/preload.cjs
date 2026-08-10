@@ -72,6 +72,9 @@ contextBridge.exposeInMainWorld("orfNativeRuntime", {
 });
 
 contextBridge.exposeInMainWorld("orfDesktopShell", {
+  setAppearanceMode(payload) {
+    return ipcRenderer.invoke("orf:desktop-shell:set-appearance-mode", payload);
+  },
   setAttentionState(payload) {
     return ipcRenderer.invoke("orf:desktop-shell:set-attention-state", payload);
   },

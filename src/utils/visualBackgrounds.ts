@@ -2,6 +2,7 @@ import {
   defaultVisualBackgroundCrop,
   normalizeVisualBackgroundCrop,
   type VisualBackgroundCrop,
+  type VisualMaterialPreferences,
 } from "../domain/settings/visualBackgrounds";
 import type { VisualBackgroundImage, VisualBackgroundScene, VisualBackgroundsData } from "../state/apiClient";
 
@@ -12,7 +13,7 @@ const preparedSelections = new Map<VisualBackgroundScene, { contract: string; im
 export type VisualBackgroundSelection = {
   crop: VisualBackgroundCrop;
   image: VisualBackgroundImage;
-  overlayOpacity: number;
+  material: VisualMaterialPreferences;
   url: string;
 };
 
@@ -59,7 +60,7 @@ function selectionForImage(data: VisualBackgroundsData, image: VisualBackgroundI
   return {
     crop: cropForVisualBackground(data, image.id),
     image,
-    overlayOpacity: data.config.overlayOpacity,
+    material: data.config.material,
     url: image.url,
   };
 }

@@ -5,6 +5,7 @@ import type { PermissionKey } from "../../../../../../src/config/permissions";
 import type { ObjectiveFlowStatus, OrfStage } from "../../../../../../src/types/orf";
 import {
   deleteTestObjective,
+  applicationConfirmDialog,
   readResponseBody,
   upsertTestObjective,
   type TestObjectiveFixtureRecord,
@@ -16,8 +17,7 @@ const RESPONSE_TIMEOUT_MS = 5_000;
 
 type PendingObjectiveDelete = {
   title: string;
-  dialogMessage: string;
-  response: Response;
+  responsePromise: Promise<Response>;
 };
 
 const pendingDeletesByPage = new WeakMap<Page, PendingObjectiveDelete[]>();
@@ -87,23 +87,13 @@ export async function editObjectiveTitle(page: Page, input: { oldTitle: string; 
 export async function startObjectiveDelete(page: Page, title: string) {
   const objective = await requiredObjectiveByTitle(title);
   const responsePromise = waitForObjectiveDeleteResponse(page, objective.id);
-  const dialogPromise = new Promise<string>((resolve, reject) => {
-    page.once("dialog", async (dialog) => {
-      const message = dialog.message();
-      try {
-        await dialog.accept();
-        resolve(message);
-      } catch (error) {
-        reject(error);
-      }
-    });
-  });
-
   await clickObjectiveMenuAction(page, title, "删除");
-  const [dialogMessage, response] = await Promise.all([dialogPromise, responsePromise]);
+  const dialog = applicationConfirmDialog(page, "删除工作项");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".orf-confirm-dialog-description")).toContainText(title);
 
   const queue = pendingDeletesByPage.get(page) ?? [];
-  queue.push({ title, dialogMessage, response });
+  queue.push({ title, responsePromise });
   pendingDeletesByPage.set(page, queue);
 }
 
@@ -114,11 +104,11 @@ export async function confirmNextObjectiveDelete(page: Page) {
     throw new Error("不存在待确认的删除目标弹窗");
   }
 
-  if (!pending.dialogMessage.includes(pending.title)) {
-    throw new Error(`删除目标确认弹窗文案不包含目标标题: ${pending.dialogMessage}`);
-  }
-  if (!pending.response.ok()) {
-    throw new Error(`删除目标接口请求失败: ${pending.response.status()} ${pending.response.url()}`);
+  const dialog = applicationConfirmDialog(page, "删除工作项");
+  await dialog.getByRole("button", { name: "确认删除", exact: true }).click();
+  const response = await pending.responsePromise;
+  if (!response.ok()) {
+    throw new Error(`删除目标接口请求失败: ${response.status()} ${response.url()}`);
   }
   await expect(objectivePanel(page, pending.title)).toHaveCount(0);
 }

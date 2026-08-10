@@ -62,7 +62,7 @@ export function workLogClassificationSearchInput(page: Page) {
 }
 
 export function workLogClassificationOption(page: Page, title: string) {
-  return page.locator(".orf-fantasy-select-option").filter({ hasText: title });
+  return page.locator(".orf-select-option").filter({ hasText: title });
 }
 
 export async function selectWorkLogCategory(page: Page, categoryName: string) {

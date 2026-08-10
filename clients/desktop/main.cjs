@@ -46,6 +46,10 @@ const DESKTOP_CREDENTIALS_MAX_ACCOUNTS = 10;
 const DESKTOP_CREDENTIALS_FILE_NAME = "saved-login-accounts.v1.json";
 const DESKTOP_SETTINGS_FILE_NAME = "desktop-settings.v1.json";
 const DESKTOP_STABLE_DATA_DIR_NAME = "ORF";
+const DESKTOP_WINDOW_BACKGROUND_COLORS = Object.freeze({
+  dark: "#0e1115",
+  light: "#e9edee",
+});
 const DESKTOP_MAIN_WINDOW_SIZE = Object.freeze({
   height: 900,
   minHeight: 680,
@@ -136,9 +140,9 @@ function createMainWindow(clientUrl, options = {}) {
     title: "ORF",
     icon: createDesktopTaskbarIconImage("normal", false),
     frame: false,
-    backgroundColor: "#f6f8fb",
+    backgroundColor: desktopWindowBackgroundColor(),
     autoHideMenuBar: true,
-    show: options.show !== false,
+    show: false,
     webPreferences: desktopBrowserWindowWebPreferences(),
   });
   const webContentsId = mainWindow.webContents.id;
@@ -169,8 +173,13 @@ function createMainWindow(clientUrl, options = {}) {
 
   mainWindow.webContents.on("did-create-window", (childWindow, details) => {
     const childUrl = new URL(details.url);
-    if (!isChatImagePopoutUrl(childUrl)) return;
-    centerAndRevealChatImagePopoutWindow(childWindow, mainWindow);
+    if (isChatImagePopoutUrl(childUrl)) {
+      centerAndRevealChatImagePopoutWindow(childWindow, mainWindow);
+      return;
+    }
+    if (isDriveFilePreviewPopoutUrl(childUrl)) {
+      revealDesktopWindowWhenReady(childWindow);
+    }
   });
 
   mainWindow.webContents.on("will-navigate", (event, url) => {
@@ -213,6 +222,10 @@ function createMainWindow(clientUrl, options = {}) {
     }
   });
 
+  if (options.show !== false) {
+    mainWindow.once("ready-to-show", () => revealDesktopWindow(mainWindow));
+  }
+
   void mainWindow.loadURL(clientUrl.toString());
   updateDesktopUnreadState();
   return mainWindow;
@@ -238,7 +251,7 @@ function isDriveFilePreviewPopoutUrl(url) {
 function chatImagePopoutBrowserWindowOptions(parentWindow) {
   return {
     autoHideMenuBar: true,
-    backgroundColor: "#f7f8fb",
+    backgroundColor: desktopWindowBackgroundColor(),
     frame: false,
     minHeight: CHAT_IMAGE_POPOUT_MINIMUM_SIZE.height,
     minWidth: CHAT_IMAGE_POPOUT_MINIMUM_SIZE.width,
@@ -273,6 +286,22 @@ function centerAndRevealChatImagePopoutWindow(popoutWindow, parentWindow) {
   });
 }
 
+function revealDesktopWindow(targetWindow) {
+  if (targetWindow.isDestroyed()) return;
+  if (targetWindow.isMinimized()) targetWindow.restore();
+  targetWindow.show();
+  targetWindow.focus();
+}
+
+function revealDesktopWindowWhenReady(targetWindow) {
+  if (targetWindow.isDestroyed()) return;
+  if (targetWindow.webContents.isLoadingMainFrame()) {
+    targetWindow.once("ready-to-show", () => revealDesktopWindow(targetWindow));
+    return;
+  }
+  revealDesktopWindow(targetWindow);
+}
+
 function clampWindowDimension(value, minimum, available) {
   const maximum = Math.max(1, available);
   const effectiveMinimum = Math.min(minimum, maximum);
@@ -282,13 +311,13 @@ function clampWindowDimension(value, minimum, available) {
 function driveFilePreviewPopoutBrowserWindowOptions() {
   return {
     autoHideMenuBar: true,
-    backgroundColor: "#f7f8fb",
+    backgroundColor: desktopWindowBackgroundColor(),
     frame: false,
     height: 820,
     minHeight: 640,
     minWidth: 900,
     resizable: true,
-    show: true,
+    show: false,
     title: "ORF 文件预览",
     width: 1180,
     webPreferences: desktopBrowserWindowWebPreferences(),
@@ -414,10 +443,11 @@ function readDesktopSettings() {
   try {
     const parsed = JSON.parse(fs.readFileSync(desktopSettingsFilePath(), "utf8"));
     return {
+      appearanceMode: normalizeDesktopAppearanceMode(parsed?.appearanceMode) ?? "light",
       launchAtLoginPromptSeen: parsed?.launchAtLoginPromptSeen === true,
     };
   } catch {
-    return { launchAtLoginPromptSeen: false };
+    return { appearanceMode: "light", launchAtLoginPromptSeen: false };
   }
 }
 
@@ -429,8 +459,29 @@ function updateDesktopSettings(patch) {
   const filePath = desktopSettingsFilePath();
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify({
+    appearanceMode: normalizeDesktopAppearanceMode(nextSettings.appearanceMode) ?? "light",
     launchAtLoginPromptSeen: nextSettings.launchAtLoginPromptSeen === true,
   }, null, 2)}\n`);
+}
+
+function normalizeDesktopAppearanceMode(input) {
+  return input === "dark" || input === "light" ? input : null;
+}
+
+function desktopWindowBackgroundColor(appearanceMode = readDesktopSettings().appearanceMode) {
+  const normalizedMode = normalizeDesktopAppearanceMode(appearanceMode) ?? "light";
+  return DESKTOP_WINDOW_BACKGROUND_COLORS[normalizedMode];
+}
+
+function setDesktopAppearanceMode(input) {
+  const appearanceMode = normalizeDesktopAppearanceMode(input?.appearanceMode);
+  if (!appearanceMode) return { status: "error", reason: "invalid_appearance_mode" };
+  updateDesktopSettings({ appearanceMode });
+  const backgroundColor = desktopWindowBackgroundColor(appearanceMode);
+  for (const desktopWindow of BrowserWindow.getAllWindows()) {
+    if (!desktopWindow.isDestroyed()) desktopWindow.setBackgroundColor(backgroundColor);
+  }
+  return { status: "success", data: { appearanceMode, backgroundColor } };
 }
 
 function createDesktopRecoveryState() {
@@ -696,10 +747,10 @@ function showMainWindow(targetPath) {
   const clientUrl = desktopShellState.clientUrl ?? resolveClientUrl();
   desktopShellState.clientUrl = clientUrl;
   const currentWindow = desktopShellState.mainWindow;
-  const targetWindow = currentWindow && !currentWindow.isDestroyed() ? currentWindow : createMainWindow(clientUrl);
-  if (targetWindow.isMinimized()) targetWindow.restore();
-  targetWindow.show();
-  targetWindow.focus();
+  const targetWindow = currentWindow && !currentWindow.isDestroyed()
+    ? currentWindow
+    : createMainWindow(clientUrl, { show: false });
+  revealDesktopWindowWhenReady(targetWindow);
   if (isSafeDesktopTargetPath(targetPath)) {
     openDesktopTargetInWindow(targetWindow, targetPath);
   }
@@ -1542,6 +1593,12 @@ function registerDesktopShellBridge(clientUrl) {
     const unreadCount = normalizeDesktopUnreadInput(input);
     setDesktopUnreadCount(unreadCount);
     return { status: "success", data: unreadCount };
+  });
+  ipcMain.handle("orf:desktop-shell:set-appearance-mode", (event, input) => {
+    if (!isTrustedDesktopIpcSender(event, clientUrl)) return { status: "error", reason: "untrusted_sender" };
+    const targetWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!targetWindow || targetWindow.isDestroyed()) return { status: "unsupported", reason: "window_unavailable" };
+    return setDesktopAppearanceMode(input);
   });
   ipcMain.handle("orf:desktop-shell:get-launch-at-login-state", () => desktopLaunchAtLoginState());
   ipcMain.handle("orf:desktop-shell:set-launch-at-login-enabled", (_event, input) => (

@@ -21,6 +21,7 @@ docs/
 
 | 文档 | 说明 |
 | --- | --- |
+| [ORF 前端视觉系统.md](./design/ORF%20前端视觉系统.md) | 全站视觉语言、亮暗主题、组件几何、响应式和视觉验收的唯一规范 |
 | [AppShell - 前端.md](./frontend/AppShell%20-%20前端.md) | 全局侧边栏、顶部栏、全局搜索、新建入口和全局浮层 |
 | [AppShell - 后端.md](./backend/AppShell%20-%20后端.md) | AppShell 依赖的认证、权限和接口边界 |
 | [ORF 我的挑战页面 - 前端.md](./frontend/ORF%20我的挑战页面%20-%20前端.md) | 我的挑战内容区 UI、字段展示和可见交互 |

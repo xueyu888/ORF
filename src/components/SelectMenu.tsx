@@ -1,0 +1,558 @@
+import { clsx } from "clsx";
+import { Check, ChevronDown, Search } from "lucide-react";
+import type { CSSProperties, ReactNode, RefObject } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
+export type SelectOption<Value extends string> = {
+  value: Value;
+  label: string;
+  description?: string;
+  disabled?: boolean;
+  alwaysVisible?: boolean;
+};
+
+type PopoverPosition = {
+  left: number;
+  maxHeight: number;
+  minWidth: number;
+  placement: "bottom" | "top";
+  top: number;
+};
+
+export function SelectMenu<Value extends string>({
+  ariaLabel,
+  className,
+  disabled = false,
+  leadingIcon,
+  onChange,
+  onSearchQueryChange,
+  options,
+  placeholder = "请选择",
+  searchable = false,
+  searchPlaceholder = "搜索选项",
+  stopPropagation = false,
+  title,
+  value,
+  variant = "filter",
+}: {
+  ariaLabel: string;
+  className?: string;
+  disabled?: boolean;
+  leadingIcon?: ReactNode;
+  onChange: (value: Value) => void;
+  onSearchQueryChange?: (query: string) => void;
+  options: Array<SelectOption<Value>>;
+  placeholder?: string;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  stopPropagation?: boolean;
+  title?: string;
+  value: Value;
+  variant?: "filter" | "chip";
+}) {
+  const [open, setOpen] = useState(false);
+  const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const menuId = useId();
+  const selected = options.find((option) => option.value === value);
+  const selectedLabel = selected?.label ?? placeholder;
+  const visibleOptions = searchable ? filterSelectOptions(options, searchQuery) : options;
+  const selectedValues = new Set<Value>([value]);
+
+  const updateSearchQuery = useCallback((query: string) => {
+    setSearchQuery(query);
+    onSearchQueryChange?.(query);
+  }, [onSearchQueryChange]);
+
+  const updatePopoverPosition = () => {
+    const trigger = rootRef.current;
+    if (!trigger || typeof window === "undefined") return;
+
+    const viewportPadding = 12;
+    const popoverGap = 7;
+    const triggerRect = trigger.getBoundingClientRect();
+    const fallbackWidth = searchable ? Math.max(triggerRect.width, 188) : variant === "filter" ? Math.max(triggerRect.width, 144) : 108;
+    const popoverWidth = popoverRef.current?.offsetWidth ?? fallbackWidth;
+    const searchHeight = searchable ? 46 : 0;
+    const fallbackHeight = Math.min(360, Math.max(132, options.length * 32 + 12 + searchHeight));
+    const popoverHeight = popoverRef.current?.offsetHeight ?? fallbackHeight;
+    const belowTop = triggerRect.bottom + popoverGap;
+    const belowSpace = window.innerHeight - belowTop - viewportPadding;
+    const aboveSpace = triggerRect.top - popoverGap - viewportPadding;
+    const placement = belowSpace < Math.min(popoverHeight, 180) && aboveSpace > belowSpace ? "top" : "bottom";
+    const maxHeight = Math.max(searchable ? 156 : 112, Math.min(searchable ? 360 : 320, placement === "top" ? aboveSpace : belowSpace));
+    const top = placement === "top"
+      ? Math.max(viewportPadding, triggerRect.top - popoverGap - Math.min(popoverHeight, maxHeight))
+      : Math.min(belowTop, window.innerHeight - viewportPadding - Math.min(popoverHeight, maxHeight));
+    const left = Math.min(
+      Math.max(viewportPadding, triggerRect.left),
+      Math.max(viewportPadding, window.innerWidth - viewportPadding - popoverWidth),
+    );
+
+    setPopoverPosition({
+      left,
+      maxHeight,
+      minWidth: fallbackWidth,
+      placement,
+      top,
+    });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    const syncPosition = () => updatePopoverPosition();
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", syncPosition);
+    window.addEventListener("scroll", syncPosition, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", syncPosition);
+      window.removeEventListener("scroll", syncPosition, true);
+    };
+  }, [open, options.length, searchable, variant]);
+
+  useEffect(() => {
+    if (!open && searchQuery) {
+      updateSearchQuery("");
+    }
+  }, [open, searchQuery, updateSearchQuery]);
+
+  useEffect(() => {
+    if (!open || !searchable) return;
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, [open, searchable]);
+
+  useLayoutEffect(() => {
+    if (open) {
+      updatePopoverPosition();
+    } else {
+      setPopoverPosition(null);
+    }
+  }, [open, searchable, searchQuery, selectedLabel, variant, visibleOptions.length]);
+
+  const selectOption = useCallback((option: SelectOption<Value>) => {
+    if (option.disabled || disabled) return;
+    updateSearchQuery("");
+    setOpen(false);
+    if (option.value !== value) {
+      onChange(option.value);
+    }
+  }, [disabled, onChange, updateSearchQuery, value]);
+
+  const setPopoverElement = useCallback(
+    (node: HTMLDivElement | null) => {
+      popoverRef.current = node;
+    },
+    [],
+  );
+
+  return (
+    <div
+      ref={rootRef}
+      className={clsx("orf-select-menu", `orf-select-menu-${variant}`, open && "orf-select-menu-open", disabled && "orf-select-menu-disabled", className)}
+      data-no-row-edit={stopPropagation ? "true" : undefined}
+      onClick={stopPropagation ? (event) => event.stopPropagation() : undefined}
+      onDoubleClick={stopPropagation ? (event) => event.stopPropagation() : undefined}
+    >
+      <button
+        aria-controls={open ? menuId : undefined}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={ariaLabel}
+        className={clsx("orf-select-trigger", variant === "filter" && "orf-floating-control")}
+        disabled={disabled}
+        onClick={() => {
+          if (!open) {
+            updatePopoverPosition();
+          }
+          setOpen((current) => !current);
+        }}
+        title={title}
+        type="button"
+      >
+        {leadingIcon && <span className="orf-select-icon" aria-hidden="true">{leadingIcon}</span>}
+        <span className="orf-select-value">{selectedLabel}</span>
+        <ChevronDown className="orf-select-chevron" aria-hidden="true" />
+      </button>
+      <SelectPopover
+        ariaLabel={ariaLabel}
+        menuId={menuId}
+        onSelect={selectOption}
+        onSearchQueryChange={updateSearchQuery}
+        open={open}
+        options={options}
+        popoverRef={setPopoverElement}
+        position={popoverPosition}
+        searchable={searchable}
+        searchInputRef={searchInputRef}
+        searchPlaceholder={searchPlaceholder}
+        searchQuery={searchQuery}
+        selectedValues={selectedValues}
+        visibleOptions={visibleOptions}
+        variant={variant}
+      />
+    </div>
+  );
+}
+
+export function MultiSelectMenu<Value extends string>({
+  allValue,
+  ariaLabel,
+  className,
+  disabled = false,
+  leadingIcon,
+  onChange,
+  options,
+  placeholder = "请选择",
+  searchable = false,
+  searchPlaceholder = "搜索选项",
+  stopPropagation = false,
+  title,
+  values,
+  variant = "filter",
+}: {
+  allValue?: Value;
+  ariaLabel: string;
+  className?: string;
+  disabled?: boolean;
+  leadingIcon?: ReactNode;
+  onChange: (values: Value[]) => void;
+  options: Array<SelectOption<Value>>;
+  placeholder?: string;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  stopPropagation?: boolean;
+  title?: string;
+  values: readonly Value[];
+  variant?: "filter" | "chip";
+}) {
+  const [open, setOpen] = useState(false);
+  const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const menuId = useId();
+  const selectedValues = new Set(values);
+  const visibleOptions = searchable ? filterSelectOptions(options, searchQuery) : options;
+  const selectedLabel = multiSelectLabel({ allValue, options, placeholder, values });
+
+  const updateSearchQuery = useCallback((query: string) => {
+    setSearchQuery(query);
+  }, []);
+
+  const updatePopoverPosition = () => {
+    const trigger = rootRef.current;
+    if (!trigger || typeof window === "undefined") return;
+
+    const viewportPadding = 12;
+    const popoverGap = 7;
+    const triggerRect = trigger.getBoundingClientRect();
+    const fallbackWidth = searchable ? Math.max(triggerRect.width, 188) : variant === "filter" ? Math.max(triggerRect.width, 144) : 108;
+    const popoverWidth = popoverRef.current?.offsetWidth ?? fallbackWidth;
+    const searchHeight = searchable ? 46 : 0;
+    const fallbackHeight = Math.min(360, Math.max(132, options.length * 32 + 12 + searchHeight));
+    const popoverHeight = popoverRef.current?.offsetHeight ?? fallbackHeight;
+    const belowTop = triggerRect.bottom + popoverGap;
+    const belowSpace = window.innerHeight - belowTop - viewportPadding;
+    const aboveSpace = triggerRect.top - popoverGap - viewportPadding;
+    const placement = belowSpace < Math.min(popoverHeight, 180) && aboveSpace > belowSpace ? "top" : "bottom";
+    const maxHeight = Math.max(searchable ? 156 : 112, Math.min(searchable ? 360 : 320, placement === "top" ? aboveSpace : belowSpace));
+    const top = placement === "top"
+      ? Math.max(viewportPadding, triggerRect.top - popoverGap - Math.min(popoverHeight, maxHeight))
+      : Math.min(belowTop, window.innerHeight - viewportPadding - Math.min(popoverHeight, maxHeight));
+    const left = Math.min(
+      Math.max(viewportPadding, triggerRect.left),
+      Math.max(viewportPadding, window.innerWidth - viewportPadding - popoverWidth),
+    );
+
+    setPopoverPosition({
+      left,
+      maxHeight,
+      minWidth: fallbackWidth,
+      placement,
+      top,
+    });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    const syncPosition = () => updatePopoverPosition();
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", syncPosition);
+    window.addEventListener("scroll", syncPosition, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", syncPosition);
+      window.removeEventListener("scroll", syncPosition, true);
+    };
+  }, [open, options.length, searchable, variant]);
+
+  useEffect(() => {
+    if (!open && searchQuery) {
+      updateSearchQuery("");
+    }
+  }, [open, searchQuery, updateSearchQuery]);
+
+  useEffect(() => {
+    if (!open || !searchable) return;
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, [open, searchable]);
+
+  useLayoutEffect(() => {
+    if (open) {
+      updatePopoverPosition();
+    } else {
+      setPopoverPosition(null);
+    }
+  }, [open, searchable, searchQuery, selectedLabel, variant, visibleOptions.length]);
+
+  const selectOption = useCallback((option: SelectOption<Value>) => {
+    if (option.disabled || disabled) return;
+    if (allValue && option.value === allValue) {
+      onChange([]);
+      return;
+    }
+
+    const next = new Set(values);
+    if (next.has(option.value)) {
+      next.delete(option.value);
+    } else {
+      next.add(option.value);
+    }
+    if (allValue) next.delete(allValue);
+    onChange(Array.from(next));
+  }, [allValue, disabled, onChange, values]);
+
+  const setPopoverElement = useCallback(
+    (node: HTMLDivElement | null) => {
+      popoverRef.current = node;
+    },
+    [],
+  );
+
+  return (
+    <div
+      ref={rootRef}
+      className={clsx("orf-select-menu", "orf-select-menu-multi", `orf-select-menu-${variant}`, open && "orf-select-menu-open", disabled && "orf-select-menu-disabled", className)}
+      data-no-row-edit={stopPropagation ? "true" : undefined}
+      onClick={stopPropagation ? (event) => event.stopPropagation() : undefined}
+      onDoubleClick={stopPropagation ? (event) => event.stopPropagation() : undefined}
+    >
+      <button
+        aria-controls={open ? menuId : undefined}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={ariaLabel}
+        className={clsx("orf-select-trigger", variant === "filter" && "orf-floating-control")}
+        disabled={disabled}
+        onClick={() => {
+          if (!open) {
+            updatePopoverPosition();
+          }
+          setOpen((current) => !current);
+        }}
+        title={title}
+        type="button"
+      >
+        {leadingIcon && <span className="orf-select-icon" aria-hidden="true">{leadingIcon}</span>}
+        <span className="orf-select-value">{selectedLabel}</span>
+        <ChevronDown className="orf-select-chevron" aria-hidden="true" />
+      </button>
+      <SelectPopover
+        ariaLabel={ariaLabel}
+        menuId={menuId}
+        multiselect
+        onSelect={selectOption}
+        onSearchQueryChange={updateSearchQuery}
+        open={open}
+        options={options}
+        popoverRef={setPopoverElement}
+        position={popoverPosition}
+        searchable={searchable}
+        searchInputRef={searchInputRef}
+        searchPlaceholder={searchPlaceholder}
+        searchQuery={searchQuery}
+        selectedValues={selectedValues.size > 0 ? selectedValues : allValue ? new Set<Value>([allValue]) : selectedValues}
+        visibleOptions={visibleOptions}
+        variant={variant}
+      />
+    </div>
+  );
+}
+
+function multiSelectLabel<Value extends string>(input: {
+  allValue?: Value;
+  options: Array<SelectOption<Value>>;
+  placeholder: string;
+  values: readonly Value[];
+}) {
+  const selectedValues = input.values.filter((value) => value !== input.allValue);
+  if (selectedValues.length === 0) {
+    return input.options.find((option) => option.value === input.allValue)?.label ?? input.placeholder;
+  }
+
+  const labels = selectedValues
+    .map((value) => input.options.find((option) => option.value === value)?.label ?? value);
+  if (labels.length <= 2) return labels.join("、");
+  return `${labels[0]}等 ${labels.length} 项`;
+}
+
+export function filterSelectOptions<Value extends string>(options: Array<SelectOption<Value>>, query: string) {
+  const normalizedQuery = normalizeSelectSearchText(query);
+  if (!normalizedQuery) return options;
+  return options.filter((option) => option.alwaysVisible || selectOptionMatchesSearch(option, normalizedQuery));
+}
+
+export function hasSelectOptionSearchMatch<Value extends string>(options: Array<SelectOption<Value>>, query: string) {
+  const normalizedQuery = normalizeSelectSearchText(query);
+  return !normalizedQuery || options.some((option) => selectOptionMatchesSearch(option, normalizedQuery));
+}
+
+function selectOptionMatchesSearch<Value extends string>(option: SelectOption<Value>, normalizedQuery: string) {
+  return [option.label, option.description, option.value].some((value) => normalizeSelectSearchText(value ?? "").includes(normalizedQuery));
+}
+
+function normalizeSelectSearchText(value: string) {
+  return value.trim().toLocaleLowerCase();
+}
+
+function SelectPopover<Value extends string>({
+  ariaLabel,
+  menuId,
+  onSelect,
+  onSearchQueryChange,
+  open,
+  options,
+  popoverRef,
+  position,
+  searchable,
+  searchInputRef,
+  searchPlaceholder,
+  searchQuery,
+  selectedValues,
+  visibleOptions,
+  variant,
+  multiselect = false,
+}: {
+  ariaLabel: string;
+  menuId: string;
+  multiselect?: boolean;
+  onSelect: (option: SelectOption<Value>) => void;
+  onSearchQueryChange: (query: string) => void;
+  open: boolean;
+  options: Array<SelectOption<Value>>;
+  popoverRef: (node: HTMLDivElement | null) => void;
+  position: PopoverPosition | null;
+  searchable: boolean;
+  searchInputRef: RefObject<HTMLInputElement | null>;
+  searchPlaceholder: string;
+  searchQuery: string;
+  selectedValues: ReadonlySet<Value>;
+  visibleOptions: Array<SelectOption<Value>>;
+  variant: "filter" | "chip";
+}) {
+  if (!open || typeof document === "undefined") return null;
+
+  const style: CSSProperties = {
+    left: position?.left ?? -9999,
+    maxHeight: position?.maxHeight,
+    minWidth: position?.minWidth,
+    top: position?.top ?? -9999,
+  };
+
+  return createPortal(
+    <div
+      ref={popoverRef}
+      id={menuId}
+      className={clsx(
+        "orf-select-popover",
+        `orf-select-popover-${variant}`,
+        searchable && "orf-select-popover-searchable",
+        position?.placement === "top" && "orf-select-popover-top",
+      )}
+      style={style}
+    >
+      {searchable && (
+        <label className="orf-select-search">
+          <Search className="h-4 w-4" aria-hidden="true" />
+          <input
+            ref={searchInputRef}
+            aria-label={`搜索${ariaLabel}`}
+            autoComplete="off"
+            placeholder={searchPlaceholder}
+            type="search"
+            value={searchQuery}
+            onChange={(event) => onSearchQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                onSearchQueryChange("");
+              }
+            }}
+          />
+        </label>
+      )}
+      <div className="orf-select-options" role="listbox" aria-label={ariaLabel} aria-multiselectable={multiselect ? true : undefined}>
+        {visibleOptions.map((option) => {
+          const selectedOption = selectedValues.has(option.value);
+          return (
+            <button
+              key={option.value}
+              aria-selected={selectedOption}
+              className={clsx("orf-select-option", selectedOption && "orf-select-option-selected")}
+              data-select-option-value={option.value}
+              disabled={option.disabled}
+              onClick={() => onSelect(option)}
+              role="option"
+              type="button"
+            >
+              <span className="orf-select-option-rune" aria-hidden="true" />
+              <span className="orf-select-option-copy">
+                <span className="orf-select-option-label">{option.label}</span>
+                {option.description && <span className="orf-select-option-description">{option.description}</span>}
+              </span>
+              {selectedOption && <Check className="orf-select-option-check" aria-hidden="true" />}
+            </button>
+          );
+        })}
+        {searchable && !hasSelectOptionSearchMatch(options, searchQuery) && <div className="orf-select-empty">没有匹配项</div>}
+      </div>
+    </div>,
+    document.body,
+  );
+}

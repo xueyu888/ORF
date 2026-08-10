@@ -1,0 +1,130 @@
+/* Shared floating decisions. Page modules provide copy and intent only. */
+.orf-confirm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 280;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, #020617 64%, transparent);
+  padding: 24px;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.orf-confirm-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(460px, 100%);
+  max-height: min(86dvh, 620px);
+  overflow: hidden;
+  border: 1px solid var(--orf-border-strong);
+  border-radius: 18px;
+  background: var(--orf-surface-elevated);
+  color: var(--orf-text-primary);
+  box-shadow: var(--orf-shadow-card);
+}
+
+.orf-confirm-dialog-header {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--orf-border);
+  padding: 16px 18px;
+}
+
+.orf-confirm-dialog-header > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.orf-confirm-dialog-header > div > span {
+  color: var(--orf-text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+}
+
+.orf-confirm-dialog-header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.orf-confirm-dialog-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--orf-accent-soft);
+  color: var(--orf-accent-text);
+}
+
+.orf-confirm-dialog[data-tone="danger"] .orf-confirm-dialog-icon {
+  background: var(--orf-danger-bg);
+  color: var(--orf-danger-text);
+}
+
+.orf-confirm-dialog-icon svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 1.8;
+}
+
+.orf-confirm-dialog-description {
+  overflow: auto;
+  color: var(--orf-text-secondary);
+  padding: 18px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.orf-confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  border-top: 1px solid var(--orf-border);
+  background: var(--orf-surface-control-solid);
+  padding: 12px 18px 16px;
+}
+
+@media (max-width: 560px) {
+  .orf-confirm-dialog-backdrop {
+    align-items: end;
+    padding: 14px 0 0;
+  }
+
+  .orf-confirm-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 14px);
+    border-right-color: var(--orf-border);
+    border-bottom: 0;
+    border-left-color: var(--orf-border);
+    border-radius: 20px 20px 0 0;
+  }
+
+  .orf-confirm-dialog-header,
+  .orf-confirm-dialog-description {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .orf-confirm-dialog-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px 16px max(16px, env(safe-area-inset-bottom));
+  }
+
+  .orf-confirm-dialog-actions .orf-action-button {
+    width: 100%;
+  }
+
+  .orf-confirm-dialog-confirm {
+    order: -1;
+  }
+}

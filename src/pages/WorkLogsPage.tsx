@@ -34,8 +34,9 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { FantasyDatePicker } from "../components/FantasyDatePicker";
-import { FantasySelectMenu } from "../components/FantasySelectMenu";
+import { DatePicker } from "../components/DatePicker";
+import { useConfirmDialog } from "../components/ConfirmDialog";
+import { SelectMenu } from "../components/SelectMenu";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, IconButton } from "../components/ui";
 import { UserAvatar } from "../components/UserAvatar";
@@ -218,6 +219,7 @@ function workLogObjectiveSelectionSubmitMessage(objective: WorkLogObjectiveOptio
 }
 
 export function WorkLogsPage() {
+  const confirm = useConfirmDialog();
   const location = useLocation();
   const navigate = useNavigate();
   const viewDate = dateFromSearch(location.search);
@@ -776,7 +778,11 @@ export function WorkLogsPage() {
       ? objectiveOptionsById.get(submittedDraftInput.objectiveId)
       : undefined;
     if (selectedObjective && workLogObjectiveSelectionNotices(selectedObjective).length > 0) {
-      const confirmed = window.confirm(workLogObjectiveSelectionSubmitMessage(selectedObjective));
+      const confirmed = await confirm({
+        title: "确认提交工作日志",
+        description: workLogObjectiveSelectionSubmitMessage(selectedObjective),
+        confirmLabel: "继续提交",
+      });
       if (!confirmed) return;
     }
     setSaving(true);
@@ -900,9 +906,12 @@ export function WorkLogsPage() {
 
   const deleteEntry = async (entry: WorkLogEntry) => {
     if (saving) return;
-    const confirmed = window.confirm(
-      "删除这条工作日志？删除后不会影响目标、进度、验收或积分。",
-    );
+    const confirmed = await confirm({
+      title: "删除工作日志",
+      description: "删除这条工作日志？删除后不会影响目标、进度、验收或积分。",
+      confirmLabel: "删除日志",
+      tone: "danger",
+    });
     if (!confirmed) return;
     setDeletingEntryId(entry.id);
     setError("");
@@ -1342,14 +1351,14 @@ function WorkLogDateControl({
         label="前一天"
         onClick={() => onChange(addCalendarDays(date, -1, date))}
       />
-      <FantasyDatePicker
+      <DatePicker
         ariaLabel="选择日志日期"
         value={date}
         onChange={onChange}
       >
         <CalendarDays className="h-4 w-4" />
         <span>{date}</span>
-      </FantasyDatePicker>
+      </DatePicker>
       <IconButton
         icon={ChevronRight}
         label="后一天"
@@ -1473,7 +1482,7 @@ function WorkLogEditorCard({
               <small>可把这条日志移到其他日期</small>
             </div>
           </div>
-          <FantasyDatePicker
+          <DatePicker
             ariaLabel="选择移动日期"
             disabled={disabled}
             onChange={onWorkDateChange}
@@ -1481,11 +1490,11 @@ function WorkLogEditorCard({
           >
             <CalendarDays className="h-4 w-4" />
             <span>{workDate}</span>
-          </FantasyDatePicker>
+          </DatePicker>
         </div>
       )}
       <div className="work-logs-draft-entry-header">
-        <FantasySelectMenu
+        <SelectMenu
           ariaLabel="日志归类"
           className="work-logs-objective-select"
           disabled={disabled}

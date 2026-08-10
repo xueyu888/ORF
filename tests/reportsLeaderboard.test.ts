@@ -128,6 +128,65 @@ test("leaderboard uses public user display profiles when full users are not load
   assert.equal(rows[1]?.avatarUrl, "/api/users/user-c/avatar?v=avatar-c");
 });
 
+test("leaderboard groups point sources by objective for segmented contribution bars", () => {
+  const rows = buildLeaderboardRows(
+    state({
+      objectives: [
+        objective({ id: "objective-quality", title: "引用质量提升" }),
+        objective({ id: "objective-cost", title: "推理成本优化" }),
+      ],
+      pointLedger: [
+        ledger({
+          createdAt: "2026-06-11T10:00:00.000Z",
+          id: "ledger-quality-review",
+          objectiveId: "objective-quality",
+          points: 35,
+          reason: "匿名互评贡献",
+          settlementPeriodAt: "2026-06-11T10:00:00.000Z",
+        }),
+        ledger({
+          createdAt: "2026-06-12T10:00:00.000Z",
+          id: "ledger-quality-delivery",
+          objectiveId: "objective-quality",
+          points: 25,
+          reason: "交付结果贡献",
+          settlementPeriodAt: "2026-06-12T10:00:00.000Z",
+        }),
+        ledger({
+          createdAt: "2026-06-13T10:00:00.000Z",
+          id: "ledger-cost",
+          objectiveId: "objective-cost",
+          points: 20,
+          reason: "目标结算",
+          settlementPeriodAt: "2026-06-13T10:00:00.000Z",
+        }),
+      ],
+    }),
+    "all",
+  );
+
+  assert.deepEqual(rows[0]?.pointSources, [
+    {
+      entryCount: 2,
+      latestSettlementAt: "2026-06-12T10:00:00.000Z",
+      objectiveId: "objective-quality",
+      objectiveTitle: "引用质量提升",
+      points: 60,
+      primaryReason: "匿名互评贡献",
+      reasonCount: 2,
+    },
+    {
+      entryCount: 1,
+      latestSettlementAt: "2026-06-13T10:00:00.000Z",
+      objectiveId: "objective-cost",
+      objectiveTitle: "推理成本优化",
+      points: 20,
+      primaryReason: "目标结算",
+      reasonCount: 1,
+    },
+  ]);
+});
+
 test("leaderboard keeps formal failed evaluations with zero points", () => {
   const rows = buildLeaderboardRows(
     state({

@@ -15,8 +15,6 @@ const titleMap: Record<string, string> = {
   drive: "资源",
   resources: "资源",
   chat: "聊天",
-  "fantasy-ui": "Fantasy UI",
-  "genshin-ui-kit": "Genshin UI Kit",
   ...webModuleTitleMap(),
   notifications: "聊天",
   "strategy-map": "策略地图",

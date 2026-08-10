@@ -35,8 +35,8 @@ function DashboardMetric({
         <Icon className="h-6 w-6" />
       </div>
       <div className="min-w-0">
-        <div className="text-3xl font-semibold leading-none text-[#1f2f45]">{value}</div>
-        <div className="mt-1 text-xs font-semibold text-[#7b6a50]">{label}</div>
+        <div className="orf-text-primary text-3xl font-semibold leading-none">{value}</div>
+        <div className="orf-text-muted mt-1 text-xs font-semibold">{label}</div>
       </div>
       <div className="orf-dashboard-progress h-1.5 w-full max-w-[150px] overflow-hidden" aria-hidden="true">
         <span style={{ width: `${Math.max(0, Math.min(100, Math.round(progress)))}%` }} />

@@ -1,11 +1,13 @@
-import { BellRing, Contrast, Loader2, Moon, Power, RotateCcw, Trash2, Type, Upload } from "lucide-react";
+import { BellRing, CircleAlert, Contrast, Loader2, Moon, Power, RotateCcw, Sun, Trash2, Type, Upload } from "lucide-react";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { PageScaffold } from "../components/PageScaffold";
 import { UserAvatar } from "../components/UserAvatar";
 import { registeredWebModules } from "../config/webModuleRegistry";
 import { Button, Card, Field } from "../components/ui";
-import { defaultChatTheme, defaultUserDisplayPreferences, displayPreferenceLimits, type ChatTheme, type UserDisplayPreferences } from "../domain/settings/personalPreferences";
+import { defaultUserDisplayPreferences, displayPreferenceLimits, type UserDisplayPreferences } from "../domain/settings/personalPreferences";
+import { userStatusLabel } from "../domain/userPresentation";
+import { defaultAppearanceMode, type AppearanceMode } from "../features/appearance/appearanceMode";
 import { sendNativeChatNotification } from "../features/chat/chatNativeNotificationDelivery";
 import { workbenchZoomScale } from "../features/display/displayPreferences";
 import {
@@ -36,9 +38,9 @@ const landingOptions = [
   { label: "统计", value: "/reports" },
 ];
 
-const chatThemeOptions: Array<{ label: string; value: ChatTheme }> = [
-  { label: "舒适暗色", value: "dark" },
-  { label: "经典浅色", value: "light" },
+const appearanceModeOptions: Array<{ description: string; icon: typeof Sun; label: string; value: AppearanceMode }> = [
+  { description: "清亮冷白界面", icon: Sun, label: "亮色", value: "light" },
+  { description: "沉静深蓝界面", icon: Moon, label: "暗色", value: "dark" },
 ];
 const workbenchZoomOptions = range(displayPreferenceLimits.workbenchZoomLevel.min, displayPreferenceLimits.workbenchZoomLevel.max).map((value) => ({
   label: `${Math.round(workbenchZoomScale(value) * 100)}%`,
@@ -68,20 +70,20 @@ export function PersonalSettingsPage() {
     ? { alt: `${currentUser.name} 头像`, label: `${currentUser.name} 头像`, src: currentUser.avatarUrl }
     : null;
 
-  const loadSettings = async () => {
-    setErrorMessage(null);
-    try {
-      const data = await getUserPreferences({ force: Boolean(settingsInvalidationKey), userId: currentUser?.id });
-      setPreferences(data);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "个人设置加载失败";
-      setErrorMessage(message);
-      notify(message);
-    }
-  };
-
   useEffect(() => {
-    void loadSettings();
+    let cancelled = false;
+    setErrorMessage(null);
+    void getUserPreferences({ force: Boolean(settingsInvalidationKey), userId: currentUser?.id })
+      .then((data) => {
+        if (!cancelled) setPreferences(data);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setErrorMessage(error instanceof Error ? error.message : "个人设置加载失败");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [currentUser?.id, settingsInvalidationKey]);
 
   useEffect(() => {
@@ -137,8 +139,8 @@ export function PersonalSettingsPage() {
     await savePreferencePatch({ sidebarCollapsed: value === "system" ? null : value === "collapsed" });
   };
 
-  const handleChatThemeChange = async (value: ChatTheme) => {
-    await savePreferencePatch({ chatTheme: value }, "聊天主题已更新");
+  const handleAppearanceModeChange = async (value: AppearanceMode) => {
+    await savePreferencePatch({ chatTheme: value }, "全局外观已更新");
   };
 
   const handleDisplayPreferenceChange = async (patch: Partial<UserDisplayPreferences>) => {
@@ -276,10 +278,14 @@ export function PersonalSettingsPage() {
     : "Windows 登录后自动启动并驻留托盘。";
 
   return (
-    <PageScaffold title="个人设置" subtitle="管理当前登录用户的偏好。">
-      <div className="grid gap-4">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <Card className="orf-card-padding">
+    <PageScaffold title="个人设置">
+      <div className="orf-personal-settings-page grid gap-4">
+        <div className="orf-personal-settings-overview grid gap-4 xl:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
+          <Card className="orf-card-padding orf-personal-settings-profile">
+            <div className="orf-personal-settings-card-heading">
+              <span>账户</span>
+              <small>头像与身份信息</small>
+            </div>
             <div className="flex items-start gap-4">
               {avatarPreview ? (
                 <button
@@ -317,173 +323,218 @@ export function PersonalSettingsPage() {
               </div>
               <div>
                 <div className="orf-text-muted">状态</div>
-                <div className="font-medium orf-text-primary">{currentUser?.status ?? "-"}</div>
+                <div className="font-medium orf-text-primary">{currentUser ? userStatusLabel[currentUser.status] : "-"}</div>
               </div>
             </div>
           </Card>
 
-          <Card className="orf-card-padding grid gap-4">
-            <Field label="默认进入页面">
-              <select
-                className="orf-control border px-3 py-2 text-sm"
-                value={preferences?.defaultLandingPath ?? ""}
-                disabled={!preferences || busy}
-                onChange={(event) => void handleLandingChange(event.target.value)}
-              >
-                <option value="">系统默认</option>
-                {landingOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="侧边栏默认状态">
-              <select
-                className="orf-control border px-3 py-2 text-sm"
-                value={sidebarPreference}
-                disabled={!preferences || busy}
-                onChange={(event) => void handleSidebarPreferenceChange(event.target.value)}
-              >
-                <option value="system">系统默认</option>
-                <option value="expanded">展开</option>
-                <option value="collapsed">折叠</option>
-              </select>
-            </Field>
-            <Field label="聊天界面主题">
-              <select
-                className="orf-control border px-3 py-2 text-sm"
-                value={preferences?.chatTheme ?? defaultChatTheme}
-                disabled={!preferences || busy}
-                onChange={(event) => void handleChatThemeChange(event.target.value as ChatTheme)}
-              >
-                {chatThemeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </Field>
-            <div className="grid gap-3 border-t pt-4 orf-border">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2 font-medium orf-text-primary">
-                  <Type className="h-4 w-4 shrink-0 orf-text-muted" aria-hidden="true" />
-                  <span>界面显示</span>
+          <Card className="orf-card-padding orf-personal-settings-preferences grid gap-4">
+            <div className="orf-personal-settings-card-heading">
+              <span>工作台偏好</span>
+              <small>入口、外观与本机体验</small>
+            </div>
+            {errorMessage && (
+              <div className="orf-settings-inline-error" role="alert">
+                <CircleAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+            <section className="orf-personal-settings-section orf-personal-settings-navigation-section">
+              <div className="orf-personal-settings-section-heading">
+                <span>启动与导航</span>
+                <small>只保留每天真正会用到的入口选择。</small>
+              </div>
+              <div className="orf-personal-settings-field-grid">
+                <Field label="默认进入页面">
+                  <select
+                    className="orf-control border px-3 py-2 text-sm"
+                    value={preferences?.defaultLandingPath ?? ""}
+                    disabled={!preferences || busy}
+                    onChange={(event) => void handleLandingChange(event.target.value)}
+                  >
+                    <option value="">系统默认</option>
+                    {landingOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="侧边栏默认状态">
+                  <select
+                    className="orf-control border px-3 py-2 text-sm"
+                    value={sidebarPreference}
+                    disabled={!preferences || busy}
+                    onChange={(event) => void handleSidebarPreferenceChange(event.target.value)}
+                  >
+                    <option value="system">系统默认</option>
+                    <option value="expanded">展开</option>
+                    <option value="collapsed">折叠</option>
+                  </select>
+                </Field>
+              </div>
+            </section>
+
+            <section className="orf-personal-settings-section orf-personal-settings-appearance-section">
+              <div className="orf-personal-settings-section-heading">
+                <span>外观与显示</span>
+                <small>明暗主题、字号和密度共享同一套内容结构。</small>
+              </div>
+              <Field label="全局外观">
+                <div className="orf-appearance-mode-picker" role="radiogroup" aria-label="全局亮色或暗色外观">
+                  {appearanceModeOptions.map((option) => {
+                    const Icon = option.icon;
+                    const selected = (preferences?.chatTheme ?? defaultAppearanceMode) === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className="orf-appearance-mode-option"
+                        data-selected={selected ? "true" : "false"}
+                        role="radio"
+                        aria-checked={selected}
+                        disabled={!preferences || busy}
+                        onClick={() => void handleAppearanceModeChange(option.value)}
+                      >
+                        <Icon className="h-4 w-4" aria-hidden="true" />
+                        <span>
+                          <strong>{option.label}</strong>
+                          <small>{option.description}</small>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
-                <Button type="button" variant="ghost" disabled={!preferences || busy} onClick={() => void handleResetDisplayPreferences()}>
-                  <RotateCcw className="h-4 w-4" />
-                  重置
-                </Button>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="工作台缩放">
-                  <select
-                    className="orf-control border px-3 py-2 text-sm"
-                    value={displayPreferences.workbenchZoomLevel}
-                    disabled={!preferences || busy}
-                    onChange={(event) => void handleDisplayPreferenceChange({ workbenchZoomLevel: Number(event.target.value) })}
-                  >
-                    {workbenchZoomOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="界面字号">
-                  <select
-                    className="orf-control border px-3 py-2 text-sm"
-                    value={displayPreferences.interfaceFontSize}
-                    disabled={!preferences || busy}
-                    onChange={(event) => void handleDisplayPreferenceChange({ interfaceFontSize: Number(event.target.value) })}
-                  >
-                    {interfaceFontSizeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="内容字号">
-                  <select
-                    className="orf-control border px-3 py-2 text-sm"
-                    value={displayPreferences.contentFontSize}
-                    disabled={!preferences || busy}
-                    onChange={(event) => void handleDisplayPreferenceChange({ contentFontSize: Number(event.target.value) })}
-                  >
-                    {contentFontSizeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="界面密度">
-                  <select
-                    className="orf-control border px-3 py-2 text-sm"
-                    value={displayPreferences.density}
-                    disabled={!preferences || busy}
-                    onChange={(event) => void handleDisplayPreferenceChange({ density: event.target.value as UserDisplayPreferences["density"] })}
-                  >
-                    {displayDensityOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
-              <label className="flex items-center justify-between gap-4 rounded-md border orf-border px-3 py-2">
-                <span className="flex min-w-0 items-center gap-2">
-                  <Contrast className="h-4 w-4 shrink-0 orf-text-muted" aria-hidden="true" />
-                  <span className="font-medium orf-text-primary">高对比度</span>
-                </span>
-                <input
-                  className="h-5 w-5 shrink-0 accent-[var(--orf-accent)]"
-                  type="checkbox"
-                  checked={displayPreferences.contrast === "high"}
-                  disabled={!preferences || busy}
-                  onChange={(event) => void handleDisplayPreferenceChange({ contrast: event.target.checked ? "high" : "default" })}
-                />
-              </label>
-            </div>
-            <div className="flex items-start gap-3 border-t pt-4 orf-border">
-              <Moon className="mt-0.5 h-4 w-4 shrink-0 orf-text-muted" aria-hidden="true" />
-              <div>
-                <div className="font-medium orf-text-primary">聊天独立配色</div>
-                <div className="mt-1 text-sm orf-text-secondary">只影响聊天页的侧栏、消息区、输入框和聊天浮层，不改变其他页面皮肤。</div>
-              </div>
-            </div>
-            <label className="flex items-center justify-between gap-4 border-t pt-4 orf-border">
-              <span>
-                <span className="block font-medium orf-text-primary">Toast 通知</span>
-                <span className="block text-sm orf-text-secondary">当前用户的页面提示。</span>
-              </span>
-              <input
-                className="h-5 w-5 accent-[var(--orf-accent)]"
-                type="checkbox"
-                checked={preferences?.notificationDisplay.toastEnabled ?? true}
-                disabled={!preferences || busy}
-                onChange={(event) => void savePreferencePatch({ notificationDisplay: { toastEnabled: event.target.checked } })}
-              />
-            </label>
-            <div className="flex items-center justify-between gap-4 border-t pt-4 orf-border">
-              <span>
-                <span className="block font-medium orf-text-primary">系统通知</span>
-                <span className="block text-sm orf-text-secondary">Windows / Android 客户端</span>
-              </span>
-              <Button type="button" variant="secondary" disabled={notificationTestStatus === "loading"} onClick={() => void handleNativeNotificationTest()}>
-                {notificationTestStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}
-                测试
-              </Button>
-            </div>
-            <label className="flex items-center justify-between gap-4 border-t pt-4 orf-border">
-              <span className="flex min-w-0 items-start gap-3">
-                <Power className="mt-0.5 h-4 w-4 shrink-0 orf-text-muted" aria-hidden="true" />
-                <span className="min-w-0">
-                  <span className="block font-medium orf-text-primary">开机自启</span>
-                  <span className="block text-sm orf-text-secondary">
-                    {launchAtLoginDescription}
+              </Field>
+              <div className="orf-personal-settings-display-block">
+                <div className="orf-personal-settings-display-heading">
+                  <div>
+                    <Type className="h-4 w-4 shrink-0 orf-text-muted" aria-hidden="true" />
+                    <span>界面显示</span>
+                  </div>
+                  <Button type="button" variant="ghost" disabled={!preferences || busy} onClick={() => void handleResetDisplayPreferences()}>
+                    <RotateCcw className="h-4 w-4" />
+                    重置
+                  </Button>
+                </div>
+                <div className="orf-personal-settings-field-grid orf-personal-settings-display-grid">
+                  <Field label="工作台缩放">
+                    <select
+                      className="orf-control border px-3 py-2 text-sm"
+                      value={displayPreferences.workbenchZoomLevel}
+                      disabled={!preferences || busy}
+                      onChange={(event) => void handleDisplayPreferenceChange({ workbenchZoomLevel: Number(event.target.value) })}
+                    >
+                      {workbenchZoomOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="界面字号">
+                    <select
+                      className="orf-control border px-3 py-2 text-sm"
+                      value={displayPreferences.interfaceFontSize}
+                      disabled={!preferences || busy}
+                      onChange={(event) => void handleDisplayPreferenceChange({ interfaceFontSize: Number(event.target.value) })}
+                    >
+                      {interfaceFontSizeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="内容字号">
+                    <select
+                      className="orf-control border px-3 py-2 text-sm"
+                      value={displayPreferences.contentFontSize}
+                      disabled={!preferences || busy}
+                      onChange={(event) => void handleDisplayPreferenceChange({ contentFontSize: Number(event.target.value) })}
+                    >
+                      {contentFontSizeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="界面密度">
+                    <select
+                      className="orf-control border px-3 py-2 text-sm"
+                      value={displayPreferences.density}
+                      disabled={!preferences || busy}
+                      onChange={(event) => void handleDisplayPreferenceChange({ density: event.target.value as UserDisplayPreferences["density"] })}
+                    >
+                      {displayDensityOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+                <label className="orf-personal-settings-toggle-row">
+                  <span>
+                    <Contrast className="h-4 w-4 shrink-0 orf-text-muted" aria-hidden="true" />
+                    <span>高对比度</span>
                   </span>
-                </span>
-              </span>
-              <input
-                className="h-5 w-5 shrink-0 accent-[var(--orf-accent)]"
-                type="checkbox"
-                checked={launchAtLoginState?.enabled ?? false}
-                disabled={launchAtLoginDisabled}
-                onChange={(event) => void handleLaunchAtLoginChange(event.target.checked)}
-              />
-            </label>
-            {errorMessage && <div className="orf-settings-inline-error">{errorMessage}</div>}
+                  <input
+                    className="orf-preference-switch shrink-0"
+                    type="checkbox"
+                    checked={displayPreferences.contrast === "high"}
+                    disabled={!preferences || busy}
+                    onChange={(event) => void handleDisplayPreferenceChange({ contrast: event.target.checked ? "high" : "default" })}
+                  />
+                </label>
+              </div>
+              <div className="orf-personal-settings-theme-note">
+                <Moon className="h-4 w-4 shrink-0 orf-text-muted" aria-hidden="true" />
+                <div>
+                  <div className="font-medium orf-text-primary">统一前景皮肤</div>
+                  <div className="text-sm orf-text-secondary">文字、图标、按钮、状态色和玻璃材质会在所有页面同步切换；背景图片保持独立。</div>
+                </div>
+              </div>
+            </section>
+
+            <section className="orf-personal-settings-section orf-personal-settings-notification-section">
+              <div className="orf-personal-settings-section-heading">
+                <span>通知与客户端</span>
+                <small>只在需要你行动时提高视觉优先级。</small>
+              </div>
+              <div className="orf-personal-settings-notification-grid">
+                <label className="orf-personal-settings-setting-row">
+                  <span>
+                    <span className="block font-medium orf-text-primary">Toast 通知</span>
+                    <span className="block text-sm orf-text-secondary">当前用户的页面提示。</span>
+                  </span>
+                  <input
+                    className="orf-preference-switch shrink-0"
+                    type="checkbox"
+                    checked={preferences?.notificationDisplay.toastEnabled ?? true}
+                    disabled={!preferences || busy}
+                    onChange={(event) => void savePreferencePatch({ notificationDisplay: { toastEnabled: event.target.checked } })}
+                  />
+                </label>
+                <div className="orf-personal-settings-setting-row">
+                  <span>
+                    <span className="block font-medium orf-text-primary">系统通知</span>
+                    <span className="block text-sm orf-text-secondary">Windows / Android 客户端</span>
+                  </span>
+                  <Button type="button" variant="secondary" disabled={notificationTestStatus === "loading"} onClick={() => void handleNativeNotificationTest()}>
+                    {notificationTestStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}
+                    测试
+                  </Button>
+                </div>
+                <label className="orf-personal-settings-setting-row">
+                  <span className="flex min-w-0 items-start gap-3">
+                    <Power className="mt-0.5 h-4 w-4 shrink-0 orf-text-muted" aria-hidden="true" />
+                    <span className="min-w-0">
+                      <span className="block font-medium orf-text-primary">开机自启</span>
+                      <span className="block text-sm orf-text-secondary">{launchAtLoginDescription}</span>
+                    </span>
+                  </span>
+                  <input
+                    className="orf-preference-switch shrink-0"
+                    type="checkbox"
+                    checked={launchAtLoginState?.enabled ?? false}
+                    disabled={launchAtLoginDisabled}
+                    onChange={(event) => void handleLaunchAtLoginChange(event.target.checked)}
+                  />
+                </label>
+              </div>
+            </section>
           </Card>
         </div>
 

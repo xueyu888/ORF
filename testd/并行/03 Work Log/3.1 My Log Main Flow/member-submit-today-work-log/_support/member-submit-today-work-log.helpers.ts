@@ -56,7 +56,7 @@ export async function selectWorkLogObjective(page: Page, objectiveTitle: string)
   await workLogClassificationControl(page).click();
   await page.getByLabel("搜索日志归类", { exact: true }).fill(objectiveTitle);
   await page
-    .locator(".orf-fantasy-select-option")
+    .locator(".orf-select-option")
     .filter({ hasText: objectiveTitle })
     .first()
     .click();

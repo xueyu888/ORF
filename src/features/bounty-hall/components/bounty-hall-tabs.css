@@ -1,0 +1,105 @@
+/* The status rail is owned by BountyHallTabs. Keep its shape and states out of
+   the page skin so the component has one visual contract in every theme. */
+.bounty-hall-tabs {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+  scrollbar-width: none;
+  scroll-padding-inline: 4px;
+}
+
+.bounty-hall-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.bounty-hall-tab {
+  min-height: 34px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--orf-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: var(--orf-type-label-weight, 560);
+  line-height: 1;
+  padding: 0 10px;
+  white-space: nowrap;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease;
+}
+
+.bounty-hall-tab:is(:hover, :focus-visible) {
+  border-color: var(--orf-border);
+  background: var(--orf-surface-control-solid-hover);
+  color: var(--orf-text-primary);
+}
+
+.bounty-hall-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--orf-accent) 52%, transparent);
+  outline-offset: 2px;
+}
+
+.bounty-hall-tab[data-active="true"] {
+  border-color: var(--orf-accent-border);
+  background: color-mix(in srgb, var(--orf-surface-panel) 92%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--orf-text-primary) 8%, transparent);
+  color: var(--orf-accent-text);
+}
+
+.bounty-hall-tab strong {
+  min-width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orf-text-primary) 7%, transparent);
+  color: var(--orf-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0 6px;
+}
+
+.bounty-hall-tab[data-active="true"] strong {
+  background: var(--orf-accent-soft);
+  color: var(--orf-accent-text);
+}
+
+@media (max-width: 720px) {
+  .bounty-hall-tabs {
+    gap: 3px;
+    padding: 4px;
+  }
+
+  .bounty-hall-tab {
+    min-height: 38px;
+    gap: 5px;
+    padding-inline: 11px;
+    font-size: 12px;
+  }
+
+  .bounty-hall-tab strong {
+    min-width: 18px;
+    height: 18px;
+    padding-inline: 5px;
+    font-size: 10px;
+  }
+}

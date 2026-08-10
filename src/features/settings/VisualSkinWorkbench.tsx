@@ -19,14 +19,18 @@ import {
   defaultVisualBackgroundConfig,
   defaultVisualBackgroundCrop,
   normalizeVisualBackgroundCrop,
-  normalizeVisualBackgroundOverlayOpacity,
   visualBackgroundCropLimits,
-  visualBackgroundOverlayLimits,
+  visualMaterialExposureLimits,
   type VisualBackgroundConfig,
   type VisualBackgroundCrop,
+  type VisualMaterialPreferences,
   type PageVisualBackgroundScene,
   type VisualBackgroundScene,
 } from "../../domain/settings/visualBackgrounds";
+import { readCachedAppearanceMode } from "../appearance/appearanceMode";
+import { VisualMaterialLayer } from "../appearance/material/VisualMaterialLayer";
+import { useAdaptiveMaterial } from "../appearance/material/useAdaptiveMaterial";
+import type { PersistentMaterialRole } from "../appearance/material/materialTokens";
 import { readModelInvalidationKey } from "../realtime/readModelInvalidations";
 import {
   deletePersonalBackground,
@@ -72,8 +76,6 @@ function backgroundSourceInfo(id: string) {
   const [sceneRaw, scopeRaw] = decodedId.split("/");
   const slotLabel = sceneRaw === "app_background"
     ? "旧版外壳"
-    : sceneRaw === "page_chat_background"
-      ? "旧聊天页"
     : visualSkinSlots.find((item) => item.scene === sceneRaw)?.label ?? "未知槽位";
   const scopeLabel = scopeRaw === "personal"
     ? "个人图库"
@@ -103,7 +105,7 @@ function cropFromConfig(config: VisualBackgroundConfig, imageId: string | null |
 function configWithCrop(config: VisualBackgroundConfig, imageId: string, crop: VisualBackgroundCrop): VisualBackgroundConfig {
   return {
     ...config,
-    version: 2,
+    version: 3,
     fitMode: "cover-crop",
     fixedBackgroundId: imageId,
     crops: {
@@ -113,10 +115,13 @@ function configWithCrop(config: VisualBackgroundConfig, imageId: string, crop: V
   };
 }
 
-function configWithOverlayOpacity(config: VisualBackgroundConfig, overlayOpacity: number): VisualBackgroundConfig {
+function configWithMaterial(config: VisualBackgroundConfig, material: Partial<VisualMaterialPreferences>): VisualBackgroundConfig {
   return {
     ...config,
-    overlayOpacity: normalizeVisualBackgroundOverlayOpacity(overlayOpacity),
+    material: {
+      ...config.material,
+      ...material,
+    },
   };
 }
 
@@ -153,6 +158,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
   const [deleteStatus, setDeleteStatus] = useState<RequestStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pageTargetScenes, setPageTargetScenes] = useState<PageVisualBackgroundScene[]>([]);
+  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
 
   const slot = visualSkinSlotByScene(scene);
   const selectedBackground = backgroundList.find((background) => background.id === selectedBackgroundId) ?? null;
@@ -169,7 +175,9 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
         draftConfig.switchTrigger !== data.config.switchTrigger ||
         draftConfig.switchOrder !== data.config.switchOrder ||
         draftConfig.switchIntervalMinutes !== data.config.switchIntervalMinutes ||
-        draftConfig.overlayOpacity !== data.config.overlayOpacity ||
+        draftConfig.material.tone !== data.config.material.tone ||
+        draftConfig.material.exposure !== data.config.material.exposure ||
+        draftConfig.material.reduceTransparency !== data.config.material.reduceTransparency ||
         !cropEquals(draftCrop, persistedCrop)),
   );
   const busy = loadStatus === "loading" || saveStatus === "loading" || uploadStatus === "loading" || deleteStatus === "loading";
@@ -265,7 +273,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
     const nextConfig = configWithCrop(
       {
         ...draftConfig,
-        version: 2,
+        version: 3,
         fitMode: "cover-crop",
         switchIntervalMinutes: clamp(draftConfig.switchIntervalMinutes, 1, 1440),
       },
@@ -377,12 +385,19 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
     setDraftConfig((current) => ({ ...current, switchIntervalMinutes: clamp(value, 1, 1440) }));
   };
 
-  const setOverlayOpacity = (value: number) => {
-    setDraftConfig((current) => configWithOverlayOpacity(current, value));
+  const setMaterial = (material: Partial<VisualMaterialPreferences>) => {
+    setDraftConfig((current) => configWithMaterial(current, material));
   };
 
   return (
     <section className="orf-skin-workbench" data-scope={scope}>
+      <header className="orf-skin-workbench-heading">
+        <div>
+          <span>{scope === "system" ? "系统视觉" : "个性化背景"}</span>
+          <h2>背景工作台</h2>
+        </div>
+        <p>为登录、导航和业务页面分别配置背景；界面材质与明暗外观保持统一。</p>
+      </header>
       <aside className="orf-skin-slot-rail" aria-label="皮肤槽位">
         {groupedSlots.map(([group, items]) => (
           <div className="orf-skin-slot-group" key={group}>
@@ -437,12 +452,23 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
           <VisualSkinPreview
             crop={draftCrop}
             image={selectedBackground}
-            overlayOpacity={draftConfig.overlayOpacity}
+            materialPreferences={draftConfig.material}
             previewShape={slot.previewShape}
             onCropChange={updateCrop}
           />
 
-          <div className="orf-skin-inspector">
+          <button
+            type="button"
+            className="orf-skin-mobile-inspector-toggle"
+            aria-controls="orf-skin-inspector"
+            aria-expanded={mobileInspectorOpen}
+            onClick={() => setMobileInspectorOpen((open) => !open)}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            <span>{mobileInspectorOpen ? "收起精细调整" : "位置、材质与切换"}</span>
+          </button>
+
+          <div id="orf-skin-inspector" className="orf-skin-inspector" data-mobile-open={mobileInspectorOpen ? "true" : "false"}>
             {isPageSlot && (
               <div className="orf-skin-inspector-section">
                 <div className="orf-skin-inspector-title">
@@ -553,16 +579,33 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
             <div className="orf-skin-inspector-section">
               <div className="orf-skin-inspector-title">
                 <SlidersHorizontal className="h-4 w-4" />
-                <span>蒙层</span>
+                <span>自适应材质</span>
               </div>
+              <SegmentedControl
+                value={draftConfig.material.tone}
+                options={[
+                  { label: "自动", value: "auto" },
+                  { label: "柔亮", value: "soft-light" },
+                  { label: "柔暗", value: "soft-dark" },
+                ]}
+                onChange={(value) => setMaterial({ tone: value as VisualMaterialPreferences["tone"] })}
+              />
               <SkinSlider
-                label="强度"
-                max={visualBackgroundOverlayLimits.opacityMax}
-                min={visualBackgroundOverlayLimits.opacityMin}
+                label="背景生命力"
+                max={visualMaterialExposureLimits.max}
+                min={visualMaterialExposureLimits.min}
                 step={0.01}
-                value={draftConfig.overlayOpacity}
+                value={draftConfig.material.exposure}
                 format={(value) => `${Math.round(value * 100)}%`}
-                onChange={setOverlayOpacity}
+                onChange={(value) => setMaterial({ exposure: value })}
+              />
+              <SegmentedControl
+                value={draftConfig.material.reduceTransparency ? "reduced" : "adaptive"}
+                options={[
+                  { label: "自适应", value: "adaptive" },
+                  { label: "减少透明", value: "reduced" },
+                ]}
+                onChange={(value) => setMaterial({ reduceTransparency: value === "reduced" })}
               />
             </div>
 
@@ -669,14 +712,14 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
 function VisualSkinPreview({
   crop,
   image,
+  materialPreferences,
   onCropChange,
-  overlayOpacity,
   previewShape,
 }: {
   crop: VisualBackgroundCrop;
   image: VisualBackgroundImage | null;
+  materialPreferences: VisualMaterialPreferences;
   onCropChange: (crop: VisualBackgroundCrop) => void;
-  overlayOpacity: number;
   previewShape: VisualSkinPreviewShape;
 }) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
@@ -685,6 +728,17 @@ function VisualSkinPreview({
   const frameRatio = useRuntimePreviewFrameRatio(previewShape);
   const surfaceSize = useElementSize(surfaceRef);
   const [sourceImageSize, setSourceImageSize] = useState<{ width: number; height: number } | null>(null);
+  const previewFrameBox = visualSkinPreviewFrameBox(previewShape, frameRatio, surfaceSize);
+  const previewRole = previewMaterialRole(previewShape);
+  const previewMaterial = useAdaptiveMaterial({
+    appearance: readCachedAppearanceMode(),
+    crop,
+    highContrast: document.documentElement.dataset.orfDisplayContrast === "high",
+    imageUrl: image?.url ?? null,
+    preferences: materialPreferences,
+    role: previewRole,
+    viewport: previewFrameBox.box ?? { width: 640, height: 360 },
+  });
 
   useEffect(() => {
     setSourceImageSize(null);
@@ -755,11 +809,7 @@ function VisualSkinPreview({
     }
   };
 
-  const previewFrameBox = visualSkinPreviewFrameBox(previewShape, frameRatio, surfaceSize);
-  const previewFrameStyle = {
-    ...previewFrameBox.style,
-    "--orf-skin-preview-overlay-opacity": overlayOpacity,
-  } as CSSProperties;
+  const previewFrameStyle = previewFrameBox.style as CSSProperties;
   const imageLayerStyle = sourceImageSize
     ? visualSkinPreviewImageLayerStyle(crop, sourceImageSize.width / Math.max(1, sourceImageSize.height), previewFrameBox.box, surfaceSize)
     : ({ opacity: 0 } as CSSProperties);
@@ -801,11 +851,17 @@ function VisualSkinPreview({
           style={previewFrameStyle}
           aria-hidden="true"
         >
-          <span className="orf-skin-preview-frame-overlay" aria-hidden="true" />
+          <VisualMaterialLayer className="orf-skin-preview-material" material={previewMaterial} role={previewRole} />
         </div>
       </div>
     </div>
   );
+}
+
+function previewMaterialRole(previewShape: VisualSkinPreviewShape): PersistentMaterialRole {
+  if (previewShape === "sidebar") return "sidebar";
+  if (previewShape === "topbar") return "topbar";
+  return "workspace";
 }
 
 type ElementSize = {

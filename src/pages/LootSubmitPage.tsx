@@ -1,7 +1,8 @@
 import { ArrowLeft, CheckCircle2, Circle, ClipboardCheck, Send, XCircle } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { FantasySelectMenu, type FantasySelectOption } from "../components/FantasySelectMenu";
+import { SelectMenu, type SelectOption } from "../components/SelectMenu";
+import { useConfirmDialog } from "../components/ConfirmDialog";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, Field, actionButtonClassName } from "../components/ui";
 import {
@@ -74,14 +75,14 @@ import type {
 import { localDateString } from "../utils/date";
 import { canSubmitObjectivePeerReview } from "../features/challenge/model/orfFlowCapabilities";
 
-const resultReviewOptions: Array<FantasySelectOption<ResultAcceptedResult>> = [
+const resultReviewOptions: Array<SelectOption<ResultAcceptedResult>> = [
   { label: "完成", value: "completed" },
   { label: "证伪", value: "falsified" },
   { label: "失败", value: "failed" },
   { label: "不验收", value: "unreviewed" },
 ];
 
-const trialDecisionOptions: Array<FantasySelectOption<Exclude<ObjectiveTrialReviewStatus, "requested">>> = [
+const trialDecisionOptions: Array<SelectOption<Exclude<ObjectiveTrialReviewStatus, "requested">>> = [
   { label: "可正式提交", value: "approved" },
   { label: "需补充", value: "needsWork" },
 ];
@@ -129,15 +130,21 @@ function InactiveLootActionPanel({
   ) ?? [];
 
   return (
-    <Card className="orf-card-padding">
-      <div className="grid gap-4 text-sm">
-        <div className="grid gap-1">
-          <div className="font-semibold orf-text-primary">当前处理状态</div>
-          <div className="orf-text-secondary">{message}</div>
+    <Card className="orf-loot-inactive-panel orf-card-padding">
+      <div className="orf-loot-inactive-content">
+        <div className="orf-loot-inactive-state">
+          <span className="orf-loot-inactive-icon" aria-hidden="true">
+            <ClipboardCheck />
+          </span>
+          <div>
+            <div className="orf-loot-eyebrow">当前阶段</div>
+            <h2>暂时无需处理</h2>
+            <p>{message}</p>
+          </div>
         </div>
 
         {latestLoot && (
-          <div className="rounded-md border orf-border p-3">
+          <div className="orf-loot-inactive-history">
             <div className="text-xs font-semibold orf-text-muted">最近正式提交</div>
             <div className="mt-1 orf-text-primary">{latestLoot.submittedBy} · {formatSummaryTime(latestLoot.submittedAt)}</div>
             <div className="mt-2 whitespace-pre-wrap orf-text-secondary">{latestLoot.body}</div>
@@ -145,7 +152,7 @@ function InactiveLootActionPanel({
         )}
 
         {latestAcceptanceReview && (
-          <div className="rounded-md border orf-border p-3">
+          <div className="orf-loot-inactive-history">
             <div className="text-xs font-semibold orf-text-muted">最近验收结果</div>
             <div className="mt-1 orf-text-primary">
               {objectiveAcceptanceReviewLabel(latestAcceptanceReview.acceptedResult)} · {formatSummaryTime(latestAcceptanceReview.reviewedAt)}
@@ -171,7 +178,7 @@ function InactiveLootActionPanel({
         )}
 
         {currentSettlementEvent && (
-          <div className="rounded-md border orf-border p-3">
+          <div className="orf-loot-inactive-history">
             <div className="text-xs font-semibold orf-text-muted">已完成结算事件</div>
             <div className="mt-1 orf-text-primary">
               {settlementEventLabel(currentSettlementEvent.kind)} · {formatSummaryTime(currentSettlementEvent.createdAt)}
@@ -272,6 +279,7 @@ function emptyContributionReviewDraft(input: {
 }
 
 export function LootSubmitPage() {
+  const confirm = useConfirmDialog();
   const { objectiveId } = useParams();
   const navigate = useNavigate();
   const {
@@ -997,15 +1005,17 @@ export function LootSubmitPage() {
       defaultSettlementEventPlan &&
       selectedSettlementEventPlan
     ) {
-      const confirmed = window.confirm(
-        fullCompletionMultiplierConfirmMessage({
+      const confirmed = await confirm({
+        title: "确认结算倍率",
+        description: fullCompletionMultiplierConfirmMessage({
           defaultPlan: defaultSettlementEventPlan,
           finalDueAt: objective.finalDueAt,
           lootSubmittedAt: latestLoot.submittedAt,
           selectedMode: settlementMultiplierMode,
           selectedPlan: selectedSettlementEventPlan,
         }),
-      );
+        confirmLabel: "继续结算",
+      });
       if (!confirmed) return;
     }
 
@@ -1101,21 +1111,22 @@ export function LootSubmitPage() {
     : settlementReviewWindow.reason === "deadlinePending"
       ? "目标仍在返工期内；到达截止日后才会开放逾期惩罚互评和结算。"
       : "当前状态没有可提交的验收动作。";
+  const pageTitle = canReview
+    ? "验收战利品"
+    : canSettle
+      ? "确认结算"
+      : canReviewTrial
+        ? "处理试验收"
+        : canPeerReview
+          ? "提交匿名互评"
+          : canSubmit
+            ? "提交战利品"
+            : "战利品进度";
 
   return (
     <PageScaffold
-      title={
-        canReview
-          ? "验收战利品"
-          : canSettle
-            ? "确认结算"
-            : canReviewTrial
-              ? "处理试验收"
-              : canPeerReview
-                ? "提交匿名互评"
-                : "提交战利品"
-      }
-      subtitle={`目标：${objective.title}`}
+      title={pageTitle}
+      subtitle="查看目标提交、验收与结算进度。"
       action={
         <Link
           className={actionButtonClassName({ variant: "secondary" })}
@@ -1127,13 +1138,19 @@ export function LootSubmitPage() {
       }
     >
       <div className="orf-loot-page-grid">
-        <Card className="orf-card-padding">
-          <div className="grid gap-2">
-            <div className="text-xs font-medium orf-text-muted">
-              悬赏目标标题
-            </div>
-            <div className="rounded-md border orf-border orf-surface-muted px-3 py-2 text-sm font-semibold orf-text-primary">
-              {objective.title}
+        <Card className="orf-loot-context-card orf-card-padding">
+          <div className="orf-loot-context-main">
+            <div className="orf-loot-eyebrow">当前目标</div>
+            <h2>{objective.title}</h2>
+            <div className="orf-loot-context-meta">
+              <span>
+                <Circle aria-hidden="true" />
+                {results.length} 个验收指标
+              </span>
+              <span>
+                <ClipboardCheck aria-hidden="true" />
+                {pageTitle}
+              </span>
             </div>
           </div>
         </Card>
@@ -1385,7 +1402,7 @@ export function LootSubmitPage() {
               }}
             >
               <Field label="试验收结论">
-                <FantasySelectMenu
+                <SelectMenu
                   ariaLabel="试验收结论"
                   className="orf-loot-select"
                   onChange={(value) => setTrialDecision(value)}
@@ -1919,7 +1936,7 @@ function ResultReviewTable({
                   </div>
                 </td>
                 <td className="px-3 py-2">
-                  <FantasySelectMenu
+                  <SelectMenu
                     ariaLabel={`${result.title} 验收结论`}
                     className="orf-loot-select orf-loot-table-select"
                     onChange={(value) => onChange(result.id, value)}

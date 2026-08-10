@@ -1,17 +1,19 @@
 import { clsx } from "clsx";
 import { Bookmark, CheckCheck, ChevronDown, ChevronUp, Copy, Edit3, EyeOff, FileText, Link as LinkIcon, type LucideIcon, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
-import { type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatPastedFeedbackLinks } from "@orf/feedback-module/contracts";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
+import { chatFloatingLayerRoot } from "./chatFloatingLayer";
 import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";
 import { ChatMarkdown, commentImageAttachmentIdsFromChatSystemMetadata } from "./chatMarkdown";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
 import { ChatReactionEmoji } from "./ChatReactionEmoji";
 import { ChatReactionPicker } from "./ChatReactionPicker";
+import { chatMobileViewportQuery } from "./useChatMobileViewport";
 import { canonicalChatReactionName, isVisibleChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
 import { ChatDraftEditor } from "./ChatDraftEditor";
 import { chatMessageSendStatus, draftFromStoredBody, serializeDraft, type ChatDraft, type ChatFeedbackReference } from "./chatModels";
@@ -273,11 +275,6 @@ function AttachmentGrid({
   );
 }
 
-function chatFloatingLayerRoot() {
-  if (typeof document === "undefined") return null;
-  return document.querySelector<HTMLElement>(".orf-app-shell[data-chat-page='true']") ?? document.body;
-}
-
 function ChatMessageMoreMenu({
   actions,
   anchorRef,
@@ -317,14 +314,17 @@ function ChatMessageMoreMenu({
     const panelRect = panelRef.current?.getBoundingClientRect();
     const panelWidth = panelRect?.width ?? 180;
     const panelHeight = panelRect?.height ?? Math.min(320, actions.length * 32 + 8);
-    const rawTopbarHeight = window.getComputedStyle(document.documentElement).getPropertyValue("--orf-topbar-height");
-    const topbarHeight = Number.parseFloat(rawTopbarHeight);
-    const safeTop = Number.isFinite(topbarHeight) ? topbarHeight + viewportPadding : viewportPadding;
+    const topbarBottom = document.querySelector<HTMLElement>(".orf-topbar")?.getBoundingClientRect().bottom ?? 0;
+    const bottomNavigationTop = document.querySelector<HTMLElement>(".orf-mobile-bottom-nav")?.getBoundingClientRect().top ?? window.innerHeight;
+    const safeTop = Math.max(viewportPadding, topbarBottom + viewportPadding);
+    const safeBottom = Math.min(window.innerHeight - viewportPadding, bottomNavigationTop - viewportPadding);
     const belowTop = anchorRect.bottom + gap;
     const aboveTop = anchorRect.top - panelHeight - gap;
-    const hasEnoughBelow = belowTop + panelHeight <= window.innerHeight - viewportPadding;
-    const preferredTop = hasEnoughBelow ? belowTop : aboveTop;
-    const maxTop = Math.max(safeTop, window.innerHeight - panelHeight - viewportPadding);
+    const hasEnoughBelow = belowTop + panelHeight <= safeBottom;
+    const mobileViewport = window.matchMedia(chatMobileViewportQuery).matches;
+    const hasEnoughAbove = aboveTop >= safeTop;
+    const preferredTop = mobileViewport && hasEnoughAbove ? aboveTop : hasEnoughBelow ? belowTop : aboveTop;
+    const maxTop = Math.max(safeTop, safeBottom - panelHeight);
     const top = Math.max(safeTop, Math.min(preferredTop, maxTop));
     const maxLeft = Math.max(viewportPadding, window.innerWidth - panelWidth - viewportPadding);
     const left = Math.max(viewportPadding, Math.min(anchorRect.right - panelWidth, maxLeft));
@@ -504,11 +504,15 @@ export function ChatMessageItem({
 
   useEffect(() => {
     if (!reactionPickerSignal || !canUseServerActions || editing) return;
+    setMoreOpen(false);
     setEmojiOpen(true);
   }, [canUseServerActions, editing, reactionPickerSignal]);
 
   useEffect(() => {
-    if (editing || !canUseServerActions) setMoreOpen(false);
+    if (editing || !canUseServerActions) {
+      setEmojiOpen(false);
+      setMoreOpen(false);
+    }
   }, [canUseServerActions, editing]);
 
   const selectReaction = (emojiName: string) => {
@@ -563,14 +567,28 @@ export function ChatMessageItem({
   }, [focusMoreButton]);
   const openMoreMenu = useCallback((initialFocus: "first" | "last" = "first") => {
     moreMenuInitialFocusRef.current = initialFocus;
+    setEmojiOpen(false);
     setMoreOpen(true);
   }, []);
-  const toggleMoreMenu = () => {
+  const toggleEmojiPicker = useCallback(() => {
+    setMoreOpen(false);
+    setEmojiOpen((open) => !open);
+  }, []);
+  const openEmojiPicker = useCallback(() => {
+    setMoreOpen(false);
+    setEmojiOpen(true);
+  }, []);
+  const toggleMoreMenu = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
     if (moreOpen) {
       closeMoreMenu();
       return;
     }
     openMoreMenu("first");
+  };
+  const handleMorePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (event.pointerType === "touch") event.preventDefault();
   };
   const handleMoreTriggerKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") {
@@ -627,13 +645,21 @@ export function ChatMessageItem({
       onSelect: () => onRequestAcknowledgement(message),
     } : null;
   const moreActions: ChatMessageMoreAction[] = [
+    {
+      icon: Smile,
+      id: "reaction",
+      label: "添加反应",
+      onSelect: openEmojiPicker,
+    },
     ...(acknowledgementAction ? [acknowledgementAction] : []),
+    copyMessageAction,
     {
       icon: LinkIcon,
       id: "copyLink",
       label: "复制消息链接",
       onSelect: () => onCopyLink(message),
     },
+    ...(saveAction ? [saveAction] : []),
     ...(canPin && onPin ? [{
       active: Boolean(message.pinnedAt),
       icon: Pin,
@@ -641,12 +667,14 @@ export function ChatMessageItem({
       label: message.pinnedAt ? "取消固定" : "固定消息",
       onSelect: () => onPin(message),
     }] : []),
+    ...(editAction ? [editAction] : []),
     ...(onMarkUnread ? [{
       icon: EyeOff,
       id: "markUnread",
       label: "从这里标记未读",
       onSelect: () => onMarkUnread(message),
     }] : []),
+    ...(deleteAction ? [deleteAction] : []),
   ];
   const hasMoreActions = moreActions.length > 0;
   const referenceCard = !message.deletedAt && !editing ? renderReferenceCard?.(message) : null;
@@ -661,8 +689,8 @@ export function ChatMessageItem({
         onThread && "orf-chat-message-threadable",
         message.pinnedAt && "orf-chat-message-pinned",
         focused && "orf-chat-message-focused",
-        emojiOpen && "orf-chat-message-actions-open",
-        moreOpen && "orf-chat-message-actions-open",
+        emojiOpen && "orf-chat-message-actions-open orf-chat-message-emoji-open",
+        moreOpen && "orf-chat-message-actions-open orf-chat-message-more-open",
         sendStatus === "failed" && "orf-chat-message-failed",
       )}
       data-chat-message-id={message.id}
@@ -819,41 +847,11 @@ export function ChatMessageItem({
             </button>
           ))}
           <div className="orf-chat-message-action-anchor" ref={emojiAnchorRef}>
-            <IconButton icon={Smile} label="添加反应" onClick={() => setEmojiOpen((open) => !open)} />
+            <IconButton icon={Smile} label="添加反应" onClick={toggleEmojiPicker} />
             {emojiOpen && <ChatReactionPicker anchorRef={emojiAnchorRef} onClose={() => setEmojiOpen(false)} onSelect={selectReaction} />}
           </div>
           {onThread && !message.rootMessageId && (
             <IconButton icon={Reply} label={message.replyCount > 0 ? "打开回复" : "回复"} onClick={() => onThread(message.id, { focusComposer: true })} />
-          )}
-          <IconButton
-            className="orf-chat-message-primary-action"
-            icon={copyMessageAction.icon}
-            label={copyMessageAction.label}
-            onClick={copyMessageAction.onSelect}
-          />
-          {saveAction && (
-            <IconButton
-              className={clsx(saveAction.active && "orf-chat-message-action-active")}
-              icon={saveAction.icon}
-              label={saveAction.label}
-              onClick={saveAction.onSelect}
-            />
-          )}
-          {editAction && (
-            <IconButton
-              className="orf-chat-message-primary-action"
-              icon={editAction.icon}
-              label={editAction.label}
-              onClick={editAction.onSelect}
-            />
-          )}
-          {deleteAction && (
-            <IconButton
-              className="orf-chat-message-danger-action"
-              icon={deleteAction.icon}
-              label={deleteAction.label}
-              onClick={deleteAction.onSelect}
-            />
           )}
           {hasMoreActions && (
             <div className="orf-chat-message-more-anchor" ref={moreMenuRef} onKeyDown={handleMoreTriggerKeyDown}>
@@ -865,6 +863,7 @@ export function ChatMessageItem({
                 icon={MoreHorizontal}
                 label="更多操作"
                 onClick={toggleMoreMenu}
+                onPointerDown={handleMorePointerDown}
               />
               {moreOpen && (
                 <ChatMessageMoreMenu

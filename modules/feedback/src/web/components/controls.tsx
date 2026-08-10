@@ -41,9 +41,18 @@ export function FeedbackBadge({
   return <span className="feedback-badge" data-tone={tone}>{children}</span>;
 }
 
-export function FeedbackEmptyState({ description, title }: { description: string; title: string }) {
+export function FeedbackEmptyState({
+  description,
+  icon,
+  title,
+}: {
+  description: string;
+  icon?: ReactNode;
+  title: string;
+}) {
   return (
     <div className="feedback-empty-state">
+      {icon ? <span className="feedback-empty-state-icon" aria-hidden="true">{icon}</span> : null}
       <h2>{title}</h2>
       <p>{description}</p>
     </div>

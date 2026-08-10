@@ -1,0 +1,175 @@
+/* Adaptive material is a window-level optical system. Feature pages consume
+   its surface roles; they never create additional persistent blur layers. */
+
+:root {
+  --orf-material-content-container: rgba(246, 249, 248, 0.14);
+  --orf-material-content-primary: rgba(252, 253, 252, 0.64);
+  --orf-material-content-secondary: rgba(246, 249, 248, 0.48);
+  --orf-material-content-tertiary: rgba(238, 243, 242, 0.36);
+  --orf-material-content-control: rgba(255, 255, 255, 0.54);
+  --orf-material-content-control-hover: rgba(255, 255, 255, 0.74);
+  --orf-material-content-hairline: rgba(26, 42, 48, 0.16);
+  --orf-material-content-hairline-strong: rgba(26, 42, 48, 0.24);
+  --orf-material-content-shine: rgba(255, 255, 255, 0.72);
+  --orf-material-content-shadow: 0 18px 44px rgba(21, 45, 51, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.58);
+  --orf-material-content-shadow-soft: 0 10px 26px rgba(21, 45, 51, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --orf-material-floating: rgba(252, 253, 252, 0.9);
+  --orf-material-modal: rgba(249, 251, 250, 0.94);
+}
+
+html[data-orf-appearance="dark"] {
+  --orf-material-content-container: rgba(24, 29, 34, 0.18);
+  --orf-material-content-primary: rgba(24, 29, 34, 0.66);
+  --orf-material-content-secondary: rgba(30, 36, 42, 0.5);
+  --orf-material-content-tertiary: rgba(38, 45, 51, 0.38);
+  --orf-material-content-control: rgba(42, 49, 56, 0.56);
+  --orf-material-content-control-hover: rgba(52, 60, 68, 0.74);
+  --orf-material-content-hairline: rgba(205, 218, 225, 0.18);
+  --orf-material-content-hairline-strong: rgba(211, 224, 231, 0.28);
+  --orf-material-content-shine: rgba(225, 240, 244, 0.16);
+  --orf-material-content-shadow: 0 20px 48px rgba(0, 5, 9, 0.34), inset 0 1px 0 rgba(225, 240, 244, 0.12);
+  --orf-material-content-shadow-soft: 0 12px 30px rgba(0, 5, 9, 0.24), inset 0 1px 0 rgba(225, 240, 244, 0.1);
+  --orf-material-floating: rgba(25, 30, 36, 0.9);
+  --orf-material-modal: rgba(22, 27, 32, 0.94);
+}
+
+.orf-adaptive-material-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  overflow: hidden;
+  border: 0;
+  background:
+    linear-gradient(
+      180deg,
+      rgb(255 255 255 / var(--orf-material-border-light-opacity, 0.2)),
+      transparent 18%,
+      rgb(0 0 0 / var(--orf-material-border-dark-opacity, 0.12))
+    ),
+    color-mix(
+      in srgb,
+      var(--orf-material-tint, rgb(246 249 248)) var(--orf-material-tint-opacity, 56%),
+      transparent
+    );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / var(--orf-material-border-light-opacity, 0.2)),
+    inset 0 -1px 0 rgb(0 0 0 / var(--orf-material-border-dark-opacity, 0.12)),
+    0 18px 52px rgb(0 0 0 / var(--orf-material-shadow-opacity, 0.1));
+  -webkit-backdrop-filter:
+    blur(var(--orf-material-blur, 18px))
+    saturate(var(--orf-material-saturation, 1.08));
+  backdrop-filter:
+    blur(var(--orf-material-blur, 18px))
+    saturate(var(--orf-material-saturation, 1.08));
+  pointer-events: none;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    opacity 180ms ease;
+}
+
+.orf-adaptive-material-layer::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+  mix-blend-mode: soft-light;
+  opacity: var(--orf-material-noise-opacity, 0.012);
+}
+
+.orf-adaptive-material-layer[data-material-transparency="reduced"],
+.orf-adaptive-material-layer[data-material-transparency="fallback"] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.orf-sidebar-material,
+.orf-topbar-material {
+  position: absolute;
+  inset: 0;
+}
+
+.orf-workspace-material {
+  position: fixed;
+  inset: var(--orf-content-bg-top) 0 var(--orf-content-bg-bottom) var(--orf-content-bg-left);
+}
+
+.orf-skin-preview-material {
+  position: absolute;
+  inset: 0;
+}
+
+.orf-sidebar[data-material-content-tone="dark"] {
+  --orf-sidebar-divider: rgba(26, 46, 54, 0.14);
+  --orf-sidebar-icon: #213840;
+  --orf-sidebar-text: #15292f;
+  --orf-sidebar-text-muted: #587078;
+  --orf-sidebar-link-text: #294149;
+  --orf-sidebar-command-text: #15292f;
+  --orf-sidebar-control-bg: rgba(255, 255, 255, 0.4);
+  --orf-sidebar-control-hover-bg: rgba(255, 255, 255, 0.62);
+  --orf-sidebar-selected-bg: rgba(20, 126, 150, 0.15);
+  --orf-sidebar-hover-bg: rgba(255, 255, 255, 0.34);
+}
+
+.orf-sidebar[data-material-content-tone="light"] {
+  --orf-sidebar-divider: rgba(218, 237, 242, 0.14);
+  --orf-sidebar-icon: #edf8fa;
+  --orf-sidebar-text: #f3fafb;
+  --orf-sidebar-text-muted: #abc2ca;
+  --orf-sidebar-link-text: #e6f1f3;
+  --orf-sidebar-command-text: #f5fafb;
+}
+
+.orf-topbar[data-material-content-tone="dark"] {
+  --orf-text-primary: #172a31;
+  --orf-text-muted: #60747c;
+  --orf-topbar-border: rgba(27, 53, 62, 0.15);
+  --orf-topbar-control-bg: rgba(255, 255, 255, 0.46);
+  --orf-topbar-control-hover-bg: rgba(255, 255, 255, 0.68);
+  --orf-topbar-control-border: rgba(27, 53, 62, 0.16);
+  --orf-topbar-control-text: #263d45;
+  --orf-topbar-control-muted: #657a82;
+}
+
+.orf-topbar[data-material-content-tone="light"] {
+  --orf-text-primary: #f1f7f8;
+  --orf-text-muted: #a9bac1;
+  --orf-topbar-border: rgba(218, 235, 240, 0.14);
+  --orf-topbar-control-bg: rgba(10, 22, 30, 0.48);
+  --orf-topbar-control-hover-bg: rgba(13, 29, 39, 0.68);
+  --orf-topbar-control-border: rgba(206, 229, 235, 0.18);
+  --orf-topbar-control-text: #e4eff2;
+  --orf-topbar-control-muted: #9db0b8;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .orf-adaptive-material-layer {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .orf-adaptive-material-layer {
+    background: var(--orf-material-tint, rgb(246 249 248));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .orf-adaptive-material-layer {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .orf-adaptive-material-layer::after {
+    display: none;
+  }
+}

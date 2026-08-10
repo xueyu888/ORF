@@ -1,0 +1,421 @@
+/* Feedback scene material contract
+   --------------------------------
+   Feedback is an issue-response console: queues and lifecycle state stay
+   precise, while the surrounding material borrows colour and light from the
+   configured scene. Cards remain reading surfaces; capsules are reserved for
+   compact controls, filters, state and short actions. */
+.orf-app-shell[data-page-scene="page_feedback_background"] {
+  --orf-bg-page: transparent;
+  --feedback-signal: #d97745;
+  --feedback-signal-soft: rgba(217, 119, 69, 0.13);
+}
+
+html[data-orf-appearance="dark"] .orf-app-shell[data-page-scene="page_feedback_background"] {
+  --feedback-signal: #f09a68;
+  --feedback-signal-soft: rgba(240, 154, 104, 0.15);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"],
+.orf-app-shell[data-page-scene="page_feedback_background"]::before {
+  background: var(--orf-bg-app);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(.orf-shell-body, .orf-main-content) {
+  background: transparent;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .orf-feedback-workbench {
+  color: var(--orf-text-primary);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-issue-header,
+  .feedback-issue-detail-header,
+  .feedback-index-header,
+  .feedback-create-header
+) {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 16px;
+  border: 1px solid var(--orf-material-content-hairline);
+  border-radius: 18px;
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--orf-material-content-shine) 16%, transparent), transparent 42%),
+    var(--orf-material-content-tertiary);
+  padding: 13px 15px;
+  box-shadow: var(--orf-material-content-shadow-soft);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-issue-header,
+  .feedback-issue-detail-header,
+  .feedback-index-header,
+  .feedback-create-header
+)::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  border-radius: inherit;
+  background: linear-gradient(116deg, color-mix(in srgb, var(--feedback-signal-soft) 32%, transparent), transparent 34%);
+  pointer-events: none;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-issue-header > *,
+  .feedback-issue-detail-header > *,
+  .feedback-index-header > *,
+  .feedback-create-header > *
+) {
+  position: relative;
+  z-index: 1;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-issue-title-block h1,
+  .feedback-issue-detail-title-block h2,
+  .feedback-index-title-block h1,
+  .feedback-create-heading h1
+) {
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-button,
+  .feedback-transfer-trigger,
+  .feedback-mobile-filter-toggle,
+  .feedback-issue-state-button,
+  .feedback-select select,
+  .feedback-text-input input,
+  .feedback-issue-sidebar-input,
+  .feedback-create-sidebar-field select,
+  .feedback-create-title-field input
+) {
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 54%, var(--orf-workbench-hairline));
+  background: var(--orf-material-content-control);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 48%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-button,
+  .feedback-transfer-trigger,
+  .feedback-mobile-filter-toggle,
+  .feedback-issue-state-button
+):is(:hover, :focus-visible) {
+  border-color: var(--orf-accent-border);
+  background: color-mix(in srgb, var(--orf-material-content-control) 76%, var(--orf-accent-soft));
+  color: var(--orf-accent-text);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-button[data-variant="primary"] {
+  border-color: color-mix(in srgb, var(--orf-accent) 76%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--orf-accent) 92%, white 8%), var(--orf-accent-hover));
+  color: #f8ffff;
+  box-shadow: 0 9px 22px color-mix(in srgb, var(--orf-accent) 24%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-button[data-variant="primary"]:hover {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--orf-accent-hover) 88%, white 12%), var(--orf-accent-hover));
+  color: #fff;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-transfer-trigger {
+  border-color: var(--orf-accent-border);
+  background: color-mix(in srgb, var(--orf-material-content-control) 74%, var(--orf-accent-soft));
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--orf-accent) 13%, transparent), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 54%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-project-chat-panel,
+  .feedback-index-toolbar,
+  .feedback-label-list,
+  .feedback-create-editor-card,
+  .feedback-create-sidebar
+) {
+  border-color: var(--orf-material-content-hairline);
+  border-radius: 18px;
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--orf-material-content-shine) 14%, transparent), transparent 40%),
+    var(--orf-material-content-primary);
+  box-shadow: var(--orf-material-content-shadow);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page :is(
+  .feedback-issue-query-panel,
+  .feedback-issue-work-queue,
+  .feedback-issue-list
+) {
+  border-color: var(--orf-material-content-hairline);
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--orf-material-content-shine) 12%, transparent), transparent 40%),
+    var(--orf-material-content-primary);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-query-panel {
+  box-shadow: var(--orf-material-content-shadow);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-work-queue {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--orf-material-content-secondary) 72%, transparent), transparent 64%),
+    var(--orf-material-content-primary);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-list {
+  box-shadow: var(--orf-material-content-shadow);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-list-head {
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 48%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 52%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-state-button[data-active="true"] {
+  border-color: var(--orf-accent-border);
+  background: color-mix(in srgb, var(--orf-material-content-control) 68%, var(--orf-accent-soft));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--orf-accent) 12%, transparent), inset 0 1px 0 var(--orf-material-content-shine);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-row {
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 42%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 72%, transparent);
+  transition: background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-row:is(:hover, :focus-visible) {
+  position: relative;
+  z-index: 1;
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 68%, var(--orf-accent-soft));
+  box-shadow: inset 3px 0 0 var(--orf-accent), 0 10px 24px color-mix(in srgb, var(--orf-text-primary) 8%, transparent);
+  outline: 0;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-row[data-requires-action="true"] {
+  box-shadow: inset 3px 0 0 var(--feedback-signal);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-row[data-unread="true"] {
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 70%, var(--orf-accent-soft));
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-row-unread-dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--orf-accent-soft) 80%, transparent), 0 0 14px color-mix(in srgb, var(--orf-accent) 42%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(
+  .feedback-issue-list,
+  .feedback-label-list
+) > .feedback-empty-state {
+  min-height: 154px;
+  justify-items: center;
+  place-content: center;
+  border: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--orf-accent-soft) 54%, transparent), transparent 40%),
+    color-mix(in srgb, var(--orf-material-content-secondary) 42%, transparent);
+  text-align: center;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-empty-state-icon {
+  border-color: color-mix(in srgb, var(--orf-accent-border) 74%, var(--orf-material-content-hairline));
+  background: color-mix(in srgb, var(--orf-material-content-control) 66%, var(--orf-accent-soft));
+  box-shadow:
+    0 12px 28px color-mix(in srgb, var(--orf-accent) 14%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 74%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-list-footer {
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 44%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 42%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page :is(
+  .feedback-issue-original-card,
+  .feedback-issue-comment-card,
+  .feedback-issue-event-list,
+  .feedback-issue-composer
+) {
+  border-color: var(--orf-material-content-hairline);
+  border-radius: 18px;
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--orf-material-content-shine) 13%, transparent), transparent 40%),
+    var(--orf-material-content-primary);
+  box-shadow: var(--orf-material-content-shadow-soft);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .feedback-issue-comment-card {
+  box-shadow: var(--orf-material-content-shadow-soft);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .feedback-issue-event-list {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--orf-accent-soft) 32%, transparent), transparent 54%),
+    var(--orf-material-content-tertiary);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .feedback-issue-composer {
+  background:
+    linear-gradient(126deg, color-mix(in srgb, var(--orf-material-content-shine) 15%, transparent), transparent 40%),
+    var(--orf-material-content-primary);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .orf-rich-text-editor {
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 56%, var(--orf-workbench-hairline));
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--orf-material-content-primary) 82%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 46%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .orf-rich-text-editor :is(.orf-rich-text-toolbar, .orf-rich-text-footer) {
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 42%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 46%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-sidebar {
+  border-color: var(--orf-material-content-hairline);
+  border-radius: 20px;
+  background:
+    linear-gradient(132deg, color-mix(in srgb, var(--orf-material-content-shine) 13%, transparent), transparent 42%),
+    var(--orf-material-content-primary);
+  box-shadow: var(--orf-material-content-shadow);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-inspector-heading {
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 50%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 68%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-inspector-body > :is(.orf-related-resources, .feedback-issue-sidebar-block) {
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 42%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 54%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-sidebar-input {
+  border-radius: var(--orf-radius-control);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(.feedback-label-row, .feedback-import-summary span, .feedback-import-field-mappings span) {
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 44%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 74%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-label-row:hover {
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 68%, var(--orf-accent-soft));
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-create-title-field input {
+  border-radius: 999px;
+  background: var(--orf-material-content-primary);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] :is(.feedback-transfer-popover, .feedback-transfer-dialog) {
+  border-color: var(--orf-material-content-hairline);
+  border-radius: 18px;
+  background:
+    linear-gradient(132deg, color-mix(in srgb, var(--orf-material-content-shine) 15%, transparent), transparent 42%),
+    var(--orf-material-floating);
+  box-shadow: var(--orf-material-content-shadow);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-transfer-popover :is(a, button) {
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 40%, var(--orf-workbench-hairline));
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-transfer-dialog footer {
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 46%, var(--orf-workbench-hairline));
+  background: color-mix(in srgb, var(--orf-material-floating) 94%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-import-dropzone {
+  border-color: color-mix(in srgb, var(--orf-accent-border) 70%, var(--orf-material-content-hairline));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--orf-material-content-control) 76%, var(--orf-accent-soft));
+}
+
+.feedback-mobile-filter-toggle {
+  font-weight: 650;
+}
+
+@media (max-width: 900px) {
+  .orf-app-shell[data-page-scene="page_feedback_background"] :is(
+    .feedback-issue-header,
+    .feedback-issue-detail-header,
+    .feedback-index-header,
+    .feedback-create-header
+  ) {
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 720px) {
+  .orf-app-shell[data-page-scene="page_feedback_background"] :is(
+    .feedback-issue-header,
+    .feedback-issue-detail-header,
+    .feedback-index-header,
+    .feedback-create-header
+  ) {
+    border-radius: 16px;
+    background:
+      linear-gradient(126deg, color-mix(in srgb, var(--orf-material-content-shine) 17%, transparent), transparent 44%),
+      color-mix(in srgb, var(--orf-material-content-tertiary) 90%, var(--orf-material-content-primary));
+    box-shadow: 0 14px 34px color-mix(in srgb, var(--orf-text-primary) 14%, transparent), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 64%, transparent);
+  }
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-page .feedback-issue-work-queue {
+    background:
+      linear-gradient(90deg, color-mix(in srgb, var(--orf-material-content-secondary) 72%, transparent), transparent 68%),
+      var(--orf-material-content-primary);
+  }
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page :is(
+    .feedback-issue-original-card,
+    .feedback-issue-comment-card,
+    .feedback-issue-event-list,
+    .feedback-issue-composer
+  ) {
+    border-radius: 16px;
+  }
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-inspector-dialog {
+    border-color: var(--orf-material-content-hairline);
+    background:
+      linear-gradient(132deg, color-mix(in srgb, var(--orf-material-content-shine) 13%, transparent), transparent 42%),
+      var(--orf-material-floating);
+    box-shadow: 0 -26px 70px rgba(0, 8, 12, 0.42), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 58%, transparent);
+  }
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-transfer-dialog {
+    border-radius: 22px 22px 0 0;
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .orf-app-shell[data-page-scene="page_feedback_background"] :is(
+    .feedback-issue-header,
+    .feedback-issue-detail-header,
+    .feedback-index-header,
+    .feedback-create-header,
+    .feedback-project-chat-panel,
+    .feedback-issue-query-panel,
+    .feedback-issue-work-queue,
+    .feedback-issue-list,
+    .feedback-index-toolbar,
+    .feedback-label-list,
+    .feedback-issue-original-card,
+    .feedback-issue-comment-card,
+    .feedback-issue-event-list,
+    .feedback-issue-composer,
+    .feedback-issue-sidebar,
+    .feedback-create-editor-card,
+    .feedback-create-sidebar,
+    .feedback-transfer-popover,
+    .feedback-transfer-dialog,
+    .feedback-issue-inspector-dialog
+  ) {
+    background: var(--orf-surface-elevated);
+  }
+}

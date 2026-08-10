@@ -89,7 +89,7 @@ test("rich text viewer renders headings with shared markdown classes", () => {
 });
 
 test("rich text compact heading styles preserve markdown heading levels", () => {
-  const css = readFileSync("src/styles.css", "utf8");
+  const css = readFileSync("src/styles/controls.css", "utf8");
   assert.match(css, /\.orf-rich-text-markdown-heading-2\.orf-rich-text-markdown-heading-compact\s*\{[^}]*font-size:\s*1\.28em;/s);
   assert.match(css, /\.orf-rich-text-markdown-heading-4\.orf-rich-text-markdown-heading-compact,[^}]*\{[^}]*font-size:\s*1\.08em;/s);
 });

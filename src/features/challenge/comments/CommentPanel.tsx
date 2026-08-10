@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { Link } from "react-router-dom";
 import { ImagePreviewDialog, type ImagePreview } from "../../../components/ImagePreviewDialog";
+import { useConfirmDialog } from "../../../components/ConfirmDialog";
 import { IconButton } from "../../../components/ui";
 import { UserAvatar } from "../../../components/UserAvatar";
 import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
@@ -431,14 +432,20 @@ function CommentMessageRow({
   selected: boolean;
   showReplyEntry?: boolean;
 }) {
+  const confirm = useConfirmDialog();
   const { message, threadId } = entry;
   const moreActionsRef = useRef<HTMLDivElement | null>(null);
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const canManageMessage = canManageAllComments || (message.authorUserId ? message.authorUserId === currentUserId : message.author === currentMember);
   const createdTime = commentTimeDisplay(message.createdAt);
   const moreMenuId = `orf-comment-message-more-${message.id}`;
-  const deleteMessage = () => {
-    if (window.confirm("删除这条评论？")) {
+  const deleteMessage = async () => {
+    if (await confirm({
+      title: "删除评论",
+      description: "删除这条评论？",
+      confirmLabel: "删除评论",
+      tone: "danger",
+    })) {
       onDelete(threadId, message.id);
     }
   };

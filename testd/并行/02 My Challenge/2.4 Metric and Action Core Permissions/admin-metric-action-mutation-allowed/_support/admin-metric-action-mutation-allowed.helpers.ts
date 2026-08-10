@@ -5,6 +5,7 @@ import type { PermissionKey } from "../../../../../../src/config/permissions";
 import type { ObjectiveFlowStatus, OrfStage } from "../../../../../../src/types/orf";
 import {
   deleteTestObjective,
+  applicationConfirmDialog,
   readResponseBody,
   upsertTestObjective,
   type TestObjectiveFixtureRecord,
@@ -24,8 +25,7 @@ const RESPONSE_TIMEOUT_MS = 7_500;
 
 type PendingDelete = {
   title: string;
-  dialogMessage: string;
-  response: Response;
+  responsePromise: Promise<Response>;
 };
 
 const pendingDeletesByPage = new WeakMap<Page, PendingDelete[]>();
@@ -122,31 +122,20 @@ export async function confirmNextDelete(page: Page, noun: "指标" | "行动项"
     throw new Error(`不存在待确认的删除${noun}弹窗`);
   }
 
-  if (!pending.dialogMessage.includes(pending.title)) {
-    throw new Error(`删除${noun}确认弹窗文案不包含标题: ${pending.dialogMessage}`);
-  }
-  await requireOkResponse(pending.response, `删除${noun}接口请求失败`);
+  const dialog = applicationConfirmDialog(page, "删除工作项");
+  await dialog.getByRole("button", { name: "确认删除", exact: true }).click();
+  await requireOkResponse(await pending.responsePromise, `删除${noun}接口请求失败`);
   await expect(challengeRow(page, pending.title)).toHaveCount(0);
 }
 
 async function startRowDelete(page: Page, title: string, responsePromise: Promise<Response>) {
-  const dialogPromise = new Promise<string>((resolve, reject) => {
-    page.once("dialog", async (dialog) => {
-      const message = dialog.message();
-      try {
-        await dialog.accept();
-        resolve(message);
-      } catch (error) {
-        reject(error);
-      }
-    });
-  });
-
   await clickRowMenuAction(page, title, "删除");
-  const [dialogMessage, response] = await Promise.all([dialogPromise, responsePromise]);
+  const dialog = applicationConfirmDialog(page, "删除工作项");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".orf-confirm-dialog-description")).toContainText(title);
 
   const queue = pendingDeletesByPage.get(page) ?? [];
-  queue.push({ title, dialogMessage, response });
+  queue.push({ title, responsePromise });
   pendingDeletesByPage.set(page, queue);
 }
 

@@ -148,7 +148,7 @@ test("saveUserPreferences replaces the cached preferences fact", async (t) => {
   const originalFetch = globalThis.fetch;
   const requests: Array<{ body: string | null; method: string; url: string }> = [];
   const initial = userPreferences("user-a", { defaultLandingPath: "/tasks" });
-  const saved = userPreferences("user-a", { defaultLandingPath: "/reports" });
+  const saved = userPreferences("user-a", { chatTheme: "dark", defaultLandingPath: "/reports" });
 
   t.after(() => {
     globalThis.fetch = originalFetch;
@@ -170,9 +170,15 @@ test("saveUserPreferences replaces the cached preferences fact", async (t) => {
   }) as typeof fetch;
 
   assert.equal((await getUserPreferences({ userId: "user-a" })).defaultLandingPath, "/tasks");
-  assert.equal((await saveUserPreferences({ defaultLandingPath: "/reports" })).defaultLandingPath, "/reports");
-  assert.equal((await getUserPreferences({ userId: "user-a" })).defaultLandingPath, "/reports");
+  const updated = await saveUserPreferences({ chatTheme: "dark", defaultLandingPath: "/reports" });
+  assert.equal(updated.defaultLandingPath, "/reports");
+  assert.equal(updated.chatTheme, "dark");
+  assert.equal((await getUserPreferences({ userId: "user-a" })).chatTheme, "dark");
   assert.deepEqual(requests.map((request) => request.method), ["GET", "PUT"]);
+  assert.deepEqual(JSON.parse(requests[1]?.body ?? "{}"), {
+    chatTheme: "dark",
+    defaultLandingPath: "/reports",
+  });
 });
 
 test("chat bootstrap and chat users reuse in-flight requests without caching settled data", async (t) => {

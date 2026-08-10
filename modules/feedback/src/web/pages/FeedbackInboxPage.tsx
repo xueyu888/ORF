@@ -209,7 +209,6 @@ export function FeedbackInboxPage() {
     projectId !== "All",
     sort !== "updated-desc",
   ].filter(Boolean).length;
-
   const setFilter = (key: string, value: string, defaultValue: string) => {
     const next = new URLSearchParams(searchParams);
     if (value === defaultValue || !value.trim()) {
@@ -306,11 +305,12 @@ export function FeedbackInboxPage() {
         aria-controls="feedback-issue-query-panel"
         aria-expanded={filtersExpanded}
         className="feedback-mobile-filter-toggle"
+        data-active={activeFilterCount > 0 ? "true" : undefined}
         type="button"
         onClick={() => setFiltersExpanded((value) => !value)}
       >
-        <span><SlidersHorizontal aria-hidden="true" /> 筛选</span>
-        {activeFilterCount > 0 && <strong>{activeFilterCount}</strong>}
+        <span><SlidersHorizontal aria-hidden="true" /> 筛选条件</span>
+        {activeFilterCount > 0 && <strong>{activeFilterCount} 项启用</strong>}
         <ChevronDown aria-hidden="true" className="feedback-mobile-filter-toggle-chevron" />
       </button>
 
@@ -403,6 +403,12 @@ export function FeedbackInboxPage() {
           <FeedbackEmptyState title="反馈加载中" description="正在读取反馈列表。" />
         ) : feedbackReadModel.error ? (
           <FeedbackEmptyState title="反馈读取失败" description={feedbackReadModel.error} />
+        ) : !hasActiveFilters && issueCounts.all === 0 ? (
+          <FeedbackEmptyState
+            description="新反馈出现后，会在这里进入分诊、处理和验证队列。"
+            icon={<Inbox />}
+            title="还没有反馈"
+          />
         ) : (
           <FeedbackEmptyState title="没有匹配的反馈" description="调整搜索或筛选条件后再看。" />
         )}

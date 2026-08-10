@@ -8,10 +8,14 @@ import {
   canonicalVisualBackgroundScene,
   canonicalVisualBackgroundScope,
   defaultVisualBackgroundConfig,
+  defaultLegacyVisualBackgroundOverlayOpacity,
   normalizeVisualBackgroundCrop,
-  normalizeVisualBackgroundOverlayOpacity,
+  normalizeVisualBackgroundMigration,
+  normalizeVisualMaterialPreferences,
   visualBackgroundCropLimits,
-  visualBackgroundOverlayLimits,
+  legacyVisualBackgroundOverlayLimits,
+  visualMaterialExposureLimits,
+  visualMaterialTones,
   legacyVisualBackgroundScenes,
   legacyVisualBackgroundStorageScenes,
   legacyVisualBackgroundScopes,
@@ -56,33 +60,52 @@ export const backgroundCropSchema = z
     scale: z.coerce.number().min(0.5).max(visualBackgroundCropLimits.zoomMax).optional(),
   })
   .transform((crop) => normalizeVisualBackgroundCrop(crop));
-const backgroundOverlayOpacitySchema = z.coerce.number().min(visualBackgroundOverlayLimits.opacityMin).max(visualBackgroundOverlayLimits.opacityMax);
+const legacyBackgroundOverlayOpacitySchema = z.coerce.number().min(legacyVisualBackgroundOverlayLimits.opacityMin).max(legacyVisualBackgroundOverlayLimits.opacityMax);
+const backgroundMaterialPreferencesSchema = z
+  .object({
+    tone: z.enum(visualMaterialTones).optional(),
+    exposure: z.coerce.number().min(visualMaterialExposureLimits.min).max(visualMaterialExposureLimits.max).optional(),
+    reduceTransparency: z.boolean().optional(),
+  })
+  .optional();
+const backgroundMigrationSchema = z
+  .object({
+    overlayOpacityV2: legacyBackgroundOverlayOpacitySchema.nullable().optional(),
+  })
+  .optional();
 export const backgroundSceneConfigSchema = z
   .object({
-    version: z.literal(2).optional(),
+    version: z.union([z.literal(2), z.literal(3)]).optional(),
     fitMode: backgroundFitModeSchema.optional(),
     mode: backgroundModeSchema,
     fixedBackgroundId: z.string().nullable(),
-    overlayOpacity: backgroundOverlayOpacitySchema.optional(),
+    overlayOpacity: legacyBackgroundOverlayOpacitySchema.optional(),
+    material: backgroundMaterialPreferencesSchema,
+    migration: backgroundMigrationSchema,
     switchTrigger: backgroundSwitchTriggerSchema,
     switchOrder: backgroundSwitchOrderSchema,
     switchIntervalMinutes: z.coerce.number().int().min(1).max(1440),
     crops: z.record(z.string(), backgroundCropSchema).optional(),
     placements: z.record(z.string(), backgroundCropSchema).optional(),
   })
-  .transform((config) => ({
-    version: 2 as const,
-    fitMode: "cover-crop" as const,
-    mode: config.mode,
-    fixedBackgroundId: config.fixedBackgroundId,
-    overlayOpacity: normalizeVisualBackgroundOverlayOpacity(config.overlayOpacity),
-    switchTrigger: config.switchTrigger,
-    switchOrder: config.switchOrder,
-    switchIntervalMinutes: config.switchIntervalMinutes,
-    crops: Object.fromEntries(
-      Object.entries(config.crops ?? config.placements ?? {}).map(([backgroundId, crop]) => [backgroundId, normalizeVisualBackgroundCrop(crop)]),
-    ),
-  }));
+  .transform((config) => {
+    const legacyOverlayOpacity = config.migration?.overlayOpacityV2
+      ?? (config.version === 3 || config.material ? undefined : config.overlayOpacity ?? defaultLegacyVisualBackgroundOverlayOpacity);
+    return {
+      version: 3 as const,
+      fitMode: "cover-crop" as const,
+      mode: config.mode,
+      fixedBackgroundId: config.fixedBackgroundId,
+      material: normalizeVisualMaterialPreferences(config.material, legacyOverlayOpacity),
+      migration: normalizeVisualBackgroundMigration(config.migration, legacyOverlayOpacity),
+      switchTrigger: config.switchTrigger,
+      switchOrder: config.switchOrder,
+      switchIntervalMinutes: config.switchIntervalMinutes,
+      crops: Object.fromEntries(
+        Object.entries(config.crops ?? config.placements ?? {}).map(([backgroundId, crop]) => [backgroundId, normalizeVisualBackgroundCrop(crop)]),
+      ),
+    };
+  });
 export type BackgroundScene = z.infer<typeof backgroundSceneSchema>;
 export type BackgroundSceneConfig = z.infer<typeof backgroundSceneConfigSchema>;
 export type BackgroundScope = CanonicalBackgroundScope;
@@ -105,7 +128,18 @@ type VisualSettings = {
   };
 };
 
-type LegacyBackgroundConfig = Partial<BackgroundSceneConfig> & {
+type LegacyBackgroundConfig = {
+  version?: unknown;
+  fitMode?: unknown;
+  mode?: BackgroundSceneConfig["mode"];
+  fixedBackgroundId?: unknown;
+  overlayOpacity?: unknown;
+  material?: BackgroundSceneConfig["material"];
+  migration?: BackgroundSceneConfig["migration"];
+  switchTrigger?: BackgroundSceneConfig["switchTrigger"];
+  switchOrder?: BackgroundSceneConfig["switchOrder"];
+  switchIntervalMinutes?: unknown;
+  crops?: unknown;
   defaultBackgroundId?: unknown;
   placements?: unknown;
 };
@@ -267,9 +301,12 @@ function normalizeBackgroundConfig(input: LegacyBackgroundConfig | null | undefi
   const fixedBackgroundId = typeof input?.fixedBackgroundId === "string" ? input.fixedBackgroundId : legacyFixedBackgroundId;
 
   return backgroundSceneConfigSchema.parse({
+    version: input?.version,
     mode: input?.mode ?? fallback.mode,
     fixedBackgroundId,
-    overlayOpacity: input?.overlayOpacity ?? fallback.overlayOpacity,
+    overlayOpacity: input?.overlayOpacity,
+    material: input?.material,
+    migration: input?.migration,
     switchTrigger: input?.switchTrigger ?? fallback.switchTrigger,
     switchOrder: input?.switchOrder ?? fallback.switchOrder,
     switchIntervalMinutes: input?.switchIntervalMinutes ?? fallback.switchIntervalMinutes,
@@ -290,9 +327,32 @@ function normalizeVisualSettings(input: RawSystemSettingsFile | null | undefined
   return settings;
 }
 
+function visualSettingsNeedMigration(input: RawSystemSettingsFile | null | undefined) {
+  const backgrounds = input?.visual?.backgrounds;
+  if (!backgrounds) return true;
+  return visualBackgroundScenes.some((scene) => {
+    const config = backgrounds[scene];
+    if (!config || typeof config !== "object") return true;
+    const candidate = config as { material?: unknown; migration?: unknown; version?: unknown };
+    return candidate.version !== 3 || !candidate.material || !candidate.migration;
+  });
+}
+
 async function readVisualSettings() {
   await ensureBackgroundDirectories();
-  return normalizeVisualSettings(await readSystemSettingsFile());
+  const rawSettings = await readSystemSettingsFile();
+  const settings = normalizeVisualSettings(rawSettings);
+  if (visualSettingsNeedMigration(rawSettings)) {
+    await updateSystemSettingsFile((storedSettings) => {
+      const migrated = normalizeVisualSettings(storedSettings);
+      storedSettings.visual = storedSettings.visual ?? {};
+      storedSettings.visual.backgrounds = storedSettings.visual.backgrounds ?? {};
+      for (const scene of visualBackgroundScenes) {
+        storedSettings.visual.backgrounds[scene] = migrated.visual.backgrounds[scene];
+      }
+    });
+  }
+  return settings;
 }
 
 function storageSceneNames(scene: CanonicalBackgroundScene): AnyVisualBackgroundStorageScene[] {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SlidersHorizontal } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { canShowFrontend } from "../config/frontendVisibility";
 import { canApplyForObjectiveChallenge } from "../domain/orfLifecycle";
@@ -34,6 +35,8 @@ import { readModelInvalidationKey } from "../features/realtime/readModelInvalida
 import { getUserPreferences, saveUserPreferences, type BountyHallData } from "../state/apiClient";
 import { bountyHallSnapshot, loadBountyHall } from "../state/readModelQueries";
 import { useOrf } from "../state/OrfProvider";
+import "../features/bounty-hall/bounty-hall-skin.css";
+import "../styles/pages/bounty.css";
 
 export function BountyHallPage() {
   const {
@@ -52,6 +55,7 @@ export function BountyHallPage() {
   const [sortKey, setSortKey] = useState<SortKey>(defaultBountyHallSortKey);
   const [activeTab, setActiveTab] = useState<HallTab>(defaultHallTab);
   const [confirmTarget, setConfirmTarget] = useState<ChallengeConfirmTarget | null>(null);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [processingBountyId, setProcessingBountyId] = useState<string | null>(null);
   const now = useMinuteNow();
   const currentUserId = currentUser?.id ?? "";
@@ -159,7 +163,7 @@ export function BountyHallPage() {
     return [...filtered].sort((left, right) => compareHallItems(left, right, sortKey));
   }, [query, sortKey, tabbedHallItems]);
 
-  const hasFilters = query.trim();
+  const hasFilters = Boolean(query.trim());
 
   const updateQuery = (next: string) => {
     filterPreferenceTouchedRef.current = true;
@@ -208,6 +212,7 @@ export function BountyHallPage() {
   const clearFilters = () => {
     filterPreferenceTouchedRef.current = true;
     setQuery("");
+    setMobileFiltersOpen(false);
   };
 
   const applyChallenge = async (item: BountyItem, reason: string) => {
@@ -258,39 +263,53 @@ export function BountyHallPage() {
       />
 
       <section className="grid gap-4" aria-label="悬赏目标列表">
-        <div className="bounty-toolbar-panel">
-          <BountyToolbar
-            query={query}
-            sortKey={sortKey}
-            onQueryChange={updateQuery}
-            onSortChange={updateSortKey}
-          />
-        </div>
-
-        <BountyHallTabs
-          activeTab={activeTab}
-          counts={{
-            all: hallItemBuckets.all.length,
-            open: hallItemBuckets.open.length,
-            frozen: hallItemBuckets.frozen.length,
-            submitted: hallItemBuckets.submitted.length,
-            revisionRequired: hallItemBuckets.revisionRequired.length,
-            accepted: hallItemBuckets.accepted.length,
-            settled: hallItemBuckets.settled.length,
-            related: hallItemBuckets.related.length,
-          }}
-          onChange={updateActiveTab}
-        />
-
-        <div className="bounty-list-summary">
-          <div className="bounty-list-count">
-            悬赏目标 <span>{filteredHallItems.length}</span> 条
+        <div className="bounty-command-surface">
+          <div className="bounty-toolbar-panel" data-mobile-open={mobileFiltersOpen ? "true" : undefined}>
+            <BountyToolbar
+              query={query}
+              sortKey={sortKey}
+              onQueryChange={updateQuery}
+              onSortChange={updateSortKey}
+            />
           </div>
-          {hasFilters && (
-            <BountyButton onClick={clearFilters} size="sm" variant="secondary">
-              清空筛选
-            </BountyButton>
-          )}
+
+          <div className="bounty-command-header">
+            <BountyHallTabs
+              activeTab={activeTab}
+              counts={{
+                all: hallItemBuckets.all.length,
+                open: hallItemBuckets.open.length,
+                frozen: hallItemBuckets.frozen.length,
+                submitted: hallItemBuckets.submitted.length,
+                revisionRequired: hallItemBuckets.revisionRequired.length,
+                accepted: hallItemBuckets.accepted.length,
+                settled: hallItemBuckets.settled.length,
+                related: hallItemBuckets.related.length,
+              }}
+              onChange={updateActiveTab}
+            />
+            <button
+              type="button"
+              className="bounty-mobile-filter-trigger"
+              aria-expanded={mobileFiltersOpen}
+              onClick={() => setMobileFiltersOpen((open) => !open)}
+            >
+              <SlidersHorizontal aria-hidden="true" />
+              <span>{mobileFiltersOpen ? "收起" : "筛选"}</span>
+              {hasFilters ? <i aria-label="筛选已生效" /> : null}
+            </button>
+          </div>
+
+          <div className="bounty-list-summary" data-has-filters={hasFilters ? "true" : undefined}>
+            <div className="bounty-list-count">
+              悬赏目标 <span>{filteredHallItems.length}</span> 条
+            </div>
+            {hasFilters && (
+              <BountyButton onClick={clearFilters} size="sm" variant="secondary">
+                清空筛选
+              </BountyButton>
+            )}
+          </div>
         </div>
 
         {filteredHallItems.length > 0 ? (

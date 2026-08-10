@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { RefreshCw } from "lucide-react";
+import { MessageSquareText, RefreshCw } from "lucide-react";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
@@ -342,9 +342,14 @@ export function ChatPage() {
   const activeRightPanelWidth = activePanel
     ? rightPanelWidthOverrides[activePanel] ?? defaultChatRightPanelWidth(activePanel)
     : defaultChatRightPanelWidth(null);
+  const activeRightPanelWidthOverride = activePanel
+    ? rightPanelWidthOverrides[activePanel] ?? null
+    : null;
   const chatPageStyle = {
     ...(sidebarWidthOverride !== null ? { "--orf-chat-left-sidebar-width": `${sidebarWidthOverride}px` } : {}),
-    ...(activePanel ? { "--orf-chat-right-panel-width": `${activeRightPanelWidth}px` } : {}),
+    ...(activeRightPanelWidthOverride !== null
+      ? { "--orf-chat-right-panel-width": `${activeRightPanelWidthOverride}px` }
+      : {}),
   } as CSSProperties;
 
   const createSidebarWidthResolver = useCallback((element: HTMLButtonElement) => {
@@ -1295,6 +1300,7 @@ export function ChatPage() {
   return (
     <div
       className={clsx("orf-chat-page", activePanel && "orf-chat-page-with-panel")}
+      data-chat-active-panel={activePanel ?? undefined}
       data-chat-mobile-view={chatMobileView}
       data-resizing-sidebar={sidebarResize.resizing ? "true" : "false"}
       data-resizing-right-panel={rightPanelResize.resizing ? "true" : "false"}
@@ -1415,7 +1421,11 @@ export function ChatPage() {
             />
           </>
         ) : (
-          <div className="orf-chat-empty-channel">选择一个频道、私信或系统会话。</div>
+          <div className="orf-chat-empty-channel">
+            <span className="orf-chat-empty-channel-icon"><MessageSquareText aria-hidden="true" /></span>
+            <strong>从左侧开始一段对话</strong>
+            <span>选择频道、私信或系统会话，消息与文件会在这里连续展开。</span>
+          </div>
         )}
       </section>
       {activeChannel && activePanel && (
