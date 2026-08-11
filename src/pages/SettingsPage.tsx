@@ -189,6 +189,7 @@ function ChatSettingSection() {
         </div>
         <div className="orf-settings-control-field orf-settings-interval-field">
           <input
+            aria-label="聊天附件上限"
             className="orf-settings-number-input"
             type="number"
             min={0.01}

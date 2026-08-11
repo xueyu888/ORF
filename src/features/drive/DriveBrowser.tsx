@@ -913,6 +913,7 @@ export function DriveBrowser({
               <Search className="h-4 w-4" />
               <input
                 ref={searchInputRef}
+                aria-label="搜索资源"
                 value={searchQuery}
                 placeholder="搜索文件、来源、关联对象"
                 onChange={(event) => setSearchQuery(event.target.value)}

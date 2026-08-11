@@ -664,13 +664,39 @@ html[data-orf-appearance="dark"] body:has(.orf-chat-image-popout-page)
   user-select: none;
 }
 
-.orf-chat-loading,
-.orf-chat-empty-page {
+.orf-chat-loading {
   display: grid;
   min-height: calc(100vh - var(--orf-topbar-height) - 48px);
   place-items: center;
   gap: 10px;
   color: var(--orf-text-secondary);
+}
+
+.orf-chat-empty-page {
+  display: flex;
+  min-height: calc(100vh - var(--orf-topbar-height) - 48px);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: var(--orf-text-secondary);
+  text-align: center;
+}
+
+.orf-chat-empty-page > span {
+  display: inline-flex;
+  max-width: min(560px, 100%);
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--orf-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orf-bg-card) 92%, transparent);
+  box-shadow: var(--orf-shadow-card);
+  color: var(--orf-text-primary);
+  line-height: 1.55;
+  padding: 9px 18px;
 }
 
 .orf-app-shell[data-chat-page="true"] .orf-chat-loading,

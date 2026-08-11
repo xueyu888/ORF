@@ -249,7 +249,7 @@ export function MembersPage() {
           <div className="orf-user-toolbar">
             <label className="orf-user-search">
               <Search className="h-5 w-5" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索姓名或邮箱" />
+              <input aria-label="搜索成员" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索姓名或邮箱" />
             </label>
 
             <div className="orf-user-toolbar-filters">

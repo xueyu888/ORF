@@ -130,6 +130,7 @@ export function PermissionsPage() {
           <label className="orf-permission-search">
             <Search className="h-4 w-4" aria-hidden="true" />
             <input
+              aria-label="搜索权限"
               type="search"
               value={permissionQuery}
               placeholder="搜索权限名称、key 或使用位置"

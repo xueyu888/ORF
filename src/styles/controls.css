@@ -492,7 +492,8 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
-  height: 21px;
+  min-width: 28px;
+  height: 28px;
   padding: 0 7px;
   appearance: none;
   border: 0;
@@ -522,7 +523,7 @@
 }
 
 .orf-comment-count-badge[data-empty="true"] {
-  width: 21px;
+  width: 28px;
   padding: 0;
   opacity: 0;
   pointer-events: none;

@@ -1544,7 +1544,7 @@ function SubActionRow({
 
 function CompletionCheckbox({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <button type="button" aria-pressed={checked} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full" onClick={() => onChange(!checked)}>
+    <button type="button" aria-label={checked ? "标记为未完成" : "标记为已完成"} aria-pressed={checked} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" onClick={() => onChange(!checked)}>
       <CompletionCircleIcon checked={checked} />
     </button>
   );

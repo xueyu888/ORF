@@ -471,6 +471,7 @@ export function PersonalSettingsPage() {
                     <span>高对比度</span>
                   </span>
                   <input
+                    aria-label="高对比度"
                     className="orf-preference-switch shrink-0"
                     type="checkbox"
                     checked={displayPreferences.contrast === "high"}
@@ -500,6 +501,7 @@ export function PersonalSettingsPage() {
                     <span className="block text-sm orf-text-secondary">当前用户的页面提示。</span>
                   </span>
                   <input
+                    aria-label="Toast 通知"
                     className="orf-preference-switch shrink-0"
                     type="checkbox"
                     checked={preferences?.notificationDisplay.toastEnabled ?? true}
@@ -526,6 +528,7 @@ export function PersonalSettingsPage() {
                     </span>
                   </span>
                   <input
+                    aria-label="开机自启"
                     className="orf-preference-switch shrink-0"
                     type="checkbox"
                     checked={launchAtLoginState?.enabled ?? false}

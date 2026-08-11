@@ -91,7 +91,7 @@ export function BountyTextInput({
     <label className="bounty-search-box">
       <span className="sr-only">{ariaLabel}</span>
       <Search aria-hidden="true" />
-      <input value={value} onChange={(event) => onValueChange(event.target.value)} placeholder={placeholder} />
+      <input aria-label={ariaLabel} value={value} onChange={(event) => onValueChange(event.target.value)} placeholder={placeholder} />
     </label>
   );
 }

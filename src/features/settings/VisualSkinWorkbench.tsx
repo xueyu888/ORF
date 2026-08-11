@@ -159,6 +159,22 @@ function useHorizontalGalleryNavigation(itemCount: number, selectedId: string | 
     ));
   }, []);
 
+  const revealCard = useCallback((card: HTMLElement) => {
+    const gallery = galleryRef.current;
+    if (!gallery) return;
+    const inset = 10;
+    const cardStart = card.offsetLeft;
+    const cardEnd = cardStart + card.offsetWidth;
+    const visibleStart = gallery.scrollLeft + inset;
+    const visibleEnd = gallery.scrollLeft + gallery.clientWidth - inset;
+    if (cardStart < visibleStart) {
+      gallery.scrollTo({ left: Math.max(0, cardStart - inset), behavior: "auto" });
+    } else if (cardEnd > visibleEnd) {
+      gallery.scrollTo({ left: cardEnd - gallery.clientWidth + inset, behavior: "auto" });
+    }
+    window.requestAnimationFrame(measure);
+  }, [measure]);
+
   useEffect(() => {
     const gallery = galleryRef.current;
     if (!gallery) return;
@@ -179,19 +195,10 @@ function useHorizontalGalleryNavigation(itemCount: number, selectedId: string | 
     const frame = window.requestAnimationFrame(() => {
       const selectedCard = gallery.querySelector<HTMLElement>('[aria-pressed="true"]');
       if (!selectedCard) return;
-      const cardStart = selectedCard.offsetLeft;
-      const cardEnd = cardStart + selectedCard.offsetWidth;
-      const visibleStart = gallery.scrollLeft;
-      const visibleEnd = visibleStart + gallery.clientWidth;
-      if (cardStart < visibleStart) {
-        gallery.scrollTo({ left: cardStart, behavior: "auto" });
-      } else if (cardEnd > visibleEnd) {
-        gallery.scrollTo({ left: cardEnd - gallery.clientWidth, behavior: "auto" });
-      }
-      measure();
+      revealCard(selectedCard);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [itemCount, measure, selectedId]);
+  }, [itemCount, revealCard, selectedId]);
 
   const move = useCallback((direction: -1 | 1) => {
     const gallery = galleryRef.current;
@@ -206,6 +213,7 @@ function useHorizontalGalleryNavigation(itemCount: number, selectedId: string | 
   return {
     galleryRef,
     ...scrollState,
+    revealCard,
     moveBack: () => move(-1),
     moveForward: () => move(1),
   };
@@ -808,6 +816,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
                   aria-label={`${background.fileName}，来源：${source.detailLabel}`}
                   aria-pressed={selected}
                   title={`${background.fileName} / 来源：${source.detailLabel}`}
+                  onFocus={(event) => galleryNavigation.revealCard(event.currentTarget)}
                   onClick={() => selectBackground(background.id)}
                 >
                   <img src={background.url} alt={background.fileName} draggable={false} />
@@ -1274,6 +1283,7 @@ function SkinSlider({
     <label className="orf-skin-slider">
       <span>{label}</span>
       <input
+        aria-label={label}
         type="range"
         min={min}
         max={max}
