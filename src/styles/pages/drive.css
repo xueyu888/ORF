@@ -1145,7 +1145,7 @@
   min-height: 0;
   place-items: center;
   overflow: hidden;
-  border-radius: var(--orf-radius-control);
+  border-radius: 14px;
   background: var(--orf-drive-surface-muted);
   color: var(--orf-drive-text-muted);
 }

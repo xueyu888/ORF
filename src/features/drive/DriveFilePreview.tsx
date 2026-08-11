@@ -131,7 +131,10 @@ export function DriveFilePreviewPopoutPage() {
   const [payload] = useState<DriveFilePreviewPayload | null>(() => readDriveFilePreviewPayload(popoutId));
 
   useEffect(() => {
-    if (popoutId) removeDriveFilePreviewPayload(popoutId);
+    if (!popoutId) return undefined;
+    const cleanupPayload = () => removeDriveFilePreviewPayload(popoutId);
+    window.addEventListener("pagehide", cleanupPayload, { once: true });
+    return () => window.removeEventListener("pagehide", cleanupPayload);
   }, [popoutId]);
 
   if (!payload) {
