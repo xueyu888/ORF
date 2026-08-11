@@ -128,13 +128,6 @@ export function registerSettingsRoutes(app: FastifyInstance) {
         return reply.send(file.stream);
       }
 
-      if (params.scene !== "login_background") {
-        const user = await requireApiUser(request, reply);
-        if (!user) {
-          return reply;
-        }
-      }
-
       const file = await getVisualBackgroundFile(params.scene, params.scope, params.fileName);
       reply.header("Content-Type", file.mimeType);
       return reply.send(file.stream);
