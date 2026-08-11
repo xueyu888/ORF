@@ -10,6 +10,7 @@ import {
   normalizeReleaseVersion,
   publishClientUpdateReleaseToOrf as publishReleaseToOrf,
 } from "./client-update-publisher.mjs";
+import { verifyProductionRelease } from "./production-release-verifier.mjs";
 
 const defaultRepository = "xueyu888/ORF";
 
@@ -27,10 +28,12 @@ if (options.help) {
 const releaseNotes = resolveReleaseNotesOption(options);
 
 assertReleaseTag(releaseTag);
+assertReleaseMode(options);
 if (options.broadcastOnly) {
   await broadcastClientUpdateRelease({ tagName: releaseTag }, { force: true });
   process.exit(0);
 }
+assertReleaseTagMatchesPackageVersion(releaseTag);
 
 const branch = options.branch ?? git(["branch", "--show-current"], { capture: true }).trim();
 if (!branch) {
@@ -42,12 +45,19 @@ if (status) {
   fail(`工作区不干净，请先提交或清理后再发布。\n${status}`);
 }
 
+if (options.publishStaged) {
+  assertExistingTagAtHead(releaseTag, releaseNotes);
+  await publishStagedClientRelease();
+  process.exit(0);
+}
+
 const pendingCommits = git(["log", "--reverse", "--oneline", `origin/${branch}..HEAD`], { capture: true }).trim();
 if (pendingCommits) {
   logSection(`准备推送 ${branch} 的本地提交`);
   console.log(pendingCommits);
 }
 
+assertProductionReleaseArtifactPrepared();
 ensureLocalTagAtHead(releaseTag, releaseNotes);
 
 logSection(`推送分支 ${branch}`);
@@ -69,25 +79,20 @@ const runId = waitForReleaseRun({ repository, tag: releaseTag });
 logSection(`等待 GitHub Release 工作流完成: ${runId}`);
 runGh(["run", "watch", runId, "--repo", repository, "--exit-status"], { stdio: "inherit" });
 
-logSection(`核对 GitHub Release ${releaseTag}`);
-const release = readJsonWithRetry(() => runGh([
-  "release",
-  "view",
-  releaseTag,
-  "--repo",
-  repository,
-  "--json",
-  "tagName,name,url,assets,body,publishedAt,isDraft,isPrerelease",
-], { capture: true, throwOnError: true }));
+logSection(`核对 GitHub Draft ${releaseTag}`);
+const release = readGitHubRelease(releaseTag);
 
 console.log(`${release.name} ${release.url}`);
 for (const asset of release.assets ?? []) {
   console.log(`- ${asset.name} (${formatBytes(asset.size)})`);
 }
 assertReleaseBodyHasNotes(release, releaseTag);
-
-await publishClientUpdateReleaseToOrf(release);
-await broadcastClientUpdateRelease(release);
+assertClientReleaseAssets(release, releaseTag);
+if (!release.isDraft) {
+  fail(`${releaseTag} 构建完成后不是私有 Draft，已停止流程，避免生产入口验收前提前公开客户端版本。`);
+}
+console.log(`${releaseTag} 客户端产物已构建并保存在私有 Draft；尚未写入 ORF 主更新源，也未广播。`);
+console.log(`生产 Web、后端和网关验收通过后运行: npm run release:clients -- --tag ${releaseTag} --publish-staged`);
 
 function parseArgs(args) {
   const parsed = {
@@ -98,8 +103,11 @@ function parseArgs(args) {
     help: false,
     notes: null,
     notesFile: null,
-    publishAssets: true,
+    publishStaged: false,
     publishUrl: null,
+    productionBackendHealthUrl: null,
+    productionRuntimeRoot: null,
+    productionUrl: null,
     repository: null,
     tag: null,
     watch: false,
@@ -114,12 +122,15 @@ function parseArgs(args) {
       parsed.broadcast = true;
       parsed.broadcastOnly = true;
     }
+    else if (arg === "--publish-staged") parsed.publishStaged = true;
     else if (arg === "--no-broadcast") parsed.broadcast = false;
-    else if (arg === "--no-publish-assets") parsed.publishAssets = false;
     else if (arg === "--notes") parsed.notes = readValue(args, ++index, arg);
     else if (arg === "--notes-file") parsed.notesFile = readValue(args, ++index, arg);
     else if (arg === "--broadcast-url") parsed.broadcastUrl = readValue(args, ++index, arg);
     else if (arg === "--publish-url") parsed.publishUrl = readValue(args, ++index, arg);
+    else if (arg === "--production-backend-health-url") parsed.productionBackendHealthUrl = readValue(args, ++index, arg);
+    else if (arg === "--production-runtime-root") parsed.productionRuntimeRoot = readValue(args, ++index, arg);
+    else if (arg === "--production-url") parsed.productionUrl = readValue(args, ++index, arg);
     else if (arg === "--branch") parsed.branch = readValue(args, ++index, arg);
     else if (arg === "--repo") parsed.repository = readValue(args, ++index, arg);
     else if (arg === "--tag") parsed.tag = readValue(args, ++index, arg);
@@ -138,31 +149,68 @@ function printHelp() {
   console.log(`ORF 客户端 Release 发布脚本
 
 用法:
-  npm run release:clients -- --tag v0.0.3 --notes "修复工作日志入口，并优化客户端更新提示"
-  npm run release:clients -- --tag v0.0.3 --notes-file release-notes/v0.0.3.md --watch --no-broadcast
+  npm run release:clients -- --tag v0.0.3 --notes "修复工作日志入口，并优化客户端更新提示" --watch
+  npm run release:clients -- --tag v0.0.3 --publish-staged
   npm run release:clients -- --tag v0.0.3 --broadcast-only
 
 行为:
+  - 标准顺序固定为：构建私有产物 → 切换并验收生产 → 公开客户端并写主更新源 → 广播。
   - 常规发布要求工作区干净；--broadcast-only 只通知已同步版本，不推送分支或 tag。
   - 使用 package.json 版本作为默认 tag，也可用 --tag 指定。
   - 新发布 tag 必须提供 --notes 或 --notes-file，说明本版本面向用户更新了什么。
   - 发布说明会写入 annotated tag，GitHub Release 和 ORF 主更新源共用这份说明。
   - 使用 git push --no-verify 推送分支和 tag，避免发布时触发本地 testd pre-push 门禁。
-  - 默认只触发 .github/workflows/release-clients.yml，不等待 GitHub Actions。
-  - 加 --watch 时才等待工作流完成并核对 GitHub Release 镜像资产。
-  - --watch 核对 GitHub Release 镜像资产后，会在配置 ORF_CLIENT_UPDATE_PUBLISH_SECRET 时把安装包同步到 ORF 主更新源。
-  - 发布脚本默认不广播，避免完整发布时在生产后端和 public-gateway 稳定前弹出更新提示。
-  - 只发布客户端且确认后续不会重启生产服务时，可加 --broadcast 在资产同步后立即通知当前 SSE 实时连接客户端。
-  - 完整发布必须等生产入口验证通过后，再运行 --broadcast-only 广播已同步的版本。
-  - 可用 --no-publish-assets 跳过 ORF 主更新源同步，或用 --publish-url 覆盖 ORF_CLIENT_UPDATE_PUBLISH_URL / ORF_APP_URL。
+  - 默认触发工作流构建私有 GitHub Draft，不公开 Release、不写 ORF 主更新源、不广播。
+  - 加 --watch 会等待工作流完成并核对私有 Draft 中的 Win11 和 Android 产物。
+  - 生产完整发布包必须在客户端 Draft 之前构建，Draft 完成后切换并重启生产 Web、后端和网关。
+  - --publish-staged 会核对当前生产 release 的版本、提交、健康状态和公网首页，再公开 GitHub Release 并同步 ORF 主更新源。
+  - --publish-staged 默认不广播；发布和主更新源同步成功后，再运行 --broadcast-only。
+  - 可用 --production-runtime-root、--production-url、--production-backend-health-url 覆盖生产验收地址。
+  - --publish-url 只覆盖 ORF_CLIENT_UPDATE_PUBLISH_URL / ORF_APP_URL。
   - 可用 --no-broadcast 明确保持不广播，或用 --broadcast-url 覆盖 ORF_CLIENT_UPDATE_BROADCAST_URL / ORF_APP_URL。
 `);
+}
+
+function assertReleaseMode(input) {
+  if (input.broadcastOnly && input.publishStaged) {
+    fail("--broadcast-only 与 --publish-staged 不能同时使用。");
+  }
+  if (!input.publishStaged && !input.broadcastOnly && input.broadcast) {
+    fail("客户端私有构建阶段不能广播；请在生产验收和 --publish-staged 成功后单独运行 --broadcast-only。");
+  }
 }
 
 function assertReleaseTag(tag) {
   if (!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(tag)) {
     fail(`发布 tag 不合法: ${tag}`);
   }
+}
+
+function assertReleaseTagMatchesPackageVersion(tag) {
+  const expectedTag = `v${packageJson.version}`;
+  if (tag !== expectedTag) {
+    fail(`客户端 tag 必须与根 package.json 版本一致: expected=${expectedTag}, actual=${tag}`);
+  }
+}
+
+function assertProductionReleaseArtifactPrepared() {
+  const releasesDirectory = new URL("../.artifacts/releases/", import.meta.url);
+  const head = git(["rev-parse", "HEAD"], { capture: true }).trim();
+  const candidates = fs.existsSync(releasesDirectory)
+    ? fs.readdirSync(releasesDirectory, { withFileTypes: true }).filter((entry) => entry.isDirectory())
+    : [];
+  for (const candidate of candidates) {
+    const manifestUrl = new URL(`${candidate.name}/release.json`, releasesDirectory);
+    if (!fs.existsSync(manifestUrl)) continue;
+    const manifest = JSON.parse(fs.readFileSync(manifestUrl, "utf8"));
+    if (manifest.applicationVersion !== packageJson.version || manifest.gitCommit !== head || manifest.gitDirty) continue;
+    const archiveUrl = new URL(`orf-${manifest.releaseId}.tar.gz`, releasesDirectory);
+    const checksumUrl = new URL(`orf-${manifest.releaseId}.tar.gz.sha256`, releasesDirectory);
+    if (!fs.existsSync(archiveUrl) || !fs.existsSync(checksumUrl)) continue;
+    console.log(`生产不可变包已准备: ${manifest.releaseId}`);
+    return;
+  }
+  fail(`尚未找到与 ${packageJson.version}/${head} 对应的干净生产不可变包；请先运行 npm run build:release。`);
 }
 
 function resolveReleaseNotesOption(input) {
@@ -210,6 +258,15 @@ function ensureLocalTagAtHead(tag, notes) {
   git(["tag", "-a", tag, "-m", buildReleaseTagMessage(tag, notes)]);
 }
 
+function assertExistingTagAtHead(tag, notes) {
+  const head = git(["rev-parse", "HEAD"], { capture: true }).trim();
+  const tagCommit = git(["rev-parse", `${tag}^{}`], { capture: true }).trim();
+  if (tagCommit !== head) {
+    fail(`${tag} 不指向当前 HEAD: tag=${tagCommit}, HEAD=${head}`);
+  }
+  assertExistingTagHasReleaseNotes(tag, notes);
+}
+
 function assertExistingTagHasReleaseNotes(tag, expectedNotes) {
   const tagType = git(["cat-file", "-t", `refs/tags/${tag}`], { capture: true }).trim();
   if (tagType !== "tag") {
@@ -241,6 +298,104 @@ function assertReleaseBodyHasNotes(release, tag) {
   const body = String(release.body ?? "");
   if (!body.includes(`ORF ${tag}`) || !body.includes("主要更新：")) {
     fail(`${tag} 的 GitHub Release 未包含完整版本信息和主要更新说明，已停止同步 ORF 主更新源。`);
+  }
+}
+
+function assertClientReleaseAssets(release, tag) {
+  const version = normalizeReleaseVersion(tag);
+  const names = new Set((release.assets ?? []).map((asset) => asset.name));
+  const expectedNames = [
+    `ORF-${version}-win11-x64-setup.exe`,
+    `ORF-v${version}-android.apk`,
+  ];
+  const missing = expectedNames.filter((name) => !names.has(name));
+  if (missing.length > 0) {
+    fail(`${tag} 客户端产物不完整，缺少: ${missing.join(", ")}`);
+  }
+}
+
+function readGitHubRelease(tag) {
+  return readJsonWithRetry(() => runGh([
+    "release",
+    "view",
+    tag,
+    "--repo",
+    repository,
+    "--json",
+    "tagName,name,url,assets,body,publishedAt,isDraft,isPrerelease",
+  ], { capture: true, throwOnError: true }));
+}
+
+async function publishStagedClientRelease() {
+  const stagedRelease = readGitHubRelease(releaseTag);
+  assertReleaseBodyHasNotes(stagedRelease, releaseTag);
+  assertClientReleaseAssets(stagedRelease, releaseTag);
+  if (stagedRelease.isPrerelease) {
+    fail(`${releaseTag} 是预发布版本，不能进入正式 ORF 主更新源。`);
+  }
+
+  assertClientUpdatePublishConfiguration();
+  await verifyCurrentProductionRelease();
+
+  if (stagedRelease.isDraft) {
+    logSection(`公开 GitHub Release ${releaseTag}`);
+    runGh(["release", "edit", releaseTag, "--repo", repository, "--draft=false", "--latest"], { stdio: "inherit" });
+  } else {
+    console.log(`${releaseTag} 已经公开；继续重试 ORF 主更新源同步。`);
+  }
+
+  const publishedRelease = readGitHubRelease(releaseTag);
+  if (publishedRelease.isDraft || !publishedRelease.publishedAt) {
+    fail(`${releaseTag} 仍未公开，已停止写入 ORF 主更新源。`);
+  }
+  await publishClientUpdateReleaseToOrf(publishedRelease);
+  await broadcastClientUpdateRelease(publishedRelease);
+  console.log(
+    options.broadcast
+      ? `${releaseTag} 已公开、写入 ORF 主更新源并完成广播。`
+      : `${releaseTag} 已公开并写入 ORF 主更新源；确认无误后再运行 --broadcast-only。`,
+  );
+}
+
+function clientUpdatePublishConfiguration() {
+  return {
+    secret: process.env.ORF_CLIENT_UPDATE_PUBLISH_SECRET?.trim(),
+    targetUrl: options.publishUrl ?? process.env.ORF_CLIENT_UPDATE_PUBLISH_URL ?? process.env.ORF_APP_URL,
+  };
+}
+
+function assertClientUpdatePublishConfiguration() {
+  const config = clientUpdatePublishConfiguration();
+  if (!config.secret || !config.targetUrl) {
+    fail("--publish-staged 前必须配置 ORF_CLIENT_UPDATE_PUBLISH_SECRET 和 ORF_CLIENT_UPDATE_PUBLISH_URL/ORF_APP_URL。");
+  }
+}
+
+async function verifyCurrentProductionRelease() {
+  const runtimeRoot = options.productionRuntimeRoot
+    ?? process.env.ORF_CURRENT_HOST_RUNTIME_ROOT
+    ?? `${process.env.HOME}/.local/share/orf-production`;
+  const expectedVersion = normalizeReleaseVersion(releaseTag);
+  const expectedCommit = git(["rev-parse", `${releaseTag}^{}`], { capture: true }).trim();
+  const publishConfig = clientUpdatePublishConfiguration();
+  const productionUrl = options.productionUrl ?? process.env.ORF_PRODUCTION_URL ?? publishConfig.targetUrl;
+  const backendHealthUrl = options.productionBackendHealthUrl
+    ?? process.env.ORF_PRODUCTION_BACKEND_HEALTH_URL
+    ?? "http://127.0.0.1:8787/health";
+  try {
+    const verified = await verifyProductionRelease({
+      backendHealthUrl,
+      expectedCommit,
+      expectedVersion,
+      productionUrl,
+      runtimeRoot,
+    });
+    console.log(
+      `生产验收通过: ${verified.manifest.releaseId}，` +
+      `后端、网关和公网 Web 均为 ${expectedVersion}/${expectedCommit.slice(0, 12)}。`,
+    );
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -315,16 +470,7 @@ function logSection(label) {
 }
 
 async function publishClientUpdateReleaseToOrf(release) {
-  if (!options.publishAssets) {
-    console.log("已按 --no-publish-assets 跳过 ORF 主更新源同步。");
-    return;
-  }
-
-  const secret = process.env.ORF_CLIENT_UPDATE_PUBLISH_SECRET?.trim();
-  const targetUrl =
-    options.publishUrl ??
-    process.env.ORF_CLIENT_UPDATE_PUBLISH_URL ??
-    process.env.ORF_APP_URL;
+  const { secret, targetUrl } = clientUpdatePublishConfiguration();
   if (!secret || !targetUrl) {
     console.log("未配置 ORF_CLIENT_UPDATE_PUBLISH_SECRET 或 ORF_CLIENT_UPDATE_PUBLISH_URL/ORF_APP_URL，已跳过 ORF 主更新源同步。");
     return;
