@@ -1,6 +1,6 @@
 import { Loader2, type LucideIcon } from "lucide-react";
 import { clsx } from "clsx";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
 import type { Priority, TaskStatus, WorkStatus } from "../types/orf";
 import { UserAvatar } from "./UserAvatar";
 import { statusLabel } from "../utils/labels";
@@ -25,12 +25,11 @@ export function Card({
   children,
   className,
   interactive,
-}: {
-  children: ReactNode;
-  className?: string;
+  ...props
+}: HTMLAttributes<HTMLDivElement> & {
   interactive?: boolean;
 }) {
-  return <div className={clsx("orf-card", interactive && "orf-card-hover", className)}>{children}</div>;
+  return <div {...props} className={clsx("orf-card", interactive && "orf-card-hover", className)}>{children}</div>;
 }
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
