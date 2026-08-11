@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const rootPackagePath = path.resolve("package.json");
+const rootPackageLockPath = path.resolve("package-lock.json");
 const desktopPackagePath = path.resolve("clients/desktop/package.json");
 const androidBuildGradlePath = path.resolve("android/app/build.gradle");
 const androidVersionSegmentBase = 1_000;
@@ -32,6 +33,11 @@ function versionCode(version) {
 const rootPackage = readJson(rootPackagePath);
 const version = rootPackage.version;
 const code = versionCode(version);
+
+const rootPackageLock = readJson(rootPackageLockPath);
+rootPackageLock.version = version;
+rootPackageLock.packages[""].version = version;
+writeJson(rootPackageLockPath, rootPackageLock);
 
 const desktopPackage = readJson(desktopPackagePath);
 desktopPackage.version = version;

@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
+import type { Readable } from "node:stream";
 import type { CommentAttachment, CommentAttachmentPreviewKind, CommentTargetType } from "../../src/types/orf";
 import { commentAttachments } from "../db/schema";
-import { objectStorage } from "../storage/objectStorage";
+import {
+  ObjectStorageUploadEmptyError,
+  ObjectStorageUploadTooLargeError,
+  objectStorage,
+} from "../storage/objectStorage";
 import { readImageMetadata } from "../storage/images";
-import { env } from "../env";
 
 export type CommentAttachmentRow = typeof commentAttachments.$inferSelect;
 export type CommentAttachmentInsert = typeof commentAttachments.$inferInsert;
@@ -19,7 +23,7 @@ export type PrepareCommentAttachmentOutcome =
   | { status: "invalid" }
   | { status: "tooLarge" };
 
-type CommentAttachmentUploadMetadata = {
+export type CommentAttachmentUploadMetadata = {
   extension: string;
   height?: number;
   mimeType: string;
@@ -103,7 +107,7 @@ export async function deleteStoredCommentAttachmentObjects(rows: Array<Pick<Comm
   await Promise.allSettled(rows.map((row) => objectStorage.deleteObject(row.objectKey)));
 }
 
-function sanitizeFileName(fileName: string, extension: string) {
+export function sanitizeCommentAttachmentFileName(fileName: string, extension: string) {
   const leafName = fileName.split(/[\\/]/).pop()?.trim() ?? "";
   const sanitized = leafName.replace(/[^\w.\-()\u4e00-\u9fff ]+/g, "_").slice(0, 120).trim();
   return sanitized || `attachment.${extension}`;
@@ -141,7 +145,7 @@ function isPreviewableTextFile(input: { fileName: string; mimeType: string }) {
   return previewableTextFileExtensions.has(extension) || (previewableTextMimeTypes.has(mimeType) && !unsafeTextPreviewFileExtensions.has(extension));
 }
 
-function safeStoredMimeType(input: { body: Buffer; fileName: string; mimeType: string }): CommentAttachmentUploadMetadata {
+export function safeCommentAttachmentMetadata(input: { body: Buffer; fileName: string; mimeType: string }): CommentAttachmentUploadMetadata {
   const declaredMimeType = normalizeMimeType(input.mimeType);
   const imageMetadata = readImageMetadata(input.body);
   if (imageMetadata) {
@@ -196,45 +200,51 @@ export function pendingCommentAttachmentExpiresAt(createdAt: string) {
   return new Date(new Date(createdAt).getTime() + 24 * 60 * 60 * 1000).toISOString();
 }
 
-export async function prepareCommentAttachment(input: {
-  body: Buffer;
+export async function prepareCommentAttachmentStream(input: {
+  body: Readable;
   createdAt: string;
   createdBy: string;
   fileName: string;
+  maxBytes: number;
   messageId: string | null;
   mimeType: string;
   storageScopeId: string;
   targetId: string;
   targetType: CommentTargetType;
 }): Promise<PrepareCommentAttachmentOutcome> {
-  if (!input.body.byteLength || !input.fileName.trim()) {
+  if (!input.fileName.trim()) {
     return { status: "invalid" };
   }
 
-  if (input.body.byteLength > env.OBJECT_STORAGE_UPLOAD_MAX_BYTES) {
-    return { status: "tooLarge" };
-  }
-
-  const metadata = safeStoredMimeType({ body: input.body, fileName: input.fileName, mimeType: input.mimeType });
   const attachmentId = makeCommentAttachmentId();
+  const fallbackExtension = extensionFromFileName(input.fileName) || extensionFromMimeType(input.mimeType);
   const objectKey = commentAttachmentObjectKey({
     attachmentId,
-    extension: metadata.extension,
+    extension: fallbackExtension,
     storageScopeId: input.storageScopeId,
     targetId: input.targetId,
     targetType: input.targetType,
   });
-  const fileName = sanitizeFileName(input.fileName, metadata.extension);
+
+  let stored: { contentLength: number; peeked: Buffer };
+  try {
+    stored = await objectStorage.putObjectStream({
+      body: input.body,
+      contentType: "application/octet-stream",
+      key: objectKey,
+      maxBytes: input.maxBytes,
+      peekBytes: 256 * 1024,
+    });
+  } catch (error) {
+    if (error instanceof ObjectStorageUploadTooLargeError) return { status: "tooLarge" };
+    if (error instanceof ObjectStorageUploadEmptyError) return { status: "invalid" };
+    throw error;
+  }
+
+  const metadata = safeCommentAttachmentMetadata({ body: stored.peeked, fileName: input.fileName, mimeType: input.mimeType });
+  const fileName = sanitizeCommentAttachmentFileName(input.fileName, metadata.extension);
   const attachedAt = input.messageId ? input.createdAt : null;
   const expiresAt = pendingCommentAttachmentExpiresAt(input.createdAt);
-
-  await objectStorage.putObject({
-    body: input.body,
-    contentLength: input.body.byteLength,
-    contentType: metadata.mimeType,
-    key: objectKey,
-  });
-
   const row: CommentAttachmentInsert = {
     id: attachmentId,
     teamId: input.storageScopeId,
@@ -244,7 +254,7 @@ export async function prepareCommentAttachment(input: {
     objectKey,
     fileName,
     mimeType: metadata.mimeType,
-    fileSize: input.body.byteLength,
+    fileSize: stored.contentLength,
     width: metadata.width ?? null,
     height: metadata.height ?? null,
     createdBy: input.createdBy,

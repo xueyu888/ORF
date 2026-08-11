@@ -80,7 +80,7 @@ import type {
 } from "./notificationProtocol";
 
 export type FeedbackApplicationCreateAttachmentInput = {
-  readonly body: Buffer;
+  readonly body: Readable;
   readonly clientId: string;
   readonly fileName: string;
   readonly mimeType: string;
@@ -174,6 +174,10 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
 
   get uploadMaxBytes() {
     return this.ports.limits.uploadMaxBytes;
+  }
+
+  getReportAttachmentMaxBytes() {
+    return this.ports.limits.readReportAttachmentMaxBytes();
   }
 
   async getIssueList(scope: FeedbackReadModelScope): Promise<FeedbackIssueReadModelData> {
@@ -314,12 +318,14 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
     if (projectId && !project) return { status: "invalidProject" };
 
     const draft = createFeedbackDraft();
+    const uploadMaxBytes = await this.getReportAttachmentMaxBytes();
     const report = await this.ports.reportAttachments.prepareReport({
       actorUserId: actor.id,
       attachments: input.attachments ?? [],
       createdAt: draft.createdAt,
       description: input.description.trim(),
       feedbackId: draft.id,
+      uploadMaxBytes,
       scope: actor.scope,
     });
     if (report.status !== "ok") return { status: report.status };

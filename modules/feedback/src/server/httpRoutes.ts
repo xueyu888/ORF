@@ -1,3 +1,9 @@
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
@@ -81,6 +87,7 @@ const feedbackReferencesQuerySchema = z.object({
 });
 
 type MultipartFilePart = {
+  readonly file: Readable & { readonly truncated?: boolean };
   readonly fieldname: string;
   readonly filename: string;
   readonly mimetype: string;
@@ -95,6 +102,17 @@ type MultipartFieldPart = {
 };
 
 type MultipartPart = MultipartFilePart | MultipartFieldPart;
+
+const feedbackReportAttachmentFileLimit = 1_000;
+
+class FeedbackAttachmentUploadLimitError extends Error {
+  readonly statusCode = 413;
+
+  constructor(readonly maxBytes: number) {
+    super("Feedback attachments exceed the configured total size limit");
+    this.name = "FeedbackAttachmentUploadLimitError";
+  }
+}
 
 function parseCauseCategories(value: string) {
   try {
@@ -148,47 +166,86 @@ async function readCreateFeedbackBody(request: FastifyRequest, uploadMaxBytes: n
   if (!contentType.includes("multipart/form-data")) {
     const body = createFeedbackBodySchema.parse(request.body);
     return {
-      title: body.title,
-      causeCategories: body.causeCategories,
-      impact: body.impact,
-      priority: body.priority ?? null,
-      description: body.description,
-      assigneeUserId: normalizeOptionalId(body.assigneeUserId),
-      projectId: normalizeOptionalId(body.projectId),
-      attachments: [],
+      input: {
+        title: body.title,
+        causeCategories: body.causeCategories,
+        impact: body.impact,
+        priority: body.priority ?? null,
+        description: body.description,
+        assigneeUserId: normalizeOptionalId(body.assigneeUserId),
+        projectId: normalizeOptionalId(body.projectId),
+        attachments: [],
+      },
+      dispose: async () => undefined,
     };
   }
 
   const fields: Record<string, string> = {};
-  const attachments: Array<{ body: Buffer; clientId: string; fileName: string; mimeType: string }> = [];
-  for await (const part of multipartParts(request, uploadMaxBytes)) {
-    if (part.type === "field" && typeof part.value === "string") {
-      fields[part.fieldname] = part.value;
-    }
-    if (part.type === "file" && part.fieldname.startsWith("attachment:")) {
-      const clientId = part.fieldname.slice("attachment:".length).trim();
-      if (clientId) {
-        attachments.push({
-          body: await part.toBuffer(),
-          clientId,
-          fileName: part.filename,
-          mimeType: part.mimetype,
-        });
-      }
-    }
-  }
+  const attachments: Array<{ body: Readable; clientId: string; fileName: string; mimeType: string }> = [];
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), "orf-feedback-upload-"));
+  let aggregateBytes = 0;
+  let attachmentIndex = 0;
 
-  const body = createFeedbackMultipartFieldsSchema.parse(fields);
-  return {
-    title: body.title,
-    causeCategories: parseCauseCategories(body.causeCategories),
-    impact: body.impact,
-    priority: parsePriority(body.priority),
-    description: body.description,
-    assigneeUserId: normalizeOptionalId(body.assigneeUserId),
-    projectId: normalizeOptionalId(body.projectId),
-    attachments,
-  };
+  try {
+    for await (const part of multipartParts(request, uploadMaxBytes, feedbackReportAttachmentFileLimit)) {
+      if (part.type === "field" && typeof part.value === "string") {
+        fields[part.fieldname] = part.value;
+        continue;
+      }
+      if (part.type !== "file") continue;
+
+      const clientId = part.fieldname.startsWith("attachment:")
+        ? part.fieldname.slice("attachment:".length).trim()
+        : "";
+      if (!clientId) {
+        for await (const _chunk of part.file) {
+          // Consume unsupported file fields so multipart parsing can finish safely.
+        }
+        continue;
+      }
+
+      attachmentIndex += 1;
+      const temporaryPath = join(temporaryDirectory, `${attachmentIndex}.upload`);
+      const aggregateLimiter = new Transform({
+        transform(chunk: Buffer | Uint8Array, _encoding, callback) {
+          aggregateBytes += chunk.byteLength;
+          if (aggregateBytes > uploadMaxBytes) {
+            callback(new FeedbackAttachmentUploadLimitError(uploadMaxBytes));
+            return;
+          }
+          callback(null, chunk);
+        },
+      });
+      await pipeline(part.file, aggregateLimiter, createWriteStream(temporaryPath, { flags: "wx" }));
+      if (part.file.truncated) {
+        throw new FeedbackAttachmentUploadLimitError(uploadMaxBytes);
+      }
+      attachments.push({
+        body: createReadStream(temporaryPath),
+        clientId,
+        fileName: part.filename,
+        mimeType: part.mimetype,
+      });
+    }
+
+    const body = createFeedbackMultipartFieldsSchema.parse(fields);
+    return {
+      input: {
+        title: body.title,
+        causeCategories: parseCauseCategories(body.causeCategories),
+        impact: body.impact,
+        priority: parsePriority(body.priority),
+        description: body.description,
+        assigneeUserId: normalizeOptionalId(body.assigneeUserId),
+        projectId: normalizeOptionalId(body.projectId),
+        attachments,
+      },
+      dispose: () => rm(temporaryDirectory, { force: true, recursive: true }),
+    };
+  } catch (error) {
+    await rm(temporaryDirectory, { force: true, recursive: true });
+    throw error;
+  }
 }
 
 async function readFeedbackImportUpload(request: FastifyRequest, uploadMaxBytes: number) {
@@ -216,14 +273,14 @@ async function readFeedbackImportUpload(request: FastifyRequest, uploadMaxBytes:
   return file ? { ...file, fields } : null;
 }
 
-function multipartParts(request: FastifyRequest, uploadMaxBytes: number): AsyncIterable<MultipartPart> {
+function multipartParts(request: FastifyRequest, uploadMaxBytes: number, files = 1): AsyncIterable<MultipartPart> {
   const requestWithMultipart = request as FastifyRequest & {
-    parts?: (options: { limits: { fileSize: number } }) => AsyncIterable<MultipartPart>;
+    parts?: (options: { limits: { fileSize: number; files: number } }) => AsyncIterable<MultipartPart>;
   };
   if (!requestWithMultipart.parts) {
     throw new Error("Feedback multipart request handling is not registered.");
   }
-  return requestWithMultipart.parts({ limits: { fileSize: uploadMaxBytes } });
+  return requestWithMultipart.parts({ limits: { fileSize: uploadMaxBytes, files } });
 }
 
 function parseFeedbackImportReferenceMappings(value: string | undefined) {
@@ -429,14 +486,21 @@ export function registerFeedbackHttpRoutes(app: FastifyInstance, feedback: Feedb
     const context = await feedback.actor.requireUserScopeContext(request, reply);
     if (!context) return reply;
 
-    const body = await readCreateFeedbackBody(request, feedbackPortsUploadLimit(feedback));
-    const outcome = await feedback.createFeedback(body, applicationActor(context));
-    if (outcome.status === "notFound") return reply.code(404).send({ error: "Runtime scope not found" });
-    if (outcome.status === "invalid") return reply.code(400).send({ error: "Feedback body is required" });
-    if (outcome.status === "invalidAssignee") return reply.code(409).send({ error: "Feedback assignee must be an active member" });
-    if (outcome.status === "invalidProject") return reply.code(409).send({ error: "Feedback project not found" });
-    if (outcome.status === "tooLarge") return reply.code(413).send({ error: "Attachment is too large" });
-    return { feedbackId: outcome.feedbackId };
+    const uploadMaxBytes = await feedback.getReportAttachmentMaxBytes();
+    const parsed = await readCreateFeedbackBody(request, uploadMaxBytes);
+    try {
+      const outcome = await feedback.createFeedback(parsed.input, applicationActor(context));
+      if (outcome.status === "notFound") return reply.code(404).send({ error: "Runtime scope not found" });
+      if (outcome.status === "invalid") return reply.code(400).send({ error: "Feedback body is required" });
+      if (outcome.status === "invalidAssignee") return reply.code(409).send({ error: "Feedback assignee must be an active member" });
+      if (outcome.status === "invalidProject") return reply.code(409).send({ error: "Feedback project not found" });
+      if (outcome.status === "tooLarge") {
+        return reply.code(413).send({ error: "Feedback attachments exceed the configured total size limit" });
+      }
+      return { feedbackId: outcome.feedbackId };
+    } finally {
+      await parsed.dispose();
+    }
   });
 
   app.post("/api/feedback/:feedbackId/transitions", async (request, reply) => {

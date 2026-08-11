@@ -20,6 +20,7 @@ import { gitLabOrfChatEventTypes } from "../integrations/gitlab-orf-chat/model";
 import { publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import { chatSettingsError, chatSettingsPatchSchema, readChatSettings, saveChatSettings } from "../settings/chatSettings";
+import { feedbackSettingsError, feedbackSettingsPatchSchema, readFeedbackSettings, saveFeedbackSettings } from "../settings/feedbackSettings";
 import {
   backgroundSceneConfigSchema,
   backgroundScenePathSchema,
@@ -293,6 +294,45 @@ export function registerSettingsRoutes(app: FastifyInstance) {
       };
     } catch (error) {
       const mapped = chatSettingsError(error);
+      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
+    }
+  });
+
+  app.get("/api/settings/feedback", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    try {
+      return {
+        code: 0,
+        message: "ok",
+        data: await readFeedbackSettings(),
+      };
+    } catch (error) {
+      const mapped = feedbackSettingsError(error);
+      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
+    }
+  });
+
+  app.put("/api/settings/feedback", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    try {
+      const body = feedbackSettingsPatchSchema.parse(request.body);
+      const data = await saveFeedbackSettings(body);
+      publishSettingsInvalidation({ actorUserId: context.user.id, scope: context.scope, targetId: "feedback" });
+      return {
+        code: 0,
+        message: "ok",
+        data,
+      };
+    } catch (error) {
+      const mapped = feedbackSettingsError(error);
       return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
     }
   });

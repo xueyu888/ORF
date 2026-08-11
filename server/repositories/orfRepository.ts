@@ -86,6 +86,7 @@ import {
 } from "../../src/domain/orfAlignment";
 import { validateObjectiveDeadlineChange } from "../../src/domain/orfDeadline";
 import { db } from "../db/client";
+import { env } from "../env";
 import { requireFeedbackReferenceProvider } from "../references/feedbackReferenceRegistry";
 import {
   commentAttachments,
@@ -125,6 +126,7 @@ import {
 import { publishRealtimeSystemBroadcastToUsers } from "../realtime/realtimeEventBus";
 import { publishObjectiveInvalidation, publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { objectStorage } from "../storage/objectStorage";
+import { readFeedbackSettings } from "../settings/feedbackSettings";
 import { getOrfStateSnapshot } from "../readModels/orfTaskManagementReadModel";
 import {
   canPreviewCommentAttachment,
@@ -132,7 +134,7 @@ import {
   commentAttachmentPreviewKind,
   deleteStoredCommentAttachmentObjects,
   groupCommentAttachmentsByMessage,
-  prepareCommentAttachment,
+  prepareCommentAttachmentStream,
 } from "./commentAttachmentRepository";
 import {
   getCommentTargetAdapter,
@@ -2496,7 +2498,7 @@ export async function listCommentMentionableUsers(
 }
 
 export type UploadCommentAttachmentInput = {
-  body: Buffer;
+  body: Readable;
   fileName: string;
   mimeType: string;
   targetId: string;
@@ -2531,7 +2533,10 @@ export async function uploadCommentAttachment(
   }
 
   const createdAt = nowIso();
-  const prepared = await prepareCommentAttachment({
+  const maxBytes = input.targetType === "feedback"
+    ? (await readFeedbackSettings()).attachmentMaxBytes
+    : env.OBJECT_STORAGE_UPLOAD_MAX_BYTES;
+  const prepared = await prepareCommentAttachmentStream({
     body: input.body,
     createdAt,
     createdBy: actor.id,
@@ -2541,6 +2546,7 @@ export async function uploadCommentAttachment(
     storageScopeId: target.storageScopeId,
     targetId: input.targetId,
     targetType: input.targetType,
+    maxBytes,
   });
   if (prepared.status !== "ok") {
     return { status: prepared.status };

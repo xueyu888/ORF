@@ -75,7 +75,7 @@ export type FeedbackDiscussionPort = {
 };
 
 export type FeedbackReportAttachmentUpload = {
-  readonly body: Buffer;
+  readonly body: Readable;
   readonly clientId: string;
   readonly fileName: string;
   readonly mimeType: string;
@@ -105,6 +105,7 @@ export type FeedbackReportAttachmentPort = {
     readonly createdAt: string;
     readonly description: string;
     readonly feedbackId: string;
+    readonly uploadMaxBytes: number;
     readonly scope: FeedbackScope;
   }): Promise<
     | { readonly status: "ok"; readonly report: FeedbackPreparedReport }
@@ -166,6 +167,7 @@ export type FeedbackServerApplicationPorts = {
   readonly database: FeedbackApplicationDatabase;
   readonly discussion: FeedbackDiscussionPort;
   readonly limits: {
+    readReportAttachmentMaxBytes(): Promise<number>;
     readonly uploadMaxBytes: number;
   };
   readonly log: FeedbackApplicationLogPort;

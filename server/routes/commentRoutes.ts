@@ -54,25 +54,28 @@ function sendCommentOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typ
   return { ok: true, commentThread: outcome.thread ?? null };
 }
 
-async function readCommentAttachmentUpload(request: FastifyRequest) {
+async function readCommentAttachmentUpload(
+  request: FastifyRequest,
+  actor: Parameters<typeof uploadCommentAttachment>[1],
+) {
   const fields: Record<string, string> = {};
-  let file: { buffer: Buffer; fileName: string; mimeType: string } | null = null;
 
-  for await (const part of request.parts({ limits: { fileSize: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES, files: 1 } })) {
+  for await (const part of request.parts({ limits: { fileSize: env.ORF_INFRA_UPLOAD_MAX_BYTES, files: 1 } })) {
     if (part.type === "field" && typeof part.value === "string") {
       fields[part.fieldname] = part.value;
     }
     if (part.type === "file" && part.fieldname === "file") {
-      file = {
-        buffer: await part.toBuffer(),
+      const target = uploadCommentAttachmentFieldsSchema.parse(fields);
+      return uploadCommentAttachment({
+        body: part.file,
         fileName: part.filename,
         mimeType: part.mimetype,
-      };
+        ...target,
+      }, actor);
     }
   }
 
-  const target = uploadCommentAttachmentFieldsSchema.parse(fields);
-  return file ? { ...target, ...file } : null;
+  return null;
 }
 
 export function registerCommentRoutes(app: FastifyInstance) {
@@ -82,12 +85,10 @@ export function registerCommentRoutes(app: FastifyInstance) {
       return reply;
     }
 
-    const upload = await readCommentAttachmentUpload(request);
-    if (!upload) {
+    const outcome = await readCommentAttachmentUpload(request, user);
+    if (!outcome) {
       return reply.code(400).send({ error: "Attachment file is required" });
     }
-
-    const outcome = await uploadCommentAttachment({ ...upload, body: upload.buffer }, user);
     if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Comment target not found" });
     }

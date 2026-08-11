@@ -300,6 +300,7 @@ export type ChatSettingsData = {
   attachmentMaxBytes: number;
   infrastructureMaxBytes: number;
 };
+export type FeedbackSettingsData = ChatSettingsData;
 export type UserPreferences = {
   userId: string;
   defaultLandingPath: string | null;
@@ -1238,6 +1239,19 @@ export async function getChatSettings() {
 
 export async function saveChatSettings(input: Pick<ChatSettingsData, "attachmentMaxBytes">) {
   const response = await apiJson<ApiEnvelope<ChatSettingsData>>("/api/settings/chat", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
+export async function getFeedbackSettings() {
+  const response = await apiJson<ApiEnvelope<FeedbackSettingsData>>("/api/settings/feedback");
+  return response.data;
+}
+
+export async function saveFeedbackSettings(input: Pick<FeedbackSettingsData, "attachmentMaxBytes">) {
+  const response = await apiJson<ApiEnvelope<FeedbackSettingsData>>("/api/settings/feedback", {
     method: "PUT",
     body: JSON.stringify(input),
   });

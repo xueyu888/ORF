@@ -1,13 +1,15 @@
 import { clsx } from "clsx";
-import { Check, GitBranch, Loader2, MessageSquare, Palette, Plus, Power, RefreshCw, Settings2, Trash2, Upload } from "lucide-react";
+import { Check, GitBranch, Loader2, MessageSquare, MessageSquareWarning, Palette, Plus, Power, RefreshCw, Settings2, Trash2, Upload, type LucideIcon } from "lucide-react";
 import { type KeyboardEvent, useEffect, useState } from "react";
 import {
   getGitLabOrfChatSettings,
   getChatSettings,
+  getFeedbackSettings,
   createGitLabOrfChatChannelSubscription as requestCreateGitLabOrfChatChannelSubscription,
   deleteGitLabOrfChatChannelSubscription as requestDeleteGitLabOrfChatChannelSubscription,
   reconcileGitLabOrfChatSettings as requestReconcileGitLabOrfChatSettings,
   saveChatSettings as requestSaveChatSettings,
+  saveFeedbackSettings as requestSaveFeedbackSettings,
   updateGitLabOrfChatChannelSubscription as requestUpdateGitLabOrfChatChannelSubscription,
   type ChatSettingsData,
   type GitLabOrfChatEventType,
@@ -47,7 +49,7 @@ export function SystemSettingsPage() {
       <section className="orf-settings-detail" aria-label="设置详情">
         <div className="orf-settings-detail-heading">
           <span>系统配置</span>
-          <p>{activeWorkspace === "system" ? "管理聊天限制与外部消息集成。" : "配置登录、导航和业务页面的全站背景。"}</p>
+          <p>{activeWorkspace === "system" ? "管理聊天、反馈附件限制与外部消息集成。" : "配置登录、导航和业务页面的全站背景。"}</p>
         </div>
 
         <div className="orf-system-settings-workspace-tabs" role="tablist" aria-label="系统设置工作区">
@@ -83,6 +85,7 @@ export function SystemSettingsPage() {
           role="tabpanel"
         >
           <ChatSettingSection />
+          <FeedbackSettingSection />
           <GitLabOrfChatSettingSection />
         </div>
         <div
@@ -100,6 +103,58 @@ export function SystemSettingsPage() {
 }
 
 function ChatSettingSection() {
+  return (
+    <AttachmentLimitSettingSection
+      description="配置聊天单个附件的上传上限。"
+      Icon={MessageSquare}
+      inputLabel="聊天附件上限"
+      loadErrorMessage="聊天设置加载失败"
+      loadSettings={getChatSettings}
+      saveErrorMessage="聊天设置保存失败"
+      savedMessage="聊天设置已保存"
+      saveSettings={requestSaveChatSettings}
+      title="聊天设置"
+    />
+  );
+}
+
+function FeedbackSettingSection() {
+  return (
+    <AttachmentLimitSettingSection
+      description="配置单条反馈全部附件的总上传上限；默认 2GB。"
+      Icon={MessageSquareWarning}
+      inputLabel="反馈附件总上限"
+      loadErrorMessage="反馈设置加载失败"
+      loadSettings={getFeedbackSettings}
+      saveErrorMessage="反馈设置保存失败"
+      savedMessage="反馈设置已保存"
+      saveSettings={requestSaveFeedbackSettings}
+      title="反馈设置"
+    />
+  );
+}
+
+function AttachmentLimitSettingSection({
+  description,
+  Icon,
+  inputLabel,
+  loadErrorMessage,
+  loadSettings,
+  saveErrorMessage,
+  savedMessage,
+  saveSettings,
+  title,
+}: {
+  description: string;
+  Icon: LucideIcon;
+  inputLabel: string;
+  loadErrorMessage: string;
+  loadSettings: () => Promise<ChatSettingsData>;
+  saveErrorMessage: string;
+  savedMessage: string;
+  saveSettings: (input: Pick<ChatSettingsData, "attachmentMaxBytes">) => Promise<ChatSettingsData>;
+  title: string;
+}) {
   const { notify, readModelInvalidations } = useOrf();
   const settingsInvalidationKey = readModelInvalidationKey(readModelInvalidations, "settings");
   const [settings, setSettings] = useState<ChatSettingsData | null>(null);
@@ -107,7 +162,7 @@ function ChatSettingSection() {
   const [queryStatus, setQueryStatus] = useState<RequestStatus>("idle");
   const [queryErrorMessage, setQueryErrorMessage] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<RequestStatus>("idle");
-  const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const nextBytes = parseGbInput(inputValue);
   const validationMessage =
@@ -128,7 +183,7 @@ function ChatSettingSection() {
     let cancelled = false;
     setQueryStatus("loading");
     setQueryErrorMessage(null);
-    void getChatSettings()
+    void loadSettings()
       .then((data) => {
         if (cancelled) return;
         setSettings(data);
@@ -138,27 +193,27 @@ function ChatSettingSection() {
       .catch((error) => {
         if (cancelled) return;
         setQueryStatus("error");
-        setQueryErrorMessage(error instanceof Error ? error.message : "聊天设置加载失败");
+        setQueryErrorMessage(error instanceof Error ? error.message : loadErrorMessage);
       });
     return () => {
       cancelled = true;
     };
-  }, [settingsInvalidationKey]);
+  }, [loadErrorMessage, loadSettings, settingsInvalidationKey]);
 
   const handleSave = async () => {
     if (!settings || isSaveDisabled || nextBytes === null) return;
     setSaveStatus("loading");
-    setSaveErrorMessage(null);
+    setSaveError(null);
     try {
-      const data = await requestSaveChatSettings({ attachmentMaxBytes: nextBytes });
+      const data = await saveSettings({ attachmentMaxBytes: nextBytes });
       setSettings(data);
       setInputValue(uploadBytesToGbInput(data.attachmentMaxBytes));
       setSaveStatus("success");
-      notify("聊天设置已保存");
+      notify(savedMessage);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "聊天设置保存失败";
+      const message = error instanceof Error ? error.message : saveErrorMessage;
       setSaveStatus("error");
-      setSaveErrorMessage(message);
+      setSaveError(message);
       notify(message);
     }
   };
@@ -173,8 +228,8 @@ function ChatSettingSection() {
     <section className="orf-settings-background-section">
       <div className="orf-settings-section-header">
         <div>
-          <h2>聊天设置</h2>
-          <p>配置聊天附件上传上限。</p>
+          <h2>{title}</h2>
+          <p>{description}</p>
         </div>
         <Button type="button" size="sm" disabled={isSaveDisabled} onClick={() => void handleSave()}>
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
@@ -182,14 +237,14 @@ function ChatSettingSection() {
         </Button>
       </div>
 
-      <div className="orf-settings-background-controls" aria-label="聊天设置">
+      <div className="orf-settings-background-controls" aria-label={title}>
         <div className="orf-settings-background-label">
-          <MessageSquare className="h-5 w-5" />
+          <Icon className="h-5 w-5" />
           <span>附件上限</span>
         </div>
         <div className="orf-settings-control-field orf-settings-interval-field">
           <input
-            aria-label="聊天附件上限"
+            aria-label={inputLabel}
             className="orf-settings-number-input"
             type="number"
             min={0.01}
@@ -203,7 +258,7 @@ function ChatSettingSection() {
           <select className="orf-settings-unit-select" value="gb" disabled onChange={() => undefined}>
             <option value="gb">GB</option>
           </select>
-          {(validationMessage || saveErrorMessage) && <span className="orf-settings-inline-error">{validationMessage ?? saveErrorMessage}</span>}
+          {(validationMessage || saveError) && <span className="orf-settings-inline-error">{validationMessage ?? saveError}</span>}
         </div>
 
         <div className="orf-settings-background-label">
@@ -212,7 +267,7 @@ function ChatSettingSection() {
         </div>
         <div className="orf-settings-control-field">
           {queryStatus === "loading" && <span className="orf-settings-inline-error">加载中...</span>}
-          {queryStatus === "error" && <span className="orf-settings-inline-error">{queryErrorMessage ?? "聊天设置加载失败"}</span>}
+          {queryStatus === "error" && <span className="orf-settings-inline-error">{queryErrorMessage ?? loadErrorMessage}</span>}
           {settings && <span className="orf-settings-selected-text">{formatUploadBytes(settings.infrastructureMaxBytes)}</span>}
         </div>
       </div>

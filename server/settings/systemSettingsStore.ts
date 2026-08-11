@@ -8,6 +8,7 @@ import {
 
 export type RawSystemSettingsFile = {
   chat?: Record<string, unknown>;
+  feedback?: Record<string, unknown>;
   visual?: {
     backgrounds?: Record<string, unknown>;
   };
@@ -18,6 +19,7 @@ let settingsMutationQueue: Promise<void> = Promise.resolve();
 function emptySystemSettings(): RawSystemSettingsFile {
   return {
     chat: {},
+    feedback: {},
     visual: {
       backgrounds: {},
     },
@@ -37,6 +39,7 @@ function normalizeRawSettings(input: RawSystemSettingsFile | null | undefined): 
   return {
     ...input,
     chat: input?.chat ?? {},
+    feedback: input?.feedback ?? {},
     visual: {
       ...input?.visual,
       backgrounds: input?.visual?.backgrounds ?? {},

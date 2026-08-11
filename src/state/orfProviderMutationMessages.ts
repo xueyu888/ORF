@@ -158,7 +158,7 @@ export function commentMutationFailureMessage(error: unknown, fallback: string) 
     }
 
     if (error.status === 413) {
-      return "附件过大，请压缩后再上传";
+      return "附件大小超过系统配置上限";
     }
 
     if (error.status === 415) {

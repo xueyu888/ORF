@@ -5,7 +5,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { teamFeedbackCauseOptions, type FeedbackImpact } from "../../contracts";
 import { feedbackRootPath } from "../../contracts/links";
 import { feedbackImpactLabel } from "../../contracts/labels";
-import { createFeedback, feedbackMutationFailureMessage } from "../api";
+import { createFeedback, feedbackMutationFailureMessage, getFeedbackAttachmentSettings } from "../api";
 import { FeedbackButton, FeedbackEmptyState } from "../components/controls";
 import { canCreateTeamFeedback } from "../model/capabilities";
 import { feedbackIssueHref } from "../model/issue";
@@ -13,6 +13,15 @@ import { useFeedbackWebHost, type FeedbackCommentDraft } from "../runtime";
 import { useFeedbackAssigneeOptions, useFeedbackIssueReadModel } from "../hooks";
 
 const feedbackImpactOptions: FeedbackImpact[] = ["low", "medium", "high", "critical"];
+
+function formatAttachmentBytes(bytes: number) {
+  const gibibyte = 1024 * 1024 * 1024;
+  const mebibyte = 1024 * 1024;
+  if (bytes <= 0) return "0 KB";
+  if (bytes >= gibibyte) return `${(bytes / gibibyte).toFixed(bytes % gibibyte === 0 ? 0 : 1)} GB`;
+  if (bytes >= mebibyte) return `${(bytes / mebibyte).toFixed(bytes % mebibyte === 0 ? 0 : 1)} MB`;
+  return `${Math.max(1, Math.ceil(bytes / 1024))} KB`;
+}
 
 type PendingFeedbackAttachment = {
   file: File;
@@ -42,6 +51,7 @@ export function FeedbackCreatePage() {
   const [assigneeUserId, setAssigneeUserId] = useState(initialAssigneeUserId);
   const [projectId, setProjectId] = useState(initialProjectId);
   const [pendingAttachments, setPendingAttachments] = useState<PendingFeedbackAttachment[]>([]);
+  const [attachmentMaxBytes, setAttachmentMaxBytes] = useState<number | null>(null);
   const [previewAttachmentId, setPreviewAttachmentId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const attachmentCounterRef = useRef(0);
@@ -50,6 +60,7 @@ export function FeedbackCreatePage() {
   const body = host.commentDraft.serialize(draft).trim();
   const referencedPendingAttachmentIds = new Set(host.commentDraft.validPendingAttachmentIds(draft));
   const referencedAttachments = pendingAttachments.filter((attachment) => referencedPendingAttachmentIds.has(attachment.id));
+  const referencedAttachmentBytes = referencedAttachments.reduce((total, attachment) => total + attachment.file.size, 0);
   const referencedImageAttachments = referencedAttachments.filter(isPendingFeedbackImageAttachment);
   const previewAttachmentIndex = previewAttachmentId
     ? referencedImageAttachments.findIndex((attachment) => attachment.id === previewAttachmentId)
@@ -61,6 +72,20 @@ export function FeedbackCreatePage() {
       URL.revokeObjectURL(previewUrl);
     }
     pendingPreviewUrlsRef.current.clear();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getFeedbackAttachmentSettings()
+      .then((settings) => {
+        if (!cancelled) setAttachmentMaxBytes(settings.attachmentMaxBytes);
+      })
+      .catch(() => {
+        // The server remains the final authority when the optional display limit cannot be loaded.
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -107,6 +132,10 @@ export function FeedbackCreatePage() {
   }
 
   const uploadLocalAttachment = async (file: File) => {
+    if (attachmentMaxBytes !== null && referencedAttachmentBytes + file.size > attachmentMaxBytes) {
+      notify(`单条反馈的附件总大小不能超过 ${formatAttachmentBytes(attachmentMaxBytes)}`);
+      return null;
+    }
     attachmentCounterRef.current += 1;
     const id = `pending-${Date.now()}-${attachmentCounterRef.current}`;
     const previewUrl = URL.createObjectURL(file);
@@ -121,6 +150,10 @@ export function FeedbackCreatePage() {
     if (submitting) return;
     if (!title.trim() || !body || !cause.trim() || !assigneeUserId.trim()) {
       notify("请填写标题、正文、分类和处理人");
+      return;
+    }
+    if (attachmentMaxBytes !== null && referencedAttachmentBytes > attachmentMaxBytes) {
+      notify(`单条反馈的附件总大小不能超过 ${formatAttachmentBytes(attachmentMaxBytes)}`);
       return;
     }
 
@@ -172,6 +205,11 @@ export function FeedbackCreatePage() {
             <div className="feedback-create-editor-header">
               <UserAvatar avatarUrl={currentUser?.avatarUrl} className="h-7 w-7 text-[11px]" frame={false} name={currentUser?.name ?? "User"} />
               <strong>{currentUser?.name ?? "User"}</strong>
+              {attachmentMaxBytes !== null && (
+                <span className="feedback-create-attachment-limit">
+                  附件 {formatAttachmentBytes(referencedAttachmentBytes)} / {formatAttachmentBytes(attachmentMaxBytes)}
+                </span>
+              )}
             </div>
             <div className="feedback-create-body-field">
               <CommentDraftFields

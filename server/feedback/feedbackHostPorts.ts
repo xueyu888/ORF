@@ -16,7 +16,7 @@ import { env } from "../env";
 import {
   deleteStoredCommentAttachmentObjects,
   groupCommentAttachmentsByMessage,
-  prepareCommentAttachment,
+  prepareCommentAttachmentStream,
   type PreparedCommentAttachment,
 } from "../repositories/commentAttachmentRepository";
 import {
@@ -27,6 +27,7 @@ import { runtimeScope, runtimeScopeStorageId } from "../repositories/runtimeScop
 import { getScopedUsers } from "../repositories/userRepository";
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { objectStorage } from "../storage/objectStorage";
+import { readFeedbackSettings } from "../settings/feedbackSettings";
 import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
 import { feedbackNotificationPort } from "./feedbackNotificationPort";
 
@@ -78,6 +79,9 @@ export function createOrfFeedbackPorts(input: {
     dailyDigest: input.dailyDigest,
     discussion: feedbackDiscussionPort,
     limits: {
+      async readReportAttachmentMaxBytes() {
+        return (await readFeedbackSettings()).attachmentMaxBytes;
+      },
       uploadMaxBytes: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES,
     },
     log: input.log,
@@ -198,12 +202,14 @@ const feedbackReportAttachmentPort: FeedbackReportAttachmentPort = {
   },
   async prepareReport(input) {
     const preparedUploads: Array<{ clientId: string; prepared: PreparedCommentAttachment }> = [];
+    let remainingBytes = input.uploadMaxBytes;
     for (const attachment of input.attachments) {
-      const prepared = await prepareCommentAttachment({
+      const prepared = await prepareCommentAttachmentStream({
         body: attachment.body,
         createdAt: input.createdAt,
         createdBy: input.actorUserId,
         fileName: attachment.fileName,
+        maxBytes: remainingBytes,
         messageId: null,
         mimeType: attachment.mimeType,
         storageScopeId: input.scope.storageScopeId,
@@ -214,6 +220,7 @@ const feedbackReportAttachmentPort: FeedbackReportAttachmentPort = {
         await deleteStoredCommentAttachmentObjects(preparedUploads.map((upload) => upload.prepared.row));
         return { status: prepared.status };
       }
+      remainingBytes -= prepared.prepared.row.fileSize;
       preparedUploads.push({ clientId: attachment.clientId, prepared: prepared.prepared });
     }
 

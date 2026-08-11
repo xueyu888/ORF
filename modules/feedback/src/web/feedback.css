@@ -1069,6 +1069,13 @@ textarea.feedback-issue-sidebar-input {
   margin-bottom: 10px;
 }
 
+.feedback-create-attachment-limit {
+  margin-left: auto;
+  color: var(--orf-text-subtle);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .feedback-create-sidebar,
 .feedback-create-sidebar-field {
   display: grid;

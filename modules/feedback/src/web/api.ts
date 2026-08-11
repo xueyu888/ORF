@@ -106,6 +106,11 @@ export type FeedbackImportReferenceOptions = {
   projects: FeedbackWebProject[];
 };
 
+export type FeedbackAttachmentSettings = {
+  attachmentMaxBytes: number;
+  infrastructureMaxBytes: number;
+};
+
 export async function getFeedbackIssueReadModel(query = "") {
   const normalizedQuery = query.trim().replace(/^\?/, "");
   const suffix = normalizedQuery ? `?${normalizedQuery}` : "";
@@ -157,6 +162,11 @@ export async function getFeedbackReferences(input: {
 
 export async function getFeedbackAssignees() {
   return apiJson<{ users: FeedbackWebUserSummary[] }>("/api/feedback/assignees");
+}
+
+export async function getFeedbackAttachmentSettings() {
+  const response = await apiJson<{ data: FeedbackAttachmentSettings }>("/api/settings/feedback");
+  return response.data;
 }
 
 export async function createFeedback(input: CreateFeedbackInput): Promise<string> {
@@ -301,7 +311,7 @@ export function feedbackMutationFailureMessage(error: unknown, fallback: string)
     if (error.status === 403) return "当前账号没有权限执行这个反馈操作";
     if (error.status === 404) return "反馈不存在或当前账号不可见";
     if (error.status === 409) return "反馈已被其他人更新，请刷新后重试";
-    if (error.status === 413) return "附件过大";
+    if (error.status === 413) return "附件总大小超过系统配置上限";
     return error.message || fallback;
   }
   return fallback;
