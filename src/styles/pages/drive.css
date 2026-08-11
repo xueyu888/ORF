@@ -2565,9 +2565,51 @@ body:has(.orf-app-shell[data-page-scene="page_resources_background"][data-worksp
     scroll-margin-top: calc(var(--orf-mobile-topbar-height) + 8px);
   }
 
-.orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-mobile-detail-header {
+  .orf-app-shell[data-page-scene="page_resources_background"] .orf-drive-mobile-detail-header {
     border-color: color-mix(in srgb, var(--orf-material-content-hairline) 58%, var(--orf-workbench-hairline));
     background: var(--orf-material-content-primary);
+  }
+
+  .orf-drive-searchbar :is(input, select, .orf-control),
+  .orf-drive-mobile-filter-trigger,
+  .orf-drive-filter-selects select,
+  .orf-drive-details > .orf-drive-detail-section > select {
+    min-height: 44px;
+  }
+
+  .orf-drive-page .orf-drive-searchbar button.orf-control {
+    min-height: 44px;
+  }
+
+  .orf-drive-row {
+    min-height: 44px;
+  }
+
+  .orf-drive-filter-chips button,
+  .orf-drive-markdown-toolbar button,
+  .orf-drive-download-link,
+  .orf-drive-context-list button,
+  .orf-drive-version-list button,
+  .orf-drive-markdown-rendered .orf-rich-text-markdown-code-header button {
+    min-height: 40px;
+  }
+
+  .orf-drive-copy-link {
+    height: 40px;
+  }
+
+  .orf-drive-download-link,
+  .orf-drive-markdown-rendered .orf-rich-text-markdown-code-header button {
+    border-radius: 999px;
+    padding-inline: 10px;
+  }
+
+  .orf-drive-markdown-toolbar button {
+    min-width: 52px;
+  }
+
+  .orf-drive-filter-chips button {
+    min-width: 44px;
   }
 }
 
