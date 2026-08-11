@@ -113,6 +113,8 @@ export function FeedbackIssuePage() {
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const commentElementRefs = useRef(new Map<string, HTMLElement>());
   const markedViewSequenceRef = useRef<string | null>(null);
+  const loadMentionableUsersRef = useRef(loadCommentMentionableUsers);
+  loadMentionableUsersRef.current = loadCommentMentionableUsers;
   const assigneeOptions = useFeedbackAssigneeOptions(users, currentUser);
   const threads = useMemo(() => feedback ? feedbackIssueThreads(feedbackData.comments, feedback.id) : [], [feedback, feedbackData.comments]);
   const entries = useMemo(() => feedbackCommentEntries(threads), [threads]);
@@ -125,6 +127,7 @@ export function FeedbackIssuePage() {
   const mentionUsersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
   const canEditMetadata = Boolean(feedback?.capabilities.canEditReport);
   const canChangeAssignee = Boolean(feedback?.capabilities.canChangeAssignee);
+  const feedbackTargetId = feedback?.id ?? null;
   const refreshFeedbackIssueData = useCallback(() => feedbackReadModel.reload(), [feedbackReadModel.reload]);
 
   useEffect(() => {
@@ -190,13 +193,13 @@ export function FeedbackIssuePage() {
   }, [linkedCommentMessageId]);
 
   useEffect(() => {
-    if (!feedback) {
+    if (!feedbackTargetId) {
       setMentionableUsers([]);
       return;
     }
 
     let cancelled = false;
-    loadCommentMentionableUsers({ targetId: feedback.id, targetType: "feedback" })
+    loadMentionableUsersRef.current({ targetId: feedbackTargetId, targetType: "feedback" })
       .then((users) => {
         if (!cancelled) setMentionableUsers(users.filter((user) => user.status === "active"));
       })
@@ -207,7 +210,7 @@ export function FeedbackIssuePage() {
     return () => {
       cancelled = true;
     };
-  }, [feedback, loadCommentMentionableUsers]);
+  }, [feedbackTargetId]);
 
   useEffect(() => {
     if (!feedback || !currentUser) {
