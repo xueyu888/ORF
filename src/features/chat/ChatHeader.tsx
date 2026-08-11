@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Archive, ArrowLeft, Bell, BellOff, Bookmark, EyeOff, Folder, Inbox, Info, MoreHorizontal, Pin, Reply, Search, Star, UserPlus, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { IconButton, actionButtonClassName } from "../../components/ui";
@@ -77,6 +77,32 @@ export function ChatHeader({
   const runMenuAction = (handler: () => void) => {
     setMoreOpen(false);
     handler();
+  };
+  const focusMoreTrigger = () => {
+    window.setTimeout(() => moreMenuRef.current?.querySelector<HTMLButtonElement>("button[aria-haspopup='menu']")?.focus(), 0);
+  };
+  const handleMoreKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!moreOpen) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setMoreOpen(false);
+      focusMoreTrigger();
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const items = Array.from(moreMenuRef.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']") ?? [])
+      .filter((item) => !item.disabled && item.offsetParent !== null);
+    if (items.length === 0) return;
+    event.preventDefault();
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End" || (event.key === "ArrowUp" && currentIndex < 0)
+        ? items.length - 1
+        : event.key === "ArrowDown"
+          ? currentIndex < 0 ? 0 : (currentIndex + 1) % items.length
+          : (currentIndex - 1 + items.length) % items.length;
+    items[nextIndex]?.focus();
   };
 
   return (
@@ -162,7 +188,7 @@ export function ChatHeader({
             <span>{channel.threadUnreadCount}</span>
           </button>
         )}
-        <div className="orf-chat-header-more" ref={moreMenuRef}>
+        <div className="orf-chat-header-more" ref={moreMenuRef} onKeyDown={handleMoreKeyDown}>
           <IconButton
             icon={MoreHorizontal}
             label="更多频道操作"
