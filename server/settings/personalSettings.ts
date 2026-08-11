@@ -24,7 +24,6 @@ import {
   userFilterPreferencesPatchSchema,
 } from "../../src/domain/settings/filterPreferences";
 import {
-  visualMaterialPreferencesNeedMigration,
   visualBackgroundScenes,
   type VisualBackgroundScene as CanonicalBackgroundScene,
 } from "../../src/domain/settings/visualBackgrounds";
@@ -170,17 +169,6 @@ function normalizeUserPreferences(userId: string, input: Partial<UserPreferences
   };
 }
 
-function personalBackgroundsNeedMigration(input: Partial<UserPreferences> | null | undefined) {
-  const rawBackgrounds = input?.backgrounds && typeof input.backgrounds === "object" ? input.backgrounds : {};
-  return Object.values(rawBackgrounds).some((config) => {
-    if (!config || typeof config !== "object") return false;
-    const candidate = config as { material?: unknown; migration?: unknown; version?: unknown };
-    return candidate.version !== 4
-      || visualMaterialPreferencesNeedMigration(candidate.material)
-      || !candidate.migration;
-  });
-}
-
 async function readPreferencesJson(userId: string) {
   const raw = await readFile(userPreferencesPath(userId), "utf8");
   return JSON.parse(raw) as RawStoredUserPreferences;
@@ -190,11 +178,7 @@ export async function readUserPreferences(userId: string) {
   await ensurePrivateSettingsStorage();
   try {
     const rawPreferences = await readPreferencesJson(userId);
-    const preferences = normalizeUserPreferences(userId, rawPreferences);
-    if (personalBackgroundsNeedMigration(rawPreferences)) {
-      await writeUserPreferences(preferences).catch(() => undefined);
-    }
-    return preferences;
+    return normalizeUserPreferences(userId, rawPreferences);
   } catch {
     return defaultUserPreferences(userId);
   }

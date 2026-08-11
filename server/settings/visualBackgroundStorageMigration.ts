@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { copyFile, mkdir, readFile, readdir, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { visualBackgroundScenes } from "../../src/domain/settings/visualBackgrounds";
+import { normalizeLegacyVisualBackgroundConfig } from "./legacyVisualBackgroundConfig";
 
 const migrationName = "visual-background-v4";
 const legacyScene = "app_background";
@@ -159,13 +160,20 @@ function canonicalizeSystemSettings(value: unknown, idMap: ReadonlyMap<string, s
   const settings = asRecord(rewriteBackgroundIds(value, idMap));
   const visual = asRecord(settings?.visual);
   const backgrounds = asRecord(visual?.backgrounds);
-  if (!settings || !visual || !backgrounds || !Object.prototype.hasOwnProperty.call(backgrounds, legacyScene)) {
+  if (!settings || !visual || !backgrounds) {
     return settings;
   }
-  const legacyConfig = backgrounds[legacyScene];
-  if (backgrounds.topbar_background === undefined) backgrounds.topbar_background = legacyConfig;
-  if (backgrounds.sidebar_background === undefined) backgrounds.sidebar_background = legacyConfig;
-  delete backgrounds[legacyScene];
+  if (Object.prototype.hasOwnProperty.call(backgrounds, legacyScene)) {
+    const legacyConfig = backgrounds[legacyScene];
+    if (backgrounds.topbar_background === undefined) backgrounds.topbar_background = legacyConfig;
+    if (backgrounds.sidebar_background === undefined) backgrounds.sidebar_background = legacyConfig;
+    delete backgrounds[legacyScene];
+  }
+  for (const scene of visualBackgroundScenes) {
+    if (backgrounds[scene] !== undefined && backgrounds[scene] !== null) {
+      backgrounds[scene] = normalizeLegacyVisualBackgroundConfig(backgrounds[scene]);
+    }
+  }
   return settings;
 }
 
@@ -182,6 +190,11 @@ function canonicalizeUserPreferences(value: unknown, idMap: ReadonlyMap<string, 
   }
   delete preferences.appBackground;
   delete backgrounds[legacyScene];
+  for (const scene of visualBackgroundScenes) {
+    if (backgrounds[scene] !== undefined && backgrounds[scene] !== null) {
+      backgrounds[scene] = normalizeLegacyVisualBackgroundConfig(backgrounds[scene]);
+    }
+  }
 
   const migration = asRecord(preferences.migration);
   if (migration && Object.prototype.hasOwnProperty.call(migration, "appBackgroundV2")) {

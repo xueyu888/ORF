@@ -19,12 +19,16 @@ export type CachedLoginBackgroundPreview = {
   userId: string;
 };
 
-type LegacyCachedLoginBackgroundPreview = Partial<CachedLoginBackgroundPreview> & {
-  placement?: unknown;
-};
-
 function canUseStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function isCurrentCrop(input: unknown): input is VisualBackgroundCrop {
+  return typeof input === "object"
+    && input !== null
+    && typeof (input as Partial<VisualBackgroundCrop>).centerX === "number"
+    && typeof (input as Partial<VisualBackgroundCrop>).centerY === "number"
+    && typeof (input as Partial<VisualBackgroundCrop>).zoom === "number";
 }
 
 function loadImage(src: string) {
@@ -52,14 +56,14 @@ export function readCachedLoginBackgroundPreview(): CachedLoginBackgroundPreview
   try {
     const raw = window.localStorage.getItem(storageKey);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as LegacyCachedLoginBackgroundPreview;
-    if (!parsed.userId || !parsed.dataUrl || !parsed.updatedAt) return null;
+    const parsed = JSON.parse(raw) as Partial<CachedLoginBackgroundPreview>;
+    if (!parsed.userId || !parsed.dataUrl || !parsed.updatedAt || !isCurrentCrop(parsed.crop)) return null;
     return {
       userId: parsed.userId,
       dataUrl: parsed.dataUrl,
       material: normalizeVisualMaterialPreferences(parsed.material ?? defaultVisualMaterialPreferences),
       updatedAt: parsed.updatedAt,
-      crop: normalizeVisualBackgroundCrop(parsed.crop ?? parsed.placement ?? defaultVisualBackgroundCrop),
+      crop: normalizeVisualBackgroundCrop(parsed.crop ?? defaultVisualBackgroundCrop),
     };
   } catch {
     return null;
