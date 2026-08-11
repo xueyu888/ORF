@@ -3,6 +3,7 @@ import {
   CheckCheck,
   FileText,
   Image as ImageIcon,
+  LockKeyhole,
   Loader2,
   Paperclip,
   RotateCcw,
@@ -282,6 +283,19 @@ export function ChatComposer({
       return false;
     }
   };
+
+  if (disabled) {
+    return (
+      <div className="orf-chat-composer orf-chat-composer-readonly">
+        <div className="orf-chat-composer-readonly-notice" role="status">
+          <span className="orf-chat-composer-readonly-icon" aria-hidden="true">
+            <LockKeyhole className="h-4 w-4" />
+          </span>
+          <span>当前没有发送权限</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
