@@ -78,23 +78,17 @@ function backgroundSourceInfo(id: string) {
     decodedId = id;
   }
   const [sceneRaw, scopeRaw] = decodedId.split("/");
-  const slotLabel = sceneRaw === "app_background"
-    ? "旧版外壳"
-    : visualSkinSlots.find((item) => item.scene === sceneRaw)?.label ?? "未知槽位";
+  const slotLabel = visualSkinSlots.find((item) => item.scene === sceneRaw)?.label ?? "未知槽位";
   const scopeLabel = scopeRaw === "personal"
     ? "个人图库"
     : scopeRaw === "default"
       ? "内置图库"
-      : scopeRaw === "user"
-        ? "旧系统图库"
-        : "系统图库";
+      : "系统图库";
   const scopeBadge = scopeRaw === "personal"
     ? "个人"
     : scopeRaw === "default"
       ? "内置"
-      : scopeRaw === "user"
-        ? "旧版"
-        : "系统";
+      : "系统";
   return {
     detailLabel: `${scopeLabel} / ${slotLabel}`,
     scopeBadge,

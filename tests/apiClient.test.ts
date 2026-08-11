@@ -31,7 +31,6 @@ import {
 
 function userPreferences(userId: string, overrides: Partial<UserPreferences> = {}): UserPreferences {
   return {
-    appBackground: null,
     backgrounds: {},
     chatTheme: "light",
     defaultLandingPath: "/bounties",

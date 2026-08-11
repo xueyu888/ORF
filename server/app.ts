@@ -38,7 +38,8 @@ import { createOrfFeedbackServerHost } from "./feedback/feedbackServerHost";
 import { startReestimateAutoFreezeScheduler } from "./orf/reestimateAutoFreezeScheduler";
 import { registerWorkLogCommentTargetAdapter } from "./workLogs/workLogCommentTarget";
 import { startWorkLogReminderScheduler } from "./workLogs/workLogReminderScheduler";
-import { ensurePrivateSettingsStorage } from "./settings/settingsStorage";
+import { ensurePrivateSettingsStorage, privateSettingsRoot } from "./settings/settingsStorage";
+import { migrateLegacyVisualBackgroundStorage } from "./settings/visualBackgroundStorageMigration";
 
 function corsOrigin() {
   if (env.CORS_ORIGIN === "*") {
@@ -100,6 +101,7 @@ export async function buildServer(options: {
 
   await assertRuntimeDatabaseSchema();
   await ensurePrivateSettingsStorage();
+  await migrateLegacyVisualBackgroundStorage(privateSettingsRoot);
 
   app.addHook("preHandler", requireAuthenticatedApi);
 

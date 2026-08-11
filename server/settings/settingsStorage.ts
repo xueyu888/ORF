@@ -36,7 +36,7 @@ const publicUsersRoot = path.join(publicSettingsRoot, "users");
 const privateUsersRoot = path.join(privateSettingsRoot, "users");
 const publicBackgroundsRoot = path.join(publicSettingsRoot, "backgrounds");
 const privateBackgroundsRoot = path.join(privateSettingsRoot, "backgrounds");
-const mutableBackgroundScopes = ["system", "user", "personal"] as const;
+const legacyMutableBackgroundScopes = ["system", "user", "personal"] as const;
 
 let storageInitialization: Promise<void> | null = null;
 
@@ -123,7 +123,7 @@ async function migrateMutableBackgrounds() {
     if (!sceneEntry.isDirectory()) {
       continue;
     }
-    for (const scope of mutableBackgroundScopes) {
+    for (const scope of legacyMutableBackgroundScopes) {
       await moveWithoutOverwrite(
         path.join(publicBackgroundsRoot, sceneEntry.name, scope),
         path.join(privateBackgroundsRoot, sceneEntry.name, scope),

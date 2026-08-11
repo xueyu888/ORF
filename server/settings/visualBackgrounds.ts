@@ -4,9 +4,6 @@ import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import {
-  acceptsLegacyAppBackgroundScene,
-  canonicalVisualBackgroundScene,
-  canonicalVisualBackgroundScope,
   defaultVisualBackgroundConfig,
   defaultLegacyVisualBackgroundOverlayOpacity,
   normalizeVisualBackgroundCrop,
@@ -18,14 +15,8 @@ import {
   visualMaterialStrengthLimits,
   visualMaterialTones,
   visualMaterialPreferencesNeedMigration,
-  legacyVisualBackgroundScenes,
-  legacyVisualBackgroundStorageScenes,
-  legacyVisualBackgroundScopes,
   visualBackgroundScenes,
   visualBackgroundScopes,
-  type AnyVisualBackgroundScene,
-  type AnyVisualBackgroundStorageScene,
-  type AnyVisualBackgroundScope,
   type VisualBackgroundScene as CanonicalBackgroundScene,
   type VisualBackgroundScope as CanonicalBackgroundScope,
 } from "../../src/domain/settings/visualBackgrounds";
@@ -36,18 +27,11 @@ const imageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avi
 const allowedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
 const maxUploadSize = 10 * 1024 * 1024;
 
-const anyBackgroundScenes = [...visualBackgroundScenes, ...legacyVisualBackgroundScenes] as [AnyVisualBackgroundScene, ...AnyVisualBackgroundScene[]];
-const storageBackgroundScenes = [...anyBackgroundScenes, ...legacyVisualBackgroundStorageScenes] as [
-  AnyVisualBackgroundStorageScene,
-  ...AnyVisualBackgroundStorageScene[],
-];
-const anyBackgroundScopes = [...visualBackgroundScopes, ...legacyVisualBackgroundScopes] as [AnyVisualBackgroundScope, ...AnyVisualBackgroundScope[]];
-
-export const backgroundSceneSchema = z.enum(anyBackgroundScenes).transform(canonicalVisualBackgroundScene);
-export const backgroundScenePathSchema = z.enum(storageBackgroundScenes);
-export const backgroundStorageScenePathSchema = z.enum(storageBackgroundScenes);
-const backgroundScopeSchema = z.enum(anyBackgroundScopes).transform(canonicalVisualBackgroundScope);
-export const backgroundScopePathSchema = z.enum(anyBackgroundScopes);
+export const backgroundSceneSchema = z.enum(visualBackgroundScenes);
+export const backgroundScenePathSchema = z.enum(visualBackgroundScenes);
+export const backgroundStorageScenePathSchema = z.enum(visualBackgroundScenes);
+const backgroundScopeSchema = z.enum(visualBackgroundScopes);
+export const backgroundScopePathSchema = z.enum(visualBackgroundScopes);
 export const backgroundModeSchema = z.enum(["fixed", "switchable"]);
 export const backgroundSwitchTriggerSchema = z.enum(["on_open", "interval"]);
 export const backgroundSwitchOrderSchema = z.enum(["sequential", "random"]);
@@ -149,10 +133,10 @@ type LegacyBackgroundConfig = {
 };
 
 type ParsedBackgroundId = {
-  scene: CanonicalBackgroundScene | null;
+  scene: CanonicalBackgroundScene;
   scope: CanonicalBackgroundScope;
-  storageScene: AnyVisualBackgroundStorageScene;
-  storageScope: AnyVisualBackgroundScope;
+  storageScene: CanonicalBackgroundScene;
+  storageScope: CanonicalBackgroundScope;
   fileName: string;
   filePath: string;
 };
@@ -166,11 +150,11 @@ const emptyVisualSettings = (): VisualSettings => ({
   },
 });
 
-function sceneDir(scene: AnyVisualBackgroundStorageScene, scope: AnyVisualBackgroundScope) {
+function sceneDir(scene: CanonicalBackgroundScene, scope: CanonicalBackgroundScope) {
   return visualBackgroundDirectory(scene, scope);
 }
 
-function sceneUrl(scene: AnyVisualBackgroundStorageScene, scope: AnyVisualBackgroundScope, fileName: string) {
+function sceneUrl(scene: CanonicalBackgroundScene, scope: CanonicalBackgroundScope, fileName: string) {
   return `/settings/backgrounds/${scene}/${scope}/${encodeURIComponent(fileName)}`;
 }
 
@@ -321,11 +305,8 @@ function normalizeBackgroundConfig(input: LegacyBackgroundConfig | null | undefi
 function normalizeVisualSettings(input: RawSystemSettingsFile | null | undefined): VisualSettings {
   const settings = emptyVisualSettings();
   for (const scene of visualBackgroundScenes) {
-    const legacyAppConfig = acceptsLegacyAppBackgroundScene(scene)
-      ? (input?.visual?.backgrounds?.app_background as LegacyBackgroundConfig | undefined)
-      : undefined;
     settings.visual.backgrounds[scene] = normalizeBackgroundConfig(
-      (input?.visual?.backgrounds?.[scene] as LegacyBackgroundConfig | undefined) ?? legacyAppConfig,
+      input?.visual?.backgrounds?.[scene] as LegacyBackgroundConfig | undefined,
     );
   }
   return settings;
@@ -361,49 +342,39 @@ async function readVisualSettings() {
   return settings;
 }
 
-function storageSceneNames(scene: CanonicalBackgroundScene): AnyVisualBackgroundStorageScene[] {
-  const sharedScenes = visualBackgroundScenes.filter((candidate) => candidate !== scene);
-  const legacyScenes: AnyVisualBackgroundScene[] = acceptsLegacyAppBackgroundScene(scene) ? ["app_background"] : [];
-  return [scene, ...sharedScenes, ...legacyVisualBackgroundStorageScenes, ...legacyScenes];
-}
-
-function storageScopeNames(scope: CanonicalBackgroundScope): AnyVisualBackgroundScope[] {
-  return scope === "system" ? ["system", "user"] : [scope];
+function storageSceneNames(scene: CanonicalBackgroundScene): CanonicalBackgroundScene[] {
+  return [scene, ...visualBackgroundScenes.filter((candidate) => candidate !== scene)];
 }
 
 async function scanBackgroundScope(scene: CanonicalBackgroundScene, scope: CanonicalBackgroundScope) {
   const images: VisualBackgroundImage[] = [];
 
   for (const storageScene of storageSceneNames(scene)) {
-    for (const storageScope of storageScopeNames(scope)) {
-      const directory = sceneDir(storageScene, storageScope);
-      if (storageScope !== "default") await mkdir(directory, { recursive: true });
-
-      const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
-      images.push(
-        ...(await Promise.all(
-          entries
-            .filter((entry) => entry.isFile() && imageExtensions.has(path.extname(entry.name).toLowerCase()))
-            .sort((first, second) => first.name.localeCompare(second.name))
-            .map(async (entry) => {
-              const filePath = path.join(directory, entry.name);
-              const fileStat = await stat(filePath);
-              const fileKey = `${storageScene}/${storageScope}/${entry.name}`;
-              return {
-                id: fileKey,
-                scene,
-                fileName: entry.name,
-                url: sceneUrl(storageScene, storageScope, entry.name),
-                fileKey,
-                mimeType: mimeTypeFromFileName(entry.name),
-                fileSize: fileStat.size,
-                isDefault: false,
-                createdAt: fileStat.birthtime.toISOString(),
-              } satisfies VisualBackgroundImage;
-            }),
-        )),
-      );
-    }
+    const directory = sceneDir(storageScene, scope);
+    const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+    images.push(
+      ...(await Promise.all(
+        entries
+          .filter((entry) => entry.isFile() && imageExtensions.has(path.extname(entry.name).toLowerCase()))
+          .sort((first, second) => first.name.localeCompare(second.name))
+          .map(async (entry) => {
+            const filePath = path.join(directory, entry.name);
+            const fileStat = await stat(filePath);
+            const fileKey = `${storageScene}/${scope}/${entry.name}`;
+            return {
+              id: fileKey,
+              scene,
+              fileName: entry.name,
+              url: sceneUrl(storageScene, scope, entry.name),
+              fileKey,
+              mimeType: mimeTypeFromFileName(entry.name),
+              fileSize: fileStat.size,
+              isDefault: false,
+              createdAt: fileStat.birthtime.toISOString(),
+            } satisfies VisualBackgroundImage;
+          }),
+      )),
+    );
   }
 
   return images;
@@ -438,11 +409,10 @@ export function parseBackgroundId(id: string): ParsedBackgroundId {
   }
 
   const [sceneRaw, scopeRaw, ...fileNameParts] = decodedId.split("/");
-  const parsedScene = backgroundSceneSchema.safeParse(sceneRaw);
-  const scene = parsedScene.success ? parsedScene.data : null;
+  const scene = backgroundSceneSchema.parse(sceneRaw);
   const scope = backgroundScopeSchema.parse(scopeRaw);
   const storageScene = backgroundStorageScenePathSchema.parse(sceneRaw);
-  const storageScope = z.enum(anyBackgroundScopes).parse(scopeRaw);
+  const storageScope = backgroundScopeSchema.parse(scopeRaw);
   const fileName = fileNameParts.join("/");
 
   if (!fileName || fileName.includes("/") || fileName.includes("\\") || path.basename(fileName) !== fileName) {
@@ -459,7 +429,7 @@ export function parseBackgroundId(id: string): ParsedBackgroundId {
   };
 }
 
-export async function getVisualBackgroundFile(scene: AnyVisualBackgroundStorageScene, scope: AnyVisualBackgroundScope, fileName: string) {
+export async function getVisualBackgroundFile(scene: CanonicalBackgroundScene, scope: CanonicalBackgroundScope, fileName: string) {
   const parsed = parseBackgroundId(`${scene}/${scope}/${fileName}`);
   const fileStat = await stat(parsed.filePath);
   if (!fileStat.isFile()) {
@@ -509,16 +479,6 @@ async function assertBackgroundExists(id: string) {
   return parsed;
 }
 
-function isBackgroundUsableForScene(parsed: ParsedBackgroundId, scene: CanonicalBackgroundScene) {
-  if ((visualBackgroundScenes as readonly string[]).includes(parsed.storageScene)) {
-    return true;
-  }
-  if ((legacyVisualBackgroundStorageScenes as readonly string[]).includes(parsed.storageScene)) {
-    return true;
-  }
-  return parsed.storageScene === "app_background" && acceptsLegacyAppBackgroundScene(scene);
-}
-
 export async function saveVisualBackgroundConfig(scene: BackgroundScene, input: BackgroundSceneConfig) {
   const config = backgroundSceneConfigSchema.parse(input);
   if (config.mode === "fixed" && !config.fixedBackgroundId) {
@@ -529,9 +489,6 @@ export async function saveVisualBackgroundConfig(scene: BackgroundScene, input: 
   if (config.fixedBackgroundId) {
     const fixedBackground = await assertBackgroundExists(config.fixedBackgroundId);
     if (fixedBackground.scope === "personal") {
-      throw new Error("background not found");
-    }
-    if (!isBackgroundUsableForScene(fixedBackground, scene)) {
       throw new Error("background not found");
     }
     fixedBackgroundId = `${fixedBackground.storageScene}/${fixedBackground.storageScope}/${fixedBackground.fileName}`;
@@ -556,9 +513,6 @@ export async function saveVisualBackgroundConfig(scene: BackgroundScene, input: 
 export async function setDefaultVisualBackground(id: string) {
   const parsed = await assertBackgroundExists(id);
   if (parsed.scope === "personal") {
-    throw new Error("background not found");
-  }
-  if (!parsed.scene) {
     throw new Error("background not found");
   }
   const scene = parsed.scene;

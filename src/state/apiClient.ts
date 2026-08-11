@@ -308,8 +308,6 @@ export type UserPreferences = {
   display: UserDisplayPreferences;
   filterPreferences: UserFilterPreferences;
   workspaceLayout: WorkspaceLayoutPreferences;
-  /** Compatibility projection for legacy clients. New writes must use backgrounds[scene]. */
-  appBackground: VisualBackgroundConfig | null;
   backgrounds: Partial<Record<VisualBackgroundScene, VisualBackgroundConfig | null>>;
   notificationDisplay: {
     toastEnabled: boolean;
@@ -346,7 +344,6 @@ function normalizeVisualBackgroundsData<T extends VisualBackgroundsData>(data: T
 function normalizeUserPreferencesPayload(preferences: UserPreferences): UserPreferences {
   return {
     ...preferences,
-    appBackground: preferences.appBackground ? normalizeVisualBackgroundConfig(preferences.appBackground) : null,
     backgrounds: Object.fromEntries(
       Object.entries(preferences.backgrounds ?? {}).map(([scene, config]) => [
         scene,

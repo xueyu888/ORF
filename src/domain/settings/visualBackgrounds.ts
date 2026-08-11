@@ -25,21 +25,12 @@ export const visualBackgroundScenes = [
   ...pageVisualBackgroundScenes,
 ] as const;
 
-export const legacyVisualBackgroundScenes = ["app_background"] as const;
-export const legacyVisualBackgroundStorageScenes = [] as const;
 export const visualBackgroundScopes = ["default", "system", "personal"] as const;
-export const legacyVisualBackgroundScopes = ["user"] as const;
 
 export type AppChromeVisualBackgroundScene = (typeof appChromeVisualBackgroundScenes)[number];
 export type PageVisualBackgroundScene = (typeof pageVisualBackgroundScenes)[number];
 export type VisualBackgroundScene = (typeof visualBackgroundScenes)[number];
-export type LegacyVisualBackgroundScene = (typeof legacyVisualBackgroundScenes)[number];
-export type LegacyVisualBackgroundStorageScene = (typeof legacyVisualBackgroundStorageScenes)[number];
-export type AnyVisualBackgroundScene = VisualBackgroundScene | LegacyVisualBackgroundScene;
-export type AnyVisualBackgroundStorageScene = VisualBackgroundScene | LegacyVisualBackgroundScene | LegacyVisualBackgroundStorageScene;
 export type VisualBackgroundScope = (typeof visualBackgroundScopes)[number];
-export type LegacyVisualBackgroundScope = (typeof legacyVisualBackgroundScopes)[number];
-export type AnyVisualBackgroundScope = VisualBackgroundScope | LegacyVisualBackgroundScope;
 
 export type VisualBackgroundMode = "fixed" | "switchable";
 export type VisualBackgroundSwitchTrigger = "on_open" | "interval";
@@ -115,18 +106,6 @@ export const defaultVisualMaterialPreferences: VisualMaterialPreferences = {
   blurStrength: 1,
   reduceTransparency: false,
 };
-
-export function canonicalVisualBackgroundScene(scene: AnyVisualBackgroundScene): VisualBackgroundScene {
-  return scene === "app_background" ? "sidebar_background" : scene;
-}
-
-export function canonicalVisualBackgroundScope(scope: AnyVisualBackgroundScope): VisualBackgroundScope {
-  return scope === "user" ? "system" : scope;
-}
-
-export function acceptsLegacyAppBackgroundScene(scene: VisualBackgroundScene) {
-  return scene === "topbar_background" || scene === "sidebar_background";
-}
 
 export function isPageVisualBackgroundScene(scene: VisualBackgroundScene): scene is PageVisualBackgroundScene {
   return (pageVisualBackgroundScenes as readonly string[]).includes(scene);
