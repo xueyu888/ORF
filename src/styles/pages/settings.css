@@ -630,6 +630,38 @@
   min-width: 0;
 }
 
+.orf-skin-gallery-title-row,
+.orf-skin-gallery-navigation {
+  display: flex;
+  align-items: center;
+}
+
+.orf-skin-gallery-title-row {
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.orf-skin-gallery-navigation {
+  gap: 5px;
+}
+
+.orf-skin-gallery-navigation .orf-action-icon-button {
+  border-color: var(--orf-border);
+  background: var(--orf-surface-control);
+  color: var(--orf-text-secondary);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--orf-text-primary) 7%, transparent);
+}
+
+.orf-skin-gallery-navigation .orf-action-icon-button:hover:not(:disabled) {
+  border-color: var(--orf-accent-border);
+  background: var(--orf-surface-control-solid-hover);
+  color: var(--orf-accent-text);
+}
+
+.orf-skin-gallery-navigation .orf-action-icon-button:disabled {
+  opacity: 0.38;
+}
+
 .orf-skin-selected-file {
   display: flex;
   max-width: min(64%, 720px);
@@ -657,7 +689,15 @@
   gap: 10px;
   min-height: 100px;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
   padding-bottom: 2px;
+  scroll-padding-inline: 2px;
+  scroll-snap-type: inline proximity;
+  scrollbar-width: none;
+}
+
+.orf-skin-gallery::-webkit-scrollbar {
+  display: none;
 }
 
 .orf-skin-gallery-card,
@@ -672,6 +712,7 @@
   width: 152px;
   height: 94px;
   padding: 0;
+  scroll-snap-align: start;
 }
 
 .orf-skin-gallery-card img {
@@ -802,8 +843,13 @@
     justify-content: center;
   }
 
-.orf-skin-selected-file {
+  .orf-skin-selected-file {
     max-width: 100%;
+  }
+
+  .orf-skin-gallery-title-row {
+    width: 100%;
+    justify-content: space-between;
   }
 
 .orf-settings-gitlab-head {
@@ -2458,7 +2504,7 @@ body:has(.orf-personal-settings-page) .orf-personal-settings-section-heading > s
   font-weight: 500;
 }
 
-body:has(.orf-personal-settings-page) .orf-personal-settings-page .orf-control {
+body:has(.orf-personal-settings-page) .orf-personal-settings-page .orf-control:not(.orf-action-icon-button) {
   min-height: 38px;
   border-color: var(--orf-material-content-hairline);
   border-radius: 999px;
@@ -2467,7 +2513,7 @@ body:has(.orf-personal-settings-page) .orf-personal-settings-page .orf-control {
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 34%, transparent);
 }
 
-body:has(.orf-personal-settings-page) .orf-personal-settings-page .orf-control:focus-visible {
+body:has(.orf-personal-settings-page) .orf-personal-settings-page .orf-control:not(.orf-action-icon-button):focus-visible {
   border-color: var(--orf-accent-border);
   box-shadow: var(--orf-focus-ring);
 }

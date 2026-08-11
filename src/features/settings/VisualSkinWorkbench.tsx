@@ -1,6 +1,8 @@
 import { clsx } from "clsx";
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
   Image,
   ImagePlus,
   Loader2,
@@ -144,6 +146,77 @@ function pageApplyTargets(scene: VisualBackgroundScene, scenes: readonly PageVis
   return Array.from(new Set(selected));
 }
 
+function useHorizontalGalleryNavigation(itemCount: number, selectedId: string | null) {
+  const galleryRef = useRef<HTMLDivElement | null>(null);
+  const [scrollState, setScrollState] = useState({ canMoveBack: false, canMoveForward: false });
+
+  const measure = useCallback(() => {
+    const gallery = galleryRef.current;
+    if (!gallery) return;
+    const tolerance = 2;
+    const nextState = {
+      canMoveBack: gallery.scrollLeft > tolerance,
+      canMoveForward: gallery.scrollLeft + gallery.clientWidth < gallery.scrollWidth - tolerance,
+    };
+    setScrollState((current) => (
+      current.canMoveBack === nextState.canMoveBack && current.canMoveForward === nextState.canMoveForward
+        ? current
+        : nextState
+    ));
+  }, []);
+
+  useEffect(() => {
+    const gallery = galleryRef.current;
+    if (!gallery) return;
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    gallery.addEventListener("scroll", measure, { passive: true });
+    observer?.observe(gallery);
+    const frame = window.requestAnimationFrame(measure);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      gallery.removeEventListener("scroll", measure);
+      observer?.disconnect();
+    };
+  }, [itemCount, measure]);
+
+  useEffect(() => {
+    const gallery = galleryRef.current;
+    if (!gallery || !selectedId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const selectedCard = gallery.querySelector<HTMLElement>('[aria-pressed="true"]');
+      if (!selectedCard) return;
+      const cardStart = selectedCard.offsetLeft;
+      const cardEnd = cardStart + selectedCard.offsetWidth;
+      const visibleStart = gallery.scrollLeft;
+      const visibleEnd = visibleStart + gallery.clientWidth;
+      if (cardStart < visibleStart) {
+        gallery.scrollTo({ left: cardStart, behavior: "auto" });
+      } else if (cardEnd > visibleEnd) {
+        gallery.scrollTo({ left: cardEnd - gallery.clientWidth, behavior: "auto" });
+      }
+      measure();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [itemCount, measure, selectedId]);
+
+  const move = useCallback((direction: -1 | 1) => {
+    const gallery = galleryRef.current;
+    if (!gallery) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    gallery.scrollBy({
+      left: direction * Math.max(162, gallery.clientWidth - 162),
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }, []);
+
+  return {
+    galleryRef,
+    ...scrollState,
+    moveBack: () => move(-1),
+    moveForward: () => move(1),
+  };
+}
+
 export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
   const { currentUser, notify, readModelInvalidations } = useOrf();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -161,6 +234,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pageTargetScenes, setPageTargetScenes] = useState<PageVisualBackgroundScene[]>([]);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
+  const galleryNavigation = useHorizontalGalleryNavigation(backgroundList.length, selectedBackgroundId);
 
   const slot = visualSkinSlotByScene(scene);
   const selectedBackground = backgroundList.find((background) => background.id === selectedBackgroundId) ?? null;
@@ -680,9 +754,29 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
 
         <div className="orf-skin-gallery-shell">
           <div className="orf-skin-gallery-heading">
-            <div className="orf-skin-inspector-title">
-              <Image className="h-4 w-4" />
-              <span>图库</span>
+            <div className="orf-skin-gallery-title-row">
+              <div className="orf-skin-inspector-title">
+                <Image className="h-4 w-4" />
+                <span>图库</span>
+              </div>
+              <div className="orf-skin-gallery-navigation" aria-label="浏览图库">
+                <IconButton
+                  icon={ChevronLeft}
+                  label="向前浏览图库"
+                  size="sm"
+                  variant="ghost"
+                  disabled={!galleryNavigation.canMoveBack}
+                  onClick={galleryNavigation.moveBack}
+                />
+                <IconButton
+                  icon={ChevronRight}
+                  label="向后浏览图库"
+                  size="sm"
+                  variant="ghost"
+                  disabled={!galleryNavigation.canMoveForward}
+                  onClick={galleryNavigation.moveForward}
+                />
+              </div>
             </div>
             {selectedBackground && (
               <span
@@ -695,7 +789,11 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
               </span>
             )}
           </div>
-          <div className="orf-skin-gallery" data-loading={loadStatus === "loading" ? "true" : "false"}>
+          <div
+            ref={galleryNavigation.galleryRef}
+            className="orf-skin-gallery"
+            data-loading={loadStatus === "loading" ? "true" : "false"}
+          >
             {loadStatus === "loading" && backgroundList.length === 0 && <div className="orf-skin-state"><Loader2 className="h-5 w-5 animate-spin" />加载中</div>}
             {loadStatus === "error" && <div className="orf-skin-state">{errorMessage ?? "加载失败"}</div>}
             {loadStatus === "success" && backgroundList.length === 0 && (
@@ -714,6 +812,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
                   type="button"
                   className={clsx("orf-skin-gallery-card", selected && "orf-skin-gallery-card-selected")}
                   aria-label={`${background.fileName}，来源：${source.detailLabel}`}
+                  aria-pressed={selected}
                   title={`${background.fileName} / 来源：${source.detailLabel}`}
                   onClick={() => selectBackground(background.id)}
                 >
