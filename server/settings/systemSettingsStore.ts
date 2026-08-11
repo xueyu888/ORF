@@ -2,11 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import {
   ensurePrivateSettingsStorage,
-  privateLegacySystemSettingsPath,
   privateSystemSettingsDirectory,
   privateSystemSettingsPath,
-  publicLegacySystemSettingsExamplePath,
-  publicSystemSettingsExamplePath,
 } from "./settingsStorage";
 
 export type RawSystemSettingsFile = {
@@ -32,6 +29,10 @@ async function readSettingsJson(filePath: string) {
   return JSON.parse(raw) as RawSystemSettingsFile;
 }
 
+function isFileNotFound(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "ENOENT";
+}
+
 function normalizeRawSettings(input: RawSystemSettingsFile | null | undefined): RawSystemSettingsFile {
   return {
     ...input,
@@ -53,20 +54,9 @@ export async function readSystemSettingsFile(): Promise<RawSystemSettingsFile> {
 
   try {
     return normalizeRawSettings(await readSettingsJson(privateSystemSettingsPath));
-  } catch {
-    try {
-      return normalizeRawSettings(await readSettingsJson(privateLegacySystemSettingsPath));
-    } catch {
-      try {
-        return normalizeRawSettings(await readSettingsJson(publicSystemSettingsExamplePath));
-      } catch {
-        try {
-          return normalizeRawSettings(await readSettingsJson(publicLegacySystemSettingsExamplePath));
-        } catch {
-          return emptySystemSettings();
-        }
-      }
-    }
+  } catch (error) {
+    if (isFileNotFound(error)) return emptySystemSettings();
+    throw error;
   }
 }
 

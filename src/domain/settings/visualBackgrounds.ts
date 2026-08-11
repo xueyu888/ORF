@@ -47,10 +47,6 @@ export type VisualMaterialPreferences = {
   reduceTransparency: boolean;
 };
 
-export type VisualBackgroundMigration = {
-  overlayOpacityV2: number | null;
-};
-
 export type VisualBackgroundCrop = {
   centerX: number;
   centerY: number;
@@ -63,7 +59,6 @@ export type VisualBackgroundConfig = {
   mode: VisualBackgroundMode;
   fixedBackgroundId: string | null;
   material: VisualMaterialPreferences;
-  migration: VisualBackgroundMigration;
   switchTrigger: VisualBackgroundSwitchTrigger;
   switchOrder: VisualBackgroundSwitchOrder;
   switchIntervalMinutes: number;
@@ -152,17 +147,6 @@ export function normalizeVisualMaterialPreferences(
   };
 }
 
-export function normalizeVisualBackgroundMigration(
-  input: Partial<VisualBackgroundMigration> | null | undefined,
-): VisualBackgroundMigration {
-  const candidate = input?.overlayOpacityV2;
-  return {
-    overlayOpacityV2: typeof candidate !== "number" || !Number.isFinite(candidate)
-      ? null
-      : clampNumber(candidate, 0, 1, 0),
-  };
-}
-
 export function defaultVisualBackgroundConfig(): VisualBackgroundConfig {
   return {
     version: 4,
@@ -170,7 +154,6 @@ export function defaultVisualBackgroundConfig(): VisualBackgroundConfig {
     mode: "fixed",
     fixedBackgroundId: null,
     material: { ...defaultVisualMaterialPreferences },
-    migration: { overlayOpacityV2: null },
     switchTrigger: "on_open",
     switchOrder: "random",
     switchIntervalMinutes: 10,
@@ -186,7 +169,6 @@ export function normalizeVisualBackgroundConfig(input: unknown): VisualBackgroun
   const raw = recordValue(input);
   const fallback = defaultVisualBackgroundConfig();
   const materialInput = recordValue(raw.material) as Partial<VisualMaterialPreferences>;
-  const migrationInput = recordValue(raw.migration) as Partial<VisualBackgroundMigration>;
   const rawCrops = recordValue(raw.crops);
   const crops = Object.fromEntries(
     Object.entries(rawCrops).map(([backgroundId, crop]) => [backgroundId, normalizeVisualBackgroundCrop(recordValue(crop))]),
@@ -201,7 +183,6 @@ export function normalizeVisualBackgroundConfig(input: unknown): VisualBackgroun
     mode,
     fixedBackgroundId: typeof raw.fixedBackgroundId === "string" ? raw.fixedBackgroundId : null,
     material: normalizeVisualMaterialPreferences(materialInput),
-    migration: normalizeVisualBackgroundMigration(migrationInput),
     switchTrigger,
     switchOrder,
     switchIntervalMinutes: Math.round(clampNumber(raw.switchIntervalMinutes, 1, 1440, fallback.switchIntervalMinutes)),

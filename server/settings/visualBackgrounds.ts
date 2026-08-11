@@ -51,11 +51,6 @@ const backgroundMaterialPreferencesSchema = z
   })
   .strict()
   .transform((material) => normalizeVisualMaterialPreferences(material));
-const backgroundMigrationSchema = z
-  .object({
-    overlayOpacityV2: z.number().min(0).max(1).nullable(),
-  })
-  .strict();
 export const backgroundSceneConfigSchema = z
   .object({
     version: z.literal(4),
@@ -63,7 +58,6 @@ export const backgroundSceneConfigSchema = z
     mode: backgroundModeSchema,
     fixedBackgroundId: z.string().nullable(),
     material: backgroundMaterialPreferencesSchema,
-    migration: backgroundMigrationSchema,
     switchTrigger: backgroundSwitchTriggerSchema,
     switchOrder: backgroundSwitchOrderSchema,
     switchIntervalMinutes: z.coerce.number().int().min(1).max(1440),
