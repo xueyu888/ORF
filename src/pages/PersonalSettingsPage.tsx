@@ -7,7 +7,11 @@ import { registeredWebModules } from "../config/webModuleRegistry";
 import { Button, Card, Field } from "../components/ui";
 import { defaultUserDisplayPreferences, displayPreferenceLimits, type UserDisplayPreferences } from "../domain/settings/personalPreferences";
 import { userStatusLabel } from "../domain/userPresentation";
-import { defaultAppearanceMode, type AppearanceMode } from "../features/appearance/appearanceMode";
+import {
+  cacheConfirmedAppearanceMode,
+  readCachedUserAppearanceMode,
+  type AppearanceMode,
+} from "../features/appearance/appearanceMode";
 import { sendNativeChatNotification } from "../features/chat/chatNativeNotificationDelivery";
 import { workbenchZoomScale } from "../features/display/displayPreferences";
 import {
@@ -58,6 +62,9 @@ export function PersonalSettingsPage() {
   const { currentUser, deleteCurrentUserAvatar, notify, readModelInvalidations, uploadCurrentUserAvatar } = useOrf();
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+  const [preferencesStatus, setPreferencesStatus] = useState<RequestStatus>("idle");
+  const [preferencesLoadRevision, setPreferencesLoadRevision] = useState(0);
+  const [cachedAppearanceMode, setCachedAppearanceMode] = useState<AppearanceMode | null>(() => readCachedUserAppearanceMode(currentUser?.id));
   const [saveStatus, setSaveStatus] = useState<RequestStatus>("idle");
   const [avatarStatus, setAvatarStatus] = useState<RequestStatus>("idle");
   const [notificationTestStatus, setNotificationTestStatus] = useState<RequestStatus>("idle");
@@ -71,20 +78,31 @@ export function PersonalSettingsPage() {
     : null;
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
+    setPreferences(null);
+    setPreferencesStatus("loading");
+    setCachedAppearanceMode(readCachedUserAppearanceMode(currentUser?.id));
     setErrorMessage(null);
-    void getUserPreferences({ force: Boolean(settingsInvalidationKey), userId: currentUser?.id })
+    void getUserPreferences({
+      force: Boolean(settingsInvalidationKey),
+      userId: currentUser?.id,
+    })
       .then((data) => {
-        if (!cancelled) setPreferences(data);
+        if (controller.signal.aborted) return;
+        setPreferences(data);
+        setPreferencesStatus("success");
+        cacheConfirmedAppearanceMode(data.userId, data.chatTheme);
+        setCachedAppearanceMode(data.chatTheme);
       })
       .catch((error) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
+        setPreferencesStatus("error");
         setErrorMessage(error instanceof Error ? error.message : "个人设置加载失败");
       });
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [currentUser?.id, settingsInvalidationKey]);
+  }, [currentUser?.id, preferencesLoadRevision, settingsInvalidationKey]);
 
   useEffect(() => {
     if (!currentUser?.avatarUrl) {
@@ -118,6 +136,9 @@ export function PersonalSettingsPage() {
     try {
       const saved = await saveUserPreferences(patch);
       setPreferences(saved);
+      setPreferencesStatus("success");
+      cacheConfirmedAppearanceMode(saved.userId, saved.chatTheme);
+      setCachedAppearanceMode(saved.chatTheme);
       setSaveStatus("success");
       dispatchPersonalPreferencesChanged();
       notify(message);
@@ -271,6 +292,7 @@ export function PersonalSettingsPage() {
         ? "collapsed"
         : "expanded";
   const displayPreferences = preferences?.display ?? defaultUserDisplayPreferences;
+  const selectedAppearanceMode = preferences?.chatTheme ?? cachedAppearanceMode;
   const busy = saveStatus === "loading" || avatarStatus === "loading";
   const launchAtLoginDisabled = launchAtLoginStatus === "idle" || launchAtLoginStatus === "loading" || launchAtLoginStatus === "unsupported";
   const launchAtLoginDescription = launchAtLoginStatus === "unsupported"
@@ -333,10 +355,21 @@ export function PersonalSettingsPage() {
               <span>工作台偏好</span>
               <small>入口、外观与本机体验</small>
             </div>
+            {preferencesStatus === "loading" && (
+              <div className="orf-personal-settings-load-state" role="status">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                正在恢复你的工作台偏好…
+              </div>
+            )}
             {errorMessage && (
               <div className="orf-settings-inline-error" role="alert">
                 <CircleAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
                 <span>{errorMessage}</span>
+                {preferencesStatus === "error" && (
+                  <Button type="button" variant="ghost" onClick={() => setPreferencesLoadRevision((value) => value + 1)}>
+                    重试
+                  </Button>
+                )}
               </div>
             )}
             <section className="orf-personal-settings-section orf-personal-settings-navigation-section">
@@ -382,7 +415,7 @@ export function PersonalSettingsPage() {
                 <div className="orf-appearance-mode-picker" role="radiogroup" aria-label="全局亮色或暗色外观">
                   {appearanceModeOptions.map((option) => {
                     const Icon = option.icon;
-                    const selected = (preferences?.chatTheme ?? defaultAppearanceMode) === option.value;
+                    const selected = selectedAppearanceMode === option.value;
                     return (
                       <button
                         key={option.value}

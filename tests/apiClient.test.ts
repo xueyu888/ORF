@@ -25,6 +25,12 @@ import {
   setReadModelSnapshot,
 } from "../src/state/readModelCache";
 import {
+  cacheConfirmedAppearanceMode,
+  readCachedAppearanceMode,
+  readCachedUserAppearanceMode,
+} from "../src/features/appearance/appearanceMode";
+import { readPersonalPreferencesWithRetry } from "../src/utils/personalPreferences";
+import {
   chatFeedSessionSnapshots,
   clearChatFeedSessionCache,
 } from "../src/features/chat/chatFeedSessionCache";
@@ -103,6 +109,7 @@ test("apiJson hides HTML gateway error pages behind a readable service message",
 test("getUserPreferences reuses the same user request and cache without crossing users", async (t) => {
   const originalFetch = globalThis.fetch;
   const requests: string[] = [];
+  const requestCaches: Array<RequestCache | undefined> = [];
   const responses = [
     userPreferences("user-a", { defaultLandingPath: "/tasks" }),
     userPreferences("user-b", { defaultLandingPath: "/chat" }),
@@ -114,8 +121,9 @@ test("getUserPreferences reuses the same user request and cache without crossing
   });
   invalidateUserPreferencesCache();
 
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     requests.push(String(input));
+    requestCaches.push(init?.cache);
     const data = responses.shift();
     if (!data) {
       throw new Error("unexpected preferences request");
@@ -141,6 +149,57 @@ test("getUserPreferences reuses the same user request and cache without crossing
   const otherUser = await getUserPreferences({ userId: "user-b" });
   assert.equal(otherUser.defaultLandingPath, "/chat");
   assert.equal(requests.length, 2);
+  assert.deepEqual(requestCaches, ["no-store", "no-store"]);
+});
+
+test("confirmed appearance cache stays user-scoped and never invents another user's choice", (t) => {
+  const originalWindow = globalThis.window;
+  const values = new Map<string, string>();
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+      },
+    },
+  });
+  t.after(() => {
+    Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });
+  });
+
+  assert.equal(readCachedAppearanceMode(), "light");
+  assert.equal(readCachedUserAppearanceMode("user-a"), null);
+  cacheConfirmedAppearanceMode("user-a", "dark");
+  assert.equal(readCachedAppearanceMode(), "dark");
+  assert.equal(readCachedUserAppearanceMode("user-a"), "dark");
+  assert.equal(readCachedUserAppearanceMode("user-b"), null);
+});
+
+test("personal preference reads retry transient failures and return the confirmed response", async () => {
+  const attempts: number[] = [];
+  const preferences = userPreferences("user-a", { chatTheme: "dark" });
+  const result = await readPersonalPreferencesWithRetry(async (attempt) => {
+    attempts.push(attempt);
+    if (attempt < 2) throw new Error("temporary preference read failure");
+    return preferences;
+  }, undefined, [0, 0]);
+
+  assert.equal(result.chatTheme, "dark");
+  assert.deepEqual(attempts, [0, 1, 2]);
+});
+
+test("personal preference reads do not retry authorization or contract failures", async () => {
+  const attempts: number[] = [];
+  const failure = Object.assign(new Error("preference user mismatch"), { status: 409 });
+  await assert.rejects(
+    readPersonalPreferencesWithRetry(async (attempt) => {
+      attempts.push(attempt);
+      throw failure;
+    }, undefined, [0, 0]),
+    failure,
+  );
+  assert.deepEqual(attempts, [0]);
 });
 
 test("saveUserPreferences replaces the cached preferences fact", async (t) => {

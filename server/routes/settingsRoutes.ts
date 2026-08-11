@@ -138,6 +138,7 @@ export function registerSettingsRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/settings/personal/preferences", async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
     const user = await requireApiUser(request, reply);
     if (!user) {
       return reply;
@@ -177,6 +178,7 @@ export function registerSettingsRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/settings/personal/backgrounds", async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
     const user = await requireApiUser(request, reply);
     if (!user) {
       return reply;

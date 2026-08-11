@@ -47,6 +47,7 @@ import type { ChatSyncResponse } from "../domain/chatSync";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
 import type { ChatTheme, UserDisplayPreferences, WorkspaceLayoutPreferences } from "../domain/settings/personalPreferences";
 import type { FilterPreferenceRecord, UserFilterPreferences } from "../domain/settings/filterPreferences";
+import { readPersonalPreferencesWithRetry } from "../utils/personalPreferences";
 import {
   normalizeVisualBackgroundConfig,
   type VisualBackgroundConfig,
@@ -1368,14 +1369,16 @@ export async function getUserPreferences(options: UserPreferencesRequestOptions 
     return userPreferencesCache.preferences;
   }
 
-  if (!options.force && userPreferencesRequest) {
+  if (userPreferencesRequest) {
     const preferences = await userPreferencesRequest;
     if (!expectedUserId || preferences.userId === expectedUserId) {
       return preferences;
     }
   }
 
-  const request = apiJson<ApiEnvelope<UserPreferences>>("/api/settings/personal/preferences")
+  const request = readPersonalPreferencesWithRetry(
+    () => apiJson<ApiEnvelope<UserPreferences>>("/api/settings/personal/preferences", { cache: "no-store" }),
+  )
     .then((response) => cacheUserPreferences(response.data))
     .finally(() => {
       if (userPreferencesRequest === request) {
@@ -1401,7 +1404,10 @@ export async function saveUserPreferences(input: UserPreferencesPatch) {
 }
 
 export async function getPersonalBackgrounds(scene: VisualBackgroundScene = "sidebar_background") {
-  const response = await apiJson<ApiEnvelope<PersonalBackgroundsData>>(`/api/settings/personal/backgrounds?scene=${encodeURIComponent(scene)}`);
+  const response = await apiJson<ApiEnvelope<PersonalBackgroundsData>>(
+    `/api/settings/personal/backgrounds?scene=${encodeURIComponent(scene)}`,
+    { cache: "no-store" },
+  );
   return {
     ...normalizeVisualBackgroundsData(response.data),
     preferences: normalizeUserPreferencesPayload(response.data.preferences),

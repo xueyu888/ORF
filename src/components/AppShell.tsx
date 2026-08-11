@@ -25,9 +25,10 @@ import { isDesktopShellAvailable, setDesktopWorkbenchZoomLevel, syncDesktopAppea
 import { applyDisplayPreferencesToDocument, nextWorkbenchZoomLevel } from "../features/display/displayPreferences";
 import {
   applyAppearanceModeToDocument,
-  cacheAppearanceMode,
+  cacheConfirmedAppearanceMode,
   defaultAppearanceMode,
   readCachedAppearanceMode,
+  readCachedUserAppearanceMode,
   type AppearanceMode,
 } from "../features/appearance/appearanceMode";
 import { contentToneForAppearance } from "../features/appearance/appearanceContentTone";
@@ -48,7 +49,10 @@ import {
 } from "../domain/settings/visualBackgrounds";
 import { getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-import { dispatchPersonalPreferencesChanged, subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
+import {
+  dispatchPersonalPreferencesChanged,
+  subscribePersonalPreferencesChanged,
+} from "../utils/personalPreferences";
 import { preloadProductionRouteExperience } from "../routing/routePreload";
 
 const shellMainMinimumWidthPx = 640;
@@ -109,7 +113,8 @@ function AppShellFrame() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!currentUser) {
+    let refreshGeneration = 0;
+    if (!currentUserId) {
       setSidebarCollapsed(false);
       setSidebarWidth(sidebarLayoutLimits.expandedWidthPx.default);
       setAppearanceMode(readCachedAppearanceMode());
@@ -117,17 +122,26 @@ function AppShellFrame() {
       return undefined;
     }
 
+    const cachedUserAppearanceMode = readCachedUserAppearanceMode(currentUserId);
+    if (cachedUserAppearanceMode) setAppearanceMode(cachedUserAppearanceMode);
+
     const refreshPreferences = () => {
-      void getUserPreferences({ userId: currentUser.id })
+      const generation = ++refreshGeneration;
+      void getUserPreferences({ userId: currentUserId })
         .then((preferences) => {
-          if (!cancelled) {
+          if (!cancelled && generation === refreshGeneration) {
             setSidebarCollapsed(preferences.sidebarCollapsed ?? false);
             setSidebarWidth(normalizeSidebarWidth(preferences.sidebarWidth));
             setAppearanceMode(preferences.chatTheme ?? defaultAppearanceMode);
+            cacheConfirmedAppearanceMode(currentUserId, preferences.chatTheme ?? defaultAppearanceMode);
             setDisplayPreferences(preferences.display ?? defaultUserDisplayPreferences);
           }
         })
-        .catch(() => undefined);
+        .catch(() => {
+          if (!cancelled && generation === refreshGeneration) {
+            notify("个人外观同步失败，已继续使用本机上次确认的设置。");
+          }
+        });
     };
 
     refreshPreferences();
@@ -137,11 +151,10 @@ function AppShellFrame() {
       cancelled = true;
       unsubscribe();
     };
-  }, [currentUser]);
+  }, [currentUserId, notify]);
 
   useEffect(() => {
     applyAppearanceModeToDocument(appearanceMode);
-    cacheAppearanceMode(appearanceMode);
     if (desktopChromeEnabled) void syncDesktopAppearanceMode(appearanceMode);
   }, [appearanceMode, desktopChromeEnabled]);
 

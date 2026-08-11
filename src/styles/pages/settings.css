@@ -1827,6 +1827,22 @@
   line-height: 1.45;
 }
 
+.orf-personal-settings-preferences > .orf-personal-settings-load-state {
+  display: flex;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-height: 42px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--orf-workbench-hairline);
+  border-radius: var(--orf-radius-control);
+  background: var(--orf-material-content-tertiary);
+  color: var(--orf-text-secondary);
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .orf-personal-settings-section {
   display: grid;
   min-width: 0;
@@ -1862,6 +1878,17 @@
 }
 
 .orf-personal-settings-preferences:has(> .orf-settings-inline-error) > .orf-personal-settings-notification-section {
+  grid-row: 4;
+}
+
+.orf-personal-settings-preferences:has(> .orf-personal-settings-load-state) > :is(
+    .orf-personal-settings-navigation-section,
+    .orf-personal-settings-appearance-section
+  ) {
+  grid-row: 3;
+}
+
+.orf-personal-settings-preferences:has(> .orf-personal-settings-load-state) > .orf-personal-settings-notification-section {
   grid-row: 4;
 }
 
@@ -2430,7 +2457,8 @@ body:has(.orf-personal-settings-page) .orf-personal-settings-preferences {
 }
 
 body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-personal-settings-card-heading,
-body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-settings-inline-error {
+body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-settings-inline-error,
+body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-personal-settings-load-state {
   grid-column: 1 / -1;
   grid-row: auto;
 }
@@ -2600,6 +2628,7 @@ body:has(.orf-personal-settings-page) .orf-preference-switch:disabled {
 
   body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-personal-settings-card-heading,
   body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-settings-inline-error,
+  body:has(.orf-personal-settings-page) .orf-personal-settings-preferences > .orf-personal-settings-load-state,
   body:has(.orf-personal-settings-page) .orf-personal-settings-section {
     grid-column: 1;
     grid-row: auto;

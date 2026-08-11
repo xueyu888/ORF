@@ -4,21 +4,35 @@ export type AppearanceMode = "light" | "dark";
 export const defaultAppearanceMode: AppearanceMode = "light";
 
 const appearanceModeStorageKey = "orf.appearanceMode.v1";
+const userAppearanceModeStoragePrefix = "orf.userAppearanceMode.v1";
 
-export function readCachedAppearanceMode(): AppearanceMode {
-  if (typeof window === "undefined") return defaultAppearanceMode;
+function storedAppearanceMode(key: string): AppearanceMode | null {
+  if (typeof window === "undefined") return null;
   try {
-    const stored = window.localStorage.getItem(appearanceModeStorageKey);
-    return stored === "dark" || stored === "light" ? stored : defaultAppearanceMode;
+    const stored = window.localStorage.getItem(key);
+    return stored === "dark" || stored === "light" ? stored : null;
   } catch {
-    return defaultAppearanceMode;
+    return null;
   }
 }
 
-export function cacheAppearanceMode(appearanceMode: AppearanceMode) {
-  if (typeof window === "undefined") return;
+function userAppearanceModeStorageKey(userId: string) {
+  return `${userAppearanceModeStoragePrefix}.${encodeURIComponent(userId)}`;
+}
+
+export function readCachedAppearanceMode(): AppearanceMode {
+  return storedAppearanceMode(appearanceModeStorageKey) ?? defaultAppearanceMode;
+}
+
+export function readCachedUserAppearanceMode(userId: string | null | undefined): AppearanceMode | null {
+  return userId ? storedAppearanceMode(userAppearanceModeStorageKey(userId)) : null;
+}
+
+export function cacheConfirmedAppearanceMode(userId: string, appearanceMode: AppearanceMode) {
+  if (typeof window === "undefined" || !userId) return;
   try {
     window.localStorage.setItem(appearanceModeStorageKey, appearanceMode);
+    window.localStorage.setItem(userAppearanceModeStorageKey(userId), appearanceMode);
   } catch {
     // The server preference remains authoritative when local storage is unavailable.
   }

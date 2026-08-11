@@ -174,13 +174,18 @@ async function readPreferencesJson(userId: string) {
   return JSON.parse(raw) as RawStoredUserPreferences;
 }
 
+function isMissingPreferencesFile(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "ENOENT";
+}
+
 export async function readUserPreferences(userId: string) {
   await ensurePrivateSettingsStorage();
   try {
     const rawPreferences = await readPreferencesJson(userId);
     return normalizeUserPreferences(userId, rawPreferences);
-  } catch {
-    return defaultUserPreferences(userId);
+  } catch (error) {
+    if (isMissingPreferencesFile(error)) return defaultUserPreferences(userId);
+    throw error;
   }
 }
 
