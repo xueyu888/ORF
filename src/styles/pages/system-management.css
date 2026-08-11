@@ -2006,6 +2006,11 @@ body:has(.orf-role-permissions-shell) .orf-role-permission-footer {
     padding: 12px;
   }
 
+  body:has(.orf-role-permissions-shell) .orf-permission-category-tabs button {
+    height: 40px;
+    padding-inline: 12px;
+  }
+
   body:has(.orf-role-permissions-shell) .orf-role-permission-table tbody {
     gap: 10px;
     padding: 10px;
@@ -2028,6 +2033,12 @@ body:has(.orf-role-permissions-shell) .orf-role-permission-footer {
   body:has(.orf-role-permissions-shell) .orf-role-permission-table :is(th, td) {
     height: auto;
     padding: 0;
+  }
+
+  body:has(.orf-role-permissions-shell) .orf-permission-toggle {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
   }
 
   body:has(.orf-role-permissions-shell) .orf-role-stage-cell {
