@@ -29,7 +29,8 @@ import {
   type VisualMaterialPreferences,
 } from "../domain/settings/visualBackgrounds";
 import { readCachedLoginBackgroundPreview } from "../utils/loginBackgroundCache";
-import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
+import { subscribeVisualBackgroundChanged } from "../features/appearance/background/visualBackgroundRuntime";
+import { pickVisualBackground, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
 
 type AuthMode = "login" | "register";
 

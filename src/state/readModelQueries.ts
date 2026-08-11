@@ -40,7 +40,7 @@ const keys = {
   chatUsers: "chat.users",
   driveBootstrap: "drive.bootstrap",
   driveContext: (contextType: DriveContextType, contextId: string, limit: number) => `drive.context:${contextType}:${contextId}:${limit}`,
-  personalBackground: (scene: VisualBackgroundScene) => `visual-background.personal:${scene}`,
+  personalBackground: (userId: string, scene: VisualBackgroundScene) => `visual-background.personal:${userId}:${scene}`,
   workLogActivity: (limit: number) => `work-logs.activity:${limit}`,
   workLogDay: (date: string) => `work-logs.day:${date}`,
   workLogObjectives: "work-logs.objectives",
@@ -74,10 +74,12 @@ export const loadDriveContextResources = (contextType: DriveContextType, context
 export const invalidateDriveContextResources = (contextType: DriveContextType, contextId: string) =>
   invalidateReadModelPrefix(`drive.context:${contextType}:${contextId}:`);
 
-export const personalBackgroundSnapshot = (scene: VisualBackgroundScene) =>
-  readModelSnapshot<PersonalBackgroundsData>(keys.personalBackground(scene));
-export const loadPersonalBackground = (scene: VisualBackgroundScene, options?: ReadModelLoadOptions) =>
-  loadReadModel(keys.personalBackground(scene), () => getPersonalBackgrounds(scene), { maxAgeMs: 5 * 60_000, ...options });
+export const personalBackgroundSnapshot = (userId: string, scene: VisualBackgroundScene) =>
+  readModelSnapshot<PersonalBackgroundsData>(keys.personalBackground(userId, scene));
+export const loadPersonalBackground = (userId: string, scene: VisualBackgroundScene, options?: ReadModelLoadOptions) =>
+  loadReadModel(keys.personalBackground(userId, scene), () => getPersonalBackgrounds(scene), { maxAgeMs: 5 * 60_000, ...options });
+export const invalidatePersonalBackground = (userId: string, scene: VisualBackgroundScene) =>
+  invalidateReadModel(keys.personalBackground(userId, scene));
 
 export const workLogObjectivesSnapshot = () => readModelSnapshot<WorkLogObjectivesResponse>(keys.workLogObjectives);
 export const loadWorkLogObjectives = (options?: ReadModelLoadOptions) =>

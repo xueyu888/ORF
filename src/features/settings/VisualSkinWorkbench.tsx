@@ -47,7 +47,8 @@ import {
 } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
 import { cacheLoginBackgroundPreview, clearCachedLoginBackgroundPreview } from "../../utils/loginBackgroundCache";
-import { cropForVisualBackground, dispatchVisualBackgroundChanged } from "../../utils/visualBackgrounds";
+import { dispatchVisualBackgroundChanged } from "../appearance/background/visualBackgroundRuntime";
+import { cropForVisualBackground } from "../../utils/visualBackgrounds";
 
 type RequestStatus = "idle" | "loading" | "success" | "error";
 type SkinScope = "personal" | "system";
@@ -314,7 +315,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
       }
       const changedScenes = slot.kind === "page" ? effectivePageTargetScenes : [scene];
       for (const changedScene of changedScenes) {
-        dispatchVisualBackgroundChanged(changedScene);
+        dispatchVisualBackgroundChanged({ scene: changedScene, userId: currentUser?.id ?? null });
       }
       await loadScene();
       if (slot.kind === "page") {
@@ -340,7 +341,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
       if (scene === "login_background") {
         clearCachedLoginBackgroundPreview(currentUser?.id);
       }
-      dispatchVisualBackgroundChanged(scene);
+      dispatchVisualBackgroundChanged({ scene, userId: currentUser?.id ?? null });
       await loadScene();
       setSaveStatus("success");
       notify("已使用系统默认");
@@ -361,7 +362,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
       if (scene === "login_background") {
         clearCachedLoginBackgroundPreview(currentUser?.id);
       }
-      dispatchVisualBackgroundChanged(scene);
+      dispatchVisualBackgroundChanged({ scene, userId: currentUser?.id ?? null });
       await loadScene();
       setDeleteStatus("success");
       notify("个人图片已删除");

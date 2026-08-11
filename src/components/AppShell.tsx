@@ -88,9 +88,9 @@ function AppShellFrame() {
   const shellDisplayPath = location.pathname;
   const isChatPage = location.pathname.startsWith("/chat");
   const pageBackgroundScene = pageVisualBackgroundSceneForPath(location.pathname);
-  const sidebarBackground = useVisualBackground("sidebar_background");
-  const topbarBackground = useVisualBackground("topbar_background");
-  const pageBackground = useVisualBackground(pageBackgroundScene);
+  const sidebarBackground = useVisualBackground("sidebar_background", currentUserId);
+  const topbarBackground = useVisualBackground("topbar_background", currentUserId);
+  const pageBackground = useVisualBackground(pageBackgroundScene, currentUserId);
 
   useEffect(() => {
     setDesktopChromeEnabled(isDesktopShellAvailable());

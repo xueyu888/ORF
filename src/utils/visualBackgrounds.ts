@@ -7,7 +7,6 @@ import {
 import type { VisualBackgroundImage, VisualBackgroundScene, VisualBackgroundsData } from "../state/apiClient";
 
 const rotationStoragePrefix = "orf.visualBackgroundRotation";
-const visualBackgroundChangedEvent = "orf:visual-background-changed";
 const preparedSelections = new Map<VisualBackgroundScene, { contract: string; imageId: string }>();
 
 export type VisualBackgroundSelection = {
@@ -119,27 +118,14 @@ export function clearPreparedVisualBackgrounds() {
   preparedSelections.clear();
 }
 
+export function clearPreparedVisualBackground(scene: VisualBackgroundScene) {
+  preparedSelections.delete(scene);
+}
+
 export function visualBackgroundIntervalMs(data: VisualBackgroundsData) {
   if (data.config.mode !== "switchable" || data.config.switchTrigger !== "interval") {
     return null;
   }
 
   return Math.max(1, data.config.switchIntervalMinutes) * 60 * 1000;
-}
-
-export function dispatchVisualBackgroundChanged(scene: VisualBackgroundScene) {
-  preparedSelections.delete(scene);
-  window.dispatchEvent(new CustomEvent(visualBackgroundChangedEvent, { detail: { scene } }));
-}
-
-export function subscribeVisualBackgroundChanged(scene: VisualBackgroundScene, listener: () => void) {
-  const handler = (event: Event) => {
-    const detail = event instanceof CustomEvent ? (event.detail as { scene?: VisualBackgroundScene } | undefined) : undefined;
-    if (detail?.scene === scene) {
-      listener();
-    }
-  };
-
-  window.addEventListener(visualBackgroundChangedEvent, handler);
-  return () => window.removeEventListener(visualBackgroundChangedEvent, handler);
 }
