@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
-import { ArrowRight, Loader2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { ArrowRight, ChevronDown, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { actionButtonClassName } from "../../components/ui";
 
@@ -10,6 +10,7 @@ export type ChatReferenceCardProps = {
   actionHref?: string | null;
   actionLabel?: string;
   badge?: ReactNode;
+  bodyCollapseKey?: string;
   children?: ReactNode;
   className?: string;
   eyebrow?: ReactNode;
@@ -20,6 +21,66 @@ export type ChatReferenceCardProps = {
   subtitle?: ReactNode;
   title: ReactNode;
 };
+
+function ChatReferenceCardBody({
+  collapseKey,
+  children,
+}: {
+  collapseKey?: string;
+  children: ReactNode;
+}) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [collapseKey]);
+
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return undefined;
+
+    const measure = () => {
+      const collapsedHeight = Number.parseFloat(
+        window.getComputedStyle(content).getPropertyValue("--orf-chat-reference-card-collapsed-height"),
+      ) || 176;
+      setOverflowing(content.scrollHeight > collapsedHeight + 1);
+    };
+    measure();
+
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    resizeObserver?.observe(content);
+    window.addEventListener("resize", measure);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [children]);
+
+  return (
+    <>
+      <div
+        className="orf-chat-reference-card-body-frame"
+        data-expanded={expanded ? "true" : "false"}
+        data-overflowing={overflowing ? "true" : "false"}
+      >
+        <div className="orf-chat-reference-card-body" ref={contentRef}>{children}</div>
+      </div>
+      {overflowing && (
+        <button
+          aria-expanded={expanded}
+          className="orf-chat-reference-card-toggle"
+          onClick={() => setExpanded((value) => !value)}
+          type="button"
+        >
+          <span>{expanded ? "收起详情" : "展开详情"}</span>
+          <ChevronDown className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </>
+  );
+}
 
 function isInternalHref(href: string) {
   return href.startsWith("/") && !href.startsWith("//");
@@ -63,6 +124,7 @@ export function ChatReferenceCard({
   actionHref,
   actionLabel = "打开",
   badge,
+  bodyCollapseKey,
   children,
   className,
   eyebrow,
@@ -76,7 +138,12 @@ export function ChatReferenceCard({
   const href = actionHref?.trim() || "";
   const hasDetails = Boolean(eyebrow || subtitle || meta);
   return (
-    <aside className={clsx("orf-chat-reference-card", `orf-chat-reference-card-${status}`, className)} role="group">
+    <aside
+      aria-busy={status === "loading"}
+      className={clsx("orf-chat-reference-card", `orf-chat-reference-card-${status}`, className)}
+      data-status={status}
+      role="group"
+    >
       <div className="orf-chat-reference-card-header">
         {icon && <div className="orf-chat-reference-card-icon">{icon}</div>}
         <div className="orf-chat-reference-card-title-block">
@@ -93,7 +160,7 @@ export function ChatReferenceCard({
         </div>
         {badge && <div className="orf-chat-reference-card-badge">{badge}</div>}
       </div>
-      {children && <div className="orf-chat-reference-card-body">{children}</div>}
+      {children && <ChatReferenceCardBody collapseKey={bodyCollapseKey}>{children}</ChatReferenceCardBody>}
       {(footer || href) && (
         <div className="orf-chat-reference-card-footer">
           {footer && <div className="orf-chat-reference-card-footer-note">{footer}</div>}
@@ -120,16 +187,25 @@ export function ChatReferenceCardSection({
 }
 
 export function ChatReferenceCardNotice({
+  actionLabel,
   children,
   icon,
+  onAction,
 }: {
+  actionLabel?: string;
   children: ReactNode;
   icon?: ReactNode;
+  onAction?: () => void;
 }) {
   return (
     <div className="orf-chat-reference-card-notice">
       {icon ?? <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-      <span>{children}</span>
+      <span className="orf-chat-reference-card-notice-content">{children}</span>
+      {actionLabel && onAction && (
+        <button className="orf-chat-reference-card-notice-action" onClick={onAction} type="button">
+          {actionLabel}
+        </button>
+      )}
     </div>
   );
 }

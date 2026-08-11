@@ -20,9 +20,13 @@ const feedbackReportAttachmentParamsSchema = z.object({ attachmentId: z.string()
 const feedbackReportAttachmentContentQuerySchema = z.object({
   disposition: z.enum(["attachment", "inline"]).optional(),
 });
+const optionalFeedbackReferenceQueryValueSchema = z.preprocess(
+  (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().trim().min(1).optional(),
+).optional();
 const feedbackReferenceCardQuerySchema = z.object({
-  activity: z.preprocess((value) => typeof value === "string" && value.trim() === "" ? undefined : value, z.string().trim().min(1).optional()),
-  comment: z.preprocess((value) => typeof value === "string" && value.trim() === "" ? undefined : value, z.string().trim().min(1).optional()),
+  activity: optionalFeedbackReferenceQueryValueSchema,
+  comment: optionalFeedbackReferenceQueryValueSchema,
 });
 const createFeedbackBodySchema = z.object({
   title: z.string().trim().min(1),

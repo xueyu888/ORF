@@ -1,5 +1,5 @@
 import { AlertCircle, FileText, Image as ImageIcon, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { ZodType } from "zod";
 import type { ChatMessage } from "../../types/orf";
@@ -198,10 +198,14 @@ export function resolveChatReferenceCard(
 function errorTextFromReferenceLoad(error: unknown, timedOut: boolean) {
   if (timedOut) return "引用内容读取超时，请稍后再试";
   if (error instanceof DOMException && error.name === "AbortError") return "引用内容读取已取消";
-  return error instanceof Error ? error.message : "引用内容读取失败";
+  if (!(error instanceof Error)) return "引用内容暂时无法读取，请重试";
+  const message = error.message.trim();
+  return /^(?:Bad Request|Internal Server Error|HTTP \d{3})$/i.test(message)
+    ? "引用内容暂时无法读取，请重试"
+    : message || "引用内容暂时无法读取，请重试";
 }
 
-function useChatReferenceCardModel(resolution: ChatReferenceCardResolution): ChatReferenceCardLoadState {
+function useChatReferenceCardModel(resolution: ChatReferenceCardResolution) {
   const placeholder = useMemo(
     () => resolution.registration.placeholder(resolution.reference),
     [resolution],
@@ -209,6 +213,11 @@ function useChatReferenceCardModel(resolution: ChatReferenceCardResolution): Cha
   const [state, setState] = useState<ChatReferenceCardLoadState>(() => (
     readFreshCachedState(resolution.cacheKey) ?? { status: "loading", model: placeholder }
   ));
+  const [requestVersion, setRequestVersion] = useState(0);
+  const retry = useCallback(() => {
+    chatReferenceCardCache.delete(resolution.cacheKey);
+    setRequestVersion((value) => value + 1);
+  }, [resolution.cacheKey]);
 
   useEffect(() => {
     const cached = readFreshCachedState(resolution.cacheKey);
@@ -254,9 +263,9 @@ function useChatReferenceCardModel(resolution: ChatReferenceCardResolution): Cha
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [placeholder, resolution]);
+  }, [placeholder, requestVersion, resolution]);
 
-  return state;
+  return { retry, state };
 }
 
 function renderNoticeIcon(tone: ChatReferenceCardNoticeTone | undefined) {
@@ -323,13 +332,17 @@ function renderReferenceCardBodyBlock(block: ChatReferenceCardBodyBlock, index: 
 }
 
 function ChatReferenceCardModelView({
+  collapseKey,
   model,
+  onRetry,
   state,
 }: {
+  collapseKey: string;
   model: ChatReferenceCardModel;
+  onRetry: () => void;
   state: ChatReferenceCardLoadState;
 }) {
-  const status = state.status === "loading" ? "loading" : model.status ?? state.status;
+  const status = state.status === "ready" ? model.status ?? "ready" : state.status;
   const blocks = model.body ?? [];
   const action = model.action ?? null;
   return (
@@ -337,6 +350,7 @@ function ChatReferenceCardModelView({
       actionHref={action?.href}
       actionLabel={action?.label}
       badge={model.badge}
+      bodyCollapseKey={`${collapseKey}:${state.status}`}
       className={model.className}
       eyebrow={model.eyebrow}
       icon={state.status === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : model.icon}
@@ -349,7 +363,11 @@ function ChatReferenceCardModelView({
         <ChatReferenceCardNotice>正在读取引用内容</ChatReferenceCardNotice>
       )}
       {state.status === "error" && (
-        <ChatReferenceCardNotice icon={<AlertCircle className="h-3.5 w-3.5" />}>
+        <ChatReferenceCardNotice
+          actionLabel="重试"
+          icon={<AlertCircle className="h-3.5 w-3.5" />}
+          onAction={onRetry}
+        >
           {state.message}
         </ChatReferenceCardNotice>
       )}
@@ -363,8 +381,15 @@ export function ChatReferenceCardProviderHost({
 }: {
   resolution: ChatReferenceCardResolution;
 }) {
-  const state = useChatReferenceCardModel(resolution);
-  return <ChatReferenceCardModelView model={state.model} state={state} />;
+  const { retry, state } = useChatReferenceCardModel(resolution);
+  return (
+    <ChatReferenceCardModelView
+      collapseKey={resolution.cacheKey}
+      model={state.model}
+      onRetry={retry}
+      state={state}
+    />
+  );
 }
 
 export function renderChatReferenceCardFromRegistrations(

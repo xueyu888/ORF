@@ -13,6 +13,7 @@ import {
   type FeedbackReferenceCardData,
 } from "./feedbackWebClient";
 import { CircleDot, MessageSquare, Paperclip } from "lucide-react";
+import { replaceOrfAttachmentMarkdownTokens } from "../features/rich-text/orfRichTextMarkdown";
 import type {
   ChatReferenceCardAttachment,
   ChatReferenceCardBodyBlock,
@@ -49,8 +50,7 @@ function feedbackReferencePlaceholder(reference: FeedbackNotificationCardReferen
     eyebrow: feedbackReferenceEyebrow(reference),
     icon: feedbackReferenceIcon(reference),
     status: "loading",
-    subtitle: feedbackReferenceTitle(reference.feedbackId),
-    title: reference.kind === "comment" ? "正在读取反馈回复" : "正在读取反馈内容",
+    title: feedbackReferenceTitle(reference.feedbackId),
   };
 }
 
@@ -143,21 +143,35 @@ function addAttachmentSection(
   });
 }
 
+function feedbackReferenceBodyWithoutListedAttachments(
+  bodyMarkdown: string,
+  attachments: FeedbackReferenceCardData["feedback"]["reportAttachments"],
+) {
+  const listedAttachmentIds = new Set(attachments.map((attachment) => attachment.id));
+  return replaceOrfAttachmentMarkdownTokens(bodyMarkdown, (reference, token) => (
+    reference.kind === "attached" && listedAttachmentIds.has(reference.attachmentId) ? "" : token
+  )).trim();
+}
+
 function feedbackReferenceBodyBlocks(
   reference: FeedbackNotificationCardReferenceV1,
   data: FeedbackReferenceCardData,
 ): ChatReferenceCardBodyBlock[] {
   const blocks: ChatReferenceCardBodyBlock[] = [];
   if (reference.kind === "comment") {
-    const body = data.comment?.body.trim();
+    const attachments = data.comment?.attachments ?? [];
+    const body = feedbackReferenceBodyWithoutListedAttachments(data.comment?.body ?? "", attachments);
     if (body) {
       blocks.push({ bodyMarkdown: body, title: "回复内容", type: "section" });
     }
-    addAttachmentSection(blocks, data.comment?.attachments ?? []);
+    addAttachmentSection(blocks, attachments);
     return blocks;
   }
 
-  const description = data.feedback.description.trim();
+  const description = feedbackReferenceBodyWithoutListedAttachments(
+    data.feedback.description,
+    data.feedback.reportAttachments,
+  );
   if (description) {
     blocks.push({ bodyMarkdown: description, title: "原始报告", type: "section" });
   }
