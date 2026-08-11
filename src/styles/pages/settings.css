@@ -913,6 +913,73 @@
   }
 }
 
+.orf-skin-selected-meta {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.orf-skin-selected-meta .orf-skin-selected-file {
+  max-width: min(58%, 680px);
+}
+
+.orf-skin-community-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.orf-skin-community-actions .orf-action-button {
+  min-height: 32px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.orf-skin-community-confirmation {
+  display: grid;
+  gap: 10px;
+}
+
+.orf-skin-community-confirmation p,
+.orf-skin-community-confirmation ul {
+  margin: 0;
+}
+
+.orf-skin-community-confirmation ul {
+  display: grid;
+  gap: 6px;
+  padding-left: 20px;
+}
+
+@media (max-width: 760px) {
+  .orf-skin-gallery-heading,
+  .orf-skin-selected-meta {
+    align-items: stretch;
+  }
+
+  .orf-skin-selected-meta {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .orf-skin-selected-meta .orf-skin-selected-file {
+    max-width: 100%;
+    justify-content: flex-start;
+  }
+
+  .orf-skin-community-actions {
+    width: 100%;
+  }
+
+  .orf-skin-community-actions .orf-action-button {
+    min-height: 42px;
+  }
+}
+
 .orf-settings-page {
   --settings-ink: var(--orf-text-primary);
   --settings-cyan: var(--orf-accent);

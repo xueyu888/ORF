@@ -22,6 +22,12 @@ import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import { chatSettingsError, chatSettingsPatchSchema, readChatSettings, saveChatSettings } from "../settings/chatSettings";
 import { feedbackSettingsError, feedbackSettingsPatchSchema, readFeedbackSettings, saveFeedbackSettings } from "../settings/feedbackSettings";
 import {
+  communityBackgroundError,
+  getCommunityBackgroundFile,
+  shareCommunityBackground,
+  withdrawCommunityBackground,
+} from "../settings/communityBackgrounds";
+import {
   backgroundSceneConfigSchema,
   backgroundScenePathSchema,
   backgroundSceneSchema,
@@ -38,6 +44,8 @@ import {
   getPersonalBackgroundFile,
   listPersonalBackgrounds,
   personalSettingsError,
+  readPersonalBackgroundForCommunityCopy,
+  readUserReferencedBackgroundIds,
   readUserPreferences,
   saveUploadedPersonalBackground,
   saveUserPreferences,
@@ -53,6 +61,9 @@ const visualBackgroundConfigBodySchema = z.object({
 });
 const visualBackgroundParamsSchema = z.object({
   id: z.string().min(1),
+});
+const communityBackgroundParamsSchema = z.object({
+  shareId: z.string().uuid(),
 });
 const visualBackgroundStaticParamsSchema = z.object({
   scene: backgroundScenePathSchema,
@@ -114,7 +125,37 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function personalBackgroundSettingsError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message === "community background forbidden" || message === "community background not found"
+    ? communityBackgroundError(error)
+    : personalSettingsError(error);
+}
+
 export function registerSettingsRoutes(app: FastifyInstance) {
+  app.get("/settings/community-backgrounds/:shareId", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    try {
+      const params = communityBackgroundParamsSchema.parse(request.params);
+      const file = await getCommunityBackgroundFile({
+        scopeId: runtimeScopeStorageId(context.scope),
+        userId: context.user.id,
+        shareId: params.shareId,
+        referencedIds: await readUserReferencedBackgroundIds(context.user.id),
+      });
+      reply.header("Cache-Control", "private, no-store");
+      reply.header("Content-Type", file.mimeType);
+      return reply.send(file.stream);
+    } catch (error) {
+      const mapped = communityBackgroundError(error);
+      return reply.code(mapped.status).send({ error: mapped.message });
+    }
+  });
+
   app.get("/settings/backgrounds/:scene/:scope/:fileName", async (request, reply) => {
     try {
       const params = visualBackgroundStaticParamsSchema.parse(request.params);
@@ -152,7 +193,7 @@ export function registerSettingsRoutes(app: FastifyInstance) {
         data: await readUserPreferences(user.id),
       };
     } catch (error) {
-      const mapped = personalSettingsError(error);
+      const mapped = personalBackgroundSettingsError(error);
       return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
     }
   });
@@ -165,7 +206,7 @@ export function registerSettingsRoutes(app: FastifyInstance) {
 
     try {
       const body = userPreferencesPatchSchema.parse(request.body);
-      const data = await saveUserPreferences(context.user.id, body);
+      const data = await saveUserPreferences(runtimeScopeStorageId(context.scope), context.user.id, body);
       publishSettingsInvalidation({ actorUserId: context.user.id, scope: context.scope, targetId: `personal:${context.user.id}` });
       return {
         code: 0,
@@ -173,15 +214,15 @@ export function registerSettingsRoutes(app: FastifyInstance) {
         data,
       };
     } catch (error) {
-      const mapped = personalSettingsError(error);
+      const mapped = personalBackgroundSettingsError(error);
       return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
     }
   });
 
   app.get("/api/settings/personal/backgrounds", async (request, reply) => {
     reply.header("Cache-Control", "private, no-store");
-    const user = await requireApiUser(request, reply);
-    if (!user) {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
       return reply;
     }
 
@@ -190,10 +231,14 @@ export function registerSettingsRoutes(app: FastifyInstance) {
       return {
         code: 0,
         message: "ok",
-        data: await listPersonalBackgrounds(user.id, query.scene ?? "sidebar_background"),
+        data: await listPersonalBackgrounds(
+          runtimeScopeStorageId(context.scope),
+          context.user.id,
+          query.scene ?? "sidebar_background",
+        ),
       };
     } catch (error) {
-      const mapped = personalSettingsError(error);
+      const mapped = personalBackgroundSettingsError(error);
       return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
     }
   });
@@ -255,6 +300,57 @@ export function registerSettingsRoutes(app: FastifyInstance) {
       };
     } catch (error) {
       const mapped = personalSettingsError(error);
+      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
+    }
+  });
+
+  app.post("/api/settings/personal/backgrounds/:id/community-share", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    try {
+      const params = visualBackgroundParamsSchema.parse(request.params);
+      const source = await readPersonalBackgroundForCommunityCopy(context.user.id, params.id);
+      const data = await shareCommunityBackground({
+        scopeId: runtimeScopeStorageId(context.scope),
+        userId: context.user.id,
+        ...source,
+      });
+      publishSettingsInvalidation({ actorUserId: context.user.id, scope: context.scope, targetId: `community:${data.community?.shareId ?? data.id}` });
+      return {
+        code: 0,
+        message: "ok",
+        data,
+      };
+    } catch (error) {
+      const mapped = personalBackgroundSettingsError(error);
+      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
+    }
+  });
+
+  app.post("/api/settings/community-backgrounds/:shareId/withdraw", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    try {
+      const params = communityBackgroundParamsSchema.parse(request.params);
+      const data = await withdrawCommunityBackground({
+        scopeId: runtimeScopeStorageId(context.scope),
+        userId: context.user.id,
+        shareId: params.shareId,
+      });
+      publishSettingsInvalidation({ actorUserId: context.user.id, scope: context.scope, targetId: `community:${params.shareId}` });
+      return {
+        code: 0,
+        message: "ok",
+        data,
+      };
+    } catch (error) {
+      const mapped = communityBackgroundError(error);
       return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
     }
   });

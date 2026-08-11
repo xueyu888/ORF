@@ -78,6 +78,12 @@ export type VisualBackgroundImage = {
   fileSize: number;
   isDefault: boolean;
   createdAt?: string;
+  community?: {
+    shareId: string;
+    state: "active" | "withdrawn";
+    role: "community-copy" | "shared-source";
+    canWithdraw: boolean;
+  };
 };
 
 type VisualSettings = {

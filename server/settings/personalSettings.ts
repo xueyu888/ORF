@@ -37,6 +37,10 @@ import {
   type BackgroundSceneConfig,
   type VisualBackgroundImage,
 } from "./visualBackgrounds";
+import {
+  assertCommunityBackgroundSelectable,
+  listCommunityBackgrounds,
+} from "./communityBackgrounds";
 import { ensurePrivateSettingsStorage, privateUserSettingsDirectory } from "./settingsStorage";
 
 const imageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"]);
@@ -371,8 +375,23 @@ async function scanPersonalBackgrounds(userId: string, scene: CanonicalBackgroun
   return images;
 }
 
-async function assertAccessibleBackground(userId: string, id: string) {
+function referencedBackgroundIds(preferences: UserPreferences) {
+  return new Set(
+    Object.values(preferences.backgrounds)
+      .map((config) => config?.fixedBackgroundId)
+      .filter((id): id is string => Boolean(id)),
+  );
+}
+
+export async function readUserReferencedBackgroundIds(userId: string) {
+  return referencedBackgroundIds(await readUserPreferences(userId));
+}
+
+async function assertAccessibleBackground(scopeId: string, userId: string, id: string, existingReferences: ReadonlySet<string>) {
   const decodedId = decodeURIComponent(id);
+  if (decodedId.startsWith("community/")) {
+    return assertCommunityBackgroundSelectable({ scopeId, id: decodedId, referencedIds: existingReferences });
+  }
   if (decodedId.includes("/personal/")) {
     const parsed = parsePersonalBackgroundId(decodedId);
     const filePath = path.join(personalBackgroundDir(userId, parsed.storageScene), parsed.fileName);
@@ -391,7 +410,12 @@ async function assertAccessibleBackground(userId: string, id: string) {
   return `${parsed.storageScene}/${parsed.storageScope}/${parsed.fileName}`;
 }
 
-async function normalizePersonalBackgroundConfig(userId: string, config: BackgroundSceneConfig | null) {
+async function normalizePersonalBackgroundConfig(
+  scopeId: string,
+  userId: string,
+  config: BackgroundSceneConfig | null,
+  existingReferences: ReadonlySet<string>,
+) {
   if (!config) {
     return null;
   }
@@ -402,17 +426,20 @@ async function normalizePersonalBackgroundConfig(userId: string, config: Backgro
 
   return {
     ...config,
-    fixedBackgroundId: config.fixedBackgroundId ? await assertAccessibleBackground(userId, config.fixedBackgroundId) : null,
+    fixedBackgroundId: config.fixedBackgroundId
+      ? await assertAccessibleBackground(scopeId, userId, config.fixedBackgroundId, existingReferences)
+      : null,
   } satisfies BackgroundSceneConfig;
 }
 
-export async function saveUserPreferences(userId: string, patch: z.infer<typeof userPreferencesPatchSchema>) {
+export async function saveUserPreferences(scopeId: string, userId: string, patch: z.infer<typeof userPreferencesPatchSchema>) {
   const input = userPreferencesPatchSchema.parse(patch);
   if (input.defaultLandingPath !== undefined && input.defaultLandingPath !== null && !allowedLandingPaths.has(input.defaultLandingPath)) {
     throw new Error("invalid preference");
   }
 
   return updateUserPreferences(userId, async (preferences) => {
+    const existingReferences = referencedBackgroundIds(preferences);
     if (input.defaultLandingPath !== undefined) {
       preferences.defaultLandingPath = input.defaultLandingPath;
     }
@@ -454,21 +481,35 @@ export async function saveUserPreferences(userId: string, patch: z.infer<typeof 
     if (input.backgrounds) {
       for (const [sceneRaw, config] of Object.entries(input.backgrounds)) {
         const scene = backgroundSceneSchema.parse(sceneRaw);
-        preferences.backgrounds[scene] = await normalizePersonalBackgroundConfig(userId, config);
+        preferences.backgrounds[scene] = await normalizePersonalBackgroundConfig(scopeId, userId, config, existingReferences);
       }
     }
     return preferences;
   });
 }
 
-export async function listPersonalBackgrounds(userId: string, sceneInput: CanonicalBackgroundScene = "sidebar_background"): Promise<PersonalBackgroundsData> {
+export async function listPersonalBackgrounds(
+  scopeId: string,
+  userId: string,
+  sceneInput: CanonicalBackgroundScene = "sidebar_background",
+): Promise<PersonalBackgroundsData> {
   const scene = backgroundSceneSchema.parse(sceneInput);
   const [systemBackgrounds, preferences, personalImages] = await Promise.all([
     listVisualBackgrounds(scene),
     readUserPreferences(userId),
     scanPersonalBackgrounds(userId, scene),
   ]);
-  const list = [...systemBackgrounds.list, ...personalImages];
+  const communityBackgrounds = await listCommunityBackgrounds({
+    scopeId,
+    userId,
+    scene,
+    referencedIds: referencedBackgroundIds(preferences),
+  });
+  const personalImagesWithShareState = personalImages.map((image) => {
+    const community = communityBackgrounds.sourceStates.get(image.id);
+    return community ? { ...image, community } : image;
+  });
+  const list = [...systemBackgrounds.list, ...personalImagesWithShareState, ...communityBackgrounds.images];
   const personalConfig = preferences.backgrounds[scene] ?? null;
   const personalFixedExists = personalConfig?.fixedBackgroundId ? list.some((image) => image.id === personalConfig.fixedBackgroundId) : false;
   const config = personalConfig && (personalConfig.mode !== "fixed" || personalFixedExists)
@@ -486,6 +527,23 @@ export async function listPersonalBackgrounds(userId: string, sceneInput: Canoni
     },
     list: list.map((image) => ({ ...image, isDefault: image.id === fixedBackgroundId })),
     preferences,
+  };
+}
+
+export async function readPersonalBackgroundForCommunityCopy(userId: string, id: string) {
+  const parsed = parsePersonalBackgroundId(id);
+  const sourcePersonalBackgroundId = personalBackgroundId(parsed.storageScene, parsed.fileName);
+  const filePath = path.join(personalBackgroundDir(userId, parsed.storageScene), parsed.fileName);
+  const fileStat = await stat(filePath).catch(() => null);
+  if (!fileStat?.isFile()) {
+    throw new Error("background not found");
+  }
+  return {
+    sourcePersonalBackgroundId,
+    scene: parsed.scene,
+    fileName: parsed.fileName,
+    mimeType: mimeTypeFromFileName(parsed.fileName),
+    buffer: await readFile(filePath),
   };
 }
 

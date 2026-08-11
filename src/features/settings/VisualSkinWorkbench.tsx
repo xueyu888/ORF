@@ -10,11 +10,14 @@ import {
   Move,
   RotateCcw,
   Save,
+  Share2,
   SlidersHorizontal,
   Trash2,
   Upload,
+  Undo2,
 } from "lucide-react";
 import { type ChangeEvent, type CSSProperties, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useConfirmDialog } from "../../components/ConfirmDialog";
 import { Button, IconButton } from "../../components/ui";
 import { defaultVisualSkinScene, visualSkinPageSlots, visualSkinSlotByScene, visualSkinSlots, type VisualSkinPreviewShape } from "../../config/visualSkinSlots";
 import {
@@ -41,8 +44,10 @@ import {
   getVisualBackgrounds,
   saveUserPreferences,
   saveVisualBackgroundConfig,
+  sharePersonalBackground,
   uploadPersonalBackground,
   uploadVisualBackground,
+  withdrawCommunityBackground,
   type PersonalBackgroundsData,
   type VisualBackgroundImage,
   type VisualBackgroundsData,
@@ -68,12 +73,20 @@ function isPersonalBackground(id: string | null | undefined) {
   return Boolean(id?.includes("/personal/"));
 }
 
-function backgroundSourceInfo(id: string) {
-  let decodedId = id;
+function backgroundSourceInfo(background: VisualBackgroundImage) {
+  if (background.community?.role === "community-copy") {
+    return {
+      detailLabel: "社区图库",
+      scopeBadge: "社区",
+      slotLabel: null,
+    };
+  }
+
+  let decodedId = background.id;
   try {
-    decodedId = decodeURIComponent(id);
+    decodedId = decodeURIComponent(background.id);
   } catch {
-    decodedId = id;
+    decodedId = background.id;
   }
   const [sceneRaw, scopeRaw] = decodedId.split("/");
   const slotLabel = visualSkinSlots.find((item) => item.scene === sceneRaw)?.label ?? "未知槽位";
@@ -219,6 +232,7 @@ function useHorizontalGalleryNavigation(itemCount: number, selectedId: string | 
 
 export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
   const { currentUser, notify, readModelInvalidations } = useOrf();
+  const confirm = useConfirmDialog();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const settingsInvalidationKey = readModelInvalidationKey(readModelInvalidations, "settings");
   const [scene, setScene] = useState<VisualBackgroundScene>(defaultVisualSkinScene);
@@ -231,6 +245,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
   const [saveStatus, setSaveStatus] = useState<RequestStatus>("idle");
   const [uploadStatus, setUploadStatus] = useState<RequestStatus>("idle");
   const [deleteStatus, setDeleteStatus] = useState<RequestStatus>("idle");
+  const [shareStatus, setShareStatus] = useState<RequestStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pageTargetScenes, setPageTargetScenes] = useState<PageVisualBackgroundScene[]>([]);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
@@ -238,7 +253,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
 
   const slot = visualSkinSlotByScene(scene);
   const selectedBackground = backgroundList.find((background) => background.id === selectedBackgroundId) ?? null;
-  const selectedBackgroundSource = selectedBackground ? backgroundSourceInfo(selectedBackground.id) : null;
+  const selectedBackgroundSource = selectedBackground ? backgroundSourceInfo(selectedBackground) : null;
   const persistedCrop = data ? cropForVisualBackground(data, selectedBackgroundId) : defaultVisualBackgroundCrop;
   const isPageSlot = slot.kind === "page";
   const effectivePageTargetScenes = isPageSlot ? pageApplyTargets(scene, pageTargetScenes) : [];
@@ -258,9 +273,22 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
         draftConfig.material.reduceTransparency !== data.config.material.reduceTransparency ||
         !cropEquals(draftCrop, persistedCrop)),
   );
-  const busy = loadStatus === "loading" || saveStatus === "loading" || uploadStatus === "loading" || deleteStatus === "loading";
+  const busy = loadStatus === "loading" || saveStatus === "loading" || uploadStatus === "loading" || deleteStatus === "loading" || shareStatus === "loading";
   const canSave = Boolean(selectedBackgroundId && (dirty || pageTargetsDirty) && !busy);
   const canDelete = scope === "personal" && isPersonalBackground(selectedBackgroundId) && !busy;
+  const canShare = Boolean(
+    scope === "personal" &&
+      selectedBackground &&
+      isPersonalBackground(selectedBackground.id) &&
+      selectedBackground.community?.state !== "active" &&
+      !busy,
+  );
+  const canWithdraw = Boolean(
+    scope === "personal" &&
+      selectedBackground?.community?.state === "active" &&
+      selectedBackground.community.canWithdraw &&
+      !busy,
+  );
 
   const groupedSlots = useMemo(() => {
     const groups = new Map<string, typeof visualSkinSlots[number][]>();
@@ -270,8 +298,10 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
     return Array.from(groups.entries());
   }, []);
 
-  const applyLoadedData = useCallback((nextData: BackgroundData) => {
-    const nextSelectedId = nextData.config.fixedBackgroundId ?? nextData.list[0]?.id ?? null;
+  const applyLoadedData = useCallback((nextData: BackgroundData, preferredBackgroundId?: string | null) => {
+    const nextSelectedId = preferredBackgroundId && nextData.list.some((image) => image.id === preferredBackgroundId)
+      ? preferredBackgroundId
+      : nextData.config.fixedBackgroundId ?? nextData.list[0]?.id ?? null;
     setData(nextData);
     setBackgroundList(nextData.list);
     setDraftConfig(nextData.config);
@@ -279,7 +309,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
     setDraftCrop(cropFromConfig(nextData.config, nextSelectedId));
   }, []);
 
-  const loadScene = useCallback(async () => {
+  const loadScene = useCallback(async (preferredBackgroundId?: string | null) => {
     setLoadStatus("loading");
     setErrorMessage(null);
     setData(null);
@@ -289,7 +319,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
     setDraftCrop(defaultVisualBackgroundCrop);
     try {
       const nextData = scope === "system" ? await getVisualBackgrounds(scene) : await getPersonalBackgrounds(scene);
-      applyLoadedData(nextData);
+      applyLoadedData(nextData, preferredBackgroundId);
       setLoadStatus("success");
     } catch (error) {
       const message = error instanceof Error ? error.message : "皮肤设置加载失败";
@@ -317,6 +347,74 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
     setDraftConfig((current) => selectedBackgroundId ? configWithCrop(current, selectedBackgroundId, normalized) : current);
   };
 
+  const confirmCommunityShare = (image: VisualBackgroundImage) => confirm({
+    title: "把这张图片分享到社区？",
+    confirmLabel: "分享到社区",
+    cancelLabel: "仅保留个人图片",
+    description: (
+      <div className="orf-skin-community-confirmation">
+        <p><strong>{image.fileName}</strong> 会生成一份独立的社区副本，当前 ORF 中的已激活成员可以选择它。</p>
+        <ul>
+          <li>个人原图仍然只属于你，不会改成系统资源。</li>
+          <li>社区图库默认不展示作者姓名。</li>
+          <li>之后可以撤回；撤回不会删除文件，也不会破坏已有使用。</li>
+        </ul>
+      </div>
+    ),
+  });
+
+  const handleCommunityShare = async (image: VisualBackgroundImage, askForConfirmation = true) => {
+    if (scope !== "personal" || !isPersonalBackground(image.id)) return;
+    if (askForConfirmation && !(await confirmCommunityShare(image))) return;
+    setShareStatus("loading");
+    setErrorMessage(null);
+    try {
+      await sharePersonalBackground(image.id);
+      await loadScene(image.id);
+      setShareStatus("success");
+      notify("已匿名分享到社区图库");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "分享失败";
+      setShareStatus("error");
+      setErrorMessage(message);
+      notify(message);
+    }
+  };
+
+  const handleCommunityWithdraw = async (image: VisualBackgroundImage) => {
+    const community = image.community;
+    if (scope !== "personal" || !community?.canWithdraw || community.state !== "active") return;
+    const confirmed = await confirm({
+      title: "撤回这张社区背景？",
+      confirmLabel: "撤回分享",
+      cancelLabel: "继续分享",
+      description: (
+        <div className="orf-skin-community-confirmation">
+          <p>撤回后，这张图片不再出现在其他成员的可选社区图库中。</p>
+          <p>图片文件和已经保存的使用记录会继续保留，不会删除个人原图，也不会让已有界面失效。</p>
+        </div>
+      ),
+    });
+    if (!confirmed) return;
+
+    const sourceImage = backgroundList.find((candidate) => (
+      candidate.community?.shareId === community.shareId && candidate.community.role === "shared-source"
+    ));
+    setShareStatus("loading");
+    setErrorMessage(null);
+    try {
+      await withdrawCommunityBackground(community.shareId);
+      await loadScene(sourceImage?.id ?? image.id);
+      setShareStatus("success");
+      notify("社区分享已撤回，已有使用保持不变");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "撤回失败";
+      setShareStatus("error");
+      setErrorMessage(message);
+      notify(message);
+    }
+  };
+
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     event.target.value = "";
@@ -338,6 +436,9 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
       setDraftConfig((current) => configWithCrop(current, uploaded.id, defaultVisualBackgroundCrop));
       setUploadStatus("success");
       notify("图片已上传");
+      if (scope === "personal" && await confirmCommunityShare(uploaded)) {
+        await handleCommunityShare(uploaded, false);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "上传失败";
       setUploadStatus("error");
@@ -779,14 +880,32 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
               </div>
             </div>
             {selectedBackground && (
-              <span
-                className="orf-skin-selected-file"
-                title={`应用到：${slot.label}；来源：${selectedBackgroundSource?.detailLabel ?? "未知图库"}；${selectedBackground.fileName}`}
-              >
-                <span>应用到：{slot.label}</span>
-                <span>来源：{selectedBackgroundSource?.detailLabel ?? "未知图库"}</span>
-                <span className="orf-skin-selected-file-name">{selectedBackground.fileName}</span>
-              </span>
+              <div className="orf-skin-selected-meta">
+                <span
+                  className="orf-skin-selected-file"
+                  title={`应用到：${slot.label}；来源：${selectedBackgroundSource?.detailLabel ?? "未知图库"}；${selectedBackground.fileName}`}
+                >
+                  <span>应用到：{slot.label}</span>
+                  <span>来源：{selectedBackgroundSource?.detailLabel ?? "未知图库"}</span>
+                  <span className="orf-skin-selected-file-name">{selectedBackground.fileName}</span>
+                </span>
+                {scope === "personal" && (canShare || canWithdraw) && (
+                  <div className="orf-skin-community-actions">
+                    {canShare && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => void handleCommunityShare(selectedBackground)}>
+                        {shareStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+                        {selectedBackground.community?.state === "withdrawn" ? "重新分享" : "分享到社区"}
+                      </Button>
+                    )}
+                    {canWithdraw && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => void handleCommunityWithdraw(selectedBackground)}>
+                        {shareStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
+                        撤回分享
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
           <div
@@ -805,7 +924,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
             {backgroundList.map((background) => {
               const selected = selectedBackgroundId === background.id;
               const current = data?.config.fixedBackgroundId === background.id;
-              const source = backgroundSourceInfo(background.id);
+              const source = backgroundSourceInfo(background);
               return (
                 <button
                   key={background.id}
@@ -821,7 +940,9 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
                   <span className="orf-skin-gallery-card-badges">
                     {current && <span>当前</span>}
                     <span>{source.scopeBadge}</span>
-                    <span>{source.slotLabel}</span>
+                    {source.slotLabel && <span>{source.slotLabel}</span>}
+                    {background.community?.role === "shared-source" && background.community.state === "active" && <span>已分享</span>}
+                    {background.community?.state === "withdrawn" && <span>已撤回</span>}
                   </span>
                 </button>
               );

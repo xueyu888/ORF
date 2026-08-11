@@ -30,6 +30,7 @@ export const privateSystemSettingsDirectory = path.join(privateSettingsRoot, "sy
 export const privateSystemSettingsPath = path.join(privateSystemSettingsDirectory, "settings.json");
 
 const privateUsersRoot = path.join(privateSettingsRoot, "users");
+const privateCommunitiesRoot = path.join(privateSettingsRoot, "communities");
 const publicBackgroundsRoot = path.join(publicSettingsRoot, "backgrounds");
 const privateBackgroundsRoot = path.join(privateSettingsRoot, "backgrounds");
 
@@ -53,6 +54,10 @@ export function ensurePrivateSettingsStorage() {
 
 export function privateUserSettingsDirectory(userStorageId: string) {
   return path.join(privateUsersRoot, userStorageId);
+}
+
+export function privateCommunitySettingsDirectory(scopeStorageId: string) {
+  return path.join(privateCommunitiesRoot, scopeStorageId);
 }
 
 export function visualBackgroundDirectory(scene: string, scope: string) {

@@ -290,6 +290,12 @@ export type VisualBackgroundImage = {
   fileSize: number;
   isDefault: boolean;
   createdAt?: string;
+  community?: {
+    shareId: string;
+    state: "active" | "withdrawn";
+    role: "community-copy" | "shared-source";
+    canWithdraw: boolean;
+  };
 };
 export type VisualBackgroundsData = {
   scene: VisualBackgroundScene;
@@ -1444,6 +1450,22 @@ export async function deletePersonalBackground(id: string) {
   const response = await apiJson<ApiEnvelope<{ id: string }>>(`/api/settings/personal/backgrounds/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
+  return response.data;
+}
+
+export async function sharePersonalBackground(id: string) {
+  const response = await apiJson<ApiEnvelope<VisualBackgroundImage>>(
+    `/api/settings/personal/backgrounds/${encodeURIComponent(id)}/community-share`,
+    { method: "POST" },
+  );
+  return response.data;
+}
+
+export async function withdrawCommunityBackground(shareId: string) {
+  const response = await apiJson<ApiEnvelope<{ id: string; shareId: string; withdrawnAt: string }>>(
+    `/api/settings/community-backgrounds/${encodeURIComponent(shareId)}/withdraw`,
+    { method: "POST" },
+  );
   return response.data;
 }
 
