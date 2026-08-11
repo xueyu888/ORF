@@ -1940,6 +1940,7 @@
 }
 
 .orf-rich-text-markdown-notification-image figcaption,
+.orf-rich-text-markdown-notification-image-caption,
 .orf-rich-text-markdown-notification-image-compact {
   display: inline-flex;
   max-width: 100%;
@@ -1951,7 +1952,8 @@
   white-space: nowrap;
 }
 
-.orf-rich-text-markdown-notification-image figcaption {
+.orf-rich-text-markdown-notification-image figcaption,
+.orf-rich-text-markdown-notification-image-caption {
   margin-top: 4px;
 }
 

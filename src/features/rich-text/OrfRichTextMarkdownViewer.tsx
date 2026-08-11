@@ -55,11 +55,18 @@ export type OrfRichTextResolvedLink = {
   label: ReactNode;
 };
 
+export type OrfRichTextAttachmentPlacement = "block" | "inline";
+
 export type OrfRichTextMarkdownViewerProps = {
   body: string;
   compact?: boolean;
   enableTitleAutolinks?: boolean;
-  renderAttachment?: (reference: OrfAttachmentReference, key: string, token: string) => ReactNode;
+  renderAttachment?: (
+    reference: OrfAttachmentReference,
+    key: string,
+    token: string,
+    placement: OrfRichTextAttachmentPlacement,
+  ) => ReactNode;
   renderLink?: (href: string, children: ReactNode, key: string) => ReactNode;
   renderMention?: (reference: OrfMentionReference, key: string) => ReactNode;
   renderPlainText?: (text: string, keyPrefix: string) => ReactNode[];
@@ -526,7 +533,7 @@ function renderInlineFragments(body: string, context: InlineRenderContext, keyPr
     }
     if (match[2] === "orf-attachment" || match[2] === "orf-pending-attachment") {
       const reference = parseOrfAttachmentMarkdownToken(match[0]);
-      nodes.push(reference ? context.renderAttachment(reference, `${keyPrefix}:attachment:${match.index}`, match[0]) : match[0]);
+      nodes.push(reference ? context.renderAttachment(reference, `${keyPrefix}:attachment:${match.index}`, match[0], "inline") : match[0]);
     } else if (match[5]) {
       const reference = parseOrfMentionMarkdownToken(match[0]);
       nodes.push(reference ? context.renderMention(reference, `${keyPrefix}:mention:${match.index}`) : match[0]);
@@ -667,7 +674,7 @@ export function OrfRichTextMarkdownViewer({
     <>
       {blocks.map((block) => {
         if (block.kind === "attachment") {
-          return context.renderAttachment(block.reference, block.key, block.token);
+          return context.renderAttachment(block.reference, block.key, block.token, "block");
         }
         if (block.kind === "code") {
           return <MarkdownCodeBlock compact={compact} content={block.content} key={block.key} language={block.language} />;

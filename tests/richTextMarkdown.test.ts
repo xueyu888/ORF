@@ -4,6 +4,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { OrfRichTextMarkdownViewer } from "../src/features/rich-text/OrfRichTextMarkdownViewer";
+import { ChatMarkdown } from "../src/features/chat/chatMarkdown";
 import { normalizePastedOrfRichText } from "../src/features/rich-text/orfRichTextClipboard";
 
 test("rich text paste normalizes external ordered list markers and continuations", () => {
@@ -92,4 +93,16 @@ test("rich text compact heading styles preserve markdown heading levels", () => 
   const css = readFileSync("src/styles/controls.css", "utf8");
   assert.match(css, /\.orf-rich-text-markdown-heading-2\.orf-rich-text-markdown-heading-compact\s*\{[^}]*font-size:\s*1\.28em;/s);
   assert.match(css, /\.orf-rich-text-markdown-heading-4\.orf-rich-text-markdown-heading-compact,[^}]*\{[^}]*font-size:\s*1\.08em;/s);
+});
+
+test("chat notification images keep inline attachments inside valid paragraph markup", () => {
+  const html = renderToStaticMarkup(React.createElement(ChatMarkdown, {
+    body: "证据：![截图](orf-attachment:attachment-1)",
+    commentImageAttachmentIds: ["attachment-1"],
+    usersById: new Map(),
+  }));
+
+  assert.match(html, /data-attachment-placement="inline"/);
+  assert.doesNotMatch(html, /<p[^>]*>[^]*<figure/);
+  assert.doesNotMatch(html, /<figcaption>/);
 });

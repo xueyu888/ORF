@@ -22,7 +22,10 @@ import {
   serializeOrfRichTextDraft,
 } from "../../rich-text/orfRichTextDraft";
 import type { OrfRichTextAttachmentUploadResult } from "../../rich-text/OrfRichTextEditor";
-import { OrfRichTextMarkdownViewer } from "../../rich-text/OrfRichTextMarkdownViewer";
+import {
+  OrfRichTextMarkdownViewer,
+  type OrfRichTextAttachmentPlacement,
+} from "../../rich-text/OrfRichTextMarkdownViewer";
 import { formatFileSize } from "../../../utils/fileSize";
 import { commentTimeDisplay } from "./commentTime";
 
@@ -588,15 +591,20 @@ export function CommentBodyText({
       </span>
     );
   };
-  const renderAttachment = (reference: OrfAttachmentReference, key: string) => {
+  const renderAttachment = (
+    reference: OrfAttachmentReference,
+    key: string,
+    _token: string,
+    placement: OrfRichTextAttachmentPlacement,
+  ) => {
     const attachment = reference.kind === "attached" ? attachmentsById.get(reference.attachmentId) : undefined;
     const alt = reference.alt;
     if (!attachment) {
       return <span key={key} className="orf-comment-attachment-missing">附件不可用：{alt}</span>;
     }
 
-    return attachment.previewKind === "image" ? (
-      <figure key={key} className="orf-comment-attachment">
+    if (attachment.previewKind === "image") {
+      const previewButton = (
         <button
           type="button"
           className="orf-comment-attachment-preview-button"
@@ -610,10 +618,15 @@ export function CommentBodyText({
         >
           <img className="orf-comment-attachment-image" src={attachment.contentUrl} alt={alt} loading="lazy" />
         </button>
-      </figure>
-    ) : (
-      <CommentFileAttachmentCard key={key} attachment={attachment} />
-    );
+      );
+      return placement === "inline" ? (
+        <span key={key} className="orf-comment-attachment" data-attachment-placement="inline">{previewButton}</span>
+      ) : (
+        <figure key={key} className="orf-comment-attachment">{previewButton}</figure>
+      );
+    }
+
+    return <CommentFileAttachmentCard key={key} attachment={attachment} placement={placement} />;
   };
 
   return (
@@ -652,7 +665,13 @@ export function CommentBodyText({
   );
 }
 
-function CommentFileAttachmentCard({ attachment }: { attachment: CommentAttachment }) {
+function CommentFileAttachmentCard({
+  attachment,
+  placement,
+}: {
+  attachment: CommentAttachment;
+  placement: OrfRichTextAttachmentPlacement;
+}) {
   const canPreview = Boolean(attachment.previewUrl && (attachment.previewKind === "markdown" || attachment.previewKind === "pdf" || attachment.previewKind === "text"));
   const fileKindLabel = attachment.previewKind === "markdown"
     ? "Markdown"
@@ -662,14 +681,21 @@ function CommentFileAttachmentCard({ attachment }: { attachment: CommentAttachme
         ? "文本"
         : attachment.mimeType || "文件";
   const Icon = attachment.previewKind === "markdown" || attachment.previewKind === "pdf" || attachment.previewKind === "text" ? FileText : FileIcon;
+  const attachmentDetails = (
+    <>
+      <span className="orf-comment-file-attachment-name" title={attachment.fileName}>{attachment.fileName}</span>
+      <span className="orf-comment-file-attachment-meta">{fileKindLabel} · {formatFileSize(attachment.fileSize)}</span>
+    </>
+  );
 
-  return (
-    <figure className="orf-comment-attachment orf-comment-file-attachment">
+  const content = (
+    <>
       <Icon className="orf-comment-file-attachment-icon" aria-hidden="true" />
-      <figcaption className="orf-comment-file-attachment-main">
-        <span className="orf-comment-file-attachment-name" title={attachment.fileName}>{attachment.fileName}</span>
-        <span className="orf-comment-file-attachment-meta">{fileKindLabel} · {formatFileSize(attachment.fileSize)}</span>
-      </figcaption>
+      {placement === "inline" ? (
+        <span className="orf-comment-file-attachment-main">{attachmentDetails}</span>
+      ) : (
+        <figcaption className="orf-comment-file-attachment-main">{attachmentDetails}</figcaption>
+      )}
       <span className="orf-comment-file-attachment-actions">
         {canPreview && (
           <a
@@ -697,6 +723,20 @@ function CommentFileAttachmentCard({ attachment }: { attachment: CommentAttachme
           <span>下载</span>
         </a>
       </span>
+    </>
+  );
+
+  if (placement === "inline") {
+    return (
+      <span className="orf-comment-attachment orf-comment-file-attachment" data-attachment-placement="inline">
+        {content}
+      </span>
+    );
+  }
+
+  return (
+    <figure className="orf-comment-attachment orf-comment-file-attachment">
+      {content}
     </figure>
   );
 }

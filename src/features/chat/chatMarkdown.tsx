@@ -4,6 +4,7 @@ import { feedbackIssueHref, feedbackIssueIdFromHref, feedbackIssueMarkdownLabel 
 import type { ChatUser } from "../../types/orf";
 import {
   OrfRichTextMarkdownViewer,
+  type OrfRichTextAttachmentPlacement,
   type OrfRichTextResolvedLink,
 } from "../rich-text/OrfRichTextMarkdownViewer";
 import {
@@ -142,6 +143,7 @@ function renderCommentNotificationImageAttachment(
   allowedAttachmentIds: ReadonlySet<string>,
   compact: boolean,
   key: string,
+  placement: OrfRichTextAttachmentPlacement,
 ) {
   if (reference.kind !== "attached" || !allowedAttachmentIds.has(reference.attachmentId)) {
     return (
@@ -156,11 +158,26 @@ function renderCommentNotificationImageAttachment(
   }
 
   const src = commentAttachmentInlineUrl(reference.attachmentId);
-  return (
-    <figure key={key} className="orf-rich-text-markdown-notification-image">
+  const content = (
+    <>
       <a href={src} target="_blank" rel="noreferrer noopener" title={`打开图片 ${reference.alt}`}>
         <img alt={reference.alt} loading="lazy" src={src} />
       </a>
+      {placement === "inline" && <span className="orf-rich-text-markdown-notification-image-caption">{reference.alt}</span>}
+    </>
+  );
+
+  if (placement === "inline") {
+    return (
+      <span key={key} className="orf-rich-text-markdown-notification-image" data-attachment-placement="inline">
+        {content}
+      </span>
+    );
+  }
+
+  return (
+    <figure key={key} className="orf-rich-text-markdown-notification-image">
+      {content}
       <figcaption>{reference.alt}</figcaption>
     </figure>
   );
@@ -174,7 +191,9 @@ export function ChatMarkdown({ body, compact = false, commentImageAttachmentIds 
     [onDriveResourceLink],
   );
   const renderAttachment = useCallback(
-    (reference: OrfAttachmentReference, key: string) => renderCommentNotificationImageAttachment(reference, allowedCommentImageAttachmentIds, compact, key),
+    (reference: OrfAttachmentReference, key: string, _token: string, placement: OrfRichTextAttachmentPlacement) => (
+      renderCommentNotificationImageAttachment(reference, allowedCommentImageAttachmentIds, compact, key, placement)
+    ),
     [allowedCommentImageAttachmentIds, compact],
   );
   const resolveLink = (href: string, label: ReactNode): OrfRichTextResolvedLink => {
