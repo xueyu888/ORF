@@ -30,6 +30,7 @@ import {
   readCachedAppearanceMode,
   type AppearanceMode,
 } from "../features/appearance/appearanceMode";
+import { resolveWorkspaceContentTone } from "../features/appearance/workspaceContentTone";
 import { VisualMaterialLayer } from "../features/appearance/material/VisualMaterialLayer";
 import { useAdaptiveMaterial } from "../features/appearance/material/useAdaptiveMaterial";
 import { WorkbenchNavigationControls, WorkbenchNavigationProvider, useWorkbenchNavigation } from "../features/workbench-navigation";
@@ -290,6 +291,11 @@ function AppShellFrame() {
     unfocused: !windowFocused,
     viewport: { width: shellBodyWidth, height: Math.max(1, viewportSize.height - 60) },
   });
+  const workspaceContentTone = resolveWorkspaceContentTone({
+    analyzedTone: workspaceMaterial.contentTone,
+    appearance: appearanceMode,
+    policy: isChatPage ? "appearance" : "adaptive",
+  });
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
   const canCreateFeedback = canCreateTeamFeedback(currentUser);
   const isBountyHall = !isChatPage && shellDisplayPath.startsWith("/bounties");
@@ -313,7 +319,7 @@ function AppShellFrame() {
           data-page-scene={pageBackgroundScene ?? "none"}
           data-mobile-primary-action={mobilePrimaryAction}
           data-orf-appearance={appearanceMode}
-          data-workspace-material-content-tone={workspaceMaterial.contentTone}
+          data-workspace-material-content-tone={workspaceContentTone}
           data-desktop-chrome={desktopChromeEnabled ? "true" : "false"}
           data-desktop-compact={compactDesktopChrome ? "true" : "false"}
           data-display-contrast={displayPreferences.contrast}
@@ -403,7 +409,7 @@ function AppShellFrame() {
               className="orf-main-content"
               data-page-scene={pageBackgroundScene ?? "none"}
               data-page-skin={pageSelection ? "true" : "false"}
-              data-material-content-tone={workspaceMaterial.contentTone}
+              data-material-content-tone={workspaceContentTone}
             >
               <VisualBackgroundSlot
                 frameClassName="orf-main-content-skin-frame"
