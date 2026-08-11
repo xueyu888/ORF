@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { Ban, CheckCircle2, ChevronDown, Edit3, KeyRound, Plus, Search, Trash2, X, XCircle } from "lucide-react";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, IconButton } from "../components/ui";
 import { useConfirmDialog } from "../components/ConfirmDialog";
@@ -61,6 +61,7 @@ export function MembersPage() {
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [processingUserId, setProcessingUserId] = useState<string | null>(null);
+  const dialogTriggerRef = useRef<HTMLElement | null>(null);
   const currentUserId = currentUser?.id ?? state.currentUserId;
   const editingUser = dialog?.userId ? state.users.find((user) => user.id === dialog.userId) : null;
   const isCurrentUser = (user: OrfUser) => user.id === currentUserId;
@@ -78,21 +79,41 @@ export function MembersPage() {
   }, [query, roleFilter, state.users]);
 
   const openAddDialog = () => {
+    dialogTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setPasswordDraft("");
     setDialog({ mode: "add", name: "", email: "", role: "member" });
   };
   const openEditDialog = (user: OrfUser) => {
+    dialogTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setPasswordDraft("");
     setDialog({ mode: "edit", userId: user.id, name: user.name, email: user.email, role: user.role });
   };
-  const closeDialog = () => {
+  const dismissDialog = useCallback(() => {
+    const trigger = dialogTriggerRef.current;
+    setDialog(null);
+    setPasswordDraft("");
+    window.requestAnimationFrame(() => {
+      if (trigger?.isConnected) trigger.focus();
+    });
+  }, []);
+  const closeDialog = useCallback(() => {
     if (dialogBusy) {
       return;
     }
 
-    setDialog(null);
-    setPasswordDraft("");
-  };
+    dismissDialog();
+  }, [dialogBusy, dismissDialog]);
+
+  useEffect(() => {
+    if (!dialog) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      closeDialog();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [closeDialog, dialog]);
 
   const handleDialogSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -124,8 +145,7 @@ export function MembersPage() {
     }
 
     if (ok) {
-      setDialog(null);
-      setPasswordDraft("");
+      dismissDialog();
     }
   };
 
@@ -306,7 +326,9 @@ export function MembersPage() {
                         </span>
                       </div>
                     </td>
-                    <td>{user.email}</td>
+                    <td>
+                      <span className="orf-user-email" title={user.email}>{user.email}</span>
+                    </td>
                     <td>
                       <span className={clsx("orf-user-role-select", user.role === "admin" ? "orf-user-role-admin" : "orf-user-role-member")}>
                         <span>{userRoleLabel[user.role]}</span>
