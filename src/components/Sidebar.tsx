@@ -100,7 +100,6 @@ export function Sidebar({
         "orf-sidebar sticky top-0 flex h-screen shrink-0 flex-col",
         collapsed ? "orf-sidebar-collapsed" : "orf-sidebar-expanded",
       ].join(" ")}
-      data-material-content-tone={material.contentTone}
       aria-label="主导航"
     >
       <VisualBackgroundSlot

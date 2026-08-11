@@ -7,7 +7,6 @@ export const materialRoles = [...persistentMaterialRoles, ...surfaceMaterialRole
 export type PersistentMaterialRole = (typeof persistentMaterialRoles)[number];
 export type SurfaceMaterialRole = (typeof surfaceMaterialRoles)[number];
 export type MaterialRole = (typeof materialRoles)[number];
-export type MaterialContentTone = "light" | "dark";
 export type MaterialTransparency = "adaptive" | "reduced" | "fallback";
 
 export type AdaptiveMaterial = {
@@ -20,7 +19,6 @@ export type AdaptiveMaterial = {
   borderLightOpacity: number;
   borderDarkOpacity: number;
   shadowOpacity: number;
-  contentTone: MaterialContentTone;
   transparency: MaterialTransparency;
 };
 

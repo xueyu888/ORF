@@ -13,7 +13,6 @@ export function VisualMaterialLayer({
   return (
     <span
       className={clsx("orf-adaptive-material-layer", className)}
-      data-material-content-tone={material.contentTone}
       data-material-blur={material.blurRadius <= 0 ? "none" : "active"}
       data-material-role={role}
       data-material-transparency={material.transparency}

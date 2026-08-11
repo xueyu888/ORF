@@ -106,7 +106,6 @@ function backdropTone(input: MaterialPolicyInput) {
 export function deriveAdaptiveMaterial(input: MaterialPolicyInput): AdaptiveMaterial {
   const role = roleParameters[input.role];
   const tone = backdropTone(input);
-  const contentTone = tone === "soft-dark" ? "light" as const : "dark" as const;
   const exposure = clamp(input.preferences.exposure, 0, 1);
   const overlayStrength = clamp(input.preferences.overlayStrength, 0, 1);
   const blurStrength = clamp(input.preferences.blurStrength, 0, 1);
@@ -133,7 +132,6 @@ export function deriveAdaptiveMaterial(input: MaterialPolicyInput): AdaptiveMate
       borderLightOpacity: (tone === "soft-dark" ? 0.1 : 0.42) * (mustReduce ? 1 : overlayStrength),
       borderDarkOpacity: (tone === "soft-dark" ? 0.3 : 0.12) * (mustReduce ? 1 : overlayStrength),
       shadowOpacity: role.shadow,
-      contentTone,
       transparency,
     };
   }
@@ -168,7 +166,6 @@ export function deriveAdaptiveMaterial(input: MaterialPolicyInput): AdaptiveMate
     borderLightOpacity: (tone === "soft-dark" ? 0.14 : 0.48) * overlayStrength,
     borderDarkOpacity: (tone === "soft-dark" ? 0.34 : 0.13) * overlayStrength,
     shadowOpacity: role.shadow,
-    contentTone,
     transparency,
   };
 }
