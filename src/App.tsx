@@ -79,7 +79,6 @@ export function App() {
             </RequireFrontendVisibility>
           }
         />
-        <Route path="settings/system" element={<Navigate to="/system/settings" replace />} />
         <Route
           path="system"
           element={
