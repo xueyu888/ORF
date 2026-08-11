@@ -1745,6 +1745,12 @@
     justify-content: flex-start;
   }
 
+.orf-skin-slot-button,
+  .orf-skin-segmented button,
+  .orf-skin-page-target {
+    min-height: 44px;
+  }
+
 .orf-skin-preview {
     min-height: 188px;
   }
@@ -2615,6 +2621,10 @@ body:has(.orf-personal-settings-page) .orf-preference-switch:disabled {
 }
 
 @media (max-width: 760px) {
+  body:has(.orf-personal-settings-page) .orf-personal-settings-page .orf-control:not(.orf-action-icon-button) {
+    min-height: 44px;
+  }
+
   body:has(.orf-personal-settings-page) .orf-personal-settings-profile,
   body:has(.orf-personal-settings-page) .orf-personal-settings-section {
     border-radius: 18px;

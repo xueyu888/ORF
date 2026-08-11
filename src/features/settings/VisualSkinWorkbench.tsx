@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { type ChangeEvent, type CSSProperties, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, IconButton } from "../../components/ui";
-import { visualSkinPageSlots, visualSkinSlotByScene, visualSkinSlots, type VisualSkinPreviewShape } from "../../config/visualSkinSlots";
+import { defaultVisualSkinScene, visualSkinPageSlots, visualSkinSlotByScene, visualSkinSlots, type VisualSkinPreviewShape } from "../../config/visualSkinSlots";
 import {
   defaultVisualBackgroundConfig,
   defaultVisualBackgroundCrop,
@@ -55,8 +55,6 @@ import { cropForVisualBackground } from "../../utils/visualBackgrounds";
 type RequestStatus = "idle" | "loading" | "success" | "error";
 type SkinScope = "personal" | "system";
 type BackgroundData = VisualBackgroundsData | PersonalBackgroundsData;
-
-const initialScene = "login_background" satisfies VisualBackgroundScene;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -223,7 +221,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
   const { currentUser, notify, readModelInvalidations } = useOrf();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const settingsInvalidationKey = readModelInvalidationKey(readModelInvalidations, "settings");
-  const [scene, setScene] = useState<VisualBackgroundScene>(initialScene);
+  const [scene, setScene] = useState<VisualBackgroundScene>(defaultVisualSkinScene);
   const [data, setData] = useState<BackgroundData | null>(null);
   const [backgroundList, setBackgroundList] = useState<VisualBackgroundImage[]>([]);
   const [draftConfig, setDraftConfig] = useState<VisualBackgroundConfig>(() => defaultVisualBackgroundConfig());
