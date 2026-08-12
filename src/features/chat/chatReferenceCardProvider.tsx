@@ -29,7 +29,8 @@ export type ChatReferenceCardBodyBlock =
   | { readonly type: "attachments"; readonly attachments: readonly ChatReferenceCardAttachment[]; readonly title?: string }
   | { readonly type: "markdown"; readonly bodyMarkdown: string }
   | { readonly type: "notice"; readonly text: string; readonly tone?: ChatReferenceCardNoticeTone }
-  | { readonly type: "section"; readonly title: string; readonly bodyMarkdown: string };
+  | { readonly type: "section"; readonly title: string; readonly bodyMarkdown: string }
+  | { readonly type: "text"; readonly text: string };
 
 export type ChatReferenceCardAction = {
   readonly href: string;
@@ -52,7 +53,7 @@ export type ChatReferenceCardModel = {
 export interface ChatReferenceCardProvider<TReference> {
   readonly namespace: string;
   readonly referenceSchema: ZodType<TReference>;
-  load(reference: TReference, signal: AbortSignal): Promise<ChatReferenceCardModel>;
+  load(reference: TReference, signal: AbortSignal): Promise<ChatReferenceCardModel | null>;
 }
 
 export type ChatReferenceCardRegistration<TReference> = {
@@ -82,7 +83,7 @@ type ChatReferenceCardResolution = {
 type ChatReferenceCardLoadState =
   | { readonly status: "error"; readonly cachedAt: number; readonly message: string; readonly model: ChatReferenceCardModel }
   | { readonly status: "loading"; readonly model: ChatReferenceCardModel }
-  | { readonly status: "missing"; readonly cachedAt: number; readonly model: ChatReferenceCardModel }
+  | { readonly status: "missing"; readonly cachedAt: number; readonly model: ChatReferenceCardModel | null }
   | { readonly status: "ready"; readonly cachedAt: number; readonly model: ChatReferenceCardModel };
 
 const chatReferenceCardCacheMaxAgeMs = 30_000;
@@ -237,6 +238,12 @@ function useChatReferenceCardModel(resolution: ChatReferenceCardResolution) {
     void resolution.registration.provider
       .load(resolution.reference, controller.signal)
       .then((model) => {
+        if (!model) {
+          const loadedState = { status: "missing", cachedAt: Date.now(), model: null } as const;
+          chatReferenceCardCache.set(resolution.cacheKey, loadedState);
+          setState(loadedState);
+          return;
+        }
         const status = model.status === "missing" ? "missing" : "ready";
         const loadedState = { status, cachedAt: Date.now(), model } as Exclude<ChatReferenceCardLoadState, { status: "loading" }>;
         chatReferenceCardCache.set(resolution.cacheKey, loadedState);
@@ -328,6 +335,9 @@ function renderReferenceCardBodyBlock(block: ChatReferenceCardBodyBlock, index: 
       </ChatReferenceCardSection>
     );
   }
+  if (block.type === "text") {
+    return <p className="orf-chat-reference-card-text" key={`${block.type}-${index}`}>{block.text}</p>;
+  }
   return <OrfRichTextMarkdownViewer key={`${block.type}-${index}`} body={block.bodyMarkdown} compact />;
 }
 
@@ -382,6 +392,7 @@ export function ChatReferenceCardProviderHost({
   resolution: ChatReferenceCardResolution;
 }) {
   const { retry, state } = useChatReferenceCardModel(resolution);
+  if (!state.model) return null;
   return (
     <ChatReferenceCardModelView
       collapseKey={resolution.cacheKey}

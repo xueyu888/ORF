@@ -5,6 +5,7 @@ import { requireUserScopeContext } from "../auth/accessPolicy";
 import { env } from "../env";
 import { CHAT_SYNC_PAGE_SIZE, CHAT_SYNC_PROTOCOL_VERSION, isChatSyncCursor } from "../../src/domain/chatSync";
 import { getChatSync } from "../chat/chatSyncRepository";
+import { loadChatWebLinkPreview } from "../chat/chatWebLinkPreviewService";
 import { getRolePermissionKeysForScope } from "../repositories/permissionRepository";
 import {
   addChatChannelMembers,
@@ -137,6 +138,7 @@ const searchQuerySchema = z.object({
   type: channelTypeSchema.optional(),
 });
 const projectChannelsQuerySchema = z.object({ projectId: z.string().trim().min(1) });
+const webLinkPreviewQuerySchema = z.object({ url: z.string().trim().max(2_048).url() });
 const chatSyncQuerySchema = z.object({
   cursor: z.string().refine(isChatSyncCursor, "Invalid chat sync cursor").optional(),
   limit: z.coerce.number().int().positive().max(CHAT_SYNC_PAGE_SIZE).default(CHAT_SYNC_PAGE_SIZE),
@@ -223,6 +225,18 @@ export function registerChatRoutes(app: FastifyInstance) {
     const actor = await chatActorFromRequest(request, reply);
     if (!actor) return reply;
     return getChatUnreadSummary(actor);
+  });
+
+  app.get("/api/chat/link-preview", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    if (!actor.canRead) return reply.code(403).send({ error: "Forbidden" });
+    const query = webLinkPreviewQuerySchema.parse(request.query);
+    try {
+      return await loadChatWebLinkPreview(query.url);
+    } catch {
+      return reply.code(422).send({ error: "网页暂时无法解析" });
+    }
   });
 
   app.get("/api/chat/search", async (request, reply) => {

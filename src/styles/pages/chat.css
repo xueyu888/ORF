@@ -2077,6 +2077,11 @@ html[data-orf-appearance="dark"] body:has(.orf-chat-image-popout-page)
   --orf-chat-reference-card-accent: #15968d;
 }
 
+.orf-chat-web-link-preview {
+  --orf-chat-reference-card-accent: #4386d8;
+  width: min(100%, 560px);
+}
+
 .orf-chat-reference-card-loading {
   border-style: dashed;
 }
@@ -2214,6 +2219,14 @@ html[data-orf-appearance="dark"] body:has(.orf-chat-image-popout-page)
   gap: 9px;
   overflow-wrap: anywhere;
   padding-right: 2px;
+}
+
+.orf-chat-reference-card-text {
+  margin: 0;
+  color: var(--orf-chat-reference-card-body-text);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.58;
 }
 
 .orf-chat-reference-card-toggle {
