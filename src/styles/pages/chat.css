@@ -2992,10 +2992,8 @@ button.orf-chat-image-attachment {
 }
 
 .orf-chat-composer {
-  border-top: 1px solid var(--orf-chat-divider);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--orf-material-content-shine) 5%, transparent), transparent 48%),
-    var(--orf-chat-composer-surface);
+  border-top: 0;
+  background: transparent;
   padding: 9px 18px 14px;
 }
 
