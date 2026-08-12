@@ -22,8 +22,11 @@ database or gateway cutover.
 - GitHub polling cursor: `~/.local/share/orf-production/data/github-sync-state.json`;
   installation migrates the previous `.artifacts` cursor once and the immutable
   release never writes into its own directory.
-- Logs: user journal for `orf-backend-production.service`; production does not
-  append to the unbounded repository `.orf/logs/backend.log`.
+- Logs: user journal for `orf-backend-production.service` when user systemd is
+  available. If `orf up` has to use the detached-process fallback because the
+  WSL user bus is unavailable, logs are written to
+  `~/.local/share/orf-production/data/backend-production.manual.log`.
+  Production does not append to the unbounded repository `.orf/logs/backend.log`.
 - Shutdown first closes registered SSE streams and then waits for ordinary
   requests; systemd keeps a 15-second upper bound before forced termination.
 
@@ -50,6 +53,7 @@ same previous release if either health check fails.
 ```bash
 deploy/current-host/rollback-release.sh
 deploy/current-host/logs.sh 200
+orf logs backend
 ```
 
 Database migrations are forward-only. Application rollback never attempts to

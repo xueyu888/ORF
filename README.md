@@ -95,18 +95,26 @@ npm run db:audit:leaderboard
 
 ### 4) 一键启动
 
-后台启动会先执行 `npm install` 同步 Node 依赖，再检查 PostgreSQL；当 `.env` 指向共享 Ory/MinIO 时，只启动后端和前端：
+在当前主机已经安装 ORF 生产运行时，也就是存在
+`~/.local/share/orf-production/releases/current` 时，`orf up` 默认恢复生产入口：
+检查生产 PostgreSQL，启动 Ory / MinIO / public-gateway 依赖，从当前不可变 release
+启动生产后端，并让 8443 网关挂载 `releases/current/web`。
+
+没有生产运行时时，`orf up` 才按本地开发入口启动后台 Backend / Frontend。
+如需在生产机上强制启动开发后台，显式使用 `--dev`：
 
 ```bash
 orf up
+orf up --dev
 ```
 
 查看状态和日志：
 
 ```bash
 orf status
+orf status --dev
 orf logs backend
-orf logs frontend
+orf logs --dev frontend
 ```
 
 停止后台服务：
@@ -115,8 +123,9 @@ orf logs frontend
 orf down
 ```
 
-前端地址：`http://127.0.0.1:5173`；后端地址：`http://127.0.0.1:8787`。
-`orf status` 会同时检查 PostgreSQL、Ory、MinIO、后端和前端。缺少 `DATABASE_URL` / `REMOTE_DATABASE_URL` 或数据库不可连接时，`orf up` 会在启动前失败并给出错误；如果 `npm install` 失败，`orf up` 不会继续启动服务。
+生产入口：`https://orf-xueyu.duckdns.org:8443`；生产后端：`http://127.0.0.1:8787`。
+开发前端地址：`http://127.0.0.1:5173`；开发后端地址：`http://127.0.0.1:8787`。
+生产模式下 `orf status` 检查当前 release、PostgreSQL、Ory、MinIO、后端、网关和公网入口。开发模式下 `orf status --dev` 检查 PostgreSQL、Ory、MinIO、后端和前端。缺少 `DATABASE_URL` / `REMOTE_DATABASE_URL` 或数据库不可连接时，`orf up` 会在启动前失败并给出错误。
 
 如果不想后台运行，可以用前台开发模式：
 
