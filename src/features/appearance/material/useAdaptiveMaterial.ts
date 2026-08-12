@@ -6,6 +6,8 @@ import { deriveAdaptiveMaterial } from "./materialPolicy";
 import type { MaterialViewportSize } from "./backgroundViewport";
 import type { PersistentMaterialRole } from "./materialTokens";
 
+const backgroundAnalysisSettleDelayMs = 90;
+
 type UseAdaptiveMaterialInput = {
   appearance: AppearanceMode;
   crop: VisualBackgroundCrop;
@@ -33,15 +35,18 @@ export function useAdaptiveMaterial(input: UseAdaptiveMaterialInput) {
       setAnalysis(neutralBackgroundAnalysis);
       return undefined;
     }
-    void analyzeBackground({
-      imageUrl: input.imageUrl,
-      crop: input.crop,
-      viewport: { width: viewportWidth, height: viewportHeight },
-    }).then((nextAnalysis) => {
-      if (!cancelled) setAnalysis(nextAnalysis);
-    });
+    const timer = window.setTimeout(() => {
+      void analyzeBackground({
+        imageUrl: input.imageUrl!,
+        crop: input.crop,
+        viewport: { width: viewportWidth, height: viewportHeight },
+      }).then((nextAnalysis) => {
+        if (!cancelled) setAnalysis(nextAnalysis);
+      });
+    }, backgroundAnalysisSettleDelayMs);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [input.crop.centerX, input.crop.centerY, input.crop.zoom, input.imageUrl, viewportHeight, viewportWidth]);
 

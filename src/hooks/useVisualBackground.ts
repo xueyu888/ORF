@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getVisualBackgrounds, type VisualBackgroundScene, type VisualBackgroundsData } from "../state/apiClient";
 import {
   cacheVisualBackgroundSelection,
@@ -61,6 +61,7 @@ function preparedVisualBackgroundState(data: VisualBackgroundsData): VisualBackg
 
 export function useVisualBackground(scene: VisualBackgroundScene | null, userId: string | null = null): VisualBackgroundLoadState {
   const identity = visualBackgroundIdentity(scene, userId);
+  const retainedHydratedSelectionsRef = useRef(new Set<CachedVisualBackgroundSelection>());
   const [snapshot, setSnapshot] = useState<VisualBackgroundSnapshot>(() => {
     const cached = cachedVisualBackgrounds(scene, userId);
     const state: VisualBackgroundLoadState = cached
@@ -70,6 +71,13 @@ export function useVisualBackground(scene: VisualBackgroundScene | null, userId:
         : { status: "empty", selection: null, url: null, error: null };
     return { identity, state };
   });
+
+  useEffect(() => () => {
+    for (const selection of retainedHydratedSelectionsRef.current) {
+      releaseCachedVisualBackgroundSelection(selection);
+    }
+    retainedHydratedSelectionsRef.current.clear();
+  }, []);
 
   useLayoutEffect(() => {
     let cancelled = false;
@@ -85,8 +93,7 @@ export function useVisualBackground(scene: VisualBackgroundScene | null, userId:
       }
     };
 
-    const releaseHydratedSelection = () => {
-      releaseCachedVisualBackgroundSelection(hydratedSelection);
+    const detachHydratedSelection = () => {
       hydratedSelection = null;
     };
 
@@ -120,8 +127,9 @@ export function useVisualBackground(scene: VisualBackgroundScene | null, userId:
               releaseCachedVisualBackgroundSelection(selection);
               return;
             }
-            releaseHydratedSelection();
+            detachHydratedSelection();
             hydratedSelection = selection;
+            retainedHydratedSelectionsRef.current.add(selection);
             setSnapshot({ identity, state: { status: "ready", selection, url: selection.url, error: null } });
           });
         }
@@ -145,18 +153,12 @@ export function useVisualBackground(scene: VisualBackgroundScene | null, userId:
             },
           });
         } else {
-          releaseHydratedSelection();
+          detachHydratedSelection();
           setSnapshot({ identity, state: nextState });
         }
         if (persistentUserId) {
           if (nextState.status === "ready") {
-            const cacheConfirmedSelection = async () => {
-              if (hydratedImageId && hydratedImageId !== nextState.selection.image.id) {
-                await clearCachedVisualBackgroundSelection({ userId: persistentUserId, scene });
-              }
-              await cacheVisualBackgroundSelection({ userId: persistentUserId, scene, selection: nextState.selection });
-            };
-            void cacheConfirmedSelection();
+            void cacheVisualBackgroundSelection({ userId: persistentUserId, scene, selection: nextState.selection });
           } else {
             void clearCachedVisualBackgroundSelection({ userId: persistentUserId, scene });
           }
@@ -196,7 +198,7 @@ export function useVisualBackground(scene: VisualBackgroundScene | null, userId:
       cancelled = true;
       unsubscribe();
       clearRotationTimer();
-      releaseHydratedSelection();
+      hydratedSelection = null;
     };
   }, [identity, scene, userId]);
 

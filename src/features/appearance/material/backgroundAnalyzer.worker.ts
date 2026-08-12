@@ -31,6 +31,15 @@ type AnalyzeSuccess = {
 
 type AnalyzeFailure = { id: string; error: string };
 
+type CachedBackgroundBitmap = {
+  activeReaders: number;
+  bitmap: Promise<ImageBitmap>;
+  lastUsedAt: number;
+};
+
+const backgroundBitmapCacheLimit = 4;
+const backgroundBitmapCache = new Map<string, CachedBackgroundBitmap>();
+
 const workerScope = self as unknown as {
   addEventListener: (type: "message", listener: (event: MessageEvent<AnalyzeRequest>) => void) => void;
   postMessage: (message: AnalyzeSuccess | AnalyzeFailure) => void;
@@ -38,6 +47,60 @@ const workerScope = self as unknown as {
 
 function clampUnit(value: number) {
   return Math.max(0, Math.min(1, value));
+}
+
+function disposeBackgroundBitmap(entry: CachedBackgroundBitmap) {
+  void entry.bitmap.then((bitmap) => bitmap.close()).catch(() => undefined);
+}
+
+function trimBackgroundBitmapCache() {
+  while (backgroundBitmapCache.size > backgroundBitmapCacheLimit) {
+    const candidate = [...backgroundBitmapCache.entries()]
+      .filter(([, entry]) => entry.activeReaders === 0)
+      .sort(([, left], [, right]) => left.lastUsedAt - right.lastUsedAt)[0];
+    if (!candidate) return;
+    const [url, entry] = candidate;
+    backgroundBitmapCache.delete(url);
+    disposeBackgroundBitmap(entry);
+  }
+}
+
+async function loadBackgroundBitmap(imageUrl: string) {
+  const response = await fetch(imageUrl, { credentials: "same-origin" });
+  if (!response.ok) throw new Error(`background request failed: ${response.status}`);
+  return createImageBitmap(await response.blob());
+}
+
+async function acquireBackgroundBitmap(imageUrl: string) {
+  let entry = backgroundBitmapCache.get(imageUrl);
+  if (!entry) {
+    entry = {
+      activeReaders: 0,
+      bitmap: loadBackgroundBitmap(imageUrl),
+      lastUsedAt: Date.now(),
+    };
+    backgroundBitmapCache.set(imageUrl, entry);
+  }
+  entry.activeReaders += 1;
+  entry.lastUsedAt = Date.now();
+  const acquiredEntry = entry;
+  trimBackgroundBitmapCache();
+
+  try {
+    const bitmap = await acquiredEntry.bitmap;
+    return {
+      bitmap,
+      release() {
+        acquiredEntry.activeReaders = Math.max(0, acquiredEntry.activeReaders - 1);
+        acquiredEntry.lastUsedAt = Date.now();
+        trimBackgroundBitmapCache();
+      },
+    };
+  } catch (error) {
+    acquiredEntry.activeReaders = Math.max(0, acquiredEntry.activeReaders - 1);
+    if (backgroundBitmapCache.get(imageUrl) === acquiredEntry) backgroundBitmapCache.delete(imageUrl);
+    throw error;
+  }
 }
 
 function srgbChannelToLinear(value: number) {
@@ -170,9 +233,8 @@ function analyzePixels(imageData: ImageData) {
 }
 
 async function analyzeBackground(request: AnalyzeRequest) {
-  const response = await fetch(request.imageUrl, { credentials: "same-origin" });
-  if (!response.ok) throw new Error(`background request failed: ${response.status}`);
-  const bitmap = await createImageBitmap(await response.blob());
+  const sourceBitmap = await acquireBackgroundBitmap(request.imageUrl);
+  const { bitmap } = sourceBitmap;
   try {
     const source = visibleBackgroundSourceRect(
       { width: bitmap.width, height: bitmap.height },
@@ -196,7 +258,7 @@ async function analyzeBackground(request: AnalyzeRequest) {
     );
     return analyzePixels(context.getImageData(0, 0, canvasSize.width, canvasSize.height));
   } finally {
-    bitmap.close();
+    sourceBitmap.release();
   }
 }
 

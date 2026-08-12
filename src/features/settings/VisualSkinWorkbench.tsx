@@ -16,7 +16,7 @@ import {
   Upload,
   Undo2,
 } from "lucide-react";
-import { type ChangeEvent, type CSSProperties, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type CSSProperties, type PointerEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useConfirmDialog } from "../../components/ConfirmDialog";
 import { Button, IconButton } from "../../components/ui";
 import { defaultVisualSkinScene, visualSkinPageSlots, visualSkinSlotByScene, visualSkinSlots, type VisualSkinPreviewShape } from "../../config/visualSkinSlots";
@@ -37,7 +37,6 @@ import { readCachedAppearanceMode } from "../appearance/appearanceMode";
 import { VisualMaterialLayer } from "../appearance/material/VisualMaterialLayer";
 import { useAdaptiveMaterial } from "../appearance/material/useAdaptiveMaterial";
 import type { PersistentMaterialRole } from "../appearance/material/materialTokens";
-import { readModelInvalidationKey } from "../realtime/readModelInvalidations";
 import {
   deletePersonalBackground,
   getPersonalBackgrounds,
@@ -55,10 +54,11 @@ import {
 import { useOrf } from "../../state/OrfProvider";
 import { cacheLoginBackgroundPreview, clearCachedLoginBackgroundPreview } from "../../utils/loginBackgroundCache";
 import { dispatchVisualBackgroundChanged } from "../appearance/background/visualBackgroundRuntime";
+import { ensureVisualBackgroundDecoded } from "../appearance/background/visualBackgroundImageRuntime";
 import { cropForVisualBackground } from "../../utils/visualBackgrounds";
+import { visualSkinInvalidationKey, visualSkinSettingInvalidations, type VisualSkinScope } from "./visualSkinWorkbenchModel";
 
 type RequestStatus = "idle" | "loading" | "success" | "error";
-type SkinScope = "personal" | "system";
 type BackgroundData = VisualBackgroundsData | PersonalBackgroundsData;
 
 function clamp(value: number, min: number, max: number) {
@@ -230,11 +230,20 @@ function useHorizontalGalleryNavigation(itemCount: number, selectedId: string | 
   };
 }
 
-export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
+export function VisualSkinWorkbench({ scope }: { scope: VisualSkinScope }) {
   const { currentUser, notify, readModelInvalidations } = useOrf();
   const confirm = useConfirmDialog();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const settingsInvalidationKey = readModelInvalidationKey(readModelInvalidations, "settings");
+  const observedSettingsInvalidationKeyRef = useRef<string | null>(null);
+  const loadGenerationRef = useRef(0);
+  const displayedDataKeyRef = useRef<string | null>(null);
+  const activeLoadRef = useRef<{
+    key: string;
+    preferredBackgroundId?: string | null;
+    refreshQueued: boolean;
+    promise: Promise<void>;
+  } | null>(null);
+  const sceneCacheRef = useRef(new Map<string, BackgroundData>());
   const [scene, setScene] = useState<VisualBackgroundScene>(defaultVisualSkinScene);
   const [data, setData] = useState<BackgroundData | null>(null);
   const [backgroundList, setBackgroundList] = useState<VisualBackgroundImage[]>([]);
@@ -250,16 +259,22 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
   const [pageTargetScenes, setPageTargetScenes] = useState<PageVisualBackgroundScene[]>([]);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const galleryNavigation = useHorizontalGalleryNavigation(backgroundList.length, selectedBackgroundId);
+  const relevantInvalidations = useMemo(
+    () => visualSkinSettingInvalidations(readModelInvalidations, scope, currentUser?.id),
+    [currentUser?.id, readModelInvalidations, scope],
+  );
+  const settingsInvalidationKey = visualSkinInvalidationKey(relevantInvalidations);
 
   const slot = visualSkinSlotByScene(scene);
   const selectedBackground = backgroundList.find((background) => background.id === selectedBackgroundId) ?? null;
   const selectedBackgroundSource = selectedBackground ? backgroundSourceInfo(selectedBackground) : null;
-  const persistedCrop = data ? cropForVisualBackground(data, selectedBackgroundId) : defaultVisualBackgroundCrop;
+  const hasCurrentSceneData = data?.scene === scene;
+  const persistedCrop = hasCurrentSceneData ? cropForVisualBackground(data, selectedBackgroundId) : defaultVisualBackgroundCrop;
   const isPageSlot = slot.kind === "page";
   const effectivePageTargetScenes = isPageSlot ? pageApplyTargets(scene, pageTargetScenes) : [];
   const pageTargetsDirty = isPageSlot && !sameSceneSet(effectivePageTargetScenes, [scene]);
   const dirty = Boolean(
-    data &&
+    hasCurrentSceneData &&
       selectedBackgroundId &&
       (selectedBackgroundId !== data.config.fixedBackgroundId ||
         draftConfig.mode !== data.config.mode ||
@@ -299,6 +314,9 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
   }, []);
 
   const applyLoadedData = useCallback((nextData: BackgroundData, preferredBackgroundId?: string | null) => {
+    const dataKey = `${scope}:${nextData.scene}`;
+    sceneCacheRef.current.set(dataKey, nextData);
+    displayedDataKeyRef.current = dataKey;
     const nextSelectedId = preferredBackgroundId && nextData.list.some((image) => image.id === preferredBackgroundId)
       ? preferredBackgroundId
       : nextData.config.fixedBackgroundId ?? nextData.list[0]?.id ?? null;
@@ -307,30 +325,67 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
     setDraftConfig(nextData.config);
     setSelectedBackgroundId(nextSelectedId);
     setDraftCrop(cropFromConfig(nextData.config, nextSelectedId));
-  }, []);
+  }, [scope]);
 
-  const loadScene = useCallback(async (preferredBackgroundId?: string | null) => {
+  const loadScene = useCallback(async (preferredBackgroundId?: string | null, refreshIfActive = false) => {
+    const requestKey = `${scope}:${scene}`;
+    const activeLoad = activeLoadRef.current;
+    if (activeLoad?.key === requestKey) {
+      if (preferredBackgroundId !== undefined) activeLoad.preferredBackgroundId = preferredBackgroundId;
+      if (refreshIfActive) activeLoad.refreshQueued = true;
+      return activeLoad.promise;
+    }
+
+    const generation = ++loadGenerationRef.current;
+    const cachedData = sceneCacheRef.current.get(requestKey);
+    if (cachedData && displayedDataKeyRef.current !== requestKey) applyLoadedData(cachedData, preferredBackgroundId);
     setLoadStatus("loading");
     setErrorMessage(null);
-    setData(null);
-    setBackgroundList([]);
-    setSelectedBackgroundId(null);
-    setDraftConfig(defaultVisualBackgroundConfig());
-    setDraftCrop(defaultVisualBackgroundCrop);
-    try {
-      const nextData = scope === "system" ? await getVisualBackgrounds(scene) : await getPersonalBackgrounds(scene);
-      applyLoadedData(nextData, preferredBackgroundId);
-      setLoadStatus("success");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "皮肤设置加载失败";
-      setLoadStatus("error");
-      setErrorMessage(message);
-    }
+
+    const request = {
+      key: requestKey,
+      preferredBackgroundId,
+      refreshQueued: false,
+      promise: Promise.resolve(),
+    };
+    const promise = (async () => {
+      while (generation === loadGenerationRef.current) {
+        request.refreshQueued = false;
+        try {
+          const nextData = scope === "system" ? await getVisualBackgrounds(scene) : await getPersonalBackgrounds(scene);
+          if (generation !== loadGenerationRef.current) return;
+          if (request.refreshQueued) continue;
+          applyLoadedData(nextData, request.preferredBackgroundId);
+          setLoadStatus("success");
+          return;
+        } catch (error) {
+          if (generation !== loadGenerationRef.current) return;
+          if (request.refreshQueued) continue;
+          const message = error instanceof Error ? error.message : "皮肤设置加载失败";
+          setLoadStatus("error");
+          setErrorMessage(message);
+          return;
+        }
+      }
+    })();
+
+    request.promise = promise;
+    activeLoadRef.current = request;
+    void promise.finally(() => {
+      if (activeLoadRef.current?.promise === promise) activeLoadRef.current = null;
+    });
+    return promise;
   }, [applyLoadedData, scene, scope]);
 
   useEffect(() => {
-    void loadScene();
+    const previousKey = observedSettingsInvalidationKeyRef.current;
+    observedSettingsInvalidationKeyRef.current = settingsInvalidationKey;
+    void loadScene(undefined, previousKey !== null && previousKey !== settingsInvalidationKey);
   }, [loadScene, settingsInvalidationKey]);
+
+  useEffect(() => () => {
+    loadGenerationRef.current += 1;
+  }, []);
 
   useEffect(() => {
     setPageTargetScenes(slot.kind === "page" ? [scene as PageVisualBackgroundScene] : []);
@@ -430,8 +485,13 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
     setErrorMessage(null);
     try {
       const uploaded = scope === "system" ? await uploadVisualBackground(scene, file) : await uploadPersonalBackground(scene, file);
-      setBackgroundList((current) => [...current, uploaded]);
-      setSelectedBackgroundId(uploaded.id);
+      const currentData = data?.scene === scene ? data : null;
+      if (currentData) {
+        applyLoadedData({ ...currentData, list: [...currentData.list, uploaded] }, uploaded.id);
+      } else {
+        setBackgroundList((current) => [...current, uploaded]);
+        setSelectedBackgroundId(uploaded.id);
+      }
       setDraftCrop(defaultVisualBackgroundCrop);
       setDraftConfig((current) => configWithCrop(current, uploaded.id, defaultVisualBackgroundCrop));
       setUploadStatus("success");
@@ -463,22 +523,23 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
     setSaveStatus("loading");
     setErrorMessage(null);
     try {
+      let savedCurrentConfig: VisualBackgroundConfig | null = null;
+      let savedPreferences: PersonalBackgroundsData["preferences"] | null = null;
       if (scope === "system") {
         const targets = slot.kind === "page" ? effectivePageTargetScenes : [scene];
-        let savedCurrentConfig: VisualBackgroundConfig | null = null;
         for (const targetScene of targets) {
           const result = await saveVisualBackgroundConfig(targetScene, nextConfig);
           if (targetScene === scene) {
             savedCurrentConfig = result.config;
           }
         }
-        setDraftConfig(savedCurrentConfig ?? nextConfig);
       } else {
         const targets = slot.kind === "page" ? effectivePageTargetScenes : [scene];
         const backgrounds: Partial<Record<VisualBackgroundScene, VisualBackgroundConfig | null>> = Object.fromEntries(
           targets.map((targetScene) => [targetScene, nextConfig]),
         );
-        await saveUserPreferences({ backgrounds });
+        savedPreferences = await saveUserPreferences({ backgrounds });
+        savedCurrentConfig = savedPreferences.backgrounds[scene] ?? nextConfig;
         if (scene === "login_background" && currentUser) {
           await cacheLoginBackgroundPreview({
             userId: currentUser.id,
@@ -492,7 +553,15 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
       for (const changedScene of changedScenes) {
         dispatchVisualBackgroundChanged({ scene: changedScene, userId: currentUser?.id ?? null });
       }
-      await loadScene();
+      if (data?.scene === scene) {
+        const confirmedConfig = savedCurrentConfig ?? nextConfig;
+        const nextData = "preferences" in data && savedPreferences
+          ? { ...data, config: confirmedConfig, preferences: savedPreferences }
+          : { ...data, config: confirmedConfig };
+        applyLoadedData(nextData, selectedBackgroundId);
+      } else {
+        setDraftConfig(savedCurrentConfig ?? nextConfig);
+      }
       if (slot.kind === "page") {
         setPageTargetScenes([scene as PageVisualBackgroundScene]);
       }
@@ -923,7 +992,7 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
             )}
             {backgroundList.map((background) => {
               const selected = selectedBackgroundId === background.id;
-              const current = data?.config.fixedBackgroundId === background.id;
+              const current = hasCurrentSceneData && data.config.fixedBackgroundId === background.id;
               const source = backgroundSourceInfo(background);
               return (
                 <button
@@ -936,7 +1005,14 @@ export function VisualSkinWorkbench({ scope }: { scope: SkinScope }) {
                   onFocus={(event) => galleryNavigation.revealCard(event.currentTarget)}
                   onClick={() => selectBackground(background.id)}
                 >
-                  <img src={background.url} alt={background.fileName} draggable={false} />
+                  <img
+                    src={background.url}
+                    alt={background.fileName}
+                    draggable={false}
+                    loading={selected || current ? "eager" : "lazy"}
+                    decoding="async"
+                    fetchPriority={selected || current ? "high" : "low"}
+                  />
                   <span className="orf-skin-gallery-card-badges">
                     {current && <span>当前</span>}
                     <span>{source.scopeBadge}</span>
@@ -973,39 +1049,56 @@ function VisualSkinPreview({
   const dragRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const frameRatio = useRuntimePreviewFrameRatio(previewShape);
   const surfaceSize = useElementSize(surfaceRef);
-  const [sourceImageSize, setSourceImageSize] = useState<{ width: number; height: number } | null>(null);
+  const [displayedImage, setDisplayedImage] = useState<{
+    height: number;
+    url: string;
+    width: number;
+  } | null>(null);
+  const lastDisplayedCropRef = useRef(crop);
   const previewFrameBox = visualSkinPreviewFrameBox(previewShape, frameRatio, surfaceSize);
   const previewRole = previewMaterialRole(previewShape);
   const previewMaterial = useAdaptiveMaterial({
     appearance: readCachedAppearanceMode(),
-    crop,
+    crop: displayedImage?.url === image?.url ? crop : lastDisplayedCropRef.current,
     highContrast: document.documentElement.dataset.orfDisplayContrast === "high",
-    imageUrl: image?.url ?? null,
+    imageUrl: displayedImage?.url ?? null,
     preferences: materialPreferences,
     role: previewRole,
     viewport: previewFrameBox.box ?? { width: 640, height: 360 },
   });
 
   useEffect(() => {
-    setSourceImageSize(null);
-    if (!image?.url || typeof window === "undefined") return;
+    if (!image?.url || typeof window === "undefined") {
+      setDisplayedImage(null);
+      return undefined;
+    }
+    if (displayedImage?.url === image.url) return undefined;
 
     let cancelled = false;
-    const probe = new window.Image();
-    probe.onload = () => {
-      if (!cancelled && probe.naturalWidth > 0 && probe.naturalHeight > 0) {
-        setSourceImageSize({ width: probe.naturalWidth, height: probe.naturalHeight });
+    void ensureVisualBackgroundDecoded(image.url).then((decodedImage) => {
+      if (!cancelled && decodedImage.naturalWidth > 0 && decodedImage.naturalHeight > 0) {
+        setDisplayedImage({
+          height: decodedImage.naturalHeight,
+          url: image.url,
+          width: decodedImage.naturalWidth,
+        });
       }
-    };
-    probe.src = image.url;
+    }).catch(() => undefined);
 
     return () => {
       cancelled = true;
     };
-  }, [image?.url]);
+  }, [displayedImage?.url, image?.url]);
+
+  const previewCrop = displayedImage?.url === image?.url ? crop : lastDisplayedCropRef.current;
+  const previewMatchesSelection = Boolean(image && displayedImage?.url === image.url);
+
+  useLayoutEffect(() => {
+    if (previewMatchesSelection) lastDisplayedCropRef.current = crop;
+  }, [crop, previewMatchesSelection]);
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (!image) return;
+    if (!previewMatchesSelection) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -1027,7 +1120,7 @@ function VisualSkinPreview({
   };
 
   const handleWheel = useCallback((event: globalThis.WheelEvent) => {
-    if (!image) return;
+    if (!previewMatchesSelection) return;
     event.preventDefault();
     const nextZoom = clamp(
       crop.zoom * Math.exp(-event.deltaY * 0.0015),
@@ -1039,7 +1132,7 @@ function VisualSkinPreview({
       ...crop,
       zoom: Number(nextZoom.toFixed(4)),
     });
-  }, [crop, image, onCropChange]);
+  }, [crop, onCropChange, previewMatchesSelection]);
 
   useEffect(() => {
     const surface = surfaceRef.current;
@@ -1056,8 +1149,8 @@ function VisualSkinPreview({
   };
 
   const previewFrameStyle = previewFrameBox.style as CSSProperties;
-  const imageLayerStyle = sourceImageSize
-    ? visualSkinPreviewImageLayerStyle(crop, sourceImageSize.width / Math.max(1, sourceImageSize.height), previewFrameBox.box, surfaceSize)
+  const imageLayerStyle = displayedImage
+    ? visualSkinPreviewImageLayerStyle(previewCrop, displayedImage.width / Math.max(1, displayedImage.height), previewFrameBox.box, surfaceSize)
     : ({ opacity: 0 } as CSSProperties);
 
   return (
@@ -1073,23 +1166,17 @@ function VisualSkinPreview({
         onPointerUp={stopDrag}
         onPointerCancel={stopDrag}
       >
-        {image && (
+        {displayedImage && (
           <img
             className="orf-skin-preview-canvas-image"
-            src={image.url}
+            src={displayedImage.url}
             alt=""
             style={imageLayerStyle}
             aria-hidden="true"
             draggable={false}
-            onLoad={(event) => {
-              const { naturalWidth, naturalHeight } = event.currentTarget;
-              if (naturalWidth > 0 && naturalHeight > 0) {
-                setSourceImageSize({ width: naturalWidth, height: naturalHeight });
-              }
-            }}
           />
         )}
-        {!image && <div className="orf-skin-preview-empty">暂无图片</div>}
+        {!displayedImage && !image && <div className="orf-skin-preview-empty">暂无图片</div>}
         <div
           ref={frameRef}
           className={clsx("orf-skin-preview-frame", `orf-skin-preview-frame-${previewShape}`)}

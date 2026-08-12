@@ -365,6 +365,7 @@ function AppShellFrame() {
                 imageClassName="orf-topbar-skin-layer"
                 imageUrl={topbarSelection?.url ?? null}
                 crop={topbarSelection?.crop ?? defaultVisualBackgroundCrop}
+                clearWhenEmpty={topbarBackground.status === "empty"}
               />
               <VisualMaterialLayer className="orf-topbar-material" material={topbarMaterial} role="topbar" />
               <WorkbenchNavigationControls />
@@ -425,6 +426,7 @@ function AppShellFrame() {
                 imageClassName="orf-main-content-skin-layer"
                 imageUrl={pageSelection?.url ?? null}
                 crop={pageSelection?.crop ?? defaultVisualBackgroundCrop}
+                clearWhenEmpty={pageBackground.status === "empty"}
               />
               <VisualMaterialLayer className="orf-workspace-material" material={workspaceMaterial} role="workspace" />
               <Outlet />

@@ -1,7 +1,6 @@
 import type { VisualBackgroundScene } from "../../../domain/settings/visualBackgrounds";
 import { invalidatePersonalBackground } from "../../../state/readModelQueries";
 import { clearPreparedVisualBackground } from "../../../utils/visualBackgrounds";
-import { clearCachedVisualBackgroundSelection } from "./visualBackgroundCache";
 
 const visualBackgroundChangedEvent = "orf:visual-background-changed";
 
@@ -13,7 +12,6 @@ export function dispatchVisualBackgroundChanged(input: {
   clearPreparedVisualBackground(input.scene);
   if (userId && input.scene !== "login_background") {
     invalidatePersonalBackground(userId, input.scene);
-    void clearCachedVisualBackgroundSelection({ scene: input.scene, userId });
   }
   window.dispatchEvent(new CustomEvent(visualBackgroundChangedEvent, {
     detail: { scene: input.scene },
