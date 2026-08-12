@@ -4,17 +4,14 @@ import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "n
 import path from "node:path";
 import { z } from "zod";
 import {
-  chatThemeSchema,
-  defaultChatTheme,
+  appearanceModeSchema,
+  defaultUserAppearanceMode,
   normalizeUserDisplayPreferences,
   normalizeSidebarWidth,
-  normalizeWorkspaceLayoutPreferences,
   sidebarWidthSchema,
-  type ChatTheme,
+  type AppearanceMode,
   type UserDisplayPreferences,
-  type WorkspaceLayoutPreferences,
   userDisplayPreferencesPatchSchema,
-  workspaceLayoutPreferencesPatchSchema,
 } from "../../src/domain/settings/personalPreferences";
 import {
   normalizeFilterPreferenceRecord,
@@ -54,9 +51,8 @@ export type UserPreferences = {
   defaultLandingPath: string | null;
   sidebarCollapsed: boolean | null;
   sidebarWidth: number;
-  chatTheme: ChatTheme;
+  appearanceMode: AppearanceMode;
   display: UserDisplayPreferences;
-  workspaceLayout: WorkspaceLayoutPreferences;
   backgrounds: Partial<Record<CanonicalBackgroundScene, BackgroundSceneConfig | null>>;
   filterPreferences: UserFilterPreferences;
   notificationDisplay: {
@@ -68,17 +64,15 @@ export type PersonalBackgroundsData = Awaited<ReturnType<typeof listVisualBackgr
   preferences: UserPreferences;
 };
 
-type StoredUserPreferences = UserPreferences & Record<string, unknown>;
 type RawStoredUserPreferences = Partial<UserPreferences> & Record<string, unknown>;
 
 export const userPreferencesPatchSchema = z.object({
   defaultLandingPath: z.string().nullable().optional(),
   sidebarCollapsed: z.boolean().nullable().optional(),
   sidebarWidth: sidebarWidthSchema.optional(),
-  chatTheme: chatThemeSchema.optional(),
+  appearanceMode: appearanceModeSchema.optional(),
   display: userDisplayPreferencesPatchSchema.optional(),
   filterPreferences: userFilterPreferencesPatchSchema.optional(),
-  workspaceLayout: workspaceLayoutPreferencesPatchSchema.optional(),
   backgrounds: z.record(z.string(), backgroundSceneConfigSchema.nullable()).optional(),
   notificationDisplay: z.object({ toastEnabled: z.boolean().optional() }).optional(),
 });
@@ -113,10 +107,9 @@ function defaultUserPreferences(userId: string): UserPreferences {
     defaultLandingPath: null,
     sidebarCollapsed: null,
     sidebarWidth: normalizeSidebarWidth(null),
-    chatTheme: defaultChatTheme,
+    appearanceMode: defaultUserAppearanceMode,
     display: normalizeUserDisplayPreferences(null),
     filterPreferences: {},
-    workspaceLayout: normalizeWorkspaceLayoutPreferences(null),
     backgrounds: {},
     notificationDisplay: {
       toastEnabled: true,
@@ -124,9 +117,9 @@ function defaultUserPreferences(userId: string): UserPreferences {
   };
 }
 
-function normalizeChatTheme(input: unknown): ChatTheme {
-  const parsed = chatThemeSchema.safeParse(input);
-  return parsed.success ? parsed.data : defaultChatTheme;
+function normalizeAppearanceMode(input: unknown): AppearanceMode {
+  const parsed = appearanceModeSchema.safeParse(input);
+  return parsed.success ? parsed.data : defaultUserAppearanceMode;
 }
 
 function normalizeBackgroundPreference(input: unknown) {
@@ -162,10 +155,9 @@ function normalizeUserPreferences(userId: string, input: Partial<UserPreferences
     defaultLandingPath,
     sidebarCollapsed: typeof input?.sidebarCollapsed === "boolean" ? input.sidebarCollapsed : input?.sidebarCollapsed === null ? null : fallback.sidebarCollapsed,
     sidebarWidth: normalizeSidebarWidth(input?.sidebarWidth),
-    chatTheme: normalizeChatTheme(input?.chatTheme),
+    appearanceMode: normalizeAppearanceMode(input?.appearanceMode),
     display: normalizeUserDisplayPreferences(input?.display),
     filterPreferences: normalizeUserFilterPreferences(input?.filterPreferences),
-    workspaceLayout: normalizeWorkspaceLayoutPreferences(input?.workspaceLayout),
     backgrounds,
     notificationDisplay: {
       toastEnabled: input?.notificationDisplay?.toastEnabled ?? fallback.notificationDisplay.toastEnabled,
@@ -206,20 +198,12 @@ async function writeUserPreferences(preferences: UserPreferences) {
   const tempPath = `${targetPath}.${process.pid}.${Date.now().toString(36)}.${randomUUID()}.tmp`;
 
   try {
-    const existing = await readPreferencesJson(preferences.userId).catch(() => null);
-    await writeFile(tempPath, `${JSON.stringify(storedUserPreferences(preferences, existing), null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    await writeFile(tempPath, `${JSON.stringify(preferences, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     await rename(tempPath, targetPath);
   } catch (error) {
     await rm(tempPath, { force: true }).catch(() => undefined);
     throw error;
   }
-}
-
-function storedUserPreferences(
-  preferences: UserPreferences,
-  existing?: RawStoredUserPreferences | null,
-): StoredUserPreferences {
-  return { ...existing, ...preferences };
 }
 
 async function updateUserPreferences<T>(userId: string, mutator: (preferences: UserPreferences) => T | Promise<T>) {
@@ -449,8 +433,8 @@ export async function saveUserPreferences(scopeId: string, userId: string, patch
     if (input.sidebarWidth !== undefined) {
       preferences.sidebarWidth = input.sidebarWidth;
     }
-    if (input.chatTheme !== undefined) {
-      preferences.chatTheme = input.chatTheme;
+    if (input.appearanceMode !== undefined) {
+      preferences.appearanceMode = input.appearanceMode;
     }
     if (input.display !== undefined) {
       preferences.display = normalizeUserDisplayPreferences(input.display);
@@ -468,9 +452,6 @@ export async function saveUserPreferences(scopeId: string, userId: string, patch
           preferences.filterPreferences[normalizedKey] = normalizedRecord;
         }
       }
-    }
-    if (input.workspaceLayout !== undefined) {
-      preferences.workspaceLayout = normalizeWorkspaceLayoutPreferences(input.workspaceLayout);
     }
     if (input.notificationDisplay) {
       preferences.notificationDisplay = {

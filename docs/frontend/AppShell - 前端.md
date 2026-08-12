@@ -210,7 +210,6 @@ AppShell 由外壳背景层、侧边栏、顶部栏、页面内容出口和全�
 | 路由标题 | 顶部标题根据当前路径生成 |
 | 个人设置 | 侧边栏用户菜单对所有 `active` 用户展示；入口只管理当前用户偏好 |
 | 显示偏好 | 工作台缩放、界面字号、内容字号、界面密度和高对比度来自当前用户 `personalPreferences.display`；Web 端工作台缩放合入根字号，桌面端工作台缩放交给 Electron 窗口缩放，其他显示 token 继续由 AppShell 应用 |
-| 工作区布局偏好 | `personalPreferences.workspaceLayout` 仅作为兼容字段保留；当前 AppShell 不读取或写入它，聊天页也不恢复目标/行动项右侧工作区 |
 | 聊天目标工作区 | 当前前端已屏蔽聊天目标/行动项工作区入口和任务链接拦截；目标、行动项、子行动项的查看和修改统一回到 `/tasks` 完整页 |
 | 系统设置 | 只对管理员展示；入口管理系统默认和全局策略 |
 | AppShell 皮肤 | 登录后侧边栏使用 `sidebar_background`，顶部栏使用 `topbar_background`，页面内容区按路由使用对应 `page_*_background`；每个槽位都先取当前用户个人偏好，缺省时回退系统默认；图库图片在规范槽位间共享，页面设置可一次保存到全部或部分页面；顶部栏、侧边栏和页面内容区统一由固定 frame 背景槽位组件渲染，`crops[imageId]` 的 `centerX`、`centerY` 和 `zoom` 只影响 frame 内 cover-crop 取景，`zoom=1` 表示刚好铺满且不能露底，不移动槽位本体 |

@@ -1,15 +1,12 @@
 import { z } from "zod";
 
-export const chatThemeSchema = z.enum(["dark", "light"]);
+export const appearanceModeSchema = z.enum(["dark", "light"]);
 export const displayDensitySchema = z.enum(["compact", "default", "comfortable"]);
 export const displayContrastSchema = z.enum(["default", "high"]);
 export const displayPreferenceLimits = {
   contentFontSize: { max: 28, min: 13 },
   interfaceFontSize: { max: 22, min: 12 },
   workbenchZoomLevel: { max: 4, min: -2, shortcutStep: 1, step: 0.25 },
-} as const;
-export const workspaceLayoutLimits = {
-  secondaryWidthPx: { default: 420, max: 720, min: 320 },
 } as const;
 export const sidebarLayoutLimits = {
   expandedWidthPx: { default: 260, max: 560, min: 220 },
@@ -28,12 +25,10 @@ export const sidebarWidthSchema = z.coerce.number().int()
   .min(sidebarLayoutLimits.expandedWidthPx.min)
   .max(sidebarLayoutLimits.expandedWidthPx.max);
 
-export type ChatTheme = z.infer<typeof chatThemeSchema>;
+export type AppearanceMode = z.infer<typeof appearanceModeSchema>;
 export type DisplayDensity = z.infer<typeof displayDensitySchema>;
 export type DisplayContrast = z.infer<typeof displayContrastSchema>;
-export type WorkspaceSecondaryPanel = "challenge";
-
-export const defaultChatTheme: ChatTheme = "dark";
+export const defaultUserAppearanceMode: AppearanceMode = "dark";
 export const defaultUserDisplayPreferences = {
   contentFontSize: 14,
   contrast: "default",
@@ -52,16 +47,6 @@ export const userDisplayPreferencesSchema = z.object({
 
 export const userDisplayPreferencesPatchSchema = userDisplayPreferencesSchema.partial();
 
-export const workspaceLayoutPreferencesSchema = z.object({
-  secondaryPanel: z.enum(["challenge"]).nullable(),
-  secondaryWidthPx: z.coerce.number().int()
-    .min(workspaceLayoutLimits.secondaryWidthPx.min)
-    .max(workspaceLayoutLimits.secondaryWidthPx.max),
-  version: z.literal(1),
-});
-
-export const workspaceLayoutPreferencesPatchSchema = workspaceLayoutPreferencesSchema.partial();
-
 export type UserDisplayPreferences = {
   contentFontSize: number;
   contrast: DisplayContrast;
@@ -70,33 +55,11 @@ export type UserDisplayPreferences = {
   workbenchZoomLevel: number;
 };
 
-export type WorkspaceLayoutPreferences = {
-  secondaryPanel: WorkspaceSecondaryPanel | null;
-  secondaryWidthPx: number;
-  version: 1;
-};
-
-export const defaultWorkspaceLayoutPreferences: WorkspaceLayoutPreferences = {
-  secondaryPanel: null,
-  secondaryWidthPx: workspaceLayoutLimits.secondaryWidthPx.default,
-  version: 1,
-};
-
 export function normalizeUserDisplayPreferences(input: unknown): UserDisplayPreferences {
   const parsed = userDisplayPreferencesPatchSchema.safeParse(input);
   return {
     ...defaultUserDisplayPreferences,
     ...(parsed.success ? parsed.data : {}),
-  };
-}
-
-export function normalizeWorkspaceLayoutPreferences(input: unknown): WorkspaceLayoutPreferences {
-  const parsed = workspaceLayoutPreferencesPatchSchema.safeParse(input);
-  if (!parsed.success) return defaultWorkspaceLayoutPreferences;
-  return {
-    ...defaultWorkspaceLayoutPreferences,
-    ...parsed.data,
-    version: 1,
   };
 }
 

@@ -8,10 +8,10 @@ export function TeamDashboard({ groups }: { groups: ObjectiveNode[] }) {
 
   return (
     <section className="orf-team-dashboard">
-      <DashboardMetric icon={CheckCircle2} value={`${summary.settled}`} label="已结算" color="#0b8f7f" progress={summary.settledProgress} />
-      <DashboardMetric icon={Target} value={`${summary.objectiveProgress}%`} label="目标总体进度" color="#e78a16" progress={summary.objectiveProgress} />
-      <DashboardMetric icon={Flag} value={`${summary.unassigned}`} label="待征召" color="#7a3ff2" progress={summary.unassignedProgress} />
-      <DashboardMetric icon={Gauge} value={`${summary.review}`} label="待验收" color="#1f8fff" progress={summary.reviewProgress} />
+      <DashboardMetric icon={CheckCircle2} value={`${summary.settled}`} label="已结算" color="var(--orf-success-text)" progress={summary.settledProgress} />
+      <DashboardMetric icon={Target} value={`${summary.objectiveProgress}%`} label="目标总体进度" color="var(--orf-warning-text)" progress={summary.objectiveProgress} />
+      <DashboardMetric icon={Flag} value={`${summary.unassigned}`} label="待征召" color="var(--orf-accent-text)" progress={summary.unassignedProgress} />
+      <DashboardMetric icon={Gauge} value={`${summary.review}`} label="待验收" color="var(--orf-info-text)" progress={summary.reviewProgress} />
     </section>
   );
 }

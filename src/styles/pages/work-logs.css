@@ -197,9 +197,9 @@
   justify-content: center;
   gap: 8px;
   padding: 0 12px;
-  border: 1px solid rgba(123, 143, 164, 0.24);
+  border: 1px solid var(--orf-material-content-hairline);
   border-radius: var(--orf-radius-control);
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--orf-material-content-control);
   color: var(--orf-text-primary);
   font-size: 13px;
   font-weight: 760;
@@ -276,7 +276,7 @@
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(130, 148, 170, 0.18);
+  border-bottom: 1px solid var(--orf-material-content-hairline);
 }
 
 .work-logs-panel-heading h2 {
@@ -413,10 +413,10 @@
 .work-logs-error {
   margin-top: 12px;
   padding: 9px 11px;
-  border: 1px solid rgba(205, 72, 72, 0.26);
+  border: 1px solid var(--orf-danger-border);
   border-radius: 8px;
-  background: rgba(255, 242, 242, 0.82);
-  color: #a13030;
+  background: var(--orf-danger-bg);
+  color: var(--orf-danger-text);
   font-size: 12px;
   font-weight: 750;
 }
@@ -897,8 +897,8 @@
   padding: 0 16px;
   border: 1px solid var(--orf-accent-border);
   background: var(--orf-accent);
-  color: #ffffff;
-  box-shadow: 0 8px 18px rgba(22, 125, 159, 0.18);
+  color: var(--orf-topbar-primary-text);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--orf-accent) 18%, transparent);
   text-shadow: none;
 }
 
@@ -912,7 +912,7 @@
 
 .work-logs-editor-actions .orf-action-button-primary:hover:not(:disabled) {
   background: var(--orf-accent-hover);
-  box-shadow: 0 10px 22px rgba(22, 125, 159, 0.22);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--orf-accent) 22%, transparent);
   transform: translateY(-1px);
 }
 
@@ -1305,7 +1305,7 @@
 .work-logs-report-scope button[aria-pressed="true"] {
   background: var(--orf-bg-card);
   color: var(--orf-accent-text);
-  box-shadow: 0 4px 12px rgba(44, 70, 92, 0.1);
+  box-shadow: var(--orf-material-content-shadow-soft);
 }
 
 .work-logs-report-summary {
@@ -1475,7 +1475,7 @@
 }
 
 .work-logs-calendar-empty-label {
-  color: rgba(92, 108, 126, 0.62);
+  color: var(--orf-text-muted);
   font-size: 12px;
   font-weight: 720;
 }
@@ -1569,7 +1569,7 @@
   min-height: 52px;
   padding: 8px 10px;
   background: var(--orf-bg-card);
-  box-shadow: 10px 0 14px -14px rgba(15, 23, 42, 0.52);
+  box-shadow: 10px 0 14px -14px color-mix(in srgb, var(--orf-text-primary) 28%, transparent);
 }
 
 .work-logs-team-user div {
@@ -1602,7 +1602,7 @@
   place-items: center;
   gap: 1px;
   background: color-mix(in srgb, var(--orf-bg-muted) 70%, transparent);
-  color: rgba(92, 108, 126, 0.62);
+  color: var(--orf-text-muted);
   font-size: 12px;
   font-weight: 780;
   font-variant-numeric: tabular-nums;
@@ -1654,9 +1654,7 @@ button.work-logs-team-cell:focus-visible {
   border-radius: 8px;
   background: color-mix(in srgb, var(--orf-bg-card) 94%, transparent);
   color: var(--orf-text-primary);
-  box-shadow:
-    0 22px 54px rgba(15, 23, 42, 0.18),
-    0 1px 1px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--orf-material-content-shadow);
 }
 
 .work-logs-report-popover-header {
@@ -1934,7 +1932,7 @@ button.work-logs-team-cell:focus-visible {
     height: 5px;
     border: 0;
     border-radius: 999px;
-    background: rgba(31, 138, 112, 0.42);
+    background: color-mix(in srgb, var(--orf-success-text) 52%, transparent);
     color: transparent;
     font-size: 0;
     padding: 0;
@@ -2292,35 +2290,6 @@ body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) .work-logs
   border-color: color-mix(in srgb, var(--orf-material-content-hairline) 48%, var(--orf-workbench-hairline));
   background: var(--orf-material-content-control);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 40%, transparent);
-}
-
-body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) :is(.orf-select-popover, .orf-date-popover) {
-  border-color: rgba(255, 255, 255, 0.68);
-  border-radius: 18px;
-  background:
-    linear-gradient(132deg, rgba(255, 255, 255, 0.16), transparent 44%),
-    rgba(249, 251, 248, 0.9);
-  box-shadow: 0 24px 58px rgba(8, 29, 33, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.82);
-}
-
-body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) .orf-select-option {
-  border-radius: var(--orf-radius-control);
-}
-
-body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) .orf-select-option:is(:hover, :focus-visible) {
-  background: rgba(8, 127, 142, 0.11);
-}
-
-body:has(.orf-app-shell[data-page-scene="page_work_logs_background"][data-workspace-material-content-tone="light"]) :is(.orf-select-popover, .orf-date-popover) {
-  border-color: rgba(170, 221, 215, 0.2);
-  background:
-    linear-gradient(132deg, rgba(113, 205, 204, 0.06), transparent 44%),
-    rgba(8, 21, 27, 0.91);
-  box-shadow: 0 26px 62px rgba(0, 6, 9, 0.58), inset 0 1px 0 rgba(207, 239, 234, 0.14);
-}
-
-body:has(.orf-app-shell[data-page-scene="page_work_logs_background"][data-workspace-material-content-tone="light"]) .orf-select-option:is(:hover, :focus-visible) {
-  background: rgba(66, 185, 196, 0.15);
 }
 
 @media (max-width: 900px) {

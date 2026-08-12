@@ -31,7 +31,6 @@ import {
   readCachedUserAppearanceMode,
   type AppearanceMode,
 } from "../features/appearance/appearanceMode";
-import { contentToneForAppearance } from "../features/appearance/appearanceContentTone";
 import { VisualMaterialLayer } from "../features/appearance/material/VisualMaterialLayer";
 import { useAdaptiveMaterial } from "../features/appearance/material/useAdaptiveMaterial";
 import { WorkbenchNavigationControls, WorkbenchNavigationProvider, useWorkbenchNavigation } from "../features/workbench-navigation";
@@ -132,8 +131,8 @@ function AppShellFrame() {
           if (!cancelled && generation === refreshGeneration) {
             setSidebarCollapsed(preferences.sidebarCollapsed ?? false);
             setSidebarWidth(normalizeSidebarWidth(preferences.sidebarWidth));
-            setAppearanceMode(preferences.chatTheme ?? defaultAppearanceMode);
-            cacheConfirmedAppearanceMode(currentUserId, preferences.chatTheme ?? defaultAppearanceMode);
+            setAppearanceMode(preferences.appearanceMode ?? defaultAppearanceMode);
+            cacheConfirmedAppearanceMode(currentUserId, preferences.appearanceMode ?? defaultAppearanceMode);
             setDisplayPreferences(preferences.display ?? defaultUserDisplayPreferences);
           }
         })
@@ -304,7 +303,6 @@ function AppShellFrame() {
     unfocused: !windowFocused,
     viewport: { width: shellBodyWidth, height: Math.max(1, viewportSize.height - 60) },
   });
-  const appearanceContentTone = contentToneForAppearance(appearanceMode);
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
   const canCreateFeedback = canCreateTeamFeedback(currentUser);
   const isBountyHall = !isChatPage && shellDisplayPath.startsWith("/bounties");
@@ -328,7 +326,6 @@ function AppShellFrame() {
           data-page-scene={pageBackgroundScene ?? "none"}
           data-mobile-primary-action={mobilePrimaryAction}
           data-orf-appearance={appearanceMode}
-          data-workspace-material-content-tone={appearanceContentTone}
           data-desktop-chrome={desktopChromeEnabled ? "true" : "false"}
           data-desktop-compact={compactDesktopChrome ? "true" : "false"}
           data-display-contrast={displayPreferences.contrast}
@@ -358,7 +355,6 @@ function AppShellFrame() {
             <header
               className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-2"
               data-topbar-skin={topbarSelection ? "true" : "false"}
-              data-material-content-tone={appearanceContentTone}
             >
               <VisualBackgroundSlot
                 frameClassName="orf-topbar-skin-frame"
@@ -419,7 +415,6 @@ function AppShellFrame() {
               className="orf-main-content"
               data-page-scene={pageBackgroundScene ?? "none"}
               data-page-skin={pageSelection ? "true" : "false"}
-              data-material-content-tone={appearanceContentTone}
             >
               <VisualBackgroundSlot
                 frameClassName="orf-main-content-skin-frame"

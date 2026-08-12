@@ -290,27 +290,27 @@
 }
 
 .orf-drive-page {
-  --orf-chat-panel-surface: color-mix(in srgb, var(--orf-bg-card) 90%, var(--orf-bg-elevated));
-  --orf-chat-panel-header-surface: color-mix(in srgb, var(--orf-bg-elevated) 78%, var(--orf-bg-muted));
-  --orf-chat-panel-border: var(--orf-border);
-  --orf-chat-panel-border-strong: var(--orf-border-strong);
+  --orf-chat-panel-surface: var(--orf-material-content-primary);
+  --orf-chat-panel-header-surface: var(--orf-material-content-secondary);
+  --orf-chat-panel-border: var(--orf-material-content-hairline);
+  --orf-chat-panel-border-strong: var(--orf-material-content-hairline-strong);
   --orf-chat-panel-text: color-mix(in srgb, var(--orf-text-primary) 72%, var(--orf-text-secondary));
   --orf-chat-panel-text-strong: var(--orf-text-primary);
   --orf-chat-panel-text-muted: color-mix(in srgb, var(--orf-text-secondary) 78%, var(--orf-text-muted));
   --orf-chat-panel-placeholder: var(--orf-text-faint);
-  --orf-chat-panel-control-bg: color-mix(in srgb, var(--orf-bg-elevated) 88%, var(--orf-bg-muted));
-  --orf-chat-panel-control-hover-bg: var(--orf-bg-elevated);
-  --orf-chat-panel-control-disabled-bg: color-mix(in srgb, var(--orf-bg-muted) 78%, var(--orf-bg-card));
+  --orf-chat-panel-control-bg: var(--orf-material-content-control);
+  --orf-chat-panel-control-hover-bg: var(--orf-material-content-control-hover);
+  --orf-chat-panel-control-disabled-bg: var(--orf-material-content-tertiary);
   --orf-chat-panel-control-disabled-text: var(--orf-text-faint);
-  --orf-chat-panel-item-bg: color-mix(in srgb, var(--orf-bg-card) 88%, var(--orf-bg-elevated));
+  --orf-chat-panel-item-bg: var(--orf-material-content-secondary);
   --orf-chat-panel-item-hover-bg: var(--orf-bg-row-hover);
-  --orf-chat-panel-empty-bg: color-mix(in srgb, var(--orf-bg-muted) 70%, var(--orf-bg-elevated));
-  --orf-chat-panel-chip-bg: color-mix(in srgb, var(--orf-bg-muted) 82%, var(--orf-bg-elevated));
+  --orf-chat-panel-empty-bg: var(--orf-material-content-tertiary);
+  --orf-chat-panel-chip-bg: var(--orf-material-content-control);
   --orf-chat-panel-chip-active-bg: var(--orf-accent-soft);
   --orf-chat-panel-chip-active-text: var(--orf-accent-text);
   --orf-chat-panel-danger-bg: var(--orf-danger-bg);
   --orf-chat-panel-focus-ring: 0 0 0 3px var(--orf-accent-soft);
-  --orf-chat-panel-preview-frame-bg: var(--orf-bg-elevated);
+  --orf-chat-panel-preview-frame-bg: var(--orf-material-content-primary);
   height: clamp(620px, calc(100dvh - var(--orf-topbar-height) - 92px), 980px);
   min-height: 0;
 }
@@ -319,35 +319,7 @@
   height: 100%;
   min-height: 0;
   border: 1px solid var(--orf-chat-panel-border);
-  box-shadow: var(--orf-shadow-card);
-}
-
-.orf-app-shell[data-page-scene="page_resources_background"][data-workspace-material-content-tone="light"] .orf-drive-page {
-  color-scheme: dark;
-  --orf-chat-panel-surface: rgba(21, 29, 41, 0.94);
-  --orf-chat-panel-header-surface: rgba(31, 42, 60, 0.94);
-  --orf-chat-panel-border: rgba(160, 176, 201, 0.2);
-  --orf-chat-panel-border-strong: rgba(180, 196, 219, 0.28);
-  --orf-chat-panel-text: #c7d2e2;
-  --orf-chat-panel-text-strong: #e7edf6;
-  --orf-chat-panel-text-muted: #9baabe;
-  --orf-chat-panel-placeholder: #7f8da1;
-  --orf-chat-panel-control-bg: rgba(29, 39, 56, 0.94);
-  --orf-chat-panel-control-hover-bg: rgba(43, 57, 80, 0.96);
-  --orf-chat-panel-control-disabled-bg: rgba(42, 53, 70, 0.58);
-  --orf-chat-panel-control-disabled-text: #76859a;
-  --orf-chat-panel-item-bg: rgba(32, 43, 61, 0.92);
-  --orf-chat-panel-item-hover-bg: rgba(73, 96, 130, 0.28);
-  --orf-chat-panel-empty-bg: rgba(25, 34, 48, 0.92);
-  --orf-chat-panel-chip-bg: rgba(39, 52, 73, 0.88);
-  --orf-chat-panel-chip-active-bg: rgba(82, 180, 198, 0.18);
-  --orf-chat-panel-chip-active-text: #9bdce7;
-  --orf-chat-panel-preview-frame-bg: rgba(18, 25, 36, 0.98);
-  --orf-drive-row-active-text: #9bdce7;
-}
-
-.orf-app-shell[data-page-scene="page_resources_background"][data-workspace-material-content-tone="light"] .orf-drive-page > .orf-drive-panel {
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.34);
+  box-shadow: var(--orf-material-content-shadow);
 }
 
 .orf-drive-toolbar,
@@ -1269,22 +1241,15 @@
   align-self: center;
   justify-self: center;
   overflow: visible;
-  border: 1px solid color-mix(in srgb, var(--orf-chat-panel-border) 72%, transparent);
+  /* Office documents keep a paper canvas so their authored colors remain faithful. */
+  border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--orf-bg-card) 96%, white);
-  box-shadow: 0 12px 32px rgba(31, 49, 74, 0.1);
-  color: #1f2937;
+  background: #f8fafc;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
+  color: #111827;
   padding: 34px 42px;
   font-size: var(--orf-drive-preview-font-size, 14px);
   line-height: 1.68;
-}
-
-.orf-app-shell[data-page-scene="page_resources_background"][data-workspace-material-content-tone="light"] .orf-drive-docx-page,
-.orf-drive-file-popout-page[data-orf-appearance="dark"] .orf-drive-docx-page {
-  border-color: rgba(148, 163, 184, 0.18);
-  background: #f8fafc;
-  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.32);
-  color: #111827;
 }
 
 .orf-drive-docx-page h1,
@@ -1515,31 +1480,19 @@
 }
 
 .orf-drive-file-popout-page {
-  --orf-chat-panel-surface: color-mix(in srgb, var(--orf-bg-card) 94%, var(--orf-bg-elevated));
-  --orf-chat-panel-border: var(--orf-border);
+  --orf-chat-panel-surface: var(--orf-material-floating);
+  --orf-chat-panel-border: var(--orf-material-content-hairline);
   --orf-chat-panel-text: var(--orf-text-secondary);
   --orf-chat-panel-text-strong: var(--orf-text-primary);
   --orf-chat-panel-text-muted: var(--orf-text-muted);
-  --orf-chat-panel-control-bg: var(--orf-bg-elevated);
-  --orf-drive-preview-frame-bg: var(--orf-bg-muted);
+  --orf-chat-panel-control-bg: var(--orf-material-content-control);
+  --orf-drive-preview-frame-bg: var(--orf-material-content-tertiary);
   display: grid;
   width: 100vw;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
-  background: var(--orf-bg-muted);
-}
-
-.orf-drive-file-popout-page[data-orf-appearance="dark"] {
-  color-scheme: dark;
-  --orf-chat-panel-surface: rgba(21, 29, 41, 0.98);
-  --orf-chat-panel-border: rgba(160, 176, 201, 0.2);
-  --orf-chat-panel-text: #c7d2e2;
-  --orf-chat-panel-text-strong: #e7edf6;
-  --orf-chat-panel-text-muted: #9baabe;
-  --orf-chat-panel-control-bg: rgba(29, 39, 56, 0.94);
-  --orf-drive-preview-frame-bg: rgba(12, 18, 28, 0.98);
-  background: #0c121c;
+  background: var(--orf-bg-app);
 }
 
 .orf-drive-file-popout-empty {
@@ -2529,23 +2482,12 @@ body:has(.orf-app-shell[data-page-scene="page_resources_background"]) :is(
   .orf-drive-file-preview-shell,
   .orf-confirm-dialog
 ) {
-  border-color: rgba(255, 255, 255, 0.68);
+  border-color: var(--orf-material-content-hairline-strong);
   border-radius: 20px;
   background:
-    linear-gradient(132deg, rgba(255, 255, 255, 0.15), transparent 44%),
-    rgba(249, 252, 252, 0.91);
-  box-shadow: 0 28px 72px rgba(7, 30, 41, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.82);
-}
-
-body:has(.orf-app-shell[data-page-scene="page_resources_background"][data-workspace-material-content-tone="light"]) :is(
-  .orf-drive-file-preview-shell,
-  .orf-confirm-dialog
-) {
-  border-color: rgba(165, 215, 225, 0.2);
-  background:
-    linear-gradient(132deg, rgba(104, 201, 220, 0.06), transparent 44%),
-    rgba(7, 22, 31, 0.92);
-  box-shadow: 0 30px 76px rgba(0, 6, 10, 0.6), inset 0 1px 0 rgba(202, 237, 243, 0.14);
+    linear-gradient(132deg, color-mix(in srgb, var(--orf-material-content-shine) 18%, transparent), transparent 44%),
+    var(--orf-material-modal);
+  box-shadow: var(--orf-material-content-shadow);
 }
 
 @media (max-width: 900px) {

@@ -4,6 +4,7 @@ import { Download, File as FileIcon, FileText, Image as ImageIcon, Loader2, Minu
 import { useParams } from "react-router-dom";
 import { ImageCopyButton } from "../../components/ImageCopyButton";
 import { IconButton } from "../../components/ui";
+import { readCachedAppearanceMode } from "../appearance/appearanceMode";
 import type { Drive, DrivePreviewKind } from "../../types/orf";
 import { OrfRichTextMarkdownViewer } from "../rich-text/OrfRichTextMarkdownViewer";
 import { drivePreviewKindLabel, drivePreviewUrl, formatDriveFileSize } from "./drivePresentation";
@@ -139,7 +140,7 @@ export function DriveFilePreviewPopoutPage() {
 
   if (!payload) {
     return (
-      <main className="orf-drive-file-popout-page" data-orf-appearance="light">
+      <main className="orf-drive-file-popout-page" data-orf-appearance={readCachedAppearanceMode()}>
         <section className="orf-drive-file-popout-empty" role="alert">
           <h1>文件预览已失效</h1>
           <p>请从 ORF 里重新打开该文件。</p>

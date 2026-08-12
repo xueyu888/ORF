@@ -45,7 +45,7 @@ import type {
 } from "../types/orf";
 import type { ChatSyncResponse } from "../domain/chatSync";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
-import type { ChatTheme, UserDisplayPreferences, WorkspaceLayoutPreferences } from "../domain/settings/personalPreferences";
+import type { AppearanceMode, UserDisplayPreferences } from "../domain/settings/personalPreferences";
 import type { FilterPreferenceRecord, UserFilterPreferences } from "../domain/settings/filterPreferences";
 import { readPersonalPreferencesWithRetry } from "../utils/personalPreferences";
 import {
@@ -312,16 +312,15 @@ export type UserPreferences = {
   defaultLandingPath: string | null;
   sidebarCollapsed: boolean | null;
   sidebarWidth: number;
-  chatTheme: ChatTheme;
+  appearanceMode: AppearanceMode;
   display: UserDisplayPreferences;
   filterPreferences: UserFilterPreferences;
-  workspaceLayout: WorkspaceLayoutPreferences;
   backgrounds: Partial<Record<VisualBackgroundScene, VisualBackgroundConfig | null>>;
   notificationDisplay: {
     toastEnabled: boolean;
   };
 };
-export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "sidebarWidth" | "chatTheme" | "display" | "workspaceLayout" | "backgrounds">> & {
+export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "sidebarWidth" | "appearanceMode" | "display" | "backgrounds">> & {
   filterPreferences?: Record<string, FilterPreferenceRecord | null>;
   notificationDisplay?: Partial<UserPreferences["notificationDisplay"]>;
 };

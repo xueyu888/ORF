@@ -14,9 +14,6 @@ export const pageVisualBackgroundScenes = [
   "page_feedback_background",
   "page_reports_background",
   "page_system_background",
-  "page_dashboard_background",
-  "page_strategy_map_background",
-  "page_ai_evaluation_background",
   "page_loot_background",
 ] as const;
 
@@ -168,6 +165,7 @@ function recordValue(input: unknown): Record<string, unknown> {
 export function normalizeVisualBackgroundConfig(input: unknown): VisualBackgroundConfig {
   const raw = recordValue(input);
   const fallback = defaultVisualBackgroundConfig();
+  if (raw.version !== 4) return fallback;
   const materialInput = recordValue(raw.material) as Partial<VisualMaterialPreferences>;
   const rawCrops = recordValue(raw.crops);
   const crops = Object.fromEntries(

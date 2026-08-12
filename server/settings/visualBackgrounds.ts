@@ -5,7 +5,6 @@ import path from "node:path";
 import { z } from "zod";
 import {
   defaultVisualBackgroundConfig,
-  normalizeVisualBackgroundConfig,
   normalizeVisualBackgroundCrop,
   normalizeVisualMaterialPreferences,
   visualBackgroundCropLimits,
@@ -243,41 +242,26 @@ async function ensureBackgroundDirectories() {
   ]);
 }
 
-function normalizeBackgroundConfig(input: unknown): BackgroundSceneConfig {
-  return backgroundSceneConfigSchema.parse(normalizeVisualBackgroundConfig(input));
+function readBackgroundConfig(input: unknown): BackgroundSceneConfig {
+  return input === undefined
+    ? backgroundSceneConfigSchema.parse(defaultVisualBackgroundConfig())
+    : backgroundSceneConfigSchema.parse(input);
 }
 
-function normalizeVisualSettings(input: RawSystemSettingsFile | null | undefined): VisualSettings {
+function currentVisualSettings(input: RawSystemSettingsFile | null | undefined): VisualSettings {
   const settings = emptyVisualSettings();
   for (const scene of visualBackgroundScenes) {
-    settings.visual.backgrounds[scene] = normalizeBackgroundConfig(
+    settings.visual.backgrounds[scene] = readBackgroundConfig(
       input?.visual?.backgrounds?.[scene],
     );
   }
   return settings;
 }
 
-function visualSettingsNeedNormalization(input: RawSystemSettingsFile | null | undefined) {
-  const backgrounds = input?.visual?.backgrounds;
-  if (!backgrounds) return true;
-  return visualBackgroundScenes.some((scene) => !backgroundSceneConfigSchema.safeParse(backgrounds[scene]).success);
-}
-
 async function readVisualSettings() {
   await ensureBackgroundDirectories();
   const rawSettings = await readSystemSettingsFile();
-  const settings = normalizeVisualSettings(rawSettings);
-  if (visualSettingsNeedNormalization(rawSettings)) {
-    await updateSystemSettingsFile((storedSettings) => {
-      const migrated = normalizeVisualSettings(storedSettings);
-      storedSettings.visual = storedSettings.visual ?? {};
-      storedSettings.visual.backgrounds = storedSettings.visual.backgrounds ?? {};
-      for (const scene of visualBackgroundScenes) {
-        storedSettings.visual.backgrounds[scene] = migrated.visual.backgrounds[scene];
-      }
-    });
-  }
-  return settings;
+  return currentVisualSettings(rawSettings);
 }
 
 function storageSceneNames(scene: CanonicalBackgroundScene): CanonicalBackgroundScene[] {
@@ -433,13 +417,17 @@ export async function saveVisualBackgroundConfig(scene: BackgroundScene, input: 
   }
 
   return updateSystemSettingsFile((rawSettings) => {
-    rawSettings.visual = rawSettings.visual ?? {};
-    rawSettings.visual.backgrounds = rawSettings.visual.backgrounds ?? {};
     const savedConfig = {
       ...config,
       fixedBackgroundId,
     };
-    rawSettings.visual.backgrounds[scene] = savedConfig;
+    rawSettings.visual = {
+      ...rawSettings.visual,
+      backgrounds: {
+        ...currentVisualSettings(rawSettings).visual.backgrounds,
+        [scene]: savedConfig,
+      },
+    };
 
     return {
       scene,
@@ -456,19 +444,24 @@ export async function setDefaultVisualBackground(id: string) {
   const scene = parsed.scene;
 
   return updateSystemSettingsFile((rawSettings) => {
-    const settings = normalizeVisualSettings(rawSettings);
-    rawSettings.visual = rawSettings.visual ?? {};
-    rawSettings.visual.backgrounds = rawSettings.visual.backgrounds ?? {};
-    rawSettings.visual.backgrounds[scene] = {
+    const settings = currentVisualSettings(rawSettings);
+    const config = {
       ...settings.visual.backgrounds[scene],
       mode: "fixed",
       fixedBackgroundId: `${parsed.storageScene}/${parsed.storageScope}/${parsed.fileName}`,
     };
+    rawSettings.visual = {
+      ...rawSettings.visual,
+      backgrounds: {
+        ...settings.visual.backgrounds,
+        [scene]: config,
+      },
+    };
 
     return {
-      id: (rawSettings.visual.backgrounds[scene] as BackgroundSceneConfig).fixedBackgroundId,
+      id: config.fixedBackgroundId,
       scene,
-      config: rawSettings.visual.backgrounds[scene] as BackgroundSceneConfig,
+      config,
       isDefault: true,
     };
   });

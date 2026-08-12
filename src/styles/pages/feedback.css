@@ -6,13 +6,8 @@
    compact controls, filters, state and short actions. */
 .orf-app-shell[data-page-scene="page_feedback_background"] {
   --orf-bg-page: transparent;
-  --feedback-signal: #d97745;
-  --feedback-signal-soft: rgba(217, 119, 69, 0.13);
-}
-
-.orf-app-shell[data-page-scene="page_feedback_background"][data-workspace-material-content-tone="light"] {
-  --feedback-signal: #f09a68;
-  --feedback-signal-soft: rgba(240, 154, 104, 0.15);
+  --feedback-signal: var(--orf-warning-text);
+  --feedback-signal-soft: var(--orf-warning-bg);
 }
 
 .orf-app-shell[data-page-scene="page_feedback_background"],
@@ -109,14 +104,14 @@
 
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-button[data-variant="primary"] {
   border-color: color-mix(in srgb, var(--orf-accent) 76%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--orf-accent) 92%, white 8%), var(--orf-accent-hover));
-  color: #f8ffff;
-  box-shadow: 0 9px 22px color-mix(in srgb, var(--orf-accent) 24%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--orf-accent) 92%, var(--orf-material-content-shine) 8%), var(--orf-accent-hover));
+  color: var(--orf-topbar-primary-text);
+  box-shadow: 0 9px 22px color-mix(in srgb, var(--orf-accent) 24%, transparent), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 52%, transparent);
 }
 
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-button[data-variant="primary"]:hover {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--orf-accent-hover) 88%, white 12%), var(--orf-accent-hover));
-  color: #fff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--orf-accent-hover) 88%, var(--orf-material-content-shine) 12%), var(--orf-accent-hover));
+  color: var(--orf-topbar-primary-text);
 }
 
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-transfer-trigger {

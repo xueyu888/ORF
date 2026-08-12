@@ -46,8 +46,5 @@ export function pageVisualBackgroundSceneForPath(pathname: string): PageVisualBa
   if (isFeedbackPath(pathname)) return "page_feedback_background";
   if (pathname.startsWith("/reports")) return "page_reports_background";
   if (pathname.startsWith("/system")) return "page_system_background";
-  if (pathname.startsWith("/dashboard")) return "page_dashboard_background";
-  if (pathname.startsWith("/strategy-map")) return "page_strategy_map_background";
-  if (pathname.startsWith("/ai-evaluation")) return "page_ai_evaluation_background";
   return "page_bounties_background";
 }

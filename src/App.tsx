@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
@@ -7,7 +7,6 @@ import { Button } from "./components/ui";
 import { canShowFrontend, canShowFrontendPath, type FrontendVisibilityKey } from "./config/frontendVisibility";
 import { systemManagementPages } from "./config/navigation";
 import { registeredWebModuleRoutes } from "./config/webModuleRegistry";
-import developmentRoutes from "./config/developmentRoutes.json";
 import { ChatImagePopoutPage } from "./features/chat/ChatFloatingImagePreview";
 import { DriveFilePreviewPopoutPage } from "./features/drive/DriveFilePreview";
 import { readLastWorkbenchLocationHref } from "./features/workbench-navigation";
@@ -28,17 +27,6 @@ import {
   WorkLogsPage,
 } from "./routing/routeModules";
 
-// These pages are implementation/design references, not committed production products.
-// Keeping the imports behind Vite's compile-time DEV flag prevents production bundles
-// from publishing either the routes or their page chunks.
-const developmentOnlyPages = import.meta.env.DEV
-  ? {
-      AIEvaluationPage: lazyDevelopmentPage(() => import("./pages/AIEvaluationPage"), "AIEvaluationPage"),
-      DashboardPage: lazyDevelopmentPage(() => import("./pages/DashboardPage"), "DashboardPage"),
-      StrategyMapPage: lazyDevelopmentPage(() => import("./pages/StrategyMapPage"), "StrategyMapPage"),
-    }
-  : null;
-
 export function App() {
   return (
     <Routes>
@@ -46,13 +34,6 @@ export function App() {
       <Route path="chat/image-popout/:popoutId" element={<ChatImagePopoutPage />} />
       <Route path="drive/file-preview-popout/:popoutId" element={<DriveFilePreviewPopoutPage />} />
       <Route element={<RequireAuth />}>
-        {developmentOnlyPages && (
-          <>
-            <Route path={relativeRoutePath(developmentRoutes.dashboard)} element={<LazyRoute><developmentOnlyPages.DashboardPage /></LazyRoute>} />
-            <Route path={relativeRoutePath(developmentRoutes.strategyMap)} element={<LazyRoute><developmentOnlyPages.StrategyMapPage /></LazyRoute>} />
-            <Route path={relativeRoutePath(developmentRoutes.aiEvaluation)} element={<LazyRoute><developmentOnlyPages.AIEvaluationPage /></LazyRoute>} />
-          </>
-        )}
         <Route path="bounties" element={<LazyRoute><BountyHallPage /></LazyRoute>} />
         <Route path="tasks" element={<LazyRoute><ChallengePlanPage /></LazyRoute>} />
         <Route path="work-logs" element={<LazyRoute><WorkLogsPage /></LazyRoute>} />
@@ -176,30 +157,19 @@ function RoutePendingFallback() {
   return (
     <div className="mx-auto grid min-h-[40vh] w-full max-w-6xl content-start gap-4 px-6 py-8" role="status" aria-live="polite">
       <span className="sr-only">正在准备页面</span>
-      <div className="h-8 w-48 animate-pulse rounded-xl bg-white/10" />
+      <div className="orf-surface-muted h-8 w-48 animate-pulse rounded-xl" />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="h-28 animate-pulse rounded-2xl bg-white/8" />
-        <div className="h-28 animate-pulse rounded-2xl bg-white/8" />
-        <div className="h-28 animate-pulse rounded-2xl bg-white/8" />
+        <div className="orf-surface-muted h-28 animate-pulse rounded-2xl" />
+        <div className="orf-surface-muted h-28 animate-pulse rounded-2xl" />
+        <div className="orf-surface-muted h-28 animate-pulse rounded-2xl" />
       </div>
-      <div className="h-64 animate-pulse rounded-2xl bg-white/8" />
+      <div className="orf-surface-muted h-64 animate-pulse rounded-2xl" />
     </div>
   );
 }
 
 function LazyRoute({ children }: { children: ReactNode }) {
   return <Suspense fallback={<RoutePendingFallback />}>{children}</Suspense>;
-}
-
-function lazyDevelopmentPage<TExport extends string, TComponent extends ComponentType>(
-  loader: () => Promise<Record<TExport, TComponent>>,
-  exportName: TExport,
-) {
-  return lazy(async () => ({ default: (await loader())[exportName] }));
-}
-
-function relativeRoutePath(path: string) {
-  return path.replace(/^\//, "");
 }
 
 function ApprovalPendingScreen({ onLogout, status }: { onLogout: () => void; status: string }) {

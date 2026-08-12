@@ -1,6 +1,7 @@
 import { applyDesignTokens } from "../../config/designTokens";
+import type { AppearanceMode } from "../../domain/settings/personalPreferences";
 
-export type AppearanceMode = "light" | "dark";
+export type { AppearanceMode } from "../../domain/settings/personalPreferences";
 export const defaultAppearanceMode: AppearanceMode = "light";
 
 const appearanceModeStorageKey = "orf.appearanceMode.v1";

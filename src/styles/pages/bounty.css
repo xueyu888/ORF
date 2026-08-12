@@ -3,45 +3,6 @@
 /* The selected scene is the hall's light source. These route-scoped material
    tokens let every surface transmit the scene without changing layout or data. */
 .orf-app-shell[data-bounty-hall="true"] {
-  --orf-bg-app: #dceaf6;
-  --orf-bg-page: rgba(239, 245, 249, 0.72);
-  --orf-text-primary: #172845;
-  --orf-text-secondary: #4e6078;
-  --orf-text-muted: #65778d;
-  --orf-text-faint: #9aa4b4;
-  --orf-border: rgba(42, 59, 88, 0.12);
-  --orf-border-strong: rgba(42, 59, 88, 0.2);
-  --orf-accent: #1973c6;
-  --orf-accent-hover: #125ea7;
-  --orf-accent-soft: rgba(25, 115, 198, 0.13);
-  --orf-accent-border: rgba(25, 115, 198, 0.34);
-  --orf-accent-text: #155d9f;
-  --orf-info-text: #3e62b6;
-  --orf-info-bg: rgba(85, 109, 188, 0.12);
-  --orf-info-border: rgba(72, 96, 174, 0.26);
-  --orf-warning-text: #8b5d18;
-  --orf-warning-bg: rgba(207, 163, 82, 0.16);
-  --orf-warning-border: rgba(174, 124, 36, 0.29);
-  --orf-surface-chrome: rgba(247, 251, 253, 0.52);
-  --orf-surface-panel: rgba(248, 251, 252, 0.58);
-  --orf-surface-elevated: #fffdf8;
-  --orf-surface-control: rgba(248, 251, 252, 0.5);
-  --orf-surface-control-hover: rgba(255, 255, 255, 0.66);
-  --orf-surface-content-solid: #f5f5f2;
-  --orf-surface-panel-solid: #fffdf8;
-  --orf-surface-control-solid: #f0f1f0;
-  --orf-surface-control-solid-hover: #e8edf0;
-  --orf-workbench-hairline: rgba(50, 74, 98, 0.15);
-  --orf-workbench-hairline-strong: rgba(45, 68, 92, 0.24);
-  --orf-topbar-surface: rgba(245, 248, 250, 0.72);
-  --orf-topbar-surface-strong: rgba(255, 253, 248, 0.9);
-  --orf-topbar-control-bg: rgba(255, 253, 248, 0.7);
-  --orf-topbar-control-hover-bg: rgba(255, 253, 248, 0.94);
-  --orf-topbar-control-border: rgba(42, 59, 88, 0.16);
-  --orf-topbar-control-text: #2a3852;
-  --orf-topbar-control-muted: #6f7c90;
-  --orf-topbar-primary-bg: #1973c6;
-  --orf-topbar-primary-hover-bg: #125ea7;
   --bounty-surface-panel: var(--orf-material-content-primary);
   --bounty-surface-control: var(--orf-material-content-control);
   --bounty-surface-float: var(--orf-material-content-secondary);
@@ -50,48 +11,6 @@
   --bounty-surface-border: var(--orf-material-content-hairline-strong);
   --bounty-surface-shine: color-mix(in srgb, var(--orf-text-primary) 8%, transparent);
   --bounty-surface-shadow: var(--orf-workbench-shadow);
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"] {
-  --orf-bg-app: #0b1326;
-  --orf-bg-page: rgba(12, 20, 39, 0.78);
-  --orf-text-primary: #f5f7fb;
-  --orf-text-secondary: #c8d4e5;
-  --orf-text-muted: #9bacbf;
-  --orf-text-faint: #69778e;
-  --orf-border: rgba(184, 204, 235, 0.14);
-  --orf-border-strong: rgba(192, 212, 242, 0.24);
-  --orf-accent: #49a4f4;
-  --orf-accent-hover: #6bb7fa;
-  --orf-accent-soft: rgba(73, 164, 244, 0.16);
-  --orf-accent-border: rgba(107, 183, 250, 0.36);
-  --orf-accent-text: #91d0ff;
-  --orf-info-text: #9abfff;
-  --orf-info-bg: rgba(91, 132, 213, 0.16);
-  --orf-info-border: rgba(124, 163, 235, 0.3);
-  --orf-warning-text: #f0c675;
-  --orf-warning-bg: rgba(199, 151, 68, 0.18);
-  --orf-warning-border: rgba(224, 176, 88, 0.3);
-  --orf-surface-chrome: rgba(7, 18, 38, 0.54);
-  --orf-surface-panel: rgba(7, 20, 41, 0.58);
-  --orf-surface-elevated: #192744;
-  --orf-surface-control: rgba(9, 27, 52, 0.52);
-  --orf-surface-control-hover: rgba(22, 49, 80, 0.68);
-  --orf-surface-content-solid: #0d172c;
-  --orf-surface-panel-solid: #14213a;
-  --orf-surface-control-solid: #1b2a46;
-  --orf-surface-control-solid-hover: #253756;
-  --orf-workbench-hairline: rgba(181, 205, 238, 0.14);
-  --orf-workbench-hairline-strong: rgba(188, 213, 246, 0.23);
-  --orf-topbar-surface: rgba(13, 24, 45, 0.76);
-  --orf-topbar-surface-strong: rgba(22, 37, 65, 0.9);
-  --orf-topbar-control-bg: rgba(22, 37, 64, 0.72);
-  --orf-topbar-control-hover-bg: rgba(34, 53, 86, 0.94);
-  --orf-topbar-control-border: rgba(178, 205, 239, 0.18);
-  --orf-topbar-control-text: #e3eaf5;
-  --orf-topbar-control-muted: #93a2b9;
-  --orf-topbar-primary-bg: #3e87cf;
-  --orf-topbar-primary-hover-bg: #55a0e5;
 }
 
 .orf-app-shell[data-bounty-hall="true"],
@@ -113,8 +32,7 @@
 .orf-app-shell[data-bounty-hall="true"] .bounty-hall-tab {
   border-color: color-mix(in srgb, var(--bounty-surface-border) 52%, transparent);
   background: var(--bounty-surface-micro);
-  color: #2d506d;
-  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.56);
+  color: var(--orf-text-secondary);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-hall-tab[data-active="true"] {
@@ -128,17 +46,7 @@
   color: var(--orf-text-primary);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--bounty-surface-shine) 54%, transparent),
-    0 8px 20px rgba(8, 35, 62, 0.11);
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"] .bounty-hall-tab {
-  color: #bfd4e7;
-  text-shadow: 0 1px 2px rgba(0, 7, 20, 0.72);
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"]
-  .bounty-hall-tab[data-active="true"] {
-  color: var(--orf-accent-text);
+    0 8px 20px color-mix(in srgb, var(--orf-text-primary) 11%, transparent);
 }
 
 .orf-workbench-surface .bounty-overview-band,
@@ -152,23 +60,19 @@
 .orf-app-shell[data-bounty-hall="true"] .orf-workbench-surface .bounty-list-table {
   position: relative;
   background:
-    radial-gradient(circle at 94% 20%, rgba(225, 242, 250, 0.12), transparent 36%),
-    linear-gradient(118deg, rgba(255, 255, 255, 0.13) 0%, transparent 46%, rgba(218, 238, 249, 0.08) 100%),
+    radial-gradient(circle at 94% 20%, color-mix(in srgb, var(--orf-accent-soft) 42%, transparent), transparent 36%),
+    linear-gradient(
+      118deg,
+      color-mix(in srgb, var(--orf-material-content-shine) 18%, transparent) 0%,
+      transparent 46%,
+      color-mix(in srgb, var(--orf-accent-soft) 24%, transparent) 100%
+    ),
     var(--bounty-surface-panel);
   box-shadow:
     var(--bounty-surface-shadow),
     inset 1px 0 0 color-mix(in srgb, var(--bounty-surface-shine) 32%, transparent),
     inset -1px 0 0 color-mix(in srgb, var(--orf-workbench-hairline) 72%, transparent),
     inset 0 -1px 0 color-mix(in srgb, var(--orf-workbench-hairline-strong) 58%, transparent);
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"]
-  .orf-workbench-surface
-  .bounty-list-table {
-  background:
-    radial-gradient(circle at 94% 20%, rgba(104, 165, 221, 0.07), transparent 36%),
-    linear-gradient(118deg, rgba(124, 185, 240, 0.07) 0%, transparent 48%, rgba(4, 12, 28, 0.12) 100%),
-    var(--bounty-surface-panel);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-list-table::before,
@@ -193,75 +97,42 @@
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-stat-card-cyan {
-  border-color: rgba(75, 168, 202, 0.28);
-  background: linear-gradient(135deg, rgba(89, 190, 225, 0.13), rgba(255, 255, 255, 0.14)), var(--bounty-surface-float);
+  --bounty-stat-accent: var(--orf-accent-text);
+  --bounty-stat-border: var(--orf-accent-border);
+  --bounty-stat-soft: var(--orf-accent-soft);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-stat-card-blue {
-  border-color: rgba(86, 117, 202, 0.25);
-  background: linear-gradient(135deg, rgba(83, 116, 210, 0.12), rgba(255, 255, 255, 0.14)), var(--bounty-surface-float);
+  --bounty-stat-accent: var(--orf-info-text);
+  --bounty-stat-border: var(--orf-info-border);
+  --bounty-stat-soft: var(--orf-info-bg);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-stat-card-orange {
-  border-color: rgba(183, 116, 79, 0.25);
-  background: linear-gradient(135deg, rgba(205, 124, 82, 0.12), rgba(255, 255, 255, 0.14)), var(--bounty-surface-float);
+  --bounty-stat-accent: var(--orf-danger-text);
+  --bounty-stat-border: var(--orf-danger-border);
+  --bounty-stat-soft: var(--orf-danger-bg);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-stat-card-gold {
-  border-color: rgba(170, 128, 52, 0.27);
-  background: linear-gradient(135deg, rgba(209, 167, 79, 0.14), rgba(255, 255, 255, 0.14)), var(--bounty-surface-float);
+  --bounty-stat-accent: var(--orf-warning-text);
+  --bounty-stat-border: var(--orf-warning-border);
+  --bounty-stat-soft: var(--orf-warning-bg);
 }
 
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"] .bounty-stat-card-cyan {
-  border-color: rgba(99, 194, 227, 0.27);
-  background: linear-gradient(135deg, rgba(44, 142, 181, 0.16), rgba(4, 15, 32, 0.08)), var(--bounty-surface-float);
+.orf-app-shell[data-bounty-hall="true"] .bounty-stat-card {
+  border-color: var(--bounty-stat-border, var(--orf-border));
+  background:
+    linear-gradient(
+      135deg,
+      var(--bounty-stat-soft, var(--orf-neutral-bg)),
+      color-mix(in srgb, var(--orf-material-content-shine) 16%, transparent)
+    ),
+    var(--bounty-surface-float);
 }
 
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"] .bounty-stat-card-blue {
-  border-color: rgba(118, 153, 237, 0.26);
-  background: linear-gradient(135deg, rgba(74, 111, 207, 0.16), rgba(4, 15, 32, 0.08)), var(--bounty-surface-float);
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"] .bounty-stat-card-orange {
-  border-color: rgba(222, 148, 109, 0.25);
-  background: linear-gradient(135deg, rgba(179, 91, 65, 0.16), rgba(4, 15, 32, 0.08)), var(--bounty-surface-float);
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"] .bounty-stat-card-gold {
-  border-color: rgba(225, 180, 90, 0.27);
-  background: linear-gradient(135deg, rgba(178, 133, 45, 0.17), rgba(4, 15, 32, 0.08)), var(--bounty-surface-float);
-}
-
-.bounty-hall-page.orf-workbench-surface .bounty-stat-card-cyan .bounty-stat-icon {
-  color: #3284bd;
-}
-
-.bounty-hall-page.orf-workbench-surface .bounty-stat-card-blue .bounty-stat-icon {
-  color: #536fd0;
-}
-
-.bounty-hall-page.orf-workbench-surface .bounty-stat-card-orange .bounty-stat-icon {
-  color: #a96d48;
-}
-
-.bounty-hall-page.orf-workbench-surface .bounty-stat-card-gold .bounty-stat-icon {
-  color: #ad812f;
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"] .bounty-hall-page.orf-workbench-surface .bounty-stat-card-cyan .bounty-stat-icon {
-  color: #70c8ec;
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"] .bounty-hall-page.orf-workbench-surface .bounty-stat-card-blue .bounty-stat-icon {
-  color: #8da9ff;
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"] .bounty-hall-page.orf-workbench-surface .bounty-stat-card-orange .bounty-stat-icon {
-  color: #e0a27c;
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"] .bounty-hall-page.orf-workbench-surface .bounty-stat-card-gold .bounty-stat-icon {
-  color: #e6bd6d;
+.bounty-hall-page.orf-workbench-surface .bounty-stat-card .bounty-stat-icon {
+  color: var(--bounty-stat-accent, var(--orf-text-secondary));
 }
 
 .orf-workbench-surface .bounty-command-surface {
@@ -401,13 +272,8 @@
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-search-box input::placeholder {
-  color: #55718a;
-  opacity: 0.92;
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"]
-  .bounty-search-box input::placeholder {
-  color: #9fb5c9;
+  color: var(--orf-text-muted);
+  opacity: 1;
 }
 
 .orf-workbench-surface .bounty-search-box:focus-within {
@@ -426,18 +292,7 @@
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-select-label > span,
 .orf-app-shell[data-bounty-hall="true"] .bounty-list-count {
-  color: #244762;
-  text-shadow:
-    0 1px 2px rgba(255, 255, 255, 0.92),
-    0 0 8px rgba(255, 255, 255, 0.64);
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"] .bounty-select-label > span,
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"] .bounty-list-count {
-  color: #d1deea;
-  text-shadow:
-    0 1px 2px rgba(0, 7, 20, 0.92),
-    0 0 8px rgba(0, 7, 20, 0.62);
+  color: var(--orf-text-secondary);
 }
 
 .orf-workbench-surface .bounty-select-label select,
@@ -542,87 +397,33 @@
 }
 
 .bounty-modal {
-  --orf-accent: #1973c6;
-  --orf-accent-hover: #125ea7;
-  --orf-accent-soft: rgba(25, 115, 198, 0.13);
-  --orf-accent-border: rgba(25, 115, 198, 0.34);
-  --orf-accent-text: #155d9f;
-  background: rgba(3, 10, 18, 0.34);
+  background: rgba(2, 6, 12, 0.42);
   -webkit-backdrop-filter: blur(14px) saturate(1.08);
   backdrop-filter: blur(14px) saturate(1.08);
 }
 
 .bounty-modal-card {
-  border-color: rgba(255, 255, 255, 0.66);
+  border-color: var(--orf-material-content-hairline-strong);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.2), transparent 46%),
-    rgba(241, 247, 250, 0.72);
-  box-shadow:
-    0 34px 88px rgba(3, 14, 27, 0.38),
-    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+    linear-gradient(135deg, color-mix(in srgb, var(--orf-material-content-shine) 22%, transparent), transparent 46%),
+    var(--orf-material-modal);
+  box-shadow: var(--orf-material-content-shadow);
   -webkit-backdrop-filter: blur(32px) saturate(1.1);
   backdrop-filter: blur(32px) saturate(1.1);
 }
 
 .bounty-modal-head,
 .bounty-modal-footer {
-  border-color: rgba(55, 78, 101, 0.14);
-  background: rgba(247, 250, 251, 0.26);
+  border-color: var(--orf-material-content-hairline);
+  background: var(--orf-material-content-secondary);
 }
 
 .bounty-modal .bounty-card {
-  border-color: rgba(255, 255, 255, 0.58);
+  border-color: var(--orf-material-content-hairline);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.2), transparent 52%),
-    rgba(255, 255, 255, 0.42);
-  box-shadow:
-    0 12px 28px rgba(10, 38, 65, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.68);
-}
-
-body:has(.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"]) .bounty-modal {
-  --orf-accent: #49a4f4;
-  --orf-accent-hover: #6bb7fa;
-  --orf-accent-soft: rgba(73, 164, 244, 0.16);
-  --orf-accent-border: rgba(107, 183, 250, 0.36);
-  --orf-accent-text: #91d0ff;
-  background: rgba(1, 6, 16, 0.46);
-}
-
-body:has(.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"]) .bounty-modal-card {
-  border-color: rgba(174, 216, 255, 0.2);
-  background:
-    linear-gradient(135deg, rgba(116, 177, 230, 0.08), transparent 44%),
-    rgba(7, 20, 41, 0.78);
-  box-shadow:
-    0 34px 90px rgba(0, 4, 12, 0.58),
-    inset 0 1px 0 rgba(203, 230, 255, 0.16);
-}
-
-body:has(.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"]) .bounty-modal-head,
-body:has(.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"]) .bounty-modal-footer {
-  border-color: rgba(174, 216, 255, 0.14);
-  background: rgba(8, 24, 48, 0.26);
-}
-
-body:has(.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"]) .bounty-modal .bounty-card {
-  border-color: rgba(174, 216, 255, 0.16);
-  background:
-    linear-gradient(135deg, rgba(106, 172, 229, 0.07), transparent 52%),
-    rgba(8, 24, 48, 0.5);
-  box-shadow:
-    0 14px 30px rgba(0, 4, 12, 0.22),
-    inset 0 1px 0 rgba(203, 230, 255, 0.12);
-}
-
-body:has(.orf-app-shell[data-bounty-hall="true"]) .orf-select-popover {
-  border-color: rgba(255, 255, 255, 0.58);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.14), transparent 54%),
-    rgba(247, 250, 251, 0.86);
-  box-shadow:
-    0 22px 56px rgba(3, 14, 27, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+    linear-gradient(135deg, color-mix(in srgb, var(--orf-material-content-shine) 18%, transparent), transparent 52%),
+    var(--orf-material-content-control);
+  box-shadow: var(--orf-material-content-shadow-soft);
   -webkit-backdrop-filter: blur(28px) saturate(1.08);
   backdrop-filter: blur(28px) saturate(1.08);
 }
@@ -632,17 +433,7 @@ body:has(.orf-app-shell[data-bounty-hall="true"]) .orf-select-option {
 }
 
 body:has(.orf-app-shell[data-bounty-hall="true"]) .orf-select-option:is(:hover, :focus-visible) {
-  background: rgba(25, 115, 198, 0.11);
-}
-
-body:has(.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"]) .orf-select-popover {
-  border-color: rgba(174, 216, 255, 0.2);
-  background:
-    linear-gradient(135deg, rgba(106, 172, 229, 0.07), transparent 54%),
-    rgba(7, 20, 41, 0.88);
-  box-shadow:
-    0 24px 62px rgba(0, 4, 12, 0.56),
-    inset 0 1px 0 rgba(203, 230, 255, 0.14);
+  background: var(--orf-accent-soft);
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-metric-detail-panel {
@@ -658,15 +449,7 @@ body:has(.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--bounty-surface-shine) 14%, transparent), transparent 52%),
     color-mix(in srgb, var(--bounty-surface-control) 82%, transparent);
-  box-shadow:
-    0 12px 28px rgba(10, 38, 65, 0.08),
-    inset 0 1px 0 color-mix(in srgb, var(--bounty-surface-shine) 48%, transparent);
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"] .bounty-metric-detail-panel .orf-metric-inspector-detail {
-  box-shadow:
-    0 14px 30px rgba(1, 7, 18, 0.22),
-    inset 0 1px 0 color-mix(in srgb, var(--bounty-surface-shine) 42%, transparent);
+  box-shadow: var(--orf-material-content-shadow-soft);
 }
 
 .orf-workbench-surface .bounty-list-table {
@@ -681,12 +464,10 @@ body:has(.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content
   font-size: 11px;
   padding: 0 12px;
   border-color: var(--orf-workbench-hairline);
-  background: linear-gradient(90deg, rgba(222, 238, 248, 0.12), rgba(255, 246, 224, 0.06)), var(--bounty-surface-header);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--orf-accent-soft) 36%, transparent), var(--orf-warning-bg)),
+    var(--bounty-surface-header);
   font-weight: var(--orf-type-label-weight, 560);
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"] .orf-workbench-surface .bounty-list-head {
-  background: linear-gradient(90deg, rgba(85, 154, 213, 0.09), rgba(6, 18, 36, 0.08)), var(--bounty-surface-header);
 }
 
 .orf-workbench-surface .bounty-list-row {
@@ -701,12 +482,7 @@ body:has(.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content
 }
 
 .orf-app-shell[data-bounty-hall="true"] .bounty-list-row:nth-child(even) {
-  background: rgba(25, 115, 198, 0.018);
-}
-
-.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content-tone="light"]
-  .bounty-list-row:nth-child(even) {
-  background: rgba(255, 255, 255, 0.014);
+  background: color-mix(in srgb, var(--orf-accent) 2%, transparent);
 }
 
 .orf-workbench-surface .bounty-list-row:hover {
@@ -723,7 +499,7 @@ body:has(.orf-app-shell[data-bounty-hall="true"][data-workspace-material-content
   background: var(--orf-accent-hover);
   box-shadow:
     0 10px 24px color-mix(in srgb, var(--orf-accent) 26%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 34%, transparent);
   transform: translateY(-1px);
 }
 

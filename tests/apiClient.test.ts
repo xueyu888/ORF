@@ -38,7 +38,7 @@ import {
 function userPreferences(userId: string, overrides: Partial<UserPreferences> = {}): UserPreferences {
   return {
     backgrounds: {},
-    chatTheme: "light",
+    appearanceMode: "light",
     defaultLandingPath: "/bounties",
     display: {
       contentFontSize: 14,
@@ -54,11 +54,6 @@ function userPreferences(userId: string, overrides: Partial<UserPreferences> = {
     sidebarCollapsed: false,
     sidebarWidth: 260,
     userId,
-    workspaceLayout: {
-      secondaryPanel: null,
-      secondaryWidthPx: 420,
-      version: 1,
-    },
     ...overrides,
   };
 }
@@ -178,14 +173,14 @@ test("confirmed appearance cache stays user-scoped and never invents another use
 
 test("personal preference reads retry transient failures and return the confirmed response", async () => {
   const attempts: number[] = [];
-  const preferences = userPreferences("user-a", { chatTheme: "dark" });
+  const preferences = userPreferences("user-a", { appearanceMode: "dark" });
   const result = await readPersonalPreferencesWithRetry(async (attempt) => {
     attempts.push(attempt);
     if (attempt < 2) throw new Error("temporary preference read failure");
     return preferences;
   }, undefined, [0, 0]);
 
-  assert.equal(result.chatTheme, "dark");
+  assert.equal(result.appearanceMode, "dark");
   assert.deepEqual(attempts, [0, 1, 2]);
 });
 
@@ -206,7 +201,7 @@ test("saveUserPreferences replaces the cached preferences fact", async (t) => {
   const originalFetch = globalThis.fetch;
   const requests: Array<{ body: string | null; method: string; url: string }> = [];
   const initial = userPreferences("user-a", { defaultLandingPath: "/tasks" });
-  const saved = userPreferences("user-a", { chatTheme: "dark", defaultLandingPath: "/reports" });
+  const saved = userPreferences("user-a", { appearanceMode: "dark", defaultLandingPath: "/reports" });
 
   t.after(() => {
     globalThis.fetch = originalFetch;
@@ -228,13 +223,13 @@ test("saveUserPreferences replaces the cached preferences fact", async (t) => {
   }) as typeof fetch;
 
   assert.equal((await getUserPreferences({ userId: "user-a" })).defaultLandingPath, "/tasks");
-  const updated = await saveUserPreferences({ chatTheme: "dark", defaultLandingPath: "/reports" });
+  const updated = await saveUserPreferences({ appearanceMode: "dark", defaultLandingPath: "/reports" });
   assert.equal(updated.defaultLandingPath, "/reports");
-  assert.equal(updated.chatTheme, "dark");
-  assert.equal((await getUserPreferences({ userId: "user-a" })).chatTheme, "dark");
+  assert.equal(updated.appearanceMode, "dark");
+  assert.equal((await getUserPreferences({ userId: "user-a" })).appearanceMode, "dark");
   assert.deepEqual(requests.map((request) => request.method), ["GET", "PUT"]);
   assert.deepEqual(JSON.parse(requests[1]?.body ?? "{}"), {
-    chatTheme: "dark",
+    appearanceMode: "dark",
     defaultLandingPath: "/reports",
   });
 });

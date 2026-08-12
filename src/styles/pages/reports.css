@@ -272,7 +272,7 @@
   border-radius: 0;
   padding: 0;
   background: var(--reports-segment-color);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 48%, transparent);
   cursor: help;
   transition: filter 140ms ease, opacity 140ms ease, transform 140ms ease;
 }
@@ -335,12 +335,12 @@
   z-index: 180;
   display: grid;
   gap: 8px;
-  border: 1px solid color-mix(in srgb, var(--reports-segment-color) 36%, var(--orf-material-floating-hairline));
+  border: 1px solid color-mix(in srgb, var(--reports-segment-color) 36%, var(--orf-material-content-hairline));
   border-radius: 16px;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--reports-segment-color) 12%, transparent), transparent 52%),
     var(--orf-material-floating);
-  box-shadow: var(--orf-material-floating-shadow), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 62%, transparent);
+  box-shadow: var(--orf-material-content-shadow), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 62%, transparent);
   padding: 12px 13px;
   color: var(--orf-text-primary);
   pointer-events: none;
@@ -389,7 +389,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--orf-material-floating-hairline) 54%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--orf-material-content-hairline) 54%, transparent);
   padding-top: 8px;
 }
 
@@ -816,37 +816,20 @@
 /* Adaptive material contract. Environmental colour remains visible around and through the data surfaces. */
 .orf-app-shell[data-page-scene="page_reports_background"] {
   --orf-bg-page: transparent;
-  --reports-gold: #b77928;
-  --reports-gold-soft: rgba(197, 138, 49, 0.14);
-  --reports-silver: #668096;
-  --reports-silver-soft: rgba(105, 132, 153, 0.13);
-  --reports-bronze: #a46743;
-  --reports-bronze-soft: rgba(169, 103, 66, 0.13);
-  --reports-cyan: #188aa6;
-  --reports-cyan-soft: rgba(30, 151, 178, 0.15);
-  --reports-source-0: #168aa4;
-  --reports-source-1: #2b9e89;
-  --reports-source-2: #477fc7;
-  --reports-source-3: #7473c8;
-  --reports-source-4: #3a9bb9;
-  --reports-source-other: #8291a4;
-}
-
-.orf-app-shell[data-page-scene="page_reports_background"][data-workspace-material-content-tone="light"] {
-  --reports-gold: #e4b968;
-  --reports-gold-soft: rgba(228, 185, 104, 0.16);
-  --reports-silver: #b7c9d7;
-  --reports-silver-soft: rgba(183, 201, 215, 0.13);
-  --reports-bronze: #d49a75;
-  --reports-bronze-soft: rgba(212, 154, 117, 0.14);
-  --reports-cyan: #6dc7dc;
-  --reports-cyan-soft: rgba(84, 187, 211, 0.17);
-  --reports-source-0: #55bfd6;
-  --reports-source-1: #5fc7a9;
-  --reports-source-2: #6ea1e5;
-  --reports-source-3: #9a92e2;
-  --reports-source-4: #67b5cf;
-  --reports-source-other: #8d9bad;
+  --reports-gold: var(--orf-warning-text);
+  --reports-gold-soft: var(--orf-warning-bg);
+  --reports-silver: var(--orf-neutral-text);
+  --reports-silver-soft: var(--orf-neutral-bg);
+  --reports-bronze: color-mix(in srgb, var(--orf-warning-text) 64%, var(--orf-danger-text));
+  --reports-bronze-soft: color-mix(in srgb, var(--orf-warning-bg) 68%, var(--orf-danger-bg));
+  --reports-cyan: var(--orf-accent-text);
+  --reports-cyan-soft: var(--orf-accent-soft);
+  --reports-source-0: var(--orf-accent-text);
+  --reports-source-1: var(--orf-success-text);
+  --reports-source-2: var(--orf-info-text);
+  --reports-source-3: color-mix(in srgb, var(--orf-info-text) 58%, var(--orf-danger-text));
+  --reports-source-4: color-mix(in srgb, var(--orf-accent-text) 58%, var(--orf-info-text));
+  --reports-source-other: var(--orf-neutral-text);
 }
 
 .orf-app-shell[data-page-scene="page_reports_background"],
@@ -1053,7 +1036,7 @@
     position: absolute;
     inset: 14px 0;
     background: var(--reports-segment-color);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 48%, transparent);
     content: "";
     transition: filter 140ms ease, transform 140ms ease;
   }

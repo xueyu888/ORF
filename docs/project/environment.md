@@ -130,7 +130,7 @@ orf status --dev
 
 所有运行时写入必须位于不可变发布目录之外。设置和客户端更新资产分别由 `ORF_SETTINGS_DATA_DIR`、`ORF_CLIENT_UPDATE_ASSET_DIR` 指向持久数据目录；GitHub 轮询游标由 `GITHUB_SYNC_STATE_FILE` 指向持久可写文件。当前对外主机的编译运行、user-systemd、日志和回滚契约见 `deploy/current-host/README.md`。
 
-生产页面边界以 `src/config/developmentRoutes.json` 为唯一清单：Vite 生产构建据此排除仍在使用的开发工具页及其页面 chunk，公网 Nginx 也在 SPA 回退之前对同一批路径返回 404。旧 Fantasy UI 和 Genshin UI Kit 视觉预览已经移除；新的视觉系统直接在真实样板页中验收，不再维护脱离产品上下文的主题陈列路由。
+前端只注册实际产品页面。旧开发参考页、对应路由配置和公网拦截规则均已删除；视觉系统直接在真实产品页中验收，不维护脱离产品上下文的主题陈列或设计参考路由。
 
 以后需要打开本地前端页面时，先识别当前是否在 WSL：
 

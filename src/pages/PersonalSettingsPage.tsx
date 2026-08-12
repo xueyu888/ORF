@@ -91,8 +91,8 @@ export function PersonalSettingsPage() {
         if (controller.signal.aborted) return;
         setPreferences(data);
         setPreferencesStatus("success");
-        cacheConfirmedAppearanceMode(data.userId, data.chatTheme);
-        setCachedAppearanceMode(data.chatTheme);
+        cacheConfirmedAppearanceMode(data.userId, data.appearanceMode);
+        setCachedAppearanceMode(data.appearanceMode);
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
@@ -137,8 +137,8 @@ export function PersonalSettingsPage() {
       const saved = await saveUserPreferences(patch);
       setPreferences(saved);
       setPreferencesStatus("success");
-      cacheConfirmedAppearanceMode(saved.userId, saved.chatTheme);
-      setCachedAppearanceMode(saved.chatTheme);
+      cacheConfirmedAppearanceMode(saved.userId, saved.appearanceMode);
+      setCachedAppearanceMode(saved.appearanceMode);
       setSaveStatus("success");
       dispatchPersonalPreferencesChanged();
       notify(message);
@@ -161,7 +161,7 @@ export function PersonalSettingsPage() {
   };
 
   const handleAppearanceModeChange = async (value: AppearanceMode) => {
-    await savePreferencePatch({ chatTheme: value }, "全局外观已更新");
+    await savePreferencePatch({ appearanceMode: value }, "全局外观已更新");
   };
 
   const handleDisplayPreferenceChange = async (patch: Partial<UserDisplayPreferences>) => {
@@ -292,7 +292,7 @@ export function PersonalSettingsPage() {
         ? "collapsed"
         : "expanded";
   const displayPreferences = preferences?.display ?? defaultUserDisplayPreferences;
-  const selectedAppearanceMode = preferences?.chatTheme ?? cachedAppearanceMode;
+  const selectedAppearanceMode = preferences?.appearanceMode ?? cachedAppearanceMode;
   const busy = saveStatus === "loading" || avatarStatus === "loading";
   const launchAtLoginDisabled = launchAtLoginStatus === "idle" || launchAtLoginStatus === "loading" || launchAtLoginStatus === "unsupported";
   const launchAtLoginDescription = launchAtLoginStatus === "unsupported"
