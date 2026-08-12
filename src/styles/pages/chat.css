@@ -1912,6 +1912,20 @@
   font-size: 15px;
 }
 
+.orf-chat-message-system-event {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--orf-accent) 22%, var(--orf-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orf-accent) 9%, transparent);
+  color: var(--orf-accent-text);
+  padding: 1px 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .orf-chat-message-meta em {
   font-style: normal;
 }
@@ -2052,19 +2066,94 @@
 }
 
 .orf-chat-feedback-reference-card {
-  --orf-chat-reference-card-accent: #6f6de8;
+  --orf-chat-reference-card-accent: color-mix(in srgb, var(--orf-accent) 78%, #7068ee);
+  --orf-chat-reference-card-collapsed-height: 164px;
+  --orf-chat-reference-card-surface:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--orf-material-content-primary) 94%, var(--orf-chat-reference-card-accent) 6%),
+      color-mix(in srgb, var(--orf-material-content-secondary) 94%, transparent)
+    );
+  --orf-chat-reference-card-border: color-mix(in srgb, var(--orf-chat-reference-card-accent) 20%, var(--orf-material-content-hairline));
+  --orf-chat-reference-card-shadow: 0 10px 28px color-mix(in srgb, var(--orf-text-primary) 7%, transparent), inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 52%, transparent);
+  width: min(100%, 600px);
+  gap: 10px;
+  padding: 13px 14px 12px;
+  border-radius: 20px;
+}
+
+.orf-chat-feedback-reference-card .orf-chat-reference-card-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.orf-chat-feedback-reference-card .orf-chat-reference-card-header {
+  gap: 6px 10px;
+}
+
+.orf-chat-feedback-reference-card .orf-chat-reference-card-eyebrow {
+  color: var(--orf-chat-reference-card-accent);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+}
+
+.orf-chat-feedback-reference-card .orf-chat-reference-card-detail-line {
+  margin-top: 4px;
+}
+
+.orf-chat-feedback-reference-card .orf-chat-reference-card-badge {
+  gap: 5px;
+}
+
+.orf-chat-feedback-reference-card .orf-chat-reference-card-badge span {
+  min-height: 21px;
+  border-color: color-mix(in srgb, var(--orf-border) 78%, transparent);
+  background: color-mix(in srgb, var(--orf-material-content-control) 72%, transparent);
+  color: var(--orf-text-secondary);
+  padding-inline: 7px;
+}
+
+.orf-chat-feedback-reference-card .orf-chat-reference-card-badge .orf-chat-feedback-reference-status {
+  border-color: var(--orf-chat-reference-card-badge-border);
+  background: var(--orf-chat-reference-card-badge-bg);
+  color: var(--orf-chat-reference-card-badge-text);
+}
+
+.orf-chat-feedback-reference-card .orf-chat-reference-card-body-frame,
+.orf-chat-feedback-reference-card .orf-chat-reference-card-footer {
+  border-top: 1px solid color-mix(in srgb, var(--orf-border) 72%, transparent);
+  padding-top: 10px;
+}
+
+.orf-chat-feedback-reference-card .orf-chat-reference-card-section {
+  gap: 5px;
+}
+
+.orf-chat-feedback-reference-card .orf-chat-reference-card-section h5 {
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.045em;
+}
+
+.orf-chat-feedback-reference-card .orf-chat-reference-card-action.orf-action-button-secondary {
+  min-height: 32px;
+  border-color: transparent;
+  background: var(--orf-chat-reference-card-badge-bg);
+  box-shadow: none;
+}
+
+.orf-chat-feedback-reference-card .orf-chat-reference-card-action.orf-action-button-secondary:hover,
+.orf-chat-feedback-reference-card .orf-chat-reference-card-action.orf-action-button-secondary:focus-visible {
+  background: var(--orf-chat-reference-card-action-hover-bg);
 }
 
 .orf-chat-work-log-reference-card {
   --orf-chat-reference-card-accent: #15968d;
 }
 
-.orf-chat-web-link-preview {
-  --orf-chat-reference-card-accent: #4386d8;
-  width: min(100%, 560px);
-}
-
 .orf-chat-reference-card-loading {
+  min-height: 130px;
   border-style: dashed;
 }
 
@@ -2414,6 +2503,28 @@
   text-decoration-color: currentColor;
 }
 
+.orf-chat-web-link-title {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 5px;
+  overflow: hidden;
+  color: var(--orf-link-text);
+  font-size: 0.92em;
+  font-weight: 600;
+  line-height: 1.4;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-chat-web-link-title:hover,
+.orf-chat-web-link-title:focus-visible {
+  color: var(--orf-link-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .orf-chat-message-text a code {
   border-color: color-mix(in srgb, var(--orf-link-text) 32%, var(--orf-border));
   background: color-mix(in srgb, var(--orf-link-text) 8%, var(--orf-bg-muted));
@@ -2693,6 +2804,7 @@ button.orf-chat-image-attachment {
 .orf-chat-image-attachment img {
   display: block;
   width: 100%;
+  aspect-ratio: 16 / 9;
   max-height: 260px;
   background: var(--orf-material-content-tertiary);
   object-fit: contain;

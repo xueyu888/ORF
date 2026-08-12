@@ -2,9 +2,12 @@ import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from 
 import type { AppAttentionState } from "../interaction/appAttentionState";
 import {
   chatFeedViewportModeAfterScroll,
+  type ChatFeedScrollAnchor,
   type ChatFeedViewportMode,
   isChatFeedAtLatest,
   isChatFeedNearLatest,
+  readChatFeedScrollAnchor,
+  restoreChatFeedScrollAnchor,
   scrollChatFeedToLatest,
 } from "./chatFeedScroll";
 import {
@@ -16,6 +19,7 @@ import {
   chatScrollUserScrollKeys,
   classifyChatScrollEvent,
 } from "./chatScrollController";
+import { observeChatViewportLayout } from "./chatViewportLayout";
 
 type PendingLatestScroll = {
   behavior: ScrollBehavior;
@@ -56,6 +60,8 @@ export function useChatLatestScrollStickiness<T extends HTMLElement>({
 }: UseChatLatestScrollStickinessInput<T>) {
   const appAttentionStateRef = useRef(appAttentionState);
   const latestScrollTokenRef = useRef(0);
+  const layoutAnchorRef = useRef<ChatFeedScrollAnchor | null>(null);
+  const layoutListenersRef = useRef(new Set<() => void>());
   const pendingLatestScrollRef = useRef<PendingLatestScroll | null>(null);
   const pendingProgrammaticScrollRef = useRef<PendingProgrammaticScroll | null>(null);
   const previousScrollTopRef = useRef(0);
@@ -144,6 +150,7 @@ export function useChatLatestScrollStickiness<T extends HTMLElement>({
     return runProgrammaticScroll("latest", () => {
       if (scrollChatFeedToLatest(scrollRef.current, behavior)) {
         previousScrollTopRef.current = scrollRef.current?.scrollTop ?? previousScrollTopRef.current;
+        layoutAnchorRef.current = readChatFeedScrollAnchor(scrollRef.current);
         onAfterScrollToLatest?.();
         return true;
       }
@@ -178,6 +185,11 @@ export function useChatLatestScrollStickiness<T extends HTMLElement>({
 
   const isLatestScrollPending = useCallback(() => Boolean(pendingLatestScrollRef.current), []);
 
+  const subscribeLayoutChanges = useCallback((listener: () => void) => {
+    layoutListenersRef.current.add(listener);
+    return () => layoutListenersRef.current.delete(listener);
+  }, []);
+
   const handleScroll = useCallback((): ChatFeedScrollHandleResult => {
     const element = scrollRef.current;
     const nearLatest = isChatFeedNearLatest(element);
@@ -204,6 +216,7 @@ export function useChatLatestScrollStickiness<T extends HTMLElement>({
       setViewportMode(nextMode);
     }
     previousScrollTopRef.current = scrollTop;
+    layoutAnchorRef.current = readChatFeedScrollAnchor(element);
     return { nearLatest, source };
   }, [classifyCurrentScrollEvent, scrollRef, setViewportMode]);
 
@@ -234,6 +247,8 @@ export function useChatLatestScrollStickiness<T extends HTMLElement>({
   useEffect(() => () => {
     clearProgrammaticClearFrame();
     clearProgrammaticClearTimer();
+    layoutListenersRef.current.clear();
+    layoutAnchorRef.current = null;
   }, [clearProgrammaticClearFrame, clearProgrammaticClearTimer]);
 
   useLayoutEffect(() => {
@@ -271,45 +286,38 @@ export function useChatLatestScrollStickiness<T extends HTMLElement>({
 
   useEffect(() => {
     const element = scrollRef.current;
-    if (!element || typeof ResizeObserver === "undefined" || typeof MutationObserver === "undefined") return undefined;
-
-    const observedContent = new Set<Element>();
+    if (!element) return undefined;
     let frame: number | null = null;
-    const resizeObserver = new ResizeObserver(() => {
+    const handleLayoutChanged = () => {
       if (frame !== null) window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(() => {
         frame = null;
+        if (
+          appAttentionStateRef.current?.activelyViewed !== false &&
+          viewportModeRef.current === "browsingHistory" &&
+          layoutAnchorRef.current
+        ) {
+          runProgrammaticScroll(
+            "layout-correction",
+            () => restoreChatFeedScrollAnchor(element, layoutAnchorRef.current),
+            "auto",
+          );
+          previousScrollTopRef.current = element.scrollTop;
+        }
+        for (const listener of layoutListenersRef.current) listener();
         if (disabled || appAttentionStateRef.current?.activelyViewed === false) return;
         if (!pendingLatestScrollRef.current && viewportModeRef.current !== "followingLatest") return;
         if (runProgrammaticScroll("layout-correction", () => scrollChatFeedToLatest(element, "auto"), "auto")) {
           previousScrollTopRef.current = element.scrollTop;
           onAfterScrollToLatest?.();
         }
+        layoutAnchorRef.current = readChatFeedScrollAnchor(element);
       });
-    });
-    const observeContent = () => {
-      const nextContent = new Set(Array.from(element.querySelectorAll(contentSelector)));
-      for (const content of observedContent) {
-        if (!nextContent.has(content)) {
-          resizeObserver.unobserve(content);
-          observedContent.delete(content);
-        }
-      }
-      for (const content of nextContent) {
-        if (!observedContent.has(content)) {
-          observedContent.add(content);
-          resizeObserver.observe(content);
-        }
-      }
     };
-    observeContent();
-    const mutationObserver = new MutationObserver(observeContent);
-    mutationObserver.observe(element, { childList: true, subtree: true });
+    const cleanupLayoutObserver = observeChatViewportLayout(element, contentSelector, handleLayoutChanged);
     return () => {
       if (frame !== null) window.cancelAnimationFrame(frame);
-      mutationObserver.disconnect();
-      resizeObserver.disconnect();
-      observedContent.clear();
+      cleanupLayoutObserver();
     };
   }, [contentSelector, disabled, onAfterScrollToLatest, runProgrammaticScroll, scrollRef]);
 
@@ -321,5 +329,6 @@ export function useChatLatestScrollStickiness<T extends HTMLElement>({
     requestScrollToLatest,
     runProgrammaticScroll,
     setFollowingLatest,
+    subscribeLayoutChanges,
   };
 }

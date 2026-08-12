@@ -161,7 +161,7 @@ function renderCommentNotificationImageAttachment(
   const content = (
     <>
       <a href={src} target="_blank" rel="noreferrer noopener" title={`打开图片 ${reference.alt}`}>
-        <img alt={reference.alt} loading="lazy" src={src} />
+        <img alt={reference.alt} decoding="async" loading="lazy" src={src} />
       </a>
       {placement === "inline" && <span className="orf-rich-text-markdown-notification-image-caption">{reference.alt}</span>}
     </>

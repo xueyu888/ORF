@@ -3,9 +3,9 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { BlockList } from "node:net";
 import iconv from "iconv-lite";
-import type { ChatWebLinkPreview } from "../../src/domain/chatWebLinkPreview";
+import type { ChatWebLinkTitle } from "../../src/domain/chatWebLinkTitle";
 
-const requestTimeoutMs = 5_000;
+const requestTimeoutMs = 2_500;
 const maxHtmlBytes = 512 * 1024;
 const maxRedirects = 3;
 
@@ -49,14 +49,19 @@ function normalizedWebUrl(value: string) {
   const url = new URL(value);
   const expectedPort = url.protocol === "https:" ? "443" : url.protocol === "http:" ? "80" : null;
   if (!expectedPort || url.username || url.password || (url.port && url.port !== expectedPort)) {
-    throw new Error("Unsupported web preview URL");
+    throw new Error("Unsupported web title URL");
   }
   url.hash = "";
   return url;
 }
 
-async function publicAddressFor(hostname: string) {
-  const addresses = await lookup(hostname, { all: true, verbatim: true });
+async function publicAddressFor(hostname: string, signal: AbortSignal) {
+  const addresses = await Promise.race([
+    lookup(hostname, { all: true, verbatim: true }),
+    new Promise<never>((_, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    }),
+  ]);
   if (
     addresses.length === 0 ||
     addresses.some(({ address, family }) => (
@@ -64,13 +69,13 @@ async function publicAddressFor(hostname: string) {
       blockedAddresses.check(address, family === 4 ? "ipv4" : "ipv6")
     ))
   ) {
-    throw new Error("Web preview URL does not resolve to a public address");
+    throw new Error("Web title URL does not resolve to a public address");
   }
   return addresses[0];
 }
 
 async function requestPage(url: URL, signal: AbortSignal): Promise<PageResponse> {
-  const address = await publicAddressFor(url.hostname);
+  const address = await publicAddressFor(url.hostname, signal);
   const request = url.protocol === "https:" ? httpsRequest : httpRequest;
 
   return new Promise((resolve, reject) => {
@@ -80,7 +85,7 @@ async function requestPage(url: URL, signal: AbortSignal): Promise<PageResponse>
         Accept: "text/html,application/xhtml+xml;q=0.9",
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
         Host: url.host,
-        "User-Agent": "ORF-Web-Preview/1.0",
+        "User-Agent": "ORF-Web-Title/1.0",
       },
       hostname: address.address,
       method: "GET",
@@ -98,14 +103,14 @@ async function requestPage(url: URL, signal: AbortSignal): Promise<PageResponse>
       }
       if (statusCode < 200 || statusCode >= 300) {
         response.resume();
-        reject(new Error(`Web preview request failed with status ${statusCode}`));
+        reject(new Error(`Web title request failed with status ${statusCode}`));
         return;
       }
 
       const contentType = String(response.headers["content-type"] ?? "");
       if (!/^(?:text\/html|application\/xhtml\+xml)(?:\s*;|$)/iu.test(contentType)) {
         response.resume();
-        reject(new Error("Web preview response is not HTML"));
+        reject(new Error("Web title response is not HTML"));
         return;
       }
 
@@ -115,7 +120,7 @@ async function requestPage(url: URL, signal: AbortSignal): Promise<PageResponse>
       response.on("data", (chunk: Buffer) => {
         receivedBytes += chunk.length;
         if (receivedBytes > maxHtmlBytes) {
-          response.destroy(new Error("Web preview response is too large"));
+          response.destroy(new Error("Web title response is too large"));
           return;
         }
         chunks.push(chunk);
@@ -149,11 +154,11 @@ async function loadHtml(initialUrl: string) {
       return { ...response, url };
     }
     if (redirectCount === maxRedirects) {
-      throw new Error("Web preview redirected too many times");
+      throw new Error("Web title request redirected too many times");
     }
     url = normalizedWebUrl(new URL(response.location, url).href);
   }
-  throw new Error("Web preview could not be loaded");
+  throw new Error("Web title could not be loaded");
 }
 
 function pageEncoding(contentType: string, body: Buffer) {
@@ -206,7 +211,7 @@ function tagAttributes(source: string) {
   return attributes;
 }
 
-function pageMetadata(html: string, url: URL): ChatWebLinkPreview {
+function pageTitle(html: string, url: URL): ChatWebLinkTitle {
   const head = html.match(/<head\b[^>]*>([\s\S]*?)<\/head>/iu)?.[1] ?? html.slice(0, 192_000);
   const metadata = new Map<string, string>();
   for (const match of head.matchAll(/<meta\b([^>]*)>/giu)) {
@@ -216,21 +221,16 @@ function pageMetadata(html: string, url: URL): ChatWebLinkPreview {
     if (key && content && !metadata.has(key)) metadata.set(key, content);
   }
 
-  const hostname = url.hostname.replace(/^www\./iu, "");
   const title = cleanText(
     metadata.get("og:title") ?? metadata.get("twitter:title") ?? head.match(/<title\b[^>]*>([\s\S]*?)<\/title>/iu)?.[1],
     240,
-  ) ?? hostname;
-  const description = cleanText(
-    metadata.get("og:description") ?? metadata.get("twitter:description") ?? metadata.get("description"),
-    500,
   );
-  const siteName = cleanText(metadata.get("og:site_name"), 120) ?? hostname;
-  return { description, hostname, siteName, title, url: url.href };
+  if (!title) throw new Error("Web page has no title");
+  return { title, url: url.href };
 }
 
-export async function loadChatWebLinkPreview(url: string): Promise<ChatWebLinkPreview> {
+export async function loadChatWebLinkTitle(url: string): Promise<ChatWebLinkTitle> {
   const page = await loadHtml(url);
   const html = iconv.decode(page.body, pageEncoding(page.contentType, page.body));
-  return pageMetadata(html, page.url);
+  return pageTitle(html, page.url);
 }

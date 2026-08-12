@@ -16,6 +16,8 @@ import { ChatReactionPicker } from "./ChatReactionPicker";
 import { chatMobileViewportQuery } from "./useChatMobileViewport";
 import { canonicalChatReactionName, isVisibleChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
 import { ChatDraftEditor } from "./ChatDraftEditor";
+import { ChatWebLinkTitle } from "./ChatWebLinkTitle";
+import { chatMessageDisplayAuthor, chatMessageDisplayBody } from "./chatMessagePresentation";
 import { chatMessageSendStatus, draftFromStoredBody, serializeDraft, type ChatDraft, type ChatFeedbackReference } from "./chatModels";
 import type { ChatOpenThreadOptions } from "./useChatThreadState";
 
@@ -97,6 +99,12 @@ function imageDimension(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
+function attachmentImageStyle(attachment: ChatAttachment) {
+  const width = imageDimension(attachment.width);
+  const height = imageDimension(attachment.height);
+  return width && height ? { aspectRatio: `${width} / ${height}` } : undefined;
+}
+
 function reactionSummaryLabel(
   reaction: ChatMessage["reactions"][number],
   reactionLabel: string,
@@ -140,14 +148,14 @@ function MessageAuthorAvatar({
   message: ChatMessage;
   usersById: Map<string, ChatUser>;
 }) {
-  const author = usersById.get(message.authorUserId);
+  const author = chatMessageDisplayAuthor(message, usersById);
   return (
     <ChatPresenceAvatar
-      avatarUrl={message.authorAvatarUrl}
+      avatarUrl={author.avatarUrl}
       className="orf-chat-message-avatar"
       currentUserId={currentUserId}
-      name={message.authorName}
-      user={author}
+      name={author.name}
+      user={author.user}
     />
   );
 }
@@ -257,8 +265,10 @@ function AttachmentGrid({
             <img
               src={attachment.contentUrl}
               alt={attachment.fileName}
+              decoding="async"
               height={imageDimension(attachment.height)}
               loading="lazy"
+              style={attachmentImageStyle(attachment)}
               width={imageDimension(attachment.width)}
             />
             <span>{attachment.fileName}</span>
@@ -689,8 +699,10 @@ export function ChatMessageItem({
   ];
   const hasMoreActions = moreActions.length > 0;
   const referenceCard = !message.deletedAt && !editing ? renderReferenceCard?.(message) : null;
-  const resolvedMessageBody = !message.deletedAt && !editing ? renderMessageBody?.(message) : undefined;
-  const visibleMessageBody = resolvedMessageBody === undefined ? message.body : resolvedMessageBody;
+  const visibleMessageBody = !message.deletedAt && !editing
+    ? chatMessageDisplayBody(message, renderMessageBody)
+    : message.body;
+  const displayAuthor = chatMessageDisplayAuthor(message, usersById);
 
   return (
     <article
@@ -722,7 +734,10 @@ export function ChatMessageItem({
           <div className="orf-chat-message-meta">
             {!compact && (
               <>
-                <strong>{message.authorName}</strong>
+                <strong>{displayAuthor.name}</strong>
+                {displayAuthor.isAttributedSystemEvent && (
+                  <span className="orf-chat-message-system-event">系统事件</span>
+                )}
                 <span title={formatDateTime(message.createdAt)}>{formatTime(message.createdAt)}</span>
               </>
             )}
@@ -771,6 +786,7 @@ export function ChatMessageItem({
                 usersById={usersById}
               />
             )}
+            <ChatWebLinkTitle message={message} />
             {referenceCard}
             <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
             {sendStatus === "failed" && (

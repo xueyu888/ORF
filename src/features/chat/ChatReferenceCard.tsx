@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { ArrowRight, ChevronDown, Loader2 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { actionButtonClassName } from "../../components/ui";
 
@@ -33,11 +33,11 @@ function ChatReferenceCardBody({
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setExpanded(false);
   }, [collapseKey]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const content = contentRef.current;
     if (!content) return undefined;
 
@@ -56,7 +56,7 @@ function ChatReferenceCardBody({
       resizeObserver?.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [children]);
+  }, [collapseKey]);
 
   return (
     <>

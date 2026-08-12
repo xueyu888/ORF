@@ -1929,6 +1929,7 @@
 .orf-rich-text-markdown-notification-image img {
   display: block;
   width: 100%;
+  aspect-ratio: 16 / 9;
   max-height: min(48vh, 420px);
   background: var(--orf-material-content-tertiary);
   object-fit: contain;

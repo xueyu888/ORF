@@ -1,7 +1,4 @@
-export type ChatWebLinkPreview = {
-  description: string | null;
-  hostname: string;
-  siteName: string;
+export type ChatWebLinkTitle = {
   title: string;
   url: string;
 };

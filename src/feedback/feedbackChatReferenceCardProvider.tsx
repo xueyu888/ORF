@@ -5,6 +5,8 @@ import {
   feedbackLifecycleLabel,
   feedbackNotificationCardReferenceV1Schema,
   feedbackPriorityLabel,
+  feedbackResolutionSchema,
+  feedbackStageSchema,
   type FeedbackNotificationCardReferenceV1,
 } from "@orf/feedback-module/contracts";
 import {
@@ -13,6 +15,7 @@ import {
   type FeedbackReferenceCardData,
 } from "./feedbackWebClient";
 import { CircleDot, MessageSquare, Paperclip } from "lucide-react";
+import type { ChatMessage } from "../types/orf";
 import { replaceOrfAttachmentMarkdownTokens } from "../features/rich-text/orfRichTextMarkdown";
 import type {
   ChatReferenceCardAttachment,
@@ -33,6 +36,10 @@ function feedbackReferenceTitle(feedbackId: string) {
   return `反馈 #${feedbackIssueDisplayId(feedbackId)}`;
 }
 
+function feedbackReferenceActionLabel(reference: FeedbackNotificationCardReferenceV1) {
+  return reference.kind === "comment" ? "打开回复" : "打开反馈";
+}
+
 function feedbackReferenceIcon(reference: FeedbackNotificationCardReferenceV1) {
   return reference.kind === "comment"
     ? <MessageSquare className="h-4 w-4" />
@@ -40,12 +47,13 @@ function feedbackReferenceIcon(reference: FeedbackNotificationCardReferenceV1) {
 }
 
 function feedbackReferenceEyebrow(reference: FeedbackNotificationCardReferenceV1) {
-  return reference.kind === "comment" ? "反馈回复" : "反馈动态";
+  const id = feedbackIssueDisplayId(reference.feedbackId);
+  return reference.kind === "comment" ? `反馈回复 #${id}` : `反馈 #${id}`;
 }
 
 function feedbackReferencePlaceholder(reference: FeedbackNotificationCardReferenceV1): ChatReferenceCardModel {
   return {
-    action: { href: feedbackReferenceHref(reference), label: "打开反馈" },
+    action: { href: feedbackReferenceHref(reference), label: feedbackReferenceActionLabel(reference) },
     className: "orf-chat-feedback-reference-card",
     eyebrow: feedbackReferenceEyebrow(reference),
     icon: feedbackReferenceIcon(reference),
@@ -64,9 +72,8 @@ function feedbackMissingReferenceModel(reference: FeedbackNotificationCardRefere
 
 function feedbackReferenceSubtitle(reference: FeedbackNotificationCardReferenceV1, data: FeedbackReferenceCardData) {
   const parts = [
-    feedbackReferenceTitle(data.feedback.id),
     data.project?.name,
-    reference.kind === "comment" ? data.comment?.author : assigneeName(data),
+    reference.kind === "comment" ? null : `处理人：${assigneeName(data)}`,
   ].filter(Boolean);
   return parts.join(" · ");
 }
@@ -77,36 +84,28 @@ function assigneeName(data: FeedbackReferenceCardData) {
   return data.users.find((user) => user.id === assigneeUserId)?.name ?? "未知处理人";
 }
 
-function formatFeedbackReferenceTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("zh-CN", {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "2-digit",
-  }).format(date);
+function feedbackReferenceAttachmentCount(
+  reference: FeedbackNotificationCardReferenceV1,
+  data: FeedbackReferenceCardData,
+) {
+  return reference.kind === "comment"
+    ? (data.comment?.attachments?.length ?? 0)
+    : data.feedback.reportAttachments.length;
 }
 
-function feedbackReferenceMeta(reference: FeedbackNotificationCardReferenceV1, data: FeedbackReferenceCardData) {
-  const value = reference.kind === "comment"
-    ? data.comment?.createdAt
-    : data.activity?.at ?? data.feedback.updatedAt;
-  if (!value) return null;
-  return `${reference.kind === "comment" ? "回复于" : "更新于"} ${formatFeedbackReferenceTime(value)}`;
-}
-
-function feedbackReferenceAttachmentCount(data: FeedbackReferenceCardData) {
-  return data.feedback.reportAttachments.length + (data.comment?.attachments?.length ?? 0);
-}
-
-function FeedbackReferenceBadge({ data }: { data: FeedbackReferenceCardData }) {
-  const attachmentCount = feedbackReferenceAttachmentCount(data);
+function FeedbackReferenceBadge({
+  data,
+  reference,
+}: {
+  data: FeedbackReferenceCardData;
+  reference: FeedbackNotificationCardReferenceV1;
+}) {
+  const attachmentCount = feedbackReferenceAttachmentCount(reference, data);
   return (
     <>
-      <span>{feedbackLifecycleLabel(data.feedback)}</span>
+      <span className="orf-chat-feedback-reference-status">{feedbackLifecycleLabel(data.feedback)}</span>
       {data.feedback.priority && <span>{feedbackPriorityLabel[data.feedback.priority]}</span>}
-      <span>{feedbackImpactLabel[data.feedback.impact]}</span>
+      <span>{feedbackImpactLabel[data.feedback.impact]}影响</span>
       {attachmentCount > 0 && (
         <span>
           <Paperclip className="h-3 w-3" />
@@ -115,6 +114,29 @@ function FeedbackReferenceBadge({ data }: { data: FeedbackReferenceCardData }) {
       )}
     </>
   );
+}
+
+function feedbackLifecycleActionLabel(message: ChatMessage) {
+  const stage = feedbackStageSchema.safeParse(message.system?.metadata?.feedbackStage);
+  if (!stage.success) return "推进了反馈生命周期";
+  const resolution = feedbackResolutionSchema.safeParse(message.system?.metadata?.feedbackResolution);
+  return `将状态更新为「${feedbackLifecycleLabel({
+    resolution: resolution.success ? resolution.data : null,
+    stage: stage.data,
+  })}」`;
+}
+
+function renderFeedbackSystemMessageBody(message: ChatMessage) {
+  if (message.system?.referenceNamespace !== "feedback") return undefined;
+  if (message.system.kind === "feedback.created") return "创建了这条反馈";
+  if (message.system.kind === "feedback.comment.created") return "回复了这条反馈";
+  if (message.system.kind === "feedback.lifecycle.changed") return feedbackLifecycleActionLabel(message);
+  if (message.system.kind === "feedback.assignee.changed") {
+    const previous = message.system.metadata?.previousAssignee?.trim() || "未指派";
+    const next = message.system.metadata?.nextAssignee?.trim() || "未指派";
+    return `将处理人从 ${previous} 调整为 ${next}`;
+  }
+  return undefined;
 }
 
 function feedbackReferenceAttachments(
@@ -168,6 +190,8 @@ function feedbackReferenceBodyBlocks(
     return blocks;
   }
 
+  if (reference.payloadType !== "created") return blocks;
+
   const description = feedbackReferenceBodyWithoutListedAttachments(
     data.feedback.description,
     data.feedback.reportAttachments,
@@ -184,13 +208,12 @@ function feedbackReferenceModel(
   data: FeedbackReferenceCardData,
 ): ChatReferenceCardModel {
   return {
-    action: { href: feedbackReferenceHref(reference), label: "打开反馈" },
-    badge: <FeedbackReferenceBadge data={data} />,
+    action: { href: feedbackReferenceHref(reference), label: feedbackReferenceActionLabel(reference) },
+    badge: <FeedbackReferenceBadge data={data} reference={reference} />,
     body: feedbackReferenceBodyBlocks(reference, data),
     className: "orf-chat-feedback-reference-card",
     eyebrow: feedbackReferenceEyebrow(reference),
     icon: feedbackReferenceIcon(reference),
-    meta: feedbackReferenceMeta(reference, data),
     status: "ready",
     subtitle: feedbackReferenceSubtitle(reference, data),
     title: data.feedback.title.trim() || feedbackReferenceTitle(data.feedback.id),
@@ -230,4 +253,5 @@ export const feedbackChatReferenceCardRegistration: ChatReferenceCardRegistratio
     referenceSchema: feedbackNotificationCardReferenceV1Schema,
     load: loadFeedbackReferenceModel,
   },
+  renderMessageBody: renderFeedbackSystemMessageBody,
 };

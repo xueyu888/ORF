@@ -1525,6 +1525,8 @@ export function ChatPage() {
           }}
           notify={notify}
           projects={state.projects}
+          renderMessageBody={renderChatSystemMessageBody}
+          renderReferenceCard={renderChatSystemReferenceCard}
           searchLoading={searchLoading}
           searchFocusSignal={searchFocusSignal}
           searchPerformed={searchPerformed}

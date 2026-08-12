@@ -11,7 +11,8 @@ import type { ChatChannel, ChatMessage } from "../../types/orf";
 import {
   type ChatFeedViewportMode,
   isChatFeedNearOldest,
-  isChatFeedMessageVisible,
+  isChatFeedMessagePositioned,
+  isChatFeedUnreadPositioned,
   readChatFeedScrollAnchor,
   restoreChatFeedScrollAnchor,
   scrollChatFeedToMessage,
@@ -55,6 +56,9 @@ import {
 } from "./chatFeedReadingPosition";
 import { shouldRecordChatFeedReadingPosition } from "./chatScrollController";
 import { resolveChatFeedOpenIntent } from "./chatFeedOpenIntent";
+import {
+  runChatViewportLayoutIntent,
+} from "./chatViewportLayout";
 
 export type ChatFeedThreadTarget = {
   focusMessageId: string;
@@ -82,6 +86,7 @@ type RememberActiveFeedScrollOptions = {
 
 type PendingUnreadScroll = {
   channelId: string;
+  messageId?: string | null;
   source: "channel-open" | "jump";
 };
 
@@ -90,38 +95,6 @@ type ChatFeedContextWindow = {
   hasOlderMessages: boolean;
   messages: ChatMessage[];
 };
-
-function runChatFeedScrollIntent(
-  tryScroll: () => boolean,
-  onDone: () => void,
-  attempts = 4,
-  isSettled?: () => boolean,
-) {
-  let cancelled = false;
-  let frame: number | null = null;
-  let remainingAttempts = Math.max(1, attempts);
-
-  const run = () => {
-    if (cancelled) return;
-    const scrolled = tryScroll();
-    remainingAttempts -= 1;
-    if ((scrolled && (!isSettled || isSettled())) || remainingAttempts <= 0) {
-      onDone();
-      return;
-    }
-    frame = window.requestAnimationFrame(run);
-  };
-
-  run();
-
-  return () => {
-    cancelled = true;
-    if (frame !== null) window.cancelAnimationFrame(frame);
-  };
-}
-
-const chatFeedReadingPositionRestoreStableMs = 240;
-const chatFeedReadingPositionRestoreMaxMs = 4_000;
 
 function readingPositionFromFeedSnapshot(
   channelId: string,
@@ -134,157 +107,6 @@ function readingPositionFromFeedSnapshot(
     messageId: snapshot.scrollAnchor.messageId,
     offsetTop: snapshot.scrollAnchor.offsetTop,
     scrollTop: snapshot.scrollTop,
-  };
-}
-
-function observeChatFeedLayout(element: HTMLElement, onLayoutChanged: () => void) {
-  const observedElements = new Set<Element>();
-  const observedImages = new Set<HTMLImageElement>();
-  const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(onLayoutChanged);
-
-  const observeElements = () => {
-    const nextElements = new Set<Element>();
-    const messageList = element.querySelector(".orf-chat-message-list");
-    if (messageList) nextElements.add(messageList);
-    for (const message of Array.from(element.querySelectorAll("[data-chat-message-id]"))) {
-      nextElements.add(message);
-    }
-
-    for (const observed of observedElements) {
-      if (!nextElements.has(observed)) {
-        resizeObserver?.unobserve(observed);
-        observedElements.delete(observed);
-      }
-    }
-    for (const next of nextElements) {
-      if (!observedElements.has(next)) {
-        observedElements.add(next);
-        resizeObserver?.observe(next);
-      }
-    }
-
-    const nextImages = new Set(Array.from(element.querySelectorAll<HTMLImageElement>("img")));
-    for (const image of observedImages) {
-      if (!nextImages.has(image)) {
-        image.removeEventListener("load", onLayoutChanged);
-        image.removeEventListener("error", onLayoutChanged);
-        observedImages.delete(image);
-      }
-    }
-    for (const image of nextImages) {
-      if (!observedImages.has(image)) {
-        observedImages.add(image);
-        image.addEventListener("load", onLayoutChanged);
-        image.addEventListener("error", onLayoutChanged);
-      }
-    }
-  };
-
-  observeElements();
-  const mutationObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => {
-    observeElements();
-    onLayoutChanged();
-  });
-  mutationObserver?.observe(element, { childList: true, subtree: true });
-  window.addEventListener("resize", onLayoutChanged);
-
-  return {
-    cleanup: () => {
-      mutationObserver?.disconnect();
-      resizeObserver?.disconnect();
-      for (const image of observedImages) {
-        image.removeEventListener("load", onLayoutChanged);
-        image.removeEventListener("error", onLayoutChanged);
-      }
-      observedElements.clear();
-      observedImages.clear();
-      window.removeEventListener("resize", onLayoutChanged);
-    },
-    hasPendingImage: () => Array.from(observedImages).some((image) => !image.complete),
-  };
-}
-
-function runChatFeedReadingPositionRestoreIntent(input: {
-  element: HTMLElement | null;
-  onDone: () => void;
-  restore: () => boolean;
-}) {
-  let cancelled = false;
-  let frame: number | null = null;
-  let stableTimer: number | null = null;
-  let maxTimer: number | null = null;
-  let restoredOnce = false;
-  let cleanupLayoutObserver: () => void = () => undefined;
-  let hasPendingImage = () => false;
-
-  const clearFrame = () => {
-    if (frame !== null) window.cancelAnimationFrame(frame);
-    frame = null;
-  };
-  const clearStableTimer = () => {
-    if (stableTimer !== null) window.clearTimeout(stableTimer);
-    stableTimer = null;
-  };
-  const clearMaxTimer = () => {
-    if (maxTimer !== null) window.clearTimeout(maxTimer);
-    maxTimer = null;
-  };
-  const cleanup = () => {
-    clearFrame();
-    clearStableTimer();
-    clearMaxTimer();
-    cleanupLayoutObserver();
-  };
-  const finish = () => {
-    if (cancelled) return;
-    cancelled = true;
-    cleanup();
-    input.onDone();
-  };
-  const scheduleStableFinish = () => {
-    clearStableTimer();
-    stableTimer = window.setTimeout(() => {
-      stableTimer = null;
-      if (cancelled) return;
-      if (restoredOnce && !hasPendingImage()) {
-        finish();
-        return;
-      }
-      if (!restoredOnce) scheduleRestore();
-      scheduleStableFinish();
-    }, chatFeedReadingPositionRestoreStableMs);
-  };
-  const runRestore = () => {
-    frame = null;
-    if (cancelled) return;
-    restoredOnce = input.restore() || restoredOnce;
-    scheduleStableFinish();
-  };
-  const scheduleRestore = () => {
-    if (cancelled) return;
-    clearFrame();
-    frame = window.requestAnimationFrame(runRestore);
-  };
-  const handleLayoutChanged = () => {
-    scheduleRestore();
-    scheduleStableFinish();
-  };
-
-  if (input.element) {
-    const layoutObserver = observeChatFeedLayout(input.element, handleLayoutChanged);
-    cleanupLayoutObserver = layoutObserver.cleanup;
-    hasPendingImage = layoutObserver.hasPendingImage;
-  }
-  scheduleRestore();
-  maxTimer = window.setTimeout(() => {
-    if (cancelled) return;
-    input.restore();
-    finish();
-  }, chatFeedReadingPositionRestoreMaxMs);
-
-  return () => {
-    cancelled = true;
-    cleanup();
   };
 }
 
@@ -309,6 +131,7 @@ export function useChatFeedState({
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [pendingNewMessageCount, setPendingNewMessageCount] = useState(0);
   const [attentionRestoreRevision, setAttentionRestoreRevision] = useState(0);
+  const [viewportLayoutIntentRevision, setViewportLayoutIntentRevision] = useState(0);
   const [unreadAnchor, setUnreadAnchor] = useState<UnreadAnchor | null>(null);
   const [feedChannelId, setFeedChannelId] = useState<string | null>(null);
   const activeChannelIdRef = useRef<string | null>(null);
@@ -365,6 +188,7 @@ export function useChatFeedState({
     requestScrollToLatest: requestLatestStickinessScroll,
     runProgrammaticScroll,
     setFollowingLatest,
+    subscribeLayoutChanges,
   } = useChatLatestScrollStickiness({
     appAttentionState,
     contentSelector: ".orf-chat-message-list",
@@ -835,7 +659,11 @@ export function useChatFeedState({
             return;
           }
           applyContextWindowToFeed(channelId, response.target.context, "unread");
-          pendingUnreadScrollRef.current = { channelId, source: "channel-open" };
+          pendingUnreadScrollRef.current = {
+            channelId,
+            messageId: response.target.context.targetMessageId,
+            source: "channel-open",
+          };
         })
         .catch(async (error) => {
           if (cancelled) return;
@@ -1037,27 +865,39 @@ export function useChatFeedState({
     if (!requestedMessageId || !messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId)) return undefined;
     pendingReadingPositionScrollRef.current = null;
     setFollowingLatest(false);
-    return runChatFeedScrollIntent(
-      () => runProgrammaticScroll(
+    const viewport = readViewportSnapshot();
+    return runChatViewportLayoutIntent({
+      element: messageScrollRef.current,
+      restore: () => runProgrammaticScroll(
         "message",
         () => scrollChatFeedToMessage(messageScrollRef.current, requestedMessageId, { behavior: "auto", block: "center" }),
         "auto",
       ),
-      () => {
+      settled: () => isChatFeedMessagePositioned(
+        messageScrollRef.current,
+        requestedMessageId,
+        { block: "center" },
+      ),
+      subscribeLayoutChanges,
+      valid: () => {
+        const current = readViewportSnapshot();
+        return current.mode === "browsingHistory" && current.revision === viewport.revision;
+      },
+      onDone: () => {
         rememberActiveFeedScroll(activeChannelId, { persistReadingPosition: true });
         onRequestedMessageLocated(requestedMessageId);
         onRequestedMessageConsumed();
       },
-      8,
-      () => isChatFeedMessageVisible(messageScrollRef.current, requestedMessageId),
-    );
-  }, [activeChannelId, messages, onRequestedMessageConsumed, onRequestedMessageLocated, rememberActiveFeedScroll, requestedMessageId, runProgrammaticScroll, setFollowingLatest]);
+      onInvalidated: onRequestedMessageConsumed,
+    });
+  }, [activeChannelId, messages, onRequestedMessageConsumed, onRequestedMessageLocated, readViewportSnapshot, rememberActiveFeedScroll, requestedMessageId, runProgrammaticScroll, setFollowingLatest, subscribeLayoutChanges]);
 
   useLayoutEffect(() => {
     const position = pendingReadingPositionScrollRef.current;
     if (!position || messagesLoading) return undefined;
     setFollowingLatest(false);
-    return runChatFeedReadingPositionRestoreIntent({
+    const viewport = readViewportSnapshot();
+    return runChatViewportLayoutIntent({
       element: messageScrollRef.current,
       restore: () => {
         const element = messageScrollRef.current;
@@ -1070,34 +910,67 @@ export function useChatFeedState({
           return true;
         }, "auto");
       },
+      subscribeLayoutChanges,
+      valid: () => {
+        const current = readViewportSnapshot();
+        return current.mode === "browsingHistory" && current.revision === viewport.revision;
+      },
       onDone: () => {
         pendingReadingPositionScrollRef.current = null;
         rememberActiveFeedScroll(position.channelId, { persistReadingPosition: true });
         window.requestAnimationFrame(scheduleVisibleReadReceipt);
       },
+      onInvalidated: () => {
+        pendingReadingPositionScrollRef.current = null;
+        window.requestAnimationFrame(scheduleVisibleReadReceipt);
+      },
     });
-  }, [attentionRestoreRevision, messages, messagesLoading, rememberActiveFeedScroll, runProgrammaticScroll, scheduleVisibleReadReceipt, setFollowingLatest]);
+  }, [attentionRestoreRevision, messages, messagesLoading, readViewportSnapshot, rememberActiveFeedScroll, runProgrammaticScroll, scheduleVisibleReadReceipt, setFollowingLatest, subscribeLayoutChanges]);
 
   useLayoutEffect(() => {
     const pendingUnreadScroll = pendingUnreadScrollRef.current;
     if (!pendingUnreadScroll || messagesLoading) return undefined;
     pendingReadingPositionScrollRef.current = null;
     setFollowingLatest(false);
-    return runChatFeedScrollIntent(
-      () => runProgrammaticScroll(
+    const viewport = readViewportSnapshot();
+    return runChatViewportLayoutIntent({
+      element: messageScrollRef.current,
+      restore: () => runProgrammaticScroll(
         "unread",
-        () => scrollChatFeedToUnread(messageScrollRef.current, { behavior: "auto" }),
+        () => (
+          scrollChatFeedToUnread(messageScrollRef.current, { behavior: "auto" }) ||
+          Boolean(
+            pendingUnreadScroll.messageId &&
+            scrollChatFeedToMessage(messageScrollRef.current, pendingUnreadScroll.messageId, {
+              behavior: "auto",
+              block: "start",
+              offset: 48,
+            })
+          )
+        ),
         "auto",
       ),
-      () => {
+      settled: () => isChatFeedUnreadPositioned(messageScrollRef.current),
+      subscribeLayoutChanges,
+      valid: () => {
+        const current = readViewportSnapshot();
+        return current.mode === "browsingHistory" && current.revision === viewport.revision;
+      },
+      onDone: () => {
         if (pendingUnreadScrollRef.current === pendingUnreadScroll) {
           pendingUnreadScrollRef.current = null;
         }
         rememberActiveFeedScroll(activeChannelId, { persistReadingPosition: true });
         window.requestAnimationFrame(scheduleVisibleReadReceipt);
       },
-    );
-  }, [activeChannelId, messages, messagesLoading, rememberActiveFeedScroll, runProgrammaticScroll, scheduleVisibleReadReceipt, setFollowingLatest]);
+      onInvalidated: () => {
+        if (pendingUnreadScrollRef.current === pendingUnreadScroll) {
+          pendingUnreadScrollRef.current = null;
+        }
+        window.requestAnimationFrame(scheduleVisibleReadReceipt);
+      },
+    });
+  }, [activeChannelId, messages, messagesLoading, readViewportSnapshot, rememberActiveFeedScroll, runProgrammaticScroll, scheduleVisibleReadReceipt, setFollowingLatest, subscribeLayoutChanges, viewportLayoutIntentRevision]);
 
   useLayoutEffect(() => {
     scheduleVisibleReadReceipt();
@@ -1108,7 +981,6 @@ export function useChatFeedState({
     const element = messageScrollRef.current;
     if (!element) return undefined;
 
-    const observedMessages = new Set<Element>();
     let frame: number | null = null;
     const scheduleAfterLayout = () => {
       if (frame !== null) window.cancelAnimationFrame(frame);
@@ -1118,36 +990,13 @@ export function useChatFeedState({
       });
     };
 
-    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleAfterLayout);
-    const observeMessages = () => {
-      const nextMessages = new Set(Array.from(element.querySelectorAll("[data-chat-message-id]")));
-      for (const message of observedMessages) {
-        if (!nextMessages.has(message)) {
-          resizeObserver?.unobserve(message);
-          observedMessages.delete(message);
-        }
-      }
-      for (const message of nextMessages) {
-        if (!observedMessages.has(message)) {
-          observedMessages.add(message);
-          resizeObserver?.observe(message);
-        }
-      }
-      scheduleAfterLayout();
-    };
-
-    observeMessages();
-    const mutationObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(observeMessages);
-    mutationObserver?.observe(element, { childList: true, subtree: true });
-    window.addEventListener("resize", scheduleAfterLayout);
+    const unsubscribeLayoutChanges = subscribeLayoutChanges(scheduleAfterLayout);
+    scheduleAfterLayout();
     return () => {
       if (frame !== null) window.cancelAnimationFrame(frame);
-      mutationObserver?.disconnect();
-      resizeObserver?.disconnect();
-      observedMessages.clear();
-      window.removeEventListener("resize", scheduleAfterLayout);
+      unsubscribeLayoutChanges();
     };
-  }, [scheduleVisibleReadReceipt, unreadAnchor]);
+  }, [scheduleVisibleReadReceipt, subscribeLayoutChanges, unreadAnchor]);
 
   const loadOlderMessages = useCallback(async () => {
     if (!activeChannelId || messages.length === 0 || olderLoadInFlightRef.current || isLatestScrollPending() || !hasOlderMessages) return;
@@ -1286,6 +1135,8 @@ export function useChatFeedState({
           "auto",
         )
       ) {
+        pendingUnreadScrollRef.current = { channelId, messageId: target.messageId, source: "jump" };
+        setViewportLayoutIntentRevision((value) => value + 1);
         rememberActiveFeedScroll(channelId, { persistReadingPosition: true });
         return;
       }
@@ -1298,6 +1149,8 @@ export function useChatFeedState({
           "auto",
         )
       ) {
+        pendingUnreadScrollRef.current = { channelId, messageId: targetMessageId, source: "jump" };
+        setViewportLayoutIntentRevision((value) => value + 1);
         rememberActiveFeedScroll(channelId, { persistReadingPosition: true });
         return;
       }
@@ -1332,7 +1185,11 @@ export function useChatFeedState({
       );
       feedCacheRef.current.set(channelId, snapshot);
       if (applySnapshotToActiveFeed(channelId, snapshot)) {
-        pendingUnreadScrollRef.current = { channelId, source: "jump" };
+        pendingUnreadScrollRef.current = {
+          channelId,
+          messageId: context.targetMessageId,
+          source: "jump",
+        };
       }
     } catch (error) {
       if (activeChannelIdRef.current === channelId) {

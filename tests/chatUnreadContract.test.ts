@@ -381,8 +381,12 @@ test("required acknowledgement is derived only from explicit reaction or thread 
 
 test("main feed read receipts reschedule after message layout changes", () => {
   const feedStateSource = readFileSync(new URL("../src/features/chat/useChatFeedState.ts", import.meta.url), "utf8");
-  assert.match(feedStateSource, /ResizeObserver/);
-  assert.match(feedStateSource, /MutationObserver/);
-  assert.match(feedStateSource, /\[data-chat-message-id\]/);
+  const layoutSource = readFileSync(new URL("../src/features/chat/chatViewportLayout.ts", import.meta.url), "utf8");
+  const stickinessSource = readFileSync(new URL("../src/features/chat/useChatLatestScrollStickiness.ts", import.meta.url), "utf8");
+  assert.match(layoutSource, /ResizeObserver/);
+  assert.match(layoutSource, /MutationObserver/);
+  assert.match(stickinessSource, /subscribeLayoutChanges/);
+  assert.match(feedStateSource, /subscribeLayoutChanges\(scheduleAfterLayout\)/);
+  assert.doesNotMatch(feedStateSource, /new ResizeObserver|new MutationObserver/);
   assert.match(feedStateSource, /scheduleVisibleReadReceipt/);
 });

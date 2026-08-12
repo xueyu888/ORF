@@ -1,4 +1,5 @@
 import { Loader2, MessageSquare, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { IconButton } from "../../components/ui";
 import type { ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, OrfProject } from "../../types/orf";
 import { ChatChannelInfoPanel } from "./ChatChannelInfoPanel";
@@ -62,6 +63,8 @@ type ChatRightPanelProps = {
   onUpdateChannel: (input: Partial<Pick<ChatChannel, "displayName" | "header" | "projectId" | "purpose">>) => Promise<void>;
   notify: (message: string) => void;
   projects: OrfProject[];
+  renderMessageBody?: (message: ChatMessage) => string | null | undefined;
+  renderReferenceCard?: (message: ChatMessage) => ReactNode;
   searchPerformed: boolean;
   searchFocusSignal: number;
   searchLoading: boolean;
@@ -129,6 +132,8 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
             onSend={props.onSendThreadReply}
             onToggleFollow={props.onToggleFollow}
             onTyping={props.onTyping}
+            renderMessageBody={props.renderMessageBody}
+            renderReferenceCard={props.renderReferenceCard}
             thread={props.thread}
             users={props.users}
             usersById={props.usersById}
@@ -151,6 +156,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
           searched={props.searchPerformed}
           query={props.searchQuery}
           results={props.searchResults}
+          renderMessageBody={props.renderMessageBody}
           searchScope={props.searchScope}
           searchType={props.searchType}
           setQuery={props.setSearchQuery}
@@ -165,6 +171,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
           feedbackItems={props.feedbackItems}
           loading={props.threadSummariesLoading}
           onOpenThread={props.onOpenThreadSummary}
+          renderMessageBody={props.renderMessageBody}
           summaries={props.threadSummaries}
           usersById={props.usersById}
         />
@@ -177,6 +184,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
           loading={props.collectionLoading}
           onOpenResult={props.onOpenResult}
           onSave={props.onSave}
+          renderMessageBody={props.renderMessageBody}
           results={props.collectionResults}
           usersById={props.usersById}
         />

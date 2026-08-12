@@ -1,15 +1,16 @@
 import { Bell, BellOff } from "lucide-react";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { ChatMessage, ChatThread, ChatUser } from "../../types/orf";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessageItem } from "./ChatMessageItem";
 import type { AppAttentionState } from "../interaction/appAttentionState";
 import type { ChatAttachmentPreviewHandler } from "./chatAttachmentPreview";
 import type { ChatDriveResourceLinkTarget } from "./chatDriveResourceLinks";
-import { scrollChatFeedToMessage } from "./chatFeedScroll";
+import { isChatFeedMessagePositioned, scrollChatFeedToMessage } from "./chatFeedScroll";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import { chatMessageSendStatus, type ChatFeedbackReference, type ChatSendHandler } from "./chatModels";
 import { useChatLatestScrollStickiness } from "./useChatLatestScrollStickiness";
+import { runChatViewportLayoutIntent } from "./chatViewportLayout";
 
 type ChatThreadPanelProps = {
   appAttentionState: AppAttentionState;
@@ -40,6 +41,8 @@ type ChatThreadPanelProps = {
   onSend: ChatSendHandler;
   onToggleFollow: (following: boolean) => void;
   onTyping: (channelId: string) => void;
+  renderMessageBody?: (message: ChatMessage) => string | null | undefined;
+  renderReferenceCard?: (message: ChatMessage) => ReactNode;
   thread: ChatThread;
   users: ChatUser[];
   usersById: Map<string, ChatUser>;
@@ -74,11 +77,14 @@ export function ChatThreadPanel({
   onSend,
   onToggleFollow,
   onTyping,
+  renderMessageBody,
+  renderReferenceCard,
   thread,
   users,
   usersById,
 }: ChatThreadPanelProps) {
   const threadPanelRef = useRef<HTMLDivElement | null>(null);
+  const locatedThreadMessageIdRef = useRef<string | null>(null);
   const previousThreadIdRef = useRef<string | null>(null);
   const previousReplyCountRef = useRef(0);
   const [reactionPickerRequest, setReactionPickerRequest] = useState<{ messageId: string | null; signal: number }>({
@@ -88,9 +94,11 @@ export function ChatThreadPanel({
   const {
     handleScroll: handleThreadStickinessScroll,
     isFollowingLatest,
+    readViewportSnapshot,
     requestScrollToLatest,
     runProgrammaticScroll,
     setFollowingLatest,
+    subscribeLayoutChanges,
   } = useChatLatestScrollStickiness({
     appAttentionState,
     contentSelector: "[data-chat-message-id], .orf-chat-thread-replies",
@@ -137,38 +145,67 @@ export function ChatThreadPanel({
 
     previousThreadIdRef.current = thread.rootMessage.id;
     previousReplyCountRef.current = thread.replies.length;
+    if (isNewThread || !focusMessageId) locatedThreadMessageIdRef.current = null;
+    const pendingFocusMessageId = focusMessageId && locatedThreadMessageIdRef.current !== focusMessageId
+      ? focusMessageId
+      : null;
 
-    if (!isNewThread && !focusMessageId && !shouldFollowReply) {
-      return;
+    if (
+      !isNewThread &&
+      !pendingFocusMessageId &&
+      !shouldFollowReply
+    ) {
+      return undefined;
     }
 
-    if (focusMessageId) {
+    if (pendingFocusMessageId) {
       setFollowingLatest(false);
-      window.requestAnimationFrame(() => {
-        const element = threadPanelRef.current;
-        if (!element) return;
-        if (
-          runProgrammaticScroll(
+      const viewport = readViewportSnapshot();
+      let located = false;
+      return runChatViewportLayoutIntent({
+        element: threadPanelRef.current,
+        restore: () => {
+          located = runProgrammaticScroll(
             "message",
-            () => scrollChatFeedToMessage(element, focusMessageId, { behavior: "auto", offset: 20 }),
+            () => scrollChatFeedToMessage(threadPanelRef.current, pendingFocusMessageId, { behavior: "auto", offset: 20 }),
             "auto",
-          )
-        ) {
-          return;
-        }
-        requestScrollToLatest("auto");
+          );
+          return located;
+        },
+        settled: () => isChatFeedMessagePositioned(
+          threadPanelRef.current,
+          pendingFocusMessageId,
+          { offset: 20 },
+        ),
+        subscribeLayoutChanges,
+        valid: () => {
+          const current = readViewportSnapshot();
+          return current.mode === "browsingHistory" && current.revision === viewport.revision;
+        },
+        onDone: () => {
+          if (located) {
+            locatedThreadMessageIdRef.current = pendingFocusMessageId;
+          } else {
+            requestScrollToLatest("auto");
+          }
+        },
+        onInvalidated: () => {
+          locatedThreadMessageIdRef.current = pendingFocusMessageId;
+        },
       });
-      return;
     }
 
     requestScrollToLatest(isNewThread ? "auto" : "smooth");
+    return undefined;
   }, [
     currentUserId,
     focusMessageId,
     isFollowingLatest,
+    readViewportSnapshot,
     requestScrollToLatest,
     runProgrammaticScroll,
     setFollowingLatest,
+    subscribeLayoutChanges,
     thread.replies,
     thread.replies.length,
     thread.rootMessage.id,
@@ -206,6 +243,8 @@ export function ChatThreadPanel({
           onSave={onSave}
           onSaveEdit={onSaveEdit}
           reactionPickerSignal={reactionPickerRequest.messageId === thread.rootMessage.id ? reactionPickerRequest.signal : undefined}
+          renderMessageBody={renderMessageBody}
+          renderReferenceCard={renderReferenceCard}
           usersById={usersById}
         />
         <button type="button" className="orf-chat-follow-button" onClick={() => onToggleFollow(!thread.following)}>
@@ -243,6 +282,8 @@ export function ChatThreadPanel({
                 onSave={onSave}
                 onSaveEdit={onSaveEdit}
                 reactionPickerSignal={reactionPickerRequest.messageId === reply.id ? reactionPickerRequest.signal : undefined}
+                renderMessageBody={renderMessageBody}
+                renderReferenceCard={renderReferenceCard}
                 usersById={usersById}
               />
             );

@@ -60,13 +60,16 @@ export function scrollChatFeedToMessage(
   return scrollChatFeedToElement(element, target, options);
 }
 
-export function isChatFeedMessageVisible(element: HTMLElement | null, messageId: string, margin = 24) {
+export function isChatFeedMessagePositioned(
+  element: HTMLElement | null,
+  messageId: string,
+  options: ChatFeedScrollOptions = {},
+  tolerance = 2,
+) {
   if (!element) return false;
   const target = findChatFeedMessageElement(element, messageId);
   if (!target) return false;
-  const elementRect = element.getBoundingClientRect();
-  const targetRect = target.getBoundingClientRect();
-  return targetRect.bottom > elementRect.top + margin && targetRect.top < elementRect.bottom - margin;
+  return isChatFeedElementPositioned(element, target, options, tolerance);
 }
 
 export function scrollChatFeedToUnread(element: HTMLElement | null, options: ChatFeedScrollOptions = {}) {
@@ -75,6 +78,15 @@ export function scrollChatFeedToUnread(element: HTMLElement | null, options: Cha
     element.querySelector<HTMLElement>("#orf-chat-unread-divider") ??
     element.querySelector<HTMLElement>("[data-chat-unread-message='true']");
   return scrollChatFeedToElement(element, target, { offset: chatFeedUnreadOffsetPx, ...options });
+}
+
+export function isChatFeedUnreadPositioned(element: HTMLElement | null, tolerance = 2) {
+  if (!element) return false;
+  const target =
+    element.querySelector<HTMLElement>("#orf-chat-unread-divider") ??
+    element.querySelector<HTMLElement>("[data-chat-unread-message='true']");
+  if (!target) return false;
+  return isChatFeedElementPositioned(element, target, { offset: chatFeedUnreadOffsetPx }, tolerance);
 }
 
 export function readChatFeedScrollAnchor(element: HTMLElement | null): ChatFeedScrollAnchor | null {
@@ -110,16 +122,35 @@ function scrollChatFeedToElement(
 ) {
   if (!target) return false;
   const behavior = options.behavior ?? "smooth";
+  const nextTop = chatFeedScrollTopForElement(element, target, options);
+  setChatFeedScrollTop(element, nextTop, behavior);
+  return true;
+}
+
+function chatFeedScrollTopForElement(
+  element: HTMLElement,
+  target: HTMLElement,
+  options: ChatFeedScrollOptions,
+) {
   const block = options.block ?? "start";
   const offset = options.offset ?? 0;
   const elementRect = element.getBoundingClientRect();
   const targetRect = target.getBoundingClientRect();
   const targetTop = element.scrollTop + targetRect.top - elementRect.top;
-  const nextTop = block === "center"
+  const intendedTop = block === "center"
     ? targetTop - (element.clientHeight / 2) + (targetRect.height / 2)
     : targetTop - offset;
-  setChatFeedScrollTop(element, Math.max(0, nextTop), behavior);
-  return true;
+  const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+  return Math.min(maxScrollTop, Math.max(0, intendedTop));
+}
+
+function isChatFeedElementPositioned(
+  element: HTMLElement,
+  target: HTMLElement,
+  options: ChatFeedScrollOptions,
+  tolerance: number,
+) {
+  return Math.abs(element.scrollTop - chatFeedScrollTopForElement(element, target, options)) <= tolerance;
 }
 
 function findChatFeedMessageElement(element: HTMLElement, messageId: string) {
@@ -132,9 +163,7 @@ export function setChatFeedScrollTopInstant(element: HTMLElement, top: number) {
   element.style.scrollBehavior = "auto";
   element.scrollTop = top;
   element.scrollTo({ top, behavior: "auto" });
-  window.requestAnimationFrame(() => {
-    element.style.scrollBehavior = previousScrollBehavior;
-  });
+  element.style.scrollBehavior = previousScrollBehavior;
 }
 
 function setChatFeedScrollTop(element: HTMLElement, top: number, behavior: ScrollBehavior) {

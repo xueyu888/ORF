@@ -4,6 +4,7 @@ import type { ChatMessage, ChatSearchResult, ChatUser } from "../../types/orf";
 import { chatChannelDisplayLabel } from "./chatChannelPresentation";
 import { formatDateTime, formatDay, formatTime } from "./chatFormat";
 import { ChatMarkdown, commentImageAttachmentIdsFromChatSystemMetadata } from "./chatMarkdown";
+import { chatMessageDisplayAuthor, chatMessageDisplayBody } from "./chatMessagePresentation";
 import type { ChatFeedbackReference } from "./chatModels";
 import type { ChatSearchScope, ChatSearchTypeFilter } from "./chatPanelTypes";
 import { chatSearchInputPlaceholder } from "./chatSearchSyntax";
@@ -16,6 +17,7 @@ type ChatSearchPanelProps = {
   onSearch: (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => Promise<void>;
   loading: boolean;
   query: string;
+  renderMessageBody?: (message: ChatMessage) => string | null | undefined;
   results: ChatSearchResult[];
   searched: boolean;
   searchScope: ChatSearchScope;
@@ -34,6 +36,7 @@ export function ChatSearchPanel({
   onSearch,
   loading,
   query,
+  renderMessageBody,
   results,
   searched,
   searchScope,
@@ -100,9 +103,14 @@ export function ChatSearchPanel({
         {results.map((result) => (
           <button type="button" key={result.message.id} onClick={() => onOpenResult(result)}>
             <span>{chatChannelDisplayLabel(result.channel, currentUserId, usersById)}</span>
-            <strong>{result.message.authorName}</strong>
+            <strong>{chatMessageDisplayAuthor(result.message, usersById).name}</strong>
             <small title={formatDateTime(result.message.createdAt)}>{formatDay(result.message.createdAt)} {formatTime(result.message.createdAt)}</small>
-            <SearchResultPreview feedbackItems={feedbackItems} message={result.message} usersById={usersById} />
+            <SearchResultPreview
+              body={chatMessageDisplayBody(result.message, renderMessageBody)}
+              feedbackItems={feedbackItems}
+              message={result.message}
+              usersById={usersById}
+            />
           </button>
         ))}
         {!loading && results.length === 0 && (
@@ -116,10 +124,12 @@ export function ChatSearchPanel({
 }
 
 function SearchResultPreview({
+  body,
   feedbackItems,
   message,
   usersById,
 }: {
+  body: string | null;
   feedbackItems?: readonly ChatFeedbackReference[];
   message: ChatMessage;
   usersById: Map<string, ChatUser>;
@@ -127,10 +137,10 @@ function SearchResultPreview({
   return (
     <>
       <div className="orf-chat-search-result-body">
-        {message.body.trim() ? (
+        {body?.trim() ? (
           <ChatMarkdown
             compact
-            body={message.body}
+            body={body}
             commentImageAttachmentIds={commentImageAttachmentIdsFromChatSystemMetadata(message.system)}
             feedbackItems={feedbackItems}
             usersById={usersById}
