@@ -253,6 +253,19 @@ function productionRuntimeAvailable() {
   return existsSync(paths.envFile) && existsSync(paths.nodeBin) && existsSync(paths.releaseManifestFile) && existsSync(resolve(paths.releaseDir, 'server.mjs'));
 }
 
+function productionTmpDir() {
+  if (process.env.ORF_PRODUCTION_TMPDIR) {
+    return process.env.ORF_PRODUCTION_TMPDIR;
+  }
+
+  const inheritedTmpDir = process.env.TMPDIR;
+  if (!inheritedTmpDir || /^\/mnt\/[A-Za-z](?:\/|$)/.test(inheritedTmpDir)) {
+    return '/tmp';
+  }
+
+  return inheritedTmpDir;
+}
+
 function readEnvFileValues(file) {
   if (!existsSync(file)) {
     return {};
@@ -279,6 +292,7 @@ function productionEnvironment(paths) {
     ORF_CURRENT_HOST_CONFIG_ROOT: paths.configRoot,
     ORF_ENVIRONMENT_FILE: paths.envFile,
     ORF_NODE_BIN: paths.nodeBin,
+    TMPDIR: productionTmpDir(),
   };
 }
 

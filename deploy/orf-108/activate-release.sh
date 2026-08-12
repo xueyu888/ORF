@@ -31,6 +31,22 @@ elif [[ "$systemctl_scope" != "system" ]]; then
   exit 2
 fi
 
+restart_backend() {
+  if [[ -n "${ORF_BACKEND_RESTART_COMMAND:-}" ]]; then
+    bash -c "$ORF_BACKEND_RESTART_COMMAND"
+  else
+    "${systemctl_command[@]}" restart "$backend_unit"
+  fi
+}
+
+restore_application_pointer() {
+  local target="$1"
+  local label="$2"
+  local restore_link="$releases_root/.${label}-${release_id}"
+  ln -s "$target" "$restore_link"
+  mv -Tf "$restore_link" "$releases_root/current"
+}
+
 cleanup() {
   if [[ -n "$incoming_dir" ]]; then
     rm -rf "$incoming_dir"
@@ -118,7 +134,18 @@ next_link="$releases_root/.current-${release_id}"
 ln -s "$release_id" "$next_link"
 mv -Tf "$next_link" "$releases_root/current"
 
-"${systemctl_command[@]}" restart "$backend_unit"
+if ! restart_backend; then
+  echo "New release backend restart failed: $release_id" >&2
+  if [[ -n "$previous_target" ]]; then
+    restore_application_pointer "$previous_target" "restart-failed"
+    restart_backend || true
+    echo "Application symlink rolled back to $previous_target; database migrations are forward-only and were not reverted." >&2
+  else
+    rm -f "$releases_root/current"
+    echo "No previous application release existed; removed the failed current pointer. Database migrations are forward-only and were not reverted." >&2
+  fi
+  exit 1
+fi
 
 healthy=false
 for _ in $(seq 1 30); do
@@ -132,10 +159,8 @@ done
 if [[ "$healthy" != true ]]; then
   echo "New release failed health check: $release_id" >&2
   if [[ -n "$previous_target" ]]; then
-    rollback_link="$releases_root/.rollback-${release_id}"
-    ln -s "$previous_target" "$rollback_link"
-    mv -Tf "$rollback_link" "$releases_root/current"
-    "${systemctl_command[@]}" restart "$backend_unit"
+    restore_application_pointer "$previous_target" "rollback"
+    restart_backend || true
     echo "Application symlink rolled back to $previous_target; database migrations are forward-only and were not reverted." >&2
   else
     rm -f "$releases_root/current"

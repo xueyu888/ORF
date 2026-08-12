@@ -2,8 +2,10 @@
 
 This directory switches the current public ORF application from the repository
 development watcher and `dist` directory to one compiled, immutable release
-managed by user systemd. It does not perform the separate 199.199.199.108
-database or gateway cutover.
+managed by the current-host production runtime. User systemd is preferred when
+available; WSL hosts without a user systemd bus use the detached production
+backend fallback. It does not perform the separate 199.199.199.108 database or
+gateway cutover.
 
 ## Ownership
 
@@ -46,7 +48,11 @@ release, switches the Web gateway to the release's `web` directory, checks both
 backend and gateway health, and automatically restores the legacy runtime if
 the compiled service cannot become healthy. Subsequent activations use the
 immutable current/previous pointers and restore both backend and Web to the
-same previous release if either health check fails.
+same previous release if either health check fails. Activation must never stop
+after only moving `releases/current`: if user systemd is unavailable, the script
+restarts the backend through the same detached production fallback used by
+`orf restart backend`, then verifies the backend process is running from the
+resolved current release directory.
 
 ## Manual Rollback And Logs
 
