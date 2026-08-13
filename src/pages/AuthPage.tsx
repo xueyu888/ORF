@@ -2,7 +2,7 @@ import { Check, Eye, EyeOff, LockKeyhole, Mail, Trash2, User } from "lucide-reac
 import type { LucideIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import brandLogo from "../assets/brand/orf-logo.png";
+import brandLogo from "../assets/brand/orf-mark.png";
 import { VisualBackgroundSlot } from "../components/VisualBackgroundSlot";
 import { Button, IconButton } from "../components/ui";
 import { readCachedAppearanceMode } from "../features/appearance/appearanceMode";
@@ -352,7 +352,7 @@ export function AuthPage() {
 
       <section className="orf-auth-panel" aria-labelledby="auth-title">
         <div className="orf-auth-logo">
-          <img className="orf-auth-logo-image" src={brandLogo} alt="ORF Flow" draggable={false} />
+          <img className="orf-auth-logo-image" src={brandLogo} alt="ORF" draggable={false} />
         </div>
 
         <div className="orf-auth-title-row">

@@ -1,16 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import zlib from "node:zlib";
 
 const require = createRequire(import.meta.url);
-const {
-  createAppIconForegroundRgba,
-  createAppIconRgba,
-} = require("../clients/desktop/icon-renderer.cjs");
+const { containRgba, encodeRgbaPng, readRgbaPng } = require("../clients/desktop/rgba-png.cjs");
 
 const repoRoot = process.cwd();
-const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const brandMarkPath = path.resolve(repoRoot, "src/assets/brand/orf-mark.png");
 const desktopIconPath = path.resolve(repoRoot, "src/assets/brand/orf-app-icon.png");
 const androidResRoot = path.resolve(repoRoot, "android/app/src/main/res");
 
@@ -33,63 +29,10 @@ function writeLauncherBackground() {
   fs.writeFileSync(targetPath, xml);
 }
 
-function encodeRgbaPng(width, height, rgba) {
-  const rowLength = width * 4;
-  const raw = Buffer.alloc((rowLength + 1) * height);
-  for (let y = 0; y < height; y += 1) {
-    const rowOffset = y * (rowLength + 1);
-    raw[rowOffset] = 0;
-    rgba.copy(raw, rowOffset + 1, y * rowLength, (y + 1) * rowLength);
-  }
+if (!fs.existsSync(brandMarkPath)) throw new Error(`Missing ORF brand mark: ${brandMarkPath}`);
+const brandMark = readRgbaPng(fs.readFileSync(brandMarkPath));
 
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr.writeUInt8(8, 8);
-  ihdr.writeUInt8(6, 9);
-  ihdr.writeUInt8(0, 10);
-  ihdr.writeUInt8(0, 11);
-  ihdr.writeUInt8(0, 12);
-
-  return Buffer.concat([
-    pngSignature,
-    pngChunk("IHDR", ihdr),
-    pngChunk("IDAT", zlib.deflateSync(raw, { level: 9 })),
-    pngChunk("IEND", Buffer.alloc(0)),
-  ]);
-}
-
-function pngChunk(type, data) {
-  const typeBuffer = Buffer.from(type, "ascii");
-  const chunk = Buffer.alloc(12 + data.length);
-  chunk.writeUInt32BE(data.length, 0);
-  typeBuffer.copy(chunk, 4);
-  data.copy(chunk, 8);
-  chunk.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])), 8 + data.length);
-  return chunk;
-}
-
-function crc32(input) {
-  let crc = 0xffffffff;
-  for (const byte of input) {
-    crc = (crc >>> 8) ^ crc32Table[(crc ^ byte) & 0xff];
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-const crc32Table = (() => {
-  const table = new Uint32Array(256);
-  for (let index = 0; index < table.length; index += 1) {
-    let value = index;
-    for (let bit = 0; bit < 8; bit += 1) {
-      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-    }
-    table[index] = value >>> 0;
-  }
-  return table;
-})();
-
-writePng(desktopIconPath, 1024, 1024, createAppIconRgba(1024, 1024));
+writePng(desktopIconPath, 1024, 1024, containRgba(brandMark, 1024, 1024, 0.92));
 writeLauncherBackground();
 
 for (const density of androidIconDensities) {
@@ -98,19 +41,19 @@ for (const density of androidIconDensities) {
     path.resolve(mipmapDir, "ic_launcher.png"),
     density.launcherSize,
     density.launcherSize,
-    createAppIconRgba(density.launcherSize, density.launcherSize),
+    containRgba(brandMark, density.launcherSize, density.launcherSize, 0.92),
   );
   writePng(
     path.resolve(mipmapDir, "ic_launcher_round.png"),
     density.launcherSize,
     density.launcherSize,
-    createAppIconRgba(density.launcherSize, density.launcherSize),
+    containRgba(brandMark, density.launcherSize, density.launcherSize, 0.92),
   );
   writePng(
     path.resolve(mipmapDir, "ic_launcher_foreground.png"),
     density.foregroundSize,
     density.foregroundSize,
-    createAppIconForegroundRgba(density.foregroundSize, density.foregroundSize),
+    containRgba(brandMark, density.foregroundSize, density.foregroundSize, 0.74),
   );
 }
 

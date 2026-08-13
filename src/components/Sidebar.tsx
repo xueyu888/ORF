@@ -5,7 +5,7 @@ import {
   useState,
 } from "react";
 import { NavLink } from "react-router-dom";
-import brandLogo from "../assets/brand/orf-logo.png";
+import brandLogo from "../assets/brand/orf-mark.png";
 import { canShowFrontend, canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
 import type { VisualBackgroundCrop } from "../domain/settings/visualBackgrounds";

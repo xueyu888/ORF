@@ -879,8 +879,10 @@ test("Win11 attention frames flash the whole high-resolution icon without numeri
 
   assert.equal(normalFrame.length, size * size * 4);
   assert.equal(highlightedFrame.length, size * size * 4);
-  assert.ok(bounds.width >= size * 0.94);
-  assert.ok(bounds.height >= size * 0.94);
+  assert.ok(bounds.width >= size * 0.8);
+  assert.ok(bounds.height >= size * 0.8);
+  assert.equal(normalFrame[3], 0);
+  assert.equal(normalFrame[(size - 1) * 4 + 3], 0);
   assert.ok(changedPixelRatio(normalFrame, highlightedFrame, size) > 0.85);
   assert.ok(changedPixelRatio(normalFrame, highlightedFrame, size, 0.15) > 0.95);
   assert.deepEqual(legacyCountFrame, normalFrame);
