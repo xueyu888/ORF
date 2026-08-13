@@ -26,10 +26,7 @@
 </p>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/readme/bounty-hall-dark.png" />
-    <img src="./docs/assets/readme/bounty-hall-light.png" alt="ORF 悬赏大厅，支持亮色和暗色外观" width="100%" />
-  </picture>
+  <img src="./docs/assets/readme/orf-bounty-hall-demo.png" alt="ORF 悬赏大厅产品界面示意图" width="100%" />
 </p>
 
 ORF 是一个面向团队的目标执行与协作工作台。它不止记录“要做什么”，还把目标拆解、执行过程、结果证据和持续反馈连接起来，让团队能看见工作为什么发生、结果如何验证、方向何时需要调整。
