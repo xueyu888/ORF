@@ -40,12 +40,15 @@ const { windowsNotificationToastXml } = require("../clients/desktop/notification
     title: string;
   }) => string;
 };
-const { createTrayIconRgba } = require("../clients/desktop/icon-renderer.cjs") as {
-  createTrayIconRgba: (width: number, height: number, options: {
+const { createAppIconRgba, createDesktopShellIconRgba, createUnreadBadgeRgba } = require("../clients/desktop/icon-renderer.cjs") as {
+  createAppIconRgba: (width: number, height: number, options?: { scale?: number }) => Buffer;
+  createDesktopShellIconRgba: (width: number, height: number, options: {
+    context?: "taskbar" | "tray";
     pulse?: boolean;
     state?: "attention" | "normal" | "unread";
     unreadCount?: number;
   }) => Buffer;
+  createUnreadBadgeRgba: (width: number, height: number, unreadCount?: number) => Buffer;
 };
 
 const currentUserId = "user-current";
@@ -870,13 +873,18 @@ test("stripChatNotificationMarkdown removes common formatting without dropping t
   );
 });
 
-test("Win11 attention frames flash the whole high-resolution icon without numeric badges", () => {
+test("Win11 app icon stays transparent while attention owns the numeric badge", () => {
   const size = 128;
-  const normalFrame = createTrayIconRgba(size, size, { state: "attention", pulse: false });
-  const highlightedFrame = createTrayIconRgba(size, size, { state: "attention", pulse: true });
-  const legacyCountFrame = createTrayIconRgba(size, size, { state: "attention", pulse: false, unreadCount: 88 });
+  const appIcon = createAppIconRgba(size, size);
+  const unreadFrame = createDesktopShellIconRgba(size, size, { context: "taskbar", state: "unread", unreadCount: 1 });
+  const secondUnreadFrame = createDesktopShellIconRgba(size, size, { context: "taskbar", state: "unread", unreadCount: 2 });
+  const normalFrame = createDesktopShellIconRgba(size, size, { context: "taskbar", state: "attention", pulse: false, unreadCount: 1 });
+  const highlightedFrame = createDesktopShellIconRgba(size, size, { context: "taskbar", state: "attention", pulse: true, unreadCount: 1 });
+  const overlayFrame = createUnreadBadgeRgba(32, 32, 1);
+  const secondOverlayFrame = createUnreadBadgeRgba(32, 32, 2);
   const bounds = opaquePixelBounds(normalFrame, size);
 
+  assert.deepEqual(createDesktopShellIconRgba(size, size, { state: "normal" }), appIcon);
   assert.equal(normalFrame.length, size * size * 4);
   assert.equal(highlightedFrame.length, size * size * 4);
   assert.ok(bounds.width >= size * 0.8);
@@ -885,18 +893,21 @@ test("Win11 attention frames flash the whole high-resolution icon without numeri
   assert.equal(normalFrame[(size - 1) * 4 + 3], 0);
   assert.ok(changedPixelRatio(normalFrame, highlightedFrame, size) > 0.85);
   assert.ok(changedPixelRatio(normalFrame, highlightedFrame, size, 0.15) > 0.95);
-  assert.deepEqual(legacyCountFrame, normalFrame);
+  assert.ok(changedPixelRatio(appIcon, unreadFrame, size) > 0.04);
+  assert.ok(changedPixelRatio(unreadFrame, secondUnreadFrame, size) > 0.001);
+  assert.ok(changedPixelRatio(overlayFrame, secondOverlayFrame, 32) > 0.001);
 });
 
-test("Win11 desktop shell uses separate crisp taskbar and tray sizes with no numeric overlay", () => {
+test("Win11 desktop shell composes one top-right numeric badge for separate taskbar and tray sizes", () => {
   const source = readFileSync(new URL("../clients/desktop/main.cjs", import.meta.url), "utf8");
 
   assert.match(source, /DESKTOP_TASKBAR_ICON_BITMAP_SIZE = 32/);
   assert.match(source, /DESKTOP_TRAY_ICON_BITMAP_SIZE = 16/);
+  assert.match(source, /const baseState = state === "attention" && pulse \? "attention" : "normal"/);
   assert.match(source, /targetWindow\.setIcon\(createDesktopTaskbarIconImage\(state, pulse\)\)/);
   assert.match(source, /tray\.setImage\(createDesktopTrayIconImage\(state, pulse\)\)/);
-  assert.match(source, /targetWindow\.setOverlayIcon\(null, ""\)/);
-  assert.doesNotMatch(source, /createUnreadBadgeRgba/);
+  assert.match(source, /unreadCount: desktopAttentionBadgeCount\(\)/);
+  assert.match(source, /attentionCount > 0 \? createDesktopTaskbarOverlayIconImage\(attentionCount\) : null/);
 });
 
 test("Win11 desktop windows wait for their first rendered frame before becoming visible", () => {

@@ -5,7 +5,7 @@ const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const { pathToFileURL } = require("node:url");
 const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, net, powerMonitor, safeStorage, screen, shell } = require("electron");
-const { createTrayIconRgba } = require("./icon-renderer.cjs");
+const { createDesktopShellIconRgba, createUnreadBadgeRgba } = require("./icon-renderer.cjs");
 const { windowsNotificationToastXml } = require("./notification-renderer.cjs");
 const { launchDesktopUpdateInstallerAfterExit } = require("./update-installer.cjs");
 
@@ -904,7 +904,10 @@ function updateDesktopUnreadState(options = {}) {
   if (process.platform !== "win32" || !targetWindow || targetWindow.isDestroyed()) return;
 
   const attentionCount = desktopAttentionBadgeCount();
-  targetWindow.setOverlayIcon(null, "");
+  targetWindow.setOverlayIcon(
+    attentionCount > 0 ? createDesktopTaskbarOverlayIconImage(attentionCount) : null,
+    attentionCount > 0 ? desktopAttentionDescription(desktopShellState.attentionState) : "",
+  );
   if (attentionCount > 0) {
     requestDesktopAttentionForState(options);
     return;
@@ -978,16 +981,33 @@ function createDesktopTrayIconImage(state, pulse) {
 }
 
 function createDesktopTaskbarIconImage(state, pulse) {
-  const image = createDesktopShellIconImage(DESKTOP_TASKBAR_ICON_BITMAP_SIZE, state, pulse);
+  const baseState = state === "attention" && pulse ? "attention" : "normal";
+  const image = createDesktopShellIconImage(DESKTOP_TASKBAR_ICON_BITMAP_SIZE, baseState, pulse);
   image.setTemplateImage(false);
   return image;
 }
 
+function createDesktopTaskbarOverlayIconImage(unreadCount) {
+  return createNativeImageFromRgba(
+    DESKTOP_TRAY_ICON_BITMAP_SIZE,
+    createUnreadBadgeRgba(
+      DESKTOP_TRAY_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
+      DESKTOP_TRAY_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
+      unreadCount,
+    ),
+  );
+}
+
 function createDesktopShellIconImage(logicalSize, state, pulse) {
-  return createNativeImageFromRgba(logicalSize, createTrayIconRgba(
+  return createNativeImageFromRgba(logicalSize, createDesktopShellIconRgba(
     logicalSize * DESKTOP_ICON_BITMAP_SCALE,
     logicalSize * DESKTOP_ICON_BITMAP_SCALE,
-    { pulse, state },
+    {
+      context: logicalSize === DESKTOP_TRAY_ICON_BITMAP_SIZE ? "tray" : "taskbar",
+      pulse,
+      state,
+      unreadCount: desktopAttentionBadgeCount(),
+    },
   ));
 }
 

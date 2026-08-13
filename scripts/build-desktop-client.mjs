@@ -23,6 +23,7 @@ const notificationRendererSource = path.resolve(repoRoot, "clients/desktop/notif
 const preloadSource = path.resolve(repoRoot, "clients/desktop/preload.cjs");
 const updateInstallerSource = path.resolve(repoRoot, "clients/desktop/update-installer.cjs");
 const desktopAppIconSource = path.resolve(repoRoot, "src/assets/brand/orf-app-icon.png");
+const desktopBrandMarkSource = path.resolve(repoRoot, "src/assets/brand/orf-mark.png");
 const iconRendererTarget = path.resolve(tempRoot, "icon-renderer.cjs");
 const rgbaPngTarget = path.resolve(tempRoot, "rgba-png.cjs");
 const mainTarget = path.resolve(tempRoot, "main.cjs");
@@ -34,6 +35,7 @@ const configTarget = path.resolve(tempRoot, "electron-builder.json");
 const appAssetsTargetDir = path.resolve(tempRoot, "assets");
 const buildResourcesTargetDir = path.resolve(tempRoot, "buildResources");
 const appIconTarget = path.resolve(appAssetsTargetDir, "icon.png");
+const brandMarkTarget = path.resolve(appAssetsTargetDir, "brand-mark.png");
 const buildIconTarget = path.resolve(buildResourcesTargetDir, "icon.png");
 const installerIncludeTarget = path.resolve(buildResourcesTargetDir, "installer.nsh");
 const desktopIconSizePx = 256;
@@ -48,6 +50,7 @@ const builderConfig = {
     output: outputDir,
   },
   files: [
+    "assets/brand-mark.png",
     "assets/icon.png",
     "icon-renderer.cjs",
     "main.cjs",
@@ -96,10 +99,14 @@ function prepareDesktopIcons() {
   if (!fs.existsSync(desktopAppIconSource)) {
     throw new Error(`Missing desktop app icon: ${desktopAppIconSource}. Run npm run client:icons:generate.`);
   }
+  if (!fs.existsSync(desktopBrandMarkSource)) {
+    throw new Error(`Missing desktop brand mark: ${desktopBrandMarkSource}.`);
+  }
   fs.mkdirSync(appAssetsTargetDir, { recursive: true });
   fs.mkdirSync(buildResourcesTargetDir, { recursive: true });
   const desktopIcon = createDesktopIconPng(desktopAppIconSource, desktopIconSizePx);
   fs.writeFileSync(appIconTarget, desktopIcon);
+  fs.copyFileSync(desktopBrandMarkSource, brandMarkTarget);
   fs.writeFileSync(buildIconTarget, desktopIcon);
 }
 

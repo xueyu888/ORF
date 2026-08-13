@@ -3,7 +3,8 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { containRgba, encodeRgbaPng, readRgbaPng } = require("../clients/desktop/rgba-png.cjs");
+const { createAppIconRgba } = require("../clients/desktop/icon-renderer.cjs");
+const { containRgba, encodeRgbaPng } = require("../clients/desktop/rgba-png.cjs");
 
 const repoRoot = process.cwd();
 const brandMarkPath = path.resolve(repoRoot, "src/assets/brand/orf-mark.png");
@@ -30,9 +31,8 @@ function writeLauncherBackground() {
 }
 
 if (!fs.existsSync(brandMarkPath)) throw new Error(`Missing ORF brand mark: ${brandMarkPath}`);
-const brandMark = readRgbaPng(fs.readFileSync(brandMarkPath));
 
-writePng(desktopIconPath, 1024, 1024, containRgba(brandMark, 1024, 1024, 0.92));
+writePng(desktopIconPath, 1024, 1024, createAppIconRgba(1024, 1024));
 writeLauncherBackground();
 
 for (const density of androidIconDensities) {
@@ -41,19 +41,28 @@ for (const density of androidIconDensities) {
     path.resolve(mipmapDir, "ic_launcher.png"),
     density.launcherSize,
     density.launcherSize,
-    containRgba(brandMark, density.launcherSize, density.launcherSize, 0.92),
+    createAppIconRgba(density.launcherSize, density.launcherSize),
   );
   writePng(
     path.resolve(mipmapDir, "ic_launcher_round.png"),
     density.launcherSize,
     density.launcherSize,
-    containRgba(brandMark, density.launcherSize, density.launcherSize, 0.92),
+    createAppIconRgba(density.launcherSize, density.launcherSize),
   );
   writePng(
     path.resolve(mipmapDir, "ic_launcher_foreground.png"),
     density.foregroundSize,
     density.foregroundSize,
-    containRgba(brandMark, density.foregroundSize, density.foregroundSize, 0.74),
+    containRgba(
+      {
+        data: createAppIconRgba(density.foregroundSize, density.foregroundSize),
+        height: density.foregroundSize,
+        width: density.foregroundSize,
+      },
+      density.foregroundSize,
+      density.foregroundSize,
+      0.8,
+    ),
   );
 }
 

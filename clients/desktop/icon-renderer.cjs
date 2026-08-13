@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { containRgba, readRgbaPng } = require("./rgba-png.cjs");
 
-const packagedBrandMarkPath = path.join(__dirname, "assets", "icon.png");
+const packagedBrandMarkPath = path.join(__dirname, "assets", "brand-mark.png");
 const sourceBrandMarkPath = path.resolve(__dirname, "..", "..", "src", "assets", "brand", "orf-mark.png");
 const attentionSurface = {
   top: { r: 255, g: 84, b: 126, a: 255 },
@@ -10,28 +10,59 @@ const attentionSurface = {
   bottom: { r: 158, g: 20, b: 62, a: 255 },
 };
 const unreadBadge = {
-  outer: { r: 255, g: 255, b: 255, a: 245 },
-  top: { r: 242, g: 57, b: 66, a: 255 },
-  bottom: { r: 198, g: 30, b: 43, a: 255 },
+  outer: { r: 255, g: 255, b: 255, a: 255 },
+  top: { r: 30, g: 32, b: 37, a: 255 },
+  bottom: { r: 10, g: 11, b: 14, a: 255 },
+  text: { r: 255, g: 255, b: 255, a: 255 },
+};
+const badgeDigitSegments = {
+  "0": ["top", "upperLeft", "upperRight", "lowerLeft", "lowerRight", "bottom"],
+  "1": ["upperRight", "lowerRight"],
+  "2": ["top", "upperRight", "middle", "lowerLeft", "bottom"],
+  "3": ["top", "upperRight", "middle", "lowerRight", "bottom"],
+  "4": ["upperLeft", "upperRight", "middle", "lowerRight"],
+  "5": ["top", "upperLeft", "middle", "lowerRight", "bottom"],
+  "6": ["top", "upperLeft", "middle", "lowerLeft", "lowerRight", "bottom"],
+  "7": ["top", "upperRight", "lowerRight"],
+  "8": ["top", "upperLeft", "upperRight", "middle", "lowerLeft", "lowerRight", "bottom"],
+  "9": ["top", "upperLeft", "upperRight", "middle", "lowerRight", "bottom"],
 };
 
 let cachedBrandMark;
 
-function createTrayIconRgba(width, height = width, options = {}) {
+function createAppIconRgba(width, height = width, options = {}) {
+  const scale = clamp01(Number.isFinite(options.scale) ? options.scale : 0.98);
+  return containRgba(loadBrandMark(), width, height, scale);
+}
+
+function createDesktopShellIconRgba(width, height = width, options = {}) {
   const state = options.state === "attention" || options.state === "unread" ? options.state : "normal";
   const pulse = options.pulse === true;
+  const context = options.context === "tray" ? "tray" : "taskbar";
   const canvas = pulse && state === "attention"
     ? createAttentionFrame(width, height)
-    : containRgba(loadBrandMark(), width, height, 0.92);
+    : createAppIconRgba(width, height);
 
-  if (state === "unread") {
+  if (state !== "normal" && !pulse) {
     const size = Math.min(width, height);
-    drawUnreadDot(canvas, width, height, {
-      centerX: width / 2 + size * 0.29,
-      centerY: height / 2 - size * 0.29,
-      radius: size * 0.115,
+    drawUnreadBadge(canvas, width, height, {
+      centerX: width / 2 + size * (context === "tray" ? 0.29 : 0.255),
+      centerY: height / 2 - size * (context === "tray" ? 0.29 : 0.255),
+      count: normalizeUnreadCount(options.unreadCount),
+      radius: size * (context === "tray" ? 0.24 : 0.255),
     });
   }
+  return canvas;
+}
+
+function createUnreadBadgeRgba(width, height = width, unreadCount = 0) {
+  const canvas = Buffer.alloc(width * height * 4);
+  drawUnreadBadge(canvas, width, height, {
+    centerX: width / 2,
+    centerY: height / 2,
+    count: normalizeUnreadCount(unreadCount),
+    radius: Math.min(width, height) * 0.48,
+  });
   return canvas;
 }
 
@@ -70,12 +101,82 @@ function loadBrandMark() {
   return cachedBrandMark;
 }
 
-function drawUnreadDot(canvas, width, height, options) {
+function drawUnreadBadge(canvas, width, height, options) {
   drawCircle(canvas, width, height, options.centerX, options.centerY, options.radius, unreadBadge.outer);
-  drawCircleGradient(canvas, width, height, options.centerX, options.centerY, options.radius * 0.78, [
+  const innerRadius = options.radius * 0.82;
+  drawCircleGradient(canvas, width, height, options.centerX, options.centerY, innerRadius, [
     { offset: 0, color: unreadBadge.top },
     { offset: 1, color: unreadBadge.bottom },
   ]);
+  if (options.count > 0) {
+    drawBadgeText(canvas, width, height, options.centerX, options.centerY, innerRadius, String(Math.min(99, options.count)));
+  }
+}
+
+function drawBadgeText(canvas, width, height, centerX, centerY, radius, text) {
+  const digits = [...text].filter((character) => badgeDigitSegments[character]);
+  if (digits.length === 0) return;
+  const digitWidth = radius * (digits.length === 1 ? 0.72 : 0.56);
+  const digitHeight = radius * (digits.length === 1 ? 1.28 : 1.14);
+  const gap = digits.length === 1 ? 0 : radius * 0.1;
+  const textWidth = digits.length * digitWidth + Math.max(0, digits.length - 1) * gap;
+  const stroke = radius * (digits.length === 1 ? 0.24 : 0.17);
+  let cursorX = centerX - textWidth / 2;
+  for (const digit of digits) {
+    drawBadgeDigit(canvas, width, height, {
+      digit,
+      height: digitHeight,
+      stroke,
+      width: digitWidth,
+      x: cursorX - (digits.length === 1 && digit === "1" ? digitWidth * 0.19 : 0),
+      y: centerY - digitHeight / 2,
+    });
+    cursorX += digitWidth + gap;
+  }
+}
+
+function drawBadgeDigit(canvas, width, height, glyph) {
+  const left = glyph.x + glyph.stroke / 2;
+  const right = glyph.x + glyph.width - glyph.stroke / 2;
+  const top = glyph.y + glyph.stroke / 2;
+  const middle = glyph.y + glyph.height / 2;
+  const bottom = glyph.y + glyph.height - glyph.stroke / 2;
+  const segments = {
+    top: [left, top, right, top],
+    upperLeft: [left, top, left, middle],
+    upperRight: [right, top, right, middle],
+    middle: [left, middle, right, middle],
+    lowerLeft: [left, middle, left, bottom],
+    lowerRight: [right, middle, right, bottom],
+    bottom: [left, bottom, right, bottom],
+  };
+  for (const segmentName of badgeDigitSegments[glyph.digit]) {
+    drawCapsule(canvas, width, height, segments[segmentName], glyph.stroke, unreadBadge.text);
+  }
+}
+
+function drawCapsule(canvas, width, height, segment, stroke, color) {
+  const [startX, startY, endX, endY] = segment;
+  const radius = stroke / 2;
+  const minX = Math.floor(Math.min(startX, endX) - radius - 1);
+  const maxX = Math.ceil(Math.max(startX, endX) + radius + 1);
+  const minY = Math.floor(Math.min(startY, endY) - radius - 1);
+  const maxY = Math.ceil(Math.max(startY, endY) + radius + 1);
+  const deltaX = endX - startX;
+  const deltaY = endY - startY;
+  const segmentLengthSquared = deltaX * deltaX + deltaY * deltaY;
+  for (let y = minY; y < maxY; y += 1) {
+    for (let x = minX; x < maxX; x += 1) {
+      const projection = segmentLengthSquared <= 0
+        ? 0
+        : clamp01(((x + 0.5 - startX) * deltaX + (y + 0.5 - startY) * deltaY) / segmentLengthSquared);
+      const nearestX = startX + deltaX * projection;
+      const nearestY = startY + deltaY * projection;
+      const distance = Math.hypot(x + 0.5 - nearestX, y + 0.5 - nearestY);
+      const coverage = clamp01(radius + 0.5 - distance);
+      if (coverage > 0) blendPixel(canvas, width, height, x, y, { ...color, a: Math.round(color.a * coverage) });
+    }
+  }
 }
 
 function compositeRgba(destination, source) {
@@ -166,4 +267,9 @@ function clamp01(value) {
   return Math.max(0, Math.min(1, value));
 }
 
-module.exports = { createTrayIconRgba };
+function normalizeUnreadCount(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
+}
+
+module.exports = { createAppIconRgba, createDesktopShellIconRgba, createUnreadBadgeRgba };
