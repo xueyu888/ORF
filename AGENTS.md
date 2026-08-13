@@ -72,6 +72,7 @@
 提交代码 → 构建生产不可变包和客户端私有 Draft
 → 切换并重启生产 Web/后端/网关 → 验收
 → 公开客户端并写入 ORF 主更新源 → 广播更新
+→ 将发布 tag 快进到 main
 ```
 
 - 生产入口验收通过前，客户端只能保存在私有 GitHub Draft；不得公开 Release、写入 ORF 主更新源或广播。
@@ -79,6 +80,7 @@
 - 生产验收必须覆盖 release 版本和提交、后端健康、公网网关健康，以及公网首页与当前 release Web 产物一致性。
 - `orf restart` 只管理开发运行时，不能代替生产不可变 release 激活、生产后端重启和 `public-gateway` 强制重建。
 - 只有生产验收通过后才能执行 `release:clients -- --publish-staged`；主更新源同步成功后才能执行 `--broadcast-only`。
+- 只有广播成功后才能用发布 tag 纯快进 `main`；推送后 `origin/main` 必须与 `TAG^{commit}` 完全一致。快进失败时必须停止，不得创建合并提交、重写 tag 或强推主分支。
 
 创建提交前，必须先确认本次要提交的完整范围：
 
