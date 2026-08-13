@@ -4,8 +4,8 @@ This directory switches the current public ORF application from the repository
 development watcher and `dist` directory to one compiled, immutable release
 managed by the current-host production runtime. User systemd is preferred when
 available; WSL hosts without a user systemd bus use the detached production
-backend fallback. It does not perform the separate 199.199.199.108 database or
-gateway cutover.
+backend fallback. It does not perform database migration; local Windows
+PostgreSQL to WSL PostgreSQL migration belongs to `deploy/local-wsl-postgres`.
 
 ## Ownership
 

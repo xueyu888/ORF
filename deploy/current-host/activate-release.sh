@@ -81,7 +81,7 @@ export ORF_BACKEND_SYSTEMD_UNIT="$unit"
 export ORF_BACKEND_HEALTH_URL="${ORF_BACKEND_HEALTH_URL:-http://127.0.0.1:8787/health}"
 configure_backend_restart
 
-if ! "$repo_root/deploy/orf-108/activate-release.sh" "$@"; then
+if ! "$repo_root/deploy/current-host/activate-release-package.sh" "$@"; then
   if [[ "$had_current" == false ]]; then
     disable_systemd_unit
     run_orf up

@@ -126,7 +126,9 @@ orf status --dev
 
 开发模式下，`orf up --dev` 只校验 `package.json`、`package-lock.json` 与已安装顶层依赖版本一致，不再隐式执行 `npm install`。依赖缺失或漂移时会明确失败，并要求开发者单独运行 `npm ci`，从而把依赖安装与应用启动拆开。随后才执行运行依赖检查：PostgreSQL 缺配置或不可连接时直接失败；当 `ORY_PUBLIC_URL` / `OBJECT_STORAGE_ENDPOINT` 指向本地地址时，Ory 和 MinIO 不健康会先运行对应的本地启动脚本；当 `ORF_LOCAL_SETTLEMENT_SERVICE_URL` 指向本地地址时，匿名互评服务不健康会先运行 `systemctl --user start orf-local-private-service.service`；指向共享公共地址时，`orf up --dev` 只会检查，不会尝试拉起这些服务。匿名互评服务是启动期可选依赖，不健康时只影响匿名互评草稿、提交、汇总和结算比例读取，不阻塞 Backend / Frontend 启动。
 
-生产部署使用 `npm run build:release` 在构建机生成不可变发布包。发布包包含编译后的 `server.mjs`、`migrate.mjs`、前端静态产物、SQL 迁移和产物清单；运行主机的 systemd 只从 `releases/current` 执行 Node 产物，不读取 TypeScript 源码，不需要 `tsx`，也不在启动时访问 npm registry。具体激活和回滚契约见 `deploy/orf-108/README.md`。
+生产部署使用 `npm run build:release` 在构建机生成不可变发布包。发布包包含编译后的 `server.mjs`、`migrate.mjs`、前端静态产物、SQL 迁移和产物清单；运行主机的 systemd 只从 `releases/current` 执行 Node 产物，不读取 TypeScript 源码，不需要 `tsx`，也不在启动时访问 npm registry。具体激活和回滚契约见 `deploy/current-host/README.md`。
+
+本机数据库迁移目标是把 Windows PostgreSQL 服务替换为 WSL/Linux PostgreSQL；迁移工具和步骤见 `deploy/local-wsl-postgres/README.md`。这不是远端主机切换。
 
 所有运行时写入必须位于不可变发布目录之外。设置和客户端更新资产分别由 `ORF_SETTINGS_DATA_DIR`、`ORF_CLIENT_UPDATE_ASSET_DIR` 指向持久数据目录；GitHub 轮询游标由 `GITHUB_SYNC_STATE_FILE` 指向持久可写文件。当前对外主机的编译运行、user-systemd、日志和回滚契约见 `deploy/current-host/README.md`。
 
