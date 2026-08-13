@@ -1,5 +1,11 @@
 import type { ComponentType } from "react";
 
+declare const orfUnitOfWorkTokenBrand: unique symbol;
+
+export type OrfUnitOfWorkToken = {
+  readonly [orfUnitOfWorkTokenBrand]: true;
+};
+
 export type OrfWebModuleCommandItem = {
   readonly label: string;
   readonly path: string;

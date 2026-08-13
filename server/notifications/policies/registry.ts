@@ -33,6 +33,11 @@ export const notificationPolicyRegistry: Partial<Record<CoreNotificationKind, No
     replyTarget: "metadata-comment-target",
     stream: "personalNotification",
   },
+  "chat.reaction.created": {
+    kind: "chat.reaction.created",
+    replyTarget: "none",
+    stream: "personalNotification",
+  },
   "data.sync.conflict": {
     kind: "data.sync.conflict",
     replyTarget: "none",

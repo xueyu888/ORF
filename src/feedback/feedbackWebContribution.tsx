@@ -9,7 +9,7 @@ import {
   type FeedbackWebUser,
 } from "@orf/feedback-module/web";
 import type { AnyChatReferenceCardRegistration } from "../features/chat/chatReferenceCardProvider";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { ImagePreviewDialog, type ImagePreview } from "../components/ImagePreviewDialog";
 import { UserAvatar } from "../components/UserAvatar";
 import { hasPermission } from "../config/permissions";
@@ -103,40 +103,49 @@ function FeedbackCommentBodyText({
 }
 
 function FeedbackCommentComposer({
+  allowEmptySubmit,
   currentMember,
   currentUserAvatarUrl,
   currentUserId,
   draft,
+  footerActions,
   mentionableUsers,
   mode,
   onCancelMode,
   onDraftChange,
   onSubmit,
   onUploadAttachment,
+  submitLabel,
 }: {
+  allowEmptySubmit?: boolean;
   currentMember: string;
   currentUserAvatarUrl?: string | null;
   currentUserId: string;
   draft: FeedbackCommentDraft;
+  footerActions?: ReactNode;
   mentionableUsers: FeedbackCommentMentionUser[];
   mode: FeedbackCommentDraftMode;
   onCancelMode: () => void;
   onDraftChange: (draft: FeedbackCommentDraft) => void;
   onSubmit: (event: FormEvent) => void;
   onUploadAttachment: (file: File) => Promise<{ markdown: string; previewUrl?: string | null } | null>;
+  submitLabel?: string;
 }) {
   return (
     <CommentComposer
+      allowEmptySubmit={allowEmptySubmit}
       currentMember={currentMember}
       currentUserAvatarUrl={currentUserAvatarUrl}
       currentUserId={currentUserId}
       draft={draft as OrfRichTextDraft}
+      footerActions={footerActions}
       mentionableUsers={feedbackMentionUsersForHost(mentionableUsers)}
       mode={mode}
       onCancelMode={onCancelMode}
       onDraftChange={(nextDraft) => onDraftChange(nextDraft)}
       onSubmit={onSubmit}
       onUploadAttachment={onUploadAttachment}
+      submitLabel={submitLabel}
     />
   );
 }

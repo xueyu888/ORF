@@ -1,10 +1,9 @@
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { OrfUnitOfWorkToken } from "@orf/module-protocol";
 import type { CommentAttachment, CommentTargetType } from "../../src/types/orf";
 import type { RuntimeScope } from "../repositories/runtimeScope";
 
 export type CommentTargetAccess = "allowed" | "forbidden" | "notFound";
 export type CommentTargetInvalidationModel = "feedback" | "taskManagement";
-export type CommentTargetDatabase = Pick<NodePgDatabase<any>, "delete" | "insert" | "select" | "update">;
 
 export type CommentTargetActor = {
   readonly canManageAllComments?: boolean;
@@ -45,10 +44,10 @@ export interface CommentTargetAdapter {
   canComment(actor: CommentTargetActor, target: CommentTargetSnapshot): Promise<CommentTargetAccess>;
   canRead(actor: CommentTargetActor, target: CommentTargetSnapshot): Promise<CommentTargetAccess>;
   href(targetId: string, commentId?: string | null): string;
-  lockForComment(database: CommentTargetDatabase, target: CommentTargetSnapshot): Promise<boolean>;
+  lockForComment(unitOfWork: OrfUnitOfWorkToken, target: CommentTargetSnapshot): Promise<boolean>;
   resolve(targetId: string): Promise<CommentTargetSnapshot | null>;
   afterMessageCommitted?(event: CommentMessageCommittedEvent, result?: CommentTargetCommitResult): Promise<void>;
-  onMessageCommitted?(event: CommentMessageCommittedEvent, database: CommentTargetDatabase): Promise<CommentTargetCommitResult | void>;
+  onMessageCommitted?(event: CommentMessageCommittedEvent, unitOfWork: OrfUnitOfWorkToken): Promise<CommentTargetCommitResult | void>;
 }
 
 const commentTargetAdapters = new Map<CommentTargetType, CommentTargetAdapter>();

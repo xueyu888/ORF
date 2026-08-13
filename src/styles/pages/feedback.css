@@ -228,7 +228,6 @@
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page :is(
   .feedback-issue-original-card,
   .feedback-issue-comment-card,
-  .feedback-issue-event-list,
   .feedback-issue-composer
 ) {
   border-color: var(--orf-material-content-hairline);
@@ -241,12 +240,6 @@
 
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .feedback-issue-comment-card {
   box-shadow: var(--orf-material-content-shadow-soft);
-}
-
-.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .feedback-issue-event-list {
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--orf-accent-soft) 32%, transparent), transparent 54%),
-    var(--orf-material-content-tertiary);
 }
 
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .feedback-issue-composer {
@@ -369,7 +362,6 @@
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page :is(
     .feedback-issue-original-card,
     .feedback-issue-comment-card,
-    .feedback-issue-event-list,
     .feedback-issue-composer
   ) {
     border-radius: 16px;
@@ -402,7 +394,6 @@
     .feedback-label-list,
     .feedback-issue-original-card,
     .feedback-issue-comment-card,
-    .feedback-issue-event-list,
     .feedback-issue-composer,
     .feedback-issue-sidebar,
     .feedback-create-editor-card,

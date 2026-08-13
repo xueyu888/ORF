@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   canPreviewFeedbackReportAttachment,
   feedbackNotificationCardReferenceFromPayload,
+  feedbackNotificationEventKindFromPayload,
   feedbackReferenceCardDataFromReadModel,
   feedbackReportAttachmentDto,
   feedbackReportAttachmentPreviewKind,
@@ -12,6 +13,7 @@ import {
   planFeedbackAssigneeChangedNotification,
   planFeedbackCommentCreatedNotification,
   planFeedbackCreatedNotification,
+  planFeedbackFollowUpNotification,
   planFeedbackLifecycleChangedNotification,
   type FeedbackIssueReadModelData,
 } from "@orf/feedback-module/contracts";
@@ -407,7 +409,7 @@ describe("feedback module domain", () => {
       }),
     ];
 
-    assert.deepEqual(plans.map((plan) => plan.kind), [
+    assert.deepEqual(plans.map((plan) => feedbackNotificationEventKindFromPayload(plan.payload)), [
       "feedback.created",
       "feedback.lifecycle.changed",
       "feedback.assignee.changed",
@@ -421,7 +423,6 @@ describe("feedback module domain", () => {
     ]);
     for (const plan of plans) {
       assert.deepEqual(plan.recipientUserIds, recipients);
-      assert.equal(plan.targetType, "feedback");
       assert.equal(plan.payload.version, 1);
     }
     assert.deepEqual(plans[0]?.payload, {
@@ -464,18 +465,38 @@ describe("feedback module domain", () => {
       feedbackId: "feedback-1",
       payloadType: "comment_created",
     });
-    assert.deepEqual(plans[0]?.metadata, {
-      assignee: "处理人",
-      feedbackTitle: "页面滚动位置异常",
-      projectId: "project-1",
-      projectName: "客户端",
-    });
     assert.equal(feedbackNotificationEventPlanSchema.safeParse(plans[0]).success, true);
     assert.equal(feedbackNotificationEventPlanSchema.safeParse({
       ...plans[0],
       payload: undefined,
     }).success, false);
-    assert.equal(plans[3]?.targetHref, "/feedback/feedback-1?comment=comment-1");
+    assert.equal(feedbackNotificationEventPlanSchema.safeParse({
+      ...plans[0],
+      title: "旧的展示字段不再属于通知事实",
+    }).success, false);
+
+    const followUp = planFeedbackFollowUpNotification({
+      actorName: "薛雨",
+      actorUserId: "actor-1",
+      assignee: { nextName: "新处理人", previousName: "旧处理人" },
+      body: "薛雨 跟进了反馈并更新了生命周期和处理人。",
+      comment: { messageId: "comment-2", metadata: {}, threadId: "thread-1" },
+      feedbackId: "feedback-1",
+      lifecycle: { resolution: "resolved", stage: "pending_verification" },
+      project,
+      recipientUserIds: recipients,
+      teamId: "team-1",
+      title: "页面滚动位置异常",
+    });
+    assert.equal(feedbackNotificationEventKindFromPayload(followUp.payload), "feedback.follow_up.created");
+    assert.deepEqual(feedbackNotificationCardReferenceFromPayload(followUp.payload, "activity-5"), {
+      version: 1,
+      kind: "comment",
+      activityId: "activity-5",
+      commentMessageId: "comment-2",
+      feedbackId: "feedback-1",
+      payloadType: "follow_up",
+    });
   });
 
   it("does not create card references for feedback digest payloads", () => {

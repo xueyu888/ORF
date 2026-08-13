@@ -8,6 +8,7 @@ import {
   feedbackIssueListFilterQueryFromSearchParams,
   feedbackIssueListPageQuery,
   feedbackIssueRelationSummaries,
+  feedbackIssueTimelineEntries,
   mergeFeedbackIssueListReadModelPages,
   parseStoredFeedbackIssueListFilterParams,
 } from "@orf/feedback-module/testing";
@@ -21,6 +22,7 @@ import {
   filterFeedbackIssueListItems,
   type FeedbackIssueReadModelData,
   type FeedbackIssueListFilters,
+  type FeedbackWebActivityItem,
   type FeedbackWebIssue,
 } from "@orf/feedback-module/contracts";
 import type { OrfProject, OrfUser } from "../src/types/orf";
@@ -569,6 +571,51 @@ test("feedback current-view CSV export uses stable contract columns and escapes 
   assert.match(csv, /"open","project-client","CSV"/);
   assert.equal(feedbackIssueCsvExportFileName("2026-08-08T10:11:12.000Z"), "orf-feedback-current-view-20260808-101112.csv");
 });
+
+test("feedback timeline groups one follow-up instead of repeating comment lifecycle and assignee rows", () => {
+  const activities: FeedbackWebActivityItem[] = [
+    activity("metadata", "feedback.metadata.changed", "2026-08-08T10:00:00.000Z"),
+    activity("comment", "feedback.comment.created", "2026-08-08T11:00:00.000Z", { commentMessageId: "message-1", followUpId: "message-1" }),
+    activity("assignee", "feedback.assignee.changed", "2026-08-08T11:00:00.000Z", { followUpId: "message-1" }),
+    activity("lifecycle", "feedback.lifecycle.changed", "2026-08-08T11:00:00.000Z", { followUpId: "message-1" }),
+    activity("assignee-only", "feedback.assignee.changed", "2026-08-08T12:00:00.000Z", { followUpId: "follow-up-2" }),
+    activity("lifecycle-only", "feedback.lifecycle.changed", "2026-08-08T12:00:00.000Z", { followUpId: "follow-up-2" }),
+  ];
+  const comment = {
+    message: {
+      author: "成员",
+      body: "已完成处理",
+      createdAt: "2026-08-08T11:00:00.000Z",
+      id: "message-1",
+    },
+    thread: {
+      createdAt: "2026-08-08T11:00:00.000Z",
+      id: "thread-1",
+      messages: [],
+      status: "open",
+      targetId: "feedback-1",
+      targetTitle: "反馈",
+      targetType: "feedback",
+      updatedAt: "2026-08-08T11:00:00.000Z",
+    },
+  };
+
+  const timeline = feedbackIssueTimelineEntries(activities, [comment]);
+
+  assert.equal(timeline.length, 3);
+  assert.deepEqual(timeline.map((entry) => entry.kind), ["activity", "comment", "activity"]);
+  assert.deepEqual(timeline[1]?.activities.map((entry) => entry.id), ["assignee", "lifecycle"]);
+  assert.deepEqual(timeline[2]?.activities.map((entry) => entry.id), ["assignee-only", "lifecycle-only"]);
+});
+
+function activity(
+  id: string,
+  activityType: FeedbackWebActivityItem["activityType"],
+  at: string,
+  payload: Record<string, unknown> = {},
+): FeedbackWebActivityItem {
+  return { activityType, at, id, payload, sequence: Number.parseInt(id.replace(/\D/g, ""), 10) || 1 };
+}
 
 function filters(input: Partial<FeedbackIssueListFilters>): FeedbackIssueListFilters {
   return {

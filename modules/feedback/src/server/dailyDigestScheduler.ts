@@ -1,11 +1,8 @@
 import { and, eq, lt, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { feedback, feedbackDailyDigestRuns } from "../infrastructure/database/schema";
-import type { FeedbackNotificationPayloadV1 } from "../contracts";
+import type { FeedbackNotificationEventPlan } from "../contracts";
 import {
-  feedbackDailyDigestListHref,
-  feedbackDailyDigestTargetId,
-  formatFeedbackDailyDigestBody,
   shouldRunFeedbackDailyDigest,
   sortFeedbackDailyDigestItems,
   type FeedbackDailyDigestItem,
@@ -33,20 +30,7 @@ export type FeedbackDailyDigestLogger = {
   warn(data: Record<string, unknown>, message: string): void;
 };
 
-export type FeedbackDailyDigestNotificationInput = {
-  readonly actorName: string;
-  readonly actorUserId: string | null;
-  readonly body: string;
-  readonly kind: "feedback.assignee.digest";
-  readonly metadata: Record<string, string>;
-  readonly payload: Extract<FeedbackNotificationPayloadV1, { type: "assignee_digest" }>;
-  readonly recipientUserIds: string[];
-  readonly targetHref: string;
-  readonly targetId: string;
-  readonly targetType: "feedback";
-  readonly teamId: string;
-  readonly title: string;
-};
+export type FeedbackDailyDigestNotificationInput = FeedbackNotificationEventPlan;
 
 export type FeedbackDailyDigestRuntime = {
   readonly config: FeedbackDailyDigestConfig;
@@ -227,18 +211,6 @@ async function publishDigestForRecipient(input: {
 
   try {
     const events = await input.runtime.publishNotification({
-      actorName: "ORF",
-      actorUserId: null,
-      body: formatFeedbackDailyDigestBody({
-        items,
-      }),
-      kind: "feedback.assignee.digest",
-      metadata: {
-        assigneeUserId: input.recipient.userId,
-        feedbackCount: String(items.length),
-        localDate: input.localDate,
-        targetTitle: "今日待处理反馈汇总",
-      },
       payload: {
         version: 1,
         type: "assignee_digest",
@@ -248,11 +220,7 @@ async function publishDigestForRecipient(input: {
         pendingCount: items.length,
       },
       recipientUserIds: [input.recipient.userId],
-      targetHref: feedbackDailyDigestListHref(input.recipient.userId),
-      targetId: feedbackDailyDigestTargetId(input.recipient.teamId, input.recipient.userId, input.localDate),
-      targetType: "feedback",
       teamId: input.recipient.teamId,
-      title: "今日待处理反馈汇总",
     });
     await markDigestRunSent({
       database: input.runtime.database,

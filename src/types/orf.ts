@@ -26,11 +26,12 @@ export type CoreNotificationKind =
   | "comment.reply.created"
   | "comment.thread.status.changed"
   | "comment.mention.created"
+  | "chat.reaction.created"
   | "data.sync.conflict"
   | "worklog.submitted"
   | "worklog.reminder";
 export type NotificationKind = string;
-export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog" | "dataSync";
+export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog" | "dataSync" | "chatMessage";
 export type NotificationStream = "personalNotification" | "teamAnnouncement";
 export type NotificationDeliveryClass = "direct" | "mandatory" | "ordinary";
 export type NotificationReceiptAttentionLevel = "action_required" | "normal";

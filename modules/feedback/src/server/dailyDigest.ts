@@ -13,8 +13,8 @@ export type FeedbackDailyDigestItem = {
   updatedAt: string;
 };
 
-export const feedbackDailyDigestTargetId = (teamId: string, assigneeUserId: string, localDate: string) =>
-  `feedback-daily-digest:${teamId}:${assigneeUserId}:${localDate}`;
+export const feedbackDailyDigestTargetId = (assigneeUserId: string, localDate: string) =>
+  `feedback-daily-digest:${assigneeUserId}:${localDate}`;
 
 export function feedbackDailyDigestListHref(assigneeUserId: string) {
   return feedbackListPath({

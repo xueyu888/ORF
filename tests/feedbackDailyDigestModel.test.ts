@@ -47,10 +47,10 @@ test("feedback server poll interval keeps database polling above the module mini
   );
 });
 
-test("feedback daily digest target id is unique by team date and assignee", () => {
+test("feedback daily digest target id is unique by date and assignee inside the team boundary", () => {
   assert.equal(
-    feedbackDailyDigestTargetId("team-1", "user-1", "2026-08-05"),
-    "feedback-daily-digest:team-1:user-1:2026-08-05",
+    feedbackDailyDigestTargetId("user-1", "2026-08-05"),
+    "feedback-daily-digest:user-1:2026-08-05",
   );
 });
 

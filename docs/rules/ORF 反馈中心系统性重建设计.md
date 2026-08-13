@@ -1,6 +1,6 @@
 # ORF 反馈中心系统性重建设计
 
-> 状态：产品决策已确认的目标方案。2026-08-08 已完成基本可用发布和本轮边界收口；剩余非阻塞缺口登记到反馈 `fb-1786196377409-1-c7db202e-af04-4c54-bb9c-53e8ce7941a2` 后续继续。
+> 状态：产品决策已确认的目标方案。2026-08-13 已完成反馈 `fb-1786196377409-1-c7db202e-af04-4c54-bb9c-53e8ce7941a2` 登记的服务端公开边界、评论事务令牌、通知纯投影、API 语义和详情页收口；后续改动继续以本文契约为准。
 >
 > 本文是反馈中心重建的目标契约。实施完成后，反馈生命周期、权限、数据模型、接口和 UI 只能以本文及代码中的同一领域模型为事实源；旧的 `Open/Closed` 说明、前端局部判断和正文关系推导必须删除，不能继续作为兼容路径。
 
@@ -63,15 +63,18 @@
 
 这些数量只是迁移设计时的核查快照。正式迁移必须重新执行同一组前置检查，不能把数量写成永久假设。
 
-### 2.4 当前阶段收口
+### 2.4 当前实现边界
 
-2026-08-08 当前阶段以“不影响基本使用”为收口边界：
+截至 2026-08-13，反馈中心采用以下单一实现链：
 
-- v0.0.128 已先保证 Win11 客户端和生产反馈列表可用；CSV 当前视图导入导出已经可用，ZIP 完整备份不进入当前阻塞范围。
-- 本轮已完成云盘上下文、评论目标类型判断、全局反馈契约依赖、聊天引用卡片和服务端注册装配边界的阶段提交。
-- 反馈列表页已移除页面内重复的“新建反馈”入口，保留全局顶栏唯一创建入口；反馈原因索引在用户界面统一称为“分类”，不改变现有 `label` 查询参数和数据模型。
-- 服务端命令/读模型彻底迁回反馈模块、评论 `UnitOfWorkToken`、通知 `payloadSchema + present`、API 细节对齐和详情页深层 UI 整理不阻塞当前使用，登记为反馈 `fb-1786196377409-1-c7db202e-af04-4c54-bb9c-53e8ce7941a2` 后续处理。
-- 后续继续按本文目标推进时，仍必须保持一次只收敛一条契约链，不能用兼容转发、双事实源或临时补丁制造“完成”假象。
+- `@orf/feedback-module/server` 只公开模块注册函数、运行句柄和只读查询协议；宿主端口、数据库类型和内部应用服务不再作为具名公开 API。
+- 评论模块只把不透明 `OrfUnitOfWorkToken` 交给反馈端口；反馈模块不能获得评论 repository，评论模块也不能获得反馈数据库实现。
+- 反馈 outbox 只保存版本化 payload、收件人快照和团队边界；标题、正文、actor、动作和跳转统一由 `NotificationPresentationProvider` 的 `payloadSchema + present` 纯投影生成。
+- 反馈详情把评论、生命周期和处理人组合为一次原子跟进；侧边栏只展示处理事实，不再提供第二套生命周期或改派入口。
+- 原始报告、元数据和组合跟进分别使用独立 API；详情页时间线按 `followUpId` 合并同一次评论、生命周期和处理人活动，不重复渲染一组跟进。
+- 反馈列表保留全局顶栏唯一创建入口；用户界面统一使用“分类”，旧 `owner` 文案和旧详情操作路径不再参与当前 UI。
+
+后续改动仍必须一次只收敛一条契约链，不能用兼容转发、双事实源或临时补丁制造“完成”假象。
 
 ## 3. 完整业务状态链
 
@@ -626,6 +629,18 @@ Web 注册表仍只保存静态贡献，不保存当前用户或反馈数据。�
 
 这样评论模块不可用时不会损坏反馈主体，删除或编辑评论也不能改写原始报告。评论和反馈仍可在同一页面连续展示，但 UI 合并不改变二者的数据所有权。
 
+#### 6.9.1 跟进是一次组合命令
+
+详情页的“跟进”是唯一的讨论提交入口。一次跟进可以同时包含：
+
+- 一段用户主动发表的评论；
+- 一个显式生命周期转换；
+- 一个处理人变更。
+
+三项均可省略，但至少选择一项。生命周期不会因为填写评论或改派处理人而隐式变化；需要说明的生命周期命令直接使用本次跟进正文作为结构化活动的 `note`，不再维护第二份说明输入。提交时只校验一次 `expectedVersion`，评论、生命周期、处理人、活动和 dispatch outbox 在同一事务中全部成功或全部失败。生命周期或处理人发生变化时反馈版本只递增一次；纯评论不改写反馈版本。
+
+一次跟进只生成一条 ordinary 反馈通知，并在正文中汇总本次评论、生命周期和处理人变化。评论模块继续独立生成 `@` 提及和直接回复的 targeted 通知；被提及或被直接回复的人从 ordinary 收件人中排除，不能收到重复消息。
+
 ### 6.10 模块自我完备审计
 
 按“原则、边界、公开接口、失败行为”重新检查后，目标模块必须同时满足下表，才能称为自我完备：
@@ -718,6 +733,7 @@ action_required
 | `feedback.assignee.changed` | 是 | 管理员、创建者、旧/新处理人、参与者、关注者；新处理人为 direct | 处理人变化活动 |
 | `feedback.lifecycle.changed` | 是 | 全部相关人；待验证创建者、退回/重开处理人为 direct | 对应生命周期活动 |
 | `feedback.comment.created` | 是 | 全部相关人，排除触发人、提及和直接回复收件人 | 具体评论 |
+| `feedback.follow_up.created` | 是 | 一次组合跟进的相关人；@ 和直接回复仍由评论模块精确投递 | 具体评论或反馈活动 |
 | `comment.mention.created` / `comment.reply.created` | 是，由评论模块负责 | 被提及人或被回复人 | 具体评论 |
 | `feedback.comment.edited` | 否 | 只更新反馈未读和时间线；编辑不会重新触发提及 | 具体评论 |
 | `feedback.report.changed` | 否 | 只形成反馈未读和时间线活动 | 对应报告活动 |
@@ -742,7 +758,6 @@ type FeedbackNotificationPayloadV1 =
   | {
       version: 1;
       type: "created";
-      activityId: string;
       actor: ActorSnapshot;
       feedback: FeedbackSnapshot;
       assignee: UserSnapshot;
@@ -750,7 +765,6 @@ type FeedbackNotificationPayloadV1 =
   | {
       version: 1;
       type: "assignee_changed";
-      activityId: string;
       actor: ActorSnapshot;
       feedback: FeedbackSnapshot;
       previousAssignee: UserSnapshot;
@@ -759,34 +773,43 @@ type FeedbackNotificationPayloadV1 =
   | {
       version: 1;
       type: "lifecycle_changed";
-      activityId: string;
       actor: ActorSnapshot;
       feedback: FeedbackSnapshot;
-      transition: FeedbackTransitionType;
+      stage: FeedbackStage;
       resolution: FeedbackResolution | null;
-      noteExcerpt: string | null;
     }
   | {
       version: 1;
       type: "comment_created";
-      activityId: string;
       actor: ActorSnapshot;
       feedback: FeedbackSnapshot;
       commentMessageId: string;
+      commentThreadId: string;
       commentExcerpt: string;
       attachmentCount: number;
     }
   | {
       version: 1;
+      type: "follow_up";
+      actor: ActorSnapshot;
+      feedback: FeedbackSnapshot;
+      comment: CommentSnapshot | null;
+      assignee: AssigneeChangeSnapshot | null;
+      lifecycle: LifecycleSnapshot | null;
+    }
+  | {
+      version: 1;
       type: "assignee_digest";
-      assignee: UserSnapshot;
+      assigneeUserId: string;
+      items: readonly FeedbackDigestItem[];
+      localDate: string;
       pendingCount: number;
     };
 ```
 
-`NotificationPresentation` 只能返回通用字段：stream、title、body、action、reply target、attention level 和 system metadata。`FeedbackRecipientContext` 只包含该收件人的 reasons、delivery class 和 action required 状态。通知模块先用 provider schema 校验 payload，再生成 event/receipt；未知版本进入失败队列，不能按旧模板猜测。
+活动 ID 属于 outbox 投递信封，不复制进业务 payload；宿主在生成聊天引用时把它与 provider 产生的引用合并。`NotificationPresentation` 只能返回通用字段：actor、stream、title、body、action、reply target、target、收件人投递快照和 system metadata。`FeedbackRecipientContext` 只包含该收件人的 reasons、delivery class 和 action required 状态。通知模块先用 provider schema 校验 payload，再生成 event/receipt；未知版本进入失败队列，不能按旧模板猜测。
 
-payload 中的 actor、反馈标题、处理人、变更差异和摘要都是业务事务当时的快照，与 dispatch 一起持久化。provider 是无副作用的确定性投影：不查询反馈、用户、项目或评论表，不根据投递时的最新状态重算历史文案。实时状态只由消息下方的反馈引用 provider 展示，不改写已投递的通知事实。
+outbox 计划只持久化 `payload + recipient snapshot + teamId`；不再同时保存由 payload 派生的标题、正文、actor、动作和跳转。payload 中的 actor、反馈标题、处理人、变更差异和摘要都是业务事务当时的快照。provider 是无副作用的确定性投影：不查询反馈、用户、项目或评论表，不根据投递时的最新状态重算历史文案。实时状态只由消息下方的反馈引用 provider 展示，不改写已投递的通知事实。
 
 聊天 Web 使用工作日志已在使用的通用卡片壳，但通过 provider 注册装配，不在 `chatSystemReferenceCards.tsx` 继续增加业务 `if/switch`：
 
@@ -893,10 +916,11 @@ URL 继续是可分享筛选视图，个人默认筛选只保存 URL 参数集�
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
 | `POST` | `/api/feedback` | 创建反馈主体、原始报告和报告附件 |
-| `PATCH` | `/api/feedback/:id/report` | 编辑原始报告正文和报告附件 |
+| `PATCH` | `/api/feedback/:id/report` | 编辑原始报告正文；附件沿用原报告 |
 | `PATCH` | `/api/feedback/:id/metadata` | 标题、影响、优先级、项目和分类 |
 | `PUT` | `/api/feedback/:id/assignee` | 改派处理人 |
 | `POST` | `/api/feedback/:id/transitions` | 执行具名生命周期转换 |
+| `POST` | `/api/feedback/:id/follow-ups` | 原子提交评论、生命周期转换和处理人变更 |
 | `POST` | `/api/feedback/:id/relations` | 新增正式关系 |
 | `DELETE` | `/api/feedback/:id/relations/:relationId` | 删除正式关系 |
 | `PUT` | `/api/feedback/:id/view` | 推进当前用户阅读游标 |
@@ -1044,6 +1068,8 @@ GitLab 频道打开后未定位到第一条未读消息
 
 - 顶部只显示当前上下文动作。打开态显示“开始处理”，处理中显示“提交验证”，待验证时发起人看到“确认关闭/退回处理中”；管理员拥有所有反馈动作的 capabilities，执行发起人专属的验证动作时打开“管理接管”并填写原因。
 - 不再提供通用“关闭 issue”按钮，也不通过下一个状态函数猜动作。
+- 生命周期和处理人使用评论编辑器底栏、发送按钮左侧的两个紧凑菜单；默认不占独立内容行，只有选择复杂生命周期时才展开结论或代操作原因。侧栏只展示当前值，不再提供独立提交按钮；评论、状态和处理人仍由同一个发送按钮提交。
+- 跟进正文同时承担需要说明的生命周期命令的 `note`；选择这类命令但没有正文时不能提交，并在输入区内说明原因。
 - 待验证使用全宽状态带展示建议结论和处理说明，避免关键动作藏在侧栏。
 - 主区按真实时间顺序合并原始报告、具名活动和评论；活动格式化器统一生成文案。
 - 属性区为无外层大卡片的分组面板，通过细分隔线组织；字段使用弹层或原位控件保存，不再设置独立的“Metadata 保存卡片”。
@@ -1056,7 +1082,7 @@ GitLab 频道打开后未定位到第一条未读消息
 - 列表保持单列，工作队列横向滚动，搜索常驻，筛选使用底部抽屉。
 - 每条反馈是全宽触控行，状态、标题和未读是首要信息；处理人、优先级和更新时间在第二行。
 - 详情改为单列：标题、验证状态带、原始反馈、时间线、评论输入区依次排列。
-- 属性通过“属性”抽屉查看和编辑；当前生命周期主动作固定在底部安全区上方。
+- 属性通过“属性”抽屉查看和编辑；跟进输入区固定在底部安全区上方，生命周期和处理人使用底部选择面板，不在属性抽屉重复动作。
 - 所有主要触控目标至少 44px，不依赖 hover；长标题和长分类必须换行，不得遮挡动作。
 - 导入流程在移动端全屏展示；当前阶段导出只提供当前视图 CSV。
 
@@ -1199,10 +1225,11 @@ GitLab 频道打开后未定位到第一条未读消息
 - 详情真正渲染后推进已读序号；旧请求不能覆盖新游标。
 - 页面打开期间到达的新评论仍保持未读提示，直到用户看到新的活动序号。
 - 静音抑制普通通知，但反馈列表仍能显示真实更新。
-- 生命周期变化、改派和评论都生成一次通知事件；通知适配失败后能重试且不重复投递。
+- 单独发生的生命周期变化、改派或评论各生成一次通知事件；同一次组合跟进即使同时包含三类变化也只生成一个汇总通知事件。通知适配失败后能重试且不重复投递。
 - active 管理员始终进入反馈聊天通知收件人集合，触发人本人除外。
 - 创建者、处理人、参与者和关注者的 ordinary 通知会被 `muted` 抑制；管理员 mandatory、任务接收人 direct、`@` 和直接回复不受影响。
 - 同一评论里被 `@` 或直接回复的人不会再收到 `feedback.comment.created` 的第二条消息。
+- 组合跟进中被 `@` 或直接回复的人不会再收到本次汇总 ordinary 通知；其 targeted 通知仍精确定位该评论。
 - 只有创建、改派、生命周期变化和新评论生成即时聊天通知；报告、元数据和关系变化只推进反馈未读。
 - 反馈事件不写团队公告或项目普通频道，不产生 `@所有人`。
 - 通知消息能分别定位 activity 或 comment；从系统消息回复会写入反馈讨论。

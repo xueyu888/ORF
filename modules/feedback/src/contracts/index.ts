@@ -1,4 +1,18 @@
 import { z } from "zod";
+import {
+  feedbackActivityTypeValues,
+  feedbackActorRoleValues,
+  feedbackActorStatusValues,
+  feedbackCommandResolutionValues,
+  feedbackImpactValues,
+  feedbackPriorityValues,
+  feedbackRelationTypeValues,
+  feedbackResolutionValues,
+  feedbackStageValues,
+  feedbackSubscriptionModeValues,
+  feedbackSubscriptionMutationModeValues,
+  feedbackTransitionTypeValues,
+} from "./values";
 
 export * from "./links";
 export * from "./capabilities";
@@ -10,57 +24,7 @@ export * from "./issueList";
 export * from "./notifications";
 export * from "./readModel";
 export * from "./reportAttachments";
-
-export const feedbackStageValues = [
-  "open",
-  "in_progress",
-  "pending_verification",
-  "closed",
-] as const;
-
-export const feedbackResolutionValues = [
-  "resolved",
-  "not_needed",
-  "cannot_resolve",
-  "duplicate",
-  "unspecified",
-] as const;
-
-export const feedbackCommandResolutionValues = [
-  "resolved",
-  "not_needed",
-  "cannot_resolve",
-  "duplicate",
-] as const;
-
-export const feedbackImpactValues = ["low", "medium", "high", "critical"] as const;
-export const feedbackPriorityValues = ["p0", "p1", "p2", "p3"] as const;
-export const feedbackActorRoleValues = ["member", "admin"] as const;
-export const feedbackActorStatusValues = ["active", "inactive"] as const;
-export const feedbackRelationTypeValues = ["related", "duplicates", "blocks"] as const;
-export const feedbackSubscriptionModeValues = ["none", "participating", "subscribed", "muted"] as const;
-export const feedbackSubscriptionMutationModeValues = ["none", "subscribed", "muted"] as const;
-export const feedbackTransitionTypeValues = [
-  "start",
-  "submit_verification",
-  "accept_verification",
-  "reject_verification",
-  "withdraw",
-  "reopen",
-] as const;
-
-export const feedbackActivityTypeValues = [
-  "feedback.created",
-  "feedback.metadata.changed",
-  "feedback.assignee.changed",
-  "feedback.lifecycle.changed",
-  "feedback.relation.added",
-  "feedback.relation.removed",
-  "feedback.comment.created",
-  "feedback.comment.edited",
-  "feedback.report.changed",
-  "feedback.imported",
-] as const;
+export * from "./values";
 
 export const feedbackStageSchema = z.enum(feedbackStageValues);
 export const feedbackResolutionSchema = z.enum(feedbackResolutionValues);
@@ -148,6 +112,49 @@ export const feedbackTransitionInputSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+export const feedbackFollowUpTransitionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("start") }),
+  z.object({
+    type: z.literal("submit_verification"),
+    resolution: feedbackCommandResolutionSchema,
+    note: feedbackTransitionNoteSchema,
+    duplicateTargetFeedbackId: feedbackIdSchema.optional(),
+  }),
+  z.object({
+    type: z.literal("accept_verification"),
+    administrativeTakeover: administrativeTakeoverSchema.optional(),
+  }),
+  z.object({
+    type: z.literal("reject_verification"),
+    note: feedbackTransitionNoteSchema,
+    administrativeTakeover: administrativeTakeoverSchema.optional(),
+  }),
+  z.object({
+    type: z.literal("withdraw"),
+    note: feedbackTransitionNoteSchema,
+    administrativeTakeover: administrativeTakeoverSchema.optional(),
+  }),
+  z.object({
+    type: z.literal("reopen"),
+    note: feedbackTransitionNoteSchema,
+    administrativeTakeover: administrativeTakeoverSchema.optional(),
+  }),
+]);
+
+export const feedbackFollowUpInputSchema = z.object({
+  expectedVersion: feedbackVersionSchema,
+  comment: z.object({
+    body: z.string().trim().min(1),
+    parentMessageId: z.string().trim().min(1).optional(),
+    replyToMessageId: z.string().trim().min(1).optional(),
+  }).strict().optional(),
+  assigneeUserId: feedbackUserIdSchema.nullable().optional(),
+  transition: feedbackFollowUpTransitionSchema.optional(),
+}).strict().refine(
+  (input) => input.comment !== undefined || input.assigneeUserId !== undefined || input.transition !== undefined,
+  { message: "Feedback follow-up must contain a comment, assignee change, or lifecycle transition" },
+);
+
 export const feedbackRelationDraftSchema = z.object({
   sourceFeedbackId: feedbackIdSchema,
   targetFeedbackId: feedbackIdSchema,
@@ -185,5 +192,7 @@ export type FeedbackActorSnapshot = z.infer<typeof feedbackActorSnapshotSchema>;
 export type FeedbackImportActor = FeedbackActorSnapshot;
 export type FeedbackEntitySnapshot = z.infer<typeof feedbackEntitySnapshotSchema>;
 export type FeedbackTransitionInput = z.infer<typeof feedbackTransitionInputSchema>;
+export type FeedbackFollowUpInput = z.infer<typeof feedbackFollowUpInputSchema>;
+export type FeedbackFollowUpTransition = z.infer<typeof feedbackFollowUpTransitionSchema>;
 export type FeedbackRelationDraft = z.infer<typeof feedbackRelationDraftSchema>;
 export type FeedbackCapabilities = z.infer<typeof feedbackCapabilitiesSchema>;

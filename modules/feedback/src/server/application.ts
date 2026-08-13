@@ -1,8 +1,10 @@
 import type { Readable } from "node:stream";
+import type { OrfUnitOfWorkToken } from "@orf/module-protocol";
 import {
   buildFeedbackIssueListProjection,
   defaultFeedbackIssueListFilters,
   type FeedbackCommandResult,
+  type FeedbackFollowUpInput,
   type FeedbackImpact,
   type FeedbackIssueReadModelData,
   type FeedbackPriority,
@@ -19,11 +21,13 @@ import {
 import {
   createFeedbackDraft,
   createFeedbackIssue,
+  commitFeedbackFollowUp,
   addFeedbackIssueRelation,
   removeFeedbackIssueRelation,
   transitionFeedbackIssue,
   updateFeedbackIssueAssignee,
   updateFeedbackIssueMetadata,
+  updateFeedbackIssueReport,
 } from "./writeModel";
 import {
   getFeedbackDashboardSummary,
@@ -36,6 +40,7 @@ import {
   buildFeedbackAssigneeChangedNotificationDispatch,
   buildFeedbackCommentCreatedNotificationDispatch,
   buildFeedbackCreatedNotificationDispatch,
+  buildFeedbackFollowUpNotificationDispatch,
   buildFeedbackLifecycleChangedNotificationDispatch,
 } from "./notificationDispatchPlans";
 import {
@@ -57,7 +62,7 @@ import {
   feedbackReportAttachmentResponseContentType,
   getFeedbackReportAttachmentContentFacts,
 } from "./reportAttachmentContent";
-import { insertFeedbackNotificationDispatch } from "./notificationDispatch";
+import { insertFeedbackNotificationDispatch, mergeFeedbackNotificationDispatchRecipients } from "./notificationDispatch";
 import {
   commitFeedbackImportBatch,
   preflightFeedbackImport,
@@ -115,12 +120,16 @@ export type FeedbackApplicationCreateOutcome =
 
 export type FeedbackApplicationUpdateMetadataInput = {
   readonly causeCategories?: readonly string[];
-  readonly description?: string;
   readonly expectedVersion: number;
   readonly impact?: FeedbackImpact;
   readonly priority?: FeedbackPriority | null;
   readonly projectId?: string | null;
   readonly title?: string;
+};
+
+export type FeedbackApplicationUpdateReportInput = {
+  readonly description: string;
+  readonly expectedVersion: number;
 };
 
 export type FeedbackApplicationUpdateAssigneeInput = {
@@ -387,7 +396,6 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
 
     const result = await updateFeedbackIssueMetadata(this.ports.database, {
       causeCategories: input.causeCategories,
-      description: input.description,
       expectedVersion: input.expectedVersion,
       feedbackId,
       impact: input.impact,
@@ -403,6 +411,22 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
       }, database),
     });
 
+    if (result.status === "ok" && result.changed) {
+      await this.publishFeedbackChangedAfterCommit({ actorUserId: actor.id, feedbackId, scope: actor.scope });
+    }
+    return result;
+  }
+
+  async updateReport(
+    feedbackId: string,
+    input: FeedbackApplicationUpdateReportInput,
+    actor: FeedbackApplicationActor,
+  ): Promise<FeedbackCommandResult> {
+    const result = await updateFeedbackIssueReport(this.ports.database, {
+      description: input.description,
+      expectedVersion: input.expectedVersion,
+      feedbackId,
+    }, feedbackWriteActor(actor));
     if (result.status === "ok" && result.changed) {
       await this.publishFeedbackChangedAfterCommit({ actorUserId: actor.id, feedbackId, scope: actor.scope });
     }
@@ -450,6 +474,118 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
       await this.publishFeedbackChangedAfterCommit({ actorUserId: actor.id, feedbackId, scope: actor.scope });
     }
     return { status: "ok", changed: result.changed };
+  }
+
+  async followUp(
+    feedbackId: string,
+    input: FeedbackFollowUpInput,
+    actor: FeedbackApplicationActor,
+  ): Promise<FeedbackCommandResult> {
+    const teamId = storageScopeIdFor(actor.scope);
+    const current = await getFeedbackCommentNotificationFacts(this.ports.database, feedbackId);
+    if (!current || current.teamId !== teamId) return { status: "notFound" };
+
+    const hasAssigneeCommand = input.assigneeUserId !== undefined;
+    const nextAssignee = hasAssigneeCommand && input.assigneeUserId
+      ? await this.ports.userDirectory.getActiveMemberById(actor.scope, input.assigneeUserId)
+      : null;
+    if (input.assigneeUserId && !nextAssignee) return { status: "invalidAssignee" };
+    const nextAssigneeUserId = hasAssigneeCommand ? nextAssignee?.id ?? null : current.assigneeUserId ?? null;
+    const assigneeChanged = hasAssigneeCommand && nextAssigneeUserId !== (current.assigneeUserId ?? null);
+    const previousAssignee = current.assigneeUserId
+      ? await this.ports.userDirectory.getActiveMemberById(actor.scope, current.assigneeUserId)
+      : null;
+    const transition = input.transition
+      ? { ...input.transition, expectedVersion: input.expectedVersion } as FeedbackTransitionInput
+      : undefined;
+    const project = current.projectId ? await this.ports.projectDirectory.getById(actor.scope, current.projectId) : null;
+
+    const recipientGroups = await Promise.all([
+      getFeedbackOrdinaryNotificationDispatchRecipients(this.ports.database, this.recipientDirectory(), {
+        assigneeUserId: nextAssigneeUserId,
+        createdBy: current.createdBy,
+        feedbackId,
+        includeCommentParticipants: true,
+        teamId,
+      }),
+      assigneeChanged
+        ? getFeedbackAssignmentNotificationDispatchRecipients(this.ports.database, this.recipientDirectory(), {
+            createdBy: current.createdBy,
+            feedbackId,
+            nextAssigneeUserId,
+            previousAssigneeUserId: current.assigneeUserId,
+            teamId,
+          })
+        : Promise.resolve([]),
+      transition
+        ? getFeedbackLifecycleNotificationDispatchRecipients(this.ports.database, this.recipientDirectory(), {
+            actionRequiredUserIds: uniqueUserIds([feedbackLifecycleActionRequiredUserId(transition, {
+              assigneeUserId: nextAssigneeUserId,
+              createdBy: current.createdBy,
+            })]),
+            assigneeUserId: nextAssigneeUserId,
+            createdBy: current.createdBy,
+            feedbackId,
+            teamId,
+          })
+        : Promise.resolve([]),
+    ]);
+    const recipients = mergeFeedbackNotificationDispatchRecipients(recipientGroups.flat());
+
+    return this.ports.discussion.commitFollowUp({
+      actor: { id: actor.id, name: actor.name, role: actor.role, scope: actor.scope },
+      body: input.comment?.body,
+      feedbackId,
+      parentMessageId: input.comment?.parentMessageId,
+      replyToMessageId: input.comment?.replyToMessageId,
+      title: current.title,
+    }, ({ comment, unitOfWork }) => this.ports.unitOfWork.use(unitOfWork, (database) => {
+      const excludedUserIds = new Set([
+        actor.id,
+        ...(comment?.mentionedUserIds ?? []),
+        comment?.replyRecipientUserId ?? "",
+      ].filter(Boolean));
+      const filteredRecipients = recipients.filter((recipient) => !excludedUserIds.has(recipient.userId));
+      const changedLabels = [transition ? "生命周期" : "", assigneeChanged ? "处理人" : ""].filter(Boolean);
+      const content = comment
+        ? this.ports.notificationContent.buildCommentContent({
+            attachments: comment.attachments,
+            commentBody: comment.body,
+            summary: `${actor.name} 跟进了反馈「${current.title}」${changedLabels.length ? `，同时更新了${changedLabels.join("和")}` : ""}：`,
+          })
+        : {
+            body: `${actor.name} 跟进了反馈「${current.title}」，更新了${changedLabels.join("和")}。`,
+            metadata: {},
+          };
+
+      return commitFeedbackFollowUp(database, {
+        ...(hasAssigneeCommand ? { assigneeUserId: nextAssigneeUserId } : {}),
+        comment: comment ? { messageId: comment.commentMessageId, threadId: comment.commentThreadId } : undefined,
+        expectedVersion: input.expectedVersion,
+        feedbackId,
+        notificationDispatch: (context) => buildFeedbackFollowUpNotificationDispatch({
+          actorName: actor.name,
+          actorUserId: actor.id,
+          assignee: assigneeChanged ? {
+            nextName: nextAssignee?.name ?? null,
+            previousName: previousAssignee?.name ?? null,
+          } : undefined,
+          body: content.body,
+          comment: context.commentMessageId && context.commentThreadId ? {
+            messageId: context.commentMessageId,
+            metadata: content.metadata,
+            threadId: context.commentThreadId,
+          } : undefined,
+          feedbackId,
+          lifecycle: transition ? { resolution: context.resolution, stage: context.stage } : undefined,
+          project,
+          recipients: filteredRecipients,
+          teamId,
+          title: current.title,
+        }),
+        transition,
+      }, feedbackWriteActor(actor));
+    }));
   }
 
   async transitionFeedback(
@@ -611,24 +747,25 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
   async recordCommentCreated(input: {
     readonly actorUserId: string;
     readonly commentMessageId: string;
-    readonly database: Parameters<typeof recordFeedbackCommentCreatedActivity>[0];
     readonly feedbackId: string;
     readonly teamId: string;
+    readonly unitOfWork: OrfUnitOfWorkToken;
   }) {
-    return recordFeedbackCommentCreatedActivity(input.database, {
-      actorUserId: input.actorUserId,
-      commentMessageId: input.commentMessageId,
-      feedbackId: input.feedbackId,
-      teamId: input.teamId,
-    });
+    return this.ports.unitOfWork.use(input.unitOfWork, (database) =>
+      recordFeedbackCommentCreatedActivity(database, {
+        actorUserId: input.actorUserId,
+        commentMessageId: input.commentMessageId,
+        feedbackId: input.feedbackId,
+        teamId: input.teamId,
+      }));
   }
 
   resolveCommentTarget(feedbackId: string) {
     return resolveFeedbackCommentTarget(this.ports.database, feedbackId);
   }
 
-  lockCommentTarget(database: Parameters<typeof lockFeedbackCommentTarget>[0], feedbackId: string) {
-    return lockFeedbackCommentTarget(database, feedbackId);
+  lockCommentTarget(unitOfWork: OrfUnitOfWorkToken, feedbackId: string) {
+    return this.ports.unitOfWork.use(unitOfWork, (database) => lockFeedbackCommentTarget(database, feedbackId));
   }
 
   async notifyCommentCreated(input: {

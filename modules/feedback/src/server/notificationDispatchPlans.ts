@@ -2,6 +2,7 @@ import {
   planFeedbackAssigneeChangedNotification,
   planFeedbackCommentCreatedNotification,
   planFeedbackCreatedNotification,
+  planFeedbackFollowUpNotification,
   planFeedbackLifecycleChangedNotification,
 } from "../contracts";
 import {
@@ -60,6 +61,36 @@ export function buildFeedbackCommentCreatedNotificationDispatch(
 ): FeedbackNotificationDispatchDraft | null {
   const { recipients, ...planInput } = input;
   return buildFeedbackNotificationDispatchDraft(planFeedbackCommentCreatedNotification({
+    ...planInput,
+    recipientUserIds: [],
+  }), recipients);
+}
+
+export function buildFeedbackFollowUpNotificationDispatch(input: {
+  readonly actorName: string;
+  readonly actorUserId: string;
+  readonly assignee?: {
+    readonly nextName?: string | null;
+    readonly previousName?: string | null;
+  };
+  readonly body: string;
+  readonly comment?: {
+    readonly messageId: string;
+    readonly metadata: Record<string, string>;
+    readonly threadId: string;
+  };
+  readonly feedbackId: string;
+  readonly lifecycle?: {
+    readonly resolution?: string | null;
+    readonly stage: string;
+  };
+  readonly project: CreatedNotificationInput["project"];
+  readonly recipients: readonly FeedbackNotificationDispatchRecipient[];
+  readonly teamId: string;
+  readonly title: string;
+}): FeedbackNotificationDispatchDraft | null {
+  const { recipients, ...planInput } = input;
+  return buildFeedbackNotificationDispatchDraft(planFeedbackFollowUpNotification({
     ...planInput,
     recipientUserIds: [],
   }), recipients);

@@ -3,11 +3,12 @@ import type {
   CommentTargetAccess,
   CommentTargetActor,
   CommentTargetAdapter,
-  CommentTargetDatabase,
   CommentTargetSnapshot,
 } from "../comments/commentTargetAdapters";
+import type { OrfUnitOfWorkToken } from "@orf/module-protocol";
 import { registerCommentTargetAdapter } from "../comments/commentTargetAdapters";
 import { db } from "../db/client";
+import { resolveUnitOfWork } from "../db/unitOfWork";
 import { workLogEntries } from "../db/schema";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 
@@ -68,7 +69,8 @@ async function resolveWorkLogCommentTarget(targetId: string): Promise<CommentTar
     : null;
 }
 
-async function lockWorkLogCommentTarget(database: CommentTargetDatabase, target: CommentTargetSnapshot) {
+async function lockWorkLogCommentTarget(unitOfWork: OrfUnitOfWorkToken, target: CommentTargetSnapshot) {
+  const database = resolveUnitOfWork(unitOfWork);
   const [entry] = await database
     .select({ id: workLogEntries.id })
     .from(workLogEntries)

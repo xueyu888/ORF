@@ -36,50 +36,50 @@ import type {
   FeedbackServerApplicationPorts,
 } from "../server/applicationPorts";
 
-export type FeedbackModuleStop = () => Promise<void> | void;
+type FeedbackModuleStop = () => Promise<void> | void;
 
-export interface FeedbackHttpRouteRegistration {
+interface FeedbackHttpRouteRegistration {
   readonly moduleId: "feedback";
   readonly mountPath: "/api/feedback";
   register(app: FastifyInstance): void;
 }
 
-export interface FeedbackHttpRouteRegistry {
+interface FeedbackHttpRouteRegistry {
   registerRoutes(registration: FeedbackHttpRouteRegistration): void;
 }
 
-export interface FeedbackRuntimeTaskRegistration {
+interface FeedbackRuntimeTaskRegistration {
   readonly moduleId: "feedback";
   readonly taskId: "daily-digest" | "notification-dispatch";
   start(): FeedbackModuleStop;
 }
 
-export interface FeedbackRuntimeLifecycleRegistry {
+interface FeedbackRuntimeLifecycleRegistry {
   registerTask(registration: FeedbackRuntimeTaskRegistration): FeedbackModuleStop;
 }
 
-export interface FeedbackCommentTargetRegistration {
+interface FeedbackCommentTargetRegistration {
   readonly moduleId: "feedback";
   readonly adapter: FeedbackCommentTargetAdapterContribution;
   readonly type: "feedback";
 }
 
-export interface FeedbackCommentTargetRegistry {
+interface FeedbackCommentTargetRegistry {
   registerTarget(registration: FeedbackCommentTargetRegistration): void;
 }
 
-export type FeedbackReferenceProviderContribution = ReturnType<typeof createFeedbackReferenceProvider>;
+type FeedbackReferenceProviderContribution = ReturnType<typeof createFeedbackReferenceProvider>;
 
-export interface FeedbackReferenceProviderRegistry {
+interface FeedbackReferenceProviderRegistry {
   registerProvider(provider: FeedbackReferenceProviderContribution): void;
 }
 
-export interface FeedbackDriveContextReference {
+interface FeedbackDriveContextReference {
   readonly id: string;
   readonly title: string;
 }
 
-export interface FeedbackDriveContextProviderContribution {
+interface FeedbackDriveContextProviderContribution {
   readonly protocolVersion: 1;
   readonly type: "feedback";
   getReferences(input: {
@@ -93,17 +93,17 @@ export interface FeedbackDriveContextProviderContribution {
   }): Promise<readonly FeedbackDriveContextReference[]>;
 }
 
-export interface FeedbackDriveContextRegistry {
+interface FeedbackDriveContextRegistry {
   registerProvider(provider: FeedbackDriveContextProviderContribution): void;
 }
 
-export interface FeedbackNotificationPresentationRegistry {
+interface FeedbackNotificationPresentationRegistry {
   registerProvider(provider: FeedbackNotificationPresentationProviderContribution): void;
 }
 
-export type FeedbackServerDatabase = FeedbackApplicationDatabase & FeedbackReferenceDatabase & Pick<NodePgDatabase<any>, "select">;
+type FeedbackServerDatabase = FeedbackApplicationDatabase & FeedbackReferenceDatabase & Pick<NodePgDatabase<any>, "select">;
 
-export interface FeedbackRequiredPorts extends FeedbackServerApplicationPorts {
+interface FeedbackRequiredPorts extends FeedbackServerApplicationPorts {
   readonly backgroundJobs: {
     readonly enabled: boolean;
   };
@@ -119,7 +119,7 @@ export interface FeedbackRequiredPorts extends FeedbackServerApplicationPorts {
   };
 }
 
-export interface FeedbackServerHost {
+interface FeedbackServerHost {
   readonly protocolVersion: 1;
   readonly commentTargets: FeedbackCommentTargetRegistry;
   readonly driveContexts: FeedbackDriveContextRegistry;

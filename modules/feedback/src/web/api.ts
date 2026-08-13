@@ -1,9 +1,9 @@
 import type {
   FeedbackImpact,
+  FeedbackFollowUpInput,
   FeedbackPriority,
   FeedbackRelationType,
   FeedbackSubscriptionMutationMode,
-  FeedbackTransitionInput,
 } from "../contracts";
 import type {
   FeedbackIssueReadModelData,
@@ -43,12 +43,16 @@ export type CreateFeedbackInput = {
 
 export type UpdateFeedbackMetadataInput = {
   causeCategories?: string[];
-  description?: string;
   expectedVersion: number;
   impact?: FeedbackImpact;
   priority?: FeedbackPriority | null;
   projectId?: string | null;
   title?: string;
+};
+
+export type UpdateFeedbackReportInput = {
+  description: string;
+  expectedVersion: number;
 };
 
 export type AddFeedbackRelationInput = {
@@ -189,10 +193,10 @@ export async function createFeedback(input: CreateFeedbackInput): Promise<string
   return response.feedbackId;
 }
 
-export async function transitionFeedback(feedbackId: string, command: FeedbackTransitionInput): Promise<void> {
-  await apiRequest(`/api/feedback/${encodeURIComponent(feedbackId)}/transitions`, {
+export async function submitFeedbackFollowUp(feedbackId: string, input: FeedbackFollowUpInput): Promise<void> {
+  await apiRequest(`/api/feedback/${encodeURIComponent(feedbackId)}/follow-ups`, {
     method: "POST",
-    body: JSON.stringify(command),
+    body: JSON.stringify(input),
   });
 }
 
@@ -203,10 +207,10 @@ export async function updateFeedbackMetadata(feedbackId: string, input: UpdateFe
   });
 }
 
-export async function updateFeedbackAssignee(feedbackId: string, assigneeUserId: string | null, expectedVersion: number): Promise<void> {
-  await apiRequest(`/api/feedback/${encodeURIComponent(feedbackId)}/assignee`, {
-    method: "PUT",
-    body: JSON.stringify({ assigneeUserId, expectedVersion }),
+export async function updateFeedbackReport(feedbackId: string, input: UpdateFeedbackReportInput): Promise<void> {
+  await apiRequest(`/api/feedback/${encodeURIComponent(feedbackId)}/report`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
   });
 }
 

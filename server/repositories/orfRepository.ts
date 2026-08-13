@@ -143,6 +143,7 @@ import {
   type CommentTargetCommitResult,
   type CommentTargetSnapshot,
 } from "../comments/commentTargetAdapters";
+import { registerUnitOfWork, releaseUnitOfWork } from "../db/unitOfWork";
 
 type CommentActor = {
   canManageAllComments?: boolean;
@@ -152,7 +153,7 @@ type CommentActor = {
   scope?: RuntimeScope | null;
 };
 
-type CommentMutationOutcome =
+export type CommentMutationOutcome =
   | { status: "ok"; thread?: CommentThread }
   | { status: "notFound" }
   | { status: "forbidden" }
@@ -2295,6 +2296,33 @@ export interface CreateCommentInput {
   replyToAuthor?: string;
 }
 
+export type CommentTargetMutationDecision =
+  | { readonly status: "ok"; readonly changed: boolean }
+  | { readonly status: "notFound" }
+  | { readonly status: "forbidden" }
+  | { readonly status: "invalid" }
+  | { readonly status: "conflict" }
+  | { readonly status: "invalidAssignee" }
+  | { readonly status: "invalidProject" };
+
+export type CommentTargetMutationOutcome =
+  | { readonly status: "ok"; readonly thread?: CommentThread }
+  | Exclude<CommentTargetMutationDecision, { status: "ok" }>;
+
+export type CommentTargetMutationCommitInput = {
+  readonly comment: {
+    readonly attachments: readonly CommentAttachment[];
+    readonly body: string;
+    readonly commentMessageId: string;
+    readonly commentThreadId: string;
+    readonly createdAt: string;
+    readonly mentionedUserIds: readonly string[];
+    readonly replyRecipientUserId?: string | null;
+    readonly replyToMessageId?: string | null;
+  } | null;
+  readonly unitOfWork: import("@orf/module-protocol").OrfUnitOfWorkToken;
+};
+
 type CommentTarget =
   | {
       kind: "workItem";
@@ -2609,303 +2637,294 @@ export async function getCommentAttachmentContent(
   };
 }
 
-export async function createComment(input: CreateCommentInput, actor: CommentActor): Promise<CommentMutationOutcome> {
-  const body = input.body.trim();
-  if (!body) {
-    return { status: "invalid" };
+class CommentTargetMutationRejected extends Error {
+  constructor(readonly decision: Exclude<CommentTargetMutationDecision, { status: "ok" }>) {
+    super(`Comment target mutation rejected: ${decision.status}`);
   }
+}
+
+type CommitCommentTargetMutationOptions = {
+  readonly commit?: (input: CommentTargetMutationCommitInput) => Promise<CommentTargetMutationDecision>;
+  readonly requireBody: boolean;
+  readonly runTargetCallbacks: boolean;
+};
+
+export async function createComment(input: CreateCommentInput, actor: CommentActor): Promise<CommentMutationOutcome> {
+  const result = await commitCommentTargetMutation(input, actor, { requireBody: true, runTargetCallbacks: true });
+  if (result.status === "conflict" || result.status === "invalidAssignee" || result.status === "invalidProject") {
+    throw new Error(`Unexpected comment mutation outcome: ${result.status}`);
+  }
+  return result;
+}
+
+export async function commitFeedbackFollowUp(
+  input: CreateCommentInput & { readonly targetType: "feedback" },
+  actor: CommentActor,
+  commit: (input: CommentTargetMutationCommitInput) => Promise<CommentTargetMutationDecision>,
+): Promise<CommentTargetMutationOutcome> {
+  return commitCommentTargetMutation(input, actor, { commit, requireBody: false, runTargetCallbacks: false });
+}
+
+async function commitCommentTargetMutation(
+  input: CreateCommentInput,
+  actor: CommentActor,
+  options: CommitCommentTargetMutationOptions,
+): Promise<CommentTargetMutationOutcome> {
+  const body = input.body.trim();
+  if (options.requireBody && !body) return { status: "invalid" };
 
   const target = await resolveCommentTarget(input.targetType, input.targetId);
-  if (!target) {
-    return { status: "notFound" };
-  }
+  if (!target) return { status: "notFound" };
   const access = await canMutateCommentTarget(actor, target);
-  if (access === "notFound") {
-    return { status: "notFound" };
-  }
-  if (access === "forbidden") {
-    return { status: "forbidden" };
-  }
+  if (access !== "allowed") return { status: access };
 
   const targetTitle = target.title;
   const createdAt = nowIso();
-  const attachmentIds = extractCommentAttachmentIds(body);
-  const mentionedUserIds = extractCommentMentionUserIds(body);
-  const createdComment = await db.transaction(async (tx) => {
-    let targetCommitResult: CommentTargetCommitResult | undefined;
-    const notifyTargetMessageCommitted = async (input: {
-      messageId: string;
-      replyRecipientUserId?: string | null;
-      replyToMessageId?: string | null;
-      threadId: string;
-    }) => {
-      if (target.kind !== "registered") {
-        return;
-      }
-      const result = await target.adapter.onMessageCommitted?.({
-        actor,
-        attachments: [],
-        body,
-        commentMessageId: input.messageId,
-        commentThreadId: input.threadId,
-        createdAt,
-        mentionedUserIds,
-        replyRecipientUserId: input.replyRecipientUserId ?? null,
-        replyToMessageId: input.replyToMessageId ?? null,
-        target,
-      }, tx);
-      if (result) {
-        targetCommitResult = result;
-      }
-    };
+  const attachmentIds = body ? extractCommentAttachmentIds(body) : [];
+  const mentionedUserIds = body ? extractCommentMentionUserIds(body) : [];
 
-    if (target.kind === "workItem") {
-      const [lockedObjective] = await tx
-        .select({ id: objectives.id })
-        .from(objectives)
-        .where(eq(objectives.id, target.objectiveId))
-        .limit(1)
-        .for("update");
-      if (!lockedObjective) {
-        return null;
-      }
-    } else {
-      if (!(await target.adapter.lockForComment(tx, target))) {
-        return null;
-      }
-    }
-
-    const arePendingAttachmentsAvailable = async () => {
-      if (attachmentIds.length === 0) {
-        return true;
-      }
-
-      const rows = await tx
-        .select({ id: commentAttachments.id })
-        .from(commentAttachments)
-        .where(
-          and(
-            inArray(commentAttachments.id, attachmentIds),
-            eq(commentAttachments.createdBy, actor.id),
-            eq(commentAttachments.targetType, input.targetType),
-            eq(commentAttachments.targetId, input.targetId),
-            isNull(commentAttachments.messageId),
-            gt(commentAttachments.expiresAt, createdAt),
-          ),
-        );
-      return rows.length === attachmentIds.length;
-    };
-    const bindMessageAttachments = async (messageId: string) => {
-      if (attachmentIds.length === 0) {
-        return;
-      }
-
-      await tx
-        .update(commentAttachments)
-        .set({ attachedAt: createdAt, messageId })
-        .where(inArray(commentAttachments.id, attachmentIds));
-    };
-
-    if (input.parentMessageId) {
-      const [parent] = await tx
-        .select({
-          author: commentMessages.author,
-          authorUserId: commentMessages.authorUserId,
-          threadId: commentMessages.threadId,
-        })
-        .from(commentMessages)
-        .innerJoin(commentThreads, eq(commentThreads.id, commentMessages.threadId))
-        .where(
-          and(
-            eq(commentMessages.id, input.parentMessageId),
-            eq(commentThreads.targetType, input.targetType),
-            eq(commentThreads.targetId, input.targetId),
-          ),
-        )
-        .limit(1);
-
-      if (!parent) {
-        return null;
-      }
-
-      let replyToMessageId: string | null = null;
-      let replyToAuthor: string | null = null;
-      let replyRecipientUserId: string | null = parent.authorUserId;
-      if (input.replyToMessageId) {
-        const [replyTarget] = await tx
-          .select({ author: commentMessages.author, authorUserId: commentMessages.authorUserId, id: commentMessages.id })
-          .from(commentMessages)
-          .where(and(eq(commentMessages.threadId, parent.threadId), eq(commentMessages.id, input.replyToMessageId)))
-          .limit(1);
-        if (!replyTarget) {
+  let committed;
+  try {
+    committed = await db.transaction(async (tx) => {
+      const unitOfWork = registerUnitOfWork(tx);
+      try {
+        if (target.kind === "workItem") {
+          const [lockedObjective] = await tx
+            .select({ id: objectives.id })
+            .from(objectives)
+            .where(eq(objectives.id, target.objectiveId))
+            .limit(1)
+            .for("update");
+          if (!lockedObjective) return null;
+        } else if (!(await target.adapter.lockForComment(unitOfWork, target))) {
           return null;
         }
-        replyToMessageId = replyTarget.id;
-        replyToAuthor = replyTarget.author;
-        replyRecipientUserId = replyTarget.authorUserId;
+
+        const arePendingAttachmentsAvailable = async () => {
+          if (attachmentIds.length === 0) return true;
+          const rows = await tx
+            .select({ id: commentAttachments.id })
+            .from(commentAttachments)
+            .where(and(
+              inArray(commentAttachments.id, attachmentIds),
+              eq(commentAttachments.createdBy, actor.id),
+              eq(commentAttachments.targetType, input.targetType),
+              eq(commentAttachments.targetId, input.targetId),
+              isNull(commentAttachments.messageId),
+              gt(commentAttachments.expiresAt, createdAt),
+            ));
+          return rows.length === attachmentIds.length;
+        };
+        const bindMessageAttachments = async (messageId: string) => {
+          if (attachmentIds.length === 0) return;
+          await tx
+            .update(commentAttachments)
+            .set({ attachedAt: createdAt, messageId })
+            .where(inArray(commentAttachments.id, attachmentIds));
+        };
+        const finish = async (comment: Omit<NonNullable<CommentTargetMutationCommitInput["comment"]>, "attachments"> | null) => {
+          const committedComment = comment ? {
+            ...comment,
+            attachments: attachmentIds.length > 0
+              ? (await tx.select().from(commentAttachments).where(eq(commentAttachments.messageId, comment.commentMessageId))).map(commentAttachmentDto)
+              : [],
+          } : null;
+          let targetCommitResult: CommentTargetCommitResult | undefined;
+          if (committedComment && options.runTargetCallbacks && target.kind === "registered") {
+            const result = await target.adapter.onMessageCommitted?.({
+              actor,
+              attachments: committedComment.attachments,
+              body,
+              commentMessageId: committedComment.commentMessageId,
+              commentThreadId: committedComment.commentThreadId,
+              createdAt,
+              mentionedUserIds,
+              replyRecipientUserId: committedComment.replyRecipientUserId ?? null,
+              replyToMessageId: committedComment.replyToMessageId ?? null,
+              target,
+            }, unitOfWork);
+            if (result) targetCommitResult = result;
+          }
+          if (options.commit) {
+            const decision = await options.commit({ comment: committedComment, unitOfWork });
+            if (decision.status !== "ok") throw new CommentTargetMutationRejected(decision);
+          }
+          return { comment: committedComment, targetCommitResult };
+        };
+
+        if (!body) return finish(null);
+        if (!(await arePendingAttachmentsAvailable())) return null;
+
+        if (input.parentMessageId) {
+          const [parent] = await tx
+            .select({ authorUserId: commentMessages.authorUserId, threadId: commentMessages.threadId })
+            .from(commentMessages)
+            .innerJoin(commentThreads, eq(commentThreads.id, commentMessages.threadId))
+            .where(and(
+              eq(commentMessages.id, input.parentMessageId),
+              eq(commentThreads.targetType, input.targetType),
+              eq(commentThreads.targetId, input.targetId),
+            ))
+            .limit(1);
+          if (!parent) return null;
+
+          let replyToMessageId: string | null = null;
+          let replyToAuthor: string | null = null;
+          let replyRecipientUserId: string | null = parent.authorUserId;
+          if (input.replyToMessageId) {
+            const [replyTarget] = await tx
+              .select({ author: commentMessages.author, authorUserId: commentMessages.authorUserId, id: commentMessages.id })
+              .from(commentMessages)
+              .where(and(eq(commentMessages.threadId, parent.threadId), eq(commentMessages.id, input.replyToMessageId)))
+              .limit(1);
+            if (!replyTarget) return null;
+            replyToMessageId = replyTarget.id;
+            replyToAuthor = replyTarget.author;
+            replyRecipientUserId = replyTarget.authorUserId;
+          }
+
+          const messageRows = await tx.select({ sortOrder: commentMessages.sortOrder }).from(commentMessages).where(eq(commentMessages.threadId, parent.threadId));
+          const nextMessageId = makeId("cmsg");
+          await tx.insert(commentMessages).values({
+            id: nextMessageId,
+            threadId: parent.threadId,
+            authorUserId: actor.id,
+            author: actor.name,
+            body,
+            createdAt,
+            parentMessageId: input.parentMessageId,
+            replyToMessageId,
+            replyToAuthor,
+            sortOrder: messageRows.reduce((max, message) => Math.max(max, message.sortOrder), -1) + 1,
+          });
+          await bindMessageAttachments(nextMessageId);
+          await tx.update(commentThreads).set({ targetTitle, updatedAt: createdAt }).where(eq(commentThreads.id, parent.threadId));
+          return finish({
+            body,
+            commentMessageId: nextMessageId,
+            commentThreadId: parent.threadId,
+            createdAt,
+            mentionedUserIds,
+            replyRecipientUserId,
+            replyToMessageId: replyToMessageId ?? input.parentMessageId,
+          });
+        }
+
+        const [openThread] = await tx
+          .select({ id: commentThreads.id })
+          .from(commentThreads)
+          .where(and(eq(commentThreads.targetType, input.targetType), eq(commentThreads.targetId, input.targetId), eq(commentThreads.status, "open")))
+          .limit(1);
+        const nextThreadId = openThread?.id ?? makeId("cthread");
+        if (!openThread) {
+          await tx.insert(commentThreads).values({
+            id: nextThreadId,
+            teamId: target.storageScopeId,
+            targetType: input.targetType,
+            targetId: input.targetId,
+            targetTitle,
+            status: "open",
+            createdBy: actor.id,
+            createdAt,
+            updatedAt: createdAt,
+          });
+        } else {
+          await tx.update(commentThreads).set({ targetTitle, updatedAt: createdAt }).where(eq(commentThreads.id, nextThreadId));
+        }
+
+        const messageRows = await tx.select({ sortOrder: commentMessages.sortOrder }).from(commentMessages).where(eq(commentMessages.threadId, nextThreadId));
+        const nextMessageId = makeId("cmsg");
+        await tx.insert(commentMessages).values({
+          id: nextMessageId,
+          threadId: nextThreadId,
+          authorUserId: actor.id,
+          author: actor.name,
+          body,
+          createdAt,
+          parentMessageId: null,
+          replyToMessageId: null,
+          replyToAuthor: null,
+          sortOrder: messageRows.reduce((max, message) => Math.max(max, message.sortOrder), -1) + 1,
+        });
+        await bindMessageAttachments(nextMessageId);
+        return finish({
+          body,
+          commentMessageId: nextMessageId,
+          commentThreadId: nextThreadId,
+          createdAt,
+          mentionedUserIds,
+          replyRecipientUserId: null,
+          replyToMessageId: null,
+        });
+      } finally {
+        releaseUnitOfWork(unitOfWork);
       }
-
-      if (!(await arePendingAttachmentsAvailable())) {
-        return null;
-      }
-
-      const messageRows = await tx
-        .select({ sortOrder: commentMessages.sortOrder })
-        .from(commentMessages)
-        .where(eq(commentMessages.threadId, parent.threadId));
-      const sortOrder = messageRows.reduce((max, message) => Math.max(max, message.sortOrder), -1) + 1;
-      const nextMessageId = makeId("cmsg");
-
-      await tx.insert(commentMessages).values({
-        id: nextMessageId,
-        threadId: parent.threadId,
-        authorUserId: actor.id,
-        author: actor.name,
-        body,
-        createdAt,
-        parentMessageId: input.parentMessageId,
-        replyToMessageId,
-        replyToAuthor,
-        sortOrder,
-      });
-      await bindMessageAttachments(nextMessageId);
-      await notifyTargetMessageCommitted({
-        messageId: nextMessageId,
-        replyRecipientUserId,
-        replyToMessageId: replyToMessageId ?? input.parentMessageId,
-        threadId: parent.threadId,
-      });
-      await tx.update(commentThreads).set({ targetTitle, updatedAt: createdAt }).where(eq(commentThreads.id, parent.threadId));
-      return {
-        messageId: nextMessageId,
-        replyRecipientUserId,
-        replyToMessageId: replyToMessageId ?? input.parentMessageId,
-        targetCommitResult,
-        threadId: parent.threadId,
-      };
-    }
-
-    const [openThread] = await tx
-      .select({ id: commentThreads.id })
-      .from(commentThreads)
-      .where(and(eq(commentThreads.targetType, input.targetType), eq(commentThreads.targetId, input.targetId), eq(commentThreads.status, "open")))
-      .limit(1);
-    const nextThreadId = openThread?.id ?? makeId("cthread");
-
-    if (!(await arePendingAttachmentsAvailable())) {
-      return null;
-    }
-
-    if (!openThread) {
-      await tx.insert(commentThreads).values({
-        id: nextThreadId,
-        teamId: target.storageScopeId,
-        targetType: input.targetType,
-        targetId: input.targetId,
-        targetTitle,
-        status: "open",
-        createdBy: actor.id,
-        createdAt,
-        updatedAt: createdAt,
-      });
-    } else {
-      await tx.update(commentThreads).set({ targetTitle, updatedAt: createdAt }).where(eq(commentThreads.id, nextThreadId));
-    }
-
-    const messageRows = await tx
-      .select({ sortOrder: commentMessages.sortOrder })
-      .from(commentMessages)
-      .where(eq(commentMessages.threadId, nextThreadId));
-    const sortOrder = messageRows.reduce((max, message) => Math.max(max, message.sortOrder), -1) + 1;
-    const nextMessageId = makeId("cmsg");
-
-    await tx.insert(commentMessages).values({
-      id: nextMessageId,
-      threadId: nextThreadId,
-      authorUserId: actor.id,
-      author: actor.name,
-      body,
-      createdAt,
-      parentMessageId: null,
-      replyToMessageId: null,
-      replyToAuthor: null,
-      sortOrder,
     });
-    await bindMessageAttachments(nextMessageId);
-    await notifyTargetMessageCommitted({
-      messageId: nextMessageId,
-      replyRecipientUserId: null,
-      replyToMessageId: null,
-      threadId: nextThreadId,
-    });
-
-    return { messageId: nextMessageId, replyRecipientUserId: null, replyToMessageId: null, targetCommitResult, threadId: nextThreadId };
-  });
-
-  if (!createdComment) {
-    return { status: "notFound" };
+  } catch (error) {
+    if (error instanceof CommentTargetMutationRejected) return error.decision;
+    throw error;
   }
 
-  const notificationAttachments =
-    attachmentIds.length > 0
-      ? (await db.select().from(commentAttachments).where(eq(commentAttachments.messageId, createdComment.messageId))).map(commentAttachmentDto)
-      : [];
-
-  await notifyMentionedUsersOfComment({
-    actorName: actor.name,
-    actorUserId: actor.id,
-    attachments: notificationAttachments,
-    body,
-    commentMessageId: createdComment.messageId,
-    commentThreadId: createdComment.threadId,
-    mentionedUserIds,
-    targetId: input.targetId,
-    targetTitle,
-    targetType: input.targetType,
-    teamId: target.storageScopeId,
-  });
-
-  await notifyCommentReplyRecipient({
-    actorName: actor.name,
-    actorUserId: actor.id,
-    attachments: notificationAttachments,
-    body,
-    commentMessageId: createdComment.messageId,
-    commentThreadId: createdComment.threadId,
-    excludedUserIds: mentionedUserIds,
-    replyRecipientUserId: createdComment.replyRecipientUserId,
-    replyToMessageId: createdComment.replyToMessageId,
-    targetId: input.targetId,
-    targetTitle,
-    targetType: input.targetType,
-    teamId: target.storageScopeId,
-  });
-
-  if (target.kind === "registered") {
-    const committedEvent: CommentMessageCommittedEvent = {
-      actor,
-      attachments: notificationAttachments,
+  if (!committed) return { status: "notFound" };
+  const comment = committed.comment;
+  let notificationAttachments: readonly CommentAttachment[] = [];
+  if (comment) {
+    notificationAttachments = comment.attachments;
+    await notifyMentionedUsersOfComment({
+      actorName: actor.name,
+      actorUserId: actor.id,
+      attachments: [...notificationAttachments],
       body,
-      commentMessageId: createdComment.messageId,
-      commentThreadId: createdComment.threadId,
-      createdAt,
+      commentMessageId: comment.commentMessageId,
+      commentThreadId: comment.commentThreadId,
       mentionedUserIds,
-      replyRecipientUserId: createdComment.replyRecipientUserId,
-      replyToMessageId: createdComment.replyToMessageId,
-      target,
-    };
-    await target.adapter.afterMessageCommitted?.(committedEvent, createdComment.targetCommitResult);
+      targetId: input.targetId,
+      targetTitle,
+      targetType: input.targetType,
+      teamId: target.storageScopeId,
+    });
+    await notifyCommentReplyRecipient({
+      actorName: actor.name,
+      actorUserId: actor.id,
+      attachments: [...notificationAttachments],
+      body,
+      commentMessageId: comment.commentMessageId,
+      commentThreadId: comment.commentThreadId,
+      excludedUserIds: mentionedUserIds,
+      replyRecipientUserId: comment.replyRecipientUserId,
+      replyToMessageId: comment.replyToMessageId,
+      targetId: input.targetId,
+      targetTitle,
+      targetType: input.targetType,
+      teamId: target.storageScopeId,
+    });
+    if (options.runTargetCallbacks && target.kind === "registered") {
+      await target.adapter.afterMessageCommitted?.({
+        actor,
+        attachments: notificationAttachments,
+        body,
+        commentMessageId: comment.commentMessageId,
+        commentThreadId: comment.commentThreadId,
+        createdAt,
+        mentionedUserIds,
+        replyRecipientUserId: comment.replyRecipientUserId,
+        replyToMessageId: comment.replyToMessageId,
+        target,
+      }, committed.targetCommitResult);
+    }
   }
 
   publishOrfDataInvalidation({
     actorUserId: actor.id,
     models: [target.kind === "registered" ? target.adapter.invalidationModel : "taskManagement"],
-    reason: "comment.changed",
-    target: { id: createdComment.threadId, type: "comment" },
+    reason: comment ? "comment.changed" : "feedback.changed",
+    target: comment
+      ? { id: comment.commentThreadId, type: "comment" }
+      : { id: input.targetId, type: "feedback" },
     teamId: target.storageScopeId,
   });
 
-  return { status: "ok", thread: (await getCommentThread(createdComment.threadId)) ?? undefined };
+  return { status: "ok", thread: comment ? (await getCommentThread(comment.commentThreadId)) ?? undefined : undefined };
 }
 
 export async function updateCommentThreadStatus(

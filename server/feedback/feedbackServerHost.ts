@@ -1,18 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import {
-  type FeedbackServerHost,
+  type registerFeedbackServerModule,
 } from "@orf/feedback-module/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { teamMembers, users } from "../db/schema";
 import { env } from "../env";
-import { publishNotificationEvent } from "../notifications/publisher";
 import { registerCommentTargetAdapter, type CommentTargetAdapter } from "../comments/commentTargetAdapters";
 import { registerDriveContextProvider } from "../drive/driveContextProviderRegistry";
 import { registerNotificationPresentationProvider } from "../notifications/presentationRegistry";
 import { registerFeedbackReferenceProvider } from "../references/feedbackReferenceRegistry";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import { createOrfFeedbackPorts } from "./feedbackHostPorts";
+import { feedbackDailyDigestNotificationPort } from "./feedbackNotificationPort";
 
 async function listActiveFeedbackDigestRecipients() {
   return db
@@ -30,7 +30,7 @@ async function listActiveFeedbackDigestRecipients() {
 export function createOrfFeedbackServerHost(
   app: FastifyInstance,
   options: { readonly startBackgroundJobs?: boolean } = {},
-): FeedbackServerHost {
+): Parameters<typeof registerFeedbackServerModule>[0] {
   const startBackgroundJobs = options.startBackgroundJobs ?? true;
   const registeredHttpRoutes = new Set<string>();
   const registeredRuntimeTasks = new Set<string>();
@@ -44,7 +44,7 @@ export function createOrfFeedbackServerHost(
         timeZone: env.ORF_FEEDBACK_DAILY_DIGEST_TIME_ZONE,
       },
       listActiveRecipients: listActiveFeedbackDigestRecipients,
-      publishNotification: publishNotificationEvent,
+      publishNotification: feedbackDailyDigestNotificationPort,
     },
     log: app.log,
     startBackgroundJobs,
@@ -100,7 +100,9 @@ export function createOrfFeedbackServerHost(
   };
 }
 
-function commentTargetAdapterForOrf(adapter: Parameters<FeedbackServerHost["commentTargets"]["registerTarget"]>[0]["adapter"]): CommentTargetAdapter {
+type FeedbackServerRegistration = Parameters<typeof registerFeedbackServerModule>[0];
+
+function commentTargetAdapterForOrf(adapter: Parameters<FeedbackServerRegistration["commentTargets"]["registerTarget"]>[0]["adapter"]): CommentTargetAdapter {
   return {
     invalidationModel: adapter.invalidationModel,
     protocolVersion: adapter.protocolVersion,
@@ -133,15 +135,15 @@ function commentTargetAdapterForOrf(adapter: Parameters<FeedbackServerHost["comm
         title: target.title,
       });
     },
-    lockForComment(database, target) {
-      return adapter.lockForComment(database, {
+    lockForComment(unitOfWork, target) {
+      return adapter.lockForComment(unitOfWork, {
         storageScopeId: target.storageScopeId,
         targetId: target.targetId,
         targetType: "feedback",
         title: target.title,
       });
     },
-    onMessageCommitted(event, database) {
+    onMessageCommitted(event, unitOfWork) {
       if (!adapter.onMessageCommitted) return Promise.resolve();
       return adapter.onMessageCommitted({
         actor: {
@@ -164,7 +166,7 @@ function commentTargetAdapterForOrf(adapter: Parameters<FeedbackServerHost["comm
           targetType: "feedback",
           title: event.target.title,
         },
-      }, database);
+      }, unitOfWork);
     },
     afterMessageCommitted(event, result) {
       if (!adapter.afterMessageCommitted) return Promise.resolve();

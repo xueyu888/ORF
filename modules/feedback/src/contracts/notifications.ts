@@ -1,11 +1,12 @@
 import { z } from "zod";
-import { feedbackCommentPath, feedbackIssuePath } from "./links";
+import { feedbackImpactValues } from "./values";
 
 export const feedbackNotificationEventKindValues = [
   "feedback.assignee.changed",
   "feedback.assignee.digest",
   "feedback.comment.created",
   "feedback.created",
+  "feedback.follow_up.created",
   "feedback.lifecycle.changed",
 ] as const;
 
@@ -34,10 +35,24 @@ const feedbackNotificationFeedbackSnapshotSchema = z.object({
 });
 const feedbackNotificationDigestItemSchema = z.object({
   id: feedbackNotificationNonEmptyTextSchema,
-  impact: feedbackNotificationTextSchema,
+  impact: z.enum(feedbackImpactValues),
   title: feedbackNotificationNonEmptyTextSchema,
   updatedAt: feedbackNotificationTextSchema,
 });
+const feedbackNotificationFollowUpCommentSchema = z.object({
+  attachmentCount: z.number().int().nonnegative(),
+  excerpt: feedbackNotificationTextSchema,
+  messageId: feedbackNotificationNonEmptyTextSchema,
+  threadId: feedbackNotificationNonEmptyTextSchema,
+}).nullable();
+const feedbackNotificationFollowUpAssigneeSchema = z.object({
+  next: feedbackNotificationUserSchema,
+  previous: feedbackNotificationUserSchema,
+}).nullable();
+const feedbackNotificationFollowUpLifecycleSchema = z.object({
+  resolution: feedbackNotificationTextSchema.nullable(),
+  stage: feedbackNotificationNonEmptyTextSchema,
+}).nullable();
 
 export const feedbackNotificationPayloadV1Schema = z.discriminatedUnion("type", [
   z.object({
@@ -81,6 +96,15 @@ export const feedbackNotificationPayloadV1Schema = z.discriminatedUnion("type", 
     localDate: feedbackNotificationNonEmptyTextSchema,
     pendingCount: z.number().int().nonnegative(),
   }),
+  z.object({
+    version: z.literal(1),
+    type: z.literal("follow_up"),
+    actor: feedbackNotificationActorSchema,
+    assignee: feedbackNotificationFollowUpAssigneeSchema,
+    comment: feedbackNotificationFollowUpCommentSchema,
+    feedback: feedbackNotificationFeedbackSnapshotSchema,
+    lifecycle: feedbackNotificationFollowUpLifecycleSchema,
+  }),
 ]);
 
 export type FeedbackNotificationPayloadV1 = z.infer<typeof feedbackNotificationPayloadV1Schema>;
@@ -91,7 +115,7 @@ export const feedbackNotificationCardReferenceV1Schema = z.discriminatedUnion("k
     kind: z.literal("feedback"),
     activityId: feedbackNotificationNonEmptyTextSchema,
     feedbackId: feedbackNotificationNonEmptyTextSchema,
-    payloadType: z.enum(["assignee_changed", "created", "lifecycle_changed"]),
+    payloadType: z.enum(["assignee_changed", "created", "follow_up", "lifecycle_changed"]),
   }),
   z.object({
     version: z.literal(1),
@@ -99,29 +123,29 @@ export const feedbackNotificationCardReferenceV1Schema = z.discriminatedUnion("k
     activityId: feedbackNotificationNonEmptyTextSchema,
     commentMessageId: feedbackNotificationNonEmptyTextSchema,
     feedbackId: feedbackNotificationNonEmptyTextSchema,
-    payloadType: z.literal("comment_created"),
+    payloadType: z.enum(["comment_created", "follow_up"]),
   }),
 ]);
 
 export type FeedbackNotificationCardReferenceV1 = z.infer<typeof feedbackNotificationCardReferenceV1Schema>;
 
 export const feedbackNotificationEventPlanSchema = z.object({
-  actorName: feedbackNotificationTextSchema,
-  actorUserId: feedbackNotificationTextSchema.nullable().optional(),
-  body: feedbackNotificationTextSchema,
-  kind: feedbackNotificationEventKindSchema,
-  metadata: z.record(z.string(), z.string()),
   payload: feedbackNotificationPayloadV1Schema,
   recipientUserIds: z.array(z.string()),
-  targetHref: feedbackNotificationTextSchema,
-  targetId: feedbackNotificationTextSchema,
-  targetType: z.literal("feedback"),
   teamId: feedbackNotificationTextSchema,
-  title: feedbackNotificationTextSchema,
-});
+}).strict();
 
 export type FeedbackNotificationProjectSnapshot = z.infer<typeof feedbackNotificationProjectSnapshotSchema>;
 export type FeedbackNotificationEventPlan = z.infer<typeof feedbackNotificationEventPlanSchema>;
+
+export function feedbackNotificationEventKindFromPayload(payload: FeedbackNotificationPayloadV1): FeedbackNotificationEventKind {
+  if (payload.type === "created") return "feedback.created";
+  if (payload.type === "assignee_changed") return "feedback.assignee.changed";
+  if (payload.type === "lifecycle_changed") return "feedback.lifecycle.changed";
+  if (payload.type === "comment_created") return "feedback.comment.created";
+  if (payload.type === "follow_up") return "feedback.follow_up.created";
+  return "feedback.assignee.digest";
+}
 
 export function feedbackNotificationCardReferenceFromPayload(
   payload: FeedbackNotificationPayloadV1,
@@ -137,6 +161,16 @@ export function feedbackNotificationCardReferenceFromPayload(
       kind: "comment",
       activityId: normalizedActivityId,
       commentMessageId: payload.commentMessageId,
+      feedbackId: payload.feedback.id,
+      payloadType: payload.type,
+    };
+  }
+  if (payload.type === "follow_up" && payload.comment) {
+    return {
+      version: 1,
+      kind: "comment",
+      activityId: normalizedActivityId,
+      commentMessageId: payload.comment.messageId,
       feedbackId: payload.feedback.id,
       payloadType: payload.type,
     };
@@ -193,15 +227,6 @@ export function planFeedbackCreatedNotification(input: {
   readonly title: string;
 }): FeedbackNotificationEventPlan {
   return {
-    actorName: input.actorName,
-    actorUserId: input.actorUserId,
-    body: `${input.actorName} 创建了反馈「${input.title}」${input.assigneeName ? `，处理人：${input.assigneeName}` : ""}。`,
-    kind: "feedback.created",
-    metadata: {
-      assignee: input.assigneeName ?? "",
-      feedbackTitle: input.title,
-      ...feedbackProjectNotificationMetadata(input.project),
-    },
     payload: {
       version: 1,
       type: "created",
@@ -210,11 +235,7 @@ export function planFeedbackCreatedNotification(input: {
       feedback: feedbackSnapshot(input),
     },
     recipientUserIds: [...input.recipientUserIds],
-    targetHref: feedbackNotificationTargetHref(input.feedbackId),
-    targetId: input.feedbackId,
-    targetType: "feedback",
     teamId: input.teamId,
-    title: "新的反馈 issue",
   };
 }
 
@@ -230,16 +251,6 @@ export function planFeedbackLifecycleChangedNotification(input: {
   readonly title: string;
 }): FeedbackNotificationEventPlan {
   return {
-    actorName: input.actorName,
-    actorUserId: input.actorUserId,
-    body: `${input.actorName} 更新了反馈「${input.title}」的生命周期。`,
-    kind: "feedback.lifecycle.changed",
-    metadata: {
-      feedbackResolution: input.resolution ?? "",
-      feedbackStage: input.stage,
-      feedbackTitle: input.title,
-      ...feedbackProjectNotificationMetadata(input.project),
-    },
     payload: {
       version: 1,
       type: "lifecycle_changed",
@@ -249,11 +260,7 @@ export function planFeedbackLifecycleChangedNotification(input: {
       stage: input.stage,
     },
     recipientUserIds: [...input.recipientUserIds],
-    targetHref: feedbackNotificationTargetHref(input.feedbackId),
-    targetId: input.feedbackId,
-    targetType: "feedback",
     teamId: input.teamId,
-    title: "反馈生命周期已更新",
   };
 }
 
@@ -268,15 +275,6 @@ export function planFeedbackAssigneeChangedNotification(input: {
   readonly title: string;
 }): FeedbackNotificationEventPlan {
   return {
-    actorName: input.actorName,
-    actorUserId: input.actorUserId,
-    body: `${input.actorName} 将反馈「${input.title}」的处理人从 ${input.previousAssigneeName ?? "未指派"} 调整为 ${input.nextAssigneeName ?? "未指派"}。`,
-    kind: "feedback.assignee.changed",
-    metadata: {
-      feedbackTitle: input.title,
-      nextAssignee: input.nextAssigneeName ?? "",
-      previousAssignee: input.previousAssigneeName ?? "",
-    },
     payload: {
       version: 1,
       type: "assignee_changed",
@@ -286,11 +284,7 @@ export function planFeedbackAssigneeChangedNotification(input: {
       previousAssignee: userSnapshot(input.previousAssigneeName),
     },
     recipientUserIds: [...input.recipientUserIds],
-    targetHref: feedbackNotificationTargetHref(input.feedbackId),
-    targetId: input.feedbackId,
-    targetType: "feedback",
     teamId: input.teamId,
-    title: "反馈处理人已更新",
   };
 }
 
@@ -308,19 +302,6 @@ export function planFeedbackCommentCreatedNotification(input: {
   readonly teamId: string;
 }): FeedbackNotificationEventPlan {
   return {
-    actorName: input.actorName,
-    actorUserId: input.actorUserId,
-    body: input.body,
-    kind: "feedback.comment.created",
-    metadata: {
-      commentMessageId: input.commentMessageId,
-      commentThreadId: input.commentThreadId,
-      ...input.commentMetadata,
-      ...feedbackProjectNotificationMetadata(input.project),
-      targetId: input.feedbackId,
-      targetTitle: input.targetTitle,
-      targetType: "feedback",
-    },
     payload: {
       version: 1,
       type: "comment_created",
@@ -332,21 +313,55 @@ export function planFeedbackCommentCreatedNotification(input: {
       feedback: feedbackSnapshot({ feedbackId: input.feedbackId, project: input.project, title: input.targetTitle }),
     },
     recipientUserIds: [...input.recipientUserIds],
-    targetHref: feedbackCommentPath({
-      commentMessageId: input.commentMessageId,
-      feedbackId: input.feedbackId,
-    }),
-    targetId: input.feedbackId,
-    targetType: "feedback",
     teamId: input.teamId,
-    title: "反馈有新回复",
   };
 }
 
-export function feedbackNotificationTargetHref(feedbackId: string) {
-  return feedbackIssuePath(feedbackId);
-}
-
-export function feedbackProjectNotificationMetadata(project: FeedbackNotificationProjectSnapshot): Record<string, string> {
-  return project ? { projectId: project.id, projectName: project.name } : {};
+export function planFeedbackFollowUpNotification(input: {
+  readonly actorName: string;
+  readonly actorUserId: string;
+  readonly assignee?: {
+    readonly nextName?: string | null;
+    readonly previousName?: string | null;
+  };
+  readonly body: string;
+  readonly comment?: {
+    readonly messageId: string;
+    readonly metadata: Record<string, string>;
+    readonly threadId: string;
+  };
+  readonly feedbackId: string;
+  readonly lifecycle?: {
+    readonly resolution?: string | null;
+    readonly stage: string;
+  };
+  readonly project: FeedbackNotificationProjectSnapshot;
+  readonly recipientUserIds: readonly string[];
+  readonly teamId: string;
+  readonly title: string;
+}): FeedbackNotificationEventPlan {
+  return {
+    payload: {
+      version: 1,
+      type: "follow_up",
+      actor: actorSnapshot(input),
+      assignee: input.assignee ? {
+        next: userSnapshot(input.assignee.nextName),
+        previous: userSnapshot(input.assignee.previousName),
+      } : null,
+      comment: input.comment ? {
+        attachmentCount: feedbackCommentAttachmentCount(input.comment.metadata),
+        excerpt: input.body,
+        messageId: input.comment.messageId,
+        threadId: input.comment.threadId,
+      } : null,
+      feedback: feedbackSnapshot(input),
+      lifecycle: input.lifecycle ? {
+        resolution: input.lifecycle.resolution ?? null,
+        stage: input.lifecycle.stage,
+      } : null,
+    },
+    recipientUserIds: [...input.recipientUserIds],
+    teamId: input.teamId,
+  };
 }

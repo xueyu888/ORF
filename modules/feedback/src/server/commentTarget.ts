@@ -1,13 +1,8 @@
 import { feedbackCommentPath, feedbackIssuePath } from "../contracts";
+import type { OrfUnitOfWorkToken } from "@orf/module-protocol";
 import type { FeedbackServerApplication } from "./application";
 
 export type FeedbackCommentTargetAccess = "allowed" | "forbidden" | "notFound";
-export type FeedbackCommentTargetDatabase = {
-  insert: unknown;
-  select: unknown;
-  update: unknown;
-  delete?: unknown;
-};
 
 export type FeedbackCommentTargetActor = {
   readonly id: string;
@@ -54,10 +49,10 @@ export interface FeedbackCommentTargetAdapterContribution {
   canComment(actor: FeedbackCommentTargetActor, target: FeedbackCommentTargetSnapshot): Promise<FeedbackCommentTargetAccess>;
   canRead(actor: FeedbackCommentTargetActor, target: FeedbackCommentTargetSnapshot): Promise<FeedbackCommentTargetAccess>;
   href(targetId: string, commentId?: string | null): string;
-  lockForComment(database: FeedbackCommentTargetDatabase, target: FeedbackCommentTargetSnapshot): Promise<boolean>;
+  lockForComment(unitOfWork: OrfUnitOfWorkToken, target: FeedbackCommentTargetSnapshot): Promise<boolean>;
   resolve(targetId: string): Promise<FeedbackCommentTargetSnapshot | null>;
   afterMessageCommitted?(event: FeedbackCommentMessageCommittedEvent, result?: FeedbackCommentTargetCommitResult): Promise<void>;
-  onMessageCommitted?(event: FeedbackCommentMessageCommittedEvent, database: FeedbackCommentTargetDatabase): Promise<FeedbackCommentTargetCommitResult | void>;
+  onMessageCommitted?(event: FeedbackCommentMessageCommittedEvent, unitOfWork: OrfUnitOfWorkToken): Promise<FeedbackCommentTargetCommitResult | void>;
 }
 
 export function createFeedbackCommentTargetAdapter(application: FeedbackServerApplication): FeedbackCommentTargetAdapterContribution {
@@ -88,16 +83,16 @@ export function createFeedbackCommentTargetAdapter(application: FeedbackServerAp
         ? feedbackCommentPath({ commentMessageId: commentId.trim(), feedbackId })
         : feedbackIssuePath(feedbackId);
     },
-    lockForComment(database, target) {
-      return application.lockCommentTarget(database as Parameters<FeedbackServerApplication["lockCommentTarget"]>[0], target.targetId);
+    lockForComment(unitOfWork, target) {
+      return application.lockCommentTarget(unitOfWork, target.targetId);
     },
-    async onMessageCommitted(event, database) {
+    async onMessageCommitted(event, unitOfWork) {
       const result = await application.recordCommentCreated({
         actorUserId: event.actor.id,
         commentMessageId: event.commentMessageId,
-        database: database as Parameters<FeedbackServerApplication["recordCommentCreated"]>[0]["database"],
         feedbackId: event.target.targetId,
         teamId: event.target.storageScopeId,
+        unitOfWork,
       });
       return { feedbackActivityEventId: result.activityEventId };
     },

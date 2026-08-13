@@ -20,16 +20,61 @@ import {
 } from "../server/notifications/notificationIsolationPolicy";
 import { notificationPolicy } from "../server/notifications/policies/registry";
 import { createFeedbackNotificationPresentationProvider } from "@orf/feedback-module/testing";
-import { registerNotificationPresentationProvider } from "../server/notifications/presentationRegistry";
+import { notificationPresentationFor, registerNotificationPresentationProvider } from "../server/notifications/presentationRegistry";
 import {
   parseDataSyncEventPayload,
   selectDataSyncRecipientMembership,
   dataSyncEventMetadata,
 } from "../server/notifications/dataSyncNotificationModel";
 import { workLogSubmissionNotificationBody } from "../server/workLogs/workLogSubmissionNotification";
+import { buildChatReactionNotificationPlan } from "../server/chat/chatReactionNotification";
 import type { NotificationKind, NotificationTargetType } from "../src/types/orf";
 
-registerNotificationPresentationProvider(createFeedbackNotificationPresentationProvider());
+const feedbackNotificationPresentationProvider = createFeedbackNotificationPresentationProvider();
+registerNotificationPresentationProvider(feedbackNotificationPresentationProvider);
+
+test("feedback notification provider validates payloads and projects recipient-scoped presentation without database reads", () => {
+  const payload = {
+    version: 1 as const,
+    type: "follow_up" as const,
+    actor: { id: "user-a", name: "薛雨" },
+    assignee: {
+      next: { id: null, name: "新处理人" },
+      previous: { id: null, name: "旧处理人" },
+    },
+    comment: {
+      attachmentCount: 0,
+      excerpt: "薛雨 跟进了反馈并更新了生命周期和处理人。",
+      messageId: "comment-1",
+      threadId: "thread-1",
+    },
+    feedback: { id: "fb-1", project: null, title: "聊天定位异常" },
+    lifecycle: { resolution: "resolved", stage: "pending_verification" },
+  };
+  assert.equal(feedbackNotificationPresentationProvider.payloadSchema.safeParse(payload).success, true);
+  assert.equal(feedbackNotificationPresentationProvider.payloadSchema.safeParse({ ...payload, version: 2 }).success, false);
+
+  const presentation = notificationPresentationFor({
+    namespace: "feedback",
+    payload,
+    recipient: {
+      attentionLevel: "action_required",
+      deliveryClass: "direct",
+      reasons: ["creator", "action_required", "creator"],
+      userId: "user-b",
+    },
+  });
+  assert.equal(presentation.actorUserId, "user-a");
+  assert.equal(presentation.title, "反馈有新跟进");
+  assert.equal(presentation.target.href, "/feedback/fb-1?comment=comment-1");
+  assert.deepEqual(presentation.action, { href: "/feedback/fb-1?comment=comment-1", label: "打开评论" });
+  assert.deepEqual(presentation.recipient, {
+    attentionLevel: "action_required",
+    deliveryClass: "direct",
+    reasons: ["action_required", "creator"],
+    userId: "user-b",
+  });
+});
 
 test("personal notifications dedupe recipients and exclude the actor", () => {
   const recipients = resolveNotificationRecipients({
@@ -244,12 +289,14 @@ test("known notification kinds have explicit action labels", () => {
     { kind: "objective.settled", label: "打开统计", targetHref: "/reports?date=2026-08-04&objective=objective-1", targetType: "objective" },
     { kind: "feedback.created", label: "打开反馈", targetHref: "/feedback/feedback-1", targetType: "feedback" },
     { kind: "feedback.comment.created", label: "打开评论", targetHref: "/feedback/feedback-1?comment=comment-1", targetType: "feedback" },
+    { kind: "feedback.follow_up.created", label: "打开评论", targetHref: "/feedback/feedback-1?comment=comment-1", targetType: "feedback" },
     { kind: "feedback.lifecycle.changed", label: "打开反馈", targetHref: "/feedback/feedback-1", targetType: "feedback" },
     { kind: "feedback.assignee.changed", label: "打开反馈", targetHref: "/feedback/feedback-1", targetType: "feedback" },
     { kind: "feedback.assignee.digest", label: "打开反馈列表", targetHref: "/feedback?state=open&assignee=user-1", targetType: "feedback" },
     { kind: "comment.reply.created", label: "打开评论", targetHref: "/tasks?comment=comment-1#objective:objective-1", targetType: "comment" },
     { kind: "comment.thread.status.changed", label: "打开评论", targetHref: "/tasks?comment=thread-1#objective:objective-1", targetType: "comment" },
     { kind: "comment.mention.created", label: "打开评论", targetHref: "/tasks?comment=comment-1#objective:objective-1", targetType: "comment" },
+    { kind: "chat.reaction.created", label: "打开消息", targetHref: "/chat/channel-1?message=message-1", targetType: "chatMessage" },
     { kind: "data.sync.conflict", label: "打开通知中心", targetHref: "/chat/system/personalNotifications", targetType: "dataSync" },
     { kind: "worklog.submitted", label: "打开工作日志", targetHref: "/work-logs?date=2026-08-04&view=today&entry=worklog-1", targetType: "workLog" },
     { kind: "worklog.reminder", label: "去补工作日志", targetHref: "/work-logs?date=2026-08-04&view=today", targetType: "workLog" },
@@ -315,6 +362,95 @@ test("settlement notifications are personal reminders without comment reply targ
   });
   assert.deepEqual(notificationPolicy("objective.settled"), {
     kind: "objective.settled",
+    replyTarget: "none",
+    stream: "personalNotification",
+  });
+});
+
+test("chat reaction notifications target the displayed message author only for a new reaction", () => {
+  const baseMessage = {
+    attachments: [],
+    authorUserId: "user-author",
+    body: "请看 **这个方案**",
+    channelId: "channel-1",
+    id: "message-1",
+    rootMessageId: "root-1",
+    source: "user" as const,
+    system: null,
+  };
+  assert.deepEqual(buildChatReactionNotificationPlan({
+    actorName: "薛雨",
+    actorUserId: "user-actor",
+    emojiName: "thumbsup",
+    message: baseMessage,
+    reacting: true,
+    reactionChanged: true,
+    teamId: "team-1",
+  }), {
+    actorName: "薛雨",
+    actorUserId: "user-actor",
+    body: "👍 点赞 · 请看 这个方案",
+    emojiName: "thumbsup",
+    recipientUserId: "user-author",
+    targetHref: "/chat/channel-1?thread=root-1&message=message-1",
+    targetId: "message-1",
+    teamId: "team-1",
+    title: "薛雨 回应了你的消息",
+  });
+  assert.equal(buildChatReactionNotificationPlan({
+    actorName: "薛雨",
+    actorUserId: "user-actor",
+    emojiName: "thumbsup",
+    message: baseMessage,
+    reacting: true,
+    reactionChanged: false,
+    teamId: "team-1",
+  }), null);
+  assert.equal(buildChatReactionNotificationPlan({
+    actorName: "薛雨",
+    actorUserId: "user-actor",
+    emojiName: "thumbsup",
+    message: baseMessage,
+    reacting: false,
+    reactionChanged: true,
+    teamId: "team-1",
+  }), null);
+});
+
+test("chat reaction notifications use the displayed actor for system event messages and exclude self reactions", () => {
+  const systemMessage = {
+    attachments: [],
+    authorUserId: "system-bot",
+    body: "反馈有新跟进",
+    channelId: "system-channel",
+    id: "system-message",
+    rootMessageId: null,
+    source: "system" as const,
+    system: { actorUserId: "user-event-actor" },
+  };
+  assert.equal(buildChatReactionNotificationPlan({
+    actorName: "事件触发人",
+    actorUserId: "user-event-actor",
+    emojiName: "one",
+    message: systemMessage,
+    reacting: true,
+    reactionChanged: true,
+    teamId: "team-1",
+  }), null);
+  assert.equal(buildChatReactionNotificationPlan({
+    actorName: "其他成员",
+    actorUserId: "user-other",
+    emojiName: "one",
+    message: systemMessage,
+    reacting: true,
+    reactionChanged: true,
+    teamId: "team-1",
+  })?.recipientUserId, "user-event-actor");
+});
+
+test("chat reaction notifications are personal reminders without a comment reply target", () => {
+  assert.deepEqual(notificationPolicy("chat.reaction.created"), {
+    kind: "chat.reaction.created",
     replyTarget: "none",
     stream: "personalNotification",
   });

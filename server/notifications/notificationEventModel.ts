@@ -272,6 +272,8 @@ export function resolveNotificationRecipients(input: {
 export function notificationActionFor(input: NotificationActionInput): NotificationAction {
   const href = input.targetHref.trim();
   if (!href) return null;
+  const storedActionLabel = input.metadata?.notificationActionLabel?.trim();
+  if (storedActionLabel) return { href, label: storedActionLabel };
   const providerAction = notificationPresentationActionFor(input);
   if (providerAction !== undefined) return providerAction;
 
@@ -306,6 +308,8 @@ export function notificationActionFor(input: NotificationActionInput): Notificat
     case "comment.thread.status.changed":
     case "comment.mention.created":
       return { href, label: "打开评论" };
+    case "chat.reaction.created":
+      return { href, label: "打开消息" };
     case "data.sync.conflict":
       return { href, label: "打开通知中心" };
     case "worklog.submitted":

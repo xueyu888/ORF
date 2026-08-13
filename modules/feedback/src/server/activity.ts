@@ -28,6 +28,8 @@ export type FeedbackCommentCreatedActivityInput = {
   readonly actorUserId: string;
   readonly commentMessageId: string;
   readonly feedbackId: string;
+  readonly followUpId?: string;
+  readonly occurredAt?: string;
   readonly teamId: string;
 };
 
@@ -35,7 +37,7 @@ export async function recordFeedbackCommentCreatedActivity(
   database: FeedbackActivityDatabase,
   input: FeedbackCommentCreatedActivityInput,
 ) {
-  const occurredAt = feedbackNowIso();
+  const occurredAt = input.occurredAt ?? feedbackNowIso();
   const activityEventId = makeFeedbackActivityId();
   await upsertFeedbackParticipants(database, {
     feedbackId: input.feedbackId,
@@ -49,7 +51,7 @@ export async function recordFeedbackCommentCreatedActivity(
     feedbackId: input.feedbackId,
     actorUserId: input.actorUserId,
     activityType: "feedback.comment.created",
-    payload: { commentMessageId: input.commentMessageId },
+    payload: { commentMessageId: input.commentMessageId, ...(input.followUpId ? { followUpId: input.followUpId } : {}) },
     createdAt: occurredAt,
   });
   return { activityEventId };

@@ -10,6 +10,7 @@ import {
   feedbackReferenceCardDataFromReadModel,
   feedbackIssueListRequestFromInput,
   feedbackImpactSchema,
+  feedbackFollowUpInputSchema,
   feedbackPrioritySchema,
   feedbackRelationTypeSchema,
   feedbackSubscriptionMutationModeSchema,
@@ -55,11 +56,14 @@ const createFeedbackMultipartFieldsSchema = z.object({
 const updateFeedbackMetadataBodySchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
   title: z.string().trim().min(1).optional(),
-  description: z.string().trim().min(1).optional(),
   causeCategories: z.array(z.string().trim().min(1)).min(1).optional(),
   impact: feedbackImpactSchema.optional(),
   priority: feedbackPrioritySchema.nullable().optional(),
   projectId: z.string().trim().min(1).nullable().optional(),
+}).strict();
+const updateFeedbackReportBodySchema = z.object({
+  expectedVersion: z.number().int().nonnegative(),
+  description: z.string().trim().min(1),
 }).strict();
 const updateFeedbackAssigneeBodySchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
@@ -511,6 +515,14 @@ export function registerFeedbackHttpRoutes(app: FastifyInstance, feedback: Feedb
     return sendFeedbackCommandOutcome(reply, await feedback.transitionFeedback(params.feedbackId, body, applicationActor(context)));
   });
 
+  app.post("/api/feedback/:feedbackId/follow-ups", async (request, reply) => {
+    const params = feedbackParamsSchema.parse(request.params);
+    const body = feedbackFollowUpInputSchema.parse(request.body);
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
+    return sendFeedbackCommandOutcome(reply, await feedback.followUp(params.feedbackId, body, applicationActor(context)));
+  });
+
   app.patch("/api/feedback/:feedbackId/metadata", async (request, reply) => {
     const params = feedbackParamsSchema.parse(request.params);
     const body = updateFeedbackMetadataBodySchema.parse(request.body);
@@ -519,8 +531,15 @@ export function registerFeedbackHttpRoutes(app: FastifyInstance, feedback: Feedb
     return sendFeedbackCommandOutcome(reply, await feedback.updateMetadata(params.feedbackId, body, applicationActor(context)));
   });
 
+  app.patch("/api/feedback/:feedbackId/report", async (request, reply) => {
+    const params = feedbackParamsSchema.parse(request.params);
+    const body = updateFeedbackReportBodySchema.parse(request.body);
+    const context = await feedback.actor.requireUserScopeContext(request, reply);
+    if (!context) return reply;
+    return sendFeedbackCommandOutcome(reply, await feedback.updateReport(params.feedbackId, body, applicationActor(context)));
+  });
+
   app.put("/api/feedback/:feedbackId/assignee", updateFeedbackAssigneeRoute);
-  app.patch("/api/feedback/:feedbackId/assignee", updateFeedbackAssigneeRoute);
 
   app.post("/api/feedback/:feedbackId/relations", async (request, reply) => {
     const params = feedbackParamsSchema.parse(request.params);

@@ -21,3 +21,6 @@ export {
   ensureFeedbackAssigneeOption,
   mergeFeedbackAssigneeOptions,
 } from "../web/model/assigneeOptions";
+export {
+  feedbackIssueTimelineEntries,
+} from "../web/model/timeline";

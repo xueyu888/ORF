@@ -2494,7 +2494,7 @@ export async function deleteChatMessage(
 export async function setChatReaction(
   input: { channelId: string; emojiName: string; messageId: string; reacting: boolean },
   actor: ChatActor,
-): Promise<Outcome<{ message: ChatMessage }>> {
+): Promise<Outcome<{ message: ChatMessage; reactionChanged: boolean }>> {
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
   const emojiName = input.emojiName.trim().slice(0, 80);
   if (!emojiName) return { status: "invalid" };
@@ -2502,36 +2502,37 @@ export async function setChatReaction(
   const message = await getRawMessage(actor, input.messageId);
   if (!message || message.channel_id !== input.channelId || message.deleted_at) return { status: "notFound" };
 
-  if (input.reacting) {
-    await pool.query(
+  const mutation = input.reacting
+    ? await pool.query(
       `
         INSERT INTO chat_message_reactions (message_id, user_id, emoji_name, created_at)
         VALUES ($1, $2, $3, $4)
         ON CONFLICT (message_id, user_id, emoji_name) DO NOTHING
       `,
       [input.messageId, actor.id, emojiName, nowIso()],
-    );
-  } else {
-    await pool.query("DELETE FROM chat_message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji_name = $3", [
+    )
+    : await pool.query("DELETE FROM chat_message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji_name = $3", [
       input.messageId,
       actor.id,
       emojiName,
     ]);
-  }
+  const reactionChanged = mutation.rowCount === 1;
 
   const updated = await getMessageById(actor, input.messageId);
   if (!updated) return { status: "notFound" };
-  const recipients = await getChannelRecipientIds(storageTeamId(actor), input.channelId);
-  publishChatMessageMutationRealtime({
-    eventType: "reaction.changed",
-    teamId: storageTeamId(actor),
-    channelId: input.channelId,
-    actorUserId: actor.id,
-    messageId: input.messageId,
-    rootMessageId: updated.rootMessageId ?? null,
-    recipientUserIds: recipients,
-  });
-  return ok({ message: updated });
+  if (reactionChanged) {
+    const recipients = await getChannelRecipientIds(storageTeamId(actor), input.channelId);
+    publishChatMessageMutationRealtime({
+      eventType: "reaction.changed",
+      teamId: storageTeamId(actor),
+      channelId: input.channelId,
+      actorUserId: actor.id,
+      messageId: input.messageId,
+      rootMessageId: updated.rootMessageId ?? null,
+      recipientUserIds: recipients,
+    });
+  }
+  return ok({ message: updated, reactionChanged });
 }
 
 export async function setChatMessagePin(

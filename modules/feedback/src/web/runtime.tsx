@@ -52,16 +52,19 @@ export type FeedbackWebHost = {
       onOpenImage: (preview: FeedbackImagePreview) => void;
     }>;
     CommentComposer: ComponentType<{
+      allowEmptySubmit?: boolean;
       currentMember: string;
       currentUserAvatarUrl?: string | null;
       currentUserId: string;
       draft: FeedbackCommentDraft;
+      footerActions?: ReactNode;
       mentionableUsers: FeedbackCommentMentionUser[];
       mode: FeedbackCommentDraftMode;
       onCancelMode: () => void;
       onDraftChange: (draft: FeedbackCommentDraft) => void;
       onSubmit: (event: FormEvent) => void;
       onUploadAttachment: (file: File) => Promise<{ markdown: string; previewUrl?: string | null } | null>;
+      submitLabel?: string;
     }>;
     CommentDraftFields: ComponentType<{
       currentUserId: string;

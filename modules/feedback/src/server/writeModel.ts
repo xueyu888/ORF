@@ -1,10 +1,11 @@
 import { and, eq, or } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type {
-  FeedbackActivityType,
   FeedbackActorRole,
   FeedbackActorStatus,
   FeedbackCommandResult,
+  FeedbackResolution,
+  FeedbackStage,
   FeedbackImpact,
   FeedbackPriority,
   FeedbackRelationType,
@@ -34,6 +35,7 @@ import {
 } from "./notificationDispatch";
 import type { FeedbackNotificationDispatchDraft } from "./notificationProtocol";
 import { upsertFeedbackParticipants } from "./participants";
+import { recordFeedbackCommentCreatedActivity } from "./activity";
 import type {
   FeedbackTargetTitleSync,
   FeedbackTransitionNotificationDispatchFactory,
@@ -87,13 +89,18 @@ type FeedbackCommandFailure = Exclude<FeedbackCommandResult, { status: "ok" }>;
 
 export type UpdateFeedbackMetadataWriteInput = {
   readonly causeCategories?: readonly string[];
-  readonly description?: string;
   readonly expectedVersion: number;
   readonly feedbackId: string;
   readonly impact?: FeedbackImpact;
   readonly priority?: FeedbackPriority | null;
   readonly projectId?: string | null;
   readonly title?: string;
+};
+
+export type UpdateFeedbackReportWriteInput = {
+  readonly description: string;
+  readonly expectedVersion: number;
+  readonly feedbackId: string;
 };
 
 export type UpdateFeedbackAssigneeWriteInput = {
@@ -117,6 +124,24 @@ export type TransitionFeedbackIssueWriteInput = {
 export type TransitionFeedbackIssueWriteResult =
   | FeedbackCommandFailure
   | { status: "ok"; changed: true };
+
+export type CommitFeedbackFollowUpWriteInput = {
+  readonly assigneeUserId?: string | null;
+  readonly comment?: {
+    readonly messageId: string;
+    readonly threadId: string;
+  };
+  readonly expectedVersion: number;
+  readonly feedbackId: string;
+  readonly notificationDispatch?: (context: {
+    readonly assigneeUserId: string | null;
+    readonly commentMessageId?: string;
+    readonly commentThreadId?: string;
+    readonly resolution: FeedbackResolution | null;
+    readonly stage: FeedbackStage;
+  }) => FeedbackNotificationDispatchDraft | null;
+  readonly transition?: FeedbackTransitionInput;
+};
 
 export type AddFeedbackRelationWriteInput = {
   readonly expectedVersion: number;
@@ -312,9 +337,8 @@ export async function updateFeedbackIssueMetadata(
   if (!teamId) return { status: "notFound" };
 
   const nextTitle = input.title === undefined ? undefined : input.title.trim();
-  const nextDescription = input.description === undefined ? undefined : input.description.trim();
   const nextCauseCategories = normalizeCauseCategories(input.causeCategories);
-  if (nextTitle === "" || nextDescription === "" || (nextCauseCategories && nextCauseCategories.length === 0)) {
+  if (nextTitle === "" || (nextCauseCategories && nextCauseCategories.length === 0)) {
     return { status: "invalid" };
   }
   const nextProjectId = input.projectId === undefined ? undefined : input.projectId?.trim() || null;
@@ -346,10 +370,6 @@ export async function updateFeedbackIssueMetadata(
       changedFields.push("title");
       payload.previousTitle = target.title;
       payload.nextTitle = nextTitle;
-    }
-    if (nextDescription !== undefined && nextDescription !== target.description) {
-      patch.description = nextDescription;
-      changedFields.push("description");
     }
     if (input.impact !== undefined && input.impact !== target.impact) {
       patch.impact = input.impact;
@@ -410,16 +430,54 @@ export async function updateFeedbackIssueMetadata(
       });
     }
 
-    const activityType: FeedbackActivityType = changedFields.some((field) => field === "title" || field === "description")
-      ? "feedback.report.changed"
-      : "feedback.metadata.changed";
     await tx.insert(feedbackActivityEvents).values({
       id: makeFeedbackActivityId(),
       teamId,
       feedbackId: input.feedbackId,
       actorUserId: actor.id,
-      activityType,
+      activityType: "feedback.metadata.changed",
       payload: { ...payload, changedFields },
+      createdAt: updatedAt,
+    });
+    return { status: "ok", changed: true };
+  });
+}
+
+export async function updateFeedbackIssueReport(
+  database: FeedbackWriteDatabase,
+  input: UpdateFeedbackReportWriteInput,
+  actor: FeedbackWriteActor,
+): Promise<FeedbackCommandResult> {
+  const teamId = normalizeTeamId(actor);
+  const description = input.description.trim();
+  if (!teamId) return { status: "notFound" };
+  if (!description) return { status: "invalid" };
+
+  return database.transaction(async (tx): Promise<FeedbackCommandResult> => {
+    const [target] = await tx.select().from(feedback).where(eq(feedback.id, input.feedbackId)).limit(1).for("update");
+    if (!target || target.teamId !== teamId) return { status: "notFound" };
+    if (target.version !== input.expectedVersion) return { status: "conflict" };
+    const capabilities = deriveFeedbackCapabilities({
+      actor: actorSnapshot(actor, teamId),
+      feedback: entitySnapshot(target),
+    });
+    if (!capabilities.canEditReport) return { status: "forbidden" };
+    if (description === target.description) return { status: "ok", changed: false };
+
+    const updatedAt = feedbackNowIso();
+    await tx.update(feedback).set({
+      description,
+      updatedAt,
+      updatedBy: actor.id,
+      version: target.version + 1,
+    }).where(and(eq(feedback.id, input.feedbackId), eq(feedback.teamId, teamId), eq(feedback.version, input.expectedVersion)));
+    await tx.insert(feedbackActivityEvents).values({
+      id: makeFeedbackActivityId(),
+      teamId,
+      feedbackId: input.feedbackId,
+      actorUserId: actor.id,
+      activityType: "feedback.report.changed",
+      payload: { changedFields: ["description"] },
       createdAt: updatedAt,
     });
     return { status: "ok", changed: true };
@@ -477,6 +535,139 @@ export async function updateFeedbackIssueAssignee(
 
     return { status: "ok", changed: true };
   });
+}
+
+export async function commitFeedbackFollowUp(
+  database: FeedbackWriteClient,
+  input: CommitFeedbackFollowUpWriteInput,
+  actor: FeedbackWriteActor,
+): Promise<FeedbackCommandResult> {
+  const teamId = normalizeTeamId(actor);
+  if (!teamId) return { status: "notFound" };
+
+  const [target] = await database.select().from(feedback).where(eq(feedback.id, input.feedbackId)).limit(1).for("update");
+  if (!target || target.teamId !== teamId) return { status: "notFound" };
+  if (target.version !== input.expectedVersion) return { status: "conflict" };
+
+  const capabilities = deriveFeedbackCapabilities({
+    actor: actorSnapshot(actor, teamId),
+    feedback: entitySnapshot(target),
+  });
+  const hasAssigneeCommand = input.assigneeUserId !== undefined;
+  const nextAssigneeUserId = hasAssigneeCommand ? input.assigneeUserId?.trim() || null : target.assigneeUserId ?? null;
+  const assigneeChanged = hasAssigneeCommand && nextAssigneeUserId !== (target.assigneeUserId ?? null);
+  if (hasAssigneeCommand && !capabilities.canChangeAssignee) return { status: "forbidden" };
+
+  const occurredAt = feedbackNowIso();
+  let transitionOutcome: ReturnType<typeof applyFeedbackTransition> | null = null;
+  if (input.transition) {
+    transitionOutcome = applyFeedbackTransition({
+      actor: actorSnapshot(actor, teamId),
+      command: input.transition,
+      duplicateRelations: {
+        duplicateTargetFeedbackIds: await duplicateTargetFeedbackIds(database, teamId, input.feedbackId),
+      },
+      feedback: entitySnapshot(target),
+      occurredAt,
+    });
+    if (!transitionOutcome.ok) {
+      const status = domainErrorToCommandStatus(transitionOutcome.error.code);
+      if (status === "conflict" || status === "forbidden") return { status };
+      return { status: "invalid" };
+    }
+  }
+
+  const hasFeedbackChange = assigneeChanged || Boolean(transitionOutcome?.ok);
+  if (!input.comment && !hasFeedbackChange) return { status: "invalid" };
+
+  const followUpId = input.comment?.messageId ?? makeFeedbackActivityId();
+  let assigneeActivityEventId: string | null = null;
+  let commentActivityEventId: string | null = null;
+  let lifecycleActivityEventId: string | null = null;
+
+  if (hasFeedbackChange) {
+    const transitionFeedback = transitionOutcome?.ok ? transitionOutcome.value.feedback : null;
+    await database
+      .update(feedback)
+      .set({
+        assigneeUserId: nextAssigneeUserId,
+        stage: transitionFeedback?.stage ?? target.stage,
+        resolution: transitionFeedback?.resolution ?? target.resolution,
+        closedAt: transitionFeedback ? transitionFeedback.closedAt ?? null : target.closedAt,
+        closedByUserId: transitionFeedback ? transitionFeedback.closedByUserId ?? null : target.closedByUserId,
+        updatedAt: occurredAt,
+        updatedBy: actor.id,
+        version: target.version + 1,
+      })
+      .where(and(eq(feedback.id, input.feedbackId), eq(feedback.teamId, teamId), eq(feedback.version, input.expectedVersion)));
+  }
+
+  if (input.comment) {
+    const commentActivity = await recordFeedbackCommentCreatedActivity(database, {
+      actorUserId: actor.id,
+      commentMessageId: input.comment.messageId,
+      feedbackId: input.feedbackId,
+      followUpId,
+      occurredAt,
+      teamId,
+    });
+    commentActivityEventId = commentActivity.activityEventId;
+  }
+
+  if (assigneeChanged) {
+    const activityEventId = makeFeedbackActivityId();
+    await database.insert(feedbackActivityEvents).values({
+      id: activityEventId,
+      teamId,
+      feedbackId: input.feedbackId,
+      actorUserId: actor.id,
+      activityType: "feedback.assignee.changed",
+      payload: {
+        followUpId,
+        previousAssigneeUserId: target.assigneeUserId,
+        nextAssigneeUserId,
+      },
+      createdAt: occurredAt,
+    });
+    assigneeActivityEventId = activityEventId;
+  }
+
+  if (transitionOutcome?.ok && input.transition) {
+    const activityEventId = makeFeedbackActivityId();
+    await database.insert(feedbackActivityEvents).values({
+      id: activityEventId,
+      teamId,
+      feedbackId: input.feedbackId,
+      actorUserId: actor.id,
+      activityType: transitionOutcome.value.activityType,
+      payload: {
+        command: input.transition,
+        followUpId,
+        previousStage: target.stage,
+        previousResolution: target.resolution,
+        nextStage: transitionOutcome.value.feedback.stage,
+        nextResolution: transitionOutcome.value.feedback.resolution,
+      },
+      createdAt: occurredAt,
+    });
+    lifecycleActivityEventId = activityEventId;
+  }
+
+  const nextLifecycle = transitionOutcome?.ok ? transitionOutcome.value.feedback : target;
+  const primaryActivityEventId = commentActivityEventId ?? lifecycleActivityEventId ?? assigneeActivityEventId;
+  if (!primaryActivityEventId) throw new Error("Feedback follow-up committed without an activity event");
+  await insertFeedbackNotificationDispatch(database, {
+    activityEventId: primaryActivityEventId,
+    dispatch: input.notificationDispatch?.({
+      assigneeUserId: nextAssigneeUserId,
+      commentMessageId: input.comment?.messageId,
+      commentThreadId: input.comment?.threadId,
+      resolution: nextLifecycle.resolution,
+      stage: nextLifecycle.stage,
+    }) ?? null,
+  });
+
+  return { status: "ok", changed: true };
 }
 
 async function duplicateTargetFeedbackIds(database: FeedbackWriteClient, teamId: string, feedbackId: string) {

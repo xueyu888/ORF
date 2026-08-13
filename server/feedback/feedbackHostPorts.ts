@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type { FeedbackServerHost } from "@orf/feedback-module/server";
+import type { registerFeedbackServerModule } from "@orf/feedback-module/server";
 import { replaceOrfAttachmentMarkdownTokens } from "../../src/features/rich-text/orfRichTextTokens";
 import { buildCommentNotificationContent } from "../notifications/notificationEventModel";
 import { requireUserScopeContext } from "../auth/accessPolicy";
@@ -30,8 +30,10 @@ import { objectStorage } from "../storage/objectStorage";
 import { readFeedbackSettings } from "../settings/feedbackSettings";
 import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
 import { feedbackNotificationPort } from "./feedbackNotificationPort";
+import { resolveUnitOfWork } from "../db/unitOfWork";
+import { commitFeedbackFollowUp } from "../repositories/orfRepository";
 
-type FeedbackRequiredPorts = FeedbackServerHost["ports"];
+type FeedbackRequiredPorts = Parameters<typeof registerFeedbackServerModule>[0]["ports"];
 type FeedbackScope = { readonly storageScopeId: string };
 type FeedbackReportAttachmentPort = FeedbackRequiredPorts["reportAttachments"];
 type FeedbackPreparedReportAttachment = {
@@ -134,6 +136,11 @@ export function createOrfFeedbackPorts(input: {
       },
     },
     reportAttachments: feedbackReportAttachmentPort,
+    unitOfWork: {
+      async use(token, operation) {
+        return operation(resolveUnitOfWork(token));
+      },
+    },
     userDirectory: {
       getActiveAdminUserIds(scope) {
         return getActiveAdminNotificationRecipients(scope.storageScopeId);
@@ -156,6 +163,22 @@ export function createOrfFeedbackPorts(input: {
 }
 
 const feedbackDiscussionPort: FeedbackRequiredPorts["discussion"] = {
+  async commitFollowUp(input, commit) {
+    const result = await commitFeedbackFollowUp({
+      body: input.body ?? "",
+      parentMessageId: input.parentMessageId,
+      replyToMessageId: input.replyToMessageId,
+      targetId: input.feedbackId,
+      targetTitle: input.title,
+      targetType: "feedback",
+    }, {
+      id: input.actor.id,
+      name: input.actor.name,
+      role: input.actor.role,
+      scope: runtimeScope(input.actor.scope.storageScopeId),
+    }, commit);
+    return result.status === "ok" ? { status: "ok", changed: true } : result;
+  },
   async getCommentSummaries(scope, feedbackIds) {
     if (feedbackIds.length === 0) return [];
     const rows = await db

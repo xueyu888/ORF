@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronRight, Download, ExternalLink, File as FileIcon, FileText, MoreHorizontal, Pencil, Reply, Send, Trash2, X } from "lucide-react";
-import type { FormEvent, MutableRefObject } from "react";
+import type { FormEvent, MutableRefObject, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { Link } from "react-router-dom";
@@ -754,10 +754,12 @@ export function serializeCommentDraft(draft: CommentDraft) {
 }
 
 export function CommentDraftFields({
+  allowEmptySubmit = false,
   autoFocus = false,
   cancelLabel = "取消",
   currentUserId,
   draft,
+  footerActions,
   idleHint,
   mentionableUsers,
   onCancel,
@@ -768,10 +770,12 @@ export function CommentDraftFields({
   submitOnEnter = true,
   submitLabel,
 }: {
+  allowEmptySubmit?: boolean;
   autoFocus?: boolean;
   cancelLabel?: string;
   currentUserId: string;
   draft: CommentDraft;
+  footerActions?: ReactNode;
   idleHint?: string;
   mentionableUsers: CommentMentionUser[];
   onCancel?: () => void;
@@ -811,20 +815,21 @@ export function CommentDraftFields({
         submitOnEnter={submitOnEnter}
         footer={
           <>
-        {onCancel && (
-          <IconButton icon={X} label={cancelLabel} size="sm" type="button" onClick={onCancel} />
-        )}
-        {showSubmitButton && (
-          <IconButton
-            className="orf-comment-send-button"
-            type="submit"
-            icon={Send}
-            label={submitLabel}
-            size="sm"
-            variant="primary"
-            disabled={!draftHasContent || uploadingImage}
-          />
-        )}
+            {footerActions}
+            {onCancel && (
+              <IconButton icon={X} label={cancelLabel} size="sm" type="button" onClick={onCancel} />
+            )}
+            {showSubmitButton && (
+              <IconButton
+                className="orf-comment-send-button"
+                type="submit"
+                icon={Send}
+                label={submitLabel}
+                size="sm"
+                variant="primary"
+                disabled={(!draftHasContent && !allowEmptySubmit) || uploadingImage}
+              />
+            )}
           </>
         }
       />
@@ -868,32 +873,38 @@ export function CommentInlineEditor({
 }
 
 export function CommentComposer({
+  allowEmptySubmit,
   currentMember,
   currentUserAvatarUrl,
   currentUserId,
   defaultReplyAuthor,
   draft,
+  footerActions,
   mentionableUsers,
   mode,
   onCancelMode,
   onDraftChange,
   onSubmit,
   onUploadAttachment,
+  submitLabel: submitLabelOverride,
 }: {
+  allowEmptySubmit?: boolean;
   currentMember: string;
   currentUserAvatarUrl?: string | null;
   currentUserId: string;
   defaultReplyAuthor?: string;
   draft: CommentDraft;
+  footerActions?: ReactNode;
   mentionableUsers: CommentMentionUser[];
   mode: CommentDraftMode;
   onCancelMode: () => void;
   onDraftChange: (draft: CommentDraft) => void;
   onSubmit: (event: FormEvent) => void;
   onUploadAttachment: (file: File) => Promise<OrfRichTextAttachmentUploadResult | null>;
+  submitLabel?: string;
 }) {
   const placeholder = mode.type === "reply" ? `回复 ${mode.targetAuthor}...` : defaultReplyAuthor ? "添加回复..." : "添加评论...";
-  const submitLabel = mode.type === "reply" || defaultReplyAuthor ? "发送回复" : "发送评论";
+  const submitLabel = submitLabelOverride ?? (mode.type === "reply" || defaultReplyAuthor ? "发送回复" : "发送评论");
 
   return (
     <form className="orf-comment-composer" onSubmit={onSubmit}>
@@ -908,8 +919,10 @@ export function CommentComposer({
         )}
       </div>
       <CommentDraftFields
+        allowEmptySubmit={allowEmptySubmit}
         currentUserId={currentUserId}
         draft={draft}
+        footerActions={footerActions}
         mentionableUsers={mentionableUsers}
         onDraftChange={onDraftChange}
         onUploadAttachment={onUploadAttachment}

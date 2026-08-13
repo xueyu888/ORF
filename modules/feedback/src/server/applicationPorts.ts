@@ -1,6 +1,8 @@
 import type { Readable } from "node:stream";
+import type { OrfUnitOfWorkToken } from "@orf/module-protocol";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type {
+  FeedbackCommandResult,
   FeedbackIssueListCommentSummary,
   FeedbackIssueListFilters,
   FeedbackIssueListPagination,
@@ -9,6 +11,7 @@ import type {
   FeedbackWebProject,
   FeedbackWebUser,
 } from "../contracts";
+import type { FeedbackWriteClient } from "./commandPorts";
 import type { FeedbackWriteDatabase } from "./writeModel";
 import type { FeedbackReferenceDatabase } from "./references";
 import type { FeedbackReadModelDatabase } from "./readModel";
@@ -64,6 +67,36 @@ export type FeedbackProjectDirectoryPort = {
 };
 
 export type FeedbackDiscussionPort = {
+  commitFollowUp(input: {
+    readonly actor: {
+      readonly id: string;
+      readonly name: string;
+      readonly role: "admin" | "member";
+      readonly scope: FeedbackScope;
+    };
+    readonly body?: string;
+    readonly feedbackId: string;
+    readonly parentMessageId?: string;
+    readonly replyToMessageId?: string;
+    readonly title: string;
+  }, commit: (input: {
+    readonly comment: {
+      readonly attachments: readonly {
+        readonly fileName: string;
+        readonly id: string;
+        readonly mimeType: string;
+        readonly previewKind?: string | null;
+      }[];
+      readonly body: string;
+      readonly commentMessageId: string;
+      readonly commentThreadId: string;
+      readonly createdAt: string;
+      readonly mentionedUserIds: readonly string[];
+      readonly replyRecipientUserId?: string | null;
+      readonly replyToMessageId?: string | null;
+    } | null;
+    readonly unitOfWork: OrfUnitOfWorkToken;
+  }) => Promise<FeedbackCommandResult>): Promise<FeedbackCommandResult>;
   getCommentSummaries(scope: FeedbackScope, feedbackIds: readonly string[]): Promise<readonly FeedbackIssueListCommentSummary[]>;
   getThreads(scope: FeedbackScope, feedbackIds: readonly string[]): Promise<readonly FeedbackWebCommentThread[]>;
   syncTargetTitle(input: {
@@ -72,6 +105,10 @@ export type FeedbackDiscussionPort = {
     readonly title: string;
     readonly updatedAt: string;
   }, database: unknown): Promise<void>;
+};
+
+export type FeedbackUnitOfWorkPort = {
+  use<T>(token: OrfUnitOfWorkToken, operation: (client: FeedbackWriteClient) => Promise<T>): Promise<T>;
 };
 
 export type FeedbackReportAttachmentUpload = {
@@ -176,6 +213,7 @@ export type FeedbackServerApplicationPorts = {
   readonly projectDirectory: FeedbackProjectDirectoryPort;
   readonly realtime: FeedbackRealtimePort;
   readonly reportAttachments: FeedbackReportAttachmentPort;
+  readonly unitOfWork: FeedbackUnitOfWorkPort;
   readonly userDirectory: FeedbackUserDirectoryPort;
 };
 

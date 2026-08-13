@@ -28,7 +28,7 @@ export {
   createFeedbackNotificationPresentationProvider,
 } from "../server/notificationPresentation";
 export {
-  updateFeedbackAssignee as updateFeedbackAssigneeForTesting,
+  submitFeedbackFollowUp as submitFeedbackFollowUpForTesting,
 } from "../web/api";
 
 export function feedbackEntityFixture(

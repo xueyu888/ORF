@@ -5,6 +5,7 @@ import { requireUserScopeContext } from "../auth/accessPolicy";
 import { env } from "../env";
 import { CHAT_SYNC_PAGE_SIZE, CHAT_SYNC_PROTOCOL_VERSION, isChatSyncCursor } from "../../src/domain/chatSync";
 import { getChatSync } from "../chat/chatSyncRepository";
+import { setChatReaction } from "../chat/chatReactionService";
 import { loadChatWebLinkTitle } from "../chat/chatWebLinkTitleService";
 import { getRolePermissionKeysForScope } from "../repositories/permissionRepository";
 import {
@@ -33,7 +34,6 @@ import {
   requestChatMessageAcknowledgement,
   searchChatMessages,
   sendChatMessage,
-  setChatReaction,
   setChatMessagePin,
   setChatMessageSaved,
   setChatThreadFollow,

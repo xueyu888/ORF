@@ -1,6 +1,10 @@
 import { and, asc, eq, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { feedbackNotificationEventPlanSchema, type FeedbackNotificationEventPlan } from "../contracts";
+import {
+  feedbackNotificationEventKindFromPayload,
+  feedbackNotificationEventPlanSchema,
+  type FeedbackNotificationEventPlan,
+} from "../contracts";
 import type {
   FeedbackNotificationAttentionLevel,
   FeedbackNotificationDeliveryClass,
@@ -173,7 +177,7 @@ export async function insertFeedbackNotificationDispatch(
   }
 
   const now = feedbackNowIso();
-  const idempotencyKey = `feedback:${input.activityEventId}:${input.dispatch.plan.kind}`;
+  const idempotencyKey = `feedback:${input.activityEventId}:${feedbackNotificationEventKindFromPayload(input.dispatch.plan.payload)}`;
   const [inserted] = await database
     .insert(feedbackEventDispatches)
     .values({
