@@ -587,14 +587,24 @@ export async function commitFeedbackFollowUp(
 
   if (hasFeedbackChange) {
     const transitionFeedback = transitionOutcome?.ok ? transitionOutcome.value.feedback : null;
+    const lifecycleFields = transitionFeedback
+      ? {
+          stage: transitionFeedback.stage,
+          resolution: transitionFeedback.resolution,
+          closedAt: transitionFeedback.closedAt ?? null,
+          closedByUserId: transitionFeedback.closedByUserId ?? null,
+        }
+      : {
+          stage: target.stage,
+          resolution: target.resolution,
+          closedAt: target.closedAt,
+          closedByUserId: target.closedByUserId,
+        };
     await database
       .update(feedback)
       .set({
         assigneeUserId: nextAssigneeUserId,
-        stage: transitionFeedback?.stage ?? target.stage,
-        resolution: transitionFeedback?.resolution ?? target.resolution,
-        closedAt: transitionFeedback ? transitionFeedback.closedAt ?? null : target.closedAt,
-        closedByUserId: transitionFeedback ? transitionFeedback.closedByUserId ?? null : target.closedByUserId,
+        ...lifecycleFields,
         updatedAt: occurredAt,
         updatedBy: actor.id,
         version: target.version + 1,

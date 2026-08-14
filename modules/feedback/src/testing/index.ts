@@ -21,6 +21,9 @@ export {
   preflightFeedbackImport,
 } from "../server/transfer";
 export {
+  commitFeedbackFollowUp,
+} from "../server/writeModel";
+export {
   feedbackServerMinimumPollIntervalMs,
   feedbackServerPollIntervalMs,
 } from "../server/polling";

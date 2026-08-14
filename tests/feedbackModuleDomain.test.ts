@@ -15,11 +15,13 @@ import {
   planFeedbackCreatedNotification,
   planFeedbackFollowUpNotification,
   planFeedbackLifecycleChangedNotification,
+  type FeedbackEntitySnapshot,
   type FeedbackIssueReadModelData,
 } from "@orf/feedback-module/contracts";
 import {
   applyFeedbackTransition,
   canonicalizeFeedbackRelation,
+  commitFeedbackFollowUp,
   deriveFeedbackCapabilities,
   feedbackActorFixture,
   feedbackEntityFixture,
@@ -27,6 +29,99 @@ import {
 } from "@orf/feedback-module/testing";
 
 const occurredAt = "2026-08-07T09:00:00.000Z";
+
+type FeedbackFollowUpRow = {
+  readonly assigneeUserId: string | null;
+  readonly closedAt: string | null;
+  readonly closedByUserId: string | null;
+  readonly createdAt: string;
+  readonly createdBy: string;
+  readonly description: string;
+  readonly id: string;
+  readonly impact: FeedbackEntitySnapshot["impact"];
+  readonly priority: FeedbackEntitySnapshot["priority"];
+  readonly projectId: string | null;
+  readonly resolution: FeedbackEntitySnapshot["resolution"];
+  readonly stage: FeedbackEntitySnapshot["stage"];
+  readonly teamId: string;
+  readonly title: string;
+  readonly updatedAt: string;
+  readonly updatedBy: string | null;
+  readonly version: number;
+};
+
+function feedbackFollowUpRowFixture(overrides: Partial<FeedbackEntitySnapshot> = {}): FeedbackFollowUpRow {
+  const entity = feedbackEntityFixture(overrides);
+  return {
+    assigneeUserId: entity.assigneeUserId ?? null,
+    closedAt: entity.closedAt ?? null,
+    closedByUserId: entity.closedByUserId ?? null,
+    createdAt: occurredAt,
+    createdBy: entity.createdByUserId,
+    description: "原始报告正文",
+    id: entity.id,
+    impact: entity.impact,
+    priority: entity.priority ?? null,
+    projectId: entity.projectId ?? null,
+    resolution: entity.resolution,
+    stage: entity.stage,
+    teamId: entity.teamId,
+    title: "页面滚动位置异常",
+    updatedAt: occurredAt,
+    updatedBy: entity.createdByUserId,
+    version: entity.version,
+  };
+}
+
+function fakeFeedbackFollowUpDatabase(target: FeedbackFollowUpRow) {
+  const updates: Array<Record<string, unknown>> = [];
+  const insertConflictChain = {
+    onConflictDoNothing: async () => undefined,
+    onConflictDoUpdate: async () => undefined,
+  };
+
+  return {
+    database: {
+      select(selection?: Record<string, unknown>) {
+        if (selection && "targetFeedbackId" in selection) {
+          return {
+            from: () => ({
+              where: async () => [],
+            }),
+          };
+        }
+
+        return {
+          from: () => ({
+            where: () => ({
+              limit: () => ({
+                for: async () => [target],
+              }),
+            }),
+          }),
+        };
+      },
+      update() {
+        return {
+          set(value: Record<string, unknown>) {
+            updates.push(value);
+            return {
+              where: async () => undefined,
+            };
+          },
+        };
+      },
+      insert() {
+        return {
+          values() {
+            return insertConflictChain;
+          },
+        };
+      },
+    } as never,
+    updates,
+  };
+}
 
 describe("feedback module domain", () => {
   it("enforces lifecycle invariants as the single stage/resolution source", () => {
@@ -263,6 +358,34 @@ describe("feedback module domain", () => {
     assert.equal(reopened.value.feedback.resolution, null);
     assert.equal(reopened.value.feedback.closedAt, null);
     assert.equal(reopened.value.feedback.closedByUserId, null);
+  });
+
+  it("persists follow-up lifecycle snapshots without restoring superseded nullable facts", async () => {
+    const { database, updates } = fakeFeedbackFollowUpDatabase(feedbackFollowUpRowFixture({
+      stage: "pending_verification",
+      resolution: "resolved",
+      version: 2,
+    }));
+
+    const result = await commitFeedbackFollowUp(database, {
+      comment: { messageId: "comment-1", threadId: "thread-1" },
+      expectedVersion: 2,
+      feedbackId: "feedback-1",
+      notificationDispatch: null,
+      transition: {
+        type: "reject_verification",
+        expectedVersion: 2,
+        note: "验证不通过，退回处理。",
+      },
+    }, feedbackActorFixture({ id: "reporter-1" }));
+
+    assert.deepEqual(result, { status: "ok", changed: true });
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0]?.stage, "in_progress");
+    assert.equal(updates[0]?.resolution, null);
+    assert.equal(updates[0]?.closedAt, null);
+    assert.equal(updates[0]?.closedByUserId, null);
+    assert.equal(updates[0]?.version, 3);
   });
 
   it("derives command and metadata capabilities from actor scope", () => {
