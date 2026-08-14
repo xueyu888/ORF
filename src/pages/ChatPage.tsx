@@ -477,7 +477,7 @@ export function ChatPage() {
 
   useEffect(() => {
     if (!activeChannel || !requestedThreadRootMessageId) return;
-    void openThread(requestedThreadRootMessageId, { focusMessageId });
+    void openThread(requestedThreadRootMessageId, { focusMessageId, revalidate: Boolean(focusMessageId) });
   }, [activeChannel, focusMessageId, openThread, requestedThreadRootMessageId]);
 
   const threadChannel = useMemo(() => {

@@ -206,6 +206,21 @@ test("chat feed latest prefetch skips channels whose opening target is first mai
   }), ["channel-thread-unread", "channel-read"]);
 });
 
+test("message deep links revalidate cached feed and thread targets before location is consumed", () => {
+  const pageSource = readFileSync(new URL("../src/pages/ChatPage.tsx", import.meta.url), "utf8");
+  const feedStateSource = readFileSync(new URL("../src/features/chat/useChatFeedState.ts", import.meta.url), "utf8");
+  const threadStateSource = readFileSync(new URL("../src/features/chat/useChatThreadState.ts", import.meta.url), "utf8");
+
+  assert.match(feedStateSource, /validatedRequestedMessageKeyRef/);
+  assert.match(feedStateSource, /openIntent\.kind === "message"/);
+  assert.doesNotMatch(feedStateSource, /cachedHasRequestedMessage/);
+  assert.match(feedStateSource, /getChatMessageContext\(\{ channelId: activeChannelId, messageId: requestedMessageId, limit: chatMessagePageSize \}\)/);
+  assert.match(feedStateSource, /messagesLoading\s+\|\|\s+!messages\.some/);
+  assert.match(threadStateSource, /revalidate\?: boolean/);
+  assert.match(threadStateSource, /!options\.revalidate &&\s+currentThread\?\.rootMessage\.id === rootMessageId/);
+  assert.match(pageSource, /openThread\(requestedThreadRootMessageId, \{ focusMessageId, revalidate: Boolean\(focusMessageId\) \}\)/);
+});
+
 test("late realtime snapshots cannot resurrect unread counts behind newer read-state versions", () => {
   const read = channel({
     mainMentionCount: 0,
@@ -347,7 +362,7 @@ test("global unread target uses the shared read cursor, visibility and fixed pri
   const pageSource = readFileSync(new URL("../src/pages/ChatPage.tsx", import.meta.url), "utf8");
   assert.match(pageSource, /const requestedThreadRootMessageId = searchParams\.get\("thread"\)/);
   assert.match(pageSource, /requestedMessageId: requestedThreadRootMessageId \? null : focusMessageId/);
-  assert.match(pageSource, /openThread\(requestedThreadRootMessageId, \{ focusMessageId \}\)/);
+  assert.match(pageSource, /openThread\(requestedThreadRootMessageId, \{ focusMessageId, revalidate: Boolean\(focusMessageId\) \}\)/);
   assert.match(pageSource, /readChatLastChannelId/);
 
   const apiClientSource = readFileSync(new URL("../src/state/apiClient.ts", import.meta.url), "utf8");

@@ -22,6 +22,7 @@ type UseChatThreadStateInput = {
 export type ChatOpenThreadOptions = {
   focusComposer?: boolean;
   focusMessageId?: string | null;
+  revalidate?: boolean;
 };
 
 function chatThreadContainsMessage(thread: ChatThread, messageId: string | null | undefined) {
@@ -56,6 +57,7 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
       }
       const currentThread = threadRef.current;
       if (
+        !options.revalidate &&
         currentThread?.rootMessage.id === rootMessageId &&
         chatThreadContainsMessage(currentThread, options.focusMessageId)
       ) {

@@ -152,6 +152,7 @@ export function useChatFeedState({
   const prefetchRequestsRef = useRef(chatFeedSessionPrefetchRequests());
   const readMarkInFlightRef = useRef<string | null>(null);
   const unreadAnchorRef = useRef<UnreadAnchor | null>(null);
+  const validatedRequestedMessageKeyRef = useRef<string | null>(null);
   const activeChannelId = activeChannel?.id ?? null;
   activeChannelIdRef.current = activeChannelId;
   appAttentionStateRef.current = appAttentionState;
@@ -594,10 +595,6 @@ export function useChatFeedState({
       requestedMessageId,
       unreadAnchor: anchor,
     });
-    const cachedHasRequestedMessage = Boolean(
-      requestedMessageId &&
-      cachedFeed?.messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId),
-    );
     const cachedHasReadingPositionMessage = Boolean(
       openIntent.kind === "restore" &&
       cachedFeed?.messages.some((message) => message.id === openIntent.position.messageId),
@@ -623,7 +620,7 @@ export function useChatFeedState({
       openIntent.kind === "unread" ||
       Boolean(openIntent.kind === "restore" && !cachedHasReadingPositionMessage) ||
       Boolean(openIntent.kind === "latest" && !cachedFeed) ||
-      Boolean(openIntent.kind === "message" && !cachedHasRequestedMessage),
+      openIntent.kind === "message",
     );
     const isCancelled = () => cancelled;
     const loadLatestFallback = async () => {
@@ -716,8 +713,6 @@ export function useChatFeedState({
         .finally(() => {
           if (!cancelled) setMessagesLoading(false);
         });
-    } else if (openIntent.kind === "message" && cachedHasRequestedMessage) {
-      setMessagesLoading(false);
     }
     return () => {
       cancelled = true;
@@ -795,15 +790,18 @@ export function useChatFeedState({
   }, [appAttentionState.activelyViewed, cancelPendingReadReceipt, scheduleVisibleReadReceipt]);
 
   useEffect(() => {
-    if (!activeChannelId || !requestedMessageId) return undefined;
+    if (!activeChannelId || !requestedMessageId) {
+      validatedRequestedMessageKeyRef.current = null;
+      return undefined;
+    }
+    const requestKey = `${activeChannelId}:${requestedMessageId}`;
     const targetInCurrentFeed = messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId);
-    if (targetInCurrentFeed) {
+    if (targetInCurrentFeed && validatedRequestedMessageKeyRef.current === requestKey) {
       contextRequestKeyRef.current = null;
       return undefined;
     }
 
     let cancelled = false;
-    const requestKey = `${activeChannelId}:${requestedMessageId}`;
     if (contextRequestKeyRef.current === requestKey) return undefined;
     contextRequestKeyRef.current = requestKey;
     setMessagesLoading(true);
@@ -821,6 +819,7 @@ export function useChatFeedState({
           },
         );
         feedCacheRef.current.set(activeChannelId, snapshot);
+        validatedRequestedMessageKeyRef.current = requestKey;
         setFeedChannelId(activeChannelId);
         setMessages(snapshot.messages);
         setHasNewerMessages(snapshot.hasNewerMessages);
@@ -832,6 +831,7 @@ export function useChatFeedState({
       })
       .catch((error) => {
         if (!cancelled) {
+          if (validatedRequestedMessageKeyRef.current === requestKey) validatedRequestedMessageKeyRef.current = null;
           onRequestedMessageConsumed();
           if (error instanceof ApiError && [403, 404, 410].includes(error.status)) {
             onRequestedMessageUnavailable();
@@ -862,7 +862,11 @@ export function useChatFeedState({
   ]);
 
   useLayoutEffect(() => {
-    if (!requestedMessageId || !messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId)) return undefined;
+    if (
+      !requestedMessageId ||
+      messagesLoading ||
+      !messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId)
+    ) return undefined;
     pendingReadingPositionScrollRef.current = null;
     setFollowingLatest(false);
     const viewport = readViewportSnapshot();
@@ -890,7 +894,7 @@ export function useChatFeedState({
       },
       onInvalidated: onRequestedMessageConsumed,
     });
-  }, [activeChannelId, messages, onRequestedMessageConsumed, onRequestedMessageLocated, readViewportSnapshot, rememberActiveFeedScroll, requestedMessageId, runProgrammaticScroll, setFollowingLatest, subscribeLayoutChanges]);
+  }, [activeChannelId, messages, messagesLoading, onRequestedMessageConsumed, onRequestedMessageLocated, readViewportSnapshot, rememberActiveFeedScroll, requestedMessageId, runProgrammaticScroll, setFollowingLatest, subscribeLayoutChanges]);
 
   useLayoutEffect(() => {
     const position = pendingReadingPositionScrollRef.current;
