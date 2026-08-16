@@ -80,7 +80,8 @@ button:disabled {
   object-position: var(--orf-visual-bg-center-x, 50%) var(--orf-visual-bg-center-y, 50%);
   opacity: 1;
   transform: scale(var(--orf-visual-bg-zoom, 1));
-  transform-origin: center;
+  /* The focus must own cover overflow and zoom-created overflow as one crop. */
+  transform-origin: var(--orf-visual-bg-center-x, 50%) var(--orf-visual-bg-center-y, 50%);
   pointer-events: none;
   user-select: none;
 }

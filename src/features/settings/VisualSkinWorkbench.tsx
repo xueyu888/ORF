@@ -55,6 +55,7 @@ import { useOrf } from "../../state/OrfProvider";
 import { cacheLoginBackgroundPreview, clearCachedLoginBackgroundPreview } from "../../utils/loginBackgroundCache";
 import { dispatchVisualBackgroundChanged } from "../appearance/background/visualBackgroundRuntime";
 import { ensureVisualBackgroundDecoded } from "../appearance/background/visualBackgroundImageRuntime";
+import { resolveVisualBackgroundCropGeometry } from "../appearance/background/visualBackgroundCropGeometry";
 import { cropForVisualBackground } from "../../utils/visualBackgrounds";
 import { visualSkinInvalidationKey, visualSkinSettingInvalidations, type VisualSkinScope } from "./visualSkinWorkbenchModel";
 
@@ -1263,19 +1264,18 @@ function visualSkinPreviewImageLayerStyle(
     return { opacity: 0 } as CSSProperties;
   }
 
-  const baseImageBox = coverImageBox(sourceRatio, frameBox);
-  const zoom = Math.max(visualBackgroundCropLimits.zoomMin, crop.zoom);
+  const geometry = resolveVisualBackgroundCropGeometry(
+    { width: sourceRatio, height: 1 },
+    frameBox,
+    crop,
+  );
   const frameLeft = (surfaceSize.width - frameBox.width) / 2;
   const frameTop = (surfaceSize.height - frameBox.height) / 2;
-  const baseImageLeftInFrame = (frameBox.width - baseImageBox.width) * crop.centerX;
-  const baseImageTopInFrame = (frameBox.height - baseImageBox.height) * crop.centerY;
-  const imageLeft = frameLeft + frameBox.width / 2 + zoom * (baseImageLeftInFrame - frameBox.width / 2);
-  const imageTop = frameTop + frameBox.height / 2 + zoom * (baseImageTopInFrame - frameBox.height / 2);
 
   return {
-    height: baseImageBox.height * zoom,
-    transform: `translate3d(${imageLeft}px, ${imageTop}px, 0)`,
-    width: baseImageBox.width * zoom,
+    height: geometry.imageRect.height,
+    transform: `translate3d(${frameLeft + geometry.imageRect.x}px, ${frameTop + geometry.imageRect.y}px, 0)`,
+    width: geometry.imageRect.width,
   } as CSSProperties;
 }
 
@@ -1334,17 +1334,6 @@ function fitPreviewRect(ratio: number, surfaceSize: ElementSize, limits: Preview
   }
 
   return fitted;
-}
-
-function coverImageBox(sourceRatio: number, frameBox: ElementSize) {
-  const normalizedRatio = Math.max(0.01, sourceRatio);
-  const frameRatio = frameBox.width / Math.max(1, frameBox.height);
-  const fitByWidth = normalizedRatio < frameRatio;
-
-  return {
-    width: fitByWidth ? frameBox.width : frameBox.height * normalizedRatio,
-    height: fitByWidth ? frameBox.width / normalizedRatio : frameBox.height,
-  };
 }
 
 const fallbackPreviewFrameRatios: Record<VisualSkinPreviewShape, number> = {

@@ -1,11 +1,13 @@
+import type { VisualBackgroundCrop } from "../../../domain/settings/visualBackgrounds";
 import {
-  normalizeVisualBackgroundCrop,
-  type VisualBackgroundCrop,
-} from "../../../domain/settings/visualBackgrounds";
+  resolveVisualBackgroundCropGeometry,
+  type VisualBackgroundGeometryRect,
+  type VisualBackgroundGeometrySize,
+} from "../background/visualBackgroundCropGeometry";
 
-export type MaterialImageSize = { width: number; height: number };
-export type MaterialViewportSize = { width: number; height: number };
-export type MaterialSourceRect = { x: number; y: number; width: number; height: number };
+export type MaterialImageSize = VisualBackgroundGeometrySize;
+export type MaterialViewportSize = VisualBackgroundGeometrySize;
+export type MaterialSourceRect = VisualBackgroundGeometryRect;
 
 function positive(value: number) {
   return Number.isFinite(value) ? Math.max(1, value) : 1;
@@ -23,24 +25,7 @@ export function visibleBackgroundSourceRect(
   viewportInput: MaterialViewportSize,
   cropInput: VisualBackgroundCrop,
 ): MaterialSourceRect {
-  const imageWidth = positive(image.width);
-  const imageHeight = positive(image.height);
-  const viewport = normalizedMaterialViewport(viewportInput);
-  const crop = normalizeVisualBackgroundCrop(cropInput);
-  const imageAspect = imageWidth / imageHeight;
-  const viewportAspect = viewport.width / viewport.height;
-
-  const coverWidth = imageAspect > viewportAspect ? imageHeight * viewportAspect : imageWidth;
-  const coverHeight = imageAspect > viewportAspect ? imageHeight : imageWidth / viewportAspect;
-  const sourceWidth = Math.min(imageWidth, coverWidth / crop.zoom);
-  const sourceHeight = Math.min(imageHeight, coverHeight / crop.zoom);
-
-  return {
-    x: (imageWidth - sourceWidth) * crop.centerX,
-    y: (imageHeight - sourceHeight) * crop.centerY,
-    width: sourceWidth,
-    height: sourceHeight,
-  };
+  return resolveVisualBackgroundCropGeometry(image, viewportInput, cropInput).sourceRect;
 }
 
 export function materialViewportAspectBucket(viewportInput: MaterialViewportSize) {
