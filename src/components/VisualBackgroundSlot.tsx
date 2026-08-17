@@ -25,32 +25,50 @@ export function VisualBackgroundSlot({
   const [displayed, setDisplayed] = useState<{ crop: VisualBackgroundCrop; url: string } | null>(() => (
     imageUrl ? { crop, url: imageUrl } : null
   ));
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const generation = ++loadGenerationRef.current;
     if (!imageUrl) {
       if (clearWhenEmpty) setDisplayed(null);
+      setFailedUrl(null);
       return undefined;
     }
+    if (failedUrl === imageUrl) return undefined;
     if (displayed?.url === imageUrl) return undefined;
 
     let cancelled = false;
     void ensureVisualBackgroundDecoded(imageUrl)
       .then(() => {
         if (!cancelled && generation === loadGenerationRef.current) {
+          setFailedUrl(null);
           setDisplayed({ crop, url: imageUrl });
         }
       })
       .catch(() => {
-        if (!cancelled && generation === loadGenerationRef.current) onImageError?.();
+        if (!cancelled && generation === loadGenerationRef.current) {
+          setFailedUrl(imageUrl);
+          setDisplayed((current) => current?.url === imageUrl ? null : current);
+          onImageError?.();
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [clearWhenEmpty, crop, displayed?.url, imageUrl, onImageError]);
+  }, [clearWhenEmpty, crop, displayed?.url, failedUrl, imageUrl, onImageError]);
+
+  useEffect(() => {
+    if (failedUrl && failedUrl !== imageUrl) setFailedUrl(null);
+  }, [failedUrl, imageUrl]);
 
   if (!displayed) return null;
   const displayedCrop = displayed.url === imageUrl ? crop : displayed.crop;
+  const handleRenderedImageError = () => {
+    const failedImageUrl = displayed.url;
+    setFailedUrl(failedImageUrl);
+    setDisplayed((current) => current?.url === failedImageUrl ? null : current);
+    onImageError?.();
+  };
 
   return (
     <span className={["orf-visual-bg-slot", frameClassName].filter(Boolean).join(" ")} aria-hidden="true">
@@ -62,7 +80,7 @@ export function VisualBackgroundSlot({
         draggable={false}
         loading={loading}
         decoding="async"
-        onError={onImageError}
+        onError={handleRenderedImageError}
         style={visualBackgroundSlotStyle(displayedCrop)}
       />
     </span>

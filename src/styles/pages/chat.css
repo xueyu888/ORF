@@ -900,29 +900,6 @@
   outline: 0;
 }
 
-.orf-chat-channel-group-action {
-  display: inline-flex;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--orf-radius-control);
-  background: transparent;
-  color: var(--orf-text-muted);
-}
-
-.orf-chat-channel-group-action:hover {
-  background: var(--orf-bg-row-hover);
-  color: var(--orf-accent-text);
-}
-
-.orf-chat-channel-group-action:disabled {
-  opacity: 0.48;
-  cursor: not-allowed;
-}
-
 .orf-chat-channel-item {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto;
@@ -5879,13 +5856,6 @@ html[data-orf-display-contrast="high"] .orf-chat-message {
 }
 
 @media (max-width: 760px) {
-  .orf-chat-channel-group-action {
-    width: 40px;
-    min-width: 40px;
-    height: 40px;
-    min-height: 40px;
-  }
-
   .orf-chat-draft-editor .orf-rich-text-tool-button {
     width: 40px;
     min-width: 40px;

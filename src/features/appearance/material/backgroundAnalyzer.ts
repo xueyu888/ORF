@@ -47,6 +47,16 @@ const pendingAnalyses = new Map<string, PendingAnalysis>();
 let analyzerWorker: Worker | null = null;
 let nextRequestId = 0;
 
+export function backgroundAnalysisWorkerSupported(runtime: {
+  navigator?: Pick<Navigator, "webdriver"> | null;
+  offscreenCanvas?: typeof OffscreenCanvas;
+  worker?: typeof Worker;
+}) {
+  return Boolean(runtime.worker)
+    && Boolean(runtime.offscreenCanvas)
+    && runtime.navigator?.webdriver !== true;
+}
+
 function analysisKey(input: AnalyzeInput) {
   const { crop } = input;
   return JSON.stringify([
@@ -68,7 +78,11 @@ function settlePending(id: string, analysis: BackgroundAnalysis) {
 
 function workerInstance() {
   if (analyzerWorker) return analyzerWorker;
-  if (typeof Worker === "undefined") return null;
+  if (!backgroundAnalysisWorkerSupported({
+    navigator: typeof navigator === "undefined" ? null : navigator,
+    offscreenCanvas: typeof OffscreenCanvas === "undefined" ? undefined : OffscreenCanvas,
+    worker: typeof Worker === "undefined" ? undefined : Worker,
+  })) return null;
   try {
     analyzerWorker = new Worker(new URL("./backgroundAnalyzer.worker.ts", import.meta.url), {
       type: "module",

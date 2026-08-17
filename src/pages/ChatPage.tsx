@@ -64,7 +64,6 @@ import {
   archiveChatChannelRequest,
   createChatChannel,
   deleteChatMessageRequest,
-  markChatChannelReadRequest,
   openChatConversation,
   removeChatChannelMemberRequest,
   requestChatMessageAcknowledgementRequest,
@@ -217,7 +216,6 @@ export function ChatPage() {
     signal: 0,
   });
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
-  const [markingUnreadChannelsRead, setMarkingUnreadChannelsRead] = useState(false);
   const [sidebarWidthOverride, setSidebarWidthOverride] = useState<number | null>(null);
   const [rightPanelWidthOverrides, setRightPanelWidthOverrides] = useState<Record<string, number>>({});
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachmentFilePreviewState | null>(null);
@@ -712,30 +710,6 @@ export function ChatPage() {
       return next;
     });
   }, []);
-
-  const handleMarkUnreadChannelsRead = useCallback(async (channelIds: string[]) => {
-    const uniqueChannelIds = [...new Set(channelIds)];
-    if (uniqueChannelIds.length === 0 || markingUnreadChannelsRead) return;
-    setMarkingUnreadChannelsRead(true);
-    try {
-      const activeChannelId = activeChannel?.id ?? null;
-      if (activeChannelId && uniqueChannelIds.includes(activeChannelId)) {
-        await clearActiveChannelUnread();
-      }
-      const responses = await Promise.all(
-        uniqueChannelIds
-          .filter((channelId) => channelId !== activeChannelId)
-          .map((channelId) => markChatChannelReadRequest(channelId, { includeThreads: true })),
-      );
-      applyChannels(responses.map((response) => response.channel));
-      await refreshChatAttentionReadState();
-      notify(`${uniqueChannelIds.length} 个频道已标记已读`);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "批量标记已读失败");
-    } finally {
-      setMarkingUnreadChannelsRead(false);
-    }
-  }, [activeChannel?.id, applyChannels, clearActiveChannelUnread, markingUnreadChannelsRead, notify, refreshChatAttentionReadState]);
 
   const handleOpenMemberSearch = useCallback(() => {
     openInfoPanel();
@@ -1335,8 +1309,6 @@ export function ChatPage() {
         createCommands={sidebarCreateCommands}
         currentUserId={currentUser?.id}
         draftChannelIds={draftChannelIds}
-        markingUnreadChannelsRead={markingUnreadChannelsRead}
-        onMarkUnreadChannelsRead={handleMarkUnreadChannelsRead}
         onOpenChannel={handleOpenChannel}
         onOpenConversationWithUser={(userId) => void handleOpenConversation([userId])}
         onPreviewChannel={handlePreviewChannel}

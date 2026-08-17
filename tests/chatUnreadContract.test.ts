@@ -13,6 +13,7 @@ import {
   selectChatFeedPrefetchChannelIds,
   upsertChannel,
 } from "../src/features/chat/chatModels";
+import { buildChatSidebarChannelGroups } from "../src/features/chat/chatSidebarModel";
 import { resolveChatFeedOpenIntent } from "../src/features/chat/chatFeedOpenIntent";
 import { getChatUnreadTarget } from "../src/state/apiClient";
 import { chatMessageTargetPath } from "../src/domain/chatNavigation";
@@ -264,6 +265,95 @@ test("new unread counts with the current cursor are still accepted", () => {
 
   const [merged] = upsertChannel([current], incoming, currentUserId);
   assert.equal(merged?.threadUnreadCount, 1);
+});
+
+test("chat sidebar recent sessions are ordered by latest message instead of unread or favorite state", () => {
+  const olderFavoriteUnread = channel({
+    id: "channel-older-favorite-unread",
+    lastMessageAt: "2026-07-11T00:02:00.000Z",
+    members: channel().members.map((member) => member.userId === currentUserId ? {
+      ...member,
+      favorite: true,
+    } : member),
+    unreadCount: 4,
+  });
+  const newerRead = channel({
+    id: "channel-newer-read",
+    lastMessageAt: "2026-07-11T00:03:00.000Z",
+    unreadCount: 0,
+  });
+  const newestMention = channel({
+    id: "channel-newest-mention",
+    lastMessageAt: "2026-07-11T00:04:00.000Z",
+    mainMentionCount: 1,
+    mentionCount: 1,
+    unreadCount: 1,
+  });
+
+  const groups = buildChatSidebarChannelGroups([olderFavoriteUnread, newestMention, newerRead], currentUserId);
+
+  assert.deepEqual(groups.find((group) => group.id === "recent")?.channels.map((item) => item.id), [
+    "channel-newest-mention",
+    "channel-newer-read",
+    "channel-older-favorite-unread",
+  ]);
+});
+
+test("chat sidebar read changes only clear badges and do not move sessions out of recent conversations", () => {
+  const unreadSession = channel({
+    id: "channel-stable-session",
+    lastMessageAt: "2026-07-11T00:03:00.000Z",
+    type: "public",
+    unreadCount: 3,
+  });
+  const unreadGroups = buildChatSidebarChannelGroups([unreadSession], currentUserId);
+  const readGroups = buildChatSidebarChannelGroups([{
+    ...unreadSession,
+    mainMentionCount: 0,
+    mentionCount: 0,
+    threadMentionCount: 0,
+    threadUnreadCount: 0,
+    unreadCount: 0,
+  }], currentUserId);
+
+  assert.deepEqual(unreadGroups.find((group) => group.id === "recent")?.channels.map((item) => item.id), ["channel-stable-session"]);
+  assert.deepEqual(readGroups.find((group) => group.id === "recent")?.channels.map((item) => item.id), ["channel-stable-session"]);
+  assert.deepEqual(readGroups.find((group) => group.id === "public")?.channels.map((item) => item.id), []);
+});
+
+test("chat sidebar directory groups keep only channels without recent message activity", () => {
+  const recentPublicChannel = channel({
+    id: "channel-recent-public",
+    lastMessageAt: "2026-07-11T00:03:00.000Z",
+    type: "public",
+  });
+  const discoverablePublicChannel = channel({
+    id: "channel-discoverable-public",
+    lastMessageAt: null,
+    lastMessagePreview: null,
+    type: "public",
+  });
+  const discoverableFavoriteChannel = channel({
+    id: "channel-discoverable-favorite",
+    lastMessageAt: null,
+    lastMessagePreview: null,
+    members: channel().members.map((member) => member.userId === currentUserId ? {
+      ...member,
+      favorite: true,
+    } : member),
+    type: "private",
+  });
+
+  const groups = buildChatSidebarChannelGroups([
+    recentPublicChannel,
+    discoverableFavoriteChannel,
+    discoverablePublicChannel,
+  ], currentUserId);
+
+  assert.deepEqual(groups.find((group) => group.id === "recent")?.channels.map((item) => item.id), ["channel-recent-public"]);
+  assert.deepEqual(groups.find((group) => group.id === "favorites")?.channels.map((item) => item.id), ["channel-discoverable-favorite"]);
+  assert.deepEqual(groups.find((group) => group.id === "public")?.channels.map((item) => item.id), ["channel-discoverable-public"]);
+  assert.deepEqual(groups.find((group) => group.id === "private")?.channels.map((item) => item.id), []);
 });
 
 test("an explicit mark-unread action may move the read cursor backwards under a newer read-state version", () => {

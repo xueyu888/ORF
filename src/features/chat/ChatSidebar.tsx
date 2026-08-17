@@ -1,13 +1,14 @@
 import { clsx } from "clsx";
 import type { LucideIcon } from "lucide-react";
-import { Bell, CheckCheck, ChevronDown, ChevronRight, Hash, Megaphone, MessageSquare, Plus, Reply, Search } from "lucide-react";
+import { Bell, ChevronDown, ChevronRight, Hash, Megaphone, MessageSquare, Plus, Reply, Search } from "lucide-react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { isChatConversation } from "../../domain/chatConversation";
 import type { ChatChannel, ChatUser } from "../../types/orf";
 import { chatChannelDisplayLabel, chatChannelSearchText, chatDirectPeer } from "./chatChannelPresentation";
 import { formatPresence } from "./chatPresence";
-import { currentMembership, isUnreadChannel, sortUnreadChannels } from "./chatModels";
+import { currentMembership } from "./chatModels";
+import { buildChatSidebarChannelGroups, type ChatSidebarChannelGroupId } from "./chatSidebarModel";
 import { ChatGroupAvatar } from "./ChatGroupAvatar";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
 import { searchChatUsers } from "./chatUserSearch";
@@ -24,16 +25,14 @@ type ChatSidebarProps = {
   currentUserId?: string;
   draftChannelIds: Set<string>;
   onOpenConversationWithUser: (userId: string) => void;
-  onMarkUnreadChannelsRead: (channelIds: string[]) => void;
   onOpenChannel: (channelId: string) => void;
   onPreviewChannel: (channelId: string) => void;
   query: string;
   setQuery: (value: string) => void;
-  markingUnreadChannelsRead: boolean;
   users: ChatUser[];
 };
 
-type ChatSidebarGroupId = "system" | "members" | "unread" | "favorites" | "public" | "private" | "direct";
+type ChatSidebarGroupId = "system" | "members" | ChatSidebarChannelGroupId;
 
 export function ChatSidebar({
   activeChannelId,
@@ -42,12 +41,10 @@ export function ChatSidebar({
   currentUserId,
   draftChannelIds,
   onOpenConversationWithUser,
-  onMarkUnreadChannelsRead,
   onOpenChannel,
   onPreviewChannel,
   query,
   setQuery,
-  markingUnreadChannelsRead,
   users,
 }: ChatSidebarProps) {
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<ChatSidebarGroupId>>(() => new Set());
@@ -57,24 +54,7 @@ export function ChatSidebar({
   const filteredSystemChannels = visibleChannels.filter((channel) => channel.systemKind);
   const filteredChannels = visibleChannels.filter((channel) => !channel.systemKind);
   const matchedUsers = searchChatUsers(users, query, { excludeUserId: currentUserId });
-  const unreadChannels = sortUnreadChannels(filteredChannels.filter((channel) => isUnreadChannel(channel, currentUserId)));
-  const unreadChannelIds = new Set(unreadChannels.map((channel) => channel.id));
-  const regularChannels = unreadChannelIds.size > 0 ? filteredChannels.filter((channel) => !unreadChannelIds.has(channel.id)) : filteredChannels;
-  const favorites = regularChannels.filter((channel) => currentMembership(channel, currentUserId)?.favorite);
-  const favoriteChannelIds = new Set(favorites.map((channel) => channel.id));
-  const uncategorizedChannels = favoriteChannelIds.size > 0
-    ? regularChannels.filter((channel) => !favoriteChannelIds.has(channel.id))
-    : regularChannels;
-  const publicChannels = uncategorizedChannels.filter((channel) => channel.type === "public");
-  const privateChannels = uncategorizedChannels.filter((channel) => channel.type === "private");
-  const conversations = uncategorizedChannels.filter((channel) => channel.type === "direct");
-  const channelGroups: Array<{ channels: ChatChannel[]; id: ChatSidebarGroupId; title: string }> = [
-    { id: "unread", title: "未读", channels: unreadChannels },
-    { id: "favorites", title: "收藏", channels: favorites },
-    { id: "public", title: "公开频道", channels: publicChannels },
-    { id: "private", title: "私有频道", channels: privateChannels },
-    { id: "direct", title: "私信", channels: conversations },
-  ];
+  const channelGroups = buildChatSidebarChannelGroups(filteredChannels, currentUserId);
   const toggleGroupCollapsed = (groupId: ChatSidebarGroupId) => {
     setCollapsedGroupIds((items) => {
       const next = new Set(items);
@@ -129,8 +109,6 @@ export function ChatSidebar({
             draftChannelIds={draftChannelIds}
             groupId={group.id}
             key={group.title}
-            markingAllRead={group.title === "未读" && markingUnreadChannelsRead}
-            onMarkAllRead={group.title === "未读" ? () => onMarkUnreadChannelsRead(unreadChannels.map((channel) => channel.id)) : undefined}
             onOpenChannel={onOpenChannel}
             onPreviewChannel={onPreviewChannel}
             onToggleCollapsed={toggleGroupCollapsed}
@@ -349,8 +327,6 @@ function ChannelGroup({
   currentUserId,
   draftChannelIds,
   groupId,
-  markingAllRead,
-  onMarkAllRead,
   onOpenChannel,
   onPreviewChannel,
   onToggleCollapsed,
@@ -363,8 +339,6 @@ function ChannelGroup({
   currentUserId?: string;
   draftChannelIds: Set<string>;
   groupId: ChatSidebarGroupId;
-  markingAllRead?: boolean;
-  onMarkAllRead?: () => void;
   onOpenChannel: (channelId: string) => void;
   onPreviewChannel: (channelId: string) => void;
   onToggleCollapsed: (groupId: ChatSidebarGroupId) => void;
@@ -374,18 +348,6 @@ function ChannelGroup({
   if (channels.length === 0) return null;
   return (
     <ChatSidebarGroupSection
-      action={onMarkAllRead ? (
-        <button
-          type="button"
-          className="orf-chat-channel-group-action"
-          disabled={markingAllRead}
-          title="全部标记已读"
-          aria-label="全部标记已读"
-          onClick={onMarkAllRead}
-        >
-          <CheckCheck className="h-3.5 w-3.5" />
-        </button>
-      ) : null}
       collapsed={collapsed}
       groupId={groupId}
       title={title}
@@ -475,14 +437,12 @@ function UserResultGroup({
 }
 
 function ChatSidebarGroupSection({
-  action,
   children,
   collapsed,
   groupId,
   onToggleCollapsed,
   title,
 }: {
-  action?: ReactNode;
   children: ReactNode;
   collapsed: boolean;
   groupId: ChatSidebarGroupId;
@@ -506,7 +466,6 @@ function ChatSidebarGroupSection({
           <Icon className="h-3.5 w-3.5" />
           <span className="truncate">{title}</span>
         </button>
-        {action}
       </div>
       <div className="orf-chat-channel-group-items" id={contentId} hidden={collapsed}>
         {children}

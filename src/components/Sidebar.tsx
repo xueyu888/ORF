@@ -47,17 +47,12 @@ export function Sidebar({
     .map((group) => ({ ...group, items: group.items.filter((item) => canShowFrontendPath(currentUser, item.path)) }))
     .filter((group) => group.items.length > 0);
   const backgroundImageUrl = backgroundUrl;
-  const [failedBackgroundUrl, setFailedBackgroundUrl] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const avatarPreview = currentUser?.avatarUrl
     ? { alt: `${currentUser.name} 头像`, label: `${currentUser.name} 头像`, src: currentUser.avatarUrl }
     : null;
-
-  useEffect(() => {
-    setFailedBackgroundUrl(null);
-  }, [backgroundImageUrl]);
 
   useEffect(() => {
     if (!userMenuOpen) return undefined;
@@ -90,9 +85,6 @@ export function Sidebar({
   if (!backgroundImageUrl) {
     throw new Error("Sidebar background image URL is missing");
   }
-  if (failedBackgroundUrl === backgroundImageUrl) {
-    throw new Error(`Sidebar background image failed to load: ${backgroundImageUrl}`);
-  }
 
   return (
     <aside
@@ -106,7 +98,6 @@ export function Sidebar({
         frameClassName="orf-sidebar-background-frame"
         imageClassName="orf-sidebar-background-image"
         imageUrl={backgroundImageUrl}
-        onImageError={() => setFailedBackgroundUrl(backgroundImageUrl)}
         crop={backgroundCrop}
       />
       <VisualMaterialLayer className="orf-sidebar-material" material={material} role="sidebar" />
