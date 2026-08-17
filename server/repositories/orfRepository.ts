@@ -20,6 +20,7 @@ import type {
   ObjectiveLoot,
   ObjectiveTrialReview,
   ObjectiveTrialReviewStatus,
+  OrfUser,
   OrfState,
   Priority,
   Result,
@@ -79,6 +80,7 @@ import {
   objectiveLifecycleInitialState,
   objectiveLifecycleTransitions,
 } from "../../src/domain/orfLifecycle";
+import { objectiveMetricExecutionCompletionAccess } from "../../src/domain/orfMetricExecution";
 import { objectiveChallengeEntryClosed as objectiveClosedForChallengeEntry } from "../../src/domain/orfChallengeEntry";
 import {
   objectiveAlignmentNeedsWorkFeedback,
@@ -2132,39 +2134,71 @@ export async function updateResultConfidence(resultId: string, confidence: numbe
   return true;
 }
 
-export async function setResultExecutionCompleted(resultId: string, executionCompleted: boolean, actorId: string): Promise<boolean> {
-  const updatedResult = await db.transaction(async (tx) => {
+export type ResultExecutionCompletionMutationOutcome =
+  | { status: "updated" }
+  | { status: "notFound" }
+  | { status: "forbidden" }
+  | { status: "lifecycleLocked"; flowStatus: Objective["flowStatus"] };
+
+type ResultExecutionCompletionActor = Pick<OrfUser, "id" | "role">;
+type ResultExecutionCompletionMutationTxOutcome =
+  | Exclude<ResultExecutionCompletionMutationOutcome, { status: "updated" }>
+  | { status: "updated"; teamId: string };
+
+export async function setResultExecutionCompleted(
+  resultId: string,
+  executionCompleted: boolean,
+  actor: ResultExecutionCompletionActor,
+  scope: RuntimeScope,
+): Promise<ResultExecutionCompletionMutationOutcome> {
+  const storageScopeId = runtimeScopeStorageId(scope);
+  const outcome = await db.transaction(async (tx): Promise<ResultExecutionCompletionMutationTxOutcome> => {
     const [target] = await tx
-      .select({ flowStatus: objectives.flowStatus, teamId: results.teamId })
+      .select({
+        challengerUserIds: objectives.challengerUserIds,
+        flowStatus: objectives.flowStatus,
+        teamId: results.teamId,
+      })
       .from(results)
       .innerJoin(objectives, eq(objectives.id, results.objectiveId))
       .where(eq(results.id, resultId))
       .limit(1)
       .for("update");
-    if (!target || !canMutateObjectiveResultsByFlow(target)) {
-      return false;
+    if (!target || target.teamId !== storageScopeId) {
+      return { status: "notFound" };
+    }
+
+    const access = objectiveMetricExecutionCompletionAccess(target, actor);
+    if (access.status !== "allowed") {
+      if (access.reason === "lifecycleLocked") {
+        return { status: "lifecycleLocked", flowStatus: target.flowStatus };
+      }
+      if (access.reason === "notFound") {
+        return { status: "notFound" };
+      }
+      return { status: "forbidden" };
     }
 
     const updated = await tx
       .update(results)
-      .set({ executionCompleted, updatedAt: today(), updatedBy: actorId })
+      .set({ executionCompleted, updatedAt: today(), updatedBy: actor.id })
       .where(eq(results.id, resultId))
       .returning({ id: results.id });
-    return updated.length > 0 ? { teamId: target.teamId } : null;
+    return updated.length > 0 ? { status: "updated", teamId: target.teamId } : { status: "notFound" };
   });
 
-  if (!updatedResult) {
-    return false;
+  if (outcome.status !== "updated") {
+    return outcome;
   }
 
   publishOrfDataInvalidation({
-    actorUserId: actorId,
+    actorUserId: actor.id,
     models: ["taskManagement", "bountyHall"],
     reason: "result.changed",
     target: { id: resultId, type: "result" },
-    teamId: updatedResult.teamId,
+    teamId: outcome.teamId,
   });
-  return true;
+  return { status: "updated" };
 }
 
 export async function updateResultUncertaintyLevel(resultId: string, uncertaintyLevel: UncertaintyLevel, actorId: string): Promise<boolean> {

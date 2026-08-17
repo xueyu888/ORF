@@ -39,6 +39,10 @@ export function canMutateObjectiveResultsByFlow(target: ObjectiveLifecycleTarget
   return policyFlag(target, "canMutateResults");
 }
 
+export function canMutateMetricExecutionCompletionByFlow(target: ObjectiveLifecycleTarget): boolean {
+  return policyFlag(target, "canMutateMetricExecutionCompletion");
+}
+
 export function canMutateObjectiveWorkItemsByFlow(target: ObjectiveLifecycleTarget): boolean {
   return policyFlag(target, "canMutateWorkItems");
 }

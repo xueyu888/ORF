@@ -205,6 +205,9 @@ export function businessMutationFailureMessage(error: unknown, fallback: string)
       if (error.message === "Objective already includes all reinforcement candidates") {
         return "选择的成员已经是目标挑战者";
       }
+      if (error.message === "Metric execution completion is locked for this lifecycle state") {
+        return "目标当前阶段不能勾选指标完成";
+      }
       return error.message || "数据状态已变化，请刷新后再试";
     }
 

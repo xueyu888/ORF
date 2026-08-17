@@ -112,6 +112,7 @@ import {
 } from "./model/objectiveCreationSession";
 import {
   canEditObjectiveContent,
+  canMutateMetricExecutionCompletion,
   canMutateObjectiveWorkItems,
   canRecruitObjectiveChallengers,
   canReinforceObjectiveChallengers,
@@ -660,6 +661,8 @@ export function ChallengePlanPage() {
       now,
     });
   const canMutateMetricForObjective = (objectiveId: string) => metricEditAccessForObjectiveId(objectiveId).status === "allowed";
+  const canToggleMetricCompletionForObjective = (objectiveId: string) =>
+    canMutateMetricExecutionCompletion(objectiveById(objectiveId), currentUser);
   const notifyUnavailableMetricEdit = (objectiveId: string) => {
     const access = metricEditAccessForObjectiveId(objectiveId);
     if (access.status === "allowed") return;
@@ -1599,6 +1602,7 @@ export function ChallengePlanPage() {
                   permissionRules: challengeState.permissionRules,
                 }),
               canMutateMetrics: canMutateMetricForObjective,
+              canToggleMetricCompletion: canToggleMetricCompletionForObjective,
               canMutateWorkItems: canMutateWorkItemsForObjective,
               objectiveDeadlineEditState,
               onActionDoneChange: setActionDone,

@@ -81,6 +81,7 @@ type RowHandlers = {
   today: string;
   objectiveDeadlineEditState: (objective: ObjectiveNode["objective"]) => ObjectiveDeadlineEditState;
   canMutateMetrics: (objectiveId: string) => boolean;
+  canToggleMetricCompletion: (objectiveId: string) => boolean;
   canMutateWorkItems: (objectiveId: string) => boolean;
   currentUser: OrfUser | null;
   draftObjectiveId?: string;
@@ -1165,7 +1166,7 @@ function MetricRow({
   const statusLabel = temporary ? (temporary.status === "submitting" ? "保存中" : "草稿") : bountyStatusLabel[bounty!.status];
   const metricTone = bounty ? metricToneForBountyStatus(bounty.status) : "todo";
   const metricChecked = Boolean(complete || bounty?.result.executionCompleted);
-  const canToggleMetricCompletion = Boolean(bounty && handlers.canMutateMetrics(bounty.result.objectiveId) && !disabled && !complete);
+  const canToggleMetricCompletion = Boolean(bounty && handlers.canToggleMetricCompletion(bounty.result.objectiveId) && !disabled && !complete);
 
   return (
     <div className="orf-result-row-frame relative">

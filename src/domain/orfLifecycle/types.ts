@@ -27,6 +27,7 @@ export type ObjectiveFlowPolicy = {
   readonly canReinforceChallengers: boolean;
   readonly canAcceptChallenge: boolean;
   readonly canMutateResults: boolean;
+  readonly canMutateMetricExecutionCompletion: boolean;
   readonly canMutateWorkItems: boolean;
   readonly canMutateComments: boolean;
   readonly canMutateCommentsAsChallenger: boolean;

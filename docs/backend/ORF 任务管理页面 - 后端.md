@@ -39,6 +39,7 @@
 | `POST`   | `/api/results`                                                               | 创建指标并返回 `{ result }`；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许 `Objective.challengerUserIds` 中的正式挑战者在未过期 `reestimating` 阶段创建 |
 | `PATCH`  | `/api/results/:resultId`                                                     | 更新指标标题；指挥官可编辑未冻结目标下指标，`Objective.challengerUserIds` 中的挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
 | `PATCH`  | `/api/results/:resultId/details`                                             | 更新指标详情字段：`detail`；权限和生命周期锁与指标标题编辑一致 |
+| `PATCH`  | `/api/results/:resultId/execution-completion`                                | 写入 `Result.executionCompleted`；仅目标正式挑战者或指挥官可在 `reestimating/frozen/revisionRequired` 勾选或取消，`submitted` 及验收完成后返回 409 |
 | `PATCH`  | `/api/results/:resultId/uncertainty`                                         | 更新指标等级和积分映射；仅未锁定目标可写，`submitted` 后不得修改。`uncertainty` 是当前实现保留的 API 名 |
 | `PATCH`  | `/api/results/:resultId/confidence`                                          | 更新指标信心 |
 | `PATCH`  | `/api/results/:resultId/order`                                               | 更新指标在同目标内的排序 |
@@ -76,7 +77,7 @@
 
 `POST /api/objectives` 对应挑战页 temporary 目标标题输入框的 Enter 或失焦快速创建动作。创建请求发起后，前端先让本地 temporary 目标退出标题编辑态并留在原位；`POST` 成功返回的真实目标必须足以立即替换本地 temporary 目标，任务管理数据刷新只负责后续同步和撤掉覆盖层，不能成为创建成功 UI 的前置条件。创建成功后的真实目标继续保持同一套目标面板结构，但缺失指标和行动项时前端不渲染伪子行；前端从目标行 `+` 选择新增指标或新增行动项后，才通过 `POST /api/results` / `POST /api/tasks` 创建对应实体，返回的真实实体用于替换本次创建的 temporary 行。`POST /api/tasks/:taskId/checklist` 必须返回创建出来的 `TaskChecklistItem`，前端用真实子任务 id 替换 temporary 子任务，不能靠标题匹配。指标、任务和子任务创建成功后都使用一次性创建覆盖层桥接到 `/api/my-challenges` 刷新 materialize，不能在页面级刷新延迟时短暂回到旧列表。任务管理接口按 `createdAt desc, id desc` 返回目标源数据；挑战页在业务排序键相同时保留该源顺序，并且不能把目标标题作为列表排序键。由于 API 源顺序可能和本地 temporary 目标插入顺序不同，前端在提交目标时保留一次性的邻居锚点；`POST` 成功返回的真实目标可以作为页面级临时覆盖层连续替换 temporary 目标，任务管理数据刷新包含同一目标后撤掉覆盖层，但排序锚点继续保留到用户切换筛选或目标业务排序键变化。创建失败时，前端回到目标标题编辑态并保留用户输入。
 
-任务和子任务完成状态接口只表达执行进度写入，不触发指标验收、目标提交、结算或积分。前端可以在挑战页展示层使用短生命周期完成状态覆盖层即时反馈点击；后端返回的任务管理数据仍是完成状态的持久化事实源，刷新数据包含同一任务或子任务完成状态后前端撤销覆盖层。
+指标、任务和子任务完成状态接口只表达执行进度写入，不触发指标验收、目标提交、结算或积分。`Result.executionCompleted` 是指标执行完成的唯一持久化事实源，可写阶段由 `src/domain/orfLifecycle/` 的 `canMutateMetricExecutionCompletion` 定义，并由目标挑战者身份或指挥官权限共同校验；`submitted` 阶段锁定正式验收快照，`revisionRequired` 重新开放执行勾选。前端可以在挑战页展示层使用短生命周期完成状态覆盖层即时反馈点击；后端返回的任务管理数据仍是完成状态的持久化事实源，刷新数据包含同一完成状态后前端撤销覆盖层。
 
 任务和子任务写入权限统一从父级 `Objective` 解析：新增、改名、改状态、勾选、移动和删除都会先把任务或子任务解析到 `Task.linkedObjectiveId`，再校验当前用户 id 是否在该目标的 `Objective.challengerUserIds`；指挥官按管理员权限通过。`Task.assignee` 只是执行提示，`Task.createdBy` / `updatedBy` 只记录创建和最近维护人，不能用来阻止同一目标下其他正式挑战者维护任务或子任务。`Task.definitionContributorUserIds` 是行动项定义者头像展示的唯一事实源：创建行动项和修改行动项标题会把当前用户追加进去并去重，状态勾选、完成状态和排序移动只表达执行或编排状态，不把用户加入定义者集合。任务读模型基于该集合派生 `definitionContributorProfiles`，用于普通成员也能直接展示所有定义过行动项的用户头像；`createdByName` / `createdByAvatarUrl` 只是兼容审计投影，不参与头像列语义、权限或所有权判断。
 
@@ -225,6 +226,7 @@ type ObjectiveFlowStatus =
 - 目标内容只能由指挥官修改。
 - 指挥官可以编辑未冻结目标下指标。
 - 挑战者只能在未过期 `reestimating` 状态提出、编辑或删除自己参与目标下的指标；超过 `confirmationDueAt` 或目标冻结后均不可调整。该指标维护能力不授予 `objective.delete`，挑战者不能删除目标。
+- 指标执行完成勾选不使用 `result.edit` 或指标定义锁；目标正式挑战者和指挥官只可在 `reestimating/frozen/revisionRequired` 写入 `Result.executionCompleted`，旁观成员返回 403，`submitted/accepted/settled/closed` 返回 409。
 - 反馈生命周期只能通过具名命令推进：独立调用使用 `/api/feedback/:feedbackId/transitions`，反馈详情的评论、生命周期和处理人组合跟进使用 `/api/feedback/:feedbackId/follow-ups`；前端只渲染反馈读模型返回的 capabilities，不能自行用 Open/Closed、创建人或处理人判断按钮权限。
 - 反馈创建以当前默认团队作用域为边界；active 团队成员可以创建不绑定目标或指标的内部反馈，反馈事实只写入团队反馈 issue。
 - 反馈处理人候选读模型来自 `/api/feedback/assignees`，只暴露当前作用域 active 成员的最小展示资料，供新建反馈和反馈详情改派共用；管理员成员管理列表 `/api/users` 不作为普通成员页面的数据源。

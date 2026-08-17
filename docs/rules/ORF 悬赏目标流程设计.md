@@ -16,6 +16,7 @@
 - 用户正在操作的目标使用列表位置锚点保持当前上下文稳定。审批申请、发布、冻结、验收等动作成功后，目标状态、挑战者、申请记录和权限立即按后端事实源刷新；当前目标在用户失焦、点击其他目标、切换筛选或离开页面前保持原展示位置，锚点释放后回到统一排序。
 - 指挥官可以编辑目标和指标；目标冻结后，指标口径锁定。
 - 挑战者只能在自己参与目标的未过期重估期提出指标或编辑已有指标。
+- 指标口径定义和指标执行完成是两类事实：冻结后 `Result` 的定义字段锁定，但 `Result.executionCompleted` 仍表示执行进度。正式挑战者可在 `reestimating`、`frozen`、`revisionRequired` 勾选或取消指标执行完成；`submitted` 是正式验收快照，`accepted`、`settled`、`closed` 只读。指挥官按管理员权限在同一可写阶段处理异常协作。
 - 冻结发生在重估完成之后，不发生在悬赏大厅或申请阶段。
 - 任务、子任务和评论用于重估/拆解/协作，不表达对单个指标的影响，也不自动推导验收、完成或结算。
 - 反馈不进入悬赏目标状态机；反馈指系统或管理层面的反馈。
@@ -50,17 +51,17 @@
 | `open` | 可申请 | 指挥官发布候选目标 | 成员申请挑战、指挥官征召 |
 | `applying` | 申请中 | 至少一名成员提交申请 | 指挥官通过或拒绝申请 |
 | `recruiting` | 征召中 | 指挥官指定待接受成员 | 被征召成员接受 |
-| `reestimating` | 重估中 | 申请被通过或征召被接受；重新重估审批通过 | 其他 active 普通成员继续申请；指挥官改目标、指标和目标分数；挑战者提出指标、编辑指标、维护任务、评论；挑战者申请完成重估后，指挥官完成并冻结或打回重估；重估完成期限到期后后端自动尝试冻结 |
-| `frozen` | 已冻结 | 重估完成期限到期且冻结校验通过，或指挥官确认重估完成 | 挑战者填写理由申请重新重估；挑战者提交战利品 |
-| `submitted` | 待验收 | 挑战者提交战利品 | 指挥官验收指标；仍可改目标分数；不再允许重新重估 |
-| `revisionRequired` | 待返工 | 指挥官验收不通过 | 截止日已到且 `deadlinePenalty` 尚未结算时进行匿名互评和逾期惩罚结算；挑战者继续完成并重新提交 |
+| `reestimating` | 重估中 | 申请被通过或征召被接受；重新重估审批通过 | 其他 active 普通成员继续申请；指挥官改目标、指标和目标分数；挑战者提出指标、编辑指标、勾选指标执行完成、维护任务、评论；挑战者申请完成重估后，指挥官完成并冻结或打回重估；重估完成期限到期后后端自动尝试冻结 |
+| `frozen` | 已冻结 | 重估完成期限到期且冻结校验通过，或指挥官确认重估完成 | 指标口径锁定；挑战者勾选指标执行完成、填写理由申请重新重估、提交战利品 |
+| `submitted` | 待验收 | 挑战者提交战利品 | 指标执行完成快照锁定；指挥官验收指标；仍可改目标分数；不再允许重新重估 |
+| `revisionRequired` | 待返工 | 指挥官验收不通过 | 挑战者继续勾选指标执行完成并重新提交；截止日已到且 `deadlinePenalty` 尚未结算时进行匿名互评和逾期惩罚结算 |
 | `accepted` | 已验收 | 指挥官确认验收通过 | 挑战者匿名互评；指挥官仍可改目标分数；指挥官确认结算 |
 | `settled` | 已结算 | 指挥官确认最终比例并写入积分 | 查看结果和排行榜 |
 | `closed` | 已关闭 | 目标关闭或放弃 | 无 |
 
 `Objective.stage` 保留为页面阶段字段：重估对应 `orfReestimate`，冻结后对应 `goalFrozen`。业务流转以 `flowStatus` 为准。
 
-生命周期规则的代码唯一事实源是 `src/domain/orfLifecycle/`：`policy.ts` 定义每个 `flowStatus` 的能力矩阵和排序/文案口径，`guards.ts` 只导出语义化判断，`transitions.ts` 只导出状态迁移和 `stage` 兼容规则。后端仓库、前端 store 和页面能力层不得再各自维护 `flowStatus` 集合或局部状态机。
+生命周期规则的代码唯一事实源是 `src/domain/orfLifecycle/`：`policy.ts` 定义每个 `flowStatus` 的能力矩阵和排序/文案口径，`guards.ts` 只导出语义化判断，`transitions.ts` 只导出状态迁移和 `stage` 兼容规则。指标执行完成勾选使用独立的 `canMutateMetricExecutionCompletion` 能力，不复用指标定义编辑锁。后端仓库、前端 store 和页面能力层不得再各自维护 `flowStatus` 集合或局部状态机。
 
 ## 页面边界
 
@@ -85,7 +86,7 @@
 
 `Objective.finalDueAt` 是目标截止日期的唯一事实源。只有指挥官可以修改：`candidate/open/applying/recruiting/reestimating` 可正常调整；`frozen` 只允许因延期等异常原因把日期延后；`submitted/revisionRequired/accepted/settled/closed` 不允许修改。目标仍处于 `reestimating` 且最终截止日期实际变更时，`Objective.confirmationDueAt` 按挑战接受时间和新的最终截止日期重新计算：重估完成期限取剩余验收周期的 50%，按半天取整，保留至少半天的最小窗口，不再设置固定最长天数。冻结后延后截止日期不重新重估，也不改变 `confirmationDueAt`。
 
-目标基础分只能由指挥官修改，且在 `accepted` 前都可调整；冻结不锁分。`reestimating` 期间可按权限编辑指标口径；挑战者申请完成重估后，指挥官可以提前完成并冻结，也可以打回重估，目标仍保持 `reestimating`。到达 `confirmationDueAt` 后，后端自动尝试冻结；若缺少指标，则自动冻结被阻断并保留 `reestimating`，补齐后仍走同一套完成重估与冻结校验。冻结后指标口径默认稳定，不允许直接编辑。若挑战者发现冻结后仍需修复，只能带理由发起 `frozenReestimate` 对齐申请；指挥官审批通过时设置新的 `confirmationDueAt`，该时间必须晚于当前时间且不能超过 `Objective.finalDueAt` 当日 23:59。审批通过后目标退回现有 `reestimating/orfReestimate` 链路并清空当前 `confirmedAt`，改完后仍需重新申请完成重估或等到新期限自动冻结。`confirmationDueAt` 到期后停止挑战者指标调整，不提供不经审批的独立续期入口。
+目标基础分只能由指挥官修改，且在 `accepted` 前都可调整；冻结不锁分。`reestimating` 期间可按权限编辑指标口径；挑战者申请完成重估后，指挥官可以提前完成并冻结，也可以打回重估，目标仍保持 `reestimating`。到达 `confirmationDueAt` 后，后端自动尝试冻结；若缺少指标，则自动冻结被阻断并保留 `reestimating`，补齐后仍走同一套完成重估与冻结校验。冻结后指标口径默认稳定，不允许直接编辑。指标执行完成勾选只写 `Result.executionCompleted`，不修改指标口径、不生成验收结论、不推进战利品提交或结算；目标正式提交后进入 `submitted`，该执行进度随提交快照锁定。若挑战者发现冻结后仍需修复指标口径，只能带理由发起 `frozenReestimate` 对齐申请；指挥官审批通过时设置新的 `confirmationDueAt`，该时间必须晚于当前时间且不能超过 `Objective.finalDueAt` 当日 23:59。审批通过后目标退回现有 `reestimating/orfReestimate` 链路并清空当前 `confirmedAt`，改完后仍需重新申请完成重估或等到新期限自动冻结。`confirmationDueAt` 到期后停止挑战者指标调整，不提供不经审批的独立续期入口。
 
 ## 征召与申请
 

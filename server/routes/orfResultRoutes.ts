@@ -155,17 +155,20 @@ export function registerOrfResultRoutes(app: FastifyInstance) {
   app.patch("/api/results/:resultId/execution-completion", async (request, reply) => {
     const params = resultParamsSchema.parse(request.params);
     const body = updateResultExecutionCompletionBodySchema.parse(request.body);
-    const context = await requireResultEditContext(request, reply, params.resultId);
+    const context = await requireUserScopeContext(request, reply);
     if (!context) {
       return reply;
     }
-    if (!(await requireResultUnlocked(reply, params.resultId))) {
-      return reply;
-    }
 
-    const updated = await setResultExecutionCompleted(params.resultId, body.completed, context.user.id);
-    if (!updated) {
+    const outcome = await setResultExecutionCompleted(params.resultId, body.completed, context.user, context.scope);
+    if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Result not found" });
+    }
+    if (outcome.status === "forbidden") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+    if (outcome.status === "lifecycleLocked") {
+      return reply.code(409).send({ error: "Metric execution completion is locked for this lifecycle state", flowStatus: outcome.flowStatus });
     }
 
     return { ok: true };

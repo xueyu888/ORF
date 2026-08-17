@@ -28,7 +28,7 @@
 
 ## 2. 权限拦截
 
-前端在执行下列指标和流程操作前检查 `permissionRules`。目标标题、内容和截止日期不使用成员权限 key，统一由指挥官 / 管理员能力控制。行动项和子行动项不使用独立权限 key；它们走目标级工作项维护能力，由目标生命周期以及当前用户是否为指挥官或 `Objective.challengerUserIds` 正式挑战者共同决定。
+前端在执行下列指标定义和流程操作前检查 `permissionRules`。目标标题、内容和截止日期不使用成员权限 key，统一由指挥官 / 管理员能力控制。行动项、子行动项和指标执行完成勾选不使用独立权限 key；它们走目标级业务能力，由目标生命周期以及当前用户是否为指挥官或 `Objective.challengerUserIds` 正式挑战者共同决定。
 
 | 操作 | 权限 key |
 | --- | --- |
@@ -37,8 +37,11 @@
 | 拖拽指标 | `result.edit` |
 | 删除目标 | `objective.delete` |
 | 删除指标 | `result.delete` |
+| 勾选指标完成 | 不使用 `result.edit`，走指标执行完成能力 |
 
 重估窗口内，目标正式挑战者可提出、编辑、拖拽和删除该目标下指标，不要求角色额外拥有对应指标权限 key；这项阶段能力不包含 `objective.delete`。其他场景无权限时只提示，不执行状态修改。
+
+指标执行完成勾选只写 `Result.executionCompleted`，在 `reestimating/frozen/revisionRequired` 对目标正式挑战者和指挥官开放；`submitted` 及验收完成后只读。该能力和指标标题、详情、排序、删除的定义编辑能力分离。
 
 ## 3. 拖拽反馈
 

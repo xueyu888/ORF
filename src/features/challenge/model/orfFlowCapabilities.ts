@@ -16,6 +16,11 @@ import {
 import { objectiveChallengeEntryClosed } from "../../../domain/orfChallengeEntry";
 import { objectiveSettlementReviewWindow } from "../../../domain/orfSettlement";
 import {
+  canMutateObjectiveMetricExecutionCompletionForActor,
+  objectiveMetricExecutionCompletionAccess,
+  type ObjectiveMetricExecutionCompletionAccess,
+} from "../../../domain/orfMetricExecution";
+import {
   canMutateObjectiveWorkItemsForActor,
   objectiveWorkItemMutationAccess,
   type ObjectiveWorkItemMutationAccess,
@@ -42,6 +47,7 @@ export type MetricEditAccess =
   | { status: "blocked"; reason: "notFound" | "lifecycleLocked" | "forbidden" };
 
 export type WorkItemMutationAccess = ObjectiveWorkItemMutationAccess;
+export type MetricExecutionCompletionAccess = ObjectiveMetricExecutionCompletionAccess;
 
 type WorkbenchAction = {
   kind: "submitLoot" | "submitPeerReview" | "reviewLoot" | "settleLoot" | "reviewTrial";
@@ -99,6 +105,27 @@ export function workItemMutationAccessForObjective({
 
 export function canMutateObjectiveWorkItems(objective: Objective | undefined, currentUser: OrfUser | null): boolean {
   return canMutateObjectiveWorkItemsForActor(objective, currentUser);
+}
+
+export function metricExecutionCompletionAccessForObjective({
+  objective,
+  currentUser,
+}: {
+  objective: Objective | undefined;
+  currentUser: OrfUser | null;
+}): MetricExecutionCompletionAccess {
+  return objectiveMetricExecutionCompletionAccess(objective, currentUser);
+}
+
+export function canMutateMetricExecutionCompletion(objective: Objective | undefined, currentUser: OrfUser | null): boolean {
+  return canMutateObjectiveMetricExecutionCompletionForActor(objective, currentUser);
+}
+
+export function metricExecutionCompletionUnavailableMessage(access: MetricExecutionCompletionAccess) {
+  if (access.status === "allowed") return "";
+  if (access.reason === "notFound") return "指标所属目标不可用";
+  if (access.reason === "lifecycleLocked") return "目标当前阶段不能勾选指标完成";
+  return "只有目标正式挑战者或指挥官可以勾选指标完成";
 }
 
 export function workItemMutationUnavailableMessage(access: WorkItemMutationAccess) {

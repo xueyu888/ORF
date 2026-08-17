@@ -113,6 +113,7 @@
 | `PATCH /api/objectives/:objectiveId/alignment-requests/:alignmentRequestId` | 指挥官处理对齐申请；重新重估审批通过时传新的 `confirmationDueAt` |
 | `POST /api/objectives/:objectiveId/reinforcements` | 指挥官在冻结后、战利品提交前加派正式挑战者 |
 | `PATCH /api/results/:resultId/details` | 指挥官或重估期内挑战者编辑指标详情 |
+| `PATCH /api/results/:resultId/execution-completion` | 目标正式挑战者或指挥官在 `reestimating/frozen/revisionRequired` 勾选指标执行完成 |
 | `POST /api/objectives/:objectiveId/loot` | 挑战者提交结构化战利品 |
 | `POST /api/objectives/:objectiveId/review` | 指挥官验收指标 |
 | `POST /api/objectives/:objectiveId/settle` | 指挥官确认结算 |
