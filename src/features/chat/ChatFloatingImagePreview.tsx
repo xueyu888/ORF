@@ -96,7 +96,7 @@ type ChatImagePopoutPayload = {
 
 const ChatFloatingImagePreviewContext = createContext<ChatFloatingImagePreviewContextValue | null>(null);
 const chatImageZoomMin = 0.25;
-const chatImageZoomMax = 5;
+const chatImageNaturalScaleMax = 5;
 const chatImageZoomStep = 0.25;
 const chatImageWindowResizeEdges: ChatImageWindowResizeEdge[] = ["n", "e", "s", "w", "ne", "nw", "se", "sw"];
 const chatImageWindowMargin = 12;
@@ -202,6 +202,8 @@ function ChatFloatingImagePreviewWindow({
   const canGoPrevious = currentIndex > 0;
   const canGoNext = currentIndex < preview.images.length - 1;
   const maximized = windowGeometry.mode === "maximized";
+  const baseNaturalScale = chatImageBaseNaturalScale(fitSize, naturalSize);
+  const viewerZoomMax = chatImageViewerZoomMax(baseNaturalScale);
 
   const updateViewerState = (update: Partial<ChatImageViewerState> | ((current: ChatImageViewerState) => ChatImageViewerState)) => {
     setViewerState((current) => typeof update === "function" ? update(current) : { ...current, ...update });
@@ -209,7 +211,7 @@ function ChatFloatingImagePreviewWindow({
   const setZoom = (nextZoom: number | ((current: number) => number)) => {
     setViewerState((current) => ({
       ...current,
-      zoom: clampChatImageZoom(typeof nextZoom === "function" ? nextZoom(current.zoom) : nextZoom),
+      zoom: clampChatImageZoom(typeof nextZoom === "function" ? nextZoom(current.zoom) : nextZoom, viewerZoomMax),
     }));
   };
   const zoomOut = () => setZoom((value) => value - chatImageZoomStep);
@@ -408,7 +410,7 @@ function ChatFloatingImagePreviewWindow({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canGoNext, canGoPrevious, onClose, onNavigateImage, viewerState.zoom]);
+  }, [canGoNext, canGoPrevious, onClose, onNavigateImage, viewerState.zoom, viewerZoomMax]);
 
   useEffect(() => {
     setWindowGeometry(defaultChatImageWindowGeometry(chatAttachmentNaturalSize(attachment), preview.images.length > 1));
@@ -481,6 +483,13 @@ function ChatFloatingImagePreviewWindow({
     };
   }, [naturalSize, viewerState.mode, viewerState.rotation, viewerState.thumbnailsOpen, windowGeometry.rect.height, windowGeometry.rect.width]);
 
+  useEffect(() => {
+    setViewerState((current) => {
+      const nextZoom = clampChatImageZoom(current.zoom, viewerZoomMax);
+      return nextZoom === current.zoom ? current : { ...current, zoom: nextZoom };
+    });
+  }, [viewerZoomMax]);
+
   if (!attachment) {
     return null;
   }
@@ -513,7 +522,7 @@ function ChatFloatingImagePreviewWindow({
       }
     : undefined;
   const displayedZoomPercent = imageSize && naturalSize
-    ? Math.max(1, Math.round((imageSize.width / naturalSize.width) * 100))
+    ? chatImageNaturalScalePercent(imageSize.width / naturalSize.width)
     : Math.round(viewerState.zoom * 100);
   const windowStyle = standalone
     ? undefined
@@ -574,7 +583,7 @@ function ChatFloatingImagePreviewWindow({
             )}
           </div>
           <div className="orf-chat-floating-image-preview-tool-group">
-            <button type="button" onClick={zoomIn} disabled={viewerState.zoom >= chatImageZoomMax} title="放大图片" aria-label="放大图片">
+            <button type="button" onClick={zoomIn} disabled={viewerState.zoom >= viewerZoomMax - chatImageZoomNeutralTolerance} title="放大图片" aria-label="放大图片">
               <ZoomIn className="h-4 w-4" />
             </button>
             <button type="button" onClick={zoomOut} disabled={viewerState.zoom <= chatImageZoomMin} title="缩小图片" aria-label="缩小图片">
@@ -1001,8 +1010,28 @@ function imageDimension(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
-function clampChatImageZoom(value: number) {
-  return Math.min(chatImageZoomMax, Math.max(chatImageZoomMin, Math.round(value * 100) / 100));
+function chatImageBaseNaturalScale(
+  fitSize: { height: number; width: number } | null,
+  naturalSize: { height: number; width: number } | null,
+) {
+  if (!fitSize || !naturalSize || naturalSize.width <= 0) return null;
+  return fitSize.width / naturalSize.width;
+}
+
+function chatImageViewerZoomMax(baseNaturalScale: number | null) {
+  if (!baseNaturalScale || !Number.isFinite(baseNaturalScale) || baseNaturalScale <= 0) {
+    return chatImageNaturalScaleMax;
+  }
+  return Math.max(1, chatImageNaturalScaleMax / baseNaturalScale);
+}
+
+function chatImageNaturalScalePercent(value: number) {
+  return Math.max(1, Math.round(value * 100));
+}
+
+function clampChatImageZoom(value: number, maxZoom: number) {
+  const safeMaxZoom = Number.isFinite(maxZoom) && maxZoom > 0 ? maxZoom : chatImageNaturalScaleMax;
+  return Math.min(safeMaxZoom, Math.max(chatImageZoomMin, Math.round(value * 100) / 100));
 }
 
 function isChatImageViewerShortcutEditableTarget(target: EventTarget | null) {
