@@ -1318,6 +1318,38 @@ textarea.feedback-issue-sidebar-input {
   padding: 14px;
 }
 
+.feedback-create-draft-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--orf-accent) 28%, var(--orf-border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--orf-accent) 10%, var(--orf-surface));
+  color: var(--orf-text-primary);
+  padding: 12px 14px;
+}
+
+.feedback-create-draft-notice > div {
+  display: grid;
+  gap: 3px;
+}
+
+.feedback-create-draft-notice strong {
+  font-size: 13px;
+}
+
+.feedback-create-draft-notice span,
+.feedback-create-draft-hint {
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.feedback-create-draft-hint {
+  margin: 0;
+}
+
 .feedback-create-editor-header {
   display: flex;
   align-items: center;
@@ -1481,6 +1513,10 @@ html[data-orf-display-contrast="high"] .feedback-issue-row {
   .feedback-issue-header-actions,
   .feedback-issue-detail-actions {
     justify-content: stretch;
+  }
+
+  .feedback-create-draft-notice {
+    display: grid;
   }
 
   .feedback-button,

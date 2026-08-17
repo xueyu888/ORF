@@ -1,6 +1,6 @@
 import { ArrowLeft, Check, Paperclip } from "lucide-react";
 import type { FormEvent } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { teamFeedbackCauseOptions, type FeedbackImpact } from "../../contracts";
 import { feedbackRootPath } from "../../contracts/links";
@@ -8,6 +8,13 @@ import { feedbackImpactLabel } from "../../contracts/labels";
 import { createFeedback, feedbackMutationFailureMessage, getFeedbackAttachmentSettings } from "../api";
 import { FeedbackButton, FeedbackEmptyState } from "../components/controls";
 import { canCreateTeamFeedback } from "../model/capabilities";
+import {
+  clearStoredFeedbackCreateDraft,
+  feedbackCreateDraftStorageKey,
+  readStoredFeedbackCreateDraft,
+  writeStoredFeedbackCreateDraft,
+  type FeedbackCreateDraftScope,
+} from "../model/createDraftStorage";
 import { feedbackIssueHref } from "../model/issue";
 import { useFeedbackWebHost, type FeedbackCommentDraft } from "../runtime";
 import { useFeedbackAssigneeOptions, useFeedbackIssueReadModel } from "../hooks";
@@ -29,6 +36,11 @@ type PendingFeedbackAttachment = {
   previewUrl: string;
 };
 
+type FeedbackCreateDraftRestoreNotice = {
+  droppedAttachmentCount: number;
+  updatedAt: string;
+};
+
 export function FeedbackCreatePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -39,14 +51,20 @@ export function FeedbackCreatePage() {
   const feedbackData = feedbackReadModel.data;
   const canCreateFeedback = canCreateTeamFeedback(currentUser);
   const causeOptions = teamFeedbackCauseOptions();
+  const defaultCause = causeOptions[0] ?? "技术问题";
   const assigneeOptions = useFeedbackAssigneeOptions(feedbackData.users, currentUser);
   const defaultAssigneeUserId = currentUser?.id ?? assigneeOptions[0]?.id ?? "";
   const initialAssigneeUserId = assigneeOptions.some((user) => user.id === defaultAssigneeUserId) ? defaultAssigneeUserId : assigneeOptions[0]?.id ?? defaultAssigneeUserId;
   const projectParam = searchParams.get("project") ?? "";
   const initialProjectId = feedbackData.projects.some((project) => project.id === projectParam) ? projectParam : "";
+  const draftStorageScope = useMemo<FeedbackCreateDraftScope | null>(
+    () => currentUser ? { projectContextId: projectParam || null, userId: currentUser.id } : null,
+    [currentUser?.id, projectParam],
+  );
+  const draftStorageKey = draftStorageScope ? feedbackCreateDraftStorageKey(draftStorageScope) : "";
   const [title, setTitle] = useState("");
   const [draft, setDraft] = useState<FeedbackCommentDraft>(() => host.commentDraft.empty());
-  const [cause, setCause] = useState<string>(causeOptions[0] ?? "技术问题");
+  const [cause, setCause] = useState<string>(defaultCause);
   const [impact, setImpact] = useState<FeedbackImpact>("medium");
   const [assigneeUserId, setAssigneeUserId] = useState(initialAssigneeUserId);
   const [projectId, setProjectId] = useState(initialProjectId);
@@ -54,10 +72,13 @@ export function FeedbackCreatePage() {
   const [attachmentMaxBytes, setAttachmentMaxBytes] = useState<number | null>(null);
   const [previewAttachmentId, setPreviewAttachmentId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [draftStorageReadyKey, setDraftStorageReadyKey] = useState("");
+  const [restoredDraftNotice, setRestoredDraftNotice] = useState<FeedbackCreateDraftRestoreNotice | null>(null);
   const attachmentCounterRef = useRef(0);
   const pendingPreviewUrlsRef = useRef(new Set<string>());
 
-  const body = host.commentDraft.serialize(draft).trim();
+  const serializedDraft = host.commentDraft.serialize(draft);
+  const body = serializedDraft.trim();
   const referencedPendingAttachmentIds = new Set(host.commentDraft.validPendingAttachmentIds(draft));
   const referencedAttachments = pendingAttachments.filter((attachment) => referencedPendingAttachmentIds.has(attachment.id));
   const referencedAttachmentBytes = referencedAttachments.reduce((total, attachment) => total + attachment.file.size, 0);
@@ -67,12 +88,84 @@ export function FeedbackCreatePage() {
     : -1;
   const previewAttachment = previewAttachmentIndex >= 0 ? referencedImageAttachments[previewAttachmentIndex] ?? null : null;
 
+  function clearPendingAttachmentState() {
+    for (const previewUrl of pendingPreviewUrlsRef.current) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    pendingPreviewUrlsRef.current.clear();
+    setPendingAttachments([]);
+    setPreviewAttachmentId(null);
+  }
+
+  function resetCreateFormToDefaults() {
+    setTitle("");
+    setDraft(host.commentDraft.empty());
+    setCause(defaultCause);
+    setImpact("medium");
+    setAssigneeUserId(initialAssigneeUserId);
+    setProjectId(initialProjectId);
+    clearPendingAttachmentState();
+    setRestoredDraftNotice(null);
+  }
+
   useEffect(() => () => {
     for (const previewUrl of pendingPreviewUrlsRef.current) {
       URL.revokeObjectURL(previewUrl);
     }
     pendingPreviewUrlsRef.current.clear();
   }, []);
+
+  useEffect(() => {
+    if (!draftStorageScope) {
+      setDraftStorageReadyKey("");
+      setRestoredDraftNotice(null);
+      return;
+    }
+
+    const storedDraft = readStoredFeedbackCreateDraft(draftStorageScope);
+    if (storedDraft) {
+      setTitle(storedDraft.title);
+      setDraft(host.commentDraft.fromStoredBody(storedDraft.body, new Map()));
+      setCause(causeOptions.some((option) => option === storedDraft.cause) ? storedDraft.cause : defaultCause);
+      setImpact(storedDraft.impact);
+      setAssigneeUserId(storedDraft.assigneeUserId);
+      setProjectId(storedDraft.projectId);
+      clearPendingAttachmentState();
+      setRestoredDraftNotice({
+        droppedAttachmentCount: storedDraft.droppedAttachmentCount,
+        updatedAt: storedDraft.updatedAt,
+      });
+    } else {
+      resetCreateFormToDefaults();
+    }
+    setDraftStorageReadyKey(draftStorageKey);
+    // 只在草稿作用域变化时加载；异步用户/项目列表加载后的合法性由下面的校验 effect 收敛。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (!draftStorageScope || draftStorageReadyKey !== draftStorageKey) return;
+    writeStoredFeedbackCreateDraft(draftStorageScope, {
+      assigneeUserId,
+      body: serializedDraft,
+      cause,
+      impact,
+      pendingAttachmentCount: referencedAttachments.length,
+      projectId,
+      title,
+    });
+  }, [
+    assigneeUserId,
+    cause,
+    draftStorageKey,
+    draftStorageReadyKey,
+    draftStorageScope,
+    impact,
+    projectId,
+    referencedAttachments.length,
+    serializedDraft,
+    title,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,6 +238,14 @@ export function FeedbackCreatePage() {
     return { markdown, previewUrl };
   };
 
+  const handleClearDraft = () => {
+    if (draftStorageScope) {
+      clearStoredFeedbackCreateDraft(draftStorageScope);
+    }
+    resetCreateFormToDefaults();
+    notify("反馈草稿已清空");
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (submitting) return;
@@ -168,6 +269,9 @@ export function FeedbackCreatePage() {
         projectId: projectId || null,
         attachments: referencedAttachments,
       });
+      if (draftStorageScope) {
+        clearStoredFeedbackCreateDraft(draftStorageScope);
+      }
       notify("反馈已捕获");
       navigate(feedbackIssueHref(feedbackId));
     } catch (error) {
@@ -188,8 +292,28 @@ export function FeedbackCreatePage() {
         </div>
       </header>
 
+      {restoredDraftNotice && (
+        <div className="feedback-create-draft-notice" role="status">
+          <div>
+            <strong>已恢复未提交反馈草稿</strong>
+            <span>
+              本机自动暂存于 {formatDraftUpdatedAt(restoredDraftNotice.updatedAt)}
+              {restoredDraftNotice.droppedAttachmentCount > 0
+                ? `；${restoredDraftNotice.droppedAttachmentCount} 个附件需要重新选择`
+                : ""}
+            </span>
+          </div>
+          <FeedbackButton size="sm" type="button" variant="ghost" onClick={handleClearDraft}>
+            清空草稿
+          </FeedbackButton>
+        </div>
+      )}
+
       <form className="feedback-create-layout" id="new-feedback-issue-form" onSubmit={handleSubmit}>
         <section className="feedback-create-main" aria-label="新建反馈正文">
+          <p className="feedback-create-draft-hint">
+            未提交内容会自动保存在本机，创建成功后清除；离开页面后附件需要重新选择。
+          </p>
           <label className="feedback-create-title-field">
             <span className="sr-only">标题</span>
             <input
@@ -320,4 +444,15 @@ export function FeedbackCreatePage() {
 
 function isPendingFeedbackImageAttachment(attachment: PendingFeedbackAttachment) {
   return attachment.file.type.startsWith("image/");
+}
+
+function formatDraftUpdatedAt(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "上次编辑时";
+  return date.toLocaleString("zh-CN", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "2-digit",
+  });
 }
