@@ -13,11 +13,11 @@ import {
   selectChatFeedPrefetchChannelIds,
   upsertChannel,
 } from "../src/features/chat/chatModels";
-import { buildChatSidebarChannelGroups } from "../src/features/chat/chatSidebarModel";
+import { buildChatSidebarNavigation } from "../src/features/chat/chatSidebarModel";
 import { resolveChatFeedOpenIntent } from "../src/features/chat/chatFeedOpenIntent";
 import { getChatUnreadTarget } from "../src/state/apiClient";
 import { chatMessageTargetPath } from "../src/domain/chatNavigation";
-import type { ChatChannel, ChatMessage } from "../src/types/orf";
+import type { ChatChannel, ChatMessage, ChatUser } from "../src/types/orf";
 
 const currentUserId = "00000000-0000-4000-8000-000000000001";
 const authorUserId = "00000000-0000-4000-8000-000000000002";
@@ -81,6 +81,26 @@ function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
     savedByCurrentUser: false,
     source: "user",
     updatedAt: "2026-07-11T00:01:00.000Z",
+    ...overrides,
+  };
+}
+
+function user(overrides: Partial<ChatUser> = {}): ChatUser {
+  return {
+    avatarUrl: null,
+    email: "member@example.com",
+    id: authorUserId,
+    lastOnlineAt: "2026-07-11T00:00:00.000Z",
+    name: "成员",
+    presence: {
+      active: false,
+      connected: false,
+      lastActiveAt: "2026-07-11T00:00:00.000Z",
+      online: false,
+      state: "offline",
+    },
+    role: "member",
+    status: "active",
     ...overrides,
   };
 }
@@ -290,9 +310,13 @@ test("chat sidebar recent sessions are ordered by latest message instead of unre
     unreadCount: 1,
   });
 
-  const groups = buildChatSidebarChannelGroups([olderFavoriteUnread, newestMention, newerRead], currentUserId);
+  const navigation = buildChatSidebarNavigation({
+    channels: [olderFavoriteUnread, newestMention, newerRead],
+    currentUserId,
+    users: [],
+  });
 
-  assert.deepEqual(groups.find((group) => group.id === "recent")?.channels.map((item) => item.id), [
+  assert.deepEqual(navigation.recent.channels.map((item) => item.id), [
     "channel-newest-mention",
     "channel-newer-read",
     "channel-older-favorite-unread",
@@ -306,22 +330,30 @@ test("chat sidebar read changes only clear badges and do not move sessions out o
     type: "public",
     unreadCount: 3,
   });
-  const unreadGroups = buildChatSidebarChannelGroups([unreadSession], currentUserId);
-  const readGroups = buildChatSidebarChannelGroups([{
-    ...unreadSession,
-    mainMentionCount: 0,
-    mentionCount: 0,
-    threadMentionCount: 0,
-    threadUnreadCount: 0,
-    unreadCount: 0,
-  }], currentUserId);
+  const unreadNavigation = buildChatSidebarNavigation({
+    channels: [unreadSession],
+    currentUserId,
+    users: [],
+  });
+  const readNavigation = buildChatSidebarNavigation({
+    channels: [{
+      ...unreadSession,
+      mainMentionCount: 0,
+      mentionCount: 0,
+      threadMentionCount: 0,
+      threadUnreadCount: 0,
+      unreadCount: 0,
+    }],
+    currentUserId,
+    users: [],
+  });
 
-  assert.deepEqual(unreadGroups.find((group) => group.id === "recent")?.channels.map((item) => item.id), ["channel-stable-session"]);
-  assert.deepEqual(readGroups.find((group) => group.id === "recent")?.channels.map((item) => item.id), ["channel-stable-session"]);
-  assert.deepEqual(readGroups.find((group) => group.id === "public")?.channels.map((item) => item.id), []);
+  assert.deepEqual(unreadNavigation.recent.channels.map((item) => item.id), ["channel-stable-session"]);
+  assert.deepEqual(readNavigation.recent.channels.map((item) => item.id), ["channel-stable-session"]);
+  assert.deepEqual(readNavigation.addressBook.channelSections.find((section) => section.id === "public")?.channels.map((item) => item.id), []);
 });
 
-test("chat sidebar directory groups keep only channels without recent message activity", () => {
+test("chat sidebar address book keeps only channels without recent message activity", () => {
   const recentPublicChannel = channel({
     id: "channel-recent-public",
     lastMessageAt: "2026-07-11T00:03:00.000Z",
@@ -344,16 +376,57 @@ test("chat sidebar directory groups keep only channels without recent message ac
     type: "private",
   });
 
-  const groups = buildChatSidebarChannelGroups([
-    recentPublicChannel,
-    discoverableFavoriteChannel,
-    discoverablePublicChannel,
-  ], currentUserId);
+  const navigation = buildChatSidebarNavigation({
+    channels: [
+      recentPublicChannel,
+      discoverableFavoriteChannel,
+      discoverablePublicChannel,
+    ],
+    currentUserId,
+    users: [],
+  });
 
-  assert.deepEqual(groups.find((group) => group.id === "recent")?.channels.map((item) => item.id), ["channel-recent-public"]);
-  assert.deepEqual(groups.find((group) => group.id === "favorites")?.channels.map((item) => item.id), ["channel-discoverable-favorite"]);
-  assert.deepEqual(groups.find((group) => group.id === "public")?.channels.map((item) => item.id), ["channel-discoverable-public"]);
-  assert.deepEqual(groups.find((group) => group.id === "private")?.channels.map((item) => item.id), []);
+  assert.deepEqual(navigation.recent.channels.map((item) => item.id), ["channel-recent-public"]);
+  assert.deepEqual(navigation.addressBook.channelSections.find((section) => section.id === "favorites")?.channels.map((item) => item.id), ["channel-discoverable-favorite"]);
+  assert.deepEqual(navigation.addressBook.channelSections.find((section) => section.id === "public")?.channels.map((item) => item.id), ["channel-discoverable-public"]);
+  assert.deepEqual(navigation.addressBook.channelSections.find((section) => section.id === "private")?.channels.map((item) => item.id), []);
+});
+
+test("chat sidebar address book exposes visible members without requiring a search query", () => {
+  const navigation = buildChatSidebarNavigation({
+    channels: [],
+    currentUserId,
+    users: [
+      user({ id: currentUserId, email: "self@example.com", name: "当前用户" }),
+      user({ id: otherUserId, email: "z@example.com", name: "赵成员" }),
+      user({ id: authorUserId, email: "a@example.com", name: "阿成员" }),
+    ],
+  });
+
+  assert.deepEqual(navigation.addressBook.users.map((item) => item.id), [authorUserId, otherUserId]);
+  assert.equal(navigation.hasResults, true);
+});
+
+test("chat sidebar search filters system, recent, address book channels and members from one projection", () => {
+  const navigation = buildChatSidebarNavigation({
+    channels: [
+      channel({ displayName: "系统公告", id: "system", lastMessageAt: null, systemKind: "teamAnnouncement", type: "public" }),
+      channel({ displayName: "发布讨论", id: "recent-release", lastMessageAt: "2026-07-11T00:04:00.000Z", type: "public" }),
+      channel({ displayName: "归档资料", id: "directory-docs", lastMessageAt: null, type: "private" }),
+    ],
+    currentUserId,
+    query: "发布",
+    users: [
+      user({ id: currentUserId, email: "self@example.com", name: "当前用户" }),
+      user({ id: authorUserId, email: "release@example.com", name: "发布负责人" }),
+      user({ id: otherUserId, email: "other@example.com", name: "旁观者" }),
+    ],
+  });
+
+  assert.deepEqual(navigation.systemChannels.map((item) => item.id), []);
+  assert.deepEqual(navigation.recent.channels.map((item) => item.id), ["recent-release"]);
+  assert.deepEqual(navigation.addressBook.channelSections.flatMap((section) => section.channels.map((item) => item.id)), []);
+  assert.deepEqual(navigation.addressBook.users.map((item) => item.id), [authorUserId]);
 });
 
 test("an explicit mark-unread action may move the read cursor backwards under a newer read-state version", () => {

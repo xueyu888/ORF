@@ -5,13 +5,17 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { isChatConversation } from "../../domain/chatConversation";
 import type { ChatChannel, ChatUser } from "../../types/orf";
-import { chatChannelDisplayLabel, chatChannelSearchText, chatDirectPeer } from "./chatChannelPresentation";
+import { chatChannelDisplayLabel, chatDirectPeer } from "./chatChannelPresentation";
 import { formatPresence } from "./chatPresence";
 import { currentMembership } from "./chatModels";
-import { buildChatSidebarChannelGroups, type ChatSidebarChannelGroupId } from "./chatSidebarModel";
+import {
+  buildChatSidebarNavigation,
+  type ChatSidebarAddressBook,
+  type ChatSidebarAddressBookChannelSection,
+  type ChatSidebarChannelGroupId,
+} from "./chatSidebarModel";
 import { ChatGroupAvatar } from "./ChatGroupAvatar";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
-import { searchChatUsers } from "./chatUserSearch";
 
 export type ChatSidebarCreateCommand = {
   kind: "channel" | "conversation";
@@ -32,7 +36,7 @@ type ChatSidebarProps = {
   users: ChatUser[];
 };
 
-type ChatSidebarGroupId = "system" | "members" | ChatSidebarChannelGroupId;
+type ChatSidebarGroupId = "system" | "addressBook" | ChatSidebarChannelGroupId;
 
 export function ChatSidebar({
   activeChannelId,
@@ -50,11 +54,12 @@ export function ChatSidebar({
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<ChatSidebarGroupId>>(() => new Set());
   const normalizedQuery = query.trim().toLowerCase();
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
-  const visibleChannels = channels.filter((channel) => chatChannelSearchText(channel, currentUserId, usersById).toLowerCase().includes(normalizedQuery));
-  const filteredSystemChannels = visibleChannels.filter((channel) => channel.systemKind);
-  const filteredChannels = visibleChannels.filter((channel) => !channel.systemKind);
-  const matchedUsers = searchChatUsers(users, query, { excludeUserId: currentUserId });
-  const channelGroups = buildChatSidebarChannelGroups(filteredChannels, currentUserId);
+  const navigation = useMemo(() => buildChatSidebarNavigation({
+    channels,
+    currentUserId,
+    query,
+    users,
+  }), [channels, currentUserId, query, users]);
   const toggleGroupCollapsed = (groupId: ChatSidebarGroupId) => {
     setCollapsedGroupIds((items) => {
       const next = new Set(items);
@@ -82,7 +87,7 @@ export function ChatSidebar({
       <div className="orf-chat-channel-groups">
         <SystemChannelGroup
           activeChannelId={activeChannelId}
-          channels={filteredSystemChannels}
+          channels={navigation.systemChannels}
           collapsed={collapsedGroupIds.has("system")}
           currentUserId={currentUserId}
           onOpenChannel={onOpenChannel}
@@ -90,33 +95,32 @@ export function ChatSidebar({
           onToggleCollapsed={toggleGroupCollapsed}
           usersById={usersById}
         />
-        {matchedUsers.length > 0 && (
-          <UserResultGroup
-            collapsed={collapsedGroupIds.has("members")}
-            currentUserId={currentUserId}
-            onOpenConversationWithUser={onOpenConversationWithUser}
-            onToggleCollapsed={toggleGroupCollapsed}
-            title="成员"
-            users={matchedUsers}
-          />
-        )}
-        {channelGroups.map((group) => (
-          <ChannelGroup
-            activeChannelId={activeChannelId}
-            channels={group.channels}
-            collapsed={collapsedGroupIds.has(group.id)}
-            currentUserId={currentUserId}
-            draftChannelIds={draftChannelIds}
-            groupId={group.id}
-            key={group.title}
-            onOpenChannel={onOpenChannel}
-            onPreviewChannel={onPreviewChannel}
-            onToggleCollapsed={toggleGroupCollapsed}
-            title={group.title}
-            usersById={usersById}
-          />
-        ))}
-        {normalizedQuery && filteredSystemChannels.length === 0 && filteredChannels.length === 0 && matchedUsers.length === 0 && (
+        <ChannelGroup
+          activeChannelId={activeChannelId}
+          channels={navigation.recent.channels}
+          collapsed={collapsedGroupIds.has("recent")}
+          currentUserId={currentUserId}
+          draftChannelIds={draftChannelIds}
+          groupId={navigation.recent.id}
+          onOpenChannel={onOpenChannel}
+          onPreviewChannel={onPreviewChannel}
+          onToggleCollapsed={toggleGroupCollapsed}
+          title={navigation.recent.title}
+          usersById={usersById}
+        />
+        <AddressBookGroup
+          activeChannelId={activeChannelId}
+          addressBook={navigation.addressBook}
+          collapsed={collapsedGroupIds.has("addressBook")}
+          currentUserId={currentUserId}
+          draftChannelIds={draftChannelIds}
+          onOpenChannel={onOpenChannel}
+          onOpenConversationWithUser={onOpenConversationWithUser}
+          onPreviewChannel={onPreviewChannel}
+          onToggleCollapsed={toggleGroupCollapsed}
+          usersById={usersById}
+        />
+        {normalizedQuery && !navigation.hasResults && (
           <div className="orf-chat-sidebar-empty">没有匹配的频道、私信或成员</div>
         )}
       </div>
@@ -353,6 +357,38 @@ function ChannelGroup({
       title={title}
       onToggleCollapsed={onToggleCollapsed}
     >
+      <ChannelRows
+        activeChannelId={activeChannelId}
+        channels={channels}
+        currentUserId={currentUserId}
+        draftChannelIds={draftChannelIds}
+        onOpenChannel={onOpenChannel}
+        onPreviewChannel={onPreviewChannel}
+        usersById={usersById}
+      />
+    </ChatSidebarGroupSection>
+  );
+}
+
+function ChannelRows({
+  activeChannelId,
+  channels,
+  currentUserId,
+  draftChannelIds,
+  onOpenChannel,
+  onPreviewChannel,
+  usersById,
+}: {
+  activeChannelId: string | null;
+  channels: ChatChannel[];
+  currentUserId?: string;
+  draftChannelIds: Set<string>;
+  onOpenChannel: (channelId: string) => void;
+  onPreviewChannel: (channelId: string) => void;
+  usersById: Map<string, ChatUser>;
+}) {
+  return (
+    <>
       {channels.map((channel) => {
         const membership = currentMembership(channel, currentUserId);
         const directPeer = chatDirectPeer(channel, currentUserId, usersById);
@@ -395,44 +431,138 @@ function ChannelGroup({
           </button>
         );
       })}
+    </>
+  );
+}
+
+function AddressBookGroup({
+  activeChannelId,
+  addressBook,
+  collapsed,
+  currentUserId,
+  draftChannelIds,
+  onOpenChannel,
+  onOpenConversationWithUser,
+  onPreviewChannel,
+  onToggleCollapsed,
+  usersById,
+}: {
+  activeChannelId: string | null;
+  addressBook: ChatSidebarAddressBook;
+  collapsed: boolean;
+  currentUserId?: string;
+  draftChannelIds: Set<string>;
+  onOpenChannel: (channelId: string) => void;
+  onOpenConversationWithUser: (userId: string) => void;
+  onPreviewChannel: (channelId: string) => void;
+  onToggleCollapsed: (groupId: ChatSidebarGroupId) => void;
+  usersById: Map<string, ChatUser>;
+}) {
+  const channelCount = addressBook.channelSections.reduce((total, section) => total + section.channels.length, 0);
+  if (addressBook.users.length === 0 && channelCount === 0) return null;
+  return (
+    <ChatSidebarGroupSection
+      collapsed={collapsed}
+      groupId="addressBook"
+      summary={`${addressBook.users.length} 人 · ${channelCount} 个频道`}
+      title={addressBook.title}
+      onToggleCollapsed={onToggleCollapsed}
+    >
+      <div className="orf-chat-address-book">
+        {addressBook.users.length > 0 && (
+          <AddressBookSection title="成员">
+            <UserRows
+              currentUserId={currentUserId}
+              onOpenConversationWithUser={onOpenConversationWithUser}
+              users={addressBook.users}
+            />
+          </AddressBookSection>
+        )}
+        {addressBook.channelSections.map((section) => (
+          <AddressBookChannelSection
+            activeChannelId={activeChannelId}
+            currentUserId={currentUserId}
+            draftChannelIds={draftChannelIds}
+            key={section.id}
+            onOpenChannel={onOpenChannel}
+            onPreviewChannel={onPreviewChannel}
+            section={section}
+            usersById={usersById}
+          />
+        ))}
+      </div>
     </ChatSidebarGroupSection>
   );
 }
 
-function UserResultGroup({
-  collapsed,
+function AddressBookChannelSection({
+  activeChannelId,
+  currentUserId,
+  draftChannelIds,
+  onOpenChannel,
+  onPreviewChannel,
+  section,
+  usersById,
+}: {
+  activeChannelId: string | null;
+  currentUserId?: string;
+  draftChannelIds: Set<string>;
+  onOpenChannel: (channelId: string) => void;
+  onPreviewChannel: (channelId: string) => void;
+  section: ChatSidebarAddressBookChannelSection;
+  usersById: Map<string, ChatUser>;
+}) {
+  if (section.channels.length === 0) return null;
+  return (
+    <AddressBookSection title={section.title}>
+      <ChannelRows
+        activeChannelId={activeChannelId}
+        channels={section.channels}
+        currentUserId={currentUserId}
+        draftChannelIds={draftChannelIds}
+        onOpenChannel={onOpenChannel}
+        onPreviewChannel={onPreviewChannel}
+        usersById={usersById}
+      />
+    </AddressBookSection>
+  );
+}
+
+function AddressBookSection({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <div className="orf-chat-address-book-section">
+      <div className="orf-chat-address-book-section-title">{title}</div>
+      <div className="orf-chat-address-book-section-items">{children}</div>
+    </div>
+  );
+}
+
+function UserRows({
   currentUserId,
   onOpenConversationWithUser,
-  onToggleCollapsed,
-  title,
   users,
 }: {
-  collapsed: boolean;
   currentUserId?: string;
   onOpenConversationWithUser: (userId: string) => void;
-  onToggleCollapsed: (groupId: ChatSidebarGroupId) => void;
-  title: string;
   users: ChatUser[];
 }) {
   return (
-    <ChatSidebarGroupSection collapsed={collapsed} groupId="members" title={title} onToggleCollapsed={onToggleCollapsed}>
-      <div className="orf-chat-user-results">
-        {users.map((user) => (
-          <button
-            aria-label={`和 ${user.name} 私聊`}
-            className="orf-chat-user-result"
-            key={user.id}
-            type="button"
-            onClick={() => onOpenConversationWithUser(user.id)}
-          >
-            <ChatPresenceAvatar className="orf-chat-channel-avatar" currentUserId={currentUserId} name={user.name} size="sm" user={user} />
-            <span className="truncate">{user.name}</span>
-            <small>{formatPresence(user, currentUserId)}</small>
-            <MessageSquare className="h-4 w-4" />
-          </button>
-        ))}
-      </div>
-    </ChatSidebarGroupSection>
+    <div className="orf-chat-user-results">
+      {users.map((user) => (
+        <button
+          aria-label={`和 ${user.name} 私聊`}
+          className="orf-chat-user-result"
+          key={user.id}
+          type="button"
+          onClick={() => onOpenConversationWithUser(user.id)}
+        >
+          <ChatPresenceAvatar className="orf-chat-channel-avatar" currentUserId={currentUserId} name={user.name} size="sm" user={user} />
+          <span className="truncate">{user.name}</span>
+          <small>{formatPresence(user, currentUserId)}</small>
+          <MessageSquare className="h-4 w-4" />
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -441,12 +571,14 @@ function ChatSidebarGroupSection({
   collapsed,
   groupId,
   onToggleCollapsed,
+  summary,
   title,
 }: {
   children: ReactNode;
   collapsed: boolean;
   groupId: ChatSidebarGroupId;
   onToggleCollapsed: (groupId: ChatSidebarGroupId) => void;
+  summary?: string;
   title: string;
 }) {
   const contentId = useId();
@@ -466,6 +598,7 @@ function ChatSidebarGroupSection({
           <Icon className="h-3.5 w-3.5" />
           <span className="truncate">{title}</span>
         </button>
+        {summary && <span className="orf-chat-channel-group-summary">{summary}</span>}
       </div>
       <div className="orf-chat-channel-group-items" id={contentId} hidden={collapsed}>
         {children}
