@@ -1457,8 +1457,9 @@
 
 .orf-sidebar-collapsed .orf-sidebar-user-menu {
   right: auto;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 0;
+  left: calc(100% + 10px);
+  transform: none;
 }
 
 .orf-sidebar-logo {
