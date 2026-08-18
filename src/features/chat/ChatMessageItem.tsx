@@ -255,11 +255,11 @@ function AttachmentGrid({
   onAttachmentPreview: ChatAttachmentPreviewHandler;
 }) {
   if (attachments.length === 0) return null;
-  const singleImage = attachments.length === 1 && Boolean(attachments[0]?.mimeType.startsWith("image/"));
+  const singleImage = attachments.length === 1 && attachments[0]?.previewKind === "image";
   return (
     <div className={clsx("orf-chat-attachments", singleImage && "orf-chat-attachments-single-image")}>
       {attachments.map((attachment) => {
-        const isImage = attachment.mimeType.startsWith("image/");
+        const isImage = attachment.previewKind === "image";
         return isImage ? (
           <button type="button" className="orf-chat-image-attachment" key={attachment.id} onClick={() => onAttachmentPreview(attachment, attachments)}>
             <img

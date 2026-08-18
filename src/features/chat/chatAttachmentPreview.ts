@@ -64,7 +64,7 @@ export function currentChatAttachmentPreviewImage(preview: ChatAttachmentPreview
 }
 
 function isChatImageAttachment(attachment: ChatAttachment) {
-  return attachment.mimeType.startsWith("image/");
+  return attachment.previewKind === "image";
 }
 
 function clampPreviewIndex(index: number, lastIndex: number) {

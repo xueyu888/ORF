@@ -1,4 +1,5 @@
 import type { PermissionKey } from "../config/permissions";
+import type { AttachmentPreviewKind } from "../domain/attachmentPreviewKind";
 
 export type WorkStatus = "On Track" | "At Risk" | "Blocked" | "Draft";
 export type TaskStatus = "Backlog" | "Todo" | "In Progress" | "In Review" | "Done";
@@ -779,7 +780,7 @@ export interface OrfRules {
 
 export type CommentTargetType = "objective" | "result" | "task" | "subtask" | "feedback" | "workLog";
 export type CommentStatus = "open" | "resolved";
-export type CommentAttachmentPreviewKind = "download" | "image" | "markdown" | "pdf" | "text";
+export type CommentAttachmentPreviewKind = AttachmentPreviewKind;
 
 export interface CommentAttachment {
   contentUrl: string;
@@ -923,6 +924,7 @@ export interface ChatAttachment {
   mimeType: string;
   fileSize: number;
   contentUrl: string;
+  previewKind: AttachmentPreviewKind;
   width?: number | null;
   height?: number | null;
   createdAt: string;

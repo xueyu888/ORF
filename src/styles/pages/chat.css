@@ -5153,6 +5153,29 @@ button.orf-chat-image-attachment {
   background: #fff;
 }
 
+.orf-chat-attachment-preview-body {
+  height: min(78vh, 760px);
+  min-height: 280px;
+  overflow: auto;
+  background: color-mix(in srgb, var(--orf-material-content-primary) 92%, var(--orf-surface-panel-solid));
+  color: var(--orf-text-primary);
+  padding: 24px;
+}
+
+.orf-chat-attachment-markdown-preview {
+  font-size: var(--orf-content-font-size);
+  line-height: var(--orf-content-line-height);
+}
+
+.orf-chat-attachment-text-preview pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
 .orf-chat-attachment-preview-empty {
   display: grid;
   min-height: 280px;
@@ -5638,11 +5661,16 @@ button.orf-chat-image-attachment,
     grid-template-columns: minmax(0, 1fr) auto auto;
   }
 
-.orf-chat-attachment-preview-panel > iframe {
+  .orf-chat-attachment-preview-panel > iframe {
     height: min(78dvh, calc(100dvh - 120px));
   }
 
-.orf-chat-message-actions {
+  .orf-chat-attachment-preview-body {
+    height: min(78dvh, calc(100dvh - 120px));
+    padding: 16px;
+  }
+
+  .orf-chat-message-actions {
     top: 4px;
     right: 4px;
     max-width: calc(100% - 8px);

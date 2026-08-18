@@ -1127,6 +1127,7 @@ function normalizeChatImagePopoutAttachment(value: unknown): ChatAttachment | nu
     createdAt: safeChatImagePopoutText(attachment.createdAt),
     fileSize: safeChatImagePopoutNumber(attachment.fileSize) ?? 0,
     height: safeChatImagePopoutNumber(attachment.height),
+    previewKind: "image",
     width: safeChatImagePopoutNumber(attachment.width),
   };
 }

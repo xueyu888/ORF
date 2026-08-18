@@ -1,7 +1,8 @@
-import { Download, FileText, Trash2, X } from "lucide-react";
+import { Download, FileText, Loader2, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button, IconButton } from "../../components/ui";
 import type { ChatMessage, ChatUser, OrfProject } from "../../types/orf";
+import { OrfRichTextMarkdownViewer } from "../rich-text/OrfRichTextMarkdownViewer";
 import type { ChatAttachmentFilePreviewState } from "./chatAttachmentPreview";
 import { formatFileSize } from "./chatFormat";
 import { ChatUserPicker } from "./ChatUserPicker";
@@ -190,7 +191,7 @@ export function AttachmentPreview({
   preview: ChatAttachmentFilePreviewState;
 }) {
   const { attachment } = preview;
-  const canEmbed = attachment.mimeType === "application/pdf" || attachment.mimeType.startsWith("text/");
+  const textPreview = useChatAttachmentTextPreview(attachment);
 
   return (
     <div className="orf-chat-attachment-preview" onMouseDown={onClose}>
@@ -202,17 +203,79 @@ export function AttachmentPreview({
           </a>
           <button type="button" onClick={onClose} title="关闭预览"><X className="h-5 w-5" /></button>
         </header>
-        {canEmbed ? (
+        {attachment.previewKind === "pdf" ? (
           <iframe src={attachment.contentUrl} title={attachment.fileName} />
-        ) : (
-          <div className="orf-chat-attachment-preview-empty">
-            <FileText className="h-8 w-8" />
-            <strong>{attachment.fileName}</strong>
-            <small>{attachment.mimeType || "未知文件类型"} · {formatFileSize(attachment.fileSize)}</small>
-            <a href={attachment.contentUrl} download={attachment.fileName}>下载附件</a>
+        ) : attachment.previewKind === "markdown" ? (
+          <div className="orf-chat-attachment-preview-body orf-chat-attachment-markdown-preview">
+            {textPreview.status === "loading" ? (
+              <div className="orf-chat-attachment-preview-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载预览</div>
+            ) : textPreview.status === "ready" ? (
+              <OrfRichTextMarkdownViewer body={textPreview.text} />
+            ) : (
+              <AttachmentDownloadFallback attachment={attachment} message={textPreview.message} />
+            )}
           </div>
+        ) : attachment.previewKind === "text" ? (
+          <div className="orf-chat-attachment-preview-body orf-chat-attachment-text-preview">
+            {textPreview.status === "loading" ? (
+              <div className="orf-chat-attachment-preview-empty"><Loader2 className="h-5 w-5 animate-spin" /> 加载预览</div>
+            ) : textPreview.status === "ready" ? (
+              <pre>{textPreview.text}</pre>
+            ) : (
+              <AttachmentDownloadFallback attachment={attachment} message={textPreview.message} />
+            )}
+          </div>
+        ) : (
+          <AttachmentDownloadFallback attachment={attachment} />
         )}
       </div>
+    </div>
+  );
+}
+
+function useChatAttachmentTextPreview(attachment: ChatAttachmentFilePreviewState["attachment"]) {
+  type TextPreviewState =
+    | { status: "idle"; message?: undefined; text?: undefined }
+    | { status: "loading"; message?: undefined; text?: undefined }
+    | { status: "ready"; message?: undefined; text: string }
+    | { status: "error"; message: string; text?: undefined };
+  const [state, setState] = useState<TextPreviewState>({ status: "idle" });
+
+  useEffect(() => {
+    if (attachment.previewKind !== "markdown" && attachment.previewKind !== "text") {
+      setState({ status: "idle" });
+      return undefined;
+    }
+    const controller = new AbortController();
+    setState({ status: "loading" });
+    fetch(attachment.contentUrl, { cache: "no-store", credentials: "include", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Chat attachment preview failed with ${response.status}`);
+        setState({ status: "ready", text: await response.text() });
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setState({ status: "error", message: "预览加载失败，请下载附件查看" });
+      });
+    return () => controller.abort();
+  }, [attachment.contentUrl, attachment.previewKind]);
+
+  return state;
+}
+
+function AttachmentDownloadFallback({
+  attachment,
+  message,
+}: {
+  attachment: ChatAttachmentFilePreviewState["attachment"];
+  message?: string;
+}) {
+  return (
+    <div className="orf-chat-attachment-preview-empty">
+      <FileText className="h-8 w-8" />
+      <strong>{attachment.fileName}</strong>
+      <small>{message ?? `${attachment.mimeType || "未知文件类型"} · ${formatFileSize(attachment.fileSize)}`}</small>
+      <a href={attachment.contentUrl} download={attachment.fileName}>下载附件</a>
     </div>
   );
 }

@@ -67,6 +67,7 @@ Chat：
 - 广播提及插入普通 `@所有人` 文本。
 - 粘贴或拖放文件交给 Chat 附件上传，不插入评论附件 token。
 - Chat 图片查看器只由同一条消息的 `message.attachments` 中 `image/*` 附件派生；桌面和桌面浏览器优先把当前图片组写入 `orf:chat-image-popout:*` 临时展示 payload 并打开 `/chat/image-popout/:popoutId` 独立窗口，弹窗被拦截或移动端视口才回落到 AppShell 下的内嵌浮窗。窗口位置、窗口尺寸、最大化/还原、图片缩放、旋转、适应/原图、缩略图、上一张/下一张和下载都不写入正文 token、附件存储字段或用户设置。
+- Chat 文件附件预览类型由聊天附件投影的 `previewKind` 统一表达；`.md/.markdown` 与 `text/markdown` 必须进入共享 Markdown viewer，纯文本进入文本预览，PDF 进入浏览器 PDF 预览，HTML、SVG、XML 和未知类型保持下载。预览弹窗只消费服务端投影和临时加载状态，不在组件内按 MIME 重建另一套判断。
 - Chat 消息展示通过共享 viewer 渲染；Chat 层只注入反馈链接、站内路由、系统广播提及样式，以及系统反馈评论通知允许展示的评论图片快照。评论图片仍归 `comment_attachments` 所有，不复制为 Chat 附件。
 - Chat 通知、反馈列表和搜索预览只消费共享模型提供的 token 和纯文本投影，不再各自复制 Markdown stripping 或 `orf-user` 正则。
 

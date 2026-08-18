@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
+import { attachmentPreviewKind } from "../../src/domain/attachmentPreviewKind";
 import type { CommentAttachment, CommentAttachmentPreviewKind, CommentTargetType } from "../../src/types/orf";
 import { commentAttachments } from "../db/schema";
 import {
@@ -62,14 +63,7 @@ const previewableTextMimeTypes = new Set(["application/json", "text/csv", "text/
 const unsafeTextPreviewFileExtensions = new Set(["htm", "html", "svg", "xhtml", "xml"]);
 
 export function commentAttachmentPreviewKind(row: Pick<CommentAttachmentRow | CommentAttachmentInsert, "fileName" | "mimeType">): CommentAttachmentPreviewKind {
-  const mimeType = normalizeMimeType(row.mimeType);
-  const fileName = row.fileName.toLowerCase();
-  const extension = extensionFromFileName(fileName);
-  if (mimeType === "image/gif" || mimeType === "image/jpeg" || mimeType === "image/png" || mimeType === "image/webp") return "image";
-  if (mimeType === "application/pdf") return "pdf";
-  if (mimeType === "text/markdown" || fileName.endsWith(".md") || fileName.endsWith(".markdown")) return "markdown";
-  if (previewableTextFileExtensions.has(extension) || (previewableTextMimeTypes.has(mimeType) && !unsafeTextPreviewFileExtensions.has(extension))) return "text";
-  return "download";
+  return attachmentPreviewKind(row);
 }
 
 export function canPreviewCommentAttachment(row: Pick<CommentAttachmentRow | CommentAttachmentInsert, "fileName" | "mimeType">) {

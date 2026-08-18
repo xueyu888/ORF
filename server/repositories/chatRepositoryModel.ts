@@ -3,6 +3,7 @@ import {
   CHAT_DIRECT_MEMBER_COUNT,
   chatConversationDisplayName,
 } from "../../src/domain/chatConversation";
+import { attachmentPreviewKind } from "../../src/domain/attachmentPreviewKind";
 import type {
   ChatAttachment,
   ChatChannelMember,
@@ -238,6 +239,7 @@ export function toChatAttachment(row: AttachmentRow): ChatAttachment {
     mimeType: row.mime_type,
     fileSize: row.file_size,
     contentUrl: chatAttachmentContentUrl(row.id),
+    previewKind: attachmentPreviewKind({ fileName: row.file_name, mimeType: row.mime_type }),
     width: row.width,
     height: row.height,
     createdAt: iso(row.created_at) ?? nowIso(),

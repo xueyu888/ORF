@@ -22,6 +22,7 @@ import type {
 } from "../../src/types/orf";
 import { chatMessageTargetPath } from "../../src/domain/chatNavigation";
 import type { PermissionKey } from "../../src/config/permissions";
+import { attachmentPreviewKind } from "../../src/domain/attachmentPreviewKind";
 import { addDaysToIsoDate, hasExecutableChatSearch, parseChatSearchQuery } from "../../src/features/chat/chatSearchSyntax";
 import { chatNotificationPreviewText } from "../../src/domain/chatNotificationPresentation";
 import { pool } from "../db/client";
@@ -3058,6 +3059,7 @@ export async function uploadChatAttachment(
       mimeType,
       fileSize: stored.contentLength,
       contentUrl: chatAttachmentContentUrl(id),
+      previewKind: attachmentPreviewKind({ fileName, mimeType }),
       width: imageWidth,
       height: imageHeight,
       createdAt: now,

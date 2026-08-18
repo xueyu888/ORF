@@ -6,6 +6,7 @@ import {
   promoteReconciledLatestWindow,
   reconcileFeedLatestWindow,
 } from "../src/features/chat/chatModels";
+import { attachmentPreviewKind } from "../src/domain/attachmentPreviewKind";
 import { chatRealtimeReconciliationScope } from "../src/features/chat/chatRealtimeReconciliation";
 import {
   chatFeedViewportModeAfterScroll,
@@ -85,6 +86,14 @@ test("first realtime open creates an epoch and every reconnect creates a newer e
   assert.equal(firstOpen.status, "connected");
   assert.equal(secondOpen.connectionEpoch, 2);
   assert.equal(secondOpen.status, "connected");
+});
+
+test("attachment preview kind keeps markdown renderable and unsafe text downloadable", () => {
+  assert.equal(attachmentPreviewKind({ fileName: "report.md", mimeType: "text/plain" }), "markdown");
+  assert.equal(attachmentPreviewKind({ fileName: "notes.markdown", mimeType: "application/octet-stream" }), "markdown");
+  assert.equal(attachmentPreviewKind({ fileName: "raw.svg", mimeType: "text/plain" }), "download");
+  assert.equal(attachmentPreviewKind({ fileName: "data.json", mimeType: "application/json; charset=utf-8" }), "text");
+  assert.equal(attachmentPreviewKind({ fileName: "scan.pdf", mimeType: "application/pdf" }), "pdf");
 });
 
 test("chat recovery exposes connected, reconciling and ready as one explicit state chain", () => {
