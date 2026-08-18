@@ -350,10 +350,10 @@ test("chat sidebar read changes only clear badges and do not move sessions out o
 
   assert.deepEqual(unreadNavigation.recent.channels.map((item) => item.id), ["channel-stable-session"]);
   assert.deepEqual(readNavigation.recent.channels.map((item) => item.id), ["channel-stable-session"]);
-  assert.deepEqual(readNavigation.addressBook.channelSections.find((section) => section.id === "public")?.channels.map((item) => item.id), []);
+  assert.deepEqual(readNavigation.addressBook.channelSections.find((section) => section.id === "public")?.channels.map((item) => item.id), ["channel-stable-session"]);
 });
 
-test("chat sidebar address book keeps only channels without recent message activity", () => {
+test("chat sidebar address book keeps the complete channel directory independent from recent activity", () => {
   const recentPublicChannel = channel({
     id: "channel-recent-public",
     lastMessageAt: "2026-07-11T00:03:00.000Z",
@@ -388,7 +388,7 @@ test("chat sidebar address book keeps only channels without recent message activ
 
   assert.deepEqual(navigation.recent.channels.map((item) => item.id), ["channel-recent-public"]);
   assert.deepEqual(navigation.addressBook.channelSections.find((section) => section.id === "favorites")?.channels.map((item) => item.id), ["channel-discoverable-favorite"]);
-  assert.deepEqual(navigation.addressBook.channelSections.find((section) => section.id === "public")?.channels.map((item) => item.id), ["channel-discoverable-public"]);
+  assert.deepEqual(navigation.addressBook.channelSections.find((section) => section.id === "public")?.channels.map((item) => item.id), ["channel-recent-public", "channel-discoverable-public"]);
   assert.deepEqual(navigation.addressBook.channelSections.find((section) => section.id === "private")?.channels.map((item) => item.id), []);
 });
 
@@ -425,7 +425,7 @@ test("chat sidebar search filters system, recent, address book channels and memb
 
   assert.deepEqual(navigation.systemChannels.map((item) => item.id), []);
   assert.deepEqual(navigation.recent.channels.map((item) => item.id), ["recent-release"]);
-  assert.deepEqual(navigation.addressBook.channelSections.flatMap((section) => section.channels.map((item) => item.id)), []);
+  assert.deepEqual(navigation.addressBook.channelSections.flatMap((section) => section.channels.map((item) => item.id)), ["recent-release"]);
   assert.deepEqual(navigation.addressBook.users.map((item) => item.id), [authorUserId]);
 });
 

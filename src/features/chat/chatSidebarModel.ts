@@ -55,8 +55,7 @@ export function buildChatSidebarNavigation({
   const systemChannels = visibleChannels.filter((channel) => channel.systemKind);
   const regularChannels = visibleChannels.filter((channel) => !channel.systemKind);
   const recentChannels = sortRecentChatSessions(regularChannels.filter(hasChatSessionActivity));
-  const recentChannelIds = new Set(recentChannels.map((channel) => channel.id));
-  const addressBookChannels = regularChannels.filter((channel) => !recentChannelIds.has(channel.id));
+  const addressBookChannels = regularChannels;
   const favoriteChannels = addressBookChannels.filter((channel) => currentMembership(channel, currentUserId)?.favorite);
   const favoriteChannelIds = new Set(favoriteChannels.map((channel) => channel.id));
   const directoryChannels = addressBookChannels.filter((channel) => !favoriteChannelIds.has(channel.id));
