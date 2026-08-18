@@ -5,7 +5,10 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { OrfRichTextMarkdownViewer } from "../src/features/rich-text/OrfRichTextMarkdownViewer";
 import { ChatMarkdown } from "../src/features/chat/chatMarkdown";
+import { chatMessageClipboardPayload, writeChatMessageClipboard } from "../src/features/chat/chatMessageClipboard";
 import { normalizePastedOrfRichText } from "../src/features/rich-text/orfRichTextClipboard";
+import { orfRichTextMarkdownToPortableMarkdown } from "../src/features/rich-text/orfRichTextMarkdown";
+import type { ChatMessage } from "../src/types/orf";
 
 test("rich text paste normalizes external ordered list markers and continuations", () => {
   const normalized = normalizePastedOrfRichText([
@@ -105,4 +108,91 @@ test("chat notification images keep inline attachments inside valid paragraph ma
   assert.match(html, /data-attachment-placement="inline"/);
   assert.doesNotMatch(html, /<p[^>]*>[^]*<figure/);
   assert.doesNotMatch(html, /<figcaption>/);
+});
+
+test("chat message clipboard keeps portable markdown and rich html from one projection", async () => {
+  const message = {
+    attachments: [{ fileName: "验收记录.md" }],
+    body: [
+      "## 验收结论",
+      "",
+      "- **通过** @[冯成](orf-user:user-1)",
+      "- [查看反馈](/feedback/fb-1)",
+      "",
+      "![现场截图](orf-attachment:attachment-1)",
+    ].join("\n"),
+  } as Pick<ChatMessage, "attachments" | "body">;
+
+  assert.equal(
+    orfRichTextMarkdownToPortableMarkdown(message.body),
+    [
+      "## 验收结论",
+      "",
+      "- **通过** @冯成",
+      "- [查看反馈](/feedback/fb-1)",
+      "",
+      "[附件] 现场截图",
+    ].join("\n"),
+  );
+
+  const payload = chatMessageClipboardPayload(message);
+  assert.equal(payload.text, [
+    "## 验收结论",
+    "",
+    "- **通过** @冯成",
+    "- [查看反馈](/feedback/fb-1)",
+    "",
+    "[图片] 现场截图",
+    "",
+    "[附件] 验收记录.md",
+  ].join("\n"));
+  assert.match(payload.html, /<strong><span>通过<\/span><\/strong>/);
+  assert.match(payload.html, /<a href="\/feedback\/fb-1"/);
+  assert.match(payload.html, /\[图片\] 现场截图/);
+  assert.match(payload.html, /\[附件\] 验收记录.md/);
+  assert.doesNotMatch(payload.html, /orf-user:user-1|orf-attachment:attachment-1/);
+
+  const writtenItems: ClipboardItem[] = [];
+  class TestClipboardItem {
+    constructor(readonly items: Record<string, Blob>) {}
+  }
+  await writeChatMessageClipboard(
+    payload,
+    {
+      write: async (items) => {
+        writtenItems.push(...items);
+      },
+      writeText: async () => {
+        assert.fail("rich clipboard should not use plain fallback");
+      },
+    },
+    TestClipboardItem as unknown as typeof ClipboardItem,
+  );
+  assert.equal(writtenItems.length, 1);
+  const written = writtenItems[0] as unknown as TestClipboardItem;
+  assert.equal(await written.items["text/plain"]?.text(), payload.text);
+  assert.equal(await written.items["text/html"]?.text(), payload.html);
+});
+
+test("chat message clipboard falls back to the same portable markdown", async () => {
+  const payload = { html: "<strong>重点</strong>", text: "**重点**" };
+  let fallbackText = "";
+  class TestClipboardItem {
+    constructor(readonly items: Record<string, Blob>) {}
+  }
+
+  await writeChatMessageClipboard(
+    payload,
+    {
+      write: async () => {
+        throw new Error("rich clipboard unavailable");
+      },
+      writeText: async (text) => {
+        fallbackText = text;
+      },
+    },
+    TestClipboardItem as unknown as typeof ClipboardItem,
+  );
+
+  assert.equal(fallbackText, payload.text);
 });

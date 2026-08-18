@@ -14,6 +14,10 @@ export type OrfRichTextPlainTextOptions = {
   preserveWhitespace?: boolean;
 };
 
+export type OrfRichTextPortableMarkdownOptions = {
+  attachmentText?: string | ((reference: OrfAttachmentReference) => string);
+};
+
 export {
   type OrfAttachmentReference,
   type OrfMentionReference,
@@ -87,6 +91,22 @@ export function orfRichTextMarkdownToPlainText(markdown: string, options: OrfRic
   }
 
   return text.replace(/[ \t\n]+/g, " ").trim();
+}
+
+export function orfRichTextMarkdownToPortableMarkdown(
+  markdown: string,
+  options: OrfRichTextPortableMarkdownOptions = {},
+) {
+  const attachmentText = options.attachmentText ?? ((reference: OrfAttachmentReference) => `[附件] ${reference.alt}`);
+  const attachmentTokenText = (reference: OrfAttachmentReference) => {
+    return typeof attachmentText === "function" ? attachmentText(reference) : attachmentText;
+  };
+  return replaceOrfAttachmentMarkdownTokens(
+    orfMentionMarkdownTokensToPlainText(markdown),
+    attachmentTokenText,
+  )
+    .replace(/\r\n?/g, "\n")
+    .trim();
 }
 
 export function orfRichTextHasMeaningfulContent(markdown: string) {

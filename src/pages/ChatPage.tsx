@@ -29,7 +29,6 @@ import {
   type FeedbackReferenceSummary,
 } from "../feedback/feedbackWebClient";
 import {
-  chatMessageCopyText,
   chatMessageSendStatus,
   chatMessagePendingSend,
   createPendingChatMessage,
@@ -47,6 +46,7 @@ import {
   storedDraftChannelIds,
   upsertChannel,
 } from "../features/chat/chatModels";
+import { chatMessageClipboardPayload, writeChatMessageClipboard } from "../features/chat/chatMessageClipboard";
 import { useChatFeedState } from "../features/chat/useChatFeedState";
 import { useChatMobileBackGesture } from "../features/chat/useChatMobileBackGesture";
 import { useChatMobileViewport } from "../features/chat/useChatMobileViewport";
@@ -1171,16 +1171,16 @@ export function ChatPage() {
   }, [notify]);
 
   const handleCopyMessage = useCallback(async (message: ChatMessage) => {
-    const text = chatMessageCopyText(message);
-    if (!text) {
+    const payload = chatMessageClipboardPayload(message);
+    if (!payload.text) {
       notify("没有可复制的消息内容");
       return;
     }
     try {
-      await navigator.clipboard.writeText(text);
+      await writeChatMessageClipboard(payload);
       notify("已复制消息");
     } catch {
-      notify(text);
+      notify(payload.text);
     }
   }, [notify]);
 

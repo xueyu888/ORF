@@ -4,7 +4,6 @@ import type { ChatFeedScrollAnchor } from "./chatFeedScroll";
 import {
   matchOrfMentionMarkdownTokens,
   orfMentionMarkdown,
-  orfRichTextMarkdownToPlainText,
   orfRichTextMentionLabel,
 } from "../rich-text/orfRichTextMarkdown";
 
@@ -222,15 +221,6 @@ export function chatMessageSendStatus(message: ChatMessage): ChatMessageSendStat
 
 export function chatMessagePendingSend(message: ChatMessage): ChatPendingSendPayload | null {
   return (message as ChatOptimisticMessage).pendingSend ?? null;
-}
-
-export function chatMessageCopyText(message: Pick<ChatMessage, "attachments" | "body">) {
-  const bodyText = orfRichTextMarkdownToPlainText(message.body, {
-    attachmentText: (reference) => `[图片] ${reference.alt}`.trim(),
-    preserveWhitespace: true,
-  });
-  const attachmentLines = message.attachments.map((attachment) => `[附件] ${attachment.fileName}`);
-  return [bodyText, ...attachmentLines].filter(Boolean).join("\n");
 }
 
 export function createPendingChatMessage(input: {
