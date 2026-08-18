@@ -7,9 +7,16 @@ GitHub repository activity 进入 ORF 原生聊天频道，不进入外部聊天
 状态链：
 
 1. GitHub repository、branch、commit 和 issue 是外部事实源。
-2. `github_orf_chat_deliveries` 是 GitHub push/issues 聊天投递和去重事实源。
-3. 投递结果是普通 `chat_messages`，由 ORF chat 负责频道可见性、未读、实时事件和推送。
-4. `GITHUB_SYNC_STATE_FILE` 只记录轮询进度，不是消息事实源。
+2. `chat_channels.integration_provider = 'github'` 是 GitHub 专属频道归属事实源；频道名和显示名只用于复用、展示和导航。
+3. `github_orf_chat_deliveries` 是 GitHub push/issues 聊天投递和去重事实源。
+4. 投递结果是普通 `chat_messages`，由 ORF chat 负责频道可见性、未读、实时事件和推送。
+5. `GITHUB_SYNC_STATE_FILE` 只记录轮询进度，不是消息事实源。
+
+频道绑定不变量：
+
+1. GitHub 集成自动创建或复用的目标频道必须标记为 `integration_provider = 'github'`。
+2. 如果显式配置的 `GITHUB_ORF_CHAT_CHANNEL_ID` 指向普通频道，启动时会把该频道标记为 GitHub 专属频道；如果它已标记为其他 provider，启动失败并暴露配置冲突。
+3. GitHub 专属频道不允许被 GitLab 订阅绑定。普通频道如果需要汇聚多个集成，必须保持 `integration_provider IS NULL` 并由各集成订阅表显式绑定。
 
 提交展示契约：
 

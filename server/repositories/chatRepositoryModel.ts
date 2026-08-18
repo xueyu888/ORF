@@ -3,6 +3,7 @@ import {
   CHAT_DIRECT_MEMBER_COUNT,
   chatConversationDisplayName,
 } from "../../src/domain/chatConversation";
+import type { ChatIntegrationProvider } from "../../src/domain/chatIntegrationProvider";
 import { attachmentPreviewKind } from "../../src/domain/attachmentPreviewKind";
 import type {
   ChatAttachment,
@@ -53,6 +54,7 @@ export type ChannelRow = {
   display_name: string;
   header: string;
   id: string;
+  integration_provider: ChatIntegrationProvider | null;
   name: string | null;
   project_id: string | null;
   project_name: string | null;

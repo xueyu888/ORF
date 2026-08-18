@@ -298,17 +298,18 @@ function GitLabOrfChatSettingSection() {
   );
   const isReconcileRunning = reconcileStatus === "loading";
   const selectedProject = settings?.projects.find((project) => project.id === draftProjectId) ?? null;
+  const selectedChannel = settings?.channels.find((channel) => channel.id === draftChannelId) ?? null;
   const canCreateSubscription = Boolean(
     settings &&
-      draftChannelId &&
+      selectedChannel &&
       draftEventTypes.length > 0 &&
       (draftScope === "group" || selectedProject),
   );
 
   const applySettings = (data: GitLabOrfChatSettingsData) => {
     setSettings(data);
-    setDraftChannelId((current) => current || data.channels[0]?.id || "");
-    setDraftProjectId((current) => current || data.projects[0]?.id || "");
+    setDraftChannelId((current) => data.channels.some((channel) => channel.id === current) ? current : data.channels[0]?.id || "");
+    setDraftProjectId((current) => data.projects.some((project) => project.id === current) ? current : data.projects[0]?.id || "");
     setDraftEventTypes((current) => current.length > 0 ? current : data.eventTypes);
   };
 
@@ -523,7 +524,10 @@ function GitLabOrfChatSettingSection() {
                     </div>
                     <div className="orf-settings-gitlab-binding-state" role="cell">
                       {subscription.channelDisplayName}
-                      <small>{subscription.channelType === "public" ? "公开频道" : "私有频道"}</small>
+                      <small>
+                        {subscription.channelType === "public" ? "公开频道" : "私有频道"}
+                        {subscription.channelProviderConflict ? " · 频道冲突" : ""}
+                      </small>
                     </div>
                     <div className="orf-settings-gitlab-channel-control" role="cell">
                       <GitLabStatusBadge label={subscription.enabled ? "启用" : "停用"} active={subscription.enabled} />

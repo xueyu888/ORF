@@ -1,4 +1,5 @@
 import type { GitLabApiProject } from "./api";
+import type { ChatIntegrationProvider } from "../../../src/domain/chatIntegrationProvider";
 import type { GitLabOrfChatConfig } from "./config";
 import type { GitLabOrfChatEventType } from "./model";
 
@@ -17,6 +18,7 @@ export type GitLabOrfChatConfigStatus = {
 export type GitLabOrfChatChannelOption = {
   displayName: string;
   id: string;
+  integrationProvider: ChatIntegrationProvider | null;
   memberCount: number;
   name: string | null;
   type: "public" | "private";
@@ -27,6 +29,8 @@ export type GitLabOrfChatSubscriptionScope = "group" | "project";
 export type GitLabOrfChatSubscription = {
   channelDisplayName: string;
   channelId: string;
+  channelIntegrationProvider: ChatIntegrationProvider | null;
+  channelProviderConflict: boolean;
   channelType: "public" | "private";
   createdAt: string;
   enabled: boolean;

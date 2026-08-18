@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import type { ChatIntegrationProvider } from "../../src/domain/chatIntegrationProvider";
+import { validateChatIntegrationBinding } from "../../src/domain/chatIntegrationProvider";
 import { pool } from "../db/client";
 import { createChatChannel, sendChatMessage, type ChatActor } from "../repositories/chatRepository";
 import { nowIso } from "../repositories/chatRepositoryModel";
@@ -54,6 +56,7 @@ export async function ensureOrfChatNamedChannel(input: {
   actor: ChatActor;
   displayName: string;
   header?: string;
+  integrationProvider?: ChatIntegrationProvider;
   name: string;
   purpose?: string;
   teamId: string;
@@ -61,6 +64,13 @@ export async function ensureOrfChatNamedChannel(input: {
 }) {
   const existing = await findActiveNamedChannel(input.teamId, input.name);
   if (existing) {
+    if (input.integrationProvider) {
+      await ensureOrfChatChannelIntegrationProvider({
+        channelId: existing.id,
+        provider: input.integrationProvider,
+        teamId: input.teamId,
+      });
+    }
     await ensureOrfChatChannelMembership({ channelId: existing.id, teamId: input.teamId, userId: input.actor.id });
     return { channelId: existing.id, created: false };
   }
@@ -70,6 +80,7 @@ export async function ensureOrfChatNamedChannel(input: {
     {
       displayName: input.displayName,
       header: input.header,
+      integrationProvider: input.integrationProvider ?? null,
       memberUserIds,
       name: input.name,
       purpose: input.purpose,
@@ -94,6 +105,63 @@ export async function sendOrfChatMessage(input: {
     throw new Error(`ORF chat message delivery failed with status ${result.status}`);
   }
   return result.message.id;
+}
+
+export async function ensureOrfChatChannelIntegrationProvider(input: {
+  channelId: string;
+  provider: ChatIntegrationProvider;
+  teamId: string;
+}) {
+  const { rows } = await pool.query<{
+    display_name: string;
+    id: string;
+    integration_provider: ChatIntegrationProvider | null;
+    name: string | null;
+  }>(
+    `
+      SELECT id, name, display_name, integration_provider
+      FROM chat_channels
+      WHERE id = $1
+        AND team_id = $2
+        AND type IN ('public', 'private')
+        AND system_kind IS NULL
+        AND archived_at IS NULL
+      LIMIT 1
+    `,
+    [input.channelId, input.teamId],
+  );
+  const channel = rows[0];
+  if (!channel) {
+    throw new Error(`ORF chat integration channel ${input.channelId} is not available`);
+  }
+
+  const validation = validateChatIntegrationBinding(
+    {
+      displayName: channel.display_name,
+      integrationProvider: channel.integration_provider,
+      name: channel.name,
+    },
+    input.provider,
+  );
+  if (validation.status === "providerConflict") {
+    throw new Error(
+      `ORF chat integration channel ${input.channelId} is dedicated to ${validation.channelProvider}, not ${validation.requestedProvider}`,
+    );
+  }
+
+  if (channel.integration_provider === input.provider) return;
+
+  await pool.query(
+    `
+      UPDATE chat_channels
+      SET integration_provider = $3,
+          updated_at = $4
+      WHERE id = $1
+        AND team_id = $2
+        AND integration_provider IS NULL
+    `,
+    [input.channelId, input.teamId, input.provider, nowIso()],
+  );
 }
 
 export async function ensureOrfChatChannelMembership(input: { channelId: string; teamId: string; userId: string }) {

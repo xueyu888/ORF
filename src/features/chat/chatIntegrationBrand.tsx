@@ -1,20 +1,20 @@
 import type { SVGProps } from "react";
 import { clsx } from "clsx";
+import {
+  chatChannelIntegrationProvider,
+  type ChatIntegrationProvider,
+} from "../../domain/chatIntegrationProvider";
 import type { ChatChannel } from "../../types/orf";
 
-export type ChatIntegrationBrand = "github" | "gitlab";
+export type ChatIntegrationBrand = ChatIntegrationProvider;
 
 type ChatIntegrationBrandMarkProps = {
   brand: ChatIntegrationBrand;
   className?: string;
 };
 
-export function chatChannelIntegrationBrand(channel: Pick<ChatChannel, "displayName" | "name">): ChatIntegrationBrand | null {
-  const keys = new Set([integrationBrandKey(channel.name), integrationBrandKey(channel.displayName)]);
-
-  if (keys.has("github")) return "github";
-  if (keys.has("gitlab")) return "gitlab";
-  return null;
+export function chatChannelIntegrationBrand(channel: Pick<ChatChannel, "displayName" | "integrationProvider" | "name">): ChatIntegrationBrand | null {
+  return chatChannelIntegrationProvider(channel);
 }
 
 export function ChatIntegrationBrandMark({ brand, className }: ChatIntegrationBrandMarkProps) {
@@ -28,10 +28,6 @@ export function ChatIntegrationBrandMark({ brand, className }: ChatIntegrationBr
       <Mark />
     </span>
   );
-}
-
-function integrationBrandKey(value: string | null | undefined) {
-  return value?.trim().toLowerCase().replace(/[\s_-]+/g, "") ?? "";
 }
 
 // Brand marks come from the official GitHub brand toolkit and GitLab press kit.

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { bigint, bigserial, boolean, check, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import type { ChatIntegrationProvider } from "../../src/domain/chatIntegrationProvider";
 import type {
   BountySource,
   ChallengeApplication,
@@ -974,6 +975,7 @@ export const chatChannels = pgTable(
       .references(() => teams.id, { onDelete: "cascade" }),
     type: chatChannelTypeEnum("type").notNull(),
     name: text("name"),
+    integrationProvider: text("integration_provider").$type<ChatIntegrationProvider>(),
     systemKind: text("system_kind").$type<ChatSystemKind>(),
     systemRecipientUserId: uuid("system_recipient_user_id").references(() => users.id, { onDelete: "cascade" }),
     projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),

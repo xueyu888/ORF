@@ -694,6 +694,13 @@
       "when": 1786292849915,
       "tag": "0098_work_log_comment_target",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1787058016885,
+      "tag": "0099_chat_channel_integration_provider",
+      "breakpoints": true
     }
   ]
 }

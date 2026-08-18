@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { GitBranch, Loader2, Plus, Power, Trash2 } from "lucide-react";
 import { Button } from "../../components/ui";
+import { chatChannelAllowsIntegrationProvider } from "../../domain/chatIntegrationProvider";
 import { isChatConversation } from "../../domain/chatConversation";
 import {
   createGitLabOrfChatChannelSubscription,
@@ -56,6 +57,9 @@ export function ChatChannelInfoPanel({
   const canEditChannelMetadata = canManage && !isConversation;
   const canEditConversationHeader = isConversation;
   const canManageMembership = canManage && channel.type === "private";
+  const canUseGitLabSubscriptions = !isConversation
+    && (channel.type === "public" || channel.type === "private")
+    && chatChannelAllowsIntegrationProvider(channel, "gitlab");
   const boundProject = useMemo(
     () =>
       projects.find((project) => project.id === channel.projectId)
@@ -213,8 +217,8 @@ export function ChatChannelInfoPanel({
           {memberMutationError && <div className="orf-chat-member-error">{memberMutationError}</div>}
         </div>
       )}
-      {!isConversation && (channel.type === "public" || channel.type === "private") && (
-        <GitLabChannelSubscriptionPanel channelId={channel.id} />
+      {canUseGitLabSubscriptions && (
+        <GitLabChannelSubscriptionPanel canManage={canManage} channelId={channel.id} />
       )}
       <div className="orf-chat-info-section">
         <label>成员</label>
@@ -240,7 +244,7 @@ export function ChatChannelInfoPanel({
   );
 }
 
-function GitLabChannelSubscriptionPanel({ channelId }: { channelId: string }) {
+function GitLabChannelSubscriptionPanel({ canManage, channelId }: { canManage: boolean; channelId: string }) {
   const [settings, setSettings] = useState<GitLabOrfChatSettingsData | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -250,16 +254,22 @@ function GitLabChannelSubscriptionPanel({ channelId }: { channelId: string }) {
   const [saving, setSaving] = useState(false);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
   const selectedProject = settings?.projects.find((project) => project.id === draftProjectId) ?? null;
-  const canCreate = Boolean(settings && draftEventTypes.length > 0 && (draftScope === "group" || selectedProject));
+  const canCreate = Boolean(canManage && settings && draftEventTypes.length > 0 && (draftScope === "group" || selectedProject));
 
   useEffect(() => {
     let cancelled = false;
+    setSettings(null);
     setStatus("loading");
     setErrorMessage(null);
+    setDraftScope("group");
+    setDraftProjectId("");
+    setDraftEventTypes([]);
+    setSaving(false);
+    setMutatingId(null);
     void getGitLabOrfChatChannelSubscriptions(channelId)
       .then((data) => {
         if (cancelled) return;
-        applySettings(data);
+        applySettings(data, "reset");
         setStatus("success");
       })
       .catch((error) => {
@@ -272,10 +282,10 @@ function GitLabChannelSubscriptionPanel({ channelId }: { channelId: string }) {
     };
   }, [channelId]);
 
-  const applySettings = (data: GitLabOrfChatSettingsData) => {
+  const applySettings = (data: GitLabOrfChatSettingsData, mode: "preserve" | "reset" = "preserve") => {
     setSettings(data);
-    setDraftProjectId((current) => current || data.projects[0]?.id || "");
-    setDraftEventTypes((current) => current.length > 0 ? current : data.eventTypes);
+    setDraftProjectId((current) => mode === "reset" ? data.projects[0]?.id || "" : current || data.projects[0]?.id || "");
+    setDraftEventTypes((current) => mode === "reset" ? data.eventTypes : current.length > 0 ? current : data.eventTypes);
   };
 
   const toggleDraftEventType = (eventType: GitLabOrfChatEventType) => {
@@ -285,7 +295,7 @@ function GitLabChannelSubscriptionPanel({ channelId }: { channelId: string }) {
   };
 
   const createSubscription = async () => {
-    if (!settings || !canCreate || saving) return;
+    if (!settings || !canManage || !canCreate || saving) return;
     setSaving(true);
     setErrorMessage(null);
     try {
@@ -306,7 +316,7 @@ function GitLabChannelSubscriptionPanel({ channelId }: { channelId: string }) {
   };
 
   const toggleSubscription = async (subscription: GitLabOrfChatSubscription) => {
-    if (mutatingId) return;
+    if (!canManage || mutatingId) return;
     setMutatingId(subscription.id);
     setErrorMessage(null);
     try {
@@ -324,7 +334,7 @@ function GitLabChannelSubscriptionPanel({ channelId }: { channelId: string }) {
   };
 
   const deleteSubscription = async (subscription: GitLabOrfChatSubscription) => {
-    if (mutatingId) return;
+    if (!canManage || mutatingId) return;
     setMutatingId(subscription.id);
     setErrorMessage(null);
     try {
@@ -352,7 +362,7 @@ function GitLabChannelSubscriptionPanel({ channelId }: { channelId: string }) {
             <span data-active={settings.config.webhookConfigured}>Webhook</span>
             <span>Group: {settings.config.groupPath}</span>
           </div>
-          <div className="orf-chat-gitlab-create">
+          {canManage && <div className="orf-chat-gitlab-create">
             <select value={draftScope} disabled={saving} onChange={(event) => setDraftScope(event.target.value as "group" | "project")}>
               <option value="group">整个 group</option>
               <option value="project">单个 project</option>
@@ -384,7 +394,7 @@ function GitLabChannelSubscriptionPanel({ channelId }: { channelId: string }) {
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               订阅
             </Button>
-          </div>
+          </div>}
           {settings.gitlabProjectListError && <div className="orf-chat-member-error">{settings.gitlabProjectListError}</div>}
           <div className="orf-chat-gitlab-list">
             {settings.subscriptions.length === 0 ? (
@@ -397,12 +407,16 @@ function GitLabChannelSubscriptionPanel({ channelId }: { channelId: string }) {
                     <strong>{subscription.scope === "group" ? subscription.gitlabGroupPath : subscription.gitlabProjectPath}</strong>
                     <small>{subscription.eventTypes.map(gitLabEventTypeLabel).join(" / ")} · {subscription.enabled ? "启用" : "停用"}</small>
                   </div>
-                  <Button disabled={mutatingId === subscription.id} onClick={() => void toggleSubscription(subscription)} variant="ghost">
-                    {mutatingId === subscription.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
-                  </Button>
-                  <Button disabled={mutatingId === subscription.id} onClick={() => void deleteSubscription(subscription)} variant="ghost">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {canManage && (
+                    <>
+                      <Button disabled={mutatingId === subscription.id} onClick={() => void toggleSubscription(subscription)} variant="ghost">
+                        {mutatingId === subscription.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
+                      </Button>
+                      <Button disabled={mutatingId === subscription.id} onClick={() => void deleteSubscription(subscription)} variant="ghost">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </>
+                  )}
                 </div>
               ))
             )}

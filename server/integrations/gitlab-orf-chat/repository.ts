@@ -1,4 +1,10 @@
 import { randomUUID } from "node:crypto";
+import type { ChatIntegrationProvider } from "../../../src/domain/chatIntegrationProvider";
+import {
+  chatChannelAllowsIntegrationProvider,
+  chatChannelIntegrationProvider,
+  validateChatIntegrationBinding,
+} from "../../../src/domain/chatIntegrationProvider";
 import { pool } from "../../db/client";
 import type { ChatActor } from "../../repositories/chatRepository";
 import { nowIso } from "../../repositories/chatRepositoryModel";
@@ -26,6 +32,8 @@ import type {
 type SubscriptionRow = {
   channel_display_name: string;
   channel_id: string;
+  channel_integration_provider: ChatIntegrationProvider | null;
+  channel_name: string | null;
   channel_type: "public" | "private";
   created_at: Date | string;
   enabled: boolean;
@@ -42,6 +50,15 @@ export type GitLabOrfChatMatchingSubscription = GitLabOrfChatSubscription & {
   project: GitLabOrfChatProject;
 };
 
+type SubscribableChannelRow = {
+  display_name: string;
+  id: string;
+  integration_provider: ChatIntegrationProvider | null;
+  member_role: "owner" | "admin" | "member";
+  name: string | null;
+  type: "public" | "private";
+};
+
 export async function ensureGitLabOrfChatBotActor(input: {
   botEmail: string;
   botName: string;
@@ -54,6 +71,7 @@ export async function listGitLabOrfChatChannelOptions(teamId: string): Promise<G
   const { rows } = await pool.query<{
     display_name: string;
     id: string;
+    integration_provider: ChatIntegrationProvider | null;
     member_count: number;
     name: string | null;
     type: "public" | "private";
@@ -63,6 +81,7 @@ export async function listGitLabOrfChatChannelOptions(teamId: string): Promise<G
         c.id,
         c.type,
         c.name,
+        c.integration_provider,
         c.display_name,
         count(cm.user_id)::int AS member_count
       FROM chat_channels c
@@ -76,13 +95,16 @@ export async function listGitLabOrfChatChannelOptions(teamId: string): Promise<G
     `,
     [teamId],
   );
-  return rows.map((row) => ({
-    displayName: row.display_name,
-    id: row.id,
-    memberCount: row.member_count,
-    name: row.name,
-    type: row.type,
-  }));
+  return rows
+    .filter((row) => chatChannelAllowsIntegrationProvider(channelDescriptor(row), "gitlab"))
+    .map((row) => ({
+      displayName: row.display_name,
+      id: row.id,
+      integrationProvider: chatChannelIntegrationProvider(channelDescriptor(row)),
+      memberCount: row.member_count,
+      name: row.name,
+      type: row.type,
+    }));
 }
 
 export async function listGitLabOrfChatSubscriptions(input: {
@@ -101,6 +123,8 @@ export async function listGitLabOrfChatSubscriptions(input: {
       SELECT
         subscription.id,
         subscription.chat_channel_id AS channel_id,
+        channel.name AS channel_name,
+        channel.integration_provider AS channel_integration_provider,
         channel.display_name AS channel_display_name,
         channel.type::text AS channel_type,
         subscription.gitlab_group_path,
@@ -153,7 +177,8 @@ export async function createGitLabOrfChatSubscription(input: {
   if (!input.actor.canRead) {
     throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
   }
-  const channel = await requireVisibleSubscribableChannel(input.actor, input.channelId);
+  const channel = await requireManageableSubscribableChannel(input.actor, input.channelId);
+  requireGitLabCompatibleChannel(channel);
   const now = nowIso();
   const project = input.scope === "project" ? requiredProject(input.project) : null;
   const eventTypes = normalizeGitLabOrfChatEventTypes(input.eventTypes);
@@ -201,7 +226,10 @@ export async function updateGitLabOrfChatSubscription(input: {
   if (!input.actor.canRead) {
     throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
   }
-  await requireVisibleSubscribableChannel(input.actor, input.channelId);
+  const channel = await requireManageableSubscribableChannel(input.actor, input.channelId);
+  if (!isLegacyConflictDisable(input)) {
+    requireGitLabCompatibleChannel(channel);
+  }
   const assignments: string[] = [];
   const values: unknown[] = [
     runtimeScopeStorageId(input.actor.scope),
@@ -245,7 +273,7 @@ export async function deleteGitLabOrfChatSubscription(input: {
   if (!input.actor.canRead) {
     throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
   }
-  await requireVisibleSubscribableChannel(input.actor, input.channelId);
+  await requireManageableSubscribableChannel(input.actor, input.channelId);
   const result = await pool.query(
     `
       DELETE FROM gitlab_orf_channel_subscriptions
@@ -274,6 +302,8 @@ export async function listMatchingGitLabOrfChatSubscriptions(input: {
       SELECT
         subscription.id,
         subscription.chat_channel_id AS channel_id,
+        channel.name AS channel_name,
+        channel.integration_provider AS channel_integration_provider,
         channel.display_name AS channel_display_name,
         channel.type::text AS channel_type,
         subscription.gitlab_group_path,
@@ -312,10 +342,12 @@ export async function listMatchingGitLabOrfChatSubscriptions(input: {
     [input.teamId, input.event.eventType, input.event.project.id, normalizedProjectPath],
   );
 
-  return rows.map((row) => ({
-    ...subscriptionFromRow(row),
-    project: input.event.project,
-  }));
+  return rows
+    .filter((row) => chatChannelAllowsIntegrationProvider(subscriptionChannelDescriptor(row), "gitlab"))
+    .map((row) => ({
+      ...subscriptionFromRow(row),
+      project: input.event.project,
+    }));
 }
 
 export async function reserveGitLabOrfEventDelivery(input: {
@@ -433,9 +465,12 @@ export async function sendGitLabOrfChatMessage(input: {
 
 function subscriptionFromRow(row: SubscriptionRow): GitLabOrfChatSubscription {
   const scope: GitLabOrfChatSubscriptionScope = row.gitlab_project_id ? "project" : "group";
+  const channelProvider = chatChannelIntegrationProvider(subscriptionChannelDescriptor(row));
   return {
     channelDisplayName: row.channel_display_name,
     channelId: row.channel_id,
+    channelIntegrationProvider: channelProvider,
+    channelProviderConflict: channelProvider !== null && channelProvider !== "gitlab",
     channelType: row.channel_type,
     createdAt: iso(row.created_at),
     enabled: row.enabled,
@@ -451,12 +486,15 @@ function subscriptionFromRow(row: SubscriptionRow): GitLabOrfChatSubscription {
 }
 
 async function requireVisibleSubscribableChannel(actor: ChatActor, channelId: string) {
-  const { rows } = await pool.query<{
-    id: string;
-    type: "public" | "private";
-  }>(
+  const { rows } = await pool.query<SubscribableChannelRow>(
     `
-      SELECT c.id, c.type
+      SELECT
+        c.id,
+        c.type,
+        c.name,
+        c.integration_provider,
+        c.display_name,
+        cm.role::text AS member_role
       FROM chat_channels c
       INNER JOIN chat_channel_members cm
         ON cm.channel_id = c.id
@@ -475,6 +513,53 @@ async function requireVisibleSubscribableChannel(actor: ChatActor, channelId: st
     throw Object.assign(new Error("GitLab ORF chat channel is not subscribable"), { statusCode: 404 });
   }
   return row;
+}
+
+async function requireManageableSubscribableChannel(actor: ChatActor, channelId: string) {
+  const channel = await requireVisibleSubscribableChannel(actor, channelId);
+  if (
+    !actor.canManageAnyChannel
+    && !actor.canManageAnyMembers
+    && channel.member_role !== "owner"
+    && channel.member_role !== "admin"
+  ) {
+    throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
+  }
+  return channel;
+}
+
+function requireGitLabCompatibleChannel(channel: SubscribableChannelRow) {
+  const validation = validateChatIntegrationBinding(channelDescriptor(channel), "gitlab");
+  if (validation.status === "providerConflict") {
+    throw Object.assign(new Error("GitLab 订阅不能绑定到 GitHub 专属频道"), {
+      code: "integration_provider_conflict",
+      statusCode: 409,
+    });
+  }
+}
+
+function isLegacyConflictDisable(input: { enabled?: boolean; eventTypes?: readonly string[] }) {
+  return input.enabled === false && input.eventTypes === undefined;
+}
+
+function channelDescriptor(row: {
+  display_name: string;
+  integration_provider: ChatIntegrationProvider | null;
+  name: string | null;
+}) {
+  return {
+    displayName: row.display_name,
+    integrationProvider: row.integration_provider,
+    name: row.name,
+  };
+}
+
+function subscriptionChannelDescriptor(row: SubscriptionRow) {
+  return {
+    displayName: row.channel_display_name,
+    integrationProvider: row.channel_integration_provider,
+    name: row.channel_name,
+  };
 }
 
 function requiredProject(project: GitLabOrfChatProject | null | undefined): GitLabOrfChatProject {

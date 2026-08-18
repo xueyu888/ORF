@@ -9,6 +9,7 @@ import { z } from "zod";
 import { getDefaultRuntimeScope, runtimeScopeStorageId } from "../../repositories/runtimeScope";
 import {
   ensureOrfChatBotActor,
+  ensureOrfChatChannelIntegrationProvider,
   ensureOrfChatChannelMembership,
   ensureOrfChatNamedChannel,
   sendOrfChatMessage,
@@ -645,6 +646,11 @@ async function resolveGitHubOrfChatTarget(config: GitHubOrfChatConfig) {
   });
 
   if (config.GITHUB_ORF_CHAT_CHANNEL_ID) {
+    await ensureOrfChatChannelIntegrationProvider({
+      channelId: config.GITHUB_ORF_CHAT_CHANNEL_ID,
+      provider: "github",
+      teamId,
+    });
     await ensureOrfChatChannelMembership({ channelId: config.GITHUB_ORF_CHAT_CHANNEL_ID, teamId, userId: actor.id });
     return { actor, channelId: config.GITHUB_ORF_CHAT_CHANNEL_ID, teamId };
   }
@@ -653,6 +659,7 @@ async function resolveGitHubOrfChatTarget(config: GitHubOrfChatConfig) {
     actor,
     displayName: config.GITHUB_ORF_CHAT_CHANNEL_DISPLAY_NAME,
     header: config.GITHUB_ORF_CHAT_CHANNEL_HEADER,
+    integrationProvider: "github",
     name: config.GITHUB_ORF_CHAT_CHANNEL_NAME,
     purpose: config.GITHUB_ORF_CHAT_CHANNEL_PURPOSE,
     teamId,

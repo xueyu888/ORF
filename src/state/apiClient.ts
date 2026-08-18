@@ -44,6 +44,7 @@ import type {
   WorkLogReportScope,
 } from "../types/orf";
 import type { ChatSyncResponse } from "../domain/chatSync";
+import type { ChatIntegrationProvider } from "../domain/chatIntegrationProvider";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
 import type { AppearanceMode, UserDisplayPreferences } from "../domain/settings/personalPreferences";
 import type { FilterPreferenceRecord, UserFilterPreferences } from "../domain/settings/filterPreferences";
@@ -226,6 +227,7 @@ export type GitLabOrfChatEventType = "push" | "tag_push" | "merge_request" | "is
 export type GitLabOrfChatChannelOption = {
   displayName: string;
   id: string;
+  integrationProvider: ChatIntegrationProvider | null;
   memberCount: number;
   name: string | null;
   type: "public" | "private";
@@ -238,6 +240,8 @@ export type GitLabOrfChatProjectOption = {
 export type GitLabOrfChatSubscription = {
   channelDisplayName: string;
   channelId: string;
+  channelIntegrationProvider: ChatIntegrationProvider | null;
+  channelProviderConflict: boolean;
   channelType: "public" | "private";
   createdAt: string;
   enabled: boolean;

@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  chatChannelAllowsIntegrationProvider,
+  chatChannelIntegrationProvider,
+  validateChatIntegrationBinding,
+} from "../src/domain/chatIntegrationProvider";
+import {
   formatGitLabWebhookChatMessage,
   gitLabProjectPathMatchesGroup,
   normalizeGitLabOrfChatEventTypes,
@@ -131,4 +136,30 @@ test("GitLab group subscription matches projects inside the configured group onl
   assert.equal(gitLabProjectPathMatchesGroup("develop/platform/orf-api", "develop"), true);
   assert.equal(gitLabProjectPathMatchesGroup("develop/platform/orf-api", "/Develop/Platform/"), true);
   assert.equal(gitLabProjectPathMatchesGroup("development/platform/orf-api", "develop"), false);
+});
+
+test("chat integration provider binding uses the explicit channel provider as the fact source", () => {
+  assert.equal(
+    chatChannelIntegrationProvider({ displayName: "GitHub", integrationProvider: "github", name: "github" }),
+    "github",
+  );
+  assert.equal(
+    chatChannelIntegrationProvider({ displayName: "GitHub", integrationProvider: null, name: "github" }),
+    null,
+  );
+  assert.equal(
+    chatChannelIntegrationProvider({ displayName: "GitLab", name: "git_lab" }),
+    "gitlab",
+  );
+});
+
+test("GitLab integration binding rejects GitHub dedicated channels and allows ordinary channels", () => {
+  assert.equal(
+    chatChannelAllowsIntegrationProvider({ displayName: "工程动态", integrationProvider: null, name: "engineering" }, "gitlab"),
+    true,
+  );
+  assert.deepEqual(
+    validateChatIntegrationBinding({ displayName: "GitHub", integrationProvider: "github", name: "github" }, "gitlab"),
+    { status: "providerConflict", channelProvider: "github", requestedProvider: "gitlab" },
+  );
 });

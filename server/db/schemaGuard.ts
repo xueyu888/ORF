@@ -370,7 +370,7 @@ export function validateSystemChatNotificationSchema(snapshot: { columns: Runtim
   }, new Map<string, Map<string, RuntimeTableColumn>>());
 
   const channelColumns = columnsByTable.get("chat_channels") ?? new Map();
-  for (const columnName of ["system_kind", "system_recipient_user_id"]) {
+  for (const columnName of ["integration_provider", "system_kind", "system_recipient_user_id"]) {
     if (!channelColumns.has(columnName)) {
       errors.push(`chat_channels.${columnName} is missing.`);
     }
@@ -1060,7 +1060,7 @@ export async function assertRuntimeDatabaseSchema() {
         from information_schema.columns
         where table_schema = current_schema()
           and table_name in ('chat_channels', 'chat_messages')
-          and column_name in ('system_kind', 'system_recipient_user_id', 'source', 'system_metadata')
+          and column_name in ('integration_provider', 'system_kind', 'system_recipient_user_id', 'source', 'system_metadata')
       `,
     ),
     pool.query<RuntimeTableColumn>(

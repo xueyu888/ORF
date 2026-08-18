@@ -216,6 +216,7 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
           c.id,
           c.team_id,
           c.type,
+          c.integration_provider,
           c.system_kind,
           c.name,
           c.system_recipient_user_id,
@@ -273,7 +274,7 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
           ) AS direct_duplicate_rank
         FROM visible_channels
       )
-      SELECT id, team_id, type, name, system_kind, system_recipient_user_id, project_id, project_name, display_name, purpose, header, created_by, archived_by, created_at, updated_at, archived_at
+      SELECT id, team_id, type, name, integration_provider, system_kind, system_recipient_user_id, project_id, project_name, display_name, purpose, header, created_by, archived_by, created_at, updated_at, archived_at
       FROM ranked_channels
       WHERE NOT (type = 'direct' AND system_kind IS NULL AND member_count <> 2)
         AND NOT (type = 'direct' AND system_kind IS NULL AND direct_duplicate_rank > 1)
@@ -457,6 +458,7 @@ async function buildChannels(rows: ChannelRow[], actor: ChatActor): Promise<Chat
       id: row.id,
       type: row.type,
       name: row.name,
+      integrationProvider: row.integration_provider,
       systemKind: row.system_kind,
       systemRecipientUserId: row.system_recipient_user_id,
       projectId: row.project_id,
@@ -527,7 +529,7 @@ async function getChannelRow(actor: ChatActor, channelId: string) {
   const teamId = storageTeamId(actor);
   const { rows } = await pool.query<ChannelRow>(
     `
-      SELECT c.id, c.team_id, c.type, c.name, c.system_kind, c.system_recipient_user_id, c.project_id, p.name AS project_name,
+      SELECT c.id, c.team_id, c.type, c.name, c.integration_provider, c.system_kind, c.system_recipient_user_id, c.project_id, p.name AS project_name,
              c.display_name, c.purpose, c.header, c.created_by, c.archived_by, c.created_at, c.updated_at, c.archived_at
       FROM chat_channels c
       LEFT JOIN projects p ON p.id = c.project_id AND p.team_id = c.team_id
@@ -1653,6 +1655,7 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
     channel_created_by: string | null;
     channel_display_name: string;
     channel_header: string;
+    channel_integration_provider: ChatChannel["integrationProvider"];
     channel_name: string | null;
     channel_project_id: string | null;
     channel_project_name: string | null;
@@ -1723,7 +1726,7 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
              u.avatar_object_key AS author_avatar_object_key, u.avatar_updated_at AS author_avatar_updated_at,
              root.body, root.root_message_id, root.parent_message_id,
              root.source, root.system_metadata, root.created_at, root.updated_at, root.edited_at, root.deleted_at, root.deleted_by,
-             c.type AS channel_type, c.name AS channel_name, c.system_kind AS channel_system_kind,
+             c.type AS channel_type, c.name AS channel_name, c.integration_provider AS channel_integration_provider, c.system_kind AS channel_system_kind,
              c.system_recipient_user_id AS channel_system_recipient_user_id, c.display_name AS channel_display_name,
              c.project_id AS channel_project_id, p.name AS channel_project_name, c.purpose AS channel_purpose, c.header AS channel_header, c.created_by AS channel_created_by,
              c.created_at AS channel_created_at, c.updated_at AS channel_updated_at, c.archived_at AS channel_archived_at,
@@ -1796,6 +1799,7 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
     id: row.channel_id,
     type: row.channel_type,
     name: row.channel_name,
+    integration_provider: row.channel_integration_provider ?? null,
     project_id: row.channel_project_id,
     project_name: row.channel_project_name,
     system_kind: row.channel_system_kind ?? null,
@@ -1832,7 +1836,16 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
 }
 
 export async function createChatChannel(
-  input: { displayName: string; header?: string; memberUserIds?: string[]; name?: string; projectId?: string | null; purpose?: string; type: "public" | "private" },
+  input: {
+    displayName: string;
+    header?: string;
+    integrationProvider?: ChatChannel["integrationProvider"];
+    memberUserIds?: string[];
+    name?: string;
+    projectId?: string | null;
+    purpose?: string;
+    type: "public" | "private";
+  },
   actor: ChatActor,
 ): Promise<Outcome<{ channel: ChatChannel }>> {
   if (!actor.canRead) return { status: "forbidden" };
@@ -1858,10 +1871,22 @@ export async function createChatChannel(
   try {
     await pool.query(
       `
-        INSERT INTO chat_channels (id, team_id, type, name, display_name, purpose, header, project_id, created_by, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+        INSERT INTO chat_channels (id, team_id, type, name, integration_provider, display_name, purpose, header, project_id, created_by, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
       `,
-      [id, teamId, input.type, name, displayName, input.purpose?.trim() ?? "", input.header?.trim() ?? "", projectId, actor.id, now],
+      [
+        id,
+        teamId,
+        input.type,
+        name,
+        input.integrationProvider ?? null,
+        displayName,
+        input.purpose?.trim() ?? "",
+        input.header?.trim() ?? "",
+        projectId,
+        actor.id,
+        now,
+      ],
     );
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "23505") {
@@ -3185,6 +3210,7 @@ export async function searchChatMessages(
     channel_created_by: string | null;
     channel_display_name: string;
     channel_header: string;
+    channel_integration_provider: ChatChannel["integrationProvider"];
     channel_name: string | null;
     channel_project_id: string | null;
     channel_project_name: string | null;
@@ -3199,7 +3225,7 @@ export async function searchChatMessages(
       SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
              u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
              m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by,
-             c.type AS channel_type, c.name AS channel_name, c.system_kind AS channel_system_kind,
+             c.type AS channel_type, c.name AS channel_name, c.integration_provider AS channel_integration_provider, c.system_kind AS channel_system_kind,
              c.system_recipient_user_id AS channel_system_recipient_user_id, c.display_name AS channel_display_name, c.purpose AS channel_purpose,
              c.project_id AS channel_project_id, p.name AS channel_project_name, c.header AS channel_header, c.created_by AS channel_created_by, c.created_at AS channel_created_at,
              c.updated_at AS channel_updated_at, c.archived_at AS channel_archived_at
@@ -3242,6 +3268,7 @@ export async function searchChatMessages(
     id: row.channel_id,
     type: row.channel_type,
     name: row.channel_name,
+    integration_provider: row.channel_integration_provider ?? null,
     project_id: row.channel_project_id,
     project_name: row.channel_project_name,
     system_kind: row.channel_system_kind ?? null,

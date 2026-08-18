@@ -1,5 +1,6 @@
 import type { PermissionKey } from "../config/permissions";
 import type { AttachmentPreviewKind } from "../domain/attachmentPreviewKind";
+import type { ChatIntegrationProvider } from "../domain/chatIntegrationProvider";
 
 export type WorkStatus = "On Track" | "At Risk" | "Blocked" | "Draft";
 export type TaskStatus = "Backlog" | "Todo" | "In Progress" | "In Review" | "Done";
@@ -873,6 +874,7 @@ export interface ChatChannel {
   id: string;
   type: ChatChannelType;
   name?: string | null;
+  integrationProvider?: ChatIntegrationProvider | null;
   systemKind?: ChatSystemKind | null;
   systemRecipientUserId?: string | null;
   projectId?: string | null;
