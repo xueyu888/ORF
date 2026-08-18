@@ -1,7 +1,7 @@
 {
   "name": "orf-desktop-client",
   "productName": "ORF",
-  "version": "0.1.20",
+  "version": "0.1.21",
   "private": true,
   "description": "ORF Win11 desktop client shell.",
   "main": "main.cjs",
