@@ -29,6 +29,7 @@ import {
   Unlink,
   Upload,
   UserRound,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { ImageCopyButton } from "../../components/ImageCopyButton";
@@ -42,6 +43,16 @@ import {
   formatDriveDateTime as formatDateTime,
   formatDriveFileSize as formatFileSize,
 } from "./drivePresentation";
+import {
+  beginDriveFolderCreation,
+  driveFolderCreationCanSubmit,
+  failDriveFolderCreation,
+  finishDriveFolderCreation,
+  idleDriveFolderCreationSession,
+  prepareDriveFolderCreationSubmission,
+  updateDriveFolderCreationName,
+  type DriveFolderCreationSession,
+} from "./driveFolderCreationSession";
 import { useDriveMobileViewport } from "./useDriveMobileViewport";
 import type { ApiUploadProgress } from "../../state/apiClient";
 import type {
@@ -193,16 +204,15 @@ export function DriveBrowser({
   uploaderOptions = [],
 }: DriveBrowserProps) {
   const [childrenByFolderId, setChildrenByFolderId] = useState<Map<string, DriveNode[]>>(new Map());
-  const [creatingFolder, setCreatingFolder] = useState(false);
   const [details, setDetails] = useState<DriveNodeDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+  const [folderCreationSession, setFolderCreationSession] = useState<DriveFolderCreationSession>(idleDriveFolderCreationSession);
   const [loadingFolderIds, setLoadingFolderIds] = useState<Set<string>>(new Set());
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [mobilePane, setMobilePane] = useState<DriveMobilePane>(initialSelectedNodeId ? "details" : "browse");
   const [mode, setMode] = useState<DriveMode>("browse");
-  const [newFolderName, setNewFolderName] = useState("");
   const [resourceLoading, setResourceLoading] = useState(false);
   const [searchFilters, setSearchFilters] = useState<DriveSearchFilters>(defaultDriveSearchFilters);
   const [searchQuery, setSearchQuery] = useState("");
@@ -297,6 +307,10 @@ export function DriveBrowser({
   }, [bootstrap?.root, childrenByFolderId, effectiveNode]);
   const uploadTarget = selectedFolder ?? bootstrap?.root ?? null;
   const canMutateDrive = canWrite && Boolean(bootstrap);
+  const folderCreationActive = folderCreationSession.status !== "idle";
+  const folderCreationName = folderCreationSession.status === "idle" ? "" : folderCreationSession.name;
+  const folderCreationSubmitting = folderCreationSession.status === "submitting";
+  const folderCreationSubmitEnabled = canMutateDrive && Boolean(uploadTarget) && driveFolderCreationCanSubmit(folderCreationSession);
   const selectedFile = effectiveNode?.file ?? null;
   const textPreview = selectedFile ? textPreviewByFileId.get(selectedFile.id) : undefined;
   const textPreviewLoading = Boolean(selectedFile && textPreviewLoadingIds.has(selectedFile.id));
@@ -486,22 +500,22 @@ export function DriveBrowser({
   };
 
   const createFolder = async () => {
-    if (!canMutateDrive || !uploadTarget || creatingFolder || !newFolderName.trim()) return;
-    setCreatingFolder(true);
+    const submission = prepareDriveFolderCreationSubmission(folderCreationSession);
+    if (!canMutateDrive || !uploadTarget || !submission) return;
+    setFolderCreationSession(submission.session);
     setErrorMessage(null);
     try {
-      const node = await onCreateFolder({ name: newFolderName.trim(), parentNodeId: uploadTarget.id });
+      const node = await onCreateFolder({ name: submission.name, parentNodeId: uploadTarget.id });
       setChildrenByFolderId((items) => appendChildNode(items, uploadTarget.id, node));
       setExpandedFolderIds((items) => new Set(items).add(uploadTarget.id));
       setMode("browse");
       setSelectedNodeId(node.id);
-      setNewFolderName("");
+      setFolderCreationSession(finishDriveFolderCreation());
     } catch (error) {
+      setFolderCreationSession((session) => failDriveFolderCreation(session));
       const message = error instanceof Error ? error.message : "新建文件夹失败";
       setErrorMessage(message);
       notify(message);
-    } finally {
-      setCreatingFolder(false);
     }
   };
 
@@ -778,7 +792,12 @@ export function DriveBrowser({
   const actions = (
     <div className="orf-drive-actions">
       <IconButton disabled={!canMutateDrive || !uploadTarget || mode === "trash"} icon={Upload} label={uploadTarget ? `上传到 ${uploadTarget.name}` : "上传文件"} onClick={() => fileInputRef.current?.click()} />
-      <IconButton disabled={!canMutateDrive || !uploadTarget || mode === "trash"} icon={FolderPlus} label="新建文件夹" onClick={() => setNewFolderName((value) => value || "新建文件夹")} />
+      <IconButton
+        disabled={!canMutateDrive || !uploadTarget || mode === "trash" || folderCreationSubmitting}
+        icon={FolderPlus}
+        label="新建文件夹"
+        onClick={() => setFolderCreationSession((session) => session.status === "idle" ? beginDriveFolderCreation() : session)}
+      />
       <div className="orf-drive-actions-menu" ref={actionsMenuRef}>
         <IconButton
           icon={MoreHorizontal}
@@ -871,15 +890,36 @@ export function DriveBrowser({
               {actions}
               <input ref={fileInputRef} hidden multiple type="file" onChange={(event) => void uploadFiles(event.currentTarget.files)} />
               <input ref={versionInputRef} hidden type="file" onChange={(event) => void uploadVersion(event.currentTarget.files)} />
-              {newFolderName && (
+              {folderCreationActive && (
                 <form className="orf-drive-create" onSubmit={(event) => {
                   event.preventDefault();
                   void createFolder();
                 }}>
-                  <input aria-label="文件夹名称" value={newFolderName} onChange={(event) => setNewFolderName(event.target.value)} />
-                  <Button disabled={creatingFolder || !newFolderName.trim()} size="sm" variant="secondary">
-                    {creatingFolder ? "创建中" : "创建"}
+                  <input
+                    aria-label="文件夹名称"
+                    autoFocus
+                    disabled={folderCreationSubmitting}
+                    value={folderCreationName}
+                    onChange={(event) => setFolderCreationSession((session) => updateDriveFolderCreationName(session, event.target.value))}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape" && !folderCreationSubmitting) {
+                        event.preventDefault();
+                        setFolderCreationSession(finishDriveFolderCreation());
+                      }
+                    }}
+                  />
+                  <Button disabled={!folderCreationSubmitEnabled} size="sm" type="submit" variant="secondary">
+                    {folderCreationSubmitting ? "创建中" : "创建"}
                   </Button>
+                  <IconButton
+                    disabled={folderCreationSubmitting}
+                    icon={X}
+                    label="取消创建文件夹"
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setFolderCreationSession(finishDriveFolderCreation())}
+                  />
                 </form>
               )}
               {uploadTask && (
