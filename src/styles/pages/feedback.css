@@ -226,11 +226,11 @@
 
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page :is(
   .feedback-issue-original-card,
-  .feedback-issue-comment-card,
-  .feedback-issue-composer
+  .feedback-issue-composer,
+  .feedback-issue-timeline
 ) {
   border-color: var(--orf-material-content-hairline);
-  border-radius: 18px;
+  border-radius: 16px;
   background:
     linear-gradient(126deg, color-mix(in srgb, var(--orf-material-content-shine) 13%, transparent), transparent 40%),
     var(--orf-material-content-primary);
@@ -238,7 +238,18 @@
 }
 
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .feedback-issue-comment-card {
-  box-shadow: var(--orf-material-content-shadow-soft);
+  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 46%, var(--orf-workbench-hairline));
+  background: transparent;
+  box-shadow: none;
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .feedback-issue-comment-card:hover {
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 44%, transparent);
+}
+
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .feedback-issue-comment-card-linked {
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 52%, var(--orf-accent-soft));
+  box-shadow: inset 3px 0 0 var(--orf-accent);
 }
 
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page .feedback-issue-composer {
@@ -262,21 +273,20 @@
 
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-sidebar {
   border-color: var(--orf-material-content-hairline);
-  border-radius: 20px;
-  background:
-    linear-gradient(132deg, color-mix(in srgb, var(--orf-material-content-shine) 13%, transparent), transparent 42%),
-    var(--orf-material-content-primary);
-  box-shadow: var(--orf-material-content-shadow);
+  border-radius: 16px;
+  background: var(--orf-material-content-primary);
+  box-shadow: var(--orf-material-content-shadow-soft);
 }
 
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-inspector-heading {
   border-color: color-mix(in srgb, var(--orf-material-content-hairline) 50%, var(--orf-workbench-hairline));
-  background: color-mix(in srgb, var(--orf-material-content-secondary) 68%, transparent);
+  background: color-mix(in srgb, var(--orf-material-content-secondary) 34%, transparent);
 }
 
-.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-inspector-body > :is(.orf-related-resources, .feedback-issue-sidebar-block) {
+.orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-inspector-body > :is(.feedback-issue-related-resources, .feedback-issue-sidebar-block) {
   border-color: color-mix(in srgb, var(--orf-material-content-hairline) 42%, var(--orf-workbench-hairline));
-  background: color-mix(in srgb, var(--orf-material-content-secondary) 54%, transparent);
+  background: transparent;
+  box-shadow: none;
 }
 
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-sidebar-input {
@@ -360,10 +370,10 @@
 
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-detail-page :is(
     .feedback-issue-original-card,
-    .feedback-issue-comment-card,
-    .feedback-issue-composer
+    .feedback-issue-composer,
+    .feedback-issue-timeline
   ) {
-    border-radius: 16px;
+    border-radius: 14px;
   }
 
 .orf-app-shell[data-page-scene="page_feedback_background"] .feedback-issue-inspector-dialog {
@@ -392,8 +402,8 @@
     .feedback-index-toolbar,
     .feedback-label-list,
     .feedback-issue-original-card,
-    .feedback-issue-comment-card,
     .feedback-issue-composer,
+    .feedback-issue-timeline,
     .feedback-issue-sidebar,
     .feedback-create-editor-card,
     .feedback-create-sidebar,

@@ -417,11 +417,11 @@ export function FeedbackIssuePage() {
           </div>
         </div>
         <div className="feedback-issue-detail-actions">
-          <FeedbackButton onClick={copyFeedbackLink} variant="secondary">
+          <FeedbackButton onClick={copyFeedbackLink} variant="ghost">
             <LinkIcon aria-hidden="true" />
             复制链接
           </FeedbackButton>
-          <FeedbackButton onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })} variant="secondary">
+          <FeedbackButton onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })} variant="ghost">
             <MessageSquare aria-hidden="true" />
             回复
           </FeedbackButton>
@@ -472,16 +472,18 @@ export function FeedbackIssuePage() {
                     <div className="feedback-issue-comment-header">
                       <strong>{message.author}</strong>
                       <time dateTime={message.createdAt} title={commentTimeDisplay(message.createdAt).title}>{commentTimeDisplay(message.createdAt).label}</time>
-                      {canManageFeedbackComment(message, currentUser, canManageAllComments) && (
-                        <FeedbackButton type="button" size="sm" variant="ghost" onClick={() => startEdit({ message, thread })}>
-                          <Pencil aria-hidden="true" />
-                          编辑
+                      <div className="feedback-issue-comment-actions">
+                        {canManageFeedbackComment(message, currentUser, canManageAllComments) && (
+                          <FeedbackButton type="button" size="sm" variant="ghost" onClick={() => startEdit({ message, thread })}>
+                            <Pencil aria-hidden="true" />
+                            编辑
+                          </FeedbackButton>
+                        )}
+                        <FeedbackButton type="button" size="sm" variant="ghost" onClick={() => startReply(message)}>
+                          <Reply aria-hidden="true" />
+                          回复
                         </FeedbackButton>
-                      )}
-                      <FeedbackButton type="button" size="sm" variant="ghost" onClick={() => startReply(message)}>
-                        <Reply aria-hidden="true" />
-                        回复
-                      </FeedbackButton>
+                      </div>
                     </div>
                     <div className="feedback-issue-comment-body">
                       {editState?.messageId === message.id ? (
@@ -747,10 +749,12 @@ function OriginalFeedbackCard({
           <strong>{author.name}</strong>
           <time dateTime={feedback.createdAt} title={createdAt.title}>{createdAt.label}</time>
           {canEdit && !editing && (
-            <FeedbackButton size="sm" type="button" variant="ghost" onClick={() => setEditing(true)}>
-              <Pencil aria-hidden="true" />
-              编辑原始报告
-            </FeedbackButton>
+            <div className="feedback-issue-comment-actions">
+              <FeedbackButton size="sm" type="button" variant="ghost" onClick={() => setEditing(true)}>
+                <Pencil aria-hidden="true" />
+                编辑原始报告
+              </FeedbackButton>
+            </div>
           )}
         </div>
         <div className="feedback-issue-comment-body">
