@@ -151,6 +151,11 @@
   margin-bottom: 18px;
 }
 
+.feedback-issue-page .feedback-issue-header {
+  position: relative;
+  z-index: 30;
+}
+
 .feedback-issue-title-block h1,
 .feedback-index-title-block h1,
 .feedback-issue-detail-title-block h2 {

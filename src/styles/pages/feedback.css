@@ -30,7 +30,6 @@
   .feedback-create-header
 ) {
   position: relative;
-  overflow: hidden;
   margin-bottom: 16px;
   border: 1px solid var(--orf-material-content-hairline);
   border-radius: 18px;
