@@ -924,7 +924,7 @@
   text-align: left;
 }
 
-.orf-chat-channel-item-conversation {
+.orf-chat-channel-item-with-avatar {
   grid-template-columns: 28px minmax(0, 1fr) auto;
   min-height: 40px;
   padding-block: 5px;
@@ -5385,11 +5385,6 @@ button.orf-chat-image-attachment {
     min-height: 46px;
     padding: 7px 8px;
     font-size: 15px;
-  }
-
-.orf-chat-channel-item-conversation {
-    grid-template-columns: 32px minmax(0, 1fr) auto;
-    min-height: 46px;
   }
 
 .orf-chat-header {

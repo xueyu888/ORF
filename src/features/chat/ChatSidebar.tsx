@@ -3,7 +3,6 @@ import type { LucideIcon } from "lucide-react";
 import { Bell, ChevronDown, ChevronRight, Hash, Megaphone, MessageSquare, Plus, Reply, Search } from "lucide-react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { isChatConversation } from "../../domain/chatConversation";
 import type { ChatChannel, ChatUser } from "../../types/orf";
 import { chatChannelDisplayLabel, chatDirectPeer } from "./chatChannelPresentation";
 import { formatPresence } from "./chatPresence";
@@ -392,7 +391,6 @@ function ChannelRows({
       {channels.map((channel) => {
         const membership = currentMembership(channel, currentUserId);
         const directPeer = chatDirectPeer(channel, currentUserId, usersById);
-        const isConversation = isChatConversation(channel);
         const label = chatChannelDisplayLabel(channel, currentUserId, usersById);
         const hasUnreadBadge = channel.mentionCount > 0 || channel.unreadCount > 0 || channel.threadUnreadCount > 0;
         const hasDraft = draftChannelIds.has(channel.id);
@@ -401,8 +399,8 @@ function ChannelRows({
             type="button"
             className={clsx(
               "orf-chat-channel-item",
+              "orf-chat-channel-item-with-avatar",
               channel.id === activeChannelId && "orf-chat-channel-item-active",
-              isConversation && "orf-chat-channel-item-conversation",
               membership?.muted && "orf-chat-channel-item-muted",
             )}
             key={channel.id}
@@ -411,7 +409,7 @@ function ChannelRows({
             onClick={() => onOpenChannel(channel.id)}
           >
             {directPeer ? (
-              <ChatPresenceAvatar className="orf-chat-channel-avatar" currentUserId={currentUserId} name={directPeer.name} size="sm" user={directPeer} />
+              <ChatPresenceAvatar className="orf-chat-channel-avatar" currentUserId={currentUserId} frame={false} name={directPeer.name} size="sm" user={directPeer} />
             ) : (
               <ChatGroupAvatar channel={channel} className="orf-chat-channel-avatar" currentUserId={currentUserId} usersById={usersById} />
             )}
@@ -556,7 +554,7 @@ function UserRows({
           type="button"
           onClick={() => onOpenConversationWithUser(user.id)}
         >
-          <ChatPresenceAvatar className="orf-chat-channel-avatar" currentUserId={currentUserId} name={user.name} size="sm" user={user} />
+          <ChatPresenceAvatar className="orf-chat-channel-avatar" currentUserId={currentUserId} frame={false} name={user.name} size="sm" user={user} />
           <span className="truncate">{user.name}</span>
           <small>{formatPresence(user, currentUserId)}</small>
           <MessageSquare className="h-4 w-4" />
