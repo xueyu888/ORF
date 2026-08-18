@@ -290,6 +290,39 @@ test("history feed reconciles latest data without replacing the visible reading 
   assert.equal(promoted?.hasNewerMessages, false);
 });
 
+test("history feed counts only unseen latest root messages after cached latest window reconciliation", () => {
+  const cachedLatest = [
+    message("known-1", "2026-07-11T02:00:00.000Z"),
+    message("known-2", "2026-07-11T02:01:00.000Z"),
+  ];
+  const historical = createFeedSnapshot({
+    hasNewerMessages: true,
+    latestWindowMessages: cachedLatest,
+    messages: [message("old-1", "2026-07-11T01:00:00.000Z")],
+    windowKind: "context",
+  });
+  const latest = [
+    ...cachedLatest,
+    {
+      ...message("reply-1", "2026-07-11T02:02:00.000Z"),
+      parentMessageId: "known-2",
+      rootMessageId: "known-2",
+    },
+    message("new-1", "2026-07-11T02:03:00.000Z"),
+  ];
+
+  const reconciliation = reconcileFeedLatestWindow(historical, latest);
+  assert.equal(reconciliation.visibleMessagesChanged, false);
+  assert.equal(reconciliation.newMessageCount, 1);
+  assert.deepEqual(reconciliation.snapshot.messages.map((item) => item.id), ["old-1"]);
+  assert.deepEqual(reconciliation.snapshot.latestWindowMessages.map((item) => item.id), [
+    "known-1",
+    "known-2",
+    "reply-1",
+    "new-1",
+  ]);
+});
+
 test("latest feed merges recovered messages by message id without duplicates", () => {
   const current = createFeedSnapshot({
     messages: [message("message-1", "2026-07-11T01:00:00.000Z")],
