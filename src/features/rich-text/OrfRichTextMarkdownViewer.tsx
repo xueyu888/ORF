@@ -518,11 +518,15 @@ function resolvedLinkFor(
   return resolveLink?.(href, label) ?? { href, label };
 }
 
+function isExplicitMarkdownHardBreak(value: string) {
+  return /^<[bB][rR]\s*\/?>$/.test(value);
+}
+
 function renderInlineFragments(body: string, context: InlineRenderContext, keyPrefix: string, depth = 0): ReactNode[] {
   if (depth > 8) return context.renderPlainText(unescapeOrfMarkdownPlainText(body), `${keyPrefix}:depth`);
 
   const nodes: ReactNode[] = [];
-  const pattern = /!\[([^\]\n]*)\]\((orf-attachment|orf-pending-attachment):([A-Za-z0-9_-]+)\)|@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)|\[([^\]\n]+)\]\((https?:\/\/[^)\s<]+|\/(?!\/)[^)\s<]+)\)|(https?:\/\/[^\s<]+|www\.[^\s<]+|\/feedback\/[^\s<]+)|`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\*([^*\n]+)\*|_([^_\n]+)_/g;
+  const pattern = /!\[([^\]\n]*)\]\((orf-attachment|orf-pending-attachment):([A-Za-z0-9_-]+)\)|@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)|\[([^\]\n]+)\]\((https?:\/\/[^)\s<]+|\/(?!\/)[^)\s<]+)\)|(https?:\/\/[^\s<]+|www\.[^\s<]+|\/feedback\/[^\s<]+)|`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\*([^*\n]+)\*|_([^_\n]+)_|<[bB][rR]\s*\/?>/g;
   let index = 0;
   let match: RegExpExecArray | null;
 
@@ -557,6 +561,8 @@ function renderInlineFragments(body: string, context: InlineRenderContext, keyPr
     } else if (match[13] || match[14]) {
       const value = match[13] ?? match[14] ?? "";
       nodes.push(<em key={`${keyPrefix}:italic:${match.index}`}>{renderInlineFragments(value, context, `${keyPrefix}:italic-inner:${match.index}`, depth + 1)}</em>);
+    } else if (isExplicitMarkdownHardBreak(match[0])) {
+      nodes.push(<br key={`${keyPrefix}:explicit-br:${match.index}`} />);
     }
     index = pattern.lastIndex;
   }

@@ -196,3 +196,20 @@ test("chat message clipboard falls back to the same portable markdown", async ()
 
   assert.equal(fallbackText, payload.text);
 });
+
+test("rich text viewer renders explicit hard breaks inside table cells from the shared inline model", () => {
+  const body = [
+    "| 标题<br>补充 | 说明 |",
+    "| --- | --- |",
+    "| 第一行<br/>第二行 | **重点**<br />结束 |",
+    "| `<br>` | <br class=\"ignored\"> |",
+  ].join("\n");
+
+  const html = renderToStaticMarkup(React.createElement(OrfRichTextMarkdownViewer, { body }));
+  assert.match(html, /<th><span>标题<\/span><br\/><span>补充<\/span><\/th>/);
+  assert.match(html, /<td><span>第一行<\/span><br\/><span>第二行<\/span><\/td>/);
+  assert.match(html, /<td><strong><span>重点<\/span><\/strong><br\/><span>结束<\/span><\/td>/);
+  assert.match(html, /<td><code>&lt;br&gt;<\/code><\/td>/);
+  assert.match(html, /<td><span>&lt;br class=&quot;ignored&quot;&gt;<\/span><\/td>/);
+  assert.equal((html.match(/<br\/>/g) ?? []).length, 3);
+});
