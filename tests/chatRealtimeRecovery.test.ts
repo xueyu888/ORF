@@ -10,8 +10,10 @@ import { attachmentPreviewKind } from "../src/domain/attachmentPreviewKind";
 import { chatRealtimeReconciliationScope } from "../src/features/chat/chatRealtimeReconciliation";
 import {
   chatFeedViewportModeAfterScroll,
+  isChatFeedScrollAnchorRestored,
   isChatFeedAtLatest,
   isChatFeedNearLatest,
+  restoreChatFeedPrependedWindowPosition,
   restoreChatFeedScrollAnchor,
 } from "../src/features/chat/chatFeedScroll";
 import {
@@ -266,6 +268,73 @@ test("chat feed anchor restore bypasses smooth scrolling", () => {
     assert.equal(container.scrollTop, 320);
     assert.equal(container.style.scrollBehavior, "smooth");
   });
+});
+
+test("prepended history restore keeps the reading anchor through chat layout changes", () => {
+  const scrollCalls: ScrollToOptions[] = [];
+  let messageTop = 420;
+  const messageElement = {
+    dataset: { chatMessageId: "message-2" },
+    getBoundingClientRect: () => ({ bottom: messageTop + 60, top: messageTop }),
+  };
+  const container = {
+    clientHeight: 500,
+    scrollHeight: 2_400,
+    scrollTop: 100,
+    style: { scrollBehavior: "smooth" },
+    getBoundingClientRect: () => ({ bottom: 510, top: 20 }),
+    querySelectorAll: () => [messageElement],
+    scrollTo: (options: ScrollToOptions) => {
+      scrollCalls.push(options);
+      container.scrollTop = Number(options.top ?? 0);
+    },
+  };
+
+  assert.equal(
+    restoreChatFeedPrependedWindowPosition(
+      container as unknown as HTMLElement,
+      { messageId: "message-2", offsetTop: 80 },
+      { scrollHeight: 1_600, scrollTop: 100 },
+    ),
+    true,
+  );
+  assert.equal(container.scrollTop, 420);
+  messageTop = 100;
+  assert.equal(
+    isChatFeedScrollAnchorRestored(
+      container as unknown as HTMLElement,
+      { messageId: "message-2", offsetTop: 80 },
+    ),
+    true,
+  );
+  assert.deepEqual(scrollCalls, [{ behavior: "auto", top: 420 }]);
+});
+
+test("prepended history restore falls back to scroll-height delta when the reading anchor is missing", () => {
+  const scrollCalls: ScrollToOptions[] = [];
+  const container = {
+    clientHeight: 500,
+    scrollHeight: 2_400,
+    scrollTop: 100,
+    style: { scrollBehavior: "smooth" },
+    getBoundingClientRect: () => ({ bottom: 510, top: 20 }),
+    querySelectorAll: () => [],
+    scrollTo: (options: ScrollToOptions) => {
+      scrollCalls.push(options);
+      container.scrollTop = Number(options.top ?? 0);
+    },
+  };
+
+  assert.equal(
+    restoreChatFeedPrependedWindowPosition(
+      container as unknown as HTMLElement,
+      { messageId: "message-2", offsetTop: 80 },
+      { scrollHeight: 1_600, scrollTop: 100 },
+    ),
+    true,
+  );
+  assert.equal(container.scrollTop, 900);
+  assert.deepEqual(scrollCalls, [{ behavior: "auto", top: 900 }]);
 });
 
 test("history feed reconciles latest data without replacing the visible reading window", () => {

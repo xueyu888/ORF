@@ -115,6 +115,34 @@ export function restoreChatFeedScrollAnchor(element: HTMLElement | null, anchor:
   return true;
 }
 
+export function isChatFeedScrollAnchorRestored(
+  element: HTMLElement | null,
+  anchor: ChatFeedScrollAnchor | null,
+  tolerance = 2,
+) {
+  if (!element || !anchor) return false;
+  const target = findChatFeedMessageElement(element, anchor.messageId);
+  if (!target) return false;
+  const elementRect = element.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  return Math.abs((targetRect.top - elementRect.top) - anchor.offsetTop) <= tolerance;
+}
+
+export function restoreChatFeedPrependedWindowPosition(
+  element: HTMLElement | null,
+  anchor: ChatFeedScrollAnchor | null,
+  previousLayout: {
+    scrollHeight: number;
+    scrollTop: number;
+  },
+) {
+  if (!element) return false;
+  if (restoreChatFeedScrollAnchor(element, anchor)) return true;
+  const nextTop = element.scrollHeight - previousLayout.scrollHeight + previousLayout.scrollTop;
+  setChatFeedScrollTopInstant(element, Math.max(0, nextTop));
+  return true;
+}
+
 function scrollChatFeedToElement(
   element: HTMLElement,
   target: HTMLElement | null,

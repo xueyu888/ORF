@@ -568,3 +568,14 @@ test("main feed read receipts reschedule after message layout changes", () => {
   assert.doesNotMatch(feedStateSource, /new ResizeObserver|new MutationObserver/);
   assert.match(feedStateSource, /scheduleVisibleReadReceipt/);
 });
+
+test("loading older chat messages restores the reading anchor through the shared layout intent", () => {
+  const feedStateSource = readFileSync(new URL("../src/features/chat/useChatFeedState.ts", import.meta.url), "utf8");
+  const loadOlderSource = feedStateSource.slice(
+    feedStateSource.indexOf("const loadOlderMessages = useCallback"),
+    feedStateSource.indexOf("const handleMessageScroll = useCallback"),
+  );
+  assert.match(loadOlderSource, /restoreActiveFeedAnchorUntilStable/);
+  assert.match(loadOlderSource, /restoreChatFeedPrependedWindowPosition/);
+  assert.doesNotMatch(loadOlderSource, /window\.requestAnimationFrame/);
+});

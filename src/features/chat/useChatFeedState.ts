@@ -12,8 +12,10 @@ import {
   type ChatFeedViewportMode,
   isChatFeedNearOldest,
   isChatFeedMessagePositioned,
+  isChatFeedScrollAnchorRestored,
   isChatFeedUnreadPositioned,
   readChatFeedScrollAnchor,
+  restoreChatFeedPrependedWindowPosition,
   restoreChatFeedScrollAnchor,
   scrollChatFeedToMessage,
   scrollChatFeedToUnread,
@@ -146,6 +148,7 @@ export function useChatFeedState({
   const messagesLoadingRef = useRef(false);
   const messagesRef = useRef<ChatMessage[]>([]);
   const olderLoadInFlightRef = useRef(false);
+  const pendingAnchorLayoutRestoreCancelRef = useRef<(() => void) | null>(null);
   const pendingReadReceiptRef = useRef<{ channelId: string; messageId: string; timer: number } | null>(null);
   const pendingReadingPositionScrollRef = useRef<ChatFeedReadingPosition | null>(null);
   const pendingUnreadScrollRef = useRef<PendingUnreadScroll | null>(null);
@@ -203,6 +206,54 @@ export function useChatFeedState({
     requestLatestStickinessScroll(behavior);
     setPendingNewMessageCount(0);
   }, [requestLatestStickinessScroll]);
+
+  const cancelPendingAnchorLayoutRestore = useCallback(() => {
+    pendingAnchorLayoutRestoreCancelRef.current?.();
+    pendingAnchorLayoutRestoreCancelRef.current = null;
+  }, []);
+
+  useEffect(() => cancelPendingAnchorLayoutRestore, [cancelPendingAnchorLayoutRestore]);
+
+  const restoreActiveFeedAnchorUntilStable = useCallback((input: {
+    channelId: string;
+    restore: () => boolean;
+    settled?: () => boolean;
+    viewport: ReturnType<typeof readViewportSnapshot>;
+  }) => {
+    cancelPendingAnchorLayoutRestore();
+    const cancel = runChatViewportLayoutIntent({
+      element: messageScrollRef.current,
+      restore: () => runProgrammaticScroll("layout-correction", input.restore, "auto"),
+      settled: input.settled,
+      subscribeLayoutChanges,
+      valid: () => {
+        const currentViewport = readViewportSnapshot();
+        return (
+          activeChannelIdRef.current === input.channelId &&
+          currentViewport.mode === "browsingHistory" &&
+          currentViewport.revision === input.viewport.revision
+        );
+      },
+      onDone: () => {
+        if (pendingAnchorLayoutRestoreCancelRef.current === cancel) {
+          pendingAnchorLayoutRestoreCancelRef.current = null;
+        }
+        rememberActiveFeedScroll(input.channelId);
+      },
+      onInvalidated: () => {
+        if (pendingAnchorLayoutRestoreCancelRef.current === cancel) {
+          pendingAnchorLayoutRestoreCancelRef.current = null;
+        }
+      },
+    });
+    pendingAnchorLayoutRestoreCancelRef.current = cancel;
+  }, [
+    cancelPendingAnchorLayoutRestore,
+    readViewportSnapshot,
+    rememberActiveFeedScroll,
+    runProgrammaticScroll,
+    subscribeLayoutChanges,
+  ]);
 
   const readRestorableFeedPosition = useCallback((channelId: string) => (
     readingPositionFromFeedSnapshot(channelId, feedCacheRef.current.get(channelId)) ??
@@ -430,15 +481,13 @@ export function useChatFeedState({
 
     setPendingNewMessageCount((count) => Math.max(count, reconciliation.newMessageCount));
     if (!reconciliation.visibleMessagesChanged || !scrollAnchor) return;
-    window.requestAnimationFrame(() => {
-      if (activeChannelIdRef.current !== channelId) return;
-      const currentViewport = readViewportSnapshot();
-      if (currentViewport.mode !== "browsingHistory" || currentViewport.revision !== viewport.revision) return;
-      const element = messageScrollRef.current;
-      if (!runProgrammaticScroll("layout-correction", () => restoreChatFeedScrollAnchor(element, scrollAnchor), "auto")) return;
-      rememberActiveFeedScroll(channelId);
+    restoreActiveFeedAnchorUntilStable({
+      channelId,
+      restore: () => restoreChatFeedScrollAnchor(messageScrollRef.current, scrollAnchor),
+      settled: () => isChatFeedScrollAnchorRestored(messageScrollRef.current, scrollAnchor),
+      viewport,
     });
-  }, [applySnapshotToActiveFeed, readViewportSnapshot, rememberActiveFeedScroll, requestScrollToLatest, runProgrammaticScroll]);
+  }, [applySnapshotToActiveFeed, readViewportSnapshot, requestScrollToLatest, restoreActiveFeedAnchorUntilStable]);
 
   const loadLatestMessages = useCallback(async (behavior: ScrollBehavior = "smooth") => {
     const channelId = activeChannelIdRef.current;
@@ -1005,9 +1054,12 @@ export function useChatFeedState({
   const loadOlderMessages = useCallback(async () => {
     if (!activeChannelId || messages.length === 0 || olderLoadInFlightRef.current || isLatestScrollPending() || !hasOlderMessages) return;
     setFollowingLatest(false);
+    const viewport = readViewportSnapshot();
     const scrollElement = messageScrollRef.current;
-    const previousScrollHeight = scrollElement?.scrollHeight ?? 0;
-    const previousScrollTop = scrollElement?.scrollTop ?? 0;
+    const previousLayout = {
+      scrollHeight: scrollElement?.scrollHeight ?? 0,
+      scrollTop: scrollElement?.scrollTop ?? 0,
+    };
     const scrollAnchor = readChatFeedScrollAnchor(scrollElement);
     olderLoadInFlightRef.current = true;
     setOlderMessagesLoading(true);
@@ -1016,7 +1068,7 @@ export function useChatFeedState({
       if (activeChannelIdRef.current !== activeChannelId) return;
       setMessages((items) => {
         const snapshot = prependOlderFeedMessages(
-          feedCacheRef.current.get(activeChannelId) ?? createFeedSnapshot({ messages: items, scrollTop: previousScrollTop }),
+          feedCacheRef.current.get(activeChannelId) ?? createFeedSnapshot({ messages: items, scrollTop: previousLayout.scrollTop }),
           response.messages,
         );
         feedCacheRef.current.set(activeChannelId, snapshot);
@@ -1025,16 +1077,11 @@ export function useChatFeedState({
         setHasOlderMessages(snapshot.hasOlderMessages);
         return snapshot.messages;
       });
-      window.requestAnimationFrame(() => {
-        const element = messageScrollRef.current;
-        if (!element) return;
-        runProgrammaticScroll("layout-correction", () => {
-          if (restoreChatFeedScrollAnchor(element, scrollAnchor)) return true;
-          const nextTop = element.scrollHeight - previousScrollHeight + previousScrollTop;
-          setChatFeedScrollTopInstant(element, Math.max(0, nextTop));
-          return true;
-        }, "auto");
-        rememberActiveFeedScroll(activeChannelId);
+      restoreActiveFeedAnchorUntilStable({
+        channelId: activeChannelId,
+        restore: () => restoreChatFeedPrependedWindowPosition(messageScrollRef.current, scrollAnchor, previousLayout),
+        settled: () => !scrollAnchor || isChatFeedScrollAnchorRestored(messageScrollRef.current, scrollAnchor),
+        viewport,
       });
     } catch (error) {
       notify(error instanceof Error ? error.message : "加载更早消息失败");
@@ -1042,7 +1089,16 @@ export function useChatFeedState({
       olderLoadInFlightRef.current = false;
       setOlderMessagesLoading(false);
     }
-  }, [activeChannelId, hasOlderMessages, isLatestScrollPending, messages, notify, rememberActiveFeedScroll, runProgrammaticScroll, setFollowingLatest]);
+  }, [
+    activeChannelId,
+    hasOlderMessages,
+    isLatestScrollPending,
+    messages,
+    notify,
+    readViewportSnapshot,
+    restoreActiveFeedAnchorUntilStable,
+    setFollowingLatest,
+  ]);
 
   const handleMessageScroll = useCallback(() => {
     const result = handleLatestStickinessScroll();
