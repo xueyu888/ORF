@@ -24,6 +24,10 @@ import { useChallengeMobileViewport } from "./hooks/useChallengeMobileViewport";
 import { challengeLinkForTarget, parseChallengeTargetHash, type ChallengeUrlTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canDropItem } from "./model/challengeDragDrop";
+import {
+  defaultCollapsedObjectiveIdsForChallengeTree,
+  mergeNewDefaultCollapsedObjectiveIds,
+} from "./model/challengeDefaultCollapse";
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
 import {
   challengeCycleOptions,
@@ -308,6 +312,7 @@ export function ChallengePlanPage() {
   const peerReviewActionStatusUserIdRef = useRef<string | null>(null);
   const childCreationSubmissionSequenceRef = useRef(0);
   const completionOverlaySequenceRef = useRef(0);
+  const appliedDefaultCollapsedObjectiveIdsRef = useRef<Set<string>>(new Set());
   const titleEditOverlaySequenceRef = useRef(0);
   const handledObjectiveCreationEntryRef = useRef(false);
   const appliedLinkedTargetRef = useRef<string | null>(null);
@@ -517,6 +522,10 @@ export function ChallengePlanPage() {
     () => applyListItemAnchor(creationAnchoredGroups, objectiveInteractionAnchor, objectiveGroupId),
     [creationAnchoredGroups, objectiveInteractionAnchor],
   );
+  const defaultCollapsedObjectiveIds = useMemo(
+    () => defaultCollapsedObjectiveIdsForChallengeTree(displayedGroups),
+    [displayedGroups],
+  );
   const mobileFocusedGroup = useMemo(
     () => displayedGroups.find((group) => group.objective.id === mobileFocusedObjectiveId) ?? null,
     [displayedGroups, mobileFocusedObjectiveId],
@@ -543,6 +552,19 @@ export function ChallengePlanPage() {
     : showAll
       ? "当前还没有挑战内容。"
       : "当前没有与你的挑战目标相关的内容。";
+
+  useEffect(() => {
+    if (defaultCollapsedObjectiveIds.size === 0) return;
+    setCollapsedBountyIds((currentCollapsedIds) => {
+      const next = mergeNewDefaultCollapsedObjectiveIds({
+        appliedDefaultCollapsedIds: appliedDefaultCollapsedObjectiveIdsRef.current,
+        currentCollapsedIds,
+        defaultCollapsedIds: defaultCollapsedObjectiveIds,
+      });
+      appliedDefaultCollapsedObjectiveIdsRef.current = next.appliedDefaultCollapsedIds;
+      return next.collapsedIds;
+    });
+  }, [defaultCollapsedObjectiveIds]);
 
   useEffect(() => {
     if (!mobileViewport) {

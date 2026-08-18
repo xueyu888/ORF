@@ -117,7 +117,7 @@ currentUser.id in Objective.challengerUserIds
 | 提出指标 | 挑战者在自己参与目标的未过期重估期，点击目标行唯一主新增 `+`，在类型选择层选择提出指标后插入指标 temporary 行并进入标题编辑；提交后后端返回的真实指标进入一次性创建覆盖层并替换 temporary 行，挑战页刷新数据包含同一真实 id 后撤掉覆盖层；成功后不自动生成下一条指标 temporary 行 |
 | 编辑指标 | 指挥官可编辑未冻结目标下指标；挑战者可编辑自己参与目标的未过期重估期指标；指标标题和详情编辑复用同一个指标编辑权限判断，不能在组件内分散判断角色、挑战者窗口或冻结状态 |
 | 查看/编辑指标详情 | 单击指标行非控件区域选中指标并打开浮动 Inspector；Inspector 内编辑详情，保存调用 `PATCH /api/results/:resultId/details`，取消只丢弃临时草稿。切换到其他指标前如果当前详情未保存，Inspector 必须提供保存并切换、放弃修改、继续编辑三个明确选择。无权限或冻结后不进入编辑并提示同一套指标编辑不可用原因 |
-| 勾选指标完成 | 目标正式挑战者或指挥官可在 `reestimating/frozen/revisionRequired` 勾选或取消指标执行完成；`submitted` 表示正式验收快照已提交，`accepted/settled/closed` 只读。该操作调用 `PATCH /api/results/:resultId/execution-completion`，只写 `Result.executionCompleted` |
+| 勾选指标完成 | 目标正式挑战者或指挥官可在 `reestimating/frozen/submitted/revisionRequired` 勾选或取消指标执行完成；`submitted` 仍处于正式验收完成前，允许目标内成员补齐执行进度；`accepted/settled/closed` 只读。该操作调用 `PATCH /api/results/:resultId/execution-completion`，只写 `Result.executionCompleted` |
 | 编辑目标分数 | 仅指挥官可在目标行编辑正整数目标分数；候选、开放、申请、征召、重估、冻结、待验收阶段均可修改。目标进入 `accepted` 并打开最终匿名互评后锁分，页面只读展示 |
 | 新增任务 | 指挥官或正式挑战者点击目标行唯一主新增 `+`，在类型选择层选择新增行动项后插入行动项 temporary 行并进入标题编辑；提交后后端返回的真实任务进入一次性创建覆盖层并替换 temporary 行，挑战页刷新数据包含同一真实 id 后撤掉覆盖层；成功后不自动生成下一条行动项 temporary 行 |
 | 新增子任务 | 同一目标正式挑战者或指挥官点击任务行 `+` 后，在当前任务下插入子任务 temporary 行；提交后后端返回的真实子任务进入一次性创建覆盖层并替换 temporary 行，挑战页刷新数据包含同一真实 id 后撤掉覆盖层；成功后不自动生成下一条子任务 temporary 行 |
@@ -133,7 +133,7 @@ currentUser.id in Objective.challengerUserIds
 | 审核挑战申请 | 指挥官在目标行处理待审核申请；审批成功后立即刷新目标状态和申请记录，当前目标使用列表位置锚点保持原展示位置，直到用户离开当前目标上下文 |
 | 查看我的相关 | 普通成员在悬赏大厅 `我的相关` 分组追踪 pending、approved、declined 申请结果、待响应征召和已经参与的公开生命周期状态；未进入 `Objective.challengerUserIds` 的目标不能在本页编辑指标、行动项或提交战利品 |
 
-目标、指标和流程操作由 `permissionRules`、状态机和对应业务能力共同控制。目标内容只能由指挥官调整；目标基础分以 `Objective.objectiveBasePoints` 为唯一事实源，在 `settled` 前可由指挥官修改，`accepted` 最终匿名互评阶段仍可改，点击确认结算并进入 `settled` 后锁定。开始时间以 `Objective.acceptedAt` 为唯一事实源，只表示第一个挑战者正式接受或申请被批准的时间，前端只展示不编辑；冻结时间以 `Objective.confirmedAt` 为事实源，只表示当前冻结时间，冻结后重新重估时后端会清空，重新冻结后再写入；截止日期以 `Objective.finalDueAt` 为唯一事实源，指标行不展示也不保存独立截止日期。重估完成期限以 `Objective.confirmationDueAt` 为事实源，只用于重估中目标的期限展示、到期自动冻结和挑战者指标编辑窗口判断，不作为普通可编辑截止日期；目标仍处于 `reestimating` 且指挥官修改最终截止日期时，后端会重新返回同步后的 `confirmationDueAt`，前端只展示接口事实，不在页面内自行推导。冻结后指标口径默认锁定；挑战者只能在正式提交战利品前发起带理由的 `frozenReestimate` 对齐申请，指挥官审批时输入新的 `confirmationDueAt`，通过后目标回到现有 `reestimating` 权限链路。目标进入 `submitted` 后，正式战利品和 `lootSubmittedAt` 已成为验收事实，不再展示重新重估入口。指标可由指挥官编辑，挑战者只可在 `reestimating` 且未过 `confirmationDueAt` 时提出或编辑 `Objective.challengerUserIds` 包含自己的目标下的指标；指标执行完成勾选是独立能力，只读取目标生命周期和正式挑战者身份，不复用指标标题/详情编辑权限。行动项和子行动项不使用独立角色权限 key；候选目标允许指挥官先维护目标行动项，挑战者正式进入 `Objective.challengerUserIds` 后，任务和子任务的新增、编辑、勾选、移动、删除都按目标共同维护，不按 `assignee` 或创建人区分。
+目标、指标和流程操作由 `permissionRules`、状态机和对应业务能力共同控制。目标内容只能由指挥官调整；目标基础分以 `Objective.objectiveBasePoints` 为唯一事实源，在 `settled` 前可由指挥官修改，`accepted` 最终匿名互评阶段仍可改，点击确认结算并进入 `settled` 后锁定。开始时间以 `Objective.acceptedAt` 为唯一事实源，只表示第一个挑战者正式接受或申请被批准的时间，前端只展示不编辑；冻结时间以 `Objective.confirmedAt` 为事实源，只表示当前冻结时间，冻结后重新重估时后端会清空，重新冻结后再写入；截止日期以 `Objective.finalDueAt` 为唯一事实源，指标行不展示也不保存独立截止日期。重估完成期限以 `Objective.confirmationDueAt` 为事实源，只用于重估中目标的期限展示、到期自动冻结和挑战者指标编辑窗口判断，不作为普通可编辑截止日期；目标仍处于 `reestimating` 且指挥官修改最终截止日期时，后端会重新返回同步后的 `confirmationDueAt`，前端只展示接口事实，不在页面内自行推导。冻结后指标口径默认锁定；挑战者只能在正式提交战利品前发起带理由的 `frozenReestimate` 对齐申请，指挥官审批时输入新的 `confirmationDueAt`，通过后目标回到现有 `reestimating` 权限链路。目标进入 `submitted` 后，正式战利品和 `lootSubmittedAt` 已成为验收事实，不再展示重新重估入口，但正式验收尚未完成，目标内成员仍可补齐指标执行完成勾选。指标可由指挥官编辑，挑战者只可在 `reestimating` 且未过 `confirmationDueAt` 时提出或编辑 `Objective.challengerUserIds` 包含自己的目标下的指标；指标执行完成勾选是独立能力，只读取目标生命周期和正式挑战者身份，不复用指标标题/详情编辑权限。行动项和子行动项不使用独立角色权限 key；候选目标允许指挥官先维护目标行动项，挑战者正式进入 `Objective.challengerUserIds` 后，任务和子任务的新增、编辑、勾选、移动、删除都按目标共同维护，不按 `assignee` 或创建人区分。
 
 反馈入口和项目关联展示只消费反馈读模型。反馈生命周期、处理人、原始报告、优先级和关系操作由反馈页面根据服务端 `capabilities` 渲染；我的挑战页不复制反馈状态按钮权限，也不使用旧 `owner` 字段判断能否关闭或重新打开反馈。
 
@@ -147,6 +147,7 @@ currentUser.id in Objective.challengerUserIds
 - 目标行下方只读展示 `Objective.assignedChallengers` 中仍在等待响应的征召成员；它不进入挑战者头像栈，不改变目标归属、任务权限或结算参与者。
 - 项目标题作为目标面板外层分段标题展示，保持紧凑，不包裹成项目卡片；项目统计只显示该分组下目标、指标和行动项数量。
 - 目标排序统一为：候选中目标、未分配的待申请/待征召目标、已分配执行中的目标、待验收目标、已验收目标、已结算目标、已关闭目标。同一组内先按截止时间升序，再按创建日期降序；业务排序键相同则保留数据源顺序。目标标题不是列表排序键，避免用户编辑标题时改变当前目标位置。
+- 目标折叠状态只是挑战树的临时展示状态。首次进入工作台时，已验收、已结算和已关闭目标默认折叠；用户手动展开或折叠后，以当前会话选择为准。折叠状态不能写回 `Objective.flowStatus`，也不能影响筛选、排序、权限、进度或结算。
 - 操作上下文位置稳定性是挑战页列表展示不变量。后端事实源立即刷新；正在操作的目标通过短生命周期位置锚点保持当前展示位置；点击其他目标、切换范围、切换筛选、离开页面或目标不再属于当前视图时释放锚点并恢复统一排序。
 - 已有标题编辑使用短生命周期 `titleEditOverlay`，只覆盖目标、指标、行动项和子行动项的标题展示；它不是业务事实源，也不参与权限、排序、结算或生命周期判断。后端快照仍是唯一业务事实源，快照包含新标题或目标离开当前上下文后覆盖层撤销。
 - 指标详情以 `Result.detail` 为唯一事实源；`selectedMetricId` 只表示当前 Inspector 对象，Inspector 收起、拖拽偏移和待切换确认只是临时 UI 状态，编辑表单草稿也只是临时 UI 状态。详情不在指标行下渲染，不参与树线、行高、挑战树拖拽、排序、评论计数或积分结算；保存成功后由后端快照接管，失败时保留编辑态并提示。

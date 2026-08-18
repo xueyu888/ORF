@@ -331,6 +331,11 @@ function ObjectivePanel({
   const canCreateAction = !isDraftObjective && handlers.canMutateWorkItems(group.objective.id);
   const metricTemporaryRow = activeTemporaryChild?.kind === "metric" ? activeTemporaryChild : null;
   const actionTemporaryRow = activeTemporaryChild?.kind === "action" ? activeTemporaryChild : null;
+  const hasObjectiveChildren =
+    group.bounties.length > 0 ||
+    group.actions.length > 0 ||
+    Boolean(metricTemporaryRow || actionTemporaryRow);
+  const objectiveContentCollapsed = hasObjectiveChildren && handlers.collapsedBountyIds.has(group.objective.id) && !activeTemporaryChild;
   const challengerUserIdSet = new Set(objectiveChallengerUserIds(group.objective));
   const assignedChallengers = avatarStackPeople(group.objective.assignedChallengerProfiles, group.objective.assignedChallengers)
     .filter((person) => !person.userId || !challengerUserIdSet.has(person.userId));
@@ -412,6 +417,20 @@ function ObjectivePanel({
           if (handlers.activeActionId === actionId) handlers.onActiveActionChange(null);
         }}
       >
+        {hasObjectiveChildren && (
+          <DisclosureAction
+            actionId={actionId}
+            activeActionId={handlers.activeActionId}
+            className="absolute top-1/2 -translate-y-1/2"
+            expanded={!objectiveContentCollapsed}
+            label={objectiveContentCollapsed ? "展开目标内容" : "折叠目标内容"}
+            left={HIERARCHY_TREE_METRICS.disclosureLeftByDepth[1]}
+            onActiveActionChange={handlers.onActiveActionChange}
+            onOpenActionChange={handlers.onOpenActionChange}
+            onToggle={() => handlers.onToggleBounty(group.objective.id)}
+            openActionId={handlers.openActionId}
+          />
+        )}
         <ChallengeRowActions
           actionId={actionId}
           activeActionId={handlers.activeActionId}
@@ -589,44 +608,46 @@ function ObjectivePanel({
         </div>
       )}
 
-      <div className="orf-objective-body">
-        {group.bounties.map((bounty) => (
-          <MetricRow
-            key={bounty.result.id}
-            handlers={handlers}
-            parentAnchorId={anchorId}
-            row={{ bounty, persistence: "persisted" }}
-            scope={scope}
-          />
-        ))}
-        {metricTemporaryRow && (
-          <MetricRow
-            handlers={handlers}
-            parentAnchorId={anchorId}
-            row={{ persistence: "temporary", placeholderTitle: metricAddLabel ?? "新增指标", temporary: metricTemporaryRow }}
-            scope={scope}
-          />
-        )}
-        {(group.actions.length > 0 || actionTemporaryRow) && (
-          <div className="pb-2">
-            {group.actions.map((action) => (
-              <ActionRow
-                key={action.id}
-                handlers={handlers}
-                parentAnchorId={anchorId}
-                row={{ action, persistence: "persisted" }}
-              />
-            ))}
-            {actionTemporaryRow && (
-              <ActionRow
-                handlers={handlers}
-                parentAnchorId={anchorId}
-                row={{ persistence: "temporary", placeholderTitle: "新增行动项", temporary: actionTemporaryRow }}
-              />
-            )}
-          </div>
-        )}
-      </div>
+      {!objectiveContentCollapsed && (
+        <div className="orf-objective-body">
+          {group.bounties.map((bounty) => (
+            <MetricRow
+              key={bounty.result.id}
+              handlers={handlers}
+              parentAnchorId={anchorId}
+              row={{ bounty, persistence: "persisted" }}
+              scope={scope}
+            />
+          ))}
+          {metricTemporaryRow && (
+            <MetricRow
+              handlers={handlers}
+              parentAnchorId={anchorId}
+              row={{ persistence: "temporary", placeholderTitle: metricAddLabel ?? "新增指标", temporary: metricTemporaryRow }}
+              scope={scope}
+            />
+          )}
+          {(group.actions.length > 0 || actionTemporaryRow) && (
+            <div className="pb-2">
+              {group.actions.map((action) => (
+                <ActionRow
+                  key={action.id}
+                  handlers={handlers}
+                  parentAnchorId={anchorId}
+                  row={{ action, persistence: "persisted" }}
+                />
+              ))}
+              {actionTemporaryRow && (
+                <ActionRow
+                  handlers={handlers}
+                  parentAnchorId={anchorId}
+                  row={{ persistence: "temporary", placeholderTitle: "新增行动项", temporary: actionTemporaryRow }}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

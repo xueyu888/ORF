@@ -223,7 +223,7 @@ export const objectiveFlowPolicy = {
     canReinforceChallengers: false,
     canAcceptChallenge: false,
     canMutateResults: false,
-    canMutateMetricExecutionCompletion: false,
+    canMutateMetricExecutionCompletion: true,
     canMutateWorkItems: false,
     canMutateComments: true,
     canMutateCommentsAsChallenger: true,
