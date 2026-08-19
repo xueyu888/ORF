@@ -716,9 +716,9 @@ body:has(.orf-app-shell[data-bounty-hall="true"]) .orf-select-option:is(:hover, 
 
   .bounty-hall-page.orf-workbench-surface .bounty-command-header {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
-    gap: 6px;
+    gap: 8px;
   }
 
   .bounty-hall-page.orf-workbench-surface .bounty-hall-tabs {
@@ -740,6 +740,7 @@ body:has(.orf-app-shell[data-bounty-hall="true"]) .orf-select-option:is(:hover, 
     padding: 0 11px;
     font-size: 12px;
     font-weight: 650;
+    justify-self: end;
   }
 
   .bounty-mobile-filter-trigger svg {

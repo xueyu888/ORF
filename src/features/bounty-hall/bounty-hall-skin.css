@@ -1117,7 +1117,7 @@ button.bounty-result-preview-item:focus-visible {
   border: 1px solid var(--orf-accent);
   background: var(--orf-accent);
   box-shadow: 0 8px 18px color-mix(in srgb, var(--orf-accent) 18%, transparent);
-  color: var(--orf-topbar-primary-text, #ffffff);
+  color: var(--orf-on-accent);
   text-shadow: none;
 }
 

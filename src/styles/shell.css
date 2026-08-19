@@ -48,16 +48,45 @@
 }
 
 .orf-app-shell[data-resizing-shell-sidebar="true"] .orf-shell-sidebar-resize-handle {
-  background: var(--orf-accent);
+  background: transparent;
 }
 
 .orf-shell-sidebar-resize-handle {
   position: sticky;
   top: 0;
-  flex: 0 0 1px;
+  width: 16px;
+  min-width: 16px;
+  flex: 0 0 16px;
   align-self: flex-start;
+  margin-inline: -8px;
   height: 100vh;
   height: 100dvh;
+  background: transparent;
+}
+
+.orf-shell-sidebar-resize-handle::before {
+  display: none;
+}
+
+.orf-shell-sidebar-resize-handle::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--orf-border);
+  content: "";
+  transform: translateX(-50%);
+}
+
+.orf-shell-sidebar-resize-handle:is(:hover, :focus-visible) {
+  background: transparent;
+}
+
+.orf-app-shell[data-resizing-shell-sidebar="true"] .orf-shell-sidebar-resize-handle::after,
+.orf-shell-sidebar-resize-handle:is(:hover, :focus-visible)::after {
+  width: 2px;
+  background: var(--orf-accent);
 }
 
 .orf-app-shell[data-sidebar-collapsed="true"] .orf-shell-sidebar-resize-handle {
@@ -205,7 +234,7 @@
 .orf-topbar .orf-action-button-primary {
   border-color: var(--orf-topbar-primary-bg);
   background: var(--orf-topbar-primary-bg);
-  color: var(--orf-topbar-primary-text);
+  color: var(--orf-on-accent);
   box-shadow: none;
 }
 
@@ -330,7 +359,7 @@
   position: fixed;
   right: 20px;
   bottom: calc(var(--orf-mobile-bottom-nav-height, 0px) + 20px);
-  z-index: 80;
+  z-index: var(--orf-layer-transient);
   display: grid;
   width: min(360px, calc(100vw - 32px));
   gap: 8px;
@@ -356,7 +385,7 @@
   position: fixed;
   top: calc(var(--orf-topbar-height) + 16px);
   right: 20px;
-  z-index: 72;
+  z-index: var(--orf-layer-transient);
   display: grid;
   width: min(440px, calc(100vw - 40px));
   grid-template-columns: 34px minmax(0, 1fr);
@@ -506,7 +535,7 @@
 .orf-client-update-dialog-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 92;
+  z-index: calc(var(--orf-layer-dialog) + 2);
   display: grid;
   place-items: center;
   padding: 24px;
@@ -600,7 +629,7 @@
 .orf-client-update-center-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 91;
+  z-index: calc(var(--orf-layer-dialog) + 1);
   display: grid;
   place-items: center;
   padding: 24px;
@@ -760,7 +789,7 @@
 
 @media (max-width: 720px) {
 
-.orf-client-update-notice {
+  .orf-client-update-notice {
     grid-template-columns: 28px minmax(0, 1fr);
     align-items: start;
     gap: 9px;
@@ -865,7 +894,7 @@
     top: calc(var(--orf-topbar-height) + 10px);
     right: 12px;
     left: 12px;
-    z-index: 72;
+    z-index: var(--orf-layer-transient);
     width: auto;
     max-height: calc(
       100dvh - var(--orf-topbar-height) - var(--orf-mobile-bottom-nav-height) - 24px
@@ -1073,7 +1102,7 @@
   border: 2px solid var(--orf-sidebar-text);
   border-radius: 999px;
   background: var(--orf-danger-text);
-  color: var(--orf-topbar-primary-text);
+  color: var(--orf-on-accent);
   font-size: 10px;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
@@ -1140,7 +1169,7 @@
   border: 1px solid var(--orf-sidebar-text);
   border-radius: 999px;
   background: var(--orf-danger-text);
-  color: var(--orf-topbar-primary-text);
+  color: var(--orf-on-accent);
   font-size: 10px;
   font-weight: 900;
   line-height: 1;
@@ -1518,7 +1547,7 @@
     right: 0;
     bottom: 0;
     left: 0;
-    z-index: 70;
+    z-index: var(--orf-layer-navigation);
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 2px;
@@ -1565,7 +1594,7 @@
     border: 1px solid var(--orf-material-content-shine);
     border-radius: 999px;
     background: var(--orf-danger-text);
-    color: var(--orf-topbar-primary-text);
+  color: var(--orf-on-accent);
     font-size: 10px;
     font-weight: 800;
     line-height: 1;
@@ -1799,7 +1828,7 @@ html[data-orf-display-ready="true"] .orf-mobile-bottom-nav-item {
   }
 
 .orf-mobile-bottom-nav-item {
-    color: var(--orf-text-muted);
+    color: var(--orf-text-secondary);
   }
 
 .orf-mobile-bottom-nav-item.is-active {
@@ -1865,8 +1894,8 @@ html[data-orf-display-ready="true"] .orf-mobile-bottom-nav-item {
 }
 
 .orf-sidebar-toggle {
-  width: 30px;
-  height: 30px;
+  width: var(--orf-icon-target-size);
+  height: var(--orf-icon-target-size);
 }
 
 .orf-workbench-history-controls {

@@ -69,12 +69,12 @@ export function ChallengeRowActions({
 
   return (
     <div
-      className="orf-block-actions pointer-events-none absolute top-1/2 z-40 flex -translate-x-full -translate-y-1/2 items-center gap-px p-0.5 transition"
+      className="orf-block-actions pointer-events-none absolute top-1/2 flex -translate-x-full -translate-y-1/2 items-center gap-px p-0.5 transition"
       data-challenge-row-actions="true"
       data-open={open ? "true" : undefined}
       data-visible={visible ? "true" : undefined}
       onPointerEnter={() => onActiveActionChange(actionId)}
-      style={{ left, zIndex: open ? 100 : 40 }}
+      style={{ left }}
     >
       {resolvedAddActions.length > 0 && addButtonLabel ? (
         <div className="relative">
@@ -96,7 +96,7 @@ export function ChallengeRowActions({
             <Plus className="h-4 w-4" />
           </button>
           {addMenuOpen && (
-            <div className="orf-popover orf-block-menu pointer-events-auto absolute left-0 top-7 z-50 w-40 p-1" onPointerDown={(event) => event.stopPropagation()}>
+            <div className="orf-popover orf-block-menu pointer-events-auto absolute left-0 top-8 z-50 w-40 p-1" onPointerDown={(event) => event.stopPropagation()}>
               {resolvedAddActions.map((item) => (
                 <button
                   key={item.label}
@@ -140,7 +140,7 @@ export function ChallengeRowActions({
           <GripVertical className="h-4 w-4" />
         </button>
         {menuOpen && (
-          <div className="orf-popover orf-block-menu pointer-events-auto absolute left-0 top-7 z-50 w-40 p-1" onPointerDown={(event) => event.stopPropagation()}>
+          <div className="orf-popover orf-block-menu pointer-events-auto absolute left-0 top-8 z-50 w-40 p-1" onPointerDown={(event) => event.stopPropagation()}>
             {extraMenuItems?.map((item) => {
               const Icon = item.icon;
 

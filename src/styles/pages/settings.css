@@ -1734,38 +1734,33 @@
 @media (max-width: 900px) {
 
 .orf-skin-slot-rail {
-    display: flex;
+    display: grid;
     min-width: 0;
     max-width: 100%;
-    align-items: center;
-    gap: 12px;
-    overflow-x: auto;
+    align-items: stretch;
+    gap: 8px;
+    overflow: visible;
     border-right: 0;
     border-bottom: 1px solid var(--orf-border);
-    padding: 9px 12px;
-    scroll-padding-inline: 12px;
-    scrollbar-width: none;
-  }
-
-.orf-skin-slot-rail::-webkit-scrollbar {
-    display: none;
+    padding: 10px 12px 12px;
   }
 
 .orf-skin-slot-group {
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 5px;
+    display: grid;
+    min-width: 0;
+    grid-template-columns: 40px minmax(0, 1fr);
+    align-items: start;
+    gap: 7px;
   }
 
 .orf-skin-slot-group + .orf-skin-slot-group {
-    padding-left: 12px;
-    border-left: 1px solid var(--orf-border);
+    padding-top: 8px;
+    border-top: 1px solid var(--orf-border);
   }
 
 .orf-skin-slot-group-label {
-    padding: 0 3px 0 0;
-    color: var(--orf-text-faint);
+    padding: 12px 3px 0 0;
+    color: var(--orf-text-secondary);
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -1774,12 +1769,13 @@
 
 .orf-skin-slot-list {
     display: flex;
-    flex: 0 0 auto;
+    min-width: 0;
+    flex-wrap: wrap;
     gap: 4px;
   }
 
 .orf-skin-slot-button {
-    min-height: 34px;
+    min-height: var(--orf-touch-target-size);
     flex: 0 0 auto;
     padding-inline: 9px;
     white-space: nowrap;
@@ -1808,8 +1804,15 @@
   }
 
 .orf-skin-editor-actions {
+    display: grid;
     width: 100%;
-    justify-content: flex-start;
+    grid-template-columns: minmax(98px, 1.2fr) repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+.orf-skin-editor-actions .orf-action-button {
+    min-width: 0;
+    padding-inline: 10px;
   }
 
 .orf-skin-slot-button,
@@ -2672,7 +2675,7 @@ body:has(.orf-personal-settings-page) .orf-preference-switch {
 body:has(.orf-personal-settings-page) .orf-preference-switch:checked {
   border-color: color-mix(in srgb, var(--orf-accent) 72%, transparent);
   background:
-    radial-gradient(circle at calc(100% - 10px) 50%, var(--orf-topbar-primary-text) 0 7px, transparent 8px),
+    radial-gradient(circle at calc(100% - 10px) 50%, var(--orf-on-accent) 0 7px, transparent 8px),
     color-mix(in srgb, var(--orf-accent) 78%, var(--orf-material-content-control));
   box-shadow: 0 5px 14px color-mix(in srgb, var(--orf-accent) 19%, transparent);
 }

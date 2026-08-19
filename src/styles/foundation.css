@@ -447,7 +447,7 @@ button:disabled {
   top: 0;
   bottom: 0;
   left: 50%;
-  width: 12px;
+  width: 16px;
   content: "";
   transform: translateX(-50%);
 }
@@ -480,7 +480,7 @@ button:disabled {
 .orf-client-release-notes-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: var(--orf-layer-dialog);
   display: grid;
   place-items: center;
   padding: 24px;
@@ -1001,7 +1001,7 @@ body[data-dragging-floating="true"] {
 
 .orf-scope-tab-active {
   background: var(--orf-accent);
-  color: var(--orf-topbar-primary-text);
+  color: var(--orf-on-accent);
   box-shadow: var(--orf-material-content-shadow-soft);
   text-shadow: none;
 }
@@ -1141,7 +1141,7 @@ body[data-dragging-floating="true"] {
 
 .orf-avatar-stack-popover {
   position: fixed;
-  z-index: 150;
+  z-index: var(--orf-layer-popover);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
@@ -1838,7 +1838,7 @@ html[data-orf-display-contrast="high"] .orf-input {
 .orf-action-button-primary {
   border-color: color-mix(in srgb, var(--orf-accent) 72%, var(--orf-border));
   background: var(--orf-accent);
-  color: var(--orf-topbar-primary-text);
+  color: var(--orf-on-accent);
   box-shadow: 0 8px 20px color-mix(in srgb, var(--orf-accent) 20%, transparent);
 }
 
@@ -1873,7 +1873,7 @@ html[data-orf-display-contrast="high"] .orf-input {
 .orf-action-button-primary:hover:not(:disabled) {
   border-color: var(--orf-accent-hover);
   background: var(--orf-accent-hover);
-  color: var(--orf-topbar-primary-text);
+  color: var(--orf-on-accent);
 }
 
 .orf-action-button-primary:disabled,

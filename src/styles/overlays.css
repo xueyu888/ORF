@@ -2,7 +2,7 @@
 .orf-confirm-dialog-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 280;
+  z-index: var(--orf-layer-modal);
   display: grid;
   place-items: center;
   background: color-mix(in srgb, #020617 64%, transparent);

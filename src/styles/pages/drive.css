@@ -235,19 +235,24 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .orf-drive-collection-item strong {
   color: inherit;
   font-size: 12.5px;
   font-weight: 880;
+  white-space: nowrap;
 }
 
 .orf-drive-collection-item small {
+  display: -webkit-box;
   color: var(--orf-drive-text-muted);
   font-size: 10.5px;
   font-weight: 730;
+  line-height: 1.35;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .orf-drive-collection-item.is-active small,
@@ -1304,7 +1309,7 @@
 .orf-drive-file-preview-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 180;
+  z-index: var(--orf-layer-modal);
   display: grid;
   place-items: center;
   background: rgba(10, 18, 30, 0.54);

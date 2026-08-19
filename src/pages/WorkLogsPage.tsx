@@ -2646,10 +2646,8 @@ function workLogReportPopoverStyle(
   return {
     left,
     maxHeight,
-    position: "fixed",
     top,
     width,
-    zIndex: 70,
   };
 }
 

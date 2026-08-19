@@ -32,6 +32,6 @@ export function avatarColorForName(name: string) {
 export function avatarStyleForName(name: string) {
   return {
     backgroundColor: avatarColorForName(name),
-    color: "#ffffff",
+    color: designTokens.color.avatarText,
   };
 }

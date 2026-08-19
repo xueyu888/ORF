@@ -1358,7 +1358,7 @@ body:has(.orf-user-table-shell) .orf-user-table td:nth-child(6) {
 }
 
 .orf-user-dialog-backdrop {
-  z-index: 180;
+  z-index: var(--orf-layer-floating);
   display: grid;
   place-items: center;
   padding: 24px;
@@ -1483,12 +1483,18 @@ body:has(.orf-user-table-shell) .orf-user-table td:nth-child(6) {
 @media (max-width: 768px) {
 
 .orf-system-management-tabs {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 2px;
+    overflow: hidden;
   }
 
 .orf-system-management-tabs a {
+    min-width: 0;
     min-height: 44px;
-    flex: 0 0 auto;
+    justify-content: center;
+    padding-inline: 8px;
   }
 }
 

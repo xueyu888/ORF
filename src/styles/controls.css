@@ -56,7 +56,7 @@
 }
 
 .orf-select-menu-open {
-  z-index: 90;
+  z-index: var(--orf-layer-popover);
 }
 
 .orf-select-trigger {
@@ -147,7 +147,7 @@
 
 .orf-select-popover {
   position: fixed;
-  z-index: 150;
+  z-index: var(--orf-layer-popover);
   display: grid;
   min-width: 108px;
   max-width: min(340px, calc(100vw - 24px));
@@ -158,6 +158,8 @@
   color: var(--orf-text-primary);
   padding: 5px;
   box-shadow: var(--orf-material-content-shadow);
+  -webkit-backdrop-filter: blur(22px) saturate(1.12);
+  backdrop-filter: blur(22px) saturate(1.12);
 }
 
 .orf-select-popover-filter {
@@ -299,7 +301,7 @@
 }
 
 .orf-date-picker-open {
-  z-index: 90;
+  z-index: var(--orf-layer-popover);
 }
 
 .orf-date-trigger {
@@ -313,7 +315,7 @@
 
 .orf-date-popover {
   position: fixed;
-  z-index: 150;
+  z-index: var(--orf-layer-popover);
   width: 284px;
   max-width: calc(100vw - 24px);
   overflow-y: auto;
@@ -323,6 +325,8 @@
   color: var(--orf-text-primary);
   padding: 10px;
   box-shadow: var(--orf-material-content-shadow);
+  -webkit-backdrop-filter: blur(22px) saturate(1.12);
+  backdrop-filter: blur(22px) saturate(1.12);
 }
 
 .orf-date-header {
@@ -439,7 +443,7 @@
 .orf-date-day-selected:hover,
 .orf-date-day-selected:focus-visible {
   background: var(--orf-accent);
-  color: var(--orf-topbar-primary-text);
+  color: var(--orf-on-accent);
   box-shadow: none;
 }
 
@@ -1034,7 +1038,7 @@
 .orf-image-preview-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 180;
+  z-index: var(--orf-layer-floating);
   display: grid;
   min-width: 0;
   background: rgba(6, 10, 16, 0.86);
@@ -1567,8 +1571,8 @@
 
 .orf-rich-text-tool-button {
   display: inline-flex;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -1969,7 +1973,7 @@
   box-shadow:
     0 8px 18px color-mix(in srgb, var(--orf-accent) 22%, transparent),
     inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 48%, transparent);
-  color: var(--orf-topbar-primary-text);
+  color: var(--orf-on-accent);
   padding: 0;
 }
 
@@ -1990,7 +1994,7 @@
   box-shadow:
     0 10px 20px color-mix(in srgb, var(--orf-accent) 28%, transparent),
     inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 52%, transparent);
-  color: var(--orf-topbar-primary-text);
+  color: var(--orf-on-accent);
   transform: translateY(-1px);
 }
 
@@ -2420,9 +2424,14 @@ html[data-orf-display-contrast="high"] .orf-comment-message-row {
 }
 
 @media (max-width: 760px) {
+  .orf-rich-text-toolbar {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
   .orf-rich-text-tool-button {
-    width: 36px;
-    height: 36px;
+    width: var(--orf-touch-target-size);
+    height: var(--orf-touch-target-size);
   }
 
   .orf-comment-count-badge {

@@ -332,7 +332,7 @@
 
 .reports-source-tooltip {
   position: fixed;
-  z-index: 180;
+  z-index: var(--orf-layer-floating);
   display: grid;
   gap: 8px;
   border: 1px solid color-mix(in srgb, var(--reports-segment-color) 36%, var(--orf-material-content-hairline));

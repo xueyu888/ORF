@@ -484,7 +484,7 @@
   border-color: var(--orf-accent);
   background: var(--orf-accent);
   box-shadow: none;
-  color: var(--orf-topbar-primary-text);
+  color: var(--orf-on-accent);
   text-shadow: none;
   transform: none;
 }

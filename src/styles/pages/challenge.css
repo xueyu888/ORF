@@ -11,8 +11,18 @@
   border-radius: 50%;
 }
 
+.orf-block-action-button {
+  width: 32px;
+  height: 32px;
+}
+
 .orf-block-actions {
+  z-index: 40;
   opacity: 0;
+}
+
+.orf-block-actions[data-open="true"] {
+  z-index: var(--orf-layer-context-menu);
 }
 
 .orf-block-actions[data-visible="true"] {
@@ -238,7 +248,7 @@
 
 .orf-objective-project-menu {
   position: fixed;
-  z-index: 2200;
+  z-index: var(--orf-layer-context-menu);
   display: grid;
   width: min(260px, 82vw);
   max-width: calc(100vw - 24px);
@@ -742,7 +752,7 @@
 
 .orf-metric-inspector-panel {
   position: fixed;
-  z-index: 85;
+  z-index: var(--orf-layer-dialog);
   top: calc(var(--orf-topbar-height) + 16px);
   right: max(16px, var(--orf-page-padding-x));
   display: grid;
@@ -1350,8 +1360,8 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: var(--orf-icon-target-size);
+  height: var(--orf-icon-target-size);
   border: 0;
   border-radius: 50%;
   background: transparent;
@@ -2172,25 +2182,15 @@
     gap: 10px;
   }
 
-.orf-challenge-workbench .orf-block-action-button,
-  .orf-challenge-workbench .orf-metric-icon-button {
+.orf-challenge-workbench .orf-block-action-button {
     width: 36px;
     height: 36px;
   }
 
 .orf-challenge-workbench .orf-team-dashboard {
     display: grid;
-    grid-auto-columns: minmax(144px, 46vw);
-    grid-auto-flow: column;
-    grid-template-columns: none;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    scroll-snap-type: inline proximity;
-    scrollbar-width: none;
-  }
-
-.orf-challenge-workbench .orf-team-dashboard::-webkit-scrollbar {
-    display: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: hidden;
   }
 
 .orf-challenge-workbench .orf-dashboard-metric,
@@ -2198,7 +2198,6 @@
     min-height: 70px;
     grid-template-columns: 22px minmax(0, 1fr);
     grid-template-rows: auto 3px;
-    scroll-snap-align: start;
     border-top: 0;
     border-left: 1px solid var(--orf-border);
     padding: 10px 12px;
@@ -2206,6 +2205,14 @@
 
 .orf-challenge-workbench .orf-dashboard-metric:first-child {
     border-left: 0;
+  }
+
+.orf-challenge-workbench .orf-dashboard-metric:nth-child(3) {
+    border-left: 0;
+  }
+
+.orf-challenge-workbench .orf-dashboard-metric:nth-child(n + 3) {
+    border-top: 1px solid var(--orf-border);
   }
 
 .orf-challenge-workbench .orf-dashboard-emblem {
@@ -2243,23 +2250,22 @@
   }
 
 .orf-challenge-workbench .orf-task-toolbar-actions {
-    display: flex;
+    display: grid;
     width: 100%;
     min-width: 0;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    padding-bottom: 1px;
-    scrollbar-width: none;
-  }
-
-.orf-challenge-workbench .orf-task-toolbar-actions::-webkit-scrollbar {
-    display: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    overflow: visible;
   }
 
 .orf-challenge-workbench .orf-task-toolbar-actions > * {
-    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+  }
+
+.orf-challenge-workbench .orf-task-toolbar-actions .orf-select-trigger,
+  .orf-challenge-workbench .orf-task-toolbar-actions > .orf-action-button {
+    width: 100%;
   }
 
 .orf-challenge-workbench[data-mobile-objective-focus="true"] .orf-task-toolbar {
