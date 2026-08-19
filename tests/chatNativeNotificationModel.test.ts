@@ -37,6 +37,7 @@ const { windowsNotificationToastXml } = require("../clients/desktop/notification
     avatarAlt?: string;
     avatarImageUri?: string;
     body: string;
+    duration?: "long" | "short";
     title: string;
   }) => string;
 };
@@ -421,22 +422,34 @@ test("Windows Toast renderer uses one escaped circular sender-avatar contract", 
     avatarAlt: '吴<&"',
     avatarImageUri: "file:///C:/Temp/avatar&1.png",
     body: "正文 <待处理>",
+    duration: "long",
     title: "项目 & 沟通",
   });
+  assert.match(xml, /<toast duration="long" launch="orf-chat-notification\?targetPath=%2Fchat%2F1&amp;message=2">/);
   assert.match(xml, /placement="appLogoOverride"/);
   assert.match(xml, /hint-crop="circle"/);
   assert.match(xml, /src="file:\/\/\/C:\/Temp\/avatar&amp;1\.png"/);
   assert.match(xml, /alt="吴&lt;&amp;&quot;"/);
   assert.match(xml, /项目 &amp; 沟通/);
   assert.match(xml, /正文 &lt;待处理&gt;/);
-  assert.match(xml, /launch="orf-chat-notification\?targetPath=%2Fchat%2F1&amp;message=2"/);
 
   const withoutAvatar = windowsNotificationToastXml({
     activationArguments: "orf-attention-notification?targetPath=%2Ftasks",
     body: "提醒",
     title: "ORF",
   });
+  assert.match(withoutAvatar, /<toast launch="orf-attention-notification\?targetPath=%2Ftasks">/);
+  assert.doesNotMatch(withoutAvatar, /duration=/);
   assert.doesNotMatch(withoutAvatar, /<image /);
+});
+
+test("Win11 chat notifications use long Toast duration without changing attention Toast duration", () => {
+  const desktopMainSource = readFileSync(new URL("../clients/desktop/main.cjs", import.meta.url), "utf8");
+  const chatToastSource = desktopMainSource.match(/function windowsChatNotificationToastXml\(payload\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const attentionToastSource = desktopMainSource.match(/function windowsAttentionNotificationToastXml\(payload\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+  assert.match(chatToastSource, /duration:\s*"long"/);
+  assert.doesNotMatch(attentionToastSource, /duration:/);
 });
 
 test("app attention state treats only focused visible browser documents as actively viewed", () => {

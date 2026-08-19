@@ -264,7 +264,7 @@ type AttentionState = {
 7. 移动端底部导航只在 `AttentionState.count > 0` 时新增 `待办` 入口，不新增独立页面；点击进入最新待处理目标或个人系统通知，最新项是通知时先调用通知已读接口。
 8. 首次 SSE 连接、每次重连、网络恢复、窗口聚焦和页面重新可见都会进入同一个 `connectionEpoch` 对账链；未读汇总恢复后重新派生 `AttentionState`，桌面任务栏和托盘不依赖错过的瞬时事件继续保持旧状态。
 9. 恢复对账只刷新持久未读和注意力派生状态，不补弹已经错过的一次性 Toast；同一实时消息仍按 `messageId` 去重，避免连接抖动导致重复系统通知。
-10. 聊天和有用户触发人的系统 Toast 展示发送者头像；Windows 使用临时本地 PNG 生成圆形 `appLogoOverride`，其他桌面平台使用同一 PNG 作为通知 icon。Android 继续使用应用通知图标，因为现有本地通知插件的 `largeIcon` 契约只接受 Android drawable 资源，不另建一套头像缓存和下载链。
+10. 聊天和有用户触发人的系统 Toast 展示发送者头像；Windows 使用临时本地 PNG 生成圆形 `appLogoOverride`，其他桌面平台使用同一 PNG 作为通知 icon。Windows 聊天实时 Toast 使用系统 `long` 时长，普通注意力 Toast 保持系统默认时长；Android 继续使用应用通知图标，因为现有本地通知插件的 `largeIcon` 契约只接受 Android drawable 资源，不另建一套头像缓存和下载链。
 
 当前不做：
 

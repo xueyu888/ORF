@@ -1493,6 +1493,7 @@ function windowsChatNotificationToastXml(payload) {
     avatarAlt: payload.sender?.name,
     avatarImageUri: payload.avatarImageUri,
     body: payload.body,
+    duration: "long",
     title: payload.title,
   });
 }

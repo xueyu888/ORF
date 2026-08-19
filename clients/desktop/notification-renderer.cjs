@@ -2,8 +2,11 @@ function windowsNotificationToastXml(input) {
   const avatarImage = input.avatarImageUri
     ? `<image placement="appLogoOverride" src="${escapeXmlAttribute(input.avatarImageUri)}" alt="${escapeXmlAttribute(input.avatarAlt || input.title)}" hint-crop="circle"/>`
     : "";
+  const durationAttribute = input.duration === "long" || input.duration === "short"
+    ? ` duration="${input.duration}"`
+    : "";
   return [
-    `<toast launch="${escapeXmlAttribute(input.activationArguments)}">`,
+    `<toast${durationAttribute} launch="${escapeXmlAttribute(input.activationArguments)}">`,
     "<visual>",
     '<binding template="ToastGeneric">',
     avatarImage,
