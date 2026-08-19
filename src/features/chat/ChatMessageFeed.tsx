@@ -50,7 +50,6 @@ type ChatMessageFeedProps = {
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onScroll: () => void;
   onThread: (rootMessageId: string, options?: ChatOpenThreadOptions) => void;
-  pendingNewMessageCount: number;
   reactionPickerMessageId: string | null;
   reactionPickerSignal: number;
   renderMessageBody?: (message: ChatMessage) => string | null | undefined;
@@ -62,7 +61,7 @@ type ChatMessageFeedProps = {
 
 type MessageListProps = Omit<
   ChatMessageFeedProps,
-  "hasNewerMessages" | "loadingMessages" | "onLoadLatest" | "onScroll" | "pendingNewMessageCount" | "scrollRef"
+  "hasNewerMessages" | "loadingMessages" | "onLoadLatest" | "onScroll" | "scrollRef"
 >;
 
 export function ChatMessageFeed({
@@ -100,7 +99,6 @@ export function ChatMessageFeed({
   onSaveEdit,
   onScroll,
   onThread,
-  pendingNewMessageCount,
   reactionPickerMessageId,
   reactionPickerSignal,
   renderMessageBody,
@@ -159,13 +157,7 @@ export function ChatMessageFeed({
           usersById={usersById}
         />
       )}
-      {pendingNewMessageCount > 0 && (
-        <button className="orf-chat-scroll-latest" type="button" onClick={onLoadLatest}>
-          <ChevronDown className="h-4 w-4" />
-          {pendingNewMessageCount} 条新消息
-        </button>
-      )}
-      {hasNewerMessages && pendingNewMessageCount === 0 && (
+      {hasNewerMessages && (
         <button className="orf-chat-scroll-latest" type="button" onClick={onLoadLatest}>
           <ChevronDown className="h-4 w-4" />
           回到最新

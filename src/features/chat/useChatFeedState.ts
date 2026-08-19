@@ -131,7 +131,6 @@ export function useChatFeedState({
   const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
   const [hasNewerMessages, setHasNewerMessages] = useState(false);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
-  const [pendingNewMessageCount, setPendingNewMessageCount] = useState(0);
   const [attentionRestoreRevision, setAttentionRestoreRevision] = useState(0);
   const [viewportLayoutIntentRevision, setViewportLayoutIntentRevision] = useState(0);
   const [unreadAnchor, setUnreadAnchor] = useState<UnreadAnchor | null>(null);
@@ -204,7 +203,6 @@ export function useChatFeedState({
 
   const requestScrollToLatest = useCallback((behavior: ScrollBehavior = "smooth") => {
     requestLatestStickinessScroll(behavior);
-    setPendingNewMessageCount(0);
   }, [requestLatestStickinessScroll]);
 
   const cancelPendingAnchorLayoutRestore = useCallback(() => {
@@ -338,7 +336,6 @@ export function useChatFeedState({
     if (activeChannelIdRef.current === message.channelId) {
       setFeedChannelId(message.channelId);
       setHasNewerMessages(false);
-      setPendingNewMessageCount(0);
       setMessages((items) => {
         const current = feedCacheRef.current.get(message.channelId) ?? createFeedSnapshot({ messages: items });
         const snapshot = {
@@ -465,7 +462,6 @@ export function useChatFeedState({
     const currentSnapshot = feedCacheRef.current.get(channelId);
     const reconciliation = viewport.mode === "followingLatest"
       ? {
-          newMessageCount: 0,
           snapshot: replaceFeedMessages(currentSnapshot, latestMessages),
           visibleMessagesChanged: true,
         }
@@ -474,12 +470,10 @@ export function useChatFeedState({
     applySnapshotToActiveFeed(channelId, reconciliation.snapshot);
 
     if (viewport.mode === "followingLatest") {
-      setPendingNewMessageCount(0);
       requestScrollToLatest(behavior);
       return;
     }
 
-    setPendingNewMessageCount((count) => Math.max(count, reconciliation.newMessageCount));
     if (!reconciliation.visibleMessagesChanged || !scrollAnchor) return;
     restoreActiveFeedAnchorUntilStable({
       channelId,
@@ -499,7 +493,6 @@ export function useChatFeedState({
       if (previousSnapshot?.latestWindowMessages.length) {
         feedCacheRef.current.set(channelId, reconciledSnapshot);
         if (applySnapshotToActiveFeed(channelId, reconciledSnapshot)) {
-          setPendingNewMessageCount(0);
           setFollowingLatest(true);
           requestScrollToLatest(behavior);
         }
@@ -655,7 +648,6 @@ export function useChatFeedState({
     pendingUnreadScrollRef.current = openIntent.kind === "unread" ? { channelId, source: "channel-open" } : null;
     setFollowingLatest(openIntent.kind === "latest" && !shouldPreserveCachedWindow);
     setUnreadAnchor(anchor);
-    setPendingNewMessageCount(0);
     olderLoadInFlightRef.current = false;
     rememberChatLastChannel({
       channelId,
@@ -1106,7 +1098,6 @@ export function useChatFeedState({
       rememberActiveFeedScroll(activeChannelIdRef.current, { persistReadingPosition: true });
     }
     if (result.source === "ambient") return;
-    if (result.nearLatest) setPendingNewMessageCount(0);
     if (!isLatestScrollPending()) scheduleVisibleReadReceipt();
     if (
       result.source === "user" &&
@@ -1312,7 +1303,6 @@ export function useChatFeedState({
     markPendingMessageFailedInFeed,
     markPendingMessageSendingInFeed,
     olderMessagesLoading,
-    pendingNewMessageCount,
     prefetchChannelMessages,
     reconcileLatestMessagesPreservingPosition,
     removePendingMessageFromFeed,

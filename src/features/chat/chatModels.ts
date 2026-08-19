@@ -427,18 +427,9 @@ export function applyFeedMessage(snapshot: ChatFeedSnapshot | undefined, message
 }
 
 export type ChatFeedLatestReconciliation = {
-  newMessageCount: number;
   snapshot: ChatFeedSnapshot;
   visibleMessagesChanged: boolean;
 };
-
-function rootMessageIdSet(messages: readonly ChatMessage[]) {
-  return new Set(messages.filter((message) => !message.rootMessageId).map((message) => message.id));
-}
-
-function knownLatestRootMessageIdsForReconciliation(snapshot: ChatFeedSnapshot) {
-  return rootMessageIdSet(snapshot.latestWindowMessages.length ? snapshot.latestWindowMessages : snapshot.messages);
-}
 
 export function reconcileFeedLatestWindow(
   snapshot: ChatFeedSnapshot | undefined,
@@ -448,8 +439,6 @@ export function reconcileFeedLatestWindow(
   const current = snapshot ?? createFeedSnapshot();
   const currentIds = new Set(current.messages.map((message) => message.id));
   const latestRootMessages = latestMessages.filter((message) => !message.rootMessageId);
-  const knownLatestRootIds = knownLatestRootMessageIdsForReconciliation(current);
-  const newMessageCount = latestRootMessages.filter((message) => !knownLatestRootIds.has(message.id)).length;
   const windowsOverlap = latestRootMessages.some((message) => currentIds.has(message.id));
   const canMergeVisibleWindow =
     current.messages.length === 0 ||
@@ -459,7 +448,6 @@ export function reconcileFeedLatestWindow(
 
   if (!canMergeVisibleWindow) {
     return {
-      newMessageCount,
       snapshot: createFeedSnapshot({
         ...current,
         hasNewerMessages: true,
@@ -475,7 +463,6 @@ export function reconcileFeedLatestWindow(
   const merged = Array.from(byId.values()).sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   const trimmed = trimFeedWindow(merged, "newer");
   return {
-    newMessageCount,
     snapshot: createFeedSnapshot({
       ...current,
       hasNewerMessages: false,

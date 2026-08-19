@@ -227,6 +227,17 @@ test("chat feed latest prefetch skips channels whose opening target is first mai
   }), ["channel-thread-unread", "channel-read"]);
 });
 
+test("chat latest catch-up keeps unread numbers owned by server read state", () => {
+  const feedStateSource = readFileSync(new URL("../src/features/chat/useChatFeedState.ts", import.meta.url), "utf8");
+  const feedSource = readFileSync(new URL("../src/features/chat/ChatMessageFeed.tsx", import.meta.url), "utf8");
+  const modelSource = readFileSync(new URL("../src/features/chat/chatModels.ts", import.meta.url), "utf8");
+
+  assert.doesNotMatch(modelSource, /newMessageCount|knownLatestRootMessageIdsForReconciliation|rootMessageIdSet/);
+  assert.doesNotMatch(feedStateSource, /pendingNewMessageCount|setPendingNewMessageCount|newMessageCount/);
+  assert.doesNotMatch(feedSource, /pendingNewMessageCount|条新消息/);
+  assert.match(feedSource, /回到最新/);
+});
+
 test("message deep links revalidate cached feed and thread targets before location is consumed", () => {
   const pageSource = readFileSync(new URL("../src/pages/ChatPage.tsx", import.meta.url), "utf8");
   const feedStateSource = readFileSync(new URL("../src/features/chat/useChatFeedState.ts", import.meta.url), "utf8");

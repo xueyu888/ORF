@@ -550,7 +550,6 @@ export function ChatPage() {
     markPendingMessageFailedInFeed,
     markPendingMessageSendingInFeed,
     olderMessagesLoading,
-    pendingNewMessageCount,
     prefetchChannelMessages,
     reconcileLatestMessagesPreservingPosition,
     removePendingMessageFromFeed,
@@ -1392,7 +1391,6 @@ export function ChatPage() {
               onSaveEdit={handleEditMessage}
               onScroll={handleMessageScroll}
               onThread={openThread}
-              pendingNewMessageCount={pendingNewMessageCount}
               reactionPickerMessageId={reactionPickerRequest.messageId}
               reactionPickerSignal={reactionPickerRequest.signal}
               renderMessageBody={renderChatSystemMessageBody}

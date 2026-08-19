@@ -350,7 +350,7 @@ test("history feed reconciles latest data without replacing the visible reading 
 
   const reconciliation = reconcileFeedLatestWindow(historical, latest);
   assert.equal(reconciliation.visibleMessagesChanged, false);
-  assert.equal(reconciliation.newMessageCount, 2);
+  assert.equal(Object.hasOwn(reconciliation, "newMessageCount"), false);
   assert.deepEqual(reconciliation.snapshot.messages.map((item) => item.id), ["old-1"]);
   assert.deepEqual(reconciliation.snapshot.latestWindowMessages.map((item) => item.id), ["new-1", "new-2"]);
 
@@ -359,7 +359,7 @@ test("history feed reconciles latest data without replacing the visible reading 
   assert.equal(promoted?.hasNewerMessages, false);
 });
 
-test("history feed counts only unseen latest root messages after cached latest window reconciliation", () => {
+test("history feed caches latest window without deriving an unread-style count", () => {
   const cachedLatest = [
     message("known-1", "2026-07-11T02:00:00.000Z"),
     message("known-2", "2026-07-11T02:01:00.000Z"),
@@ -382,7 +382,7 @@ test("history feed counts only unseen latest root messages after cached latest w
 
   const reconciliation = reconcileFeedLatestWindow(historical, latest);
   assert.equal(reconciliation.visibleMessagesChanged, false);
-  assert.equal(reconciliation.newMessageCount, 1);
+  assert.equal(Object.hasOwn(reconciliation, "newMessageCount"), false);
   assert.deepEqual(reconciliation.snapshot.messages.map((item) => item.id), ["old-1"]);
   assert.deepEqual(reconciliation.snapshot.latestWindowMessages.map((item) => item.id), [
     "known-1",
@@ -403,7 +403,7 @@ test("latest feed merges recovered messages by message id without duplicates", (
   ]);
 
   assert.equal(reconciliation.visibleMessagesChanged, true);
-  assert.equal(reconciliation.newMessageCount, 1);
+  assert.equal(Object.hasOwn(reconciliation, "newMessageCount"), false);
   assert.deepEqual(reconciliation.snapshot.messages.map((item) => item.id), ["message-1", "message-2"]);
   assert.equal(reconciliation.snapshot.hasNewerMessages, false);
 });
