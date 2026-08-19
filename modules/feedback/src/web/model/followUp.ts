@@ -25,6 +25,13 @@ export function emptyFeedbackFollowUpDraft(): FeedbackFollowUpDraft {
   };
 }
 
+export function feedbackFollowUpDraftHasCommand(input: {
+  readonly draft: FeedbackFollowUpDraft;
+  readonly hasAssigneeChange: boolean;
+}) {
+  return input.hasAssigneeChange || input.draft.lifecycle !== "unchanged";
+}
+
 export type FeedbackFollowUpLifecycleOption = {
   readonly label: string;
   readonly value: FeedbackFollowUpLifecycleChoice;

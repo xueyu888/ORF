@@ -33,6 +33,10 @@ export {
 export {
   submitFeedbackFollowUp as submitFeedbackFollowUpForTesting,
 } from "../web/api";
+export {
+  emptyFeedbackFollowUpDraft,
+  feedbackFollowUpDraftHasCommand,
+} from "../web/model/followUp";
 
 export function feedbackEntityFixture(
   overrides: Partial<FeedbackEntitySnapshot> = {},

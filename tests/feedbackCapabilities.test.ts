@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { canCreateTeamFeedback } from "@orf/feedback-module/contracts";
 import {
+  emptyFeedbackFollowUpDraft,
+  feedbackFollowUpDraftHasCommand,
   submitFeedbackFollowUpForTesting,
 } from "@orf/feedback-module/testing";
 import type { OrfUser } from "../src/types/orf";
@@ -44,6 +47,27 @@ test("feedback follow-up sends comment, lifecycle, and assignee through one endp
     method: "POST",
     url: "/api/feedback/feedback%201/follow-ups",
   }]);
+});
+
+test("feedback follow-up command state is the single display fact for composer controls", () => {
+  const emptyDraft = emptyFeedbackFollowUpDraft();
+  assert.equal(feedbackFollowUpDraftHasCommand({ draft: emptyDraft, hasAssigneeChange: false }), false);
+  assert.equal(feedbackFollowUpDraftHasCommand({ draft: emptyDraft, hasAssigneeChange: true }), true);
+  assert.equal(
+    feedbackFollowUpDraftHasCommand({
+      draft: { ...emptyDraft, lifecycle: "submit_verification" },
+      hasAssigneeChange: false,
+    }),
+    true,
+  );
+
+  const pageSource = readFileSync(new URL("../modules/feedback/src/web/pages/FeedbackIssuePage.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../modules/feedback/src/web/feedback.css", import.meta.url), "utf8");
+
+  assert.match(pageSource, /feedbackFollowUpDraftHasCommand/);
+  assert.match(pageSource, /data-follow-up-command-active=\{hasFollowUpCommand \? "true" : "false"\}/);
+  assert.match(cssSource, /\[data-follow-up-command-active="true"\]/);
+  assert.match(cssSource, /:not\(\[data-follow-up-command-active="true"\]\):not\(:focus-within\):not\(:has\(\.orf-rich-text-editor-content:not\(:placeholder-shown\)\)\)/);
 });
 
 function user(input: Pick<OrfUser, "id" | "role"> & Partial<Pick<OrfUser, "status">>): OrfUser {

@@ -1056,11 +1056,15 @@
   transition: min-height 160ms ease;
 }
 
-.feedback-issue-composer:is(:focus-within, :has(.orf-rich-text-editor-content:not(:placeholder-shown))) .orf-rich-text-editor-content {
+.feedback-issue-composer:is(
+  [data-follow-up-command-active="true"],
+  :focus-within,
+  :has(.orf-rich-text-editor-content:not(:placeholder-shown))
+) .orf-rich-text-editor-content {
   min-height: 92px;
 }
 
-.feedback-issue-composer:not(:focus-within):not(:has(.orf-rich-text-editor-content:not(:placeholder-shown))) :is(
+.feedback-issue-composer:not([data-follow-up-command-active="true"]):not(:focus-within):not(:has(.orf-rich-text-editor-content:not(:placeholder-shown))) :is(
   .orf-rich-text-toolbar,
   .orf-rich-text-footer
 ) {

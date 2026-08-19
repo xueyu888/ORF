@@ -33,6 +33,7 @@ import {
 } from "../model/issue";
 import {
   emptyFeedbackFollowUpDraft,
+  feedbackFollowUpDraftHasCommand,
   feedbackFollowUpLifecycleOptions,
   feedbackFollowUpTransition,
 } from "../model/followUp";
@@ -282,6 +283,10 @@ export function FeedbackIssuePage() {
   const hasAssigneeChange = canChangeAssignee &&
     followUpDraft.assignee !== "unchanged" &&
     selectedAssigneeUserId !== (feedback.assigneeUserId ?? null);
+  const hasFollowUpCommand = feedbackFollowUpDraftHasCommand({
+    draft: followUpDraft,
+    hasAssigneeChange,
+  });
   const allowEmptyFollowUp = hasAssigneeChange || ["start", "accept_verification"].includes(followUpDraft.lifecycle);
 
   const handleSubmit = async (event: FormEvent) => {
@@ -521,7 +526,7 @@ export function FeedbackIssuePage() {
             })}
           </div>
 
-          <div className="feedback-issue-composer">
+          <div className="feedback-issue-composer" data-follow-up-command-active={hasFollowUpCommand ? "true" : "false"}>
             <CommentComposer
               allowEmptySubmit={allowEmptyFollowUp}
               currentMember={currentUser?.name ?? "User"}
