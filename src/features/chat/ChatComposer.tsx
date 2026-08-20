@@ -39,7 +39,8 @@ import {
   parseStoredDraft,
 } from "./chatModels";
 import { ChatDraftEditor } from "./ChatDraftEditor";
-import { ChatPollDesignPreview } from "./ChatPollDesignPreview";
+import { ChatPollComposer } from "./ChatPollComposer";
+import type { ChatPollCreateInput } from "./chatPollModel";
 
 type ChatComposerProps = {
   attachmentMaxBytes: number;
@@ -49,13 +50,13 @@ type ChatComposerProps = {
   focusSignal?: number;
   mentionableUsers: ChatUser[];
   onDraftStateChange?: (channelId: string, hasDraft: boolean) => void;
+  onCreatePoll?: (input: ChatPollCreateInput) => Promise<void>;
   onEditLatest?: () => void;
   onReactToLatest?: () => void;
   onReplyToLatest?: () => void;
   onSend: ChatSendHandler;
   onTyping?: (channelId: string) => void;
   parentMessageId?: string | null;
-  pollDesignPreviewEnabled?: boolean;
   rootMessageId?: string | null;
 };
 
@@ -67,12 +68,12 @@ export function ChatComposer({
   focusSignal,
   mentionableUsers,
   onDraftStateChange,
+  onCreatePoll,
   onEditLatest,
   onReactToLatest,
   onReplyToLatest,
   onSend,
   onTyping,
-  pollDesignPreviewEnabled = false,
   rootMessageId,
   parentMessageId,
 }: ChatComposerProps) {
@@ -81,7 +82,7 @@ export function ChatComposer({
   const [draggingFiles, setDraggingFiles] = useState(false);
   const [error, setError] = useState("");
   const [requireAcknowledgement, setRequireAcknowledgement] = useState(false);
-  const [pollDesignPreviewOpen, setPollDesignPreviewOpen] = useState(false);
+  const [pollComposerOpen, setPollComposerOpen] = useState(false);
   const uploading = hasUploadingDraftAttachments(attachmentItems);
   const failedUploads = failedDraftAttachmentCount(attachmentItems);
   const uploadedAttachments = uploadedDraftAttachments(attachmentItems);
@@ -150,8 +151,8 @@ export function ChatComposer({
   }, [rootMessageId]);
 
   useEffect(() => {
-    if (!pollDesignPreviewEnabled || rootMessageId) setPollDesignPreviewOpen(false);
-  }, [pollDesignPreviewEnabled, rootMessageId]);
+    if (!onCreatePoll || rootMessageId) setPollComposerOpen(false);
+  }, [onCreatePoll, rootMessageId]);
 
   useEffect(() => {
     attachmentItemsRef.current = attachmentItems;
@@ -359,7 +360,9 @@ export function ChatComposer({
         </div>
       )}
       {error && <div className="orf-chat-composer-error">{error}</div>}
-      {pollDesignPreviewOpen && <ChatPollDesignPreview onClose={() => setPollDesignPreviewOpen(false)} />}
+      {pollComposerOpen && onCreatePoll && (
+        <ChatPollComposer onClose={() => setPollComposerOpen(false)} onCreate={onCreatePoll} />
+      )}
       <ChatDraftEditor
         autoGrow
         className="orf-chat-composer-box"
@@ -395,15 +398,15 @@ export function ChatComposer({
                 <CheckCheck className="h-4 w-4" />
               </button>
             )}
-            {!rootMessageId && pollDesignPreviewEnabled && (
+            {!rootMessageId && onCreatePoll && (
               <button
                 type="button"
-                className={clsx("orf-rich-text-tool-button", pollDesignPreviewOpen && "orf-rich-text-tool-button-active")}
+                className={clsx("orf-rich-text-tool-button", pollComposerOpen && "orf-rich-text-tool-button-active")}
                 onMouseDown={(event) => event.preventDefault()}
-                onClick={() => setPollDesignPreviewOpen((open) => !open)}
-                title={pollDesignPreviewOpen ? "关闭投票界面预览" : "创建投票（界面预览）"}
-                aria-label={pollDesignPreviewOpen ? "关闭投票界面预览" : "创建投票（界面预览）"}
-                aria-pressed={pollDesignPreviewOpen}
+                onClick={() => setPollComposerOpen((open) => !open)}
+                title={pollComposerOpen ? "关闭创建投票" : "创建投票"}
+                aria-label={pollComposerOpen ? "关闭创建投票" : "创建投票"}
+                aria-pressed={pollComposerOpen}
               >
                 <BarChart3 className="h-4 w-4" />
               </button>

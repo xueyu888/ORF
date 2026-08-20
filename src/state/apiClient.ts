@@ -6,6 +6,8 @@ import type {
   ChatChannelType,
   ChatMessageContext,
   ChatMessage,
+  ChatPollSelectionMode,
+  ChatPollVisibility,
   ChatSearchResult,
   ChatThread,
   ChatThreadSummary,
@@ -819,6 +821,42 @@ export async function sendChatMessageRequest(input: {
       rootMessageId: input.rootMessageId ?? null,
     }),
   });
+}
+
+export async function createChatPollRequest(input: {
+  channelId: string;
+  options: string[];
+  question: string;
+  selectionMode: ChatPollSelectionMode;
+  visibility: ChatPollVisibility;
+}) {
+  return apiJson<ChatMessageResponse & ChatChannelResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/polls`, {
+    method: "POST",
+    body: JSON.stringify({
+      options: input.options,
+      question: input.question,
+      selectionMode: input.selectionMode,
+      visibility: input.visibility,
+    }),
+  });
+}
+
+export async function setChatPollVoteRequest(input: {
+  channelId: string;
+  messageId: string;
+  optionIds: string[];
+}) {
+  return apiJson<ChatMessageResponse & ChatChannelResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/messages/${encodeURIComponent(input.messageId)}/poll/vote`,
+    { method: "PUT", body: JSON.stringify({ optionIds: input.optionIds }) },
+  );
+}
+
+export async function closeChatPollRequest(input: { channelId: string; messageId: string }) {
+  return apiJson<ChatMessageResponse & ChatChannelResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/messages/${encodeURIComponent(input.messageId)}/poll/close`,
+    { method: "POST" },
+  );
 }
 
 export async function updateChatMessageRequest(input: { body: string; channelId: string; messageId: string }) {

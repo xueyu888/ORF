@@ -93,7 +93,7 @@ export async function publishChatMessageCreatedRealtime(input: {
 }
 
 export function publishChatMessageMutationRealtime(input: {
-  actorUserId: string;
+  actorUserId: string | null;
   channelId: string;
   eventCreatedAt?: string;
   eventId?: string;

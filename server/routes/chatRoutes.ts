@@ -14,6 +14,7 @@ import {
   createChatChannel,
   createDirectChannel,
   deleteChatMessage,
+  endChatPoll,
   getChatAttachmentContent,
   getChatBootstrap,
   getChatMessageContext,
@@ -36,6 +37,7 @@ import {
   sendChatMessage,
   setChatMessagePin,
   setChatMessageSaved,
+  setChatPollVote,
   setChatThreadFollow,
   updateChatChannel,
   updateChatMessage,
@@ -101,6 +103,17 @@ const sendMessageBodySchema = z.object({
   parentMessageId: z.string().min(1).nullable().optional(),
   attachmentIds: z.array(z.string().min(1)).max(20).optional(),
   requireAcknowledgement: z.boolean().optional(),
+});
+
+const createPollBodySchema = z.object({
+  question: z.string().trim().min(1).max(280),
+  options: z.array(z.string().trim().min(1).max(80)).min(2).max(8),
+  selectionMode: z.enum(["single", "multiple"]),
+  visibility: z.enum(["named", "anonymous"]),
+});
+
+const pollVoteBodySchema = z.object({
+  optionIds: z.array(z.string().trim().min(1)).min(1).max(8),
 });
 
 const updateMessageBodySchema = z.object({
@@ -376,6 +389,22 @@ export function registerChatRoutes(app: FastifyInstance) {
     return sendOutcome(reply, await sendChatMessage({ ...body, channelId: params.channelId }, actor));
   });
 
+  app.post("/api/chat/channels/:channelId/polls", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const params = channelIdParamsSchema.parse(request.params);
+    const body = createPollBodySchema.parse(request.body);
+    return sendOutcome(reply, await sendChatMessage({
+      body: body.question,
+      channelId: params.channelId,
+      poll: {
+        options: body.options,
+        selectionMode: body.selectionMode,
+        visibility: body.visibility,
+      },
+    }, actor));
+  });
+
   app.get("/api/chat/channels/:channelId/messages/:messageId/context", async (request, reply) => {
     const actor = await chatActorFromRequest(request, reply);
     if (!actor) return reply;
@@ -397,6 +426,21 @@ export function registerChatRoutes(app: FastifyInstance) {
     if (!actor) return reply;
     const params = messageParamsSchema.parse(request.params);
     return sendOutcome(reply, await requestChatMessageAcknowledgement(params, actor));
+  });
+
+  app.put("/api/chat/channels/:channelId/messages/:messageId/poll/vote", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const params = messageParamsSchema.parse(request.params);
+    const body = pollVoteBodySchema.parse(request.body);
+    return sendOutcome(reply, await setChatPollVote({ ...params, optionIds: body.optionIds }, actor));
+  });
+
+  app.post("/api/chat/channels/:channelId/messages/:messageId/poll/close", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const params = messageParamsSchema.parse(request.params);
+    return sendOutcome(reply, await endChatPoll(params, actor));
   });
 
   app.delete("/api/chat/channels/:channelId/messages/:messageId", async (request, reply) => {

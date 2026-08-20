@@ -2,17 +2,18 @@ import { clsx } from "clsx";
 import { ListFilter, UserRound, UsersRound, X } from "lucide-react";
 import { useState } from "react";
 import { IconButton } from "../../components/ui";
-import type { ChatPollPreviewOption, ChatPollPreviewParticipant } from "./chatPollPreviewModel";
+import type { ChatPollOption, ChatPollParticipant } from "../../types/orf";
 
-type ChatPollDetailsPreviewProps = {
+type ChatPollDetailsProps = {
+  currentUserId?: string;
   onClose: () => void;
-  options: readonly ChatPollPreviewOption[];
-  participants: readonly ChatPollPreviewParticipant[];
+  options: readonly ChatPollOption[];
+  participants: readonly ChatPollParticipant[];
 };
 
 type ChatPollDetailsView = "option" | "participant";
 
-export function ChatPollDetailsPreview({ onClose, options, participants }: ChatPollDetailsPreviewProps) {
+export function ChatPollDetails({ currentUserId, onClose, options, participants }: ChatPollDetailsProps) {
   const [view, setView] = useState<ChatPollDetailsView>("option");
   const optionLabels = new Map(options.map((option) => [option.id, option.label]));
 
@@ -27,22 +28,10 @@ export function ChatPollDetailsPreview({ onClose, options, participants }: ChatP
       </header>
 
       <div className="orf-chat-poll-details-tabs" role="tablist" aria-label="投票明细查看方式">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === "option"}
-          className={clsx(view === "option" && "is-active")}
-          onClick={() => setView("option")}
-        >
+        <button type="button" role="tab" aria-selected={view === "option"} className={clsx(view === "option" && "is-active")} onClick={() => setView("option")}>
           <ListFilter className="h-3.5 w-3.5" /> 按选项
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === "participant"}
-          className={clsx(view === "participant" && "is-active")}
-          onClick={() => setView("participant")}
-        >
+        <button type="button" role="tab" aria-selected={view === "participant"} className={clsx(view === "participant" && "is-active")} onClick={() => setView("participant")}>
           <UsersRound className="h-3.5 w-3.5" /> 按参与人
         </button>
       </div>
@@ -56,11 +45,9 @@ export function ChatPollDetailsPreview({ onClose, options, participants }: ChatP
                 <header><strong>{option.label}</strong><span>{voters.length} 票</span></header>
                 {voters.length > 0 ? (
                   <div className="orf-chat-poll-voter-list">
-                    {voters.map((participant) => <ParticipantIdentity key={participant.id} participant={participant} />)}
+                    {voters.map((participant) => <ParticipantIdentity currentUserId={currentUserId} key={participant.userId} participant={participant} />)}
                   </div>
-                ) : (
-                  <span className="orf-chat-poll-detail-empty">暂无投票</span>
-                )}
+                ) : <span className="orf-chat-poll-detail-empty">暂无投票</span>}
               </article>
             );
           })}
@@ -68,8 +55,8 @@ export function ChatPollDetailsPreview({ onClose, options, participants }: ChatP
       ) : (
         <div className="orf-chat-poll-participant-list" role="tabpanel">
           {participants.map((participant) => (
-            <article className="orf-chat-poll-participant-row" key={participant.id}>
-              <ParticipantIdentity participant={participant} />
+            <article className="orf-chat-poll-participant-row" key={participant.userId}>
+              <ParticipantIdentity currentUserId={currentUserId} participant={participant} />
               <span>{participant.optionIds.map((optionId) => optionLabels.get(optionId)).filter(Boolean).join("、")}</span>
             </article>
           ))}
@@ -79,11 +66,14 @@ export function ChatPollDetailsPreview({ onClose, options, participants }: ChatP
   );
 }
 
-function ParticipantIdentity({ participant }: { participant: ChatPollPreviewParticipant }) {
+function ParticipantIdentity({ currentUserId, participant }: { currentUserId?: string; participant: ChatPollParticipant }) {
+  const current = participant.userId === currentUserId;
   return (
-    <span className={clsx("orf-chat-poll-participant", participant.isCurrentUser && "is-current-user")}>
-      <span aria-hidden="true">{participant.isCurrentUser ? <UserRound className="h-3.5 w-3.5" /> : participant.avatarLabel}</span>
-      <strong>{participant.name}</strong>
+    <span className={clsx("orf-chat-poll-participant", current && "is-current-user")}>
+      <span aria-hidden="true">
+        {current ? <UserRound className="h-3.5 w-3.5" /> : participant.avatarUrl ? <img alt="" src={participant.avatarUrl} /> : participant.name.slice(0, 1)}
+      </span>
+      <strong>{current ? `${participant.name}（你）` : participant.name}</strong>
     </span>
   );
 }

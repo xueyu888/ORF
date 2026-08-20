@@ -11,6 +11,8 @@ import type {
   ChatMessageAcknowledgement,
   ChatMessageSource,
   ChatMessageSystemMetadata,
+  ChatPollSelectionMode,
+  ChatPollVisibility,
   ChatReaction,
   ChatSearchResult,
   ChatThread,
@@ -32,6 +34,13 @@ import {
 } from "../chat/chatPushDeliveryOutbox";
 import { wakeChatPushDeliveryWorker } from "../chat/chatPushDeliveryWorker";
 import { publishChatMessageCreatedRealtime, publishChatMessageMutationRealtime } from "../chat/chatMessageRealtime";
+import {
+  closeChatPoll,
+  insertChatPollRows,
+  loadChatPolls,
+  replaceChatPollVote,
+} from "../chat/chatPollRepository";
+import { normalizeChatPollDraft } from "../chat/chatPollModel";
 import { chatUnreadMessageFactsSql } from "../chat/chatUnreadSql";
 import { publishChatChannelRealtime } from "../chat/chatChannelRealtime";
 import {
@@ -881,10 +890,11 @@ async function loadMessageCollections(messageIds: string[], actor: ChatActor) {
 async function buildMessages(rows: MessageRow[], actor: ChatActor): Promise<ChatMessage[]> {
   const messageIds = rows.map((row) => row.id);
   const rootIds = rows.filter((row) => row.root_message_id === null).map((row) => row.id);
-  const [attachmentsByMessage, reactionsByMessage, acknowledgementByMessage, replySummaries, collectionsByMessage] = await Promise.all([
+  const [attachmentsByMessage, reactionsByMessage, acknowledgementByMessage, pollsByMessage, replySummaries, collectionsByMessage] = await Promise.all([
     loadAttachments(messageIds),
     loadReactions(messageIds, actor),
     loadAcknowledgements(messageIds, actor),
+    loadChatPolls(messageIds, actor.id),
     loadReplySummaries(rootIds),
     loadMessageCollections(messageIds, actor),
   ]);
@@ -921,6 +931,7 @@ async function buildMessages(rows: MessageRow[], actor: ChatActor): Promise<Chat
       attachments: deleted ? [] : attachmentsByMessage.get(row.id) ?? [],
       reactions: deleted ? [] : reactionsByMessage.get(row.id) ?? [],
       acknowledgement: deleted ? null : acknowledgementByMessage.get(row.id) ?? null,
+      poll: deleted ? null : pollsByMessage.get(row.id) ?? null,
     };
   });
 }
@@ -2230,6 +2241,11 @@ export async function sendChatMessage(
     channelId: string;
     createdAt?: string;
     parentMessageId?: string | null;
+    poll?: {
+      options: string[];
+      selectionMode: ChatPollSelectionMode;
+      visibility: ChatPollVisibility;
+    };
     requireAcknowledgement?: boolean;
     rootMessageId?: string | null;
     source?: ChatMessageSource;
@@ -2241,6 +2257,16 @@ export async function sendChatMessage(
   const body = input.body.trim();
   const attachmentIds = Array.from(new Set((input.attachmentIds ?? []).filter(Boolean)));
   if (!body && attachmentIds.length === 0) return { status: "invalid" };
+  const poll = input.poll ? normalizeChatPollDraft(input.poll) : null;
+  if (input.poll && !poll) return { status: "invalid" };
+  if (poll && (
+    body.length > 280 ||
+    attachmentIds.length > 0 ||
+    input.requireAcknowledgement ||
+    input.rootMessageId ||
+    input.parentMessageId ||
+    (input.source && input.source !== "user")
+  )) return { status: "invalid" };
   const channel = await getVisibleChannel(actor, input.channelId);
   if (!channel) return { status: "notFound" };
   if (channel.archivedAt) return { status: "forbidden" };
@@ -2312,6 +2338,9 @@ export async function sendChatMessage(
       `,
       [messageId, teamId, input.channelId, actor.id, source, JSON.stringify(systemMetadata), body, rootMessageId, parentMessageId, now],
     );
+    if (poll) {
+      await insertChatPollRows(client, { createdAt: now, draft: poll, messageId });
+    }
     if (attachmentIds.length > 0) {
       await client.query(
         `
@@ -2371,6 +2400,59 @@ export async function sendChatMessage(
   void publishChatMessageCreatedRealtime({ channel: updatedChannel, message, teamId }).catch(() => undefined);
   wakeChatPushDeliveryWorker();
   return ok({ channel: updatedChannel, message });
+}
+
+async function chatPollMutationResponse(
+  input: { channelId: string; messageId: string },
+  actor: ChatActor,
+  mutation: Awaited<ReturnType<typeof replaceChatPollVote>>,
+): Promise<Outcome<{ channel: ChatChannel; message: ChatMessage }>> {
+  if (mutation.status !== "ok") return mutation;
+  const [message, channel, recipientUserIds] = await Promise.all([
+    getMessageById(actor, input.messageId),
+    getVisibleChannel(actor, input.channelId),
+    getChannelRecipientIds(storageTeamId(actor), input.channelId),
+  ]);
+  if (!message || !channel) return { status: "notFound" };
+  publishChatMessageMutationRealtime({
+    actorUserId: mutation.visibility === "anonymous" ? null : actor.id,
+    channelId: input.channelId,
+    eventType: "message.updated",
+    messageId: input.messageId,
+    recipientUserIds,
+    rootMessageId: mutation.rootMessageId,
+    teamId: storageTeamId(actor),
+  });
+  return ok({ channel, message });
+}
+
+export async function setChatPollVote(
+  input: { channelId: string; messageId: string; optionIds: string[] },
+  actor: ChatActor,
+): Promise<Outcome<{ channel: ChatChannel; message: ChatMessage }>> {
+  if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
+  const mutation = await replaceChatPollVote({
+    actorUserId: actor.id,
+    channelId: input.channelId,
+    messageId: input.messageId,
+    optionIds: input.optionIds,
+    teamId: storageTeamId(actor),
+  });
+  return chatPollMutationResponse(input, actor, mutation);
+}
+
+export async function endChatPoll(
+  input: { channelId: string; messageId: string },
+  actor: ChatActor,
+): Promise<Outcome<{ channel: ChatChannel; message: ChatMessage }>> {
+  if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
+  const mutation = await closeChatPoll({
+    actorUserId: actor.id,
+    channelId: input.channelId,
+    messageId: input.messageId,
+    teamId: storageTeamId(actor),
+  });
+  return chatPollMutationResponse(input, actor, mutation);
 }
 
 export async function requestChatMessageAcknowledgement(

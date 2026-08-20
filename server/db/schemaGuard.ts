@@ -831,6 +831,46 @@ export function validateChatSyncEventSchema(snapshot: {
   return errors;
 }
 
+export function validateChatPollSchema(snapshot: {
+  columns: RuntimeTableColumn[];
+  constraints: RuntimeSchemaConstraint[];
+}) {
+  const columnsByTable = snapshot.columns.reduce((map, column) => {
+    const columns = map.get(column.tableName) ?? new Map<string, RuntimeTableColumn>();
+    columns.set(column.columnName, column);
+    map.set(column.tableName, columns);
+    return map;
+  }, new Map<string, Map<string, RuntimeTableColumn>>());
+  const errors: string[] = [];
+  const requiredColumns: Record<string, string[]> = {
+    chat_polls: ["message_id", "selection_mode", "visibility", "created_at", "updated_at"],
+    chat_poll_options: ["id", "poll_message_id", "label", "position"],
+    chat_poll_votes: ["poll_message_id", "option_id", "voter_user_id", "created_at", "updated_at"],
+  };
+  for (const [tableName, columnNames] of Object.entries(requiredColumns)) {
+    const columns = columnsByTable.get(tableName) ?? new Map();
+    for (const columnName of columnNames) {
+      const column = columns.get(columnName);
+      if (!column) errors.push(`${tableName}.${columnName} is missing.`);
+      else if (column.isNullable !== "NO") errors.push(`${tableName}.${columnName} must be NOT NULL.`);
+    }
+  }
+  const pollColumns = columnsByTable.get("chat_polls") ?? new Map();
+  for (const columnName of ["closed_at", "closed_by_user_id"]) {
+    if (!pollColumns.has(columnName)) errors.push(`chat_polls.${columnName} is missing.`);
+  }
+  for (const constraintName of [
+    "chat_polls_selection_mode_check",
+    "chat_polls_visibility_check",
+    "chat_poll_votes_poll_option_fk",
+  ]) {
+    if (!snapshot.constraints.some((constraint) => constraint.constraintName === constraintName)) {
+      errors.push(`${constraintName} is missing.`);
+    }
+  }
+  return errors;
+}
+
 export async function assertRuntimeDatabaseSchema() {
   const { pool: runtimePool } = await import("./client");
   const schemaClient = await runtimePool.connect();
@@ -870,6 +910,8 @@ export async function assertRuntimeDatabaseSchema() {
     clientUpdateReceiptColumnsResult,
     chatSyncEventColumnsResult,
     chatSyncEventConstraintsResult,
+    chatPollColumnsResult,
+    chatPollConstraintsResult,
   ] = await Promise.all([
     pool.query<RuntimeSchemaColumn>(
       `
@@ -1195,6 +1237,24 @@ export async function assertRuntimeDatabaseSchema() {
           and con.contype = 'c'
       `,
     ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select table_name as "tableName", column_name as "columnName", is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name in ('chat_polls', 'chat_poll_options', 'chat_poll_votes')
+      `,
+    ),
+    pool.query<RuntimeSchemaConstraint>(
+      `
+        select con.conname as "constraintName", pg_get_constraintdef(con.oid) as "definition"
+        from pg_constraint con
+        join pg_class rel on rel.oid = con.conrelid
+        join pg_namespace nsp on nsp.oid = rel.relnamespace
+        where nsp.nspname = current_schema()
+          and rel.relname in ('chat_polls', 'chat_poll_options', 'chat_poll_votes')
+      `,
+    ),
   ]);
   const commentTargetTypeResult = await pool.query<{ label: string }>(
     `
@@ -1276,6 +1336,10 @@ export async function assertRuntimeDatabaseSchema() {
     ...validateChatSyncEventSchema({
       columns: chatSyncEventColumnsResult.rows,
       constraints: chatSyncEventConstraintsResult.rows,
+    }),
+    ...validateChatPollSchema({
+      columns: chatPollColumnsResult.rows,
+      constraints: chatPollConstraintsResult.rows,
     }),
   ];
 

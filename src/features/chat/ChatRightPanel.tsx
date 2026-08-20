@@ -48,6 +48,8 @@ type ChatRightPanelProps = {
   onOpenResult: (result: ChatSearchResult) => void;
   onOpenThreadSummary: (summary: ChatThreadSummary) => void;
   onPin: (message: ChatMessage) => void;
+  onPollClose: (message: ChatMessage) => Promise<void>;
+  onPollVote: (message: ChatMessage, optionIds: string[]) => Promise<void>;
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onRemovePending: (message: ChatMessage) => void;
   onRequestAcknowledgement: (message: ChatMessage) => void;
@@ -123,6 +125,8 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
             onEdit={props.onEdit}
             onMarkUnread={props.onMarkUnread}
             onPin={props.onPin}
+            onPollClose={props.onPollClose}
+            onPollVote={props.onPollVote}
             onReaction={props.onReaction}
             onRemovePending={props.onRemovePending}
             onRequestAcknowledgement={props.onRequestAcknowledgement}

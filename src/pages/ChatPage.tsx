@@ -3,6 +3,7 @@ import { MessageSquareText, RefreshCw } from "lucide-react";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
+import type { ChatPollCreateInput } from "../features/chat/chatPollModel";
 import { Button } from "../components/ui";
 import { AttachmentPreview, ChannelModal, ConversationModal, DeleteMessageDialog } from "../features/chat/ChatDialogs";
 import { ChatHeader } from "../features/chat/ChatHeader";
@@ -62,12 +63,15 @@ import { useRealtimeReconciliation } from "../features/realtime/useRealtimeRecon
 import {
   addChatChannelMembersRequest,
   archiveChatChannelRequest,
+  closeChatPollRequest,
+  createChatPollRequest,
   createChatChannel,
   deleteChatMessageRequest,
   openChatConversation,
   removeChatChannelMemberRequest,
   requestChatMessageAcknowledgementRequest,
   sendChatMessageRequest,
+  setChatPollVoteRequest,
   setChatReactionRequest,
   setChatMessagePinRequest,
   setChatMessageSavedRequest,
@@ -100,12 +104,6 @@ const chatRightPanelMinWidthPx = 320;
 const chatRightPanelMaxWidthPx = 760;
 const chatRightPanelMainMinWidthPx = 320;
 const chatRightPanelResizeHandleWidthPx = 1;
-
-function chatPathWithPollDesignPreview(path: string, enabled: boolean) {
-  if (!enabled) return path;
-  const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}poll-preview=1`;
-}
 
 function defaultChatRightPanelWidth(panel: string | null) {
   if (panel === "files") return 440;
@@ -194,7 +192,6 @@ export function ChatPage() {
     : null;
   const routeChannelId = routeSystemConversationId ? undefined : routeParams.channelId;
   const [searchParams, setSearchParams] = useSearchParams();
-  const pollDesignPreviewEnabled = searchParams.get("poll-preview") === "1";
   const navigate = useNavigate();
   const {
     appAttentionState,
@@ -726,8 +723,8 @@ export function ChatPage() {
     setLocatedMessageId(null);
     setMobileListRequested(false);
     if (channelId === activeChannel?.id) return;
-    navigate(chatPathWithPollDesignPreview(`/chat/${encodeURIComponent(channelId)}`, pollDesignPreviewEnabled));
-  }, [activeChannel?.id, navigate, pollDesignPreviewEnabled]);
+    navigate(`/chat/${encodeURIComponent(channelId)}`);
+  }, [activeChannel?.id, navigate]);
 
   const handlePreviewChannel = useCallback((channelId: string) => {
     const channel = channels.find((item) => item.id === channelId);
@@ -882,14 +879,14 @@ export function ChatPage() {
   useEffect(() => {
     if (loading) return;
     if (routeParams.systemConversationId && !routeSystemConversationId) {
-      navigate(chatPathWithPollDesignPreview("/chat", pollDesignPreviewEnabled), { replace: true });
+      navigate("/chat", { replace: true });
       return;
     }
     if (routeSystemConversationId) {
       if (routeSystemChannel) {
-        navigate(chatPathWithPollDesignPreview(`/chat/${encodeURIComponent(routeSystemChannel.id)}`, pollDesignPreviewEnabled), { replace: true });
+        navigate(`/chat/${encodeURIComponent(routeSystemChannel.id)}`, { replace: true });
       } else {
-        navigate(chatPathWithPollDesignPreview("/chat", pollDesignPreviewEnabled), { replace: true });
+        navigate("/chat", { replace: true });
       }
       return;
     }
@@ -901,14 +898,14 @@ export function ChatPage() {
     if (mobileViewport) {
       if (routeChannelId && !routeChannelExists) {
         const destination = rememberedChannelId ? `/chat/${encodeURIComponent(rememberedChannelId)}` : "/chat";
-        navigate(chatPathWithPollDesignPreview(destination, pollDesignPreviewEnabled), { replace: true });
+        navigate(destination, { replace: true });
       } else if (!routeChannelId && rememberedChannelId && !mobileListRequested) {
-        navigate(chatPathWithPollDesignPreview(`/chat/${encodeURIComponent(rememberedChannelId)}`, pollDesignPreviewEnabled), { replace: true });
+        navigate(`/chat/${encodeURIComponent(rememberedChannelId)}`, { replace: true });
       }
       return;
     }
     if (!routeChannelId || !routeChannelExists) {
-      navigate(chatPathWithPollDesignPreview(`/chat/${encodeURIComponent(rememberedChannelId ?? channels[0].id)}`, pollDesignPreviewEnabled), { replace: true });
+      navigate(`/chat/${encodeURIComponent(rememberedChannelId ?? channels[0].id)}`, { replace: true });
     }
   }, [
     channels,
@@ -917,7 +914,6 @@ export function ChatPage() {
     mobileListRequested,
     mobileViewport,
     navigate,
-    pollDesignPreviewEnabled,
     routeChannelId,
     routeParams.systemConversationId,
     routeSystemConversationId,
@@ -1069,6 +1065,30 @@ export function ChatPage() {
       submitPendingChatMessage,
     ],
   );
+
+  const handleCreatePoll = useCallback(async (input: ChatPollCreateInput) => {
+    if (!activeChannel) throw new Error("当前频道不可用");
+    const response = await createChatPollRequest({ channelId: activeChannel.id, ...input });
+    applyChannel(response.channel);
+    applyMessage(response.message);
+    requestScrollToLatest("auto");
+  }, [activeChannel, applyChannel, applyMessage, requestScrollToLatest]);
+
+  const handlePollVote = useCallback(async (message: ChatMessage, optionIds: string[]) => {
+    const response = await setChatPollVoteRequest({
+      channelId: message.channelId,
+      messageId: message.id,
+      optionIds,
+    });
+    if (response.channel) applyChannel(response.channel);
+    applyMessage(response.message);
+  }, [applyChannel, applyMessage]);
+
+  const handlePollClose = useCallback(async (message: ChatMessage) => {
+    const response = await closeChatPollRequest({ channelId: message.channelId, messageId: message.id });
+    if (response.channel) applyChannel(response.channel);
+    applyMessage(response.message);
+  }, [applyChannel, applyMessage]);
 
   const handleRetryPendingMessage = useCallback(
     (message: ChatMessage) => {
@@ -1392,6 +1412,8 @@ export function ChatPage() {
               onMarkUnread={markMessageUnread}
               onOpenThreadInbox={() => void loadThreadSummaries()}
               onPin={handlePinMessage}
+              onPollClose={handlePollClose}
+              onPollVote={handlePollVote}
               onReaction={handleReaction}
               onRemovePending={handleRemovePendingMessage}
               onRequestAcknowledgement={handleRequestAcknowledgement}
@@ -1416,12 +1438,12 @@ export function ChatPage() {
               feedbackItems={feedbackLinkItems}
               mentionableUsers={activeMentionableUsers}
               onDraftStateChange={handleDraftStateChange}
+              onCreatePoll={handleCreatePoll}
               onEditLatest={handleEditLatestOwnMessage}
               onReactToLatest={handleReactToLatestMessage}
               onReplyToLatest={handleReplyToLatestMessage}
               onSend={handleSendMessage}
               onTyping={publishTyping}
-              pollDesignPreviewEnabled={pollDesignPreviewEnabled}
             />
           </>
         ) : (
@@ -1487,6 +1509,8 @@ export function ChatPage() {
             void openThread(summary.rootMessage.id);
           }}
           onPin={handlePinMessage}
+          onPollClose={handlePollClose}
+          onPollVote={handlePollVote}
           onRemoveMember={async (userId) => {
             try {
               const response = await removeChatChannelMemberRequest((rightPanelChannel ?? activeChannel).id, userId);

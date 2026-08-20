@@ -17,6 +17,7 @@ import { chatMobileViewportQuery } from "./useChatMobileViewport";
 import { canonicalChatReactionName, isVisibleChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
 import { ChatDraftEditor } from "./ChatDraftEditor";
 import { ChatWebLinkTitle } from "./ChatWebLinkTitle";
+import { ChatPollCard } from "./ChatPollCard";
 import { chatMessageDisplayAuthor, chatMessageDisplayBody } from "./chatMessagePresentation";
 import { chatMessageSendStatus, draftFromStoredBody, serializeDraft, type ChatDraft, type ChatFeedbackReference } from "./chatModels";
 import type { ChatOpenThreadOptions } from "./useChatThreadState";
@@ -41,6 +42,8 @@ type ChatMessageItemProps = {
   onEdit: (message: ChatMessage) => void;
   onMarkUnread?: (message: ChatMessage) => void;
   onPin?: (message: ChatMessage) => void;
+  onPollClose?: (message: ChatMessage) => Promise<void>;
+  onPollVote?: (message: ChatMessage, optionIds: string[]) => Promise<void>;
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onRemovePending?: (message: ChatMessage) => void;
   onRequestAcknowledgement?: (message: ChatMessage) => void;
@@ -480,6 +483,8 @@ export function ChatMessageItem({
   onEdit,
   onMarkUnread,
   onPin,
+  onPollClose,
+  onPollVote,
   onReaction,
   onRemovePending,
   onRequestAcknowledgement,
@@ -658,7 +663,7 @@ export function ChatMessageItem({
     onSelect: () => onDelete(message),
   } : null;
   const acknowledgementAction: ChatMessageMoreAction | null = (
-    canMutate && !message.rootMessageId && !acknowledgement && onRequestAcknowledgement
+    canMutate && !message.rootMessageId && !message.poll && !acknowledgement && onRequestAcknowledgement
   ) ? {
       icon: CheckCheck,
       id: "requestAcknowledgement",
@@ -777,7 +782,7 @@ export function ChatMessageItem({
           </div>
         ) : (
           <>
-            {visibleMessageBody !== null && (
+            {!message.poll && visibleMessageBody !== null && (
               <CollapsibleMessageText
                 body={visibleMessageBody}
                 commentImageAttachmentIds={commentImageAttachmentIdsFromChatSystemMetadata(message.system)}
@@ -786,8 +791,11 @@ export function ChatMessageItem({
                 usersById={usersById}
               />
             )}
-            <ChatWebLinkTitle message={message} />
-            {referenceCard}
+            {!message.poll && <ChatWebLinkTitle message={message} />}
+            {!message.poll && referenceCard}
+            {message.poll && onPollVote && onPollClose && (
+              <ChatPollCard currentUserId={currentUserId} message={message} onClose={onPollClose} onVote={onPollVote} />
+            )}
             <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
             {sendStatus === "failed" && (
               <div className="orf-chat-delivery-status" role="alert">

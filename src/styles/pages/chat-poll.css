@@ -1,9 +1,9 @@
-/* The poll preview owns only temporary design-review states. Chat and theme tokens remain authoritative. */
-.orf-chat-poll-preview-backdrop {
+/* Poll components own interaction presentation only; chat and theme tokens remain authoritative. */
+.orf-chat-poll-composer-backdrop {
   display: none;
 }
 
-.orf-chat-poll-design-preview {
+.orf-chat-poll-composer-dialog {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   width: min(940px, 100%);
@@ -19,8 +19,8 @@
   backdrop-filter: blur(24px) saturate(1.12);
 }
 
-.orf-chat-poll-preview-header,
-.orf-chat-poll-preview-footer {
+.orf-chat-poll-composer-header,
+.orf-chat-poll-composer-footer {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -30,28 +30,28 @@
   padding: 11px 13px;
 }
 
-.orf-chat-poll-preview-header {
+.orf-chat-poll-composer-header {
   border-bottom: 1px solid var(--orf-chat-divider);
 }
 
-.orf-chat-poll-preview-footer {
+.orf-chat-poll-composer-footer {
   border-top: 1px solid var(--orf-chat-divider);
 }
 
-.orf-chat-poll-preview-title {
+.orf-chat-poll-composer-title {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 10px;
 }
 
-.orf-chat-poll-preview-title > span:nth-child(2) {
+.orf-chat-poll-composer-title > span:nth-child(2) {
   display: grid;
   min-width: 0;
   gap: 1px;
 }
 
-.orf-chat-poll-preview-title strong {
+.orf-chat-poll-composer-title strong {
   overflow: hidden;
   font-size: 14px;
   font-weight: 700;
@@ -59,29 +59,14 @@
   white-space: nowrap;
 }
 
-.orf-chat-poll-preview-title small,
-.orf-chat-poll-preview-footer > span {
+.orf-chat-poll-composer-title small,
+.orf-chat-poll-composer-footer > span {
   color: var(--orf-text-muted);
   font-size: 11px;
   line-height: 1.35;
 }
 
-.orf-chat-poll-preview-title em {
-  display: inline-flex;
-  min-height: 22px;
-  flex: 0 0 auto;
-  align-items: center;
-  border: 1px solid var(--orf-accent-border);
-  border-radius: 999px;
-  background: var(--orf-accent-soft);
-  color: var(--orf-accent-text);
-  padding: 0 8px;
-  font-size: 10px;
-  font-style: normal;
-  font-weight: 700;
-}
-
-.orf-chat-poll-preview-icon {
+.orf-chat-poll-composer-icon {
   display: grid;
   width: 34px;
   height: 34px;
@@ -93,13 +78,12 @@
   color: var(--orf-accent-text);
 }
 
-.orf-chat-poll-preview-icon svg {
+.orf-chat-poll-composer-icon svg {
   width: 17px;
   height: 17px;
 }
 
-.orf-chat-poll-compose-body,
-.orf-chat-poll-message-stage {
+.orf-chat-poll-compose-body {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -315,74 +299,11 @@
   font-weight: 650;
 }
 
-.orf-chat-poll-preview-footer > div {
+.orf-chat-poll-composer-footer > div {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   gap: 7px;
-}
-
-.orf-chat-poll-message-stage {
-  display: grid;
-  gap: 10px;
-  background: color-mix(in srgb, var(--orf-chat-canvas) 72%, transparent);
-}
-
-.orf-chat-poll-message-preview-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--orf-text-muted);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.orf-chat-poll-message-preview-label > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-  color: var(--orf-warning-text);
-}
-
-.orf-chat-poll-message-preview {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  gap: 10px;
-  border-radius: 18px;
-  padding: 10px;
-}
-
-.orf-chat-poll-preview-avatar {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border: 2px solid color-mix(in srgb, var(--orf-material-content-shine) 76%, transparent);
-  border-radius: 999px;
-  background: var(--orf-accent);
-  color: var(--orf-on-accent);
-  font-size: 11px;
-  font-weight: 700;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--orf-accent) 24%, transparent);
-}
-
-.orf-chat-poll-preview-message-body {
-  min-width: 0;
-}
-
-.orf-chat-poll-preview-message-meta {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 5px;
-  color: var(--orf-text-muted);
-  font-size: 12px;
-}
-
-.orf-chat-poll-preview-message-meta strong {
-  color: var(--orf-text-primary);
-  font-size: 14px;
 }
 
 .orf-chat-poll-card {
@@ -599,7 +520,7 @@
 }
 
 .orf-chat-poll-details-trigger,
-.orf-chat-poll-simulate-button {
+.orf-chat-poll-close-button {
   min-height: 28px;
   border: 0;
   border-radius: 999px;
@@ -623,15 +544,56 @@
   transform: rotate(90deg);
 }
 
-.orf-chat-poll-simulate-button {
+.orf-chat-poll-close-button {
   flex: 0 0 auto;
   margin-left: auto;
 }
 
+.orf-chat-poll-card-error {
+  border-top: 1px solid var(--orf-danger-border);
+  background: var(--orf-danger-bg);
+  color: var(--orf-danger-text);
+  padding: 8px 13px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.orf-chat-poll-close-confirmation {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--orf-warning-border);
+  background: var(--orf-warning-bg);
+  padding: 8px 13px;
+}
+
+.orf-chat-poll-close-confirmation > span {
+  display: grid;
+  gap: 1px;
+  color: var(--orf-warning-text);
+}
+
+.orf-chat-poll-close-confirmation strong {
+  font-size: 11px;
+}
+
+.orf-chat-poll-close-confirmation small {
+  color: var(--orf-text-muted);
+  font-size: 9px;
+}
+
+.orf-chat-poll-close-confirmation > div {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
 .orf-chat-poll-details-trigger:not(:disabled):hover,
 .orf-chat-poll-details-trigger:not(:disabled):focus-visible,
-.orf-chat-poll-simulate-button:hover,
-.orf-chat-poll-simulate-button:focus-visible {
+.orf-chat-poll-close-button:hover,
+.orf-chat-poll-close-button:focus-visible {
   background: var(--orf-accent-soft);
   outline: 0;
 }
@@ -772,6 +734,13 @@
   font-weight: 750;
 }
 
+.orf-chat-poll-participant > span img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
 .orf-chat-poll-participant strong {
   overflow: hidden;
   color: var(--orf-text-secondary);
@@ -817,7 +786,7 @@
 }
 
 @media (max-width: 900px) {
-  .orf-chat-poll-preview-backdrop {
+  .orf-chat-poll-composer-backdrop {
     position: fixed;
     inset: var(--orf-topbar-height) 0 var(--orf-mobile-bottom-nav-height);
     z-index: var(--orf-layer-transient);
@@ -828,7 +797,7 @@
     backdrop-filter: blur(7px) saturate(1.04);
   }
 
-  .orf-chat-poll-design-preview {
+  .orf-chat-poll-composer-dialog {
     position: fixed;
     right: 8px;
     bottom: calc(var(--orf-mobile-bottom-nav-height) + 8px);
@@ -854,35 +823,20 @@
     min-height: 48px;
   }
 
-  .orf-chat-poll-preview-footer {
+  .orf-chat-poll-composer-footer {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .orf-chat-poll-preview-footer > div,
-  .orf-chat-poll-preview-footer .orf-control {
+  .orf-chat-poll-composer-footer > div,
+  .orf-chat-poll-composer-footer .orf-control {
     width: 100%;
   }
 
-  .orf-chat-poll-preview-footer .orf-control {
+  .orf-chat-poll-composer-footer .orf-control {
     min-height: 42px;
     flex: 1 1 0;
     justify-content: center;
-  }
-
-  .orf-chat-poll-message-stage {
-    padding: 10px 8px;
-  }
-
-  .orf-chat-poll-message-preview {
-    grid-template-columns: 34px minmax(0, 1fr);
-    gap: 8px;
-    padding: 6px 0;
-  }
-
-  .orf-chat-poll-preview-avatar {
-    width: 34px;
-    height: 34px;
   }
 
   .orf-chat-poll-card-header,
@@ -902,8 +856,7 @@
 }
 
 @media (max-width: 430px) {
-  .orf-chat-poll-preview-title small,
-  .orf-chat-poll-preview-title em {
+  .orf-chat-poll-composer-title small {
     display: none;
   }
 
@@ -921,5 +874,21 @@
 
   .orf-chat-poll-participant-row {
     grid-template-columns: minmax(92px, 0.42fr) minmax(0, 0.58fr);
+  }
+
+  .orf-chat-poll-close-confirmation {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .orf-chat-poll-close-confirmation > div,
+  .orf-chat-poll-close-confirmation .orf-control {
+    width: 100%;
+  }
+
+  .orf-chat-poll-close-confirmation .orf-control {
+    min-height: 42px;
+    flex: 1 1 0;
+    justify-content: center;
   }
 }

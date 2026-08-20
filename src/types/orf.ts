@@ -920,6 +920,36 @@ export interface ChatMessageAcknowledgement {
   requestedByUserId: string;
 }
 
+export type ChatPollSelectionMode = "single" | "multiple";
+export type ChatPollVisibility = "named" | "anonymous";
+
+export interface ChatPollOption {
+  id: string;
+  label: string;
+  position: number;
+  voteCount: number;
+}
+
+export interface ChatPollParticipant {
+  avatarUrl?: string | null;
+  name: string;
+  optionIds: string[];
+  userId: string;
+}
+
+export interface ChatPoll {
+  canClose: boolean;
+  closedAt?: string | null;
+  closedByUserId?: string | null;
+  currentUserOptionIds: string[];
+  options: ChatPollOption[];
+  participantCount: number | null;
+  participants: ChatPollParticipant[] | null;
+  resultsVisible: boolean;
+  selectionMode: ChatPollSelectionMode;
+  visibility: ChatPollVisibility;
+}
+
 export interface ChatAttachment {
   id: string;
   fileName: string;
@@ -956,6 +986,7 @@ export interface ChatMessage {
   attachments: ChatAttachment[];
   reactions: ChatReaction[];
   acknowledgement?: ChatMessageAcknowledgement | null;
+  poll?: ChatPoll | null;
 }
 
 export interface ChatThread {

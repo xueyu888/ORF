@@ -42,6 +42,8 @@ type ChatMessageFeedProps = {
   onMarkUnread: (message: ChatMessage) => void;
   onOpenThreadInbox: () => void;
   onPin: (message: ChatMessage) => void;
+  onPollClose: (message: ChatMessage) => Promise<void>;
+  onPollVote: (message: ChatMessage, optionIds: string[]) => Promise<void>;
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onRemovePending: (message: ChatMessage) => void;
   onRequestAcknowledgement: (message: ChatMessage) => void;
@@ -91,6 +93,8 @@ export function ChatMessageFeed({
   onMarkUnread,
   onOpenThreadInbox,
   onPin,
+  onPollClose,
+  onPollVote,
   onReaction,
   onRemovePending,
   onRequestAcknowledgement,
@@ -142,6 +146,8 @@ export function ChatMessageFeed({
           onMarkUnread={onMarkUnread}
           onOpenThreadInbox={onOpenThreadInbox}
           onPin={onPin}
+          onPollClose={onPollClose}
+          onPollVote={onPollVote}
           onReaction={onReaction}
           onRemovePending={onRemovePending}
           onRequestAcknowledgement={onRequestAcknowledgement}
@@ -191,6 +197,8 @@ function MessageList({
   onMarkUnread,
   onOpenThreadInbox,
   onPin,
+  onPollClose,
+  onPollVote,
   onReaction,
   onRemovePending,
   onRequestAcknowledgement,
@@ -300,6 +308,8 @@ function MessageList({
               onEdit={onEdit}
               onMarkUnread={onMarkUnread}
               onPin={onPin}
+              onPollClose={onPollClose}
+              onPollVote={onPollVote}
               onReaction={onReaction}
               onRemovePending={onRemovePending}
               onRequestAcknowledgement={onRequestAcknowledgement}

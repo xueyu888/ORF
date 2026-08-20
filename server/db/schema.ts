@@ -1,11 +1,13 @@
 import { sql } from "drizzle-orm";
-import { bigint, bigserial, boolean, check, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, bigserial, boolean, check, date, foreignKey, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type { ChatIntegrationProvider } from "../../src/domain/chatIntegrationProvider";
 import type {
   BountySource,
   ChallengeApplication,
   ChatMessageSource,
   ChatMessageSystemMetadata,
+  ChatPollSelectionMode,
+  ChatPollVisibility,
   ChatSystemKind,
   CommentTargetType,
   LootResultClaim,
@@ -1080,6 +1082,66 @@ export const chatMessages = pgTable(
     channelCreated: index("chat_messages_channel_created_idx").on(table.channelId, table.createdAt),
     rootCreated: index("chat_messages_root_created_idx").on(table.rootMessageId, table.createdAt),
     teamCreated: index("chat_messages_team_created_idx").on(table.teamId, table.createdAt),
+  }),
+);
+
+export const chatPolls = pgTable(
+  "chat_polls",
+  {
+    messageId: text("message_id")
+      .primaryKey()
+      .references(() => chatMessages.id, { onDelete: "cascade" }),
+    selectionMode: text("selection_mode").$type<ChatPollSelectionMode>().notNull(),
+    visibility: text("visibility").$type<ChatPollVisibility>().notNull(),
+    closedAt: timestamp("closed_at", { mode: "string", withTimezone: true }),
+    closedByUserId: uuid("closed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    selectionModeCheck: check("chat_polls_selection_mode_check", sql`${table.selectionMode} IN ('single', 'multiple')`),
+    visibilityCheck: check("chat_polls_visibility_check", sql`${table.visibility} IN ('named', 'anonymous')`),
+  }),
+);
+
+export const chatPollOptions = pgTable(
+  "chat_poll_options",
+  {
+    id: text("id").primaryKey(),
+    pollMessageId: text("poll_message_id")
+      .notNull()
+      .references(() => chatPolls.messageId, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    position: integer("position").notNull(),
+  },
+  (table) => ({
+    pollPositionUnique: uniqueIndex("chat_poll_options_poll_position_unique").on(table.pollMessageId, table.position),
+    pollOptionUnique: uniqueIndex("chat_poll_options_poll_option_unique").on(table.pollMessageId, table.id),
+    positionCheck: check("chat_poll_options_position_check", sql`${table.position} >= 0`),
+    labelCheck: check("chat_poll_options_label_check", sql`char_length(btrim(${table.label})) BETWEEN 1 AND 80`),
+  }),
+);
+
+export const chatPollVotes = pgTable(
+  "chat_poll_votes",
+  {
+    pollMessageId: text("poll_message_id").notNull(),
+    optionId: text("option_id").notNull(),
+    voterUserId: uuid("voter_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.pollMessageId, table.voterUserId, table.optionId] }),
+    pollOptionForeignKey: foreignKey({
+      columns: [table.pollMessageId, table.optionId],
+      foreignColumns: [chatPollOptions.pollMessageId, chatPollOptions.id],
+      name: "chat_poll_votes_poll_option_fk",
+    }).onDelete("cascade"),
+    option: index("chat_poll_votes_option_idx").on(table.pollMessageId, table.optionId),
+    voter: index("chat_poll_votes_voter_idx").on(table.voterUserId),
   }),
 );
 
