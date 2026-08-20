@@ -7,6 +7,8 @@ import {
   ListChecks,
   Plus,
   RotateCcw,
+  ShieldCheck,
+  UsersRound,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -20,6 +22,7 @@ import {
   toChatPollPreviewOptions,
   type ChatPollDraft,
   type ChatPollSelectionMode,
+  type ChatPollVisibility,
 } from "./chatPollPreviewModel";
 
 type ChatPollDesignPreviewProps = {
@@ -40,6 +43,10 @@ export function ChatPollDesignPreview({ onClose }: ChatPollDesignPreviewProps) {
 
   const updateMode = (mode: ChatPollSelectionMode) => {
     setDraft((current) => ({ ...current, mode }));
+  };
+
+  const updateVisibility = (visibility: ChatPollVisibility) => {
+    setDraft((current) => ({ ...current, visibility }));
   };
 
   const updateOption = (optionId: string, label: string) => {
@@ -133,29 +140,55 @@ export function ChatPollDesignPreview({ onClose }: ChatPollDesignPreviewProps) {
               <small>{draft.question.length}/120</small>
             </label>
 
-            <fieldset className="orf-chat-poll-mode-field">
-              <legend>选择方式</legend>
-              <div className="orf-chat-poll-mode-switch">
-                <button
-                  type="button"
-                  className={clsx(draft.mode === "single" && "is-active")}
-                  aria-pressed={draft.mode === "single"}
-                  onClick={() => updateMode("single")}
-                >
-                  <CircleDot className="h-4 w-4" />
-                  <span><strong>单选</strong><small>每人选择一项</small></span>
-                </button>
-                <button
-                  type="button"
-                  className={clsx(draft.mode === "multiple" && "is-active")}
-                  aria-pressed={draft.mode === "multiple"}
-                  onClick={() => updateMode("multiple")}
-                >
-                  <ListChecks className="h-4 w-4" />
-                  <span><strong>多选</strong><small>每人可选择多项</small></span>
-                </button>
-              </div>
-            </fieldset>
+            <div className="orf-chat-poll-settings-column">
+              <fieldset className="orf-chat-poll-mode-field">
+                <legend>选择方式</legend>
+                <div className="orf-chat-poll-choice-switch">
+                  <button
+                    type="button"
+                    className={clsx(draft.mode === "single" && "is-active")}
+                    aria-pressed={draft.mode === "single"}
+                    onClick={() => updateMode("single")}
+                  >
+                    <CircleDot className="h-4 w-4" />
+                    <span><strong>单选</strong><small>每人选择一项</small></span>
+                  </button>
+                  <button
+                    type="button"
+                    className={clsx(draft.mode === "multiple" && "is-active")}
+                    aria-pressed={draft.mode === "multiple"}
+                    onClick={() => updateMode("multiple")}
+                  >
+                    <ListChecks className="h-4 w-4" />
+                    <span><strong>多选</strong><small>每人可选择多项</small></span>
+                  </button>
+                </div>
+              </fieldset>
+
+              <fieldset className="orf-chat-poll-visibility-field">
+                <legend>投票可见性</legend>
+                <div className="orf-chat-poll-choice-switch">
+                  <button
+                    type="button"
+                    className={clsx(draft.visibility === "named" && "is-active")}
+                    aria-pressed={draft.visibility === "named"}
+                    onClick={() => updateVisibility("named")}
+                  >
+                    <UsersRound className="h-4 w-4" />
+                    <span><strong>非匿名</strong><small>可以查看人员明细</small></span>
+                  </button>
+                  <button
+                    type="button"
+                    className={clsx(draft.visibility === "anonymous" && "is-active")}
+                    aria-pressed={draft.visibility === "anonymous"}
+                    onClick={() => updateVisibility("anonymous")}
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    <span><strong>匿名</strong><small>仅显示汇总结果</small></span>
+                  </button>
+                </div>
+              </fieldset>
+            </div>
 
             <fieldset className="orf-chat-poll-options-field">
               <legend>选项</legend>
@@ -207,11 +240,12 @@ export function ChatPollDesignPreview({ onClose }: ChatPollDesignPreviewProps) {
               <div className="orf-chat-poll-preview-message-body">
                 <div className="orf-chat-poll-preview-message-meta"><strong>你</strong><span>刚刚</span></div>
                 <ChatPollPreviewCard
-                  key={`${draft.mode}-${draft.question}`}
+                  key={`${draft.mode}-${draft.visibility}-${draft.question}`}
                   mode={draft.mode}
                   onClosedChange={setClosed}
                   options={toChatPollPreviewOptions(draft.options)}
                   question={draft.question.trim()}
+                  visibility={draft.visibility}
                 />
               </div>
             </article>

@@ -1,4 +1,5 @@
 export type ChatPollSelectionMode = "single" | "multiple";
+export type ChatPollVisibility = "named" | "anonymous";
 
 export type ChatPollDraftOption = {
   id: string;
@@ -9,17 +10,32 @@ export type ChatPollDraft = {
   mode: ChatPollSelectionMode;
   options: ChatPollDraftOption[];
   question: string;
+  visibility: ChatPollVisibility;
 };
 
-export type ChatPollPreviewOption = ChatPollDraftOption & {
-  baseVoteCount: number;
+export type ChatPollPreviewOption = ChatPollDraftOption;
+
+export type ChatPollPreviewParticipant = {
+  avatarLabel: string;
+  id: string;
+  isCurrentUser?: boolean;
+  name: string;
+  optionIds: string[];
 };
 
 export const chatPollMinimumOptionCount = 2;
 export const chatPollMaximumOptionCount = 8;
 
 const initialOptionLabels = ["围炉火锅", "炭火烤肉", "日式料理", "轻食自助"];
-const previewVoteCounts = [8, 5, 3, 2, 1, 1, 0, 0];
+const previewParticipantNames = [
+  "林晓", "周宁", "陈墨", "苏禾", "顾言", "叶然", "程屿", "江澄", "沈砚",
+  "唐棠", "许知", "陆川", "温岚", "夏予", "方遥", "韩序", "罗一", "白露",
+];
+const previewSingleSelectionIndexes = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3];
+const previewMultipleSelectionIndexes = [
+  [0, 1], [0], [0, 2], [1, 3], [1], [0, 1], [2, 3], [0, 3], [1, 2],
+  [0], [2], [3], [0, 2], [1], [0, 1, 2], [3], [0], [1, 3],
+];
 
 export function createInitialChatPollDraft(): ChatPollDraft {
   return {
@@ -29,6 +45,7 @@ export function createInitialChatPollDraft(): ChatPollDraft {
       label,
     })),
     question: "本周五团队活动，你更想选哪一个？",
+    visibility: "named",
   };
 }
 
@@ -42,11 +59,31 @@ export function chatPollDraftValidationMessage(draft: ChatPollDraft) {
 }
 
 export function toChatPollPreviewOptions(options: readonly ChatPollDraftOption[]): ChatPollPreviewOption[] {
-  return options.map((option, index) => ({
+  return options.map((option) => ({
     ...option,
     label: option.label.trim(),
-    baseVoteCount: previewVoteCounts[index] ?? 0,
   }));
+}
+
+export function createChatPollPreviewParticipants(
+  options: readonly ChatPollPreviewOption[],
+  mode: ChatPollSelectionMode,
+): ChatPollPreviewParticipant[] {
+  return previewParticipantNames.map((name, participantIndex) => {
+    const requestedIndexes = mode === "single"
+      ? [previewSingleSelectionIndexes[participantIndex] ?? participantIndex]
+      : previewMultipleSelectionIndexes[participantIndex] ?? [participantIndex];
+    const optionIds = Array.from(new Set(requestedIndexes
+      .map((optionIndex) => options[optionIndex]?.id)
+      .filter((optionId): optionId is string => Boolean(optionId))));
+    const fallbackOptionId = options[participantIndex % options.length]?.id;
+    return {
+      avatarLabel: name.slice(0, 1),
+      id: `preview-participant-${participantIndex + 1}`,
+      name,
+      optionIds: optionIds.length > 0 ? optionIds : fallbackOptionId ? [fallbackOptionId] : [],
+    };
+  });
 }
 
 export function toggleChatPollSelection(
@@ -63,4 +100,8 @@ export function toggleChatPollSelection(
 
 export function chatPollSelectionModeLabel(mode: ChatPollSelectionMode) {
   return mode === "single" ? "单选" : "多选";
+}
+
+export function chatPollVisibilityLabel(visibility: ChatPollVisibility) {
+  return visibility === "anonymous" ? "匿名" : "非匿名";
 }

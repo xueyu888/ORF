@@ -1,12 +1,17 @@
 import { clsx } from "clsx";
-import { Check, CheckCheck, Circle, LockKeyhole, Users } from "lucide-react";
+import { Check, CheckCheck, ChevronRight, Circle, LockKeyhole, ShieldCheck, Users } from "lucide-react";
 import { useMemo, useState, type CSSProperties } from "react";
 import { Button } from "../../components/ui";
+import { ChatPollDetailsPreview } from "./ChatPollDetailsPreview";
 import {
   chatPollSelectionModeLabel,
+  chatPollVisibilityLabel,
+  createChatPollPreviewParticipants,
   toggleChatPollSelection,
   type ChatPollPreviewOption,
+  type ChatPollPreviewParticipant,
   type ChatPollSelectionMode,
+  type ChatPollVisibility,
 } from "./chatPollPreviewModel";
 
 type PollResultStyle = CSSProperties & {
@@ -18,30 +23,43 @@ type ChatPollPreviewCardProps = {
   onClosedChange: (closed: boolean) => void;
   options: readonly ChatPollPreviewOption[];
   question: string;
+  visibility: ChatPollVisibility;
 };
-
-const previewParticipantCount = 18;
 
 export function ChatPollPreviewCard({
   mode,
   onClosedChange,
   options,
   question,
+  visibility,
 }: ChatPollPreviewCardProps) {
   const [closed, setClosed] = useState(false);
   const [committedSelection, setCommittedSelection] = useState<Set<string>>(new Set());
   const [pendingSelection, setPendingSelection] = useState<Set<string>>(new Set());
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const hasVoted = committedSelection.size > 0;
   const showResults = hasVoted || closed;
-  const participantCount = previewParticipantCount + (hasVoted ? 1 : 0);
+  const participants = useMemo(() => {
+    const previewParticipants = createChatPollPreviewParticipants(options, mode);
+    if (!hasVoted) return previewParticipants;
+    const currentParticipant: ChatPollPreviewParticipant = {
+      avatarLabel: "你",
+      id: "preview-current-user",
+      isCurrentUser: true,
+      name: "你",
+      optionIds: Array.from(committedSelection),
+    };
+    return [...previewParticipants, currentParticipant];
+  }, [committedSelection, hasVoted, mode, options]);
+  const participantCount = participants.length;
   const voteRows = useMemo(() => options.map((option) => {
-    const voteCount = option.baseVoteCount + (committedSelection.has(option.id) ? 1 : 0);
+    const voteCount = participants.filter((participant) => participant.optionIds.includes(option.id)).length;
     return {
       ...option,
       percentage: participantCount > 0 ? Math.round((voteCount / participantCount) * 100) : 0,
       voteCount,
     };
-  }), [committedSelection, options, participantCount]);
+  }), [options, participantCount, participants]);
   const selection = mode === "single" ? committedSelection : pendingSelection;
   const multipleSelectionChanged = mode === "multiple" && !sameSelection(pendingSelection, committedSelection);
 
@@ -59,6 +77,7 @@ export function ChatPollPreviewCard({
   const toggleClosed = () => {
     const nextClosed = !closed;
     setClosed(nextClosed);
+    if (!nextClosed) setDetailsOpen(false);
     onClosedChange(nextClosed);
   };
 
@@ -72,7 +91,10 @@ export function ChatPollPreviewCard({
           </span>
           <h3>{question}</h3>
         </div>
-        <span className="orf-chat-poll-mode-badge">{chatPollSelectionModeLabel(mode)}</span>
+        <span className="orf-chat-poll-card-badges">
+          <span className="orf-chat-poll-mode-badge">{chatPollSelectionModeLabel(mode)}</span>
+          <span className="orf-chat-poll-mode-badge">{chatPollVisibilityLabel(visibility)}</span>
+        </span>
       </header>
 
       <div className="orf-chat-poll-options" role={mode === "single" ? "radiogroup" : "group"} aria-label="投票选项">
@@ -124,10 +146,36 @@ export function ChatPollPreviewCard({
       )}
 
       <footer className="orf-chat-poll-card-footer">
-        <span><Users className="h-3.5 w-3.5" /> {participantCount} 人参与</span>
-        <span>{hasVoted ? "已投票，可修改" : closed ? "结果已公开" : mode === "single" ? "选择后立即生效" : "提交后生效"}</span>
-        <button type="button" onClick={toggleClosed}>{closed ? "恢复进行中" : "模拟结束"}</button>
+        <div className="orf-chat-poll-card-meta">
+          {visibility === "named" ? (
+            <button
+              type="button"
+              className="orf-chat-poll-details-trigger"
+              disabled={!showResults}
+              aria-expanded={detailsOpen}
+              onClick={() => setDetailsOpen((open) => !open)}
+            >
+              <Users className="h-3.5 w-3.5" />
+              {participantCount} 人参与
+              <ChevronRight className="h-3 w-3" />
+            </button>
+          ) : (
+            <span><ShieldCheck className="h-3.5 w-3.5" /> 匿名投票 · {participantCount} 人参与</span>
+          )}
+          <span className="orf-chat-poll-vote-state">
+            {hasVoted
+              ? visibility === "named" ? "已投票，可查看明细" : "已投票，人员明细不可见"
+              : closed ? "结果已公开" : mode === "single" ? "选择后立即生效" : "提交后生效"}
+          </span>
+        </div>
+        <button type="button" className="orf-chat-poll-simulate-button" onClick={toggleClosed}>
+          {closed ? "恢复进行中" : "模拟结束"}
+        </button>
       </footer>
+
+      {visibility === "named" && detailsOpen && (
+        <ChatPollDetailsPreview onClose={() => setDetailsOpen(false)} options={options} participants={participants} />
+      )}
     </section>
   );
 }
