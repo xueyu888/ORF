@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Check, CheckCheck, ChevronRight, Circle, Loader2, LockKeyhole, ShieldCheck, Users } from "lucide-react";
+import { BarChart3, Check, ChevronRight, Loader2, LockKeyhole, ShieldCheck, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Button } from "../../components/ui";
 import type { ChatMessage } from "../../types/orf";
@@ -101,18 +101,24 @@ export function ChatPollCard({ currentUserId, message, onClose, onVote }: ChatPo
       <header className="orf-chat-poll-card-header">
         <div>
           <span className="orf-chat-poll-card-kicker">
-            {closed ? <LockKeyhole className="h-3.5 w-3.5" /> : <CheckCheck className="h-3.5 w-3.5" />}
-            {closed ? "投票已结束" : "进行中的投票"}
+            {closed ? <LockKeyhole className="h-3.5 w-3.5" /> : <BarChart3 className="h-3.5 w-3.5" />}
+            <strong>{closed ? "投票已结束" : "投票进行中"}</strong>
+            <span aria-hidden="true">·</span>
+            <span>{chatPollSelectionModeLabel(poll.selectionMode)}</span>
+            <span aria-hidden="true">·</span>
+            <span>{chatPollVisibilityLabel(poll.visibility)}</span>
+            <span aria-hidden="true">·</span>
+            <span>{poll.options.length} 项</span>
           </span>
           <h3>{message.body}</h3>
         </div>
-        <span className="orf-chat-poll-card-badges">
-          <span className="orf-chat-poll-mode-badge">{chatPollSelectionModeLabel(poll.selectionMode)}</span>
-          <span className="orf-chat-poll-mode-badge">{chatPollVisibilityLabel(poll.visibility)}</span>
-        </span>
       </header>
 
-      <div className="orf-chat-poll-options" role={poll.selectionMode === "single" ? "radiogroup" : "group"} aria-label="投票选项">
+      <div
+        className="orf-chat-poll-options"
+        role={poll.selectionMode === "single" ? "radiogroup" : "group"}
+        aria-label={`投票选项，共 ${poll.options.length} 项`}
+      >
         {resultRows.map((option) => {
           const selected = pendingSelection.has(option.id);
           const committed = committedSelection.has(option.id);
@@ -126,22 +132,26 @@ export function ChatPollCard({ currentUserId, message, onClose, onVote }: ChatPo
               onClick={() => selectOption(option.id)}
               role={poll.selectionMode === "single" ? "radio" : "checkbox"}
               aria-checked={selected}
+              data-results-visible={poll.resultsVisible ? "true" : "false"}
               style={resultStyle}
             >
               <span className="orf-chat-poll-option-result" aria-hidden="true" />
               <span className="orf-chat-poll-option-indicator" aria-hidden="true">
-                {selected ? <Check className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />}
+                {selected && <Check className="h-3.5 w-3.5" />}
               </span>
               <span className="orf-chat-poll-option-label">{option.label}</span>
               {poll.resultsVisible && (
-                <span className="orf-chat-poll-option-result-label"><strong>{option.percentage}%</strong><small>{option.voteCount} 票</small></span>
+                <span className="orf-chat-poll-option-result-label">
+                  <strong>{option.percentage}%</strong>
+                  <small>{option.voteCount} 票</small>
+                </span>
               )}
             </button>
           );
         })}
       </div>
 
-      {poll.selectionMode === "multiple" && !closed && (
+      {poll.selectionMode === "multiple" && !closed && (!hasVoted || selectionChanged) && (
         <div className="orf-chat-poll-multiple-submit">
           <span>{pendingSelection.size > 0 ? `已选择 ${pendingSelection.size} 项` : "至少选择一项"}</span>
           <Button type="button" size="sm" disabled={submitting || pendingSelection.size === 0 || !selectionChanged} onClick={() => void submitSelection(Array.from(pendingSelection))}>
@@ -156,13 +166,22 @@ export function ChatPollCard({ currentUserId, message, onClose, onVote }: ChatPo
         <div className="orf-chat-poll-card-meta">
           {poll.resultsVisible ? (
             poll.visibility === "named" ? (
-              <button type="button" className="orf-chat-poll-details-trigger" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}>
-                <Users className="h-3.5 w-3.5" />{poll.participantCount ?? 0} 人参与<ChevronRight className="h-3 w-3" />
+              <button
+                type="button"
+                className="orf-chat-poll-details-trigger"
+                aria-expanded={detailsOpen}
+                aria-haspopup="dialog"
+                onClick={() => setDetailsOpen(true)}
+              >
+                <Users className="h-3.5 w-3.5" />
+                <span>{poll.participantCount ?? 0} 人参与</span>
+                <span className="orf-chat-poll-details-trigger-label">查看明细</span>
+                <ChevronRight className="h-3 w-3" />
               </button>
             ) : <span><ShieldCheck className="h-3.5 w-3.5" />匿名投票 · {poll.participantCount ?? 0} 人参与</span>
           ) : <span><LockKeyhole className="h-3.5 w-3.5" />提交选择后即可查看实时结果</span>}
           <span className="orf-chat-poll-vote-state">
-            {closed ? "最终结果已公开" : hasVoted ? "已投票，可查看结果并修改选择" : "尚未投票"}
+            {closed ? "最终结果" : hasVoted ? "已投票，可修改" : "尚未投票"}
           </span>
         </div>
         {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-label="正在提交" />}

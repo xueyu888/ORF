@@ -126,7 +126,7 @@ export function ChatPollComposer({ onClose, onCreate }: ChatPollComposerProps) {
                   onClick={() => setDraft((current) => ({ ...current, visibility: "named" }))}
                 >
                   <UsersRound className="h-4 w-4" />
-                  <span><strong>非匿名</strong><small>结束后可查看人员明细</small></span>
+                  <span><strong>非匿名</strong><small>投票后可查看人员明细</small></span>
                 </button>
                 <button
                   type="button"
