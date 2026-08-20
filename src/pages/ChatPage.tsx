@@ -101,6 +101,12 @@ const chatRightPanelMaxWidthPx = 760;
 const chatRightPanelMainMinWidthPx = 320;
 const chatRightPanelResizeHandleWidthPx = 1;
 
+function chatPathWithPollDesignPreview(path: string, enabled: boolean) {
+  if (!enabled) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}poll-preview=1`;
+}
+
 function defaultChatRightPanelWidth(panel: string | null) {
   if (panel === "files") return 440;
   if (panel === "search" || panel === "thread" || panel === "pins" || panel === "saved") return 400;
@@ -188,6 +194,7 @@ export function ChatPage() {
     : null;
   const routeChannelId = routeSystemConversationId ? undefined : routeParams.channelId;
   const [searchParams, setSearchParams] = useSearchParams();
+  const pollDesignPreviewEnabled = searchParams.get("poll-preview") === "1";
   const navigate = useNavigate();
   const {
     appAttentionState,
@@ -719,8 +726,8 @@ export function ChatPage() {
     setLocatedMessageId(null);
     setMobileListRequested(false);
     if (channelId === activeChannel?.id) return;
-    navigate(`/chat/${encodeURIComponent(channelId)}`);
-  }, [activeChannel?.id, navigate]);
+    navigate(chatPathWithPollDesignPreview(`/chat/${encodeURIComponent(channelId)}`, pollDesignPreviewEnabled));
+  }, [activeChannel?.id, navigate, pollDesignPreviewEnabled]);
 
   const handlePreviewChannel = useCallback((channelId: string) => {
     const channel = channels.find((item) => item.id === channelId);
@@ -875,14 +882,14 @@ export function ChatPage() {
   useEffect(() => {
     if (loading) return;
     if (routeParams.systemConversationId && !routeSystemConversationId) {
-      navigate("/chat", { replace: true });
+      navigate(chatPathWithPollDesignPreview("/chat", pollDesignPreviewEnabled), { replace: true });
       return;
     }
     if (routeSystemConversationId) {
       if (routeSystemChannel) {
-        navigate(`/chat/${encodeURIComponent(routeSystemChannel.id)}`, { replace: true });
+        navigate(chatPathWithPollDesignPreview(`/chat/${encodeURIComponent(routeSystemChannel.id)}`, pollDesignPreviewEnabled), { replace: true });
       } else {
-        navigate("/chat", { replace: true });
+        navigate(chatPathWithPollDesignPreview("/chat", pollDesignPreviewEnabled), { replace: true });
       }
       return;
     }
@@ -893,14 +900,15 @@ export function ChatPage() {
     const rememberedChannelId = readChatLastChannelId(currentUser?.id, channels.map((channel) => channel.id));
     if (mobileViewport) {
       if (routeChannelId && !routeChannelExists) {
-        navigate(rememberedChannelId ? `/chat/${encodeURIComponent(rememberedChannelId)}` : "/chat", { replace: true });
+        const destination = rememberedChannelId ? `/chat/${encodeURIComponent(rememberedChannelId)}` : "/chat";
+        navigate(chatPathWithPollDesignPreview(destination, pollDesignPreviewEnabled), { replace: true });
       } else if (!routeChannelId && rememberedChannelId && !mobileListRequested) {
-        navigate(`/chat/${encodeURIComponent(rememberedChannelId)}`, { replace: true });
+        navigate(chatPathWithPollDesignPreview(`/chat/${encodeURIComponent(rememberedChannelId)}`, pollDesignPreviewEnabled), { replace: true });
       }
       return;
     }
     if (!routeChannelId || !routeChannelExists) {
-      navigate(`/chat/${encodeURIComponent(rememberedChannelId ?? channels[0].id)}`, { replace: true });
+      navigate(chatPathWithPollDesignPreview(`/chat/${encodeURIComponent(rememberedChannelId ?? channels[0].id)}`, pollDesignPreviewEnabled), { replace: true });
     }
   }, [
     channels,
@@ -909,6 +917,7 @@ export function ChatPage() {
     mobileListRequested,
     mobileViewport,
     navigate,
+    pollDesignPreviewEnabled,
     routeChannelId,
     routeParams.systemConversationId,
     routeSystemConversationId,
@@ -1412,6 +1421,7 @@ export function ChatPage() {
               onReplyToLatest={handleReplyToLatestMessage}
               onSend={handleSendMessage}
               onTyping={publishTyping}
+              pollDesignPreviewEnabled={pollDesignPreviewEnabled}
             />
           </>
         ) : (

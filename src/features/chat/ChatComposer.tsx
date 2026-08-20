@@ -1,5 +1,6 @@
 import { clsx } from "clsx";
 import {
+  BarChart3,
   CheckCheck,
   FileText,
   Image as ImageIcon,
@@ -38,6 +39,7 @@ import {
   parseStoredDraft,
 } from "./chatModels";
 import { ChatDraftEditor } from "./ChatDraftEditor";
+import { ChatPollDesignPreview } from "./ChatPollDesignPreview";
 
 type ChatComposerProps = {
   attachmentMaxBytes: number;
@@ -53,6 +55,7 @@ type ChatComposerProps = {
   onSend: ChatSendHandler;
   onTyping?: (channelId: string) => void;
   parentMessageId?: string | null;
+  pollDesignPreviewEnabled?: boolean;
   rootMessageId?: string | null;
 };
 
@@ -69,6 +72,7 @@ export function ChatComposer({
   onReplyToLatest,
   onSend,
   onTyping,
+  pollDesignPreviewEnabled = false,
   rootMessageId,
   parentMessageId,
 }: ChatComposerProps) {
@@ -77,6 +81,7 @@ export function ChatComposer({
   const [draggingFiles, setDraggingFiles] = useState(false);
   const [error, setError] = useState("");
   const [requireAcknowledgement, setRequireAcknowledgement] = useState(false);
+  const [pollDesignPreviewOpen, setPollDesignPreviewOpen] = useState(false);
   const uploading = hasUploadingDraftAttachments(attachmentItems);
   const failedUploads = failedDraftAttachmentCount(attachmentItems);
   const uploadedAttachments = uploadedDraftAttachments(attachmentItems);
@@ -143,6 +148,10 @@ export function ChatComposer({
   useEffect(() => {
     if (rootMessageId) setRequireAcknowledgement(false);
   }, [rootMessageId]);
+
+  useEffect(() => {
+    if (!pollDesignPreviewEnabled || rootMessageId) setPollDesignPreviewOpen(false);
+  }, [pollDesignPreviewEnabled, rootMessageId]);
 
   useEffect(() => {
     attachmentItemsRef.current = attachmentItems;
@@ -350,6 +359,7 @@ export function ChatComposer({
         </div>
       )}
       {error && <div className="orf-chat-composer-error">{error}</div>}
+      {pollDesignPreviewOpen && <ChatPollDesignPreview onClose={() => setPollDesignPreviewOpen(false)} />}
       <ChatDraftEditor
         autoGrow
         className="orf-chat-composer-box"
@@ -383,6 +393,19 @@ export function ChatComposer({
                 aria-pressed={requireAcknowledgement}
               >
                 <CheckCheck className="h-4 w-4" />
+              </button>
+            )}
+            {!rootMessageId && pollDesignPreviewEnabled && (
+              <button
+                type="button"
+                className={clsx("orf-rich-text-tool-button", pollDesignPreviewOpen && "orf-rich-text-tool-button-active")}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => setPollDesignPreviewOpen((open) => !open)}
+                title={pollDesignPreviewOpen ? "关闭投票界面预览" : "创建投票（界面预览）"}
+                aria-label={pollDesignPreviewOpen ? "关闭投票界面预览" : "创建投票（界面预览）"}
+                aria-pressed={pollDesignPreviewOpen}
+              >
+                <BarChart3 className="h-4 w-4" />
               </button>
             )}
             <button
