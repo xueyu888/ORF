@@ -1,4 +1,5 @@
 import type { ChatPollSelectionMode, ChatPollVisibility } from "../../types/orf";
+import { CHAT_POLL_INPUT_CONTRACT } from "../../domain/chatPollContract";
 
 export type ChatPollDraftOption = {
   id: string;
@@ -19,11 +20,6 @@ export type ChatPollCreateInput = {
   visibility: ChatPollVisibility;
 };
 
-export const chatPollMinimumOptionCount = 2;
-export const chatPollMaximumOptionCount = 8;
-export const chatPollQuestionMaximumLength = 280;
-export const chatPollOptionMaximumLength = 80;
-
 let draftOptionSequence = 0;
 
 function makeDraftOption(label = ""): ChatPollDraftOption {
@@ -41,12 +37,12 @@ export function createInitialChatPollDraft(): ChatPollDraft {
 }
 
 export function addChatPollDraftOption(draft: ChatPollDraft) {
-  if (draft.options.length >= chatPollMaximumOptionCount) return draft;
+  if (draft.options.length >= CHAT_POLL_INPUT_CONTRACT.maximumOptionCount) return draft;
   return { ...draft, options: [...draft.options, makeDraftOption()] };
 }
 
 export function removeChatPollDraftOption(draft: ChatPollDraft, optionId: string) {
-  if (draft.options.length <= chatPollMinimumOptionCount) return draft;
+  if (draft.options.length <= CHAT_POLL_INPUT_CONTRACT.minimumOptionCount) return draft;
   return { ...draft, options: draft.options.filter((option) => option.id !== optionId) };
 }
 
@@ -60,12 +56,18 @@ export function updateChatPollDraftOption(draft: ChatPollDraft, optionId: string
 export function chatPollDraftValidationMessage(draft: ChatPollDraft) {
   const question = draft.question.trim();
   if (!question) return "请输入投票问题";
-  if (question.length > chatPollQuestionMaximumLength) return `投票问题不能超过 ${chatPollQuestionMaximumLength} 个字`;
-  if (draft.options.length < chatPollMinimumOptionCount) return "至少需要两个选项";
-  if (draft.options.length > chatPollMaximumOptionCount) return `最多只能添加 ${chatPollMaximumOptionCount} 个选项`;
+  if (question.length > CHAT_POLL_INPUT_CONTRACT.maximumQuestionLength) {
+    return `投票问题不能超过 ${CHAT_POLL_INPUT_CONTRACT.maximumQuestionLength} 个字`;
+  }
+  if (draft.options.length < CHAT_POLL_INPUT_CONTRACT.minimumOptionCount) return "至少需要两个选项";
+  if (draft.options.length > CHAT_POLL_INPUT_CONTRACT.maximumOptionCount) {
+    return `最多只能添加 ${CHAT_POLL_INPUT_CONTRACT.maximumOptionCount} 个选项`;
+  }
   const labels = draft.options.map((option) => option.label.trim());
   if (labels.some((label) => !label)) return "请填写完整的选项内容";
-  if (labels.some((label) => label.length > chatPollOptionMaximumLength)) return `每个选项不能超过 ${chatPollOptionMaximumLength} 个字`;
+  if (labels.some((label) => label.length > CHAT_POLL_INPUT_CONTRACT.maximumOptionLabelLength)) {
+    return `每个选项不能超过 ${CHAT_POLL_INPUT_CONTRACT.maximumOptionLabelLength} 个字`;
+  }
   const normalizedLabels = labels.map((label) => label.toLocaleLowerCase());
   if (new Set(normalizedLabels).size !== normalizedLabels.length) return "投票选项不能重复";
   return null;

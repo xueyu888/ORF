@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { CHAT_POLL_INPUT_CONTRACT } from "../src/domain/chatPollContract";
 import {
   chatPollProjectionPolicy,
   normalizeChatPollDraft,
@@ -37,6 +38,13 @@ test("chat poll draft requires a question and two distinct complete options", ()
   const duplicate = updateChatPollDraftOption(complete, complete.options[1].id, " 火锅 ");
   assert.equal(chatPollDraftValidationMessage(duplicate), "投票选项不能重复");
   assert.equal(addChatPollDraftOption(complete).options.length, 3);
+
+  let maximumDraft = complete;
+  while (maximumDraft.options.length < CHAT_POLL_INPUT_CONTRACT.maximumOptionCount) {
+    maximumDraft = addChatPollDraftOption(maximumDraft);
+  }
+  assert.equal(maximumDraft.options.length, 100);
+  assert.equal(addChatPollDraftOption(maximumDraft), maximumDraft);
 });
 
 test("server normalization independently enforces poll creation bounds", () => {
@@ -52,6 +60,13 @@ test("server normalization independently enforces poll creation bounds", () => {
   assert.equal(normalizeChatPollDraft({ options: ["A"], selectionMode: "single", visibility: "named" }), null);
   assert.equal(normalizeChatPollDraft({ options: ["A", " a "], selectionMode: "single", visibility: "named" }), null);
   assert.equal(normalizeChatPollDraft({ options: ["", "B"], selectionMode: "single", visibility: "named" }), null);
+
+  const maximumOptions = Array.from(
+    { length: CHAT_POLL_INPUT_CONTRACT.maximumOptionCount },
+    (_, index) => `选项 ${index + 1}`,
+  );
+  assert.equal(normalizeChatPollDraft({ options: maximumOptions, selectionMode: "multiple", visibility: "named" })?.options.length, 100);
+  assert.equal(normalizeChatPollDraft({ options: [...maximumOptions, "越界选项"], selectionMode: "multiple", visibility: "named" }), null);
 });
 
 test("single choice accepts exactly one option and multiple choice removes duplicates", () => {
@@ -59,6 +74,9 @@ test("single choice accepts exactly one option and multiple choice removes dupli
   assert.equal(normalizeChatPollVote(["option-a", "option-b"], "single"), null);
   assert.deepEqual(normalizeChatPollVote(["option-a", "option-a", "option-b"], "multiple"), ["option-a", "option-b"]);
   assert.equal(normalizeChatPollVote([], "multiple"), null);
+  const maximumSelection = Array.from({ length: CHAT_POLL_INPUT_CONTRACT.maximumOptionCount }, (_, index) => `option-${index}`);
+  assert.equal(normalizeChatPollVote(maximumSelection, "multiple")?.length, 100);
+  assert.equal(normalizeChatPollVote([...maximumSelection, "option-overflow"], "multiple"), null);
 
   const selected = toggleChatPollSelection("multiple", new Set(), "option-a");
   const changed = toggleChatPollSelection("multiple", selected, "option-b");

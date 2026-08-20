@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { PermissionKey } from "../../src/config/permissions";
+import { CHAT_POLL_INPUT_CONTRACT } from "../../src/domain/chatPollContract";
 import { requireUserScopeContext } from "../auth/accessPolicy";
 import { env } from "../env";
 import { CHAT_SYNC_PAGE_SIZE, CHAT_SYNC_PROTOCOL_VERSION, isChatSyncCursor } from "../../src/domain/chatSync";
@@ -106,14 +107,16 @@ const sendMessageBodySchema = z.object({
 });
 
 const createPollBodySchema = z.object({
-  question: z.string().trim().min(1).max(280),
-  options: z.array(z.string().trim().min(1).max(80)).min(2).max(8),
+  question: z.string().trim().min(1).max(CHAT_POLL_INPUT_CONTRACT.maximumQuestionLength),
+  options: z.array(z.string().trim().min(1).max(CHAT_POLL_INPUT_CONTRACT.maximumOptionLabelLength))
+    .min(CHAT_POLL_INPUT_CONTRACT.minimumOptionCount)
+    .max(CHAT_POLL_INPUT_CONTRACT.maximumOptionCount),
   selectionMode: z.enum(["single", "multiple"]),
   visibility: z.enum(["named", "anonymous"]),
 });
 
 const pollVoteBodySchema = z.object({
-  optionIds: z.array(z.string().trim().min(1)).min(1).max(8),
+  optionIds: z.array(z.string().trim().min(1)).min(1).max(CHAT_POLL_INPUT_CONTRACT.maximumOptionCount),
 });
 
 const updateMessageBodySchema = z.object({

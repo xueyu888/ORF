@@ -2,12 +2,10 @@ import { clsx } from "clsx";
 import { BarChart3, CircleDot, ListChecks, Plus, ShieldCheck, UsersRound, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, IconButton } from "../../components/ui";
+import { CHAT_POLL_INPUT_CONTRACT } from "../../domain/chatPollContract";
 import {
   addChatPollDraftOption,
   chatPollDraftValidationMessage,
-  chatPollMaximumOptionCount,
-  chatPollMinimumOptionCount,
-  chatPollQuestionMaximumLength,
   createInitialChatPollDraft,
   removeChatPollDraftOption,
   toChatPollCreateInput,
@@ -85,12 +83,12 @@ export function ChatPollComposer({ onClose, onCreate }: ChatPollComposerProps) {
             <input
               ref={questionRef}
               type="text"
-              maxLength={chatPollQuestionMaximumLength}
+              maxLength={CHAT_POLL_INPUT_CONTRACT.maximumQuestionLength}
               value={draft.question}
               placeholder="想让大家决定什么？"
               onChange={(event) => setDraft((current) => ({ ...current, question: event.target.value }))}
             />
-            <small>{draft.question.length}/{chatPollQuestionMaximumLength}</small>
+            <small>{draft.question.length}/{CHAT_POLL_INPUT_CONTRACT.maximumQuestionLength}</small>
           </label>
 
           <div className="orf-chat-poll-settings-column">
@@ -161,7 +159,7 @@ export function ChatPollComposer({ onClose, onCreate }: ChatPollComposerProps) {
                     type="button"
                     icon={X}
                     label={`删除选项 ${index + 1}`}
-                    disabled={draft.options.length <= chatPollMinimumOptionCount}
+                    disabled={draft.options.length <= CHAT_POLL_INPUT_CONTRACT.minimumOptionCount}
                     onClick={() => setDraft((current) => removeChatPollDraftOption(current, option.id))}
                   />
                 </label>
@@ -170,12 +168,12 @@ export function ChatPollComposer({ onClose, onCreate }: ChatPollComposerProps) {
             <button
               type="button"
               className="orf-chat-poll-add-option"
-              disabled={draft.options.length >= chatPollMaximumOptionCount}
+              disabled={draft.options.length >= CHAT_POLL_INPUT_CONTRACT.maximumOptionCount}
               onClick={() => setDraft(addChatPollDraftOption)}
             >
               <Plus className="h-4 w-4" />
               添加选项
-              <small>{draft.options.length}/{chatPollMaximumOptionCount}</small>
+              <small>{draft.options.length}/{CHAT_POLL_INPUT_CONTRACT.maximumOptionCount}</small>
             </button>
           </fieldset>
 

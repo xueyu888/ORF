@@ -23,6 +23,7 @@ import type {
   ProjectChatChannel,
 } from "../../src/types/orf";
 import { chatMessageTargetPath } from "../../src/domain/chatNavigation";
+import { CHAT_POLL_INPUT_CONTRACT } from "../../src/domain/chatPollContract";
 import type { PermissionKey } from "../../src/config/permissions";
 import { attachmentPreviewKind } from "../../src/domain/attachmentPreviewKind";
 import { addDaysToIsoDate, hasExecutableChatSearch, parseChatSearchQuery } from "../../src/features/chat/chatSearchSyntax";
@@ -2260,7 +2261,7 @@ export async function sendChatMessage(
   const poll = input.poll ? normalizeChatPollDraft(input.poll) : null;
   if (input.poll && !poll) return { status: "invalid" };
   if (poll && (
-    body.length > 280 ||
+    body.length > CHAT_POLL_INPUT_CONTRACT.maximumQuestionLength ||
     attachmentIds.length > 0 ||
     input.requireAcknowledgement ||
     input.rootMessageId ||
