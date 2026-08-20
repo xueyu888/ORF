@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { Check, CheckCheck, ChevronRight, Circle, Loader2, LockKeyhole, ShieldCheck, Users } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Button } from "../../components/ui";
 import type { ChatMessage } from "../../types/orf";
 import { ChatPollDetails } from "./ChatPollDetails";
@@ -23,16 +23,26 @@ type ChatPollCardProps = {
 export function ChatPollCard({ currentUserId, message, onClose, onVote }: ChatPollCardProps) {
   const poll = message.poll;
   const [pendingSelection, setPendingSelection] = useState<Set<string>>(() => new Set(poll?.currentUserOptionIds ?? []));
+  const synchronizedSelectionRef = useRef<Set<string>>(new Set(poll?.currentUserOptionIds ?? []));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [closeConfirmationOpen, setCloseConfirmationOpen] = useState(false);
 
   useEffect(() => {
-    setPendingSelection(new Set(poll?.currentUserOptionIds ?? []));
-    setDetailsOpen(false);
-    setCloseConfirmationOpen(false);
-  }, [poll?.closedAt, poll?.currentUserOptionIds]);
+    const nextSelection = new Set(poll?.currentUserOptionIds ?? []);
+    if (sameChatPollSelection(synchronizedSelectionRef.current, nextSelection)) return;
+    synchronizedSelectionRef.current = nextSelection;
+    setPendingSelection(nextSelection);
+  }, [poll?.currentUserOptionIds]);
+
+  useEffect(() => {
+    if (!poll?.resultsVisible) setDetailsOpen(false);
+  }, [poll?.resultsVisible]);
+
+  useEffect(() => {
+    if (poll?.closedAt) setCloseConfirmationOpen(false);
+  }, [poll?.closedAt]);
 
   const resultRows = useMemo(() => {
     if (!poll) return [];
@@ -150,9 +160,9 @@ export function ChatPollCard({ currentUserId, message, onClose, onVote }: ChatPo
                 <Users className="h-3.5 w-3.5" />{poll.participantCount ?? 0} 人参与<ChevronRight className="h-3 w-3" />
               </button>
             ) : <span><ShieldCheck className="h-3.5 w-3.5" />匿名投票 · {poll.participantCount ?? 0} 人参与</span>
-          ) : <span><LockKeyhole className="h-3.5 w-3.5" />投票结束后统一查看结果</span>}
+          ) : <span><LockKeyhole className="h-3.5 w-3.5" />提交选择后即可查看实时结果</span>}
           <span className="orf-chat-poll-vote-state">
-            {closed ? "结果已公开" : hasVoted ? "已投票，可修改选择" : "尚未投票"}
+            {closed ? "最终结果已公开" : hasVoted ? "已投票，可查看结果并修改选择" : "尚未投票"}
           </span>
         </div>
         {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-label="正在提交" />}
@@ -163,7 +173,7 @@ export function ChatPollCard({ currentUserId, message, onClose, onVote }: ChatPo
 
       {poll.canClose && closeConfirmationOpen && (
         <div className="orf-chat-poll-close-confirmation" role="alert">
-          <span><strong>结束后不能恢复</strong><small>结果将立即向频道成员公开。</small></span>
+          <span><strong>结束后不能恢复</strong><small>最终结果将向所有频道成员公开。</small></span>
           <div>
             <Button type="button" size="sm" variant="secondary" disabled={submitting} onClick={() => setCloseConfirmationOpen(false)}>取消</Button>
             <Button type="button" size="sm" variant="danger" disabled={submitting} onClick={() => void confirmClose()}>确认结束</Button>

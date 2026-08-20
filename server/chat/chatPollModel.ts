@@ -34,8 +34,12 @@ export function normalizeChatPollVote(optionIds: readonly string[], selectionMod
   return uniqueOptionIds;
 }
 
-export function chatPollProjectionPolicy(input: { closedAt: string | null; visibility: ChatPollVisibility }) {
-  const resultsVisible = Boolean(input.closedAt);
+export function chatPollProjectionPolicy(input: {
+  closedAt: string | null;
+  currentUserOptionIds: readonly string[];
+  visibility: ChatPollVisibility;
+}) {
+  const resultsVisible = Boolean(input.closedAt) || input.currentUserOptionIds.length > 0;
   return {
     includeParticipantIdentities: resultsVisible && input.visibility === "named",
     resultsVisible,

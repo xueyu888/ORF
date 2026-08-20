@@ -71,7 +71,7 @@ export function ChatPollComposer({ onClose, onCreate }: ChatPollComposerProps) {
             <span className="orf-chat-poll-composer-icon" aria-hidden="true"><BarChart3 /></span>
             <span>
               <strong id="orf-chat-poll-composer-title">创建投票</strong>
-              <small>投票期间隐藏结果，结束后统一公开</small>
+              <small>提交前隐藏结果，投票后即可查看实时结果</small>
             </span>
           </div>
           <IconButton type="button" icon={X} label="关闭创建投票" disabled={submitting} onClick={onClose} />

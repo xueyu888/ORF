@@ -84,11 +84,11 @@ export async function loadChatPolls(messageIds: string[], actorUserId: string) {
       `
         SELECT poll.message_id, poll.selection_mode, poll.visibility, poll.closed_at,
                poll.closed_by_user_id, message.author_user_id,
-               CASE WHEN poll.closed_at IS NULL THEN 0 ELSE (
+               (
                  SELECT count(DISTINCT vote.voter_user_id)::int
                  FROM chat_poll_votes vote
                  WHERE vote.poll_message_id = poll.message_id
-               ) END AS participant_count
+               ) AS participant_count
         FROM chat_polls poll
         INNER JOIN chat_messages message ON message.id = poll.message_id
         WHERE poll.message_id = ANY($1::text[])
@@ -98,14 +98,13 @@ export async function loadChatPolls(messageIds: string[], actorUserId: string) {
     pool.query<PollOptionRow>(
       `
         SELECT option.poll_message_id, option.id, option.label, option.position,
-               CASE WHEN poll.closed_at IS NULL THEN 0 ELSE count(vote.option_id)::int END AS vote_count
+               count(vote.option_id)::int AS vote_count
         FROM chat_poll_options option
-        INNER JOIN chat_polls poll ON poll.message_id = option.poll_message_id
         LEFT JOIN chat_poll_votes vote
           ON vote.poll_message_id = option.poll_message_id
          AND vote.option_id = option.id
         WHERE option.poll_message_id = ANY($1::text[])
-        GROUP BY option.poll_message_id, option.id, option.label, option.position, poll.closed_at
+        GROUP BY option.poll_message_id, option.id, option.label, option.position
         ORDER BY option.poll_message_id, option.position
       `,
       [messageIds],
@@ -128,7 +127,6 @@ export async function loadChatPolls(messageIds: string[], actorUserId: string) {
         FROM chat_poll_votes vote
         INNER JOIN chat_polls poll
           ON poll.message_id = vote.poll_message_id
-         AND poll.closed_at IS NOT NULL
          AND poll.visibility = 'named'
         INNER JOIN chat_poll_options option
           ON option.poll_message_id = vote.poll_message_id
@@ -173,7 +171,12 @@ export async function loadChatPolls(messageIds: string[], actorUserId: string) {
 
   for (const poll of pollRowsResult.rows) {
     const closedAt = iso(poll.closed_at);
-    const projectionPolicy = chatPollProjectionPolicy({ closedAt, visibility: poll.visibility });
+    const currentUserOptionIds = currentVotesByPoll.get(poll.message_id) ?? [];
+    const projectionPolicy = chatPollProjectionPolicy({
+      closedAt,
+      currentUserOptionIds,
+      visibility: poll.visibility,
+    });
     const participants = projectionPolicy.includeParticipantIdentities
       ? participantsByPoll.get(poll.message_id) ?? []
       : null;
@@ -183,7 +186,7 @@ export async function loadChatPolls(messageIds: string[], actorUserId: string) {
       canClose: poll.author_user_id === actorUserId && !closedAt,
       closedAt,
       closedByUserId: poll.closed_by_user_id,
-      currentUserOptionIds: currentVotesByPoll.get(poll.message_id) ?? [],
+      currentUserOptionIds,
       options: options.map((option) => ({
         id: option.id,
         label: option.label,

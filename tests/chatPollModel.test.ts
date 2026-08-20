@@ -84,16 +84,32 @@ test("single choice accepts exactly one option and multiple choice removes dupli
   assert.equal(sameChatPollSelection(changed, new Set(["option-b", "option-a"])), true);
 });
 
-test("poll results are server-visible only after close and identities only for named polls", () => {
-  assert.deepEqual(chatPollProjectionPolicy({ closedAt: null, visibility: "named" }), {
+test("poll results become visible after the current user votes or the poll closes", () => {
+  assert.deepEqual(chatPollProjectionPolicy({ closedAt: null, currentUserOptionIds: [], visibility: "named" }), {
     includeParticipantIdentities: false,
     resultsVisible: false,
   });
-  assert.deepEqual(chatPollProjectionPolicy({ closedAt: "2026-08-20T00:00:00.000Z", visibility: "named" }), {
+  assert.deepEqual(chatPollProjectionPolicy({ closedAt: null, currentUserOptionIds: ["option-a"], visibility: "named" }), {
     includeParticipantIdentities: true,
     resultsVisible: true,
   });
-  assert.deepEqual(chatPollProjectionPolicy({ closedAt: "2026-08-20T00:00:00.000Z", visibility: "anonymous" }), {
+  assert.deepEqual(chatPollProjectionPolicy({
+    closedAt: "2026-08-20T00:00:00.000Z",
+    currentUserOptionIds: [],
+    visibility: "named",
+  }), {
+    includeParticipantIdentities: true,
+    resultsVisible: true,
+  });
+  assert.deepEqual(chatPollProjectionPolicy({ closedAt: null, currentUserOptionIds: ["option-a"], visibility: "anonymous" }), {
+    includeParticipantIdentities: false,
+    resultsVisible: true,
+  });
+  assert.deepEqual(chatPollProjectionPolicy({
+    closedAt: "2026-08-20T00:00:00.000Z",
+    currentUserOptionIds: [],
+    visibility: "anonymous",
+  }), {
     includeParticipantIdentities: false,
     resultsVisible: true,
   });
@@ -121,7 +137,7 @@ test("poll schema guard requires all facts and security constraints", () => {
   assert.match(validateChatPollSchema({ columns: columns.filter((column) => column.columnName !== "voter_user_id"), constraints })[0], /voter_user_id/);
 });
 
-test("database and repository contracts keep open results hidden and anonymous identity out of sync", () => {
+test("database and repository contracts derive live results without exposing anonymous identity", () => {
   const migration = readFileSync(new URL("../drizzle/0100_chat_polls.sql", import.meta.url), "utf8");
   const pollRepository = readFileSync(new URL("../server/chat/chatPollRepository.ts", import.meta.url), "utf8");
   const chatRepository = readFileSync(new URL("../server/repositories/chatRepository.ts", import.meta.url), "utf8");
@@ -133,7 +149,9 @@ test("database and repository contracts keep open results hidden and anonymous i
   assert.match(migration, /single-choice poll accepts one option per voter/);
   assert.doesNotMatch(migration, /"status"/);
   assert.doesNotMatch(syncFunction, /voter_user_id|option_id/);
-  assert.match(pollRepository, /CASE WHEN poll\.closed_at IS NULL THEN 0 ELSE count\(vote\.option_id\)::int END/);
-  assert.match(pollRepository, /poll\.closed_at IS NOT NULL[\s\S]+poll\.visibility = 'named'/);
+  assert.match(pollRepository, /count\(vote\.option_id\)::int AS vote_count/);
+  assert.doesNotMatch(pollRepository, /CASE WHEN poll\.closed_at IS NULL THEN 0 ELSE/);
+  assert.match(pollRepository, /poll\.visibility = 'named'/);
+  assert.doesNotMatch(pollRepository, /poll\.closed_at IS NOT NULL/);
   assert.match(chatRepository, /mutation\.visibility === "anonymous" \? null : actor\.id/);
 });
