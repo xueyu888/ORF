@@ -452,6 +452,14 @@ export function ChatPage() {
     notify("目标消息不可用");
   }, [notify]);
 
+  const consumeRequestedMessage = useCallback(() => {
+    setSearchParams((params) => {
+      params.delete("message");
+      params.delete("thread");
+      return params;
+    }, { replace: true });
+  }, [setSearchParams]);
+
   const {
     appendThreadReply,
     applyThreadMessage,
@@ -477,9 +485,10 @@ export function ChatPage() {
   });
 
   useEffect(() => {
-    if (!activeChannel || !requestedThreadRootMessageId) return;
+    if (!activeChannel?.id || !requestedThreadRootMessageId) return;
     void openThread(requestedThreadRootMessageId, { focusMessageId, revalidate: Boolean(focusMessageId) });
-  }, [activeChannel, focusMessageId, openThread, requestedThreadRootMessageId]);
+    consumeRequestedMessage();
+  }, [activeChannel?.id, consumeRequestedMessage, focusMessageId, openThread, requestedThreadRootMessageId]);
 
   const threadChannel = useMemo(() => {
     if (!thread) return null;
@@ -498,14 +507,6 @@ export function ChatPage() {
     });
     return resetChatNativeNotificationViewState;
   }, [activeChannel?.id, activePanel, thread?.rootMessage.id]);
-
-  const consumeRequestedMessage = useCallback(() => {
-    setSearchParams((params) => {
-      params.delete("message");
-      params.delete("thread");
-      return params;
-    }, { replace: true });
-  }, [setSearchParams]);
 
   const redirectRequestedMessage = useCallback((messageId: string) => {
     setSearchParams((params) => {
