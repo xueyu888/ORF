@@ -1,4 +1,5 @@
 import type { ChatRealtimeEvent } from "../../types/realtime";
+import type { AttentionLevel } from "../attention/attentionTypes";
 
 export type ChatNativeNotificationSkipReason =
   | "active_channel"
@@ -19,6 +20,7 @@ export type ChatNativeNotificationPayload = {
   channelId: string;
   createdAt: string;
   id: string;
+  level?: Extract<AttentionLevel, "flash" | "toast">;
   messageId: string;
   sender?: {
     avatarUrl?: string | null;
@@ -84,6 +86,7 @@ export function buildChatNativeNotificationDecision(input: {
       channelId: event.channelId,
       createdAt: event.createdAt,
       id: event.id,
+      level: event.attention ? "flash" : "toast",
       messageId: event.messageId,
       sender: event.notification.sender ?? {
         avatarUrl: null,

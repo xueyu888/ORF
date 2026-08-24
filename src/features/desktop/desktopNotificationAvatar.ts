@@ -18,7 +18,7 @@ const notificationAvatarCacheLimit = 64;
 const preparedAvatarByIdentity = new Map<string, Promise<string>>();
 
 export async function prepareDesktopNotificationAvatar<T extends NotificationWithSender>(notification: T): Promise<T> {
-  if (!notification.sender || typeof window === "undefined" || !("orfDesktopShell" in window || "orfNativeNotifications" in window)) {
+  if (!notification.sender || typeof window === "undefined" || !("orfDesktopShell" in window)) {
     return notification;
   }
   return {

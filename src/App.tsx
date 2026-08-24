@@ -7,8 +7,6 @@ import { Button } from "./components/ui";
 import { canShowFrontend, canShowFrontendPath, type FrontendVisibilityKey } from "./config/frontendVisibility";
 import { systemManagementPages } from "./config/navigation";
 import { registeredWebModuleRoutes } from "./config/webModuleRegistry";
-import { ChatImagePopoutPage } from "./features/chat/ChatFloatingImagePreview";
-import { DriveFilePreviewPopoutPage } from "./features/drive/DriveFilePreview";
 import { readLastWorkbenchLocationHref } from "./features/workbench-navigation";
 import { useOrf } from "./state/OrfProvider";
 import {
@@ -31,8 +29,6 @@ export function App() {
   return (
     <Routes>
       <Route path="auth" element={<AuthRoute />} />
-      <Route path="chat/image-popout/:popoutId" element={<ChatImagePopoutPage />} />
-      <Route path="drive/file-preview-popout/:popoutId" element={<DriveFilePreviewPopoutPage />} />
       <Route element={<RequireAuth />}>
         <Route path="bounties" element={<LazyRoute><BountyHallPage /></LazyRoute>} />
         <Route path="tasks" element={<LazyRoute><ChallengePlanPage /></LazyRoute>} />

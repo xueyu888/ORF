@@ -46,6 +46,7 @@ import {
   attentionToastIntentFromNotification,
   attentionToastIntentFromWorkLogReminder,
   buildAttentionState,
+  type AttentionToastIntent,
 } from "../features/attention/attentionModel";
 import type { AttentionState } from "../features/attention/attentionTypes";
 import {
@@ -56,9 +57,11 @@ import {
 import type { AppAttentionState } from "../features/interaction/appAttentionState";
 import { useAppAttentionState } from "../features/interaction/useAppAttentionState";
 import {
+  showDesktopToastIntent,
   syncDesktopAttentionState,
-  subscribeDesktopAttentionTargetOpen,
-  type DesktopAttentionToast,
+  subscribeDesktopTargetOpen,
+  type DesktopToastIntent,
+  type DesktopToastSource,
 } from "../features/desktop/desktopShellRuntime";
 import { prepareDesktopNotificationAvatar } from "../features/desktop/desktopNotificationAvatar";
 import { registerOrfPushNotifications, revokeOrfPushNotifications } from "../features/push/orfPushRegistration";
@@ -269,7 +272,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [workLogReminderState, setWorkLogReminderState] = useState<WorkLogReminderState | null>(null);
   const [chatUnreadSummary, setChatUnreadSummary] = useState<ChatUnreadSummary>(emptyChatUnreadSummary);
   const [chatRealtimeAttentionIntents, setChatRealtimeAttentionIntents] = useState<ChatRealtimeAttentionIntent[]>([]);
-  const [desktopAttentionToast, setDesktopAttentionToast] = useState<DesktopAttentionToast | null>(null);
   const authenticationExpiryConfirmationRef = useRef<Promise<void> | null>(null);
   const notifiedChatMessageIdsRef = useRef<string[]>([]);
   const chatRealtimeAttentionIntentsRef = useRef<ChatRealtimeAttentionIntent[]>([]);
@@ -374,10 +376,20 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     setSystemBroadcasts((items) => items.filter((item) => item.id !== id));
   }, []);
 
-  const showDesktopAttentionToast = useCallback((toast: DesktopAttentionToast) => {
-    void prepareDesktopNotificationAvatar(toast)
-      .then(setDesktopAttentionToast)
-      .catch(() => setDesktopAttentionToast(toast));
+  const sendDesktopAttentionToastIntent = useCallback((toast: AttentionToastIntent, source: DesktopToastSource) => {
+    const intent: DesktopToastIntent = {
+      body: toast.body,
+      eventId: `${source}:${toast.id}`,
+      level: toast.level,
+      sender: toast.sender,
+      source,
+      targetPath: toast.targetPath,
+      title: toast.title,
+    };
+    void prepareDesktopNotificationAvatar(intent)
+      .then(showDesktopToastIntent)
+      .catch(() => showDesktopToastIntent(intent))
+      .catch(() => undefined);
   }, []);
 
   const receiveRealtimeNotification = useCallback(
@@ -390,10 +402,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         notification,
       });
       if (toastIntent) {
-        showDesktopAttentionToast(toastIntent);
+        sendDesktopAttentionToastIntent(toastIntent, "notification");
       }
     },
-    [appAttentionState, currentPath, currentUser?.id, receiveNotification, showDesktopAttentionToast],
+    [appAttentionState, currentPath, currentUser?.id, receiveNotification, sendDesktopAttentionToastIntent],
   );
   const receiveRealtimeBroadcast = useCallback((broadcast: SystemBroadcast) => {
     if (isClientUpdateSystemBroadcast(broadcast)) {
@@ -490,9 +502,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       currentPath,
     });
     if (toastIntent) {
-      showDesktopAttentionToast(toastIntent);
+      sendDesktopAttentionToastIntent(toastIntent, "worklog");
     }
-  }, [appAttentionState, currentPath, showDesktopAttentionToast]);
+  }, [appAttentionState, currentPath, sendDesktopAttentionToastIntent]);
 
   const receiveWorkLogReminderResolved = useCallback((event: { reminder: WorkLogReminderState }) => {
     setWorkLogReminderState(event.reminder);
@@ -504,7 +516,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     }
   }), [navigate]);
 
-  useEffect(() => subscribeDesktopAttentionTargetOpen((targetPath) => {
+  useEffect(() => subscribeDesktopTargetOpen((targetPath) => {
     navigate(targetPath);
   }), [navigate]);
 
@@ -571,7 +583,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       setChatUnreadSummary(emptyChatUnreadSummary);
       chatRealtimeAttentionIntentsRef.current = [];
       setChatRealtimeAttentionIntents([]);
-      setDesktopAttentionToast(null);
       setReadModelInvalidations([]);
       setSystemBroadcasts([]);
       setWorkLogReminderState(null);
@@ -589,7 +600,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         level: attentionState.level,
         reason: attentionState.reason,
         title: attentionState.title,
-        toast: desktopAttentionToast,
         workItemCount: attentionState.count,
       }
       : {
@@ -601,17 +611,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         level: "none" as const,
         reason: null,
         title: "ORF",
-        toast: null,
         workItemCount: 0,
       };
-    void syncDesktopAttentionState(payload)
-      .then(() => {
-        if (desktopAttentionToast) {
-          setDesktopAttentionToast((current) => current?.id === desktopAttentionToast.id ? null : current);
-        }
-      })
-      .catch(() => undefined);
-  }, [attentionState, desktopAttentionToast, isApproved, isAuthenticated]);
+    void syncDesktopAttentionState(payload).catch(() => undefined);
+  }, [attentionState, isApproved, isAuthenticated]);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) return;

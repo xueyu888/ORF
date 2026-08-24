@@ -2,6 +2,7 @@ import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import type { ChatNativeNotificationPayload } from "./chatNativeNotificationModel";
 import { prepareDesktopNotificationAvatar } from "../desktop/desktopNotificationAvatar";
+import { showDesktopToastIntent } from "../desktop/desktopShellRuntime";
 
 type NativeChatNotificationResult = {
   data?: string;
@@ -9,29 +10,12 @@ type NativeChatNotificationResult = {
   status: "error" | "not_sent" | "success" | "unsupported";
 };
 
-type OrfNativeNotificationBridge = {
-  onOpenChatTarget?: (handler: (targetPath: string) => void) => (() => void);
-  showChatMessage?: (payload: ChatNativeNotificationPayload & { avatarDataUrl?: string | null }) => Promise<NativeChatNotificationResult>;
-};
-
-declare global {
-  interface Window {
-    orfNativeNotifications?: OrfNativeNotificationBridge;
-  }
-}
-
 const androidChatNotificationChannelId = "orf-chat-messages";
 let androidLocalNotificationReady: Promise<NativeChatNotificationResult> | null = null;
 
 export async function sendNativeChatNotification(payload: ChatNativeNotificationPayload): Promise<NativeChatNotificationResult> {
-  if (typeof window !== "undefined" && window.orfNativeNotifications?.showChatMessage) {
-    try {
-      const desktopPayload = await prepareDesktopNotificationAvatar(payload);
-      return normalizeNativeChatNotificationResult(await window.orfNativeNotifications.showChatMessage(desktopPayload));
-    } catch (error) {
-      return { status: "error", reason: "desktop_bridge", data: String(error) };
-    }
-  }
+  const desktopResult = await sendDesktopChatNotification(payload);
+  if (desktopResult.status !== "unsupported") return desktopResult;
 
   if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
     return sendAndroidLocalChatNotification(payload);
@@ -49,9 +33,6 @@ export function prepareNativeChatNotifications(): Promise<NativeChatNotification
 
 export function subscribeNativeChatNotificationOpen(handler: (targetPath: string) => void) {
   let cancelled = false;
-  const cleanups: Array<() => void> = [];
-  const desktopCleanup = typeof window !== "undefined" ? window.orfNativeNotifications?.onOpenChatTarget?.(handler) : undefined;
-  if (desktopCleanup) cleanups.push(desktopCleanup);
 
   let androidListener: Promise<PluginListenerHandle> | null = null;
   if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
@@ -66,9 +47,28 @@ export function subscribeNativeChatNotificationOpen(handler: (targetPath: string
 
   return () => {
     cancelled = true;
-    for (const cleanup of cleanups) cleanup();
     if (androidListener) void androidListener.then((listener) => listener.remove());
   };
+}
+
+async function sendDesktopChatNotification(payload: ChatNativeNotificationPayload): Promise<NativeChatNotificationResult> {
+  try {
+    const desktopPayload = await prepareDesktopNotificationAvatar({ ...payload, avatarDataUrl: null });
+    const result = await showDesktopToastIntent({
+      avatarDataUrl: desktopPayload.avatarDataUrl,
+      body: payload.body,
+      duration: "long",
+      eventId: `chat:${payload.messageId}`,
+      level: payload.level ?? "toast",
+      sender: payload.sender,
+      source: "chat",
+      targetPath: payload.targetPath,
+      title: payload.title,
+    });
+    return result.status ? { reason: result.reason, status: result.status } : { status: "success" };
+  } catch (error) {
+    return { status: "error", reason: "desktop_bridge", data: String(error) };
+  }
 }
 
 async function sendAndroidLocalChatNotification(payload: ChatNativeNotificationPayload): Promise<NativeChatNotificationResult> {

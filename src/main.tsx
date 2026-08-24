@@ -5,7 +5,9 @@ import { App } from "./App";
 import { AppErrorBoundary, fallbackContentForError } from "./components/AppFallback";
 import { ConfirmDialogProvider } from "./components/ConfirmDialog";
 import { initializeAppearanceMode } from "./features/appearance/appearanceMode";
+import { ChatImagePopoutPage } from "./features/chat/ChatFloatingImagePreview";
 import { OrfProvider } from "./state/OrfProvider";
+import { DriveFilePreviewPopoutPage } from "./features/drive/DriveFilePreview";
 import "./styles.css";
 
 initializeAppearanceMode();
@@ -24,14 +26,12 @@ try {
       <React.StrictMode>
         <AppErrorBoundary>
           <BrowserRouter>
-            <ConfirmDialogProvider>
-              <OrfProvider>
-                <Routes>
-                  <Route path="/" element={<Navigate to="/bounties" replace />} />
-                  <Route path="/*" element={<App />} />
-                </Routes>
-              </OrfProvider>
-            </ConfirmDialogProvider>
+            <Routes>
+              <Route path="/" element={<Navigate to="/bounties" replace />} />
+              <Route path="chat/image-popout/:popoutId" element={<ChatImagePopoutPage />} />
+              <Route path="drive/file-preview-popout/:popoutId" element={<DriveFilePreviewPopoutPage />} />
+              <Route path="/*" element={<WorkbenchRuntime />} />
+            </Routes>
           </BrowserRouter>
         </AppErrorBoundary>
       </React.StrictMode>,
@@ -39,6 +39,16 @@ try {
   }
 } catch (error) {
   renderStaticFallback(rootElement ?? document.body, fallbackContentForError(error));
+}
+
+function WorkbenchRuntime() {
+  return (
+    <ConfirmDialogProvider>
+      <OrfProvider>
+        <App />
+      </OrfProvider>
+    </ConfirmDialogProvider>
+  );
 }
 
 function renderStaticFallback(target: HTMLElement, content: { title: string; description: string; detail?: string | null }) {

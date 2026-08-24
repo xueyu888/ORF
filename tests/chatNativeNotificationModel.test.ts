@@ -443,13 +443,14 @@ test("Windows Toast renderer uses one escaped circular sender-avatar contract", 
   assert.doesNotMatch(withoutAvatar, /<image /);
 });
 
-test("Win11 chat notifications use long Toast duration without changing attention Toast duration", () => {
+test("Win11 unified desktop Toast keeps chat long duration without forcing attention Toast duration", () => {
   const desktopMainSource = readFileSync(new URL("../clients/desktop/main.cjs", import.meta.url), "utf8");
-  const chatToastSource = desktopMainSource.match(/function windowsChatNotificationToastXml\(payload\) \{[\s\S]*?\n\}/)?.[0] ?? "";
-  const attentionToastSource = desktopMainSource.match(/function windowsAttentionNotificationToastXml\(payload\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const desktopToastPayloadSource = desktopMainSource.match(/function desktopToastPayload\(input, clientUrl\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const windowsDesktopToastSource = desktopMainSource.match(/function windowsDesktopToastXml\(payload\) \{[\s\S]*?\n\}/)?.[0] ?? "";
 
-  assert.match(chatToastSource, /duration:\s*"long"/);
-  assert.doesNotMatch(attentionToastSource, /duration:/);
+  assert.match(desktopToastPayloadSource, /source === "chat" \? "long" : undefined/);
+  assert.match(windowsDesktopToastSource, /duration:\s*payload\.duration/);
+  assert.doesNotMatch(windowsDesktopToastSource, /duration:\s*"long"/);
 });
 
 test("app attention state treats only focused visible browser documents as actively viewed", () => {

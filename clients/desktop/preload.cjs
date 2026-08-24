@@ -44,13 +44,6 @@ function createPendingTargetSubscriber(pendingChannel, consumeChannel) {
   };
 }
 
-contextBridge.exposeInMainWorld("orfNativeNotifications", {
-  showChatMessage(payload) {
-    return ipcRenderer.invoke("orf:chat-notification:show", payload);
-  },
-  onOpenChatTarget: createPendingTargetSubscriber("orf:chat-notification:open-pending", "orf:chat-notification:consume-open-target"),
-});
-
 contextBridge.exposeInMainWorld("orfNativeRuntime", {
   getInfo() {
     return ipcRenderer.invoke("orf:runtime:get-info");
@@ -77,6 +70,9 @@ contextBridge.exposeInMainWorld("orfDesktopShell", {
   },
   setAttentionState(payload) {
     return ipcRenderer.invoke("orf:desktop-shell:set-attention-state", payload);
+  },
+  showToastIntent(payload) {
+    return ipcRenderer.invoke("orf:desktop-shell:show-toast-intent", payload);
   },
   setChatUnreadCount(payload) {
     return ipcRenderer.invoke("orf:desktop-shell:set-chat-unread-count", payload);

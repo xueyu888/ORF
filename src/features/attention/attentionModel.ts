@@ -24,7 +24,7 @@ type BuildAttentionStateInput = {
   workLogReminderState: WorkLogReminderState | null;
 };
 
-type DesktopAttentionToastInput = {
+type AttentionToastInput = {
   appAttentionState: AppAttentionState;
   currentPath: string;
   currentUserId?: string | null;
@@ -143,7 +143,7 @@ export function buildAttentionState(input: BuildAttentionStateInput): AttentionS
   };
 }
 
-export function attentionToastIntentFromNotification(input: DesktopAttentionToastInput): AttentionToastIntent | null {
+export function attentionToastIntentFromNotification(input: AttentionToastInput): AttentionToastIntent | null {
   if (input.notification.actorUserId === input.currentUserId) return null;
   if (input.notification.kind === "worklog.reminder") return null;
   const targetPath = normalizeAttentionTargetPath(input.notification.targetHref);

@@ -42,7 +42,7 @@
 | 工作日志欠账是否继续提醒 | `work_log_reminder_states` |
 | 待处理数量、桌面红点数量、注意力等级、最新强提醒、是否需要闪烁 | `buildAttentionState` 的前端派生结果 |
 | realtime 强提醒意图 | 当前客户端内存；仅用于填补消息到达与持久未读对账之间的时间窗，不写数据库 |
-| Toast/flash 冷却和同事件去重 | 前端或桌面壳本地运行态；当前桌面 flash 冷却为 12 秒 |
+| Toast 同事件去重和 flash 冷却 | 桌面壳本地运行态；Toast 以 `DesktopToastIntent.eventId` 为键只输出一次，当前桌面 flash 冷却为 12 秒 |
 
 ## 注意力等级
 
@@ -132,7 +132,7 @@
 
 Win11 桌面壳只消费注意力状态，不理解业务语义。
 
-聊天 Toast 和系统通知 Toast 复用同一个桌面渲染契约：标题、正文、目标路径、提醒等级、事件 ID，以及可选的发送者展示身份。发送者头像 URL 仍由用户头像事实派生；前端使用当前登录态读取头像并缩放为受限 PNG，Windows 壳只把这份展示数据写入有数量上限的临时图片缓存，再以 `appLogoOverride + hint-crop="circle"` 渲染。无头像、读取失败或非用户事件统一回退为姓名首字头像或 ORF 应用图标，不新增头像事实表，也不让桌面壳读取业务接口。
+聊天 Toast、系统通知 Toast 和工作日志 Toast 复用同一个桌面渲染契约：来源、事件 ID、标题、正文、目标路径、提醒等级、展示时长，以及可选的发送者展示身份。发送者头像 URL 仍由用户头像事实派生；前端使用当前登录态读取头像并缩放为受限 PNG，Windows 壳只把这份展示数据写入有数量上限的临时图片缓存，再以 `appLogoOverride + hint-crop="circle"` 渲染。无头像、读取失败或非用户事件统一回退为姓名首字头像或 ORF 应用图标，不新增头像事实表，也不让桌面壳读取业务接口。
 
 保留现有兼容接口：
 
@@ -152,10 +152,23 @@ setAttentionState({
   level,
   reason,
   title,
-  toast,
   workItemCount
 })
+
+showToastIntent({
+  source,
+  eventId,
+  title,
+  body,
+  targetPath,
+  level,
+  duration,
+  sender,
+  avatarDataUrl
+})
 ```
+
+`setAttentionState` 只同步任务栏角标、托盘、flash 和最新入口等幂等展示状态，不携带 Toast。`showToastIntent` 是唯一一次性系统 Toast 出口；桌面壳先校验来源和目标路径，再按 `eventId -> payload fingerprint` 预留显示，重复 `eventId` 且 payload 相同返回重复不展示，相同 `eventId` 但 payload 不同记录冲突并拒绝展示。稳定事件 ID 由事实源命名：聊天消息为 `chat:${messageId}`，系统通知为 `notification:${notificationEventId}`，工作日志提醒为 `worklog:${reminderOccurrenceId}`。
 
 兼容规则：
 

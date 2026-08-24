@@ -6,16 +6,22 @@ export type DesktopShellUnreadResult = {
   status: "error" | "success" | "unsupported";
 };
 
-export type DesktopAttentionToast = {
+export type DesktopToastSource = "chat" | "notification" | "worklog";
+
+export type DesktopToastDuration = "long" | "short";
+
+export type DesktopToastIntent = {
   avatarDataUrl?: string | null;
   body: string;
-  id: string;
+  duration?: DesktopToastDuration;
+  eventId: string;
   sender?: {
     avatarUrl?: string | null;
     name: string;
     userId?: string | null;
   };
   level?: AttentionLevel;
+  source: DesktopToastSource;
   targetPath: string;
   title: string;
 };
@@ -29,7 +35,6 @@ export type DesktopAttentionPayload = {
   level: AttentionLevel;
   reason?: string | null;
   title: string;
-  toast?: DesktopAttentionToast | null;
   workItemCount?: number;
 };
 
@@ -37,6 +42,12 @@ export type DesktopAttentionResult = {
   data?: DesktopAttentionPayload;
   reason?: string;
   status: "error" | "success" | "unsupported";
+};
+
+export type DesktopToastResult = {
+  data?: DesktopToastIntent;
+  reason?: string;
+  status: "error" | "not_sent" | "success" | "unsupported";
 };
 
 export type DesktopLaunchAtLoginState = {
@@ -102,6 +113,7 @@ type DesktopShellBridge = {
   setChatUnreadCount?: (payload: { count: number }) => Promise<DesktopShellUnreadResult>;
   setLaunchAtLoginEnabled?: (payload: { enabled: boolean }) => Promise<DesktopShellLaunchAtLoginResult>;
   setWorkbenchZoomLevel?: (payload: { level: number }) => Promise<DesktopWorkbenchZoomResult>;
+  showToastIntent?: (payload: DesktopToastIntent) => Promise<DesktopToastResult>;
   toggleMaximizeWindow?: () => Promise<DesktopShellWindowResult>;
 };
 
@@ -144,6 +156,22 @@ export async function syncDesktopAttentionState(payload: DesktopAttentionPayload
       : { reason: result.reason, status: result.status };
   }
   return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
+}
+
+export async function showDesktopToastIntent(intent: DesktopToastIntent): Promise<DesktopToastResult> {
+  const normalizedIntent = normalizeDesktopToastIntent(intent);
+  if (!normalizedIntent) {
+    return { status: "not_sent", reason: "invalid_payload" };
+  }
+  if (typeof window === "undefined" || !window.orfDesktopShell?.showToastIntent) {
+    return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
+  }
+  try {
+    const result = await window.orfDesktopShell.showToastIntent(normalizedIntent);
+    return result?.status ? result : { data: normalizedIntent, status: "success" };
+  } catch {
+    return { status: "error", reason: "desktop_shell_bridge_failed" };
+  }
 }
 
 export function isDesktopShellAvailable() {
@@ -263,18 +291,18 @@ export function subscribeDesktopWindowState(handler: (state: DesktopWindowState)
   });
 }
 
-export function subscribeDesktopAttentionTargetOpen(handler: (targetPath: string) => void) {
+export function subscribeDesktopTargetOpen(handler: (targetPath: string) => void) {
   if (typeof window === "undefined" || !window.orfDesktopShell?.onOpenTarget) {
     return undefined;
   }
   return window.orfDesktopShell.onOpenTarget((targetPath) => {
-    if (isSafeDesktopAttentionTargetPath(targetPath)) {
+    if (isSafeDesktopTargetPath(targetPath)) {
       handler(targetPath);
     }
   });
 }
 
-export function isSafeDesktopAttentionTargetPath(targetPath: string | null | undefined) {
+export function isSafeDesktopTargetPath(targetPath: string | null | undefined) {
   return typeof targetPath === "string"
     && /^\/(?!\/)[\w\-./~%]*(?:\?[^#\s]*)?(?:#[^\s]*)?$/.test(targetPath)
     && !targetPath.startsWith("/api/")
@@ -290,8 +318,7 @@ function normalizeDesktopAttentionPayload(payload: DesktopAttentionPayload): Des
   const badgeCount = normalizeUnreadCount(payload.badgeCount ?? count);
   const workItemCount = normalizeUnreadCount(payload.workItemCount ?? count);
   const level = normalizeAttentionLevel(payload.level, badgeCount);
-  const latestTargetPath = isSafeDesktopAttentionTargetPath(payload.latestTargetPath) ? payload.latestTargetPath : null;
-  const toast = normalizeDesktopAttentionToast(payload.toast);
+  const latestTargetPath = isSafeDesktopTargetPath(payload.latestTargetPath) ? payload.latestTargetPath : null;
   return {
     badgeCount,
     body: normalizeDesktopAttentionText(payload.body, workItemCount > 0 ? `${workItemCount} 条待处理提醒` : badgeCount > 0 ? `${badgeCount} 条未读消息` : ""),
@@ -301,25 +328,37 @@ function normalizeDesktopAttentionPayload(payload: DesktopAttentionPayload): Des
     level,
     reason: normalizeDesktopAttentionText(payload.reason, "") || null,
     title: normalizeDesktopAttentionText(payload.title, "ORF"),
-    toast,
     workItemCount,
   };
 }
 
-function normalizeDesktopAttentionToast(toast: DesktopAttentionPayload["toast"]): DesktopAttentionToast | null {
-  if (!toast || !isSafeDesktopAttentionTargetPath(toast.targetPath)) return null;
+function normalizeDesktopToastIntent(intent: DesktopToastIntent): DesktopToastIntent | null {
+  if (!intent || !isSafeDesktopTargetPath(intent.targetPath)) return null;
+  const eventId = normalizeDesktopAttentionText(intent.eventId, "");
+  const source = normalizeDesktopToastSource(intent.source);
+  if (!eventId || !source) return null;
   return {
-    avatarDataUrl: normalizeDesktopAvatarDataUrl(toast.avatarDataUrl),
-    body: normalizeDesktopAttentionText(toast.body, "你有一条新的提醒"),
-    id: normalizeDesktopAttentionText(toast.id, ""),
-    sender: normalizeDesktopNotificationSender(toast.sender),
-    level: normalizeAttentionLevel(toast.level ?? "toast", 1),
-    targetPath: toast.targetPath,
-    title: normalizeDesktopAttentionText(toast.title, "ORF 提醒"),
+    avatarDataUrl: normalizeDesktopAvatarDataUrl(intent.avatarDataUrl),
+    body: normalizeDesktopAttentionText(intent.body, "你有一条新的提醒"),
+    duration: intent.duration === "long" ? "long" : intent.duration === "short" ? "short" : undefined,
+    eventId,
+    sender: normalizeDesktopNotificationSender(intent.sender),
+    level: normalizeDesktopToastLevel(intent.level),
+    source,
+    targetPath: intent.targetPath,
+    title: normalizeDesktopAttentionText(intent.title, "ORF 提醒"),
   };
 }
 
-function normalizeDesktopNotificationSender(sender: DesktopAttentionToast["sender"]): DesktopAttentionToast["sender"] {
+function normalizeDesktopToastSource(source: DesktopToastIntent["source"]): DesktopToastSource | null {
+  return source === "chat" || source === "notification" || source === "worklog" ? source : null;
+}
+
+function normalizeDesktopToastLevel(level: AttentionLevel | undefined): Extract<AttentionLevel, "flash" | "toast" | "urgent"> {
+  return level === "urgent" || level === "flash" ? level : "toast";
+}
+
+function normalizeDesktopNotificationSender(sender: DesktopToastIntent["sender"]): DesktopToastIntent["sender"] {
   if (!sender) return undefined;
   const name = normalizeDesktopAttentionText(sender.name, "");
   if (!name) return undefined;
