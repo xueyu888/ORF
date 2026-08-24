@@ -226,7 +226,6 @@ export function ChatPage() {
   const [driveSelectionRequest, setDriveSelectionRequest] = useState<ChatDriveResourceSelectionRequest | null>(null);
   const [locatedMessageId, setLocatedMessageId] = useState<string | null>(null);
   const [memberSearchFocusSignal, setMemberSearchFocusSignal] = useState(0);
-  const [mobileListRequested, setMobileListRequested] = useState(false);
   const chatPageRef = useRef<HTMLDivElement | null>(null);
   const driveSelectionRequestIdRef = useRef(0);
   const handledBootstrapInvalidationKeyRef = useRef("");
@@ -721,7 +720,6 @@ export function ChatPage() {
 
   const handleOpenChannel = useCallback((channelId: string) => {
     setLocatedMessageId(null);
-    setMobileListRequested(false);
     if (channelId === activeChannel?.id) return;
     navigate(`/chat/${encodeURIComponent(channelId)}`);
   }, [activeChannel?.id, navigate]);
@@ -735,7 +733,6 @@ export function ChatPage() {
   const handleOpenChatResult = useCallback((result: ChatSearchResult) => {
     applyChannel(result.channel);
     setLocatedMessageId(null);
-    setMobileListRequested(false);
     navigate(chatMessageTargetPath({
       channelId: result.channel.id,
       messageId: result.message.id,
@@ -749,7 +746,6 @@ export function ChatPage() {
       closePanel();
       return;
     }
-    setMobileListRequested(true);
     navigate("/chat");
   }, [activePanel, closePanel, navigate]);
 
@@ -768,7 +764,6 @@ export function ChatPage() {
     try {
       const response = await openChatConversation(userIds);
       applyChannel(response.channel);
-      setMobileListRequested(false);
       navigate(`/chat/${encodeURIComponent(response.channel.id)}`);
       setModal(null);
     } catch (error) {
@@ -897,10 +892,7 @@ export function ChatPage() {
     const rememberedChannelId = readChatLastChannelId(currentUser?.id, channels.map((channel) => channel.id));
     if (mobileViewport) {
       if (routeChannelId && !routeChannelExists) {
-        const destination = rememberedChannelId ? `/chat/${encodeURIComponent(rememberedChannelId)}` : "/chat";
-        navigate(destination, { replace: true });
-      } else if (!routeChannelId && rememberedChannelId && !mobileListRequested) {
-        navigate(`/chat/${encodeURIComponent(rememberedChannelId)}`, { replace: true });
+        navigate("/chat", { replace: true });
       }
       return;
     }
@@ -911,7 +903,6 @@ export function ChatPage() {
     channels,
     currentUser?.id,
     loading,
-    mobileListRequested,
     mobileViewport,
     navigate,
     routeChannelId,
@@ -1363,7 +1354,6 @@ export function ChatPage() {
               onArchive={async () => {
                 await archiveChatChannelRequest(activeChannel.id);
                 setChannels((items) => items.filter((channel) => channel.id !== activeChannel.id));
-                setMobileListRequested(true);
                 navigate("/chat", { replace: true });
               }}
               onFiles={() => togglePanel("files")}
@@ -1582,7 +1572,6 @@ export function ChatPage() {
           onCreate={async (input) => {
             const response = await createChatChannel(input);
             applyChannel(response.channel);
-            setMobileListRequested(false);
             navigate(`/chat/${encodeURIComponent(response.channel.id)}`);
             setChannelModalProjectId(null);
             setModal(null);
