@@ -11,7 +11,7 @@ import {
 } from "../server/chat/chatPushDeliveryModel";
 import { createChatPushDeliveryWorker } from "../server/chat/chatPushDeliveryWorker";
 import { validateChatPushDeliverySchema, validateLegacyRealtimeDeliveryArchiveSchema } from "../server/db/schemaGuard";
-import { withPushProviderDeadline } from "../server/push/firebasePushClient";
+import { isInvalidFcmRegistrationToken, withPushProviderDeadline } from "../server/push/firebasePushClient";
 import { publishRealtimeEventToUser, subscribeRealtimeEvents } from "../server/realtime/realtimeEventBus";
 
 function claim(id: string, overrides: Partial<ChatPushDeliveryClaim> = {}): ChatPushDeliveryClaim {
@@ -104,7 +104,9 @@ test("a hung push reaches a hard deadline and cannot block realtime delivery", a
   const worker = createChatPushDeliveryWorker({
     claim: async () => [claim("hung")],
     complete: async () => true,
-    deliver: async () => withPushProviderDeadline(new Promise<never>(() => undefined), 20),
+    deliver: async () => withPushProviderDeadline((signal) => new Promise<never>((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    }), 20),
     fail: async () => ({ persisted: true, status: "retry_scheduled" }),
     onBatch: () => workerFinished.resolve(),
   }, 1);
@@ -125,6 +127,42 @@ test("a hung push reaches a hard deadline and cannot block realtime delivery", a
     unsubscribe();
     await worker.stop();
   }
+});
+
+test("push provider deadline aborts cancellable transport work", async () => {
+  let aborted = false;
+  await assert.rejects(
+    () => withPushProviderDeadline((signal) => new Promise<never>((_resolve, reject) => {
+      signal.addEventListener("abort", () => {
+        aborted = true;
+        reject(signal.reason);
+      }, { once: true });
+    }), 20),
+    /Push provider timed out after 20ms/,
+  );
+  assert.equal(aborted, true);
+});
+
+test("FCM HTTP v1 invalid token classification uses only token-scoped FCM errors", () => {
+  assert.equal(isInvalidFcmRegistrationToken({
+    error: {
+      status: "NOT_FOUND",
+      details: [{ "@type": "type.googleapis.com/google.firebase.fcm.v1.FcmError", errorCode: "UNREGISTERED" }],
+    },
+  }), true);
+  assert.equal(isInvalidFcmRegistrationToken({
+    error: {
+      status: "INVALID_ARGUMENT",
+      details: [{ "@type": "type.googleapis.com/google.firebase.fcm.v1.FcmError", errorCode: "INVALID_ARGUMENT" }],
+    },
+  }), true);
+  assert.equal(isInvalidFcmRegistrationToken({
+    error: {
+      status: "INVALID_ARGUMENT",
+      details: [{ "@type": "type.googleapis.com/google.rpc.BadRequest", fieldViolations: [] }],
+    },
+  }), false);
+  assert.equal(isInvalidFcmRegistrationToken({ error: { status: "NOT_FOUND" } }), false);
 });
 
 test("schema guard rejects transport and realtime outcomes from the push queue", () => {

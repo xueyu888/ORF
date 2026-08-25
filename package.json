@@ -1,6 +1,6 @@
 {
   "name": "orf",
-  "version": "0.1.30",
+  "version": "0.1.31",
   "private": true,
   "description": "ORF project management tool built from ORF documentation.",
   "bin": {
@@ -98,7 +98,6 @@
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.8.5",
-    "firebase-admin": "^13.10.0",
     "https-proxy-agent": "^9.0.0",
     "iconv-lite": "^0.6.3",
     "lucide-react": "^1.11.0",
