@@ -23,6 +23,10 @@ import {
   pushNotificationTargetPath,
   targetPathFromPushNotificationExtra,
 } from "./orfPushNotificationModel";
+import {
+  releaseNativeNotificationPresentation,
+  reserveNativeNotificationPresentation,
+} from "../notifications/nativeNotificationPresentationDedupe";
 
 type PushOpenHandler = (targetPath: string) => void;
 
@@ -200,6 +204,8 @@ function handleAndroidPushFallbackLocalNotificationAction(extra: unknown) {
 async function showAndroidReceivedPushFallbackNotification(notification: PushNotificationSchema) {
   const fallback = buildReceivedPushFallbackNotification(notification, readAndroidPushDisplayState());
   if (!fallback) return;
+  const reservation = reserveNativeNotificationPresentation({ key: fallback.presentationKey });
+  if (reservation.status === "duplicate") return;
 
   await LocalNotifications.schedule({
     notifications: [
@@ -214,7 +220,11 @@ async function showAndroidReceivedPushFallbackNotification(notification: PushNot
         extra: fallback.extra,
       },
     ],
-  }).catch(() => undefined);
+  }).catch(() => {
+    if (reservation.status === "reserved") {
+      releaseNativeNotificationPresentation({ key: reservation.key });
+    }
+  });
 }
 
 async function registerAndroidFcmPushToken(token: string) {

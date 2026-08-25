@@ -2,7 +2,13 @@ import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import type { ChatNativeNotificationPayload } from "./chatNativeNotificationModel";
 import { prepareDesktopNotificationAvatar } from "../desktop/desktopNotificationAvatar";
-import { showDesktopToastIntent } from "../desktop/desktopShellRuntime";
+import { isDesktopShellAvailable, showDesktopToastIntent } from "../desktop/desktopShellRuntime";
+import {
+  chatMessageNativeNotificationPresentationKey,
+  releaseNativeNotificationPresentation,
+  reserveNativeNotificationPresentation,
+  type NativeNotificationPresentationReservation,
+} from "../notifications/nativeNotificationPresentationDedupe";
 
 type NativeChatNotificationResult = {
   data?: string;
@@ -52,6 +58,14 @@ export function subscribeNativeChatNotificationOpen(handler: (targetPath: string
 }
 
 async function sendDesktopChatNotification(payload: ChatNativeNotificationPayload): Promise<NativeChatNotificationResult> {
+  if (!isDesktopShellAvailable()) return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
+
+  const presentationKey = chatMessageNativeNotificationPresentationKey(payload.messageId);
+  const reservation = reserveNativeNotificationPresentation({ key: presentationKey });
+  if (reservation.status === "duplicate") {
+    return { status: "not_sent", reason: "duplicate_native_notification_presentation", data: reservation.key };
+  }
+
   try {
     const desktopPayload = await prepareDesktopNotificationAvatar({ ...payload, avatarDataUrl: null });
     const result = await showDesktopToastIntent({
@@ -65,8 +79,12 @@ async function sendDesktopChatNotification(payload: ChatNativeNotificationPayloa
       targetPath: payload.targetPath,
       title: payload.title,
     });
+    if (result.status === "error" || result.status === "unsupported") {
+      releaseReservedNativeNotificationPresentation(reservation);
+    }
     return result.status ? { reason: result.reason, status: result.status } : { status: "success" };
   } catch (error) {
+    releaseReservedNativeNotificationPresentation(reservation);
     return { status: "error", reason: "desktop_bridge", data: String(error) };
   }
 }
@@ -74,11 +92,16 @@ async function sendDesktopChatNotification(payload: ChatNativeNotificationPayloa
 async function sendAndroidLocalChatNotification(payload: ChatNativeNotificationPayload): Promise<NativeChatNotificationResult> {
   const ready = await ensureAndroidLocalNotificationsReady();
   if (ready.status !== "success") return ready;
+  const presentationKey = chatMessageNativeNotificationPresentationKey(payload.messageId);
+  const reservation = reserveNativeNotificationPresentation({ key: presentationKey });
+  if (reservation.status === "duplicate") {
+    return { status: "not_sent", reason: "duplicate_native_notification_presentation", data: reservation.key };
+  }
   try {
     await LocalNotifications.schedule({
       notifications: [
         {
-          id: numericNotificationId(payload.id),
+          id: numericNotificationId(payload.messageId),
           title: payload.title,
           body: payload.body,
           largeBody: payload.body,
@@ -88,6 +111,7 @@ async function sendAndroidLocalChatNotification(payload: ChatNativeNotificationP
           extra: {
             channelId: payload.channelId,
             messageId: payload.messageId,
+            ...(presentationKey ? { presentationKey } : {}),
             targetPath: payload.targetPath,
           },
         },
@@ -95,6 +119,7 @@ async function sendAndroidLocalChatNotification(payload: ChatNativeNotificationP
     });
     return { status: "success" };
   } catch (error) {
+    releaseReservedNativeNotificationPresentation(reservation);
     return { status: "error", reason: "android_local_notification", data: String(error) };
   }
 }
@@ -136,6 +161,12 @@ function numericNotificationId(id: string) {
     hash = (hash * 31 + id.charCodeAt(index)) | 0;
   }
   return (hash & 0x7fffffff) || 1;
+}
+
+function releaseReservedNativeNotificationPresentation(reservation: NativeNotificationPresentationReservation) {
+  if (reservation.status === "reserved") {
+    releaseNativeNotificationPresentation({ key: reservation.key });
+  }
 }
 
 function chatNotificationTargetPathFromExtra(extra: unknown) {

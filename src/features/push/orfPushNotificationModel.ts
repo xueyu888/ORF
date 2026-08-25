@@ -1,3 +1,5 @@
+import { nativeNotificationPresentationKey } from "../notifications/nativeNotificationPresentationDedupe";
+
 export const orfChatPushChannelId = "orf-chat-messages";
 export const orfClientUpdatePushChannelId = "orf-client-updates";
 export const orfPushFallbackSource = "orf-push-fallback";
@@ -19,10 +21,13 @@ export type OrfPushFallbackLocalNotification = {
   channelId: string;
   extra: {
     kind?: string;
+    messageId?: string;
+    presentationKey: string;
     source: typeof orfPushFallbackSource;
     targetPath: string;
   };
   id: number;
+  presentationKey: string;
   title: string;
 };
 
@@ -34,20 +39,27 @@ export function buildReceivedPushFallbackNotification(
 
   const data = pushNotificationData(notification.data);
   const kind = cleanText(data.kind);
+  const messageId = cleanText(data.messageId);
   const targetPath = pushNotificationTargetPath(notification, data) ?? "/";
   const title = cleanText(notification.title) ?? fallbackTitle(kind);
   const body = cleanText(notification.body);
   if (!title || !body) return null;
+  const fallbackSeed = numericPushNotificationId([kind, targetPath, title, body].filter(Boolean).join("|")).toString(36);
+  const presentationKey = nativeNotificationPresentationKey({ fallbackSeed, kind, messageId });
+  if (!presentationKey) return null;
 
   return {
     body,
     channelId: channelIdForPushKind(kind),
     extra: {
       ...(kind ? { kind } : {}),
+      ...(messageId ? { messageId } : {}),
+      presentationKey,
       source: orfPushFallbackSource,
       targetPath,
     },
-    id: numericPushNotificationId([kind, targetPath, title, body].filter(Boolean).join("|")),
+    id: numericPushNotificationId(presentationKey),
+    presentationKey,
     title,
   };
 }
