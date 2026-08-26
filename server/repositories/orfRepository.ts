@@ -125,6 +125,7 @@ import {
   matchOrfAttachmentMarkdownTokens,
   matchOrfMentionMarkdownTokens,
 } from "../../src/features/rich-text/orfRichTextTokens";
+import { attachmentNativeVideoContentType } from "../../src/domain/attachmentPreviewKind";
 import { publishRealtimeSystemBroadcastToUsers } from "../realtime/realtimeEventBus";
 import { publishObjectiveInvalidation, publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { objectStorage } from "../storage/objectStorage";
@@ -2663,7 +2664,7 @@ export async function getCommentAttachmentContent(
     contentType: contentDisposition === "inline"
       ? previewKind === "markdown" || previewKind === "text"
         ? "text/plain; charset=utf-8"
-        : attachment.mimeType
+        : attachmentNativeVideoContentType(attachment) ?? attachment.mimeType
       : canPreview
         ? (stored.contentType ?? attachment.mimeType)
         : "application/octet-stream",

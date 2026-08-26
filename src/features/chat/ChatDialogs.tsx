@@ -1,6 +1,7 @@
-import { Download, FileText, Loader2, Trash2, X } from "lucide-react";
+import { Download, FileText, FileVideo, Loader2, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button, IconButton } from "../../components/ui";
+import { attachmentNativeVideoContentType } from "../../domain/attachmentPreviewKind";
 import type { ChatMessage, ChatUser, OrfProject } from "../../types/orf";
 import { OrfRichTextMarkdownViewer } from "../rich-text/OrfRichTextMarkdownViewer";
 import type { ChatAttachmentFilePreviewState } from "./chatAttachmentPreview";
@@ -192,6 +193,7 @@ export function AttachmentPreview({
 }) {
   const { attachment } = preview;
   const textPreview = useChatAttachmentTextPreview(attachment);
+  const videoContentType = attachmentNativeVideoContentType(attachment);
 
   return (
     <div className="orf-chat-attachment-preview" onMouseDown={onClose}>
@@ -203,7 +205,14 @@ export function AttachmentPreview({
           </a>
           <button type="button" onClick={onClose} title="关闭预览"><X className="h-5 w-5" /></button>
         </header>
-        {attachment.previewKind === "pdf" ? (
+        {attachment.previewKind === "video" ? (
+          <div className="orf-chat-attachment-preview-body orf-chat-attachment-video-preview">
+            <video aria-label={attachment.fileName} controls playsInline preload="metadata">
+              <source src={attachment.contentUrl} type={videoContentType ?? undefined} />
+              <a href={attachment.contentUrl} download={attachment.fileName}>下载附件</a>
+            </video>
+          </div>
+        ) : attachment.previewKind === "pdf" ? (
           <iframe src={attachment.contentUrl} title={attachment.fileName} />
         ) : attachment.previewKind === "markdown" ? (
           <div className="orf-chat-attachment-preview-body orf-chat-attachment-markdown-preview">
@@ -272,7 +281,7 @@ function AttachmentDownloadFallback({
 }) {
   return (
     <div className="orf-chat-attachment-preview-empty">
-      <FileText className="h-8 w-8" />
+      {attachment.previewKind === "video" ? <FileVideo className="h-8 w-8" /> : <FileText className="h-8 w-8" />}
       <strong>{attachment.fileName}</strong>
       <small>{message ?? `${attachment.mimeType || "未知文件类型"} · ${formatFileSize(attachment.fileSize)}`}</small>
       <a href={attachment.contentUrl} download={attachment.fileName}>下载附件</a>

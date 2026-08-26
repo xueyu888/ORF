@@ -25,7 +25,7 @@ import type {
 import { chatMessageTargetPath } from "../../src/domain/chatNavigation";
 import { CHAT_POLL_INPUT_CONTRACT } from "../../src/domain/chatPollContract";
 import type { PermissionKey } from "../../src/config/permissions";
-import { attachmentPreviewKind } from "../../src/domain/attachmentPreviewKind";
+import { attachmentNativeVideoContentType, attachmentPreviewKind } from "../../src/domain/attachmentPreviewKind";
 import { addDaysToIsoDate, hasExecutableChatSearch, parseChatSearchQuery } from "../../src/features/chat/chatSearchSyntax";
 import { chatNotificationPreviewText } from "../../src/domain/chatNotificationPresentation";
 import { pool } from "../db/client";
@@ -3110,8 +3110,10 @@ export async function uploadChatAttachment(
   const id = makeChatAttachmentId();
   const now = nowIso();
   const expiresAt = new Date(Date.now() + CHAT_ATTACHMENT_TTL_MS).toISOString();
-  const fileName = input.fileName.trim().slice(0, 240);
-  const mimeType = normalizeMimeType(input.mimeType);
+  const originalFileName = input.fileName.trim();
+  const fileName = originalFileName.slice(0, 240);
+  const declaredMimeType = normalizeMimeType(input.mimeType);
+  const mimeType = attachmentNativeVideoContentType({ fileName: originalFileName, mimeType: declaredMimeType }) ?? declaredMimeType;
   const objectKey = `chat/${safePathSegment(storageTeamId(actor))}/${safePathSegment(input.channelId)}/${id}/${safePathSegment(fileName)}`;
 
   let stored: { contentLength: number; peeked: Buffer };
@@ -3215,8 +3217,15 @@ export async function getChatAttachmentContent(
     status: "ok",
     body: stored.body,
     contentLength: stored.contentLength,
-    contentType: stored.contentType ?? row.mime_type,
+    contentType: chatAttachmentContentType(row, stored.contentType),
   };
+}
+
+function chatAttachmentContentType(row: Pick<AttachmentRow, "file_name" | "mime_type">, storedContentType?: string | null) {
+  const contentType = storedContentType ?? row.mime_type;
+  const normalizedContentType = normalizeMimeType(contentType);
+  const videoContentType = attachmentNativeVideoContentType({ fileName: row.file_name, mimeType: row.mime_type });
+  return videoContentType && normalizedContentType === "application/octet-stream" ? videoContentType : contentType;
 }
 
 export async function searchChatMessages(

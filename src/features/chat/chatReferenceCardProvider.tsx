@@ -1,7 +1,8 @@
-import { AlertCircle, FileText, Image as ImageIcon, Loader2 } from "lucide-react";
+import { AlertCircle, FileText, FileVideo, Image as ImageIcon, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { ZodType } from "zod";
+import type { AttachmentPreviewKind } from "../../domain/attachmentPreviewKind";
 import type { ChatMessage } from "../../types/orf";
 import { OrfRichTextMarkdownViewer } from "../rich-text/OrfRichTextMarkdownViewer";
 import { formatFileSize } from "./chatFormat";
@@ -13,7 +14,7 @@ import {
 } from "./ChatReferenceCard";
 
 export type ChatReferenceCardNoticeTone = "loading" | "warning";
-export type ChatReferenceCardAttachmentPreviewKind = "download" | "image" | "markdown" | "pdf" | "text";
+export type ChatReferenceCardAttachmentPreviewKind = AttachmentPreviewKind;
 
 export type ChatReferenceCardAttachment = {
   readonly contentUrl?: string | null;
@@ -284,6 +285,7 @@ function attachmentPreviewHref(attachment: ChatReferenceCardAttachment) {
 
 function attachmentIcon(attachment: ChatReferenceCardAttachment) {
   if (attachment.previewKind === "image") return <ImageIcon className="h-4 w-4" />;
+  if (attachment.previewKind === "video") return <FileVideo className="h-4 w-4" />;
   return <FileText className="h-4 w-4" />;
 }
 

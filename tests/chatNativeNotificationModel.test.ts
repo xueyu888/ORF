@@ -443,12 +443,14 @@ test("Windows Toast renderer uses one escaped circular sender-avatar contract", 
   assert.doesNotMatch(withoutAvatar, /<image /);
 });
 
-test("Win11 unified desktop Toast keeps chat long duration without forcing attention Toast duration", () => {
+test("Win11 unified desktop Toast uses short chat duration without forcing attention Toast duration", () => {
   const desktopMainSource = readFileSync(new URL("../clients/desktop/main.cjs", import.meta.url), "utf8");
+  const chatDeliverySource = readFileSync(new URL("../src/features/chat/chatNativeNotificationDelivery.ts", import.meta.url), "utf8");
   const desktopToastPayloadSource = desktopMainSource.match(/function desktopToastPayload\(input, clientUrl\) \{[\s\S]*?\n\}/)?.[0] ?? "";
   const windowsDesktopToastSource = desktopMainSource.match(/function windowsDesktopToastXml\(payload\) \{[\s\S]*?\n\}/)?.[0] ?? "";
 
-  assert.match(desktopToastPayloadSource, /source === "chat" \? "long" : undefined/);
+  assert.doesNotMatch(chatDeliverySource, /duration:\s*"long"/);
+  assert.match(desktopToastPayloadSource, /source === "chat" \? "short" : undefined/);
   assert.match(windowsDesktopToastSource, /duration:\s*payload\.duration/);
   assert.doesNotMatch(windowsDesktopToastSource, /duration:\s*"long"/);
 });
@@ -872,11 +874,29 @@ test("chat native notification uses attachment fallback preview", () => {
           mimeType: "image/png",
           fileSize: 42,
           contentUrl: "/file",
+          previewKind: "image",
           createdAt: "2026-06-07T09:30:00.000Z",
         },
       ],
     })),
     "发送了一张图片",
+  );
+  assert.equal(
+    chatNotificationPreviewText(message({
+      body: "",
+      attachments: [
+        {
+          id: "video-1",
+          fileName: "demo.mp4",
+          mimeType: "video/mp4",
+          fileSize: 1024,
+          contentUrl: "/video",
+          previewKind: "video",
+          createdAt: "2026-06-07T09:30:00.000Z",
+        },
+      ],
+    })),
+    "发送了一个视频",
   );
 });
 

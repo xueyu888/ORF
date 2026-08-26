@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, Download, ExternalLink, File as FileIcon, FileText, MoreHorizontal, Pencil, Reply, Send, Trash2, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Download, ExternalLink, File as FileIcon, FileText, FileVideo, MoreHorizontal, Pencil, Reply, Send, Trash2, X } from "lucide-react";
 import type { FormEvent, MutableRefObject, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
@@ -626,6 +626,10 @@ export function CommentBodyText({
       );
     }
 
+    if (attachment.previewKind === "video") {
+      return <CommentVideoAttachment key={key} attachment={attachment} placement={placement} />;
+    }
+
     return <CommentFileAttachmentCard key={key} attachment={attachment} placement={placement} />;
   };
 
@@ -665,6 +669,69 @@ export function CommentBodyText({
   );
 }
 
+function CommentVideoAttachment({
+  attachment,
+  placement,
+}: {
+  attachment: CommentAttachment;
+  placement: OrfRichTextAttachmentPlacement;
+}) {
+  const details = (
+    <>
+      <FileVideo className="orf-comment-file-attachment-icon" aria-hidden="true" />
+      <span className="orf-comment-file-attachment-main">
+        <span className="orf-comment-file-attachment-name" title={attachment.fileName}>{attachment.fileName}</span>
+        <span className="orf-comment-file-attachment-meta">视频 · {formatFileSize(attachment.fileSize)}</span>
+      </span>
+      <span className="orf-comment-file-attachment-actions">
+        <a
+          href={attachment.downloadUrl}
+          download={attachment.fileName}
+          title="下载附件"
+          aria-label={`下载附件 ${attachment.fileName}`}
+          onClick={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+        >
+          <Download className="h-3.5 w-3.5" />
+          <span>下载</span>
+        </a>
+      </span>
+    </>
+  );
+
+  if (placement === "inline") {
+    return (
+      <span className="orf-comment-attachment orf-comment-video-attachment" data-attachment-placement="inline">
+        <video
+          aria-label={attachment.fileName}
+          controls
+          playsInline
+          preload="metadata"
+          src={attachment.contentUrl}
+          onClick={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+        />
+        <span className="orf-comment-video-attachment-caption">{details}</span>
+      </span>
+    );
+  }
+
+  return (
+    <figure className="orf-comment-attachment orf-comment-video-attachment">
+      <video
+        aria-label={attachment.fileName}
+        controls
+        playsInline
+        preload="metadata"
+        src={attachment.contentUrl}
+        onClick={(event) => event.stopPropagation()}
+        onDoubleClick={(event) => event.stopPropagation()}
+      />
+      <figcaption className="orf-comment-video-attachment-caption">{details}</figcaption>
+    </figure>
+  );
+}
+
 function CommentFileAttachmentCard({
   attachment,
   placement,
@@ -679,8 +746,14 @@ function CommentFileAttachmentCard({
       ? "PDF"
       : attachment.previewKind === "text"
         ? "文本"
+        : attachment.previewKind === "video"
+          ? "视频"
         : attachment.mimeType || "文件";
-  const Icon = attachment.previewKind === "markdown" || attachment.previewKind === "pdf" || attachment.previewKind === "text" ? FileText : FileIcon;
+  const Icon = attachment.previewKind === "video"
+    ? FileVideo
+    : attachment.previewKind === "markdown" || attachment.previewKind === "pdf" || attachment.previewKind === "text"
+      ? FileText
+      : FileIcon;
   const attachmentDetails = (
     <>
       <span className="orf-comment-file-attachment-name" title={attachment.fileName}>{attachment.fileName}</span>

@@ -1156,7 +1156,7 @@ function desktopToastPayload(input, clientUrl) {
     body,
     duration: input.duration === "long" || input.duration === "short"
       ? input.duration
-      : source === "chat" ? "long" : undefined,
+      : source === "chat" ? "short" : undefined,
     eventId,
     level: normalizeDesktopToastLevel(input.level),
     sender: normalizeNotificationSender(input.sender),

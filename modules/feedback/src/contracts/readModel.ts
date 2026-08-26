@@ -9,6 +9,7 @@ import type {
   FeedbackSubscriptionMode,
 } from "./index";
 import { emptyFeedbackIssueListProjection, type FeedbackIssueListProjection } from "./issueList";
+import type { FeedbackReportAttachmentPreviewKind } from "./reportAttachments";
 
 export type FeedbackWebUserRole = "admin" | "member";
 export type FeedbackWebUserStatus = "active" | "disabled" | "pending" | "rejected";
@@ -47,7 +48,7 @@ export type FeedbackWebAttachment = {
   fileSize: number;
   id: string;
   mimeType: string;
-  previewKind: "download" | "image" | "markdown" | "pdf" | "text";
+  previewKind: FeedbackReportAttachmentPreviewKind;
   previewStatus?: "failed" | "ready" | "unavailable";
   previewUrl?: string;
 };

@@ -782,6 +782,9 @@ describe("feedback module domain", () => {
 
   it("maps feedback report attachments through the module-owned attachment contract", () => {
     assert.equal(feedbackReportAttachmentPreviewKind({ fileName: "report.md", mimeType: "text/plain" }), "markdown");
+    assert.equal(feedbackReportAttachmentPreviewKind({ fileName: "screen.mp4", mimeType: "video/mp4" }), "video");
+    assert.equal(feedbackReportAttachmentPreviewKind({ fileName: "legacy.mp4", mimeType: "application/octet-stream" }), "video");
+    assert.equal(feedbackReportAttachmentPreviewKind({ fileName: "spoof.mp4", mimeType: "text/html" }), "download");
     assert.equal(feedbackReportAttachmentPreviewKind({ fileName: "raw.svg", mimeType: "text/plain" }), "download");
     assert.equal(canPreviewFeedbackReportAttachment({ fileName: "capture.png", mimeType: "image/png" }), true);
 

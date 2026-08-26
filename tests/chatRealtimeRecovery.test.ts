@@ -6,7 +6,7 @@ import {
   promoteReconciledLatestWindow,
   reconcileFeedLatestWindow,
 } from "../src/features/chat/chatModels";
-import { attachmentPreviewKind } from "../src/domain/attachmentPreviewKind";
+import { attachmentNativeVideoContentType, attachmentPreviewKind } from "../src/domain/attachmentPreviewKind";
 import { chatRealtimeReconciliationScope } from "../src/features/chat/chatRealtimeReconciliation";
 import {
   chatFeedViewportModeAfterScroll,
@@ -96,6 +96,10 @@ test("attachment preview kind keeps markdown renderable and unsafe text download
   assert.equal(attachmentPreviewKind({ fileName: "raw.svg", mimeType: "text/plain" }), "download");
   assert.equal(attachmentPreviewKind({ fileName: "data.json", mimeType: "application/json; charset=utf-8" }), "text");
   assert.equal(attachmentPreviewKind({ fileName: "scan.pdf", mimeType: "application/pdf" }), "pdf");
+  assert.equal(attachmentPreviewKind({ fileName: "demo.mp4", mimeType: "video/mp4" }), "video");
+  assert.equal(attachmentPreviewKind({ fileName: "recording.mp4", mimeType: "application/octet-stream" }), "video");
+  assert.equal(attachmentNativeVideoContentType({ fileName: "recording.mp4", mimeType: "application/octet-stream" }), "video/mp4");
+  assert.equal(attachmentPreviewKind({ fileName: "spoof.mp4", mimeType: "text/html" }), "download");
 });
 
 test("chat recovery exposes connected, reconciling and ready as one explicit state chain", () => {

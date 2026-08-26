@@ -6,7 +6,10 @@ export function chatNotificationPreviewText(message: Pick<ChatMessage, "attachme
   if (text) return truncateChatNotificationText(text, 100);
   if (message.attachments.length === 0) return "发送了一条消息";
   if (message.attachments.length > 1) return `发送了 ${message.attachments.length} 个附件`;
-  return message.attachments[0]?.mimeType.startsWith("image/") ? "发送了一张图片" : "发送了一个文件";
+  const [attachment] = message.attachments;
+  if (attachment?.previewKind === "image") return "发送了一张图片";
+  if (attachment?.previewKind === "video") return "发送了一个视频";
+  return "发送了一个文件";
 }
 
 export function stripChatNotificationMarkdown(body: string) {

@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Bookmark, CheckCheck, ChevronDown, ChevronUp, Copy, Edit3, EyeOff, FileText, Link as LinkIcon, type LucideIcon, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
+import { Bookmark, CheckCheck, ChevronDown, ChevronUp, Copy, Edit3, EyeOff, FileText, FileVideo, Link as LinkIcon, type LucideIcon, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
 import { type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, IconButton } from "../../components/ui";
@@ -81,8 +81,10 @@ function isInteractiveMessageTarget(target: EventTarget | null) {
     "label",
     "select",
     "textarea",
+    "video",
     "[role='button']",
     ".orf-chat-reference-card",
+    ".orf-chat-video-attachment",
     ".orf-chat-message-actions",
     ".orf-chat-reaction-row",
   ].join(", ")));
@@ -259,10 +261,12 @@ function AttachmentGrid({
 }) {
   if (attachments.length === 0) return null;
   const singleImage = attachments.length === 1 && attachments[0]?.previewKind === "image";
+  const singleVideo = attachments.length === 1 && attachments[0]?.previewKind === "video";
   return (
-    <div className={clsx("orf-chat-attachments", singleImage && "orf-chat-attachments-single-image")}>
+    <div className={clsx("orf-chat-attachments", singleImage && "orf-chat-attachments-single-image", singleVideo && "orf-chat-attachments-single-video")}>
       {attachments.map((attachment) => {
         const isImage = attachment.previewKind === "image";
+        const isVideo = attachment.previewKind === "video";
         return isImage ? (
           <button type="button" className="orf-chat-image-attachment" key={attachment.id} onClick={() => onAttachmentPreview(attachment, attachments)}>
             <img
@@ -276,6 +280,23 @@ function AttachmentGrid({
             />
             <span>{attachment.fileName}</span>
           </button>
+        ) : isVideo ? (
+          <figure className="orf-chat-video-attachment" key={attachment.id}>
+            <video
+              aria-label={attachment.fileName}
+              controls
+              playsInline
+              preload="metadata"
+              src={attachment.contentUrl}
+              onClick={(event) => event.stopPropagation()}
+              onDoubleClick={(event) => event.stopPropagation()}
+            />
+            <button type="button" className="orf-chat-video-attachment-caption" onClick={() => onAttachmentPreview(attachment, attachments)}>
+              <FileVideo className="h-5 w-5" />
+              <span>{attachment.fileName}</span>
+              <small>{formatFileSize(attachment.fileSize)}</small>
+            </button>
+          </figure>
         ) : (
           <button type="button" className="orf-chat-file-attachment" key={attachment.id} onClick={() => onAttachmentPreview(attachment, attachments)}>
             <FileText className="h-5 w-5" />

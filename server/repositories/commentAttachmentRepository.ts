@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
-import { attachmentPreviewKind } from "../../src/domain/attachmentPreviewKind";
+import { attachmentNativeVideoContentType, attachmentPreviewKind } from "../../src/domain/attachmentPreviewKind";
 import type { CommentAttachment, CommentAttachmentPreviewKind, CommentTargetType } from "../../src/types/orf";
 import { commentAttachments } from "../db/schema";
 import {
@@ -120,6 +120,11 @@ function extensionFromMimeType(mimeType: string) {
   if (normalized === "text/csv") return "csv";
   if (normalized === "text/markdown") return "md";
   if (normalized === "text/plain") return "txt";
+  if (normalized === "video/mp4") return "mp4";
+  if (normalized === "video/ogg") return "ogv";
+  if (normalized === "video/quicktime") return "mov";
+  if (normalized === "video/webm") return "webm";
+  if (normalized === "video/x-m4v") return "m4v";
   return "bin";
 }
 
@@ -161,6 +166,11 @@ export function safeCommentAttachmentMetadata(input: { body: Buffer; fileName: s
 
   if (isPreviewableTextFile(input)) {
     return { extension: extensionFromFileName(input.fileName) || extensionFromMimeType(declaredMimeType), mimeType: "text/plain; charset=utf-8" };
+  }
+
+  const videoContentType = attachmentNativeVideoContentType({ fileName: input.fileName, mimeType: declaredMimeType });
+  if (videoContentType) {
+    return { extension: extensionFromFileName(input.fileName) || extensionFromMimeType(videoContentType), mimeType: videoContentType };
   }
 
   if (declaredMimeType.startsWith("image/") || declaredMimeType === "application/pdf") {

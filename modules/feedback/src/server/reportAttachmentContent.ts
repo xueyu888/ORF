@@ -2,6 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import {
   canPreviewFeedbackReportAttachment,
+  feedbackReportAttachmentNativeVideoContentType,
   feedbackReportAttachmentPreviewKind,
   type FeedbackReportAttachmentPreviewKind,
 } from "../contracts";
@@ -101,6 +102,8 @@ export function feedbackReportAttachmentResponseContentType(
   if (facts.contentDisposition === "inline") {
     return facts.previewKind === "markdown" || facts.previewKind === "text"
       ? "text/plain; charset=utf-8"
+      : facts.previewKind === "video"
+        ? feedbackReportAttachmentNativeVideoContentType(facts) ?? facts.mimeType
       : facts.mimeType;
   }
 

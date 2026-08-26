@@ -1,4 +1,4 @@
-import { FileText, Image as ImageIcon, Loader2, Search } from "lucide-react";
+import { FileText, FileVideo, Image as ImageIcon, Loader2, Search } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { ChatMessage, ChatSearchResult, ChatUser } from "../../types/orf";
 import { chatChannelDisplayLabel } from "./chatChannelPresentation";
@@ -153,7 +153,11 @@ function SearchResultPreview({
         <div className="orf-chat-search-attachments">
           {message.attachments.slice(0, 3).map((attachment) => (
             <span key={attachment.id}>
-              {attachment.mimeType.startsWith("image/") ? <ImageIcon className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+              {attachment.previewKind === "image"
+                ? <ImageIcon className="h-3.5 w-3.5" />
+                : attachment.previewKind === "video"
+                  ? <FileVideo className="h-3.5 w-3.5" />
+                  : <FileText className="h-3.5 w-3.5" />}
               {attachment.fileName}
             </span>
           ))}

@@ -2,6 +2,7 @@ import { clsx } from "clsx";
 import {
   BarChart3,
   CheckCheck,
+  FileVideo,
   FileText,
   Image as ImageIcon,
   LockKeyhole,
@@ -14,6 +15,7 @@ import {
 import { type ChangeEvent, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatPastedFeedbackLinks } from "@orf/feedback-module/contracts";
 import { IconButton } from "../../components/ui";
+import { attachmentPreviewKind } from "../../domain/attachmentPreviewKind";
 import { uploadChatAttachment } from "../../state/apiClient";
 import type { ChatAttachment, ChatUser } from "../../types/orf";
 import { formatFileSize } from "./chatFormat";
@@ -140,6 +142,15 @@ export function ChatComposer({
     if (item.status === "uploading") return uploadProgressLabel(item);
     if (item.status === "failed") return "失败";
     return "已上传";
+  };
+  const attachmentIcon = (item: ChatAttachmentDraftItem) => {
+    if (item.status === "uploading") return <Loader2 className="h-4 w-4 animate-spin" />;
+    const previewKind = item.status === "uploaded"
+      ? item.attachment.previewKind
+      : attachmentPreviewKind({ fileName: item.fileName, mimeType: item.mimeType });
+    if (previewKind === "image") return <ImageIcon className="h-4 w-4" />;
+    if (previewKind === "video") return <FileVideo className="h-4 w-4" />;
+    return <FileText className="h-4 w-4" />;
   };
   const uploadProgressTitle = (item: ChatAttachmentDraftItem) => {
     if (item.status !== "uploading") return "";
@@ -327,7 +338,7 @@ export function ChatComposer({
               title={item.status === "uploading" ? uploadProgressTitle(item) : item.fileName}
             >
               <span className="orf-chat-pending-attachment-main">
-                {item.status === "uploading" ? <Loader2 className="h-4 w-4 animate-spin" /> : item.mimeType.startsWith("image/") ? <ImageIcon className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+                {attachmentIcon(item)}
                 <span className="orf-chat-pending-attachment-name">{item.fileName}</span>
                 <small>{attachmentStatusLabel(item)}</small>
               </span>

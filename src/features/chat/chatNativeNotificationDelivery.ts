@@ -71,7 +71,6 @@ async function sendDesktopChatNotification(payload: ChatNativeNotificationPayloa
     const result = await showDesktopToastIntent({
       avatarDataUrl: desktopPayload.avatarDataUrl,
       body: payload.body,
-      duration: "long",
       eventId: `chat:${payload.messageId}`,
       level: payload.level ?? "toast",
       sender: payload.sender,
