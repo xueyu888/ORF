@@ -4,6 +4,12 @@ import path from "node:path";
 import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import {
+  byteRangeContentLength,
+  resolveByteRangeSelection,
+  type ByteRangeSelection,
+  type ResolvedByteRange,
+} from "@orf/module-protocol";
+import {
   compareReleaseVersions,
   isTrustedClientUpdateUrl,
   isClientReleaseVersion,
@@ -18,8 +24,15 @@ export type StoredClientUpdateAsset = {
   contentLength: number;
   contentType: string;
   filePath: string;
+  range?: ResolvedByteRange;
   stream: Readable;
+  totalContentLength: number;
 };
+
+export type StoredClientUpdateAssetOutcome =
+  | ({ status: "ok" } & StoredClientUpdateAsset)
+  | { status: "rangeNotSatisfiable"; totalContentLength: number }
+  | null;
 
 type ClientUpdateReleaseManifest = {
   releases: ClientReleaseInfo[];
@@ -70,18 +83,27 @@ export async function getStoredClientUpdateAsset(input: {
   contentType?: string | null;
   fileName: string;
   version: string;
-}): Promise<StoredClientUpdateAsset | null> {
+}, options: { readonly byteRange?: ByteRangeSelection } = {}): Promise<StoredClientUpdateAssetOutcome> {
   const filePath = clientUpdateAssetPath(input.version, input.fileName);
   const stat = await fs.stat(filePath).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") return null;
     throw error;
   });
   if (!stat?.isFile()) return null;
+  const totalContentLength = stat.size;
+  const byteRange = resolveByteRangeSelection(options.byteRange ?? { status: "none" }, totalContentLength);
+  if (byteRange.status === "unsatisfiable") {
+    return { status: "rangeNotSatisfiable", totalContentLength };
+  }
+  const range = byteRange.status === "satisfiable" ? byteRange.range : undefined;
   return {
-    contentLength: stat.size,
+    status: "ok",
+    contentLength: range ? byteRangeContentLength(range) : totalContentLength,
     contentType: input.contentType || contentTypeForClientUpdateAsset(input.fileName),
     filePath,
-    stream: createReadStream(filePath),
+    range,
+    stream: range ? createReadStream(filePath, { end: range.end, start: range.start }) : createReadStream(filePath),
+    totalContentLength,
   };
 }
 

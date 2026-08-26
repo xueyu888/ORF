@@ -23,6 +23,11 @@ import {
   upsertStoredClientUpdateRelease,
 } from "../clientUpdates/clientUpdateAssetStore";
 import { env } from "../env";
+import {
+  byteRangeSelectionFromRequest,
+  sendByteRangeNotSatisfiable,
+  sendRangedContent,
+} from "../http/rangedContentResponse";
 import { getDefaultRuntimeScope, runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 
 const releaseVersionParamsSchema = z.object({
@@ -95,14 +100,23 @@ export function registerClientUpdateRoutes(app: FastifyInstance) {
   app.get("/api/client-updates/assets/:version/:fileName", async (request, reply) => {
     try {
       const params = releaseAssetParamsSchema.parse(request.params);
-      const storedAsset = await getStoredClientUpdateAsset(params);
-      if (storedAsset) {
-        reply.header("Cache-Control", "public, max-age=31536000, immutable");
-        reply.header("Content-Disposition", `attachment; filename="${params.fileName.replace(/"/g, "")}"`);
-        reply.header("Content-Length", storedAsset.contentLength);
-        reply.header("Content-Type", storedAsset.contentType);
-        reply.header("X-Content-Type-Options", "nosniff");
-        return reply.send(storedAsset.stream);
+      const storedAsset = await getStoredClientUpdateAsset(params, {
+        byteRange: byteRangeSelectionFromRequest(request),
+      });
+      if (storedAsset?.status === "rangeNotSatisfiable") {
+        return sendByteRangeNotSatisfiable(reply, storedAsset.totalContentLength);
+      }
+      if (storedAsset?.status === "ok") {
+        return sendRangedContent(reply, {
+          body: storedAsset.stream,
+          cacheControl: "public, max-age=31536000, immutable",
+          contentDisposition: `attachment; filename="${params.fileName.replace(/"/g, "")}"`,
+          contentLength: storedAsset.contentLength,
+          contentType: storedAsset.contentType,
+          range: storedAsset.range,
+          totalContentLength: storedAsset.totalContentLength,
+          xContentTypeOptions: "nosniff",
+        });
       }
 
       const { release } = await getCachedClientReleaseByVersion(params.version);

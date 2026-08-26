@@ -4,6 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import {
+  byteRangeContentLength,
+  byteRangeContentRangeHeader,
+  byteRangeUnsatisfiedContentRangeHeader,
+  parseByteRangeHeader,
+  type ResolvedByteRange,
+} from "@orf/module-protocol";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
@@ -444,18 +451,25 @@ export function registerFeedbackHttpRoutes(app: FastifyInstance, feedback: Feedb
 
     const params = feedbackReportAttachmentParamsSchema.parse(request.params);
     const query = feedbackReportAttachmentContentQuerySchema.parse(request.query);
-    const outcome = await feedback.getReportAttachmentContent(params.attachmentId, applicationActor(context), query);
+    const outcome = await feedback.getReportAttachmentContent(params.attachmentId, applicationActor(context), {
+      ...query,
+      byteRange: parseByteRangeHeader(request.headers.range),
+    });
     if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Feedback report attachment not found" });
     }
     if (outcome.status === "forbidden") return reply.code(403).send({ error: "Forbidden" });
-
-    reply.header("Cache-Control", "private, max-age=60");
-    reply.header("Content-Disposition", contentDispositionHeader(outcome.contentDisposition, outcome.fileName));
-    reply.header("Content-Type", outcome.contentType);
-    reply.header("X-Content-Type-Options", "nosniff");
-    if (outcome.contentLength !== undefined) reply.header("Content-Length", outcome.contentLength);
-    return reply.send(outcome.body);
+    if (outcome.status === "rangeNotSatisfiable") {
+      return sendFeedbackByteRangeNotSatisfiable(reply, outcome.totalContentLength);
+    }
+    return sendFeedbackRangedContent(reply, {
+      body: outcome.body,
+      contentDisposition: contentDispositionHeader(outcome.contentDisposition, outcome.fileName),
+      contentLength: outcome.contentLength,
+      contentType: outcome.contentType,
+      range: outcome.range,
+      totalContentLength: outcome.totalContentLength,
+    });
   });
 
   app.get("/api/feedback/:feedbackId/reference", async (request, reply) => {
@@ -599,4 +613,36 @@ function contentDispositionHeader(disposition: "attachment" | "inline", fileName
     .replace(/[^\x20-\x7e]/g, "_")
     .trim() || "attachment";
   return `${disposition}; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName || "attachment")}`;
+}
+
+function sendFeedbackByteRangeNotSatisfiable(reply: FastifyReply, totalContentLength: number) {
+  reply.header("Accept-Ranges", "bytes");
+  reply.header("Content-Range", byteRangeUnsatisfiedContentRangeHeader(totalContentLength));
+  return reply.code(416).send();
+}
+
+function sendFeedbackRangedContent(
+  reply: FastifyReply,
+  response: {
+    readonly body: Readable;
+    readonly contentDisposition: string;
+    readonly contentLength?: number;
+    readonly contentType: string;
+    readonly range?: ResolvedByteRange;
+    readonly totalContentLength: number;
+  },
+) {
+  reply.header("Cache-Control", "private, max-age=60");
+  reply.header("Content-Disposition", response.contentDisposition);
+  reply.header("Content-Type", response.contentType);
+  reply.header("X-Content-Type-Options", "nosniff");
+  reply.header("Accept-Ranges", "bytes");
+  if (response.range) {
+    reply.code(206);
+    reply.header("Content-Range", byteRangeContentRangeHeader(response.range));
+    reply.header("Content-Length", byteRangeContentLength(response.range));
+  } else if (response.contentLength !== undefined) {
+    reply.header("Content-Length", response.contentLength);
+  }
+  return reply.send(response.body);
 }

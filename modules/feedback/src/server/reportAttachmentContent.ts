@@ -17,6 +17,7 @@ export type FeedbackReportAttachmentContentFacts = {
   readonly canPreview: boolean;
   readonly contentDisposition: FeedbackReportAttachmentContentDisposition;
   readonly fileName: string;
+  readonly fileSize: number;
   readonly mimeType: string;
   readonly objectKey: string;
   readonly previewKind: FeedbackReportAttachmentPreviewKind;
@@ -88,6 +89,7 @@ export async function getFeedbackReportAttachmentContentFacts(
       canPreview,
       contentDisposition: input.disposition === "attachment" ? "attachment" : canPreview ? "inline" : "attachment",
       fileName: attachment.fileName,
+      fileSize: attachment.fileSize,
       mimeType: attachment.mimeType,
       objectKey: attachment.objectKey,
       previewKind: feedbackReportAttachmentPreviewKind(attachment),

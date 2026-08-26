@@ -1,4 +1,10 @@
 import { Readable } from "node:stream";
+import {
+  byteRangeContentLength,
+  resolveByteRangeSelection,
+  type ByteRangeSelection,
+  type ResolvedByteRange,
+} from "@orf/module-protocol";
 import type {
   ChatDriveLink,
   ChatMessage,
@@ -2063,9 +2069,19 @@ export async function deleteDriveContextLink(
 export async function getDriveFileContent(
   fileId: string,
   actor: ChatActor,
-  options: { disposition?: "attachment" | "inline" } = {},
+  options: { byteRange?: ByteRangeSelection; disposition?: "attachment" | "inline" } = {},
 ): Promise<
-  | { status: "ok"; body: Readable; contentDisposition: "attachment" | "inline"; contentLength?: number; contentType: string; fileName: string }
+  | {
+      status: "ok";
+      body: Readable;
+      contentDisposition: "attachment" | "inline";
+      contentLength?: number;
+      contentType: string;
+      fileName: string;
+      range?: ResolvedByteRange;
+      totalContentLength?: number;
+    }
+  | { status: "rangeNotSatisfiable"; totalContentLength: number }
   | { status: "forbidden" }
   | { status: "notFound" }
 > {
@@ -2089,19 +2105,34 @@ export async function getDriveFileContent(
   const canPreview = row.preview_kind !== "download" && !row.preview_error;
   const contentDisposition = options.disposition === "attachment" ? "attachment" : canPreview ? "inline" : "attachment";
   const servingPreviewObject = contentDisposition === "inline" && Boolean(row.preview_object_key);
-  const stored = await objectStorage.getObject(servingPreviewObject ? row.preview_object_key! : row.object_key);
+  const declaredTotalContentLength = servingPreviewObject && row.preview_file_size !== null
+    ? Number(row.preview_file_size)
+    : Number(row.file_size);
+  const hasDeclaredTotalContentLength = Number.isSafeInteger(declaredTotalContentLength) && declaredTotalContentLength >= 0;
+  const byteRange = hasDeclaredTotalContentLength
+    ? resolveByteRangeSelection(options.byteRange ?? { status: "none" }, declaredTotalContentLength)
+    : { status: "none" as const };
+  if (byteRange.status === "unsatisfiable") {
+    return { status: "rangeNotSatisfiable", totalContentLength: declaredTotalContentLength };
+  }
+
+  const range = byteRange.status === "satisfiable" ? byteRange.range : undefined;
+  const stored = await objectStorage.getObject(servingPreviewObject ? row.preview_object_key! : row.object_key, { byteRange: range });
   if (!stored) return { status: "notFound" };
+  const totalContentLength = hasDeclaredTotalContentLength ? declaredTotalContentLength : stored.contentLength;
   return {
     status: "ok",
     body: stored.body,
     contentDisposition,
-    contentLength: servingPreviewObject && row.preview_file_size !== null ? Number(row.preview_file_size) : stored.contentLength,
+    contentLength: range ? byteRangeContentLength(range) : totalContentLength,
     contentType: contentDisposition === "inline"
       ? row.preview_mime_type ?? (row.preview_kind === "markdown" || row.preview_kind === "text" ? "text/plain; charset=utf-8" : row.mime_type)
       : canPreview
         ? (stored.contentType ?? row.mime_type)
         : "application/octet-stream",
     fileName: row.file_name,
+    range,
+    totalContentLength,
   };
 }
 

@@ -96,8 +96,8 @@ export function createOrfFeedbackPorts(input: {
       publish: feedbackNotificationPort,
     },
     objectStorage: {
-      getObject(objectKey) {
-        return objectStorage.getObject(objectKey);
+      getObject(objectKey, options) {
+        return objectStorage.getObject(objectKey, options);
       },
     },
     projectDirectory: {

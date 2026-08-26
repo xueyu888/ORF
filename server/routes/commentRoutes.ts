@@ -3,6 +3,11 @@ import { z } from "zod";
 import { commentActorWithPermissions } from "../auth/accessPolicy";
 import { env } from "../env";
 import {
+  byteRangeSelectionFromRequest,
+  sendByteRangeNotSatisfiable,
+  sendRangedContent,
+} from "../http/rangedContentResponse";
+import {
   createComment,
   deleteCommentMessage,
   getCommentAttachmentContent,
@@ -131,22 +136,29 @@ export function registerCommentRoutes(app: FastifyInstance) {
 
     const params = commentAttachmentParamsSchema.parse(request.params);
     const query = commentAttachmentContentQuerySchema.parse(request.query);
-    const outcome = await getCommentAttachmentContent(params.attachmentId, user, query);
+    const outcome = await getCommentAttachmentContent(params.attachmentId, user, {
+      ...query,
+      byteRange: byteRangeSelectionFromRequest(request),
+    });
     if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Comment attachment not found" });
     }
     if (outcome.status === "forbidden") {
       return reply.code(403).send({ error: "Forbidden" });
     }
-
-    reply.header("Cache-Control", "private, max-age=60");
-    reply.header("Content-Disposition", contentDispositionHeader(outcome.contentDisposition, outcome.fileName));
-    reply.header("Content-Type", outcome.contentType);
-    reply.header("X-Content-Type-Options", "nosniff");
-    if (outcome.contentLength !== undefined) {
-      reply.header("Content-Length", outcome.contentLength);
+    if (outcome.status === "rangeNotSatisfiable") {
+      return sendByteRangeNotSatisfiable(reply, outcome.totalContentLength);
     }
-    return reply.send(outcome.body);
+    return sendRangedContent(reply, {
+      body: outcome.body,
+      cacheControl: "private, max-age=60",
+      contentDisposition: contentDispositionHeader(outcome.contentDisposition, outcome.fileName),
+      contentLength: outcome.contentLength,
+      contentType: outcome.contentType,
+      range: outcome.range,
+      totalContentLength: outcome.totalContentLength,
+      xContentTypeOptions: "nosniff",
+    });
   });
 
   app.post("/api/comments", async (request, reply) => {

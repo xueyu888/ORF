@@ -8,6 +8,11 @@ import { CHAT_SYNC_PAGE_SIZE, CHAT_SYNC_PROTOCOL_VERSION, isChatSyncCursor } fro
 import { getChatSync } from "../chat/chatSyncRepository";
 import { setChatReaction } from "../chat/chatReactionService";
 import { loadChatWebLinkTitle } from "../chat/chatWebLinkTitleService";
+import {
+  byteRangeSelectionFromRequest,
+  sendByteRangeNotSatisfiable,
+  sendRangedContent,
+} from "../http/rangedContentResponse";
 import { getRolePermissionKeysForScope } from "../repositories/permissionRepository";
 import {
   addChatChannelMembers,
@@ -518,14 +523,21 @@ export function registerChatRoutes(app: FastifyInstance) {
     const actor = await chatActorFromRequest(request, reply);
     if (!actor) return reply;
     const params = attachmentParamsSchema.parse(request.params);
-    const outcome = await getChatAttachmentContent(params.attachmentId, actor);
+    const outcome = await getChatAttachmentContent(params.attachmentId, actor, {
+      byteRange: byteRangeSelectionFromRequest(request),
+    });
     if (outcome.status === "notFound") return reply.code(404).send({ error: "Chat attachment not found" });
     if (outcome.status === "forbidden") return reply.code(403).send({ error: "Forbidden" });
-    reply.header("Cache-Control", "private, max-age=60");
-    reply.header("Content-Type", outcome.contentType);
-    if (outcome.contentLength !== undefined) {
-      reply.header("Content-Length", outcome.contentLength);
+    if (outcome.status === "rangeNotSatisfiable") {
+      return sendByteRangeNotSatisfiable(reply, outcome.totalContentLength);
     }
-    return reply.send(outcome.body);
+    return sendRangedContent(reply, {
+      body: outcome.body,
+      cacheControl: "private, max-age=60",
+      contentLength: outcome.contentLength,
+      contentType: outcome.contentType,
+      range: outcome.range,
+      totalContentLength: outcome.totalContentLength,
+    });
   });
 }

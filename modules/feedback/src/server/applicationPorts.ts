@@ -1,5 +1,5 @@
 import type { Readable } from "node:stream";
-import type { OrfUnitOfWorkToken } from "@orf/module-protocol";
+import type { ByteRangeSegment, OrfUnitOfWorkToken } from "@orf/module-protocol";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type {
   FeedbackCommandResult,
@@ -158,7 +158,7 @@ export type FeedbackStoredObject = {
 };
 
 export type FeedbackObjectStoragePort = {
-  getObject(objectKey: string): Promise<FeedbackStoredObject | null>;
+  getObject(objectKey: string, options?: { readonly byteRange?: ByteRangeSegment }): Promise<FeedbackStoredObject | null>;
 };
 
 export type FeedbackRealtimePort = {

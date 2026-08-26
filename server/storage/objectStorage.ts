@@ -10,6 +10,7 @@ import {
   type CompletedPart,
 } from "@aws-sdk/client-s3";
 import type { Readable } from "node:stream";
+import { byteRangeRequestHeader, type ByteRangeSegment } from "@orf/module-protocol";
 import { env } from "../env";
 
 export type StoredObject = {
@@ -18,9 +19,13 @@ export type StoredObject = {
   contentType?: string;
 };
 
+export type GetObjectOptions = {
+  readonly byteRange?: ByteRangeSegment;
+};
+
 export interface ObjectStorage {
   deleteObject(key: string): Promise<void>;
-  getObject(key: string): Promise<StoredObject | null>;
+  getObject(key: string, options?: GetObjectOptions): Promise<StoredObject | null>;
   putObject(input: {
     body: Buffer;
     contentLength: number;
@@ -228,12 +233,13 @@ export class S3ObjectStorage implements ObjectStorage {
     }
   }
 
-  async getObject(key: string): Promise<StoredObject | null> {
+  async getObject(key: string, options: GetObjectOptions = {}): Promise<StoredObject | null> {
     try {
       const response = await this.client.send(
         new GetObjectCommand({
           Bucket: this.bucket,
           Key: key,
+          Range: options.byteRange ? byteRangeRequestHeader(options.byteRange) : undefined,
         }),
       );
 

@@ -1,5 +1,11 @@
 import type { Readable } from "node:stream";
-import type { OrfUnitOfWorkToken } from "@orf/module-protocol";
+import {
+  byteRangeContentLength,
+  resolveByteRangeSelection,
+  type ByteRangeSelection,
+  type OrfUnitOfWorkToken,
+  type ResolvedByteRange,
+} from "@orf/module-protocol";
 import {
   buildFeedbackIssueListProjection,
   defaultFeedbackIssueListFilters,
@@ -159,7 +165,10 @@ export type FeedbackReportAttachmentContentOutcome =
       readonly contentLength?: number;
       readonly contentType: string;
       readonly fileName: string;
+      readonly range?: ResolvedByteRange;
+      readonly totalContentLength: number;
     }
+  | { readonly status: "rangeNotSatisfiable"; readonly totalContentLength: number }
   | { readonly status: "notFound" }
   | { readonly status: "forbidden" };
 
@@ -694,7 +703,7 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
   async getReportAttachmentContent(
     attachmentId: string,
     actor: FeedbackApplicationActor,
-    options: { readonly disposition?: "attachment" | "inline" } = {},
+    options: { readonly byteRange?: ByteRangeSelection; readonly disposition?: "attachment" | "inline" } = {},
   ): Promise<FeedbackReportAttachmentContentOutcome> {
     const outcome = await getFeedbackReportAttachmentContentFacts(this.ports.database, {
       actorStatus: actor.status === "active" ? "active" : "inactive",
@@ -704,16 +713,23 @@ export class FeedbackServerApplication implements FeedbackReferencePort {
     });
     if (outcome.status !== "ok") return outcome;
 
-    const stored = await this.ports.objectStorage.getObject(outcome.facts.objectKey);
+    const totalContentLength = outcome.facts.fileSize;
+    const byteRange = resolveByteRangeSelection(options.byteRange ?? { status: "none" }, totalContentLength);
+    if (byteRange.status === "unsatisfiable") return { status: "rangeNotSatisfiable", totalContentLength };
+
+    const range = byteRange.status === "satisfiable" ? byteRange.range : undefined;
+    const stored = await this.ports.objectStorage.getObject(outcome.facts.objectKey, { byteRange: range });
     if (!stored) return { status: "notFound" };
 
     return {
       status: "ok",
       body: stored.body,
       contentDisposition: outcome.facts.contentDisposition,
-      contentLength: stored.contentLength,
+      contentLength: range ? byteRangeContentLength(range) : stored.contentLength ?? totalContentLength,
       contentType: feedbackReportAttachmentResponseContentType(outcome.facts, { storedContentType: stored.contentType }),
       fileName: outcome.facts.fileName,
+      range,
+      totalContentLength,
     };
   }
 

@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
+import {
+  byteRangeContentLength,
+  resolveByteRangeSelection,
+  type ByteRangeSelection,
+  type ResolvedByteRange,
+} from "@orf/module-protocol";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 import type {
   CommentAttachment,
@@ -2576,7 +2582,17 @@ export type CommentAttachmentUploadOutcome =
   | { status: "tooLarge" };
 
 export type CommentAttachmentContentOutcome =
-  | { status: "ok"; body: Readable; contentDisposition: "attachment" | "inline"; contentLength?: number; contentType: string; fileName: string }
+  | {
+      status: "ok";
+      body: Readable;
+      contentDisposition: "attachment" | "inline";
+      contentLength?: number;
+      contentType: string;
+      fileName: string;
+      range?: ResolvedByteRange;
+      totalContentLength: number;
+    }
+  | { status: "rangeNotSatisfiable"; totalContentLength: number }
   | { status: "notFound" }
   | { status: "forbidden" };
 
@@ -2632,7 +2648,7 @@ export async function uploadCommentAttachment(
 export async function getCommentAttachmentContent(
   attachmentId: string,
   actor: CommentActor,
-  options: { disposition?: "attachment" | "inline" } = {},
+  options: { byteRange?: ByteRangeSelection; disposition?: "attachment" | "inline" } = {},
 ): Promise<CommentAttachmentContentOutcome> {
   const [attachment] = await db.select().from(commentAttachments).where(eq(commentAttachments.id, attachmentId)).limit(1);
   if (!attachment) {
@@ -2648,7 +2664,12 @@ export async function getCommentAttachmentContent(
     return { status: access === "notFound" ? "notFound" : "forbidden" };
   }
 
-  const stored = await objectStorage.getObject(attachment.objectKey);
+  const totalContentLength = attachment.fileSize;
+  const byteRange = resolveByteRangeSelection(options.byteRange ?? { status: "none" }, totalContentLength);
+  if (byteRange.status === "unsatisfiable") return { status: "rangeNotSatisfiable", totalContentLength };
+
+  const range = byteRange.status === "satisfiable" ? byteRange.range : undefined;
+  const stored = await objectStorage.getObject(attachment.objectKey, { byteRange: range });
   if (!stored) {
     return { status: "notFound" };
   }
@@ -2660,7 +2681,7 @@ export async function getCommentAttachmentContent(
     status: "ok",
     body: stored.body,
     contentDisposition,
-    contentLength: stored.contentLength,
+    contentLength: range ? byteRangeContentLength(range) : stored.contentLength ?? totalContentLength,
     contentType: contentDisposition === "inline"
       ? previewKind === "markdown" || previewKind === "text"
         ? "text/plain; charset=utf-8"
@@ -2669,6 +2690,8 @@ export async function getCommentAttachmentContent(
         ? (stored.contentType ?? attachment.mimeType)
         : "application/octet-stream",
     fileName: attachment.fileName,
+    range,
+    totalContentLength,
   };
 }
 

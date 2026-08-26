@@ -3,6 +3,11 @@ import { z } from "zod";
 import type { PermissionKey } from "../../src/config/permissions";
 import { requireUserScopeContext } from "../auth/accessPolicy";
 import { env } from "../env";
+import {
+  byteRangeSelectionFromRequest,
+  sendByteRangeNotSatisfiable,
+  sendRangedContent,
+} from "../http/rangedContentResponse";
 import { getRolePermissionKeysForScope } from "../repositories/permissionRepository";
 import {
   addChatDriveLink,
@@ -338,17 +343,25 @@ export function registerDriveRoutes(app: FastifyInstance) {
     if (!actor) return reply;
     const params = driveFileParamsSchema.parse(request.params);
     const query = driveContentQuerySchema.parse(request.query);
-    const outcome = await getDriveFileContent(params.fileId, actor, query);
+    const outcome = await getDriveFileContent(params.fileId, actor, {
+      ...query,
+      byteRange: byteRangeSelectionFromRequest(request),
+    });
     if (outcome.status === "notFound") return reply.code(404).send({ error: "Drive file not found" });
     if (outcome.status === "forbidden") return reply.code(403).send({ error: "Forbidden" });
-    reply.header("Cache-Control", "private, max-age=60");
-    reply.header("Content-Disposition", contentDispositionHeader(outcome.contentDisposition, outcome.fileName));
-    reply.header("Content-Type", outcome.contentType);
-    reply.header("X-Content-Type-Options", "nosniff");
-    if (outcome.contentLength !== undefined) {
-      reply.header("Content-Length", outcome.contentLength);
+    if (outcome.status === "rangeNotSatisfiable") {
+      return sendByteRangeNotSatisfiable(reply, outcome.totalContentLength);
     }
-    return reply.send(outcome.body);
+    return sendRangedContent(reply, {
+      body: outcome.body,
+      cacheControl: "private, max-age=60",
+      contentDisposition: contentDispositionHeader(outcome.contentDisposition, outcome.fileName),
+      contentLength: outcome.contentLength,
+      contentType: outcome.contentType,
+      range: outcome.range,
+      totalContentLength: outcome.totalContentLength,
+      xContentTypeOptions: "nosniff",
+    });
   });
 }
 

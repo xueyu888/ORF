@@ -1,4 +1,10 @@
 import type { Readable } from "node:stream";
+import {
+  byteRangeContentLength,
+  resolveByteRangeSelection,
+  type ByteRangeSelection,
+  type ResolvedByteRange,
+} from "@orf/module-protocol";
 import type { PoolClient } from "pg";
 import type {
   ChatAttachment,
@@ -3180,8 +3186,17 @@ export async function uploadChatAttachment(
 export async function getChatAttachmentContent(
   attachmentId: string,
   actor: ChatActor,
+  options: { readonly byteRange?: ByteRangeSelection } = {},
 ): Promise<
-  | { status: "ok"; body: Readable; contentLength?: number; contentType: string }
+  | {
+      status: "ok";
+      body: Readable;
+      contentLength?: number;
+      contentType: string;
+      range?: ResolvedByteRange;
+      totalContentLength: number;
+    }
+  | { status: "rangeNotSatisfiable"; totalContentLength: number }
   | { status: "notFound" }
   | { status: "forbidden" }
 > {
@@ -3211,13 +3226,20 @@ export async function getChatAttachmentContent(
   if (!row || row.deleted_at) return { status: "notFound" };
   if (!(await hasReadableChannel(actor, row.channel_id)) && row.created_by !== actor.id) return { status: "forbidden" };
 
-  const stored = await objectStorage.getObject(row.object_key);
+  const totalContentLength = row.file_size;
+  const byteRange = resolveByteRangeSelection(options.byteRange ?? { status: "none" }, totalContentLength);
+  if (byteRange.status === "unsatisfiable") return { status: "rangeNotSatisfiable", totalContentLength };
+
+  const range = byteRange.status === "satisfiable" ? byteRange.range : undefined;
+  const stored = await objectStorage.getObject(row.object_key, { byteRange: range });
   if (!stored) return { status: "notFound" };
   return {
     status: "ok",
     body: stored.body,
-    contentLength: stored.contentLength,
+    contentLength: range ? byteRangeContentLength(range) : stored.contentLength ?? totalContentLength,
     contentType: chatAttachmentContentType(row, stored.contentType),
+    range,
+    totalContentLength,
   };
 }
 
