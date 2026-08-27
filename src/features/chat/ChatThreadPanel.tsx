@@ -18,6 +18,7 @@ type ChatThreadPanelProps = {
   canDeleteAnyMessage: boolean;
   canPin: boolean;
   currentUserId?: string;
+  draftClearSignal?: number;
   editingMessageId?: string | null;
   feedbackItems?: readonly ChatFeedbackReference[];
   focusMessageId: string | null;
@@ -57,6 +58,7 @@ export function ChatThreadPanel({
   canDeleteAnyMessage,
   canPin,
   currentUserId,
+  draftClearSignal,
   editingMessageId,
   feedbackItems,
   focusMessageId,
@@ -301,6 +303,7 @@ export function ChatThreadPanel({
       <ChatComposer
         attachmentMaxBytes={attachmentMaxBytes}
         channelId={thread.rootMessage.channelId}
+        draftClearSignal={draftClearSignal}
         feedbackItems={feedbackItems}
         focusSignal={composerFocusSignal}
         mentionableUsers={users}

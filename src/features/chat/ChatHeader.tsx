@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Archive, ArrowLeft, Bell, BellOff, Bookmark, EyeOff, Folder, Inbox, Info, MoreHorizontal, Pin, Reply, Search, Star, UserPlus, Users } from "lucide-react";
+import { Archive, ArrowLeft, Bell, BellOff, Bookmark, EyeOff, Folder, Inbox, Info, MoreHorizontal, Pin, Reply, Search, Star, Trash2, UserPlus, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { IconButton, actionButtonClassName } from "../../components/ui";
 import { isChatConversation } from "../../domain/chatConversation";
@@ -14,7 +14,9 @@ type ChatHeaderProps = {
   canManage: boolean;
   channel: ChatChannel;
   currentUserId?: string;
+  hasDraft: boolean;
   onArchive: () => void;
+  onClearDraft: () => void;
   onInfo: () => void;
   onFiles: () => void;
   onMarkUnread: () => void;
@@ -35,7 +37,9 @@ export function ChatHeader({
   canManage,
   channel,
   currentUserId,
+  hasDraft,
   onArchive,
+  onClearDraft,
   onInfo,
   onFiles,
   onMarkUnread,
@@ -154,6 +158,14 @@ export function ChatHeader({
           label="搜索消息"
           onClick={onSearch}
         />
+        {hasDraft && (
+          <IconButton
+            className="orf-chat-header-action-secondary"
+            icon={Trash2}
+            label="清空草稿"
+            onClick={onClearDraft}
+          />
+        )}
         <IconButton
           aria-pressed={activePanel === "info"}
           className="orf-chat-header-action-secondary"
@@ -210,6 +222,12 @@ export function ChatHeader({
                 <EyeOff className="h-4 w-4" />
                 标记未读
               </button>
+              {hasDraft && (
+                <button type="button" className="orf-chat-header-mobile-menu-item" role="menuitem" onClick={() => runMenuAction(onClearDraft)}>
+                  <Trash2 className="h-4 w-4" />
+                  清空草稿
+                </button>
+              )}
               <button type="button" className="orf-chat-header-mobile-menu-item" role="menuitem" onClick={() => runMenuAction(onToggleMuted)}>
                 {membership?.muted ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
                 {membership?.muted ? "取消静音" : "静音频道"}

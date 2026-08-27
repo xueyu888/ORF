@@ -89,13 +89,17 @@ export const chatFeedFreshSnapshotMs = 5_000;
 export const chatFeedPrefetchChannelLimit = 4;
 export const emptyDraft: ChatDraft = { mentions: [], text: "" };
 
+export function chatDraftStorageKeyPrefix(channelId: string) {
+  return `orf.chat.draft.${channelId}.`;
+}
+
 export function chatDraftStorageKey(channelId: string, rootMessageId?: string | null) {
-  return `orf.chat.draft.${channelId}.${rootMessageId ?? "root"}`;
+  return `${chatDraftStorageKeyPrefix(channelId)}${rootMessageId ?? "root"}`;
 }
 
 export function hasStoredDraftForChannel(channelId: string) {
   if (typeof window === "undefined") return false;
-  const prefix = `orf.chat.draft.${channelId}.`;
+  const prefix = chatDraftStorageKeyPrefix(channelId);
   for (let index = 0; index < window.localStorage.length; index += 1) {
     const key = window.localStorage.key(index);
     if (key?.startsWith(prefix) && parseStoredDraft(window.localStorage.getItem(key)).text.trim()) {
@@ -107,6 +111,19 @@ export function hasStoredDraftForChannel(channelId: string) {
 
 export function storedDraftChannelIds(channels: ChatChannel[]) {
   return new Set(channels.filter((channel) => hasStoredDraftForChannel(channel.id)).map((channel) => channel.id));
+}
+
+export function clearStoredDraftsForChannel(channelId: string) {
+  if (typeof window === "undefined") return 0;
+  const prefix = chatDraftStorageKeyPrefix(channelId);
+  let removed = 0;
+  for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+    const key = window.localStorage.key(index);
+    if (!key?.startsWith(prefix)) continue;
+    window.localStorage.removeItem(key);
+    removed += 1;
+  }
+  return removed;
 }
 
 export function parseStoredDraft(raw: string | null): ChatDraft {

@@ -35,6 +35,7 @@ import {
   createPendingChatMessage,
   type ChatSendInput,
   buildUnreadAnchor,
+  clearStoredDraftsForChannel,
   currentMembership,
   hasMainFeedUnread,
   hasStoredDraftForChannel,
@@ -212,7 +213,9 @@ export function ChatPage() {
   const [channelQuery, setChannelQuery] = useState("");
   const [modal, setModal] = useState<"channel" | "conversation" | null>(null);
   const [channelModalProjectId, setChannelModalProjectId] = useState<string | null>(null);
-  const [draftChannelIds, setDraftChannelIds] = useState<Set<string>>(new Set());
+  const [storedDraftChannelIdSet, setStoredDraftChannelIdSet] = useState<Set<string>>(new Set());
+  const [composerDraftChannelIdSet, setComposerDraftChannelIdSet] = useState<Set<string>>(new Set());
+  const [draftClearSignalsByChannelId, setDraftClearSignalsByChannelId] = useState<Record<string, number>>({});
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [deletingMessage, setDeletingMessage] = useState<ChatMessage | null>(null);
   const [reactionPickerRequest, setReactionPickerRequest] = useState<{ messageId: string | null; signal: number }>({
@@ -265,6 +268,11 @@ export function ChatPage() {
   const settingsInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "settings"), [readModelInvalidations]);
   const bootstrapInvalidationKey = `${usersInvalidationKey}|${settingsInvalidationKey}`;
   const myMembership = currentMembership(activeChannel, currentUser?.id);
+  const draftChannelIds = useMemo(() => new Set([
+    ...storedDraftChannelIdSet,
+    ...composerDraftChannelIdSet,
+  ]), [composerDraftChannelIdSet, storedDraftChannelIdSet]);
+  const activeChannelHasDraft = activeChannel ? draftChannelIds.has(activeChannel.id) : false;
   const { applyTypingEvent, publishTyping, typingByUser } = useChatTypingState({
     activeChannelId: activeChannel?.id,
     currentUserId: currentUser?.id,
@@ -702,17 +710,45 @@ export function ChatPage() {
     queuePresenceRefresh();
   }, [bootstrap, bootstrapError, loading, presenceInvalidationKey, queuePresenceRefresh]);
 
-  const handleDraftStateChange = useCallback((channelId: string, hasDraft: boolean) => {
-    setDraftChannelIds((items) => {
+  const handleDraftStateChange = useCallback((channelId: string, hasComposerDraft: boolean) => {
+    setComposerDraftChannelIdSet((items) => {
       const next = new Set(items);
-      if (hasDraft) {
+      if (hasComposerDraft) {
         next.add(channelId);
-      } else if (!hasStoredDraftForChannel(channelId)) {
+      } else {
+        next.delete(channelId);
+      }
+      return next;
+    });
+    setStoredDraftChannelIdSet((items) => {
+      const next = new Set(items);
+      if (hasStoredDraftForChannel(channelId)) {
+        next.add(channelId);
+      } else {
         next.delete(channelId);
       }
       return next;
     });
   }, []);
+
+  const handleClearChannelDrafts = useCallback((channelId: string) => {
+    clearStoredDraftsForChannel(channelId);
+    setStoredDraftChannelIdSet((items) => {
+      const next = new Set(items);
+      next.delete(channelId);
+      return next;
+    });
+    setComposerDraftChannelIdSet((items) => {
+      const next = new Set(items);
+      next.delete(channelId);
+      return next;
+    });
+    setDraftClearSignalsByChannelId((signals) => ({
+      ...signals,
+      [channelId]: (signals[channelId] ?? 0) + 1,
+    }));
+    notify("草稿已清空");
+  }, [notify]);
 
   const handleOpenMemberSearch = useCallback(() => {
     openInfoPanel();
@@ -913,7 +949,7 @@ export function ChatPage() {
   ]);
 
   useEffect(() => {
-    setDraftChannelIds(storedDraftChannelIds(channels));
+    setStoredDraftChannelIdSet(storedDraftChannelIds(channels));
   }, [channels]);
 
   const chatBootstrapReconciliation = useRealtimeReconciliation({
@@ -1352,11 +1388,13 @@ export function ChatPage() {
               canManage={canManageActiveChannel}
               channel={activeChannel}
               currentUserId={currentUser?.id}
+              hasDraft={activeChannelHasDraft}
               onArchive={async () => {
                 await archiveChatChannelRequest(activeChannel.id);
                 setChannels((items) => items.filter((channel) => channel.id !== activeChannel.id));
                 navigate("/chat", { replace: true });
               }}
+              onClearDraft={() => handleClearChannelDrafts(activeChannel.id)}
               onFiles={() => togglePanel("files")}
               onInfo={() => togglePanel("info")}
               onMarkUnread={() => void markActiveChannelUnread()}
@@ -1425,6 +1463,7 @@ export function ChatPage() {
             <ChatComposer
               attachmentMaxBytes={bootstrap.settings.attachmentMaxBytes}
               channelId={activeChannel.id}
+              draftClearSignal={draftClearSignalsByChannelId[activeChannel.id] ?? 0}
               disabled={!bootstrap.permissions.canWrite || Boolean(activeChannel.systemKind)}
               feedbackItems={feedbackLinkItems}
               mentionableUsers={activeMentionableUsers}
@@ -1466,6 +1505,7 @@ export function ChatPage() {
           canWrite={bootstrap.permissions.canWrite && !Boolean((rightPanelChannel ?? activeChannel).systemKind)}
           channel={rightPanelChannel ?? activeChannel}
           currentUserId={currentUser?.id}
+          draftClearSignal={draftClearSignalsByChannelId[(rightPanelChannel ?? activeChannel).id] ?? 0}
           driveSelectionRequest={driveSelectionRequest}
           editingMessageId={editingMessage?.id ?? null}
           feedbackItems={feedbackLinkItems}

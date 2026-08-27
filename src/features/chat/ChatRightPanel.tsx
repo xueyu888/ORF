@@ -28,6 +28,7 @@ type ChatRightPanelProps = {
   collectionLoading: boolean;
   collectionResults: ChatSearchResult[];
   currentUserId?: string;
+  draftClearSignal?: number;
   driveSelectionRequest?: ChatDriveResourceSelectionRequest | null;
   editingMessageId?: string | null;
   feedbackItems?: readonly ChatFeedbackReference[];
@@ -111,6 +112,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
             canDeleteAnyMessage={props.canDeleteAnyMessage}
             canPin={props.canManage}
             currentUserId={props.currentUserId}
+            draftClearSignal={props.draftClearSignal}
             editingMessageId={props.editingMessageId}
             feedbackItems={props.feedbackItems}
             focusMessageId={props.threadFocusMessageId}

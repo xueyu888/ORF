@@ -35,9 +35,9 @@ import {
   type ChatDraft,
   type ChatFeedbackReference,
   type ChatSendHandler,
+  chatDraftStorageKeyPrefix,
   chatDraftStorageKey,
   emptyDraft,
-  hasStoredDraftForChannel,
   parseStoredDraft,
 } from "./chatModels";
 import { ChatDraftEditor } from "./ChatDraftEditor";
@@ -47,11 +47,12 @@ import type { ChatPollCreateInput } from "./chatPollModel";
 type ChatComposerProps = {
   attachmentMaxBytes: number;
   channelId: string;
+  draftClearSignal?: number;
   disabled?: boolean;
   feedbackItems?: readonly ChatFeedbackReference[];
   focusSignal?: number;
   mentionableUsers: ChatUser[];
-  onDraftStateChange?: (channelId: string, hasDraft: boolean) => void;
+  onDraftStateChange?: (channelId: string, hasComposerDraft: boolean) => void;
   onCreatePoll?: (input: ChatPollCreateInput) => Promise<void>;
   onEditLatest?: () => void;
   onReactToLatest?: () => void;
@@ -65,6 +66,7 @@ type ChatComposerProps = {
 export function ChatComposer({
   attachmentMaxBytes,
   channelId,
+  draftClearSignal,
   disabled,
   feedbackItems = [],
   focusSignal,
@@ -94,6 +96,7 @@ export function ChatComposer({
   const attachmentItemsRef = useRef<ChatAttachmentDraftItem[]>([]);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const activeDraftStorageKeyRef = useRef(draftStorageKey);
+  const handledDraftClearSignalRef = useRef({ channelId, signal: draftClearSignal });
 
   const updateAttachmentItemsForDraftKey = (
     targetDraftStorageKey: string,
@@ -180,17 +183,34 @@ export function ChatComposer({
   }, [draftStorageKey]);
 
   useEffect(() => {
+    if (handledDraftClearSignalRef.current.channelId !== channelId) {
+      handledDraftClearSignalRef.current = { channelId, signal: draftClearSignal };
+      return;
+    }
+    if (draftClearSignal === handledDraftClearSignalRef.current.signal) return;
+    handledDraftClearSignalRef.current = { channelId, signal: draftClearSignal };
+    const prefix = chatDraftStorageKeyPrefix(channelId);
+    for (const key of Array.from(attachmentDraftCacheRef.current.keys())) {
+      if (key.startsWith(prefix)) attachmentDraftCacheRef.current.set(key, []);
+    }
+    attachmentDraftCacheRef.current.set(draftStorageKey, []);
+    attachmentItemsRef.current = [];
+    setDraft(emptyDraft);
+    setAttachmentItems([]);
+    setError("");
+    setDraggingFiles(false);
+    window.localStorage.removeItem(draftStorageKey);
+    onDraftStateChange?.(channelId, false);
+  }, [channelId, draftClearSignal, draftStorageKey, onDraftStateChange]);
+
+  useEffect(() => {
     if (activeDraftStorageKeyRef.current !== draftStorageKey) return;
     if (draft.text.trim()) {
       window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
     } else {
       window.localStorage.removeItem(draftStorageKey);
     }
-    if (draft.text.trim() || attachmentItems.length > 0) {
-      onDraftStateChange?.(channelId, true);
-    } else {
-      onDraftStateChange?.(channelId, hasStoredDraftForChannel(channelId));
-    }
+    onDraftStateChange?.(channelId, Boolean(draft.text.trim() || attachmentItems.length > 0));
   }, [attachmentItems.length, channelId, draft, draftStorageKey, onDraftStateChange]);
 
   const uploadDraftAttachment = async (clientId: string, file: File, uploadChannelId: string, uploadDraftStorageKey: string) => {
