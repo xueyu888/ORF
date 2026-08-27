@@ -70,6 +70,14 @@ test("feedback follow-up command state is the single display fact for composer c
   assert.match(cssSource, /:not\(\[data-follow-up-command-active="true"\]\):not\(:focus-within\):not\(:has\(\.orf-rich-text-editor-content:not\(:placeholder-shown\)\)\)/);
 });
 
+test("feedback follow-up keeps the comment UnitOfWork active until target commit finishes", () => {
+  const repositorySource = readFileSync(new URL("../server/repositories/orfRepository.ts", import.meta.url), "utf8");
+
+  assert.doesNotMatch(repositorySource, /return finish\(/);
+  assert.match(repositorySource, /return await finish\(null\)/);
+  assert.match(repositorySource, /return await finish\(\{\s*body,/);
+});
+
 function user(input: Pick<OrfUser, "id" | "role"> & Partial<Pick<OrfUser, "status">>): OrfUser {
   return {
     email: `${input.id}@example.com`,

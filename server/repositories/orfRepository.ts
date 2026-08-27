@@ -2810,7 +2810,7 @@ async function commitCommentTargetMutation(
           return { comment: committedComment, targetCommitResult };
         };
 
-        if (!body) return finish(null);
+        if (!body) return await finish(null);
         if (!(await arePendingAttachmentsAvailable())) return null;
 
         if (input.parentMessageId) {
@@ -2857,7 +2857,7 @@ async function commitCommentTargetMutation(
           });
           await bindMessageAttachments(nextMessageId);
           await tx.update(commentThreads).set({ targetTitle, updatedAt: createdAt }).where(eq(commentThreads.id, parent.threadId));
-          return finish({
+          return await finish({
             body,
             commentMessageId: nextMessageId,
             commentThreadId: parent.threadId,
@@ -2905,7 +2905,7 @@ async function commitCommentTargetMutation(
           sortOrder: messageRows.reduce((max, message) => Math.max(max, message.sortOrder), -1) + 1,
         });
         await bindMessageAttachments(nextMessageId);
-        return finish({
+        return await finish({
           body,
           commentMessageId: nextMessageId,
           commentThreadId: nextThreadId,
