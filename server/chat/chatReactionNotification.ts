@@ -2,7 +2,7 @@ import type { ChatMessage } from "../../src/types/orf";
 import { chatNotificationPreviewText } from "../../src/domain/chatNotificationPresentation";
 import { chatMessageTargetPath } from "../../src/domain/chatNavigation";
 import { displayChatReactionEmoji, labelChatReactionEmoji } from "../../src/features/chat/chatReactions";
-import { publishNotificationEvent } from "../notifications/publisher";
+import { publishNotificationEvent } from "../messageSystem/notificationPublisher";
 
 type ChatReactionNotificationMessage = Pick<
   ChatMessage,

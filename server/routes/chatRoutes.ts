@@ -8,6 +8,7 @@ import { CHAT_SYNC_PAGE_SIZE, CHAT_SYNC_PROTOCOL_VERSION, isChatSyncCursor } fro
 import { getChatSync } from "../chat/chatSyncRepository";
 import { setChatReaction } from "../chat/chatReactionService";
 import { loadChatWebLinkTitle } from "../chat/chatWebLinkTitleService";
+import { markChatChannelRead, setChatChannelUnread } from "../messageSystem/chatNotificationReadCoordinator";
 import {
   byteRangeSelectionFromRequest,
   sendByteRangeNotSatisfiable,
@@ -34,8 +35,6 @@ import {
   listChatThreads,
   listPinnedChatMessages,
   listSavedChatMessages,
-  markChatChannelRead,
-  setChatChannelUnread,
   publishChatTyping,
   removeChatChannelMember,
   requestChatMessageAcknowledgement,

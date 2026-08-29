@@ -1,8 +1,9 @@
 import type { CommentTargetType } from "../../src/types/orf";
 import { isCommentTargetType } from "../comments/commentTargetAdapters";
+import { notificationPolicy } from "../notifications/policies/registry";
 import type { NotificationEventInput } from "../repositories/notificationRepository";
 import { createNotificationEvent } from "../repositories/notificationRepository";
-import { notificationPolicy } from "./policies/registry";
+import { flushNotificationChatDeliveriesForEvent } from "./notificationChatProjection";
 
 type PublishNotificationEventInput = Omit<NotificationEventInput, "replyTargetId" | "replyTargetType" | "stream"> & {
   replyTargetId?: string | null;
@@ -13,12 +14,17 @@ type PublishNotificationEventInput = Omit<NotificationEventInput, "replyTargetId
 export async function publishNotificationEvent(input: PublishNotificationEventInput) {
   const policy = notificationPolicy(input.kind);
   const replyTarget = inferredReplyTarget(input, policy.replyTarget);
-  return createNotificationEvent({
+  const notifications = await createNotificationEvent({
     ...input,
     replyTargetId: input.replyTargetId ?? replyTarget?.targetId ?? null,
     replyTargetType: input.replyTargetType ?? replyTarget?.targetType ?? null,
     stream: input.stream ?? policy.stream,
   });
+  const eventId = notifications[0]?.id;
+  if (eventId) {
+    await flushNotificationChatDeliveriesForEvent(eventId).catch(() => undefined);
+  }
+  return notifications;
 }
 
 function inferredReplyTarget(

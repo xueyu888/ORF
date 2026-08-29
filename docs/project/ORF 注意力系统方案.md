@@ -38,7 +38,7 @@
 | 系统通知事件和收件人 | `notification_events`、`notification_receipts` |
 | 系统通知到聊天的投递 | `notification_deliveries` |
 | 系统消息阅读入口 | `chat_messages`、`chat_channels.system_kind` |
-| 聊天未读 | `chat_channel_members`、`chat_thread_follows` 派生的聊天未读读模型 |
+| 聊天未读 | 普通聊天由 `chat_channel_members`、`chat_thread_follows` 派生；系统通知投影由 `notification_receipts.read_at` 派生 |
 | 工作日志欠账是否继续提醒 | `work_log_reminder_states` |
 | 待处理数量、桌面红点数量、注意力等级、最新强提醒、是否需要闪烁 | `buildAttentionState` 的前端派生结果 |
 | realtime 强提醒意图 | 当前客户端内存；仅用于填补消息到达与持久未读对账之间的时间窗，不写数据库 |
@@ -87,7 +87,7 @@
 
 ```text
 侧边栏待我处理     负责当前需要注意的摘要和入口
-聊天我的系统通知   负责完整消息历史和已读/未读
+聊天我的系统通知   负责完整消息历史；通知 receipt 负责系统通知投影已读/未读
 业务页面 targetHref 负责真正处理目标、反馈、工作日志或数据冲突
 ```
 
@@ -272,7 +272,7 @@ type AttentionState = {
 2. 私聊、聊天具名 `@我`、`@所有人` 和话题内显式提及在 realtime 到达时立即产生 `flash` 意图，再由持久未读汇总接管；两者按消息和提醒类型合并计数，不能重复生成“待我处理”项。普通关注话题回复派生 `toast`，普通聊天未读只派生聊天入口和桌面红点。聊天实时 Toast 仍由聊天原生通知模型一次性投递，强提醒意图只驱动统一注意力状态和托盘/任务栏，不重复弹 Toast。
 3. `worklog.reminder.required` 或 active `WorkLogReminderState` 派生 `urgent`，并通过 `shouldRemindNow` 尊重工作日志自身提醒节奏。
 4. 业务系统通知按通用 notification presentation 的 attention level 派生为 `badge`、`toast`、`flash` 或 `urgent`；正在查看对应目标时降级为 `badge`。注意力系统不维护反馈专属 `feedback.*` kind 清单。
-5. Win11 托盘菜单提供“打开待处理提醒”，点击后跳转到 `latestTargetPath`；任务栏与托盘共用 `normal/unread/attention` 三态图标事实源，使用适合各自系统槽位的独立逻辑尺寸和同一份四倍超采样渲染。`unread` 只显示无数字红点；`flash/urgent` 且 `count > 0` 时整枚图标在正常帧和高对比提醒帧之间持续闪烁，清空或降级后同步恢复 unread/normal 图标。
+5. Win11 托盘菜单提供“打开待处理提醒”，点击后跳转到 `latestTargetPath`；任务栏与托盘共用 `normal/unread/attention` 三态图标事实源，使用适合各自系统槽位的独立逻辑尺寸和同一份四倍超采样渲染。`unread` 只显示无数字红点；`flash/urgent` 且 `count > 0` 时整枚图标在正常帧和高对比提醒帧之间持续闪烁，清空或降级后同步恢复 unread/normal 图标。系统通知同时存在聊天投影和 badge-only 通知时，数字按持久未读事实取一次，不重复叠加；fallback 文案按“系统通知未读”展示，并优先使用聊天未读 `nextTarget` 定位到具体系统消息，避免把系统通知误导成普通聊天未读。
 6. 侧边栏新增“待我处理”入口，只在 `AttentionState.count > 0` 时展示数量和轻量面板；通知项点击进入现有聊天系统消息或业务页面前会调用通知已读接口，面板也提供“通知全部已读”用于清理历史未读积压。
 7. 移动端底部导航只在 `AttentionState.count > 0` 时新增 `待办` 入口，不新增独立页面；点击进入最新待处理目标或个人系统通知，最新项是通知时先调用通知已读接口。
 8. 首次 SSE 连接、每次重连、网络恢复、窗口聚焦和页面重新可见都会进入同一个 `connectionEpoch` 对账链；未读汇总恢复后重新派生 `AttentionState`，桌面任务栏和托盘不依赖错过的瞬时事件继续保持旧状态。
@@ -310,7 +310,7 @@ type AttentionState = {
 | 静音聊天频道中的私聊或消息实际提到当前用户 | 不弹普通聊天 Toast，但托盘持续闪烁并保留任务栏角标 |
 | realtime 到达后未读汇总请求仍在进行 | 立即进入 `flash`；对账成功后由持久未读接管，对账失败不提前清除 |
 | GitHub commit 同步到普通 GitHub 频道 | 聊天入口和桌面红点可增加；侧边栏“待我处理”和移动端 `待办` 不显示 |
-| 聊天系统通知消息被读到 | 对应 `notification_receipts.read_at` 同步更新，“待我处理”减少 |
+| 聊天系统通知消息被读到 | 消息系统组合层更新对应 `notification_receipts.read_at`，“待我处理”和托盘角标随持久对账减少 |
 
 ## 文档归属
 

@@ -120,7 +120,7 @@ import {
   getActiveTeamNotificationRecipients,
   getUserNameById,
 } from "./notificationRepository";
-import { publishNotificationEvent } from "../notifications/publisher";
+import { publishNotificationEvent } from "../messageSystem/notificationPublisher";
 import { buildCommentNotificationContent } from "../notifications/notificationEventModel";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScope, runtimeScopeStorageId } from "./runtimeScope";

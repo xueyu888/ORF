@@ -290,9 +290,9 @@ async function checkHostCommentTargetBoundary() {
     errors.push("server/routes/commentRoutes.ts must not hardcode feedback in the comment target type schema; use the comment target registry.");
   }
 
-  const notificationPublisherSource = await fs.readFile(path.join(rootDir, "server", "notifications", "publisher.ts"), "utf8");
+  const notificationPublisherSource = await fs.readFile(path.join(rootDir, "server", "messageSystem", "notificationPublisher.ts"), "utf8");
   if (/\bvalue\s*===\s*["']feedback["']/.test(notificationPublisherSource)) {
-    errors.push("server/notifications/publisher.ts must not hardcode feedback as a comment reply target; use the comment target registry.");
+    errors.push("server/messageSystem/notificationPublisher.ts must not hardcode feedback as a comment reply target; use the comment target registry.");
   }
 }
 

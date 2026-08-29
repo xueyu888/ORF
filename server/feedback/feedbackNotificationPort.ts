@@ -3,7 +3,7 @@ import {
   type FeedbackNotificationEventPlan,
 } from "@orf/feedback-module/contracts";
 import type { NotificationRecipientInput } from "../notifications/notificationEventModel";
-import { publishNotificationEvent } from "../notifications/publisher";
+import { publishNotificationEvent } from "../messageSystem/notificationPublisher";
 import { notificationPresentationFor } from "../notifications/presentationRegistry";
 
 type FeedbackNotificationPortContext = {

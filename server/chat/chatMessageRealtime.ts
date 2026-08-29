@@ -46,6 +46,7 @@ export async function publishChatMessageCreatedRealtime(input: {
   );
   const preview = chatNotificationPreviewText(input.message);
   const isHumanDirectMessage = input.channel.type === "direct" && !input.channel.systemKind;
+  const isSystemNotificationProjection = Boolean(input.message.system?.notificationEventId);
   const mentionedUserIds = new Set(extractMentionUserIds(input.message.body));
   const mentionsEveryone = hasChatBroadcastMention(input.message.body);
   const baseTitle = isHumanDirectMessage ? input.message.authorName : input.channel.displayName || "聊天";
@@ -66,10 +67,11 @@ export async function publishChatMessageCreatedRealtime(input: {
   };
   for (const recipient of rows) {
     const mayNotify = !input.channel.systemKind
+      && !isSystemNotificationProjection
       && !recipient.muted
       && recipient.user_id !== input.message.authorUserId
       && recipient.user_id !== input.message.system?.actorUserId;
-    const attentionReason = input.channel.systemKind
+    const attentionReason = input.channel.systemKind || isSystemNotificationProjection
       ? null
       : isHumanDirectMessage
         ? "direct" as const

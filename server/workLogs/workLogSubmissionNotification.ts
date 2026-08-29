@@ -1,5 +1,5 @@
 import type { WorkLogClassificationKind } from "../../src/types/orf";
-import { publishNotificationEvent } from "../notifications/publisher";
+import { publishNotificationEvent } from "../messageSystem/notificationPublisher";
 import { getActiveTeamNotificationRecipients } from "../repositories/notificationRepository";
 
 export type WorkLogSubmissionNotificationInput = {

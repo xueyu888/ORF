@@ -34,6 +34,39 @@ function visibleThreadRootSql(messageSql: string, input: ChatUnreadMessageFactsS
   )`;
 }
 
+function notificationProjectionEventIdSql(messageSql: string) {
+  return `NULLIF(${messageSql}.system_metadata->>'notificationEventId', '')`;
+}
+
+export function unreadSystemNotificationProjectionSql(messageSql: string, input: { userIdParam: string }) {
+  const eventIdSql = notificationProjectionEventIdSql(messageSql);
+  return `(
+    ${messageSql}.source = 'system'
+    AND ${eventIdSql} IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+      FROM notification_receipts projection_receipt
+      INNER JOIN notification_events projection_event
+        ON projection_event.id = projection_receipt.event_id
+       AND projection_event.team_id = ${messageSql}.team_id
+      WHERE projection_receipt.event_id = ${eventIdSql}
+        AND projection_receipt.recipient_user_id = ${input.userIdParam}
+        AND projection_receipt.read_at IS NULL
+    )
+  )`;
+}
+
+function unreadMainMessageSql(messageSql: string, input: ChatUnreadMessageFactsSqlInput) {
+  const eventIdSql = notificationProjectionEventIdSql(messageSql);
+  return `(
+    ${unreadSystemNotificationProjectionSql(messageSql, input)}
+    OR (
+      ${eventIdSql} IS NULL
+      AND (cm.last_read_at IS NULL OR ${messageSql}.created_at > cm.last_read_at)
+    )
+  )`;
+}
+
 export function chatUnreadMessageFactsSql(input: ChatUnreadMessageFactsSqlInput) {
   return `
     SELECT
@@ -71,7 +104,7 @@ export function chatUnreadMessageFactsSql(input: ChatUnreadMessageFactsSqlInput)
       AND (
         (
           m.root_message_id IS NULL
-          AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+          AND ${unreadMainMessageSql("m", input)}
         )
         OR (
           m.root_message_id IS NOT NULL

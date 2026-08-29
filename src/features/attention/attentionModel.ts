@@ -114,10 +114,19 @@ export function buildAttentionState(input: BuildAttentionStateInput): AttentionS
   const fallbackChatUnread = chatUnreadSummaryText(input.chatUnreadSummary);
   const fallbackChatTargetPath = input.chatUnreadSummary.nextTarget?.targetPath ?? "/chat";
   const fallbackBadgeNotification = notificationBadgeOnlyText(notificationBadgeOnlyCount);
-  const fallbackBadgeText = fallbackChatUnread ?? fallbackBadgeNotification;
-  const title = latestItem?.title ?? (fallbackChatUnread ? "聊天消息未读" : fallbackBadgeNotification ? "系统通知未读" : emptyAttentionState.title);
+  const fallbackSystemNotification = systemNotificationProjectionFallback(
+    input.chatUnreadSummary,
+    fallbackBadgeNotification,
+    fallbackChatTargetPath,
+  );
+  const fallbackBadgeText = fallbackSystemNotification?.body ?? fallbackChatUnread ?? fallbackBadgeNotification;
+  const title = latestItem?.title
+    ?? fallbackSystemNotification?.title
+    ?? (fallbackChatUnread ? "聊天消息未读" : fallbackBadgeNotification ? "系统通知未读" : emptyAttentionState.title);
   const body = latestItem?.body ?? fallbackBadgeText ?? emptyAttentionState.body;
-  const reason = latestItem ? attentionReason(latestItem) : fallbackChatUnread ? "chat.unread" : fallbackBadgeNotification ? "notification.unread" : null;
+  const reason = latestItem
+    ? attentionReason(latestItem)
+    : fallbackSystemNotification?.reason ?? (fallbackChatUnread ? "chat.unread" : fallbackBadgeNotification ? "notification.unread" : null);
 
   return {
     badgeCount,
@@ -125,8 +134,8 @@ export function buildAttentionState(input: BuildAttentionStateInput): AttentionS
     count,
     flashCount,
     items,
-    latestEventId: latestItem?.eventId ?? (fallbackChatUnread ? "chat-unread" : fallbackBadgeNotification ? "notification-unread" : null),
-    latestTargetPath: latestItem?.targetPath ?? (fallbackChatUnread ? fallbackChatTargetPath : fallbackBadgeNotification ? SYSTEM_NOTIFICATION_TARGET_PATH : null),
+    latestEventId: latestItem?.eventId ?? fallbackSystemNotification?.eventId ?? (fallbackChatUnread ? "chat-unread" : fallbackBadgeNotification ? "notification-unread" : null),
+    latestTargetPath: latestItem?.targetPath ?? fallbackSystemNotification?.targetPath ?? (fallbackChatUnread ? fallbackChatTargetPath : fallbackBadgeNotification ? SYSTEM_NOTIFICATION_TARGET_PATH : null),
     level,
     reason,
     signature: [
@@ -135,8 +144,8 @@ export function buildAttentionState(input: BuildAttentionStateInput): AttentionS
       badgeCount,
       urgentCount,
       flashCount,
-      latestItem?.eventId ?? (fallbackChatUnread ? "chat-unread" : fallbackBadgeNotification ? "notification-unread" : "none"),
-      latestItem?.targetPath ?? (fallbackChatUnread ? fallbackChatTargetPath : fallbackBadgeNotification ? SYSTEM_NOTIFICATION_TARGET_PATH : "none"),
+      latestItem?.eventId ?? fallbackSystemNotification?.eventId ?? (fallbackChatUnread ? "chat-unread" : fallbackBadgeNotification ? "notification-unread" : "none"),
+      latestItem?.targetPath ?? fallbackSystemNotification?.targetPath ?? (fallbackChatUnread ? fallbackChatTargetPath : fallbackBadgeNotification ? SYSTEM_NOTIFICATION_TARGET_PATH : "none"),
     ].join(":"),
     title,
     urgentCount,
@@ -392,6 +401,21 @@ function chatUnreadSummaryText(summary: ChatUnreadSummary) {
 
 function notificationBadgeOnlyText(count: number) {
   return count > 0 ? `${count} 条系统通知未读` : null;
+}
+
+function systemNotificationProjectionFallback(
+  summary: ChatUnreadSummary,
+  notificationText: string | null,
+  chatTargetPath: string,
+) {
+  if (!notificationText || summary.nextTarget?.reason !== "system") return null;
+  return {
+    body: notificationText,
+    eventId: "notification-unread",
+    reason: "notification.unread",
+    targetPath: chatTargetPath,
+    title: "系统通知未读",
+  };
 }
 
 function nonNegativeCount(value: number | null | undefined) {

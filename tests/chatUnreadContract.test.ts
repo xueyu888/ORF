@@ -502,6 +502,7 @@ test("thread mention target request uses the explicit surface contract", async (
 
 test("repository guard keeps thread read, delivery and named unread target contracts", () => {
   const repositorySource = readFileSync(new URL("../server/repositories/chatRepository.ts", import.meta.url), "utf8");
+  const realtimeSource = readFileSync(new URL("../server/chat/chatMessageRealtime.ts", import.meta.url), "utf8");
   assert.match(repositorySource, /SELECT DISTINCT m\.root_message_id, \$2::uuid, true, \$3::timestamptz, \$3::timestamptz/);
   assert.match(repositorySource, /FROM unnest\(\$2::uuid\[\]\) AS mentioned\(mentioned_user_id\)/);
   assert.match(repositorySource, /SELECT \$1, mentioned\.mentioned_user_id, true, null, \$3::timestamptz/);
@@ -513,6 +514,11 @@ test("repository guard keeps thread read, delivery and named unread target contr
   assert.match(repositorySource, /if \(followRows\[0\]\?\.read_state_changed\) \{\s+publishChatChannelRealtime/);
   assert.match(repositorySource, /if \(input\.surface === "main"\)/);
   assert.match(repositorySource, /const target = await findFirstUnreadThreadMention\(input\.channelId, actor\)/);
+  assert.match(repositorySource, /const isSystemNotificationProjection = source === "system" && Boolean\(systemMetadata\.notificationEventId\)/);
+  assert.match(repositorySource, /if \(!isSystemNotificationProjection\) \{\s+await enqueueChatPushDeliveries/);
+  assert.match(realtimeSource, /const isSystemNotificationProjection = Boolean\(input\.message\.system\?\.notificationEventId\)/);
+  assert.match(realtimeSource, /const mayNotify = !input\.channel\.systemKind\s+&& !isSystemNotificationProjection/);
+  assert.match(realtimeSource, /const attentionReason = input\.channel\.systemKind \|\| isSystemNotificationProjection/);
 
   const sendStart = repositorySource.indexOf("export async function sendChatMessage(");
   const followWrite = repositorySource.indexOf("await followMentionedThreadRecipients(client", sendStart);
@@ -532,6 +538,9 @@ test("global unread target uses the shared read cursor, visibility and fixed pri
   assert.match(unreadSqlSource, /WHEN m\.body LIKE \$\{input\.currentUserMentionParam\} THEN 2/);
   assert.match(unreadSqlSource, /WHEN m\.body ~\* \$\{input\.broadcastMentionParam\} THEN 3/);
   assert.match(unreadSqlSource, /WHEN dc\.system_kind IS NOT NULL OR m\.source = 'system' THEN 4/);
+  assert.match(unreadSqlSource, /FROM notification_receipts projection_receipt/);
+  assert.match(unreadSqlSource, /projection_receipt\.read_at IS NULL/);
+  assert.match(repositorySource, /unreadSystemNotificationProjectionSql\("m", \{ userIdParam: "\$5" \}\)/);
   assert.match(repositorySource, /ORDER BY priority ASC, created_at ASC, message_id ASC/);
   assert.match(repositorySource, /surface: row\.target_root_message_id \? "threadMention" as const : "main" as const/);
   assert.match(repositorySource, /targetPath: chatMessageTargetPath\(\{/);
@@ -559,6 +568,36 @@ test("global unread target uses the shared read cursor, visibility and fixed pri
   assert.doesNotMatch(repositorySourceForLegacy, /export async function getChatUnreadContext/);
   assert.doesNotMatch(sidebarSource, /useChatUnreadNavigation/);
   assert.doesNotMatch(mobileSource, /useChatUnreadNavigation/);
+});
+
+test("system notification projection keeps repository fact owners separated", () => {
+  const notificationRepositorySource = readFileSync(new URL("../server/repositories/notificationRepository.ts", import.meta.url), "utf8");
+  const chatRepositorySource = readFileSync(new URL("../server/repositories/chatRepository.ts", import.meta.url), "utf8");
+  const projectionRepositorySource = readFileSync(new URL("../server/chat/notificationChatProjectionRepository.ts", import.meta.url), "utf8");
+  const projectionSource = readFileSync(new URL("../server/messageSystem/notificationChatProjection.ts", import.meta.url), "utf8");
+  const publisherSource = readFileSync(new URL("../server/messageSystem/notificationPublisher.ts", import.meta.url), "utf8");
+  const readCoordinatorSource = readFileSync(new URL("../server/messageSystem/chatNotificationReadCoordinator.ts", import.meta.url), "utf8");
+  const serverSources = [
+    readFileSync(new URL("../server/app.ts", import.meta.url), "utf8"),
+    readFileSync(new URL("../server/chat/chatReactionNotification.ts", import.meta.url), "utf8"),
+    readFileSync(new URL("../server/feedback/feedbackNotificationPort.ts", import.meta.url), "utf8"),
+    readFileSync(new URL("../server/repositories/orfRepository.ts", import.meta.url), "utf8"),
+    readFileSync(new URL("../server/workLogs/workLogReminderState.ts", import.meta.url), "utf8"),
+    readFileSync(new URL("../server/workLogs/workLogSubmissionNotification.ts", import.meta.url), "utf8"),
+  ].join("\n");
+
+  assert.doesNotMatch(notificationRepositorySource, /sendChatMessage|ensureOrfChatBotActor|INSERT INTO chat_|UPDATE chat_|FROM chat_messages/);
+  assert.doesNotMatch(chatRepositorySource, /UPDATE notification_receipts|markNotificationReceipts/);
+  assert.doesNotMatch(serverSources, /\.\.\/notifications\/publisher|\.\/notifications\/notificationDeliveryScheduler/);
+  assert.match(projectionRepositorySource, /sendNotificationChatProjectionMessage/);
+  assert.match(projectionRepositorySource, /visibleSystemNotificationMessageSql/);
+  assert.match(projectionRepositorySource, /recipientUserIdParam: "\$5"/);
+  assert.match(projectionSource, /markNotificationChatDeliveryDelivered/);
+  assert.match(publisherSource, /flushNotificationChatDeliveriesForEvent/);
+  assert.match(readCoordinatorSource, /advanceChatChannelReadState/);
+  assert.match(readCoordinatorSource, /actor,/);
+  assert.match(readCoordinatorSource, /markNotificationReceiptsReadByEventIds/);
+  assert.match(readCoordinatorSource, /markNotificationReceiptsUnreadByEventIds/);
 });
 
 test("required acknowledgement is derived only from explicit reaction or thread reply facts", () => {

@@ -12,7 +12,7 @@ import { startChatPushDeliveryWorker } from "./chat/chatPushDeliveryWorker";
 import { startLegacyRealtimeDeliveryRetention } from "./chat/chatLegacyRealtimeDeliveryRetention";
 import { startChatSyncEventRetentionScheduler } from "./chat/chatSyncEventRetentionScheduler";
 import { registerOptionalIntegrations } from "./integrations";
-import { startNotificationDeliveryScheduler } from "./notifications/notificationDeliveryScheduler";
+import { startNotificationDeliveryScheduler } from "./messageSystem/notificationDeliveryScheduler";
 import { deliverChatPushDelivery } from "./repositories/chatRepository";
 import { registerSettingsRoutes } from "./routes/settingsRoutes";
 import { registerNotificationRoutes } from "./routes/notificationRoutes";

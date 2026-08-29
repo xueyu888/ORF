@@ -690,6 +690,41 @@ test("attention state keeps badge-only system notifications out of workbar", () 
   assert.equal(state.reason, "notification.unread");
 });
 
+test("attention state keeps system notification chat projection fallback as notification without double counting", () => {
+  const state = buildAttentionState(attentionInput({
+    chatUnreadSummary: chatUnreadSummary({
+      messageUnreadCount: 1,
+      nextTarget: {
+        channelId: "system-channel-1",
+        messageId: "system-message-1",
+        reason: "system",
+        surface: "main",
+        targetPath: "/chat/system-channel-1?message=system-message-1",
+      },
+      totalUnreadCount: 1,
+      unreadChannelCount: 1,
+    }),
+    notifications: [attentionNotification({
+      id: "notification-badge-1",
+      kind: "objective.published",
+      stream: "teamAnnouncement",
+      targetHref: "/tasks#objective:objective-1",
+      targetId: "objective-1",
+      targetType: "objective",
+      title: "新目标已发布",
+    })],
+  }));
+
+  assert.equal(state.count, 0);
+  assert.equal(state.badgeCount, 1);
+  assert.equal(state.level, "badge");
+  assert.equal(state.items.length, 0);
+  assert.equal(state.title, "系统通知未读");
+  assert.equal(state.body, "1 条系统通知未读");
+  assert.equal(state.latestTargetPath, "/chat/system-channel-1?message=system-message-1");
+  assert.equal(state.reason, "notification.unread");
+});
+
 test("chat presence display treats only active presence as green online", () => {
   const now = new Date().toISOString();
   const activeUser = chatUser({

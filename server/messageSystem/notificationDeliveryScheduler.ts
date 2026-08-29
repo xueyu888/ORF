@@ -1,6 +1,6 @@
 import type { FastifyBaseLogger } from "fastify";
 import { env } from "../env";
-import { flushPendingNotificationChatDeliveries } from "../repositories/notificationRepository";
+import { flushPendingNotificationChatDeliveries } from "./notificationChatProjection";
 
 let schedulerStarted = false;
 

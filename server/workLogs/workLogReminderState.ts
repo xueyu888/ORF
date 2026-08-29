@@ -5,7 +5,7 @@ import { unscopedWorkLogMemberNameList } from "../../src/domain/orfWorkLogs";
 import { env } from "../env";
 import { db } from "../db/client";
 import { objectives, teamMembers, teams, users, workLogEntries, workLogReminderStates } from "../db/schema";
-import { publishNotificationEvent } from "../notifications/publisher";
+import { publishNotificationEvent } from "../messageSystem/notificationPublisher";
 import {
   publishRealtimeWorkLogReminderRequired,
   publishRealtimeWorkLogReminderResolved,

@@ -48,7 +48,7 @@ import {
   replaceChatPollVote,
 } from "../chat/chatPollRepository";
 import { normalizeChatPollDraft } from "../chat/chatPollModel";
-import { chatUnreadMessageFactsSql } from "../chat/chatUnreadSql";
+import { chatUnreadMessageFactsSql, unreadSystemNotificationProjectionSql } from "../chat/chatUnreadSql";
 import { publishChatChannelRealtime } from "../chat/chatChannelRealtime";
 import {
   ChatPushDeliveryAttemptError,
@@ -61,7 +61,7 @@ import {
   visibleSystemNotificationMessageSql,
 } from "../notifications/notificationIsolationPolicy";
 import { chatPushChannelId, sendPushToUsers } from "../push/pushService";
-import { publishRealtimeChatEvent, publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
+import { publishRealtimeChatEvent } from "../realtime/realtimeEventBus";
 import { resolveRealtimeUserPresence } from "../realtime/presenceRegistry";
 import { readChatSettings } from "../settings/chatSettings";
 import { readImageMetadata } from "../storage/images";
@@ -504,6 +504,10 @@ async function getVisibleChannel(actor: ChatActor, channelId: string): Promise<C
   const rows = await loadDisplayableChannelRows(actor, { channelId });
   const [channel] = await buildChannels(rows, actor);
   return channel ?? null;
+}
+
+export async function getVisibleChatChannel(actor: ChatActor, channelId: string): Promise<ChatChannel | null> {
+  return getVisibleChannel(actor, channelId);
 }
 
 async function hasReadableChannel(actor: ChatActor, channelId: string) {
@@ -1502,9 +1506,15 @@ async function getChatMainUnreadContext(
         AND m.channel_id = $2
         AND m.root_message_id IS NULL
         AND m.deleted_at IS NULL
-        AND ($3::timestamptz IS NULL OR m.created_at > $3::timestamptz)
-        AND ($4::boolean = true OR m.author_user_id <> $5::uuid)
         AND ${visibleChatMessageSql("m", "$5", "$6", "$7")}
+        AND (
+          ${unreadSystemNotificationProjectionSql("m", { userIdParam: "$5" })}
+          OR (
+            NULLIF(m.system_metadata->>'notificationEventId', '') IS NULL
+            AND ($3::timestamptz IS NULL OR m.created_at > $3::timestamptz)
+            AND ($4::boolean = true OR m.author_user_id <> $5::uuid)
+          )
+        )
       ORDER BY m.created_at ASC, m.id ASC
       LIMIT 1
     `,
@@ -2280,6 +2290,7 @@ export async function sendChatMessage(
   const source = input.source ?? "user";
   if (channel.systemKind && source !== "system") return { status: "forbidden" };
   const systemMetadata = source === "system" ? input.systemMetadata ?? {} : {};
+  const isSystemNotificationProjection = source === "system" && Boolean(systemMetadata.notificationEventId);
   const requireAcknowledgement = Boolean(input.requireAcknowledgement);
 
   const teamId = storageTeamId(actor);
@@ -2383,14 +2394,16 @@ export async function sendChatMessage(
         teamId,
       });
     }
-    await enqueueChatPushDeliveries(client, {
-      authorUserId: actor.id,
-      channelId: input.channelId,
-      createdAt: now,
-      messageId,
-      systemActorUserId: systemMetadata.actorUserId,
-      teamId,
-    });
+    if (!isSystemNotificationProjection) {
+      await enqueueChatPushDeliveries(client, {
+        authorUserId: actor.id,
+        channelId: input.channelId,
+        createdAt: now,
+        messageId,
+        systemActorUserId: systemMetadata.actorUserId,
+        teamId,
+      });
+    }
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
@@ -2793,204 +2806,158 @@ export async function listSavedChatMessages(actor: ChatActor): Promise<Outcome<{
   });
 }
 
-export async function markChatChannelRead(
+export type ChatChannelReadStateAdvance = {
+  channelId: string;
+  readAt: string;
+  readThroughAt: Date | string;
+  teamId: string;
+  userId: string;
+};
+
+export async function advanceChatChannelReadState(
+  client: PoolClient,
   channelId: string,
   actor: ChatActor,
   options: { includeThreads?: boolean; messageId?: string | null } = {},
-): Promise<Outcome<{ channel: ChatChannel }>> {
+): Promise<Outcome<ChatChannelReadStateAdvance>> {
   if (!actor.canRead) return { status: "forbidden" };
   if (!(await hasReadableChannel(actor, channelId))) return { status: "notFound" };
   const readAt = nowIso();
-  const client = await pool.connect();
-  let notificationReadCount = 0;
-  try {
-    await client.query("BEGIN");
-    const targetMessageResult = options.messageId
-      ? await client.query<{ created_at: Date | string; id: string }>(
-        `
-          SELECT id, created_at
-          FROM chat_messages
-          WHERE team_id = $1
-            AND channel_id = $2
-            AND id = $3
-            AND root_message_id IS NULL
-            AND deleted_at IS NULL
-          LIMIT 1
-        `,
-        [storageTeamId(actor), channelId, options.messageId],
-      )
-      : await client.query<{ created_at: Date | string; id: string }>(
-        `
-          SELECT id, created_at
-          FROM chat_messages
-          WHERE team_id = $1
-            AND channel_id = $2
-            AND root_message_id IS NULL
-            AND deleted_at IS NULL
-          ORDER BY created_at DESC
-          LIMIT 1
-        `,
-        [storageTeamId(actor), channelId],
-      );
-    const targetMessage = targetMessageResult.rows[0] ?? null;
-    if (options.messageId && !targetMessage) {
-      await client.query("ROLLBACK");
-      return { status: "notFound" };
-    }
-    const lastReadAt = options.messageId && targetMessage ? targetMessage.created_at : readAt;
-    const lastReadMessageId = targetMessage?.id ?? null;
+  const teamId = storageTeamId(actor);
+  const targetMessageResult = options.messageId
+    ? await client.query<{ created_at: Date | string; id: string }>(
+      `
+        SELECT id, created_at
+        FROM chat_messages
+        WHERE team_id = $1
+          AND channel_id = $2
+          AND id = $3
+          AND root_message_id IS NULL
+          AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      [teamId, channelId, options.messageId],
+    )
+    : await client.query<{ created_at: Date | string; id: string }>(
+      `
+        SELECT id, created_at
+        FROM chat_messages
+        WHERE team_id = $1
+          AND channel_id = $2
+          AND root_message_id IS NULL
+          AND deleted_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT 1
+      `,
+      [teamId, channelId],
+    );
+  const targetMessage = targetMessageResult.rows[0] ?? null;
+  if (options.messageId && !targetMessage) {
+    return { status: "notFound" };
+  }
+  const lastReadAt = options.messageId && targetMessage ? targetMessage.created_at : readAt;
+  const lastReadMessageId = targetMessage?.id ?? null;
+  await client.query(
+    `
+      UPDATE chat_channel_members
+      SET
+        last_viewed_at = $3,
+        last_read_at = CASE
+          WHEN last_read_at IS NULL OR last_read_at < $4::timestamptz THEN $4
+          ELSE last_read_at
+        END,
+        last_read_message_id = CASE
+          WHEN last_read_at IS NULL OR last_read_at < $4::timestamptz THEN $5
+          ELSE last_read_message_id
+        END,
+        manually_unread = CASE
+          WHEN last_read_at IS NULL OR last_read_at <= $4::timestamptz THEN false
+          ELSE manually_unread
+        END
+      WHERE channel_id = $1 AND user_id = $2
+    `,
+    [channelId, actor.id, readAt, lastReadAt, lastReadMessageId],
+  );
+  if (options.includeThreads && !options.messageId) {
     await client.query(
       `
-        UPDATE chat_channel_members
-        SET
-          last_viewed_at = $3,
-          last_read_at = CASE
-            WHEN last_read_at IS NULL OR last_read_at < $4::timestamptz THEN $4
-            ELSE last_read_at
-          END,
-          last_read_message_id = CASE
-            WHEN last_read_at IS NULL OR last_read_at < $4::timestamptz THEN $5
-            ELSE last_read_message_id
-          END,
-          manually_unread = CASE
-            WHEN last_read_at IS NULL OR last_read_at <= $4::timestamptz THEN false
-            ELSE manually_unread
-          END
-        WHERE channel_id = $1 AND user_id = $2
+        UPDATE chat_thread_follows f
+        SET last_viewed_at = $3, updated_at = $3
+        FROM chat_messages root
+        WHERE f.root_message_id = root.id
+          AND f.user_id = $2
+          AND root.channel_id = $1
+          AND root.team_id = $4
+          AND root.root_message_id IS NULL
+          AND root.deleted_at IS NULL
       `,
-      [channelId, actor.id, readAt, lastReadAt, lastReadMessageId],
+      [channelId, actor.id, readAt, teamId],
     );
-    notificationReadCount = await markProjectedNotificationReceiptsRead(client, {
-      channelId,
-      readAt,
-      readThroughAt: lastReadAt,
-      teamId: storageTeamId(actor),
-      userId: actor.id,
-    });
-    if (options.includeThreads && !options.messageId) {
-      await client.query(
-        `
-          UPDATE chat_thread_follows f
-          SET last_viewed_at = $3, updated_at = $3
-          FROM chat_messages root
-          WHERE f.root_message_id = root.id
-            AND f.user_id = $2
-            AND root.channel_id = $1
-            AND root.team_id = $4
-            AND root.root_message_id IS NULL
-            AND root.deleted_at IS NULL
-        `,
-        [channelId, actor.id, readAt, storageTeamId(actor)],
-      );
-      await client.query(
-        `
-          INSERT INTO chat_thread_follows (root_message_id, user_id, following, last_viewed_at, updated_at)
-          SELECT DISTINCT m.root_message_id, $2::uuid, true, $3::timestamptz, $3::timestamptz
-          FROM chat_messages m
-          INNER JOIN chat_messages root ON root.id = m.root_message_id
-            AND root.team_id = m.team_id
-            AND root.channel_id = m.channel_id
-            AND root.root_message_id IS NULL
-            AND root.deleted_at IS NULL
-          WHERE m.team_id = $4
-            AND m.channel_id = $1
-            AND m.root_message_id IS NOT NULL
-            AND m.author_user_id <> $2
-            AND m.deleted_at IS NULL
-            AND (m.body LIKE $5 OR m.body ~* $6)
-            AND ${visibleChatMessageSql("m", "$2", "$7", "$8")}
-            AND ${visibleChatMessageSql("root", "$2", "$7", "$8")}
-          ON CONFLICT (root_message_id, user_id)
-          DO UPDATE SET last_viewed_at = EXCLUDED.last_viewed_at, updated_at = EXCLUDED.updated_at
-        `,
-        [
-          channelId,
-          actor.id,
-          readAt,
-          storageTeamId(actor),
-          `%orf-user:${actor.id}%`,
-          CHAT_BROADCAST_MENTION_SQL_PATTERN,
-          E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
-          normalizedE2eNotificationViewerEmails(),
-        ],
-      );
-    }
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw error;
-  } finally {
-    client.release();
-  }
-  const updated = await getVisibleChannel(actor, channelId);
-  if (!updated) return { status: "notFound" };
-  publishChatChannelRealtime({
-    teamId: storageTeamId(actor),
-    recipientUserIds: [actor.id],
-    eventType: "read.changed",
-    channelId,
-    actorUserId: actor.id,
-  });
-  if (notificationReadCount > 0) {
-    publishRealtimeReadModelInvalidation(storageTeamId(actor), {
-      actorUserId: actor.id,
-      models: ["notifications"],
-      reason: "notification.changed",
-    });
-  }
-  return ok({ channel: updated });
-}
-
-async function markProjectedNotificationReceiptsRead(
-  client: PoolClient,
-  input: { channelId: string; readAt: string; readThroughAt: Date | string; teamId: string; userId: string },
-) {
-  const { rows } = await client.query<{ count: number }>(
-    `
-      WITH read_notification_messages AS (
-        SELECT DISTINCT NULLIF(m.system_metadata->>'notificationEventId', '') AS event_id
+    await client.query(
+      `
+        INSERT INTO chat_thread_follows (root_message_id, user_id, following, last_viewed_at, updated_at)
+        SELECT DISTINCT m.root_message_id, $2::uuid, true, $3::timestamptz, $3::timestamptz
         FROM chat_messages m
-        WHERE m.team_id = $1
-          AND m.channel_id = $2
-          AND m.source = 'system'
-          AND m.root_message_id IS NULL
+        INNER JOIN chat_messages root ON root.id = m.root_message_id
+          AND root.team_id = m.team_id
+          AND root.channel_id = m.channel_id
+          AND root.root_message_id IS NULL
+          AND root.deleted_at IS NULL
+        WHERE m.team_id = $4
+          AND m.channel_id = $1
+          AND m.root_message_id IS NOT NULL
+          AND m.author_user_id <> $2
           AND m.deleted_at IS NULL
-          AND m.created_at <= $4::timestamptz
-          AND NULLIF(m.system_metadata->>'notificationEventId', '') IS NOT NULL
-      ),
-      updated AS (
-        UPDATE notification_receipts r
-        SET read_at = $5
-        FROM read_notification_messages read_message
-        INNER JOIN notification_events e ON e.id = read_message.event_id AND e.team_id = $1
-        WHERE r.event_id = read_message.event_id
-          AND r.recipient_user_id = $3
-          AND r.read_at IS NULL
-        RETURNING r.event_id
-      )
-      SELECT count(*)::int AS count
-      FROM updated
-    `,
-    [input.teamId, input.channelId, input.userId, input.readThroughAt, input.readAt],
-  );
-  return Number(rows[0]?.count ?? 0);
+          AND (m.body LIKE $5 OR m.body ~* $6)
+          AND ${visibleChatMessageSql("m", "$2", "$7", "$8")}
+          AND ${visibleChatMessageSql("root", "$2", "$7", "$8")}
+        ON CONFLICT (root_message_id, user_id)
+        DO UPDATE SET last_viewed_at = EXCLUDED.last_viewed_at, updated_at = EXCLUDED.updated_at
+      `,
+      [
+        channelId,
+        actor.id,
+        readAt,
+        teamId,
+        `%orf-user:${actor.id}%`,
+        CHAT_BROADCAST_MENTION_SQL_PATTERN,
+        E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+        normalizedE2eNotificationViewerEmails(),
+      ],
+    );
+  }
+  return ok({
+    channelId,
+    readAt,
+    readThroughAt: lastReadAt,
+    teamId,
+    userId: actor.id,
+  });
 }
 
-export async function setChatChannelUnread(
+export type ChatChannelUnreadStateChange = {
+  channelId: string;
+  targetMessageId: string | null;
+  teamId: string;
+  userId: string;
+};
+
+export async function setChatChannelUnreadState(
+  client: PoolClient,
   input: { channelId: string; messageId?: string | null },
   actor: ChatActor,
-): Promise<Outcome<{ channel: ChatChannel }>> {
+): Promise<Outcome<ChatChannelUnreadStateChange>> {
   if (!actor.canRead) return { status: "forbidden" };
-  const channel = await getVisibleChannel(actor, input.channelId);
-  if (!channel) return { status: "notFound" };
+  if (!(await hasReadableChannel(actor, input.channelId))) return { status: "notFound" };
   const readStateUpdatedAt = nowIso();
+  const teamId = storageTeamId(actor);
 
   if (input.messageId) {
     const message = await getRawMessage(actor, input.messageId);
     if (!message || message.channel_id !== input.channelId || message.deleted_at) return { status: "notFound" };
     const rootMessage = message.root_message_id ? await getRawMessage(actor, message.root_message_id) : message;
     if (!rootMessage || rootMessage.channel_id !== input.channelId || rootMessage.root_message_id !== null) return { status: "notFound" };
-    const { rows } = await pool.query<{ created_at: Date | string; id: string }>(
+    const { rows } = await client.query<{ created_at: Date | string; id: string }>(
       `
         SELECT id, created_at
         FROM chat_messages
@@ -3002,9 +2969,9 @@ export async function setChatChannelUnread(
         ORDER BY created_at DESC
         LIMIT 1
       `,
-      [storageTeamId(actor), input.channelId, rootMessage.created_at],
+      [teamId, input.channelId, rootMessage.created_at],
     );
-    await pool.query(
+    await client.query(
       `
         UPDATE chat_channel_members
         SET last_read_at = $3, last_read_message_id = $4, manually_unread = true, last_viewed_at = $5
@@ -3012,58 +2979,64 @@ export async function setChatChannelUnread(
       `,
       [input.channelId, actor.id, rows[0]?.created_at ?? null, rows[0]?.id ?? null, readStateUpdatedAt],
     );
-  } else {
-    const { rows: latestRows } = await pool.query<{ created_at: Date | string; id: string }>(
-      `
-        SELECT id, created_at
-        FROM chat_messages
-        WHERE team_id = $1
-          AND channel_id = $2
-          AND root_message_id IS NULL
-          AND deleted_at IS NULL
-        ORDER BY created_at DESC
-        LIMIT 1
-      `,
-      [storageTeamId(actor), input.channelId],
-    );
-    const latestRootMessage = latestRows[0];
-    if (!latestRootMessage) {
-      return ok({ channel });
-    }
-    const { rows } = await pool.query<{ created_at: Date | string; id: string }>(
-      `
-        SELECT id, created_at
-        FROM chat_messages
-        WHERE team_id = $1
-          AND channel_id = $2
-          AND root_message_id IS NULL
-          AND deleted_at IS NULL
-          AND created_at < $3
-        ORDER BY created_at DESC
-        LIMIT 1
-      `,
-      [storageTeamId(actor), input.channelId, latestRootMessage.created_at],
-    );
-    await pool.query(
-      `
-        UPDATE chat_channel_members
-        SET last_read_at = $3, last_read_message_id = $4, manually_unread = true, last_viewed_at = $5
-        WHERE channel_id = $1 AND user_id = $2
-      `,
-      [input.channelId, actor.id, rows[0]?.created_at ?? null, rows[0]?.id ?? null, readStateUpdatedAt],
-    );
+    return ok({
+      channelId: input.channelId,
+      targetMessageId: rootMessage.id,
+      teamId,
+      userId: actor.id,
+    });
   }
 
-  const updated = await getVisibleChannel(actor, input.channelId);
-  if (!updated) return { status: "notFound" };
-  publishChatChannelRealtime({
-    teamId: storageTeamId(actor),
-    recipientUserIds: [actor.id],
-    eventType: "read.changed",
+  const { rows: latestRows } = await client.query<{ created_at: Date | string; id: string }>(
+    `
+      SELECT id, created_at
+      FROM chat_messages
+      WHERE team_id = $1
+        AND channel_id = $2
+        AND root_message_id IS NULL
+        AND deleted_at IS NULL
+      ORDER BY created_at DESC
+      LIMIT 1
+    `,
+    [teamId, input.channelId],
+  );
+  const latestRootMessage = latestRows[0];
+  if (!latestRootMessage) {
+    return ok({
+      channelId: input.channelId,
+      targetMessageId: null,
+      teamId,
+      userId: actor.id,
+    });
+  }
+  const { rows } = await client.query<{ created_at: Date | string; id: string }>(
+    `
+      SELECT id, created_at
+      FROM chat_messages
+      WHERE team_id = $1
+        AND channel_id = $2
+        AND root_message_id IS NULL
+        AND deleted_at IS NULL
+        AND created_at < $3
+      ORDER BY created_at DESC
+      LIMIT 1
+    `,
+    [teamId, input.channelId, latestRootMessage.created_at],
+  );
+  await client.query(
+    `
+      UPDATE chat_channel_members
+      SET last_read_at = $3, last_read_message_id = $4, manually_unread = true, last_viewed_at = $5
+      WHERE channel_id = $1 AND user_id = $2
+    `,
+    [input.channelId, actor.id, rows[0]?.created_at ?? null, rows[0]?.id ?? null, readStateUpdatedAt],
+  );
+  return ok({
     channelId: input.channelId,
-    actorUserId: actor.id,
+    targetMessageId: latestRootMessage.id,
+    teamId,
+    userId: actor.id,
   });
-  return ok({ channel: updated });
 }
 
 export async function setChatThreadFollow(

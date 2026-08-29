@@ -8,7 +8,7 @@ import {
   type DataSyncRecipientMembership,
 } from "../server/notifications/dataSyncNotificationModel";
 import { closeDb, pool } from "../server/db/client";
-import { publishNotificationEvent } from "../server/notifications/publisher";
+import { publishNotificationEvent } from "../server/messageSystem/notificationPublisher";
 
 function argValue(name: string) {
   const equalsPrefix = `--${name}=`;
