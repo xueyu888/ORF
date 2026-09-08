@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { PermissionKey } from "../../src/config/permissions";
 import { CHAT_POLL_INPUT_CONTRACT } from "../../src/domain/chatPollContract";
+import { CLIENT_CHAT_MESSAGE_ID_PATTERN } from "../../src/domain/chatMessageSend";
 import { requireUserScopeContext } from "../auth/accessPolicy";
 import { env } from "../env";
 import { CHAT_SYNC_PAGE_SIZE, CHAT_SYNC_PROTOCOL_VERSION, isChatSyncCursor } from "../../src/domain/chatSync";
@@ -103,6 +104,7 @@ const addMembersBodySchema = z.object({
 });
 
 const sendMessageBodySchema = z.object({
+  messageId: z.string().regex(CLIENT_CHAT_MESSAGE_ID_PATTERN).optional(),
   body: z.string().max(20000).default(""),
   rootMessageId: z.string().min(1).nullable().optional(),
   parentMessageId: z.string().min(1).nullable().optional(),

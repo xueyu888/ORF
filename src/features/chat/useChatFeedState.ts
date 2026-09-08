@@ -22,6 +22,7 @@ import {
   setChatFeedScrollTopInstant,
 } from "./chatFeedScroll";
 import {
+  type ChatMessageSendError,
   type UnreadAnchor,
   applyFeedMessage,
   buildUnreadAnchor,
@@ -31,7 +32,7 @@ import {
   createFeedSnapshot,
   currentMembership,
   hasMainFeedUnread,
-  markPendingChatMessageFailed,
+  markPendingChatMessageSendError,
   markPendingChatMessageSending,
   isFreshFeedSnapshot,
   prependOlderFeedMessages,
@@ -407,12 +408,12 @@ export function useChatFeedState({
     }
   }, []);
 
-  const markPendingMessageFailedInFeed = useCallback((channelId: string, pendingMessageId: string, error: string) => {
+  const markPendingMessageSendErrorInFeed = useCallback((channelId: string, pendingMessageId: string, error: ChatMessageSendError) => {
     if (activeChannelIdRef.current === channelId) {
       setMessages((items) => {
         const snapshot = {
           ...(feedCacheRef.current.get(channelId) ?? createFeedSnapshot({ messages: items })),
-          messages: updatePendingMessageDelivery(items, pendingMessageId, (message) => markPendingChatMessageFailed(message, error)),
+          messages: updatePendingMessageDelivery(items, pendingMessageId, (message) => markPendingChatMessageSendError(message, error)),
         };
         feedCacheRef.current.set(channelId, snapshot);
         return snapshot.messages;
@@ -423,7 +424,7 @@ export function useChatFeedState({
     if (snapshot) {
       feedCacheRef.current.set(channelId, {
         ...snapshot,
-        messages: updatePendingMessageDelivery(snapshot.messages, pendingMessageId, (message) => markPendingChatMessageFailed(message, error)),
+        messages: updatePendingMessageDelivery(snapshot.messages, pendingMessageId, (message) => markPendingChatMessageSendError(message, error)),
       });
     }
   }, []);
@@ -1300,7 +1301,7 @@ export function useChatFeedState({
     messageScrollRef,
     messages: displayedMessages,
     messagesLoading: displayedMessagesLoading,
-    markPendingMessageFailedInFeed,
+    markPendingMessageSendErrorInFeed,
     markPendingMessageSendingInFeed,
     olderMessagesLoading,
     prefetchChannelMessages,

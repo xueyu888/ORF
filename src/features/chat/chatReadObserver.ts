@@ -1,5 +1,5 @@
 import type { ChatMessage } from "../../types/orf";
-import type { UnreadAnchor } from "./chatModels";
+import { chatMessageSendStatus, type UnreadAnchor } from "./chatModels";
 
 export const chatReadReceiptStableMs = 1000;
 export const chatReadReceiptVisibleRatio = 0.5;
@@ -13,7 +13,7 @@ type ChatReadThroughCandidateInput = {
 };
 
 export function isChatMessageUnreadForAnchor(message: ChatMessage, unreadAnchor: UnreadAnchor | null, currentUserId?: string) {
-  if (!unreadAnchor || message.rootMessageId || message.deletedAt || message.id.startsWith("pending-")) return false;
+  if (!unreadAnchor || message.rootMessageId || message.deletedAt || chatMessageSendStatus(message)) return false;
   if (unreadAnchor.lastReadAt && message.createdAt <= unreadAnchor.lastReadAt) return false;
   return unreadAnchor.manuallyUnread || message.authorUserId !== currentUserId;
 }

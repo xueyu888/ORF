@@ -30,11 +30,13 @@ import type {
 } from "../../src/types/orf";
 import { chatMessageTargetPath } from "../../src/domain/chatNavigation";
 import { CHAT_POLL_INPUT_CONTRACT } from "../../src/domain/chatPollContract";
+import { CLIENT_CHAT_MESSAGE_ID_PATTERN, type ChatMessageSendRequest } from "../../src/domain/chatMessageSend";
 import type { PermissionKey } from "../../src/config/permissions";
 import { attachmentNativeVideoContentType, attachmentPreviewKind } from "../../src/domain/attachmentPreviewKind";
 import { addDaysToIsoDate, hasExecutableChatSearch, parseChatSearchQuery } from "../../src/features/chat/chatSearchSyntax";
 import { chatNotificationPreviewText } from "../../src/domain/chatNotificationPresentation";
 import { pool } from "../db/client";
+import { readQueryBatch, type DatabaseReadClient } from "../db/queryBatch";
 import {
   enqueueChatPushDeliveries,
   type ChatPushDeliveryClaim,
@@ -106,6 +108,19 @@ import {
 } from "./chatRepositoryModel";
 
 export type { ChatActor } from "./chatRepositoryModel";
+
+type ChatSendInput = ChatMessageSendRequest & {
+  createdAt?: string;
+  poll?: {
+    options: string[];
+    selectionMode: ChatPollSelectionMode;
+    visibility: ChatPollVisibility;
+  };
+  source?: ChatMessageSource;
+  systemMetadata?: ChatMessageSystemMetadata;
+};
+
+type ChatSendResult = { channel: ChatChannel; message: ChatMessage };
 
 function visibleChatMessageSql(messageSql: string, recipientUserIdParam: string, actorNamePatternParam: string, viewerEmailsParam: string) {
   return visibleSystemNotificationMessageSql({
@@ -214,9 +229,8 @@ async function findActiveDirectChannelIdByMemberIds(teamId: string, memberIds: s
   return rows[0]?.id ?? null;
 }
 
-async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?: string } = {}) {
+async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?: string } = {}, client: DatabaseReadClient = pool) {
   const teamId = storageTeamId(actor);
-  await preparePublicChannels(teamId);
   const params: unknown[] = [
     teamId,
     actor.id,
@@ -225,7 +239,7 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
   ];
   const channelFilter = input.channelId ? "AND c.id = $5" : "";
   if (input.channelId) params.push(input.channelId);
-  const { rows } = await pool.query<ChannelRow>(
+  const { rows } = await client.query<ChannelRow>(
     `
       WITH visible_channels AS (
         SELECT
@@ -303,12 +317,13 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
 }
 
 async function listVisibleChannelRows(actor: ChatActor) {
+  await preparePublicChannels(storageTeamId(actor));
   return loadDisplayableChannelRows(actor);
 }
 
-async function loadMembers(channelIds: string[]) {
+async function loadMembers(channelIds: string[], client: DatabaseReadClient = pool) {
   if (channelIds.length === 0) return new Map<string, ChatChannelMember[]>();
-  const { rows } = await pool.query<ChannelMemberRow>(
+  const { rows } = await client.query<ChannelMemberRow>(
     `
       SELECT m.channel_id, m.user_id, m.role, m.favorite, m.muted, m.manually_unread,
              m.last_viewed_at, m.last_read_at, m.last_read_message_id, m.joined_at
@@ -334,10 +349,10 @@ async function loadMembers(channelIds: string[]) {
   return grouped;
 }
 
-async function loadUsersByIds(teamId: string, userIds: string[]) {
+async function loadUsersByIds(teamId: string, userIds: string[], client: DatabaseReadClient = pool) {
   const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
   if (uniqueIds.length === 0) return new Map<string, ChatUser>();
-  const { rows } = await pool.query<UserRow>(
+  const { rows } = await client.query<UserRow>(
     `
       SELECT u.id, u.name, u.email, u.status, u.last_online_at, u.avatar_object_key, u.avatar_updated_at, COALESCE(tm.role, 'member') AS role
       FROM users u
@@ -353,7 +368,7 @@ async function loadUsersByIds(teamId: string, userIds: string[]) {
   }))]));
 }
 
-async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
+async function loadChannelReadModel(channelIds: string[], actor: ChatActor, client: DatabaseReadClient = pool) {
   const empty = {
     lastMessageAt: new Map<string, string | null>(),
     lastMessagePreview: new Map<string, string | null>(),
@@ -366,8 +381,8 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
   };
   if (channelIds.length === 0) return empty;
 
-  const [lastMessages, unreadFacts, threadReadAt] = await Promise.all([
-    pool.query<{ body: string; channel_id: string; created_at: Date | string }>(
+  const [lastMessages, unreadFacts, threadReadAt] = await readQueryBatch(client, [
+    () => client.query<{ body: string; channel_id: string; created_at: Date | string }>(
       `
         SELECT DISTINCT ON (channel_id) channel_id, body, created_at
         FROM chat_messages m
@@ -378,7 +393,7 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
       `,
       [channelIds, actor.id, E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN, normalizedE2eNotificationViewerEmails()],
     ),
-    pool.query<{
+    () => client.query<{
       channel_id: string;
       main_mention_count: number;
       mention_count: number;
@@ -427,7 +442,7 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
         normalizedE2eNotificationViewerEmails(),
       ],
     ),
-    pool.query<{ channel_id: string; read_at: Date | string | null }>(
+    () => client.query<{ channel_id: string; read_at: Date | string | null }>(
       `
         SELECT root.channel_id, max(f.updated_at) AS read_at
         FROM chat_thread_follows f
@@ -456,14 +471,14 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
   return empty;
 }
 
-async function buildChannels(rows: ChannelRow[], actor: ChatActor): Promise<ChatChannel[]> {
+async function buildChannels(rows: ChannelRow[], actor: ChatActor, client: DatabaseReadClient = pool): Promise<ChatChannel[]> {
   const channelIds = rows.map((row) => row.id);
   const teamId = storageTeamId(actor);
-  const membersByChannel = await loadMembers(channelIds);
+  const membersByChannel = await loadMembers(channelIds, client);
   const allMemberIds = Array.from(new Set(Array.from(membersByChannel.values()).flat().map((member) => member.userId)));
-  const [usersById, readModel] = await Promise.all([
-    loadUsersByIds(teamId, allMemberIds),
-    loadChannelReadModel(channelIds, actor),
+  const [usersById, readModel] = await readQueryBatch(client, [
+    () => loadUsersByIds(teamId, allMemberIds, client),
+    () => loadChannelReadModel(channelIds, actor, client),
   ]);
 
   return rows.map((row) => {
@@ -500,10 +515,15 @@ async function buildChannels(rows: ChannelRow[], actor: ChatActor): Promise<Chat
   });
 }
 
-async function getVisibleChannel(actor: ChatActor, channelId: string): Promise<ChatChannel | null> {
-  const rows = await loadDisplayableChannelRows(actor, { channelId });
-  const [channel] = await buildChannels(rows, actor);
+async function readVisibleChannel(actor: ChatActor, channelId: string, client: DatabaseReadClient): Promise<ChatChannel | null> {
+  const rows = await loadDisplayableChannelRows(actor, { channelId }, client);
+  const [channel] = await buildChannels(rows, actor, client);
   return channel ?? null;
+}
+
+async function getVisibleChannel(actor: ChatActor, channelId: string): Promise<ChatChannel | null> {
+  await preparePublicChannels(storageTeamId(actor));
+  return readVisibleChannel(actor, channelId, pool);
 }
 
 export async function getVisibleChatChannel(actor: ChatActor, channelId: string): Promise<ChatChannel | null> {
@@ -747,9 +767,9 @@ export async function deliverChatPushDelivery(claim: ChatPushDeliveryClaim): Pro
   });
 }
 
-async function loadAttachments(messageIds: string[]) {
+async function loadAttachments(messageIds: string[], client: DatabaseReadClient = pool) {
   if (messageIds.length === 0) return new Map<string, ChatAttachment[]>();
-  const { rows } = await pool.query<AttachmentRow>(
+  const { rows } = await client.query<AttachmentRow>(
     `
       SELECT id, message_id, object_key, file_name, mime_type, file_size, width, height, created_at
       FROM chat_attachments
@@ -768,9 +788,9 @@ async function loadAttachments(messageIds: string[]) {
   return grouped;
 }
 
-async function loadReactions(messageIds: string[], actor: ChatActor) {
+async function loadReactions(messageIds: string[], actor: ChatActor, client: DatabaseReadClient = pool) {
   if (messageIds.length === 0) return new Map<string, ChatReaction[]>();
-  const { rows } = await pool.query<ReactionRow>(
+  const { rows } = await client.query<ReactionRow>(
     `
       SELECT message_id, user_id, emoji_name
       FROM chat_message_reactions
@@ -803,9 +823,9 @@ async function loadReactions(messageIds: string[], actor: ChatActor) {
   return result;
 }
 
-async function loadAcknowledgements(messageIds: string[], actor: ChatActor) {
+async function loadAcknowledgements(messageIds: string[], actor: ChatActor, client: DatabaseReadClient = pool) {
   if (messageIds.length === 0) return new Map<string, ChatMessageAcknowledgement>();
-  const { rows } = await pool.query<AcknowledgementRecipientRow>(
+  const { rows } = await client.query<AcknowledgementRecipientRow>(
     `
       SELECT
         request.message_id,
@@ -862,10 +882,10 @@ async function loadAcknowledgements(messageIds: string[], actor: ChatActor) {
   return result;
 }
 
-async function loadReplySummaries(rootMessageIds: string[]) {
+async function loadReplySummaries(rootMessageIds: string[], client: DatabaseReadClient = pool) {
   const summaries = new Map<string, { count: number; lastReplyAt: string | null }>();
   if (rootMessageIds.length === 0) return summaries;
-  const { rows } = await pool.query<{ count: number; last_reply_at: Date | string | null; root_message_id: string }>(
+  const { rows } = await client.query<{ count: number; last_reply_at: Date | string | null; root_message_id: string }>(
     `
       SELECT root_message_id, count(*)::int AS count, max(created_at) AS last_reply_at
       FROM chat_messages
@@ -881,9 +901,9 @@ async function loadReplySummaries(rootMessageIds: string[]) {
   return summaries;
 }
 
-async function loadMessageCollections(messageIds: string[], actor: ChatActor) {
+async function loadMessageCollections(messageIds: string[], actor: ChatActor, client: DatabaseReadClient = pool) {
   if (messageIds.length === 0) return new Map<string, MessageCollectionRow>();
-  const { rows } = await pool.query<MessageCollectionRow>(
+  const { rows } = await client.query<MessageCollectionRow>(
     `
       SELECT target.message_id,
              p.pinned_at,
@@ -898,16 +918,16 @@ async function loadMessageCollections(messageIds: string[], actor: ChatActor) {
   return new Map(rows.map((row) => [row.message_id, row]));
 }
 
-async function buildMessages(rows: MessageRow[], actor: ChatActor): Promise<ChatMessage[]> {
+async function buildMessages(rows: MessageRow[], actor: ChatActor, client: DatabaseReadClient = pool): Promise<ChatMessage[]> {
   const messageIds = rows.map((row) => row.id);
   const rootIds = rows.filter((row) => row.root_message_id === null).map((row) => row.id);
-  const [attachmentsByMessage, reactionsByMessage, acknowledgementByMessage, pollsByMessage, replySummaries, collectionsByMessage] = await Promise.all([
-    loadAttachments(messageIds),
-    loadReactions(messageIds, actor),
-    loadAcknowledgements(messageIds, actor),
-    loadChatPolls(messageIds, actor.id),
-    loadReplySummaries(rootIds),
-    loadMessageCollections(messageIds, actor),
+  const [attachmentsByMessage, reactionsByMessage, acknowledgementByMessage, pollsByMessage, replySummaries, collectionsByMessage] = await readQueryBatch(client, [
+    () => loadAttachments(messageIds, client),
+    () => loadReactions(messageIds, actor, client),
+    () => loadAcknowledgements(messageIds, actor, client),
+    () => loadChatPolls(messageIds, actor.id, client),
+    () => loadReplySummaries(rootIds, client),
+    () => loadMessageCollections(messageIds, actor, client),
   ]);
 
   return rows.map((row) => {
@@ -947,29 +967,15 @@ async function buildMessages(rows: MessageRow[], actor: ChatActor): Promise<Chat
   });
 }
 
-async function getMessageById(actor: ChatActor, messageId: string) {
-  const teamId = storageTeamId(actor);
-  const { rows } = await pool.query<MessageRow>(
-    `
-      SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
-             u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
-             m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
-      FROM chat_messages m
-      INNER JOIN users u ON u.id = m.author_user_id
-      WHERE m.team_id = $1
-        AND m.id = $2
-        AND ${visibleChatMessageSql("m", "$3", "$4", "$5")}
-      LIMIT 1
-    `,
-    [teamId, messageId, actor.id, E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN, normalizedE2eNotificationViewerEmails()],
-  );
-  const [message] = await buildMessages(rows, actor);
+async function getMessageById(actor: ChatActor, messageId: string, client: DatabaseReadClient = pool) {
+  const row = await getRawMessage(actor, messageId, client);
+  const [message] = await buildMessages(row ? [row] : [], actor, client);
   return message ?? null;
 }
 
-async function getRawMessage(actor: ChatActor, messageId: string) {
+async function getRawMessage(actor: ChatActor, messageId: string, client: DatabaseReadClient = pool) {
   const teamId = storageTeamId(actor);
-  const { rows } = await pool.query<MessageRow>(
+  const { rows } = await client.query<MessageRow>(
     `
       SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
              u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
@@ -2252,25 +2258,11 @@ async function createChatMessageAcknowledgementRequestRows(
 }
 
 export async function sendChatMessage(
-  input: {
-    attachmentIds?: string[];
-    body: string;
-    channelId: string;
-    createdAt?: string;
-    parentMessageId?: string | null;
-    poll?: {
-      options: string[];
-      selectionMode: ChatPollSelectionMode;
-      visibility: ChatPollVisibility;
-    };
-    requireAcknowledgement?: boolean;
-    rootMessageId?: string | null;
-    source?: ChatMessageSource;
-    systemMetadata?: ChatMessageSystemMetadata;
-  },
+  input: ChatSendInput,
   actor: ChatActor,
-): Promise<Outcome<{ channel: ChatChannel; message: ChatMessage }>> {
+): Promise<Outcome<ChatSendResult>> {
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
+  if (input.messageId && !CLIENT_CHAT_MESSAGE_ID_PATTERN.test(input.messageId)) return { status: "invalid" };
   const body = input.body.trim();
   const attachmentIds = Array.from(new Set((input.attachmentIds ?? []).filter(Boolean)));
   if (!body && attachmentIds.length === 0) return { status: "invalid" };
@@ -2320,90 +2312,110 @@ export async function sendChatMessage(
       })
     : [];
 
-  const messageId = makeId("chat-message");
+  const messageId = input.messageId ?? makeId("chat-message");
   const now = input.createdAt ?? nowIso();
   const client = await pool.connect();
+  let created = false;
+  let response: ChatSendResult;
   try {
     await client.query("BEGIN");
-    if (attachmentIds.length > 0) {
-      const { rows } = await client.query<{ id: string }>(
-        `
-          SELECT id
-          FROM chat_attachments
-          WHERE id = ANY($1::text[])
-            AND team_id = $2
-            AND channel_id = $3
-            AND created_by = $4
-            AND message_id IS NULL
-            AND expires_at > $5
-          FOR UPDATE
-        `,
-        [attachmentIds, teamId, input.channelId, actor.id, now],
-      );
-      if (rows.length !== attachmentIds.length) {
-        await client.query("ROLLBACK");
-        return { status: "invalid" };
-      }
-    }
-
-    await client.query(
+    const insertion = await client.query<{ id: string }>(
       `
         INSERT INTO chat_messages (
           id, team_id, channel_id, author_user_id, source, system_metadata, body,
           root_message_id, parent_message_id, created_at, updated_at
         )
         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $10)
+        ON CONFLICT (id) DO NOTHING
+        RETURNING id
       `,
       [messageId, teamId, input.channelId, actor.id, source, JSON.stringify(systemMetadata), body, rootMessageId, parentMessageId, now],
     );
-    if (poll) {
-      await insertChatPollRows(client, { createdAt: now, draft: poll, messageId });
-    }
-    if (attachmentIds.length > 0) {
+    created = insertion.rows.length > 0;
+    if (!created) {
+      const existing = await getRawMessage(actor, messageId, client);
+      if (!existing || existing.author_user_id !== actor.id || existing.channel_id !== input.channelId || existing.source !== source) {
+        await client.query("ROLLBACK");
+        return { status: "conflict" };
+      }
+    } else {
+      if (attachmentIds.length > 0) {
+        const { rows } = await client.query<{ id: string }>(
+          `
+            SELECT id
+            FROM chat_attachments
+            WHERE id = ANY($1::text[])
+              AND team_id = $2
+              AND channel_id = $3
+              AND created_by = $4
+              AND message_id IS NULL
+              AND expires_at > $5
+            FOR UPDATE
+          `,
+          [attachmentIds, teamId, input.channelId, actor.id, now],
+        );
+        if (rows.length !== attachmentIds.length) {
+          await client.query("ROLLBACK");
+          return { status: "invalid" };
+        }
+      }
+      if (poll) {
+        await insertChatPollRows(client, { createdAt: now, draft: poll, messageId });
+      }
+      if (attachmentIds.length > 0) {
+        await client.query(
+          `
+            UPDATE chat_attachments
+            SET message_id = $1, attached_at = $4
+            WHERE id = ANY($2::text[])
+              AND created_by = $3
+          `,
+          [messageId, attachmentIds, actor.id, now],
+        );
+      }
       await client.query(
         `
-          UPDATE chat_attachments
-          SET message_id = $1, attached_at = $4
-          WHERE id = ANY($2::text[])
-            AND created_by = $3
+          INSERT INTO chat_thread_follows (root_message_id, user_id, following, last_viewed_at, updated_at)
+          VALUES ($1, $2, true, $3, $3)
+          ON CONFLICT (root_message_id, user_id)
+          DO UPDATE SET following = true, updated_at = EXCLUDED.updated_at
         `,
-        [messageId, attachmentIds, actor.id, now],
+        [rootMessageId ?? messageId, actor.id, now],
       );
-    }
-    await client.query(
-      `
-        INSERT INTO chat_thread_follows (root_message_id, user_id, following, last_viewed_at, updated_at)
-        VALUES ($1, $2, true, $3, $3)
-        ON CONFLICT (root_message_id, user_id)
-        DO UPDATE SET following = true, updated_at = EXCLUDED.updated_at
-      `,
-      [rootMessageId ?? messageId, actor.id, now],
-    );
-    await followMentionedThreadRecipients(client, {
-      channelId: input.channelId,
-      mentionedUserIds: threadMentionRecipientIds,
-      rootMessageId,
-      updatedAt: now,
-    });
-    if (requireAcknowledgement) {
-      await createChatMessageAcknowledgementRequestRows(client, {
+      await followMentionedThreadRecipients(client, {
         channelId: input.channelId,
-        messageId,
-        requestedAt: now,
-        requestedByUserId: actor.id,
-        teamId,
+        mentionedUserIds: threadMentionRecipientIds,
+        rootMessageId,
+        updatedAt: now,
       });
+      if (requireAcknowledgement) {
+        await createChatMessageAcknowledgementRequestRows(client, {
+          channelId: input.channelId,
+          messageId,
+          requestedAt: now,
+          requestedByUserId: actor.id,
+          teamId,
+        });
+      }
+      if (!isSystemNotificationProjection) {
+        await enqueueChatPushDeliveries(client, {
+          authorUserId: actor.id,
+          channelId: input.channelId,
+          createdAt: now,
+          messageId,
+          systemActorUserId: systemMetadata.actorUserId,
+          teamId,
+        });
+      }
     }
-    if (!isSystemNotificationProjection) {
-      await enqueueChatPushDeliveries(client, {
-        authorUserId: actor.id,
-        channelId: input.channelId,
-        createdAt: now,
-        messageId,
-        systemActorUserId: systemMetadata.actorUserId,
-        teamId,
-      });
+
+    const message = await getMessageById(actor, messageId, client);
+    const updatedChannel = await readVisibleChannel(actor, input.channelId, client);
+    if (!message || !updatedChannel) {
+      await client.query("ROLLBACK");
+      return { status: "notFound" };
     }
+    response = { channel: updatedChannel, message };
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
@@ -2412,14 +2424,13 @@ export async function sendChatMessage(
     client.release();
   }
 
-  const message = await getMessageById(actor, messageId);
-  const updatedChannel = await getVisibleChannel(actor, input.channelId);
-  if (!message || !updatedChannel) return { status: "notFound" };
-  // Realtime is an opportunistic wakeup. A failed online broadcast must never
-  // turn an already committed chat message into an API failure.
-  void publishChatMessageCreatedRealtime({ channel: updatedChannel, message, teamId }).catch(() => undefined);
-  wakeChatPushDeliveryWorker();
-  return ok({ channel: updatedChannel, message });
+  if (created) {
+    // Online wakeups are best effort. The committed message and push outbox
+    // own delivery; a response replay must not broadcast or enqueue twice.
+    void publishChatMessageCreatedRealtime({ ...response, teamId }).catch(() => undefined);
+    wakeChatPushDeliveryWorker();
+  }
+  return ok(response);
 }
 
 async function chatPollMutationResponse(

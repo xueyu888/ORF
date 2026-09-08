@@ -46,6 +46,7 @@ import type {
   WorkLogReportScope,
 } from "../types/orf";
 import type { ChatSyncResponse } from "../domain/chatSync";
+import type { ChatMessageSendRequest } from "../domain/chatMessageSend";
 import type { ChatIntegrationProvider } from "../domain/chatIntegrationProvider";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, ReportsPageData, TaskManagementData } from "../domain/orfReadModel";
 import type { AppearanceMode, UserDisplayPreferences } from "../domain/settings/personalPreferences";
@@ -803,17 +804,11 @@ export async function removeChatChannelMemberRequest(channelId: string, userId: 
   );
 }
 
-export async function sendChatMessageRequest(input: {
-  attachmentIds?: string[];
-  body: string;
-  channelId: string;
-  parentMessageId?: string | null;
-  requireAcknowledgement?: boolean;
-  rootMessageId?: string | null;
-}) {
+export async function sendChatMessageRequest(input: ChatMessageSendRequest) {
   return apiJson<ChatMessageResponse & ChatChannelResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/messages`, {
     method: "POST",
     body: JSON.stringify({
+      messageId: input.messageId,
       body: input.body,
       attachmentIds: input.attachmentIds ?? [],
       parentMessageId: input.parentMessageId ?? null,

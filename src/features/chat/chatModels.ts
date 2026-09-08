@@ -1,5 +1,6 @@
-import type { ChatAttachment, ChatChannel, ChatMessage, ChatThreadSummary, ChatUser } from "../../types/orf";
+import type { ChatAttachment, ChatChannel, ChatMessage, ChatThread, ChatThreadSummary, ChatUser } from "../../types/orf";
 import { isChatConversation } from "../../domain/chatConversation";
+import { createClientChatMessageId, type ChatMessageSendRequest } from "../../domain/chatMessageSend";
 import type { ChatFeedScrollAnchor } from "./chatFeedScroll";
 import {
   matchOrfMentionMarkdownTokens,
@@ -34,14 +35,14 @@ export type ChatSendInput = {
 };
 
 export type ChatSendHandler = (input: ChatSendInput) => Promise<void>;
-export type ChatMessageSendStatus = "failed" | "sending";
-export type ChatPendingSendPayload = {
+export type ChatMessageSendStatus = "failed" | "sending" | "unconfirmed";
+export type ChatMessageSendError = {
+  message: string;
+  status: "failed" | "unconfirmed";
+};
+export type ChatPendingSendPayload = ChatMessageSendRequest & {
   attachmentIds: string[];
-  body: string;
-  channelId: string;
-  parentMessageId?: string | null;
-  requireAcknowledgement?: boolean;
-  rootMessageId?: string | null;
+  messageId: string;
 };
 export type ChatOptimisticMessage = ChatMessage & {
   deliveryError?: string;
@@ -246,16 +247,13 @@ export function createPendingChatMessage(input: {
   body: string;
   channelId: string;
   parentMessageId?: string | null;
-  pendingSend: ChatPendingSendPayload;
+  pendingSend: Omit<ChatPendingSendPayload, "messageId">;
   rootMessageId?: string | null;
 }): ChatOptimisticMessage {
   const createdAt = new Date().toISOString();
-  const randomId =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const messageId = createClientChatMessageId();
   return {
-    id: `pending-${randomId}`,
+    id: messageId,
     channelId: input.channelId,
     authorUserId: input.author.id,
     authorName: input.author.name,
@@ -278,11 +276,12 @@ export function createPendingChatMessage(input: {
     attachments: input.attachments,
     reactions: [],
     sendStatus: "sending",
-    pendingSend: input.pendingSend,
+    pendingSend: { ...input.pendingSend, messageId },
   };
 }
 
 export function markPendingChatMessageSending(message: ChatMessage): ChatOptimisticMessage {
+  if (!chatMessagePendingSend(message)) return message;
   return {
     ...(message as ChatOptimisticMessage),
     deliveryError: undefined,
@@ -290,32 +289,23 @@ export function markPendingChatMessageSending(message: ChatMessage): ChatOptimis
   };
 }
 
-export function markPendingChatMessageFailed(message: ChatMessage, error: string): ChatOptimisticMessage {
+export function markPendingChatMessageSendError(message: ChatMessage, error: ChatMessageSendError): ChatOptimisticMessage {
+  if (!chatMessagePendingSend(message)) return message;
   return {
     ...(message as ChatOptimisticMessage),
-    deliveryError: error,
-    sendStatus: "failed",
+    deliveryError: error.message,
+    sendStatus: error.status,
   };
 }
 
-export function pendingChatMessageMatchesServerMessage(pendingMessage: ChatMessage, serverMessage: ChatMessage) {
-  const pending = pendingMessage as ChatOptimisticMessage;
-  if (!pending.sendStatus || !pending.pendingSend) return false;
-  const pendingAttachmentIds = [...pending.pendingSend.attachmentIds].sort();
-  const serverAttachmentIds = serverMessage.attachments.map((attachment) => attachment.id).sort();
-  return (
-    pendingMessage.authorUserId === serverMessage.authorUserId &&
-    pendingMessage.channelId === serverMessage.channelId &&
-    pending.pendingSend.body === serverMessage.body &&
-    (pending.pendingSend.rootMessageId ?? null) === (serverMessage.rootMessageId ?? null) &&
-    (pending.pendingSend.parentMessageId ?? null) === (serverMessage.parentMessageId ?? null) &&
-    pendingAttachmentIds.length === serverAttachmentIds.length &&
-    pendingAttachmentIds.every((attachmentId, index) => attachmentId === serverAttachmentIds[index])
-  );
-}
-
-export function findMatchingPendingChatMessage(messages: ChatMessage[], serverMessage: ChatMessage) {
-  return messages.find((message) => pendingChatMessageMatchesServerMessage(message, serverMessage)) ?? null;
+export function reconcileChatThread(current: ChatThread | null, confirmed: ChatThread): ChatThread {
+  if (current?.rootMessage.id !== confirmed.rootMessage.id) return confirmed;
+  const confirmedIds = new Set(confirmed.replies.map((message) => message.id));
+  const pendingReplies = current.replies.filter((message) => chatMessagePendingSend(message) && !confirmedIds.has(message.id));
+  return {
+    ...confirmed,
+    replies: [...confirmed.replies, ...pendingReplies].sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
+  };
 }
 
 export function removeMessageById(messages: ChatMessage[], messageId: string) {

@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import type { ChatPoll, ChatPollParticipant, ChatPollSelectionMode, ChatPollVisibility } from "../../src/types/orf";
 import { pool } from "../db/client";
+import { readQueryBatch, type DatabaseReadClient } from "../db/queryBatch";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { makeId, nowIso, iso } from "../repositories/chatRepositoryModel";
 import { chatPollProjectionPolicy, normalizeChatPollVote, type NormalizedChatPollDraft } from "./chatPollModel";
@@ -75,12 +76,12 @@ export async function insertChatPollRows(
   );
 }
 
-export async function loadChatPolls(messageIds: string[], actorUserId: string) {
+export async function loadChatPolls(messageIds: string[], actorUserId: string, client: DatabaseReadClient = pool) {
   const result = new Map<string, ChatPoll>();
   if (messageIds.length === 0) return result;
 
-  const [pollRowsResult, optionRowsResult, currentVoteRowsResult, participantRowsResult] = await Promise.all([
-    pool.query<PollRow>(
+  const [pollRowsResult, optionRowsResult, currentVoteRowsResult, participantRowsResult] = await readQueryBatch(client, [
+    () => client.query<PollRow>(
       `
         SELECT poll.message_id, poll.selection_mode, poll.visibility, poll.closed_at,
                poll.closed_by_user_id, message.author_user_id,
@@ -95,7 +96,7 @@ export async function loadChatPolls(messageIds: string[], actorUserId: string) {
       `,
       [messageIds],
     ),
-    pool.query<PollOptionRow>(
+    () => client.query<PollOptionRow>(
       `
         SELECT option.poll_message_id, option.id, option.label, option.position,
                count(vote.option_id)::int AS vote_count
@@ -109,7 +110,7 @@ export async function loadChatPolls(messageIds: string[], actorUserId: string) {
       `,
       [messageIds],
     ),
-    pool.query<CurrentVoteRow>(
+    () => client.query<CurrentVoteRow>(
       `
         SELECT poll_message_id, option_id
         FROM chat_poll_votes
@@ -119,7 +120,7 @@ export async function loadChatPolls(messageIds: string[], actorUserId: string) {
       `,
       [messageIds, actorUserId],
     ),
-    pool.query<ParticipantRow>(
+    () => client.query<ParticipantRow>(
       `
         SELECT vote.poll_message_id, vote.voter_user_id AS user_id, participant.name,
                participant.avatar_object_key, participant.avatar_updated_at,

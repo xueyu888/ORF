@@ -34,6 +34,7 @@ import {
   chatMessagePendingSend,
   createPendingChatMessage,
   type ChatSendInput,
+  type ChatMessageSendError,
   buildUnreadAnchor,
   clearStoredDraftsForChannel,
   currentMembership,
@@ -62,6 +63,7 @@ import { readModelInvalidationKey } from "../features/realtime/readModelInvalida
 import { chatMessageTargetPath } from "../domain/chatNavigation";
 import { useRealtimeReconciliation } from "../features/realtime/useRealtimeReconciliation";
 import {
+  ApiError,
   addChatChannelMembersRequest,
   archiveChatChannelRequest,
   closeChatPollRequest,
@@ -471,7 +473,7 @@ export function ChatPage() {
   const {
     appendThreadReply,
     applyThreadMessage,
-    markThreadPendingMessageFailed,
+    markThreadPendingMessageSendError,
     markThreadPendingMessageSending,
     openThread,
     reconcileOpenThread,
@@ -559,7 +561,7 @@ export function ChatPage() {
     messageScrollRef,
     messages,
     messagesLoading,
-    markPendingMessageFailedInFeed,
+    markPendingMessageSendErrorInFeed,
     markPendingMessageSendingInFeed,
     olderMessagesLoading,
     prefetchChannelMessages,
@@ -1010,18 +1012,23 @@ export function ChatPage() {
           }
         })
         .catch((error) => {
-          const message = error instanceof Error ? error.message : "发送消息失败";
-          markPendingMessageFailedInFeed(pendingSend.channelId, pendingMessage.id, message);
-          markThreadPendingMessageFailed(pendingMessage.id, message);
+          const failure: ChatMessageSendError = {
+            message: error instanceof Error ? error.message : "发送结果未确认",
+            status: error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 408
+              ? "failed"
+              : "unconfirmed",
+          };
+          markPendingMessageSendErrorInFeed(pendingSend.channelId, pendingMessage.id, failure);
+          markThreadPendingMessageSendError(pendingMessage.id, failure);
         });
     },
     [
       activeChannel?.id,
       applyChannel,
       loadLatestMessages,
-      markPendingMessageFailedInFeed,
+      markPendingMessageSendErrorInFeed,
       markPendingMessageSendingInFeed,
-      markThreadPendingMessageFailed,
+      markThreadPendingMessageSendError,
       markThreadPendingMessageSending,
       requestScrollToLatest,
       resolvePendingMessageInFeed,

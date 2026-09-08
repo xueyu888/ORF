@@ -740,7 +740,7 @@ export function ChatMessageItem({
         focused && "orf-chat-message-focused",
         emojiOpen && "orf-chat-message-actions-open orf-chat-message-emoji-open",
         moreOpen && "orf-chat-message-actions-open orf-chat-message-more-open",
-        sendStatus === "failed" && "orf-chat-message-failed",
+        (sendStatus === "failed" || sendStatus === "unconfirmed") && "orf-chat-message-failed",
       )}
       data-chat-message-id={message.id}
       data-chat-unread-message={firstUnread ? "true" : undefined}
@@ -818,9 +818,9 @@ export function ChatMessageItem({
               <ChatPollCard currentUserId={currentUserId} message={message} onClose={onPollClose} onVote={onPollVote} />
             )}
             <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
-            {sendStatus === "failed" && (
+            {(sendStatus === "failed" || sendStatus === "unconfirmed") && (
               <div className="orf-chat-delivery-status" role="alert">
-                <span>发送失败</span>
+                <span>{sendStatus === "unconfirmed" ? "发送结果未确认" : "发送失败"}</span>
                 {onRetryPending && (
                   <Button size="sm" type="button" variant="secondary" onClick={() => onRetryPending(message)}>
                     <RotateCcw className="h-3.5 w-3.5" />
@@ -828,7 +828,7 @@ export function ChatMessageItem({
                   </Button>
                 )}
                 {onRemovePending && (
-                  <IconButton icon={X} label="移除失败消息" size="sm" type="button" variant="danger" onClick={() => onRemovePending(message)} />
+                  <IconButton icon={X} label="移除本地待发送消息" size="sm" type="button" variant="danger" onClick={() => onRemovePending(message)} />
                 )}
               </div>
             )}

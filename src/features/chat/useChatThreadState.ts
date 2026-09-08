@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, getChatThread } from "../../state/apiClient";
 import type { ChatChannel, ChatMessage, ChatThread } from "../../types/orf";
 import {
-  markPendingChatMessageFailed,
+  type ChatMessageSendError,
+  reconcileChatThread,
+  markPendingChatMessageSendError,
   markPendingChatMessageSending,
   removeMessageById,
   replacePendingMessage,
@@ -80,7 +82,7 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
           onChannelUpdate(response.channel);
           void onUnreadSummaryRefresh().catch(() => undefined);
         }
-        setThread(response.thread);
+        setThread((current) => reconcileChatThread(current, response.thread));
       } catch (error) {
         if (threadRequestIdRef.current !== requestId) return;
         setThread(null);
@@ -131,7 +133,7 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
     const response = await getChatThread(rootMessageId);
     if (threadRequestIdRef.current !== requestId || threadRef.current?.rootMessage.id !== rootMessageId) return;
     if (response.channel) onChannelUpdate(response.channel);
-    setThread(response.thread);
+    setThread((current) => reconcileChatThread(current, response.thread));
   }, [onChannelUpdate]);
 
   const appendThreadReply = useCallback((message: ChatMessage) => {
@@ -180,13 +182,13 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
     });
   }, []);
 
-  const markThreadPendingMessageFailed = useCallback((pendingMessageId: string, error: string) => {
+  const markThreadPendingMessageSendError = useCallback((pendingMessageId: string, error: ChatMessageSendError) => {
     setThread((item) => {
       if (!item) return item;
       return {
         ...item,
-        rootMessage: item.rootMessage.id === pendingMessageId ? markPendingChatMessageFailed(item.rootMessage, error) : item.rootMessage,
-        replies: updatePendingMessageDelivery(item.replies, pendingMessageId, (message) => markPendingChatMessageFailed(message, error)),
+        rootMessage: item.rootMessage.id === pendingMessageId ? markPendingChatMessageSendError(item.rootMessage, error) : item.rootMessage,
+        replies: updatePendingMessageDelivery(item.replies, pendingMessageId, (message) => markPendingChatMessageSendError(message, error)),
       };
     });
   }, []);
@@ -211,7 +213,7 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
   return {
     appendThreadReply,
     applyThreadMessage,
-    markThreadPendingMessageFailed,
+    markThreadPendingMessageSendError,
     markThreadPendingMessageSending,
     openThread,
     reconcileOpenThread,
