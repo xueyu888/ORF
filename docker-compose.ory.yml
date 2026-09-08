@@ -1,6 +1,10 @@
+x-kratos-runtime: &kratos-runtime
+  image: oryd/kratos:v26.2.0
+  platform: ${DOCKER_DEFAULT_PLATFORM:-linux/amd64}
+
 services:
   kratos-migrate:
-    image: oryd/kratos:v26.2.0
+    <<: *kratos-runtime
     env_file:
       - ./ory/.runtime/ory.env
     volumes:
@@ -10,7 +14,7 @@ services:
     restart: on-failure
 
   kratos:
-    image: oryd/kratos:v26.2.0
+    <<: *kratos-runtime
     depends_on:
       kratos-migrate:
         condition: service_completed_successfully

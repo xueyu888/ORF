@@ -32,6 +32,38 @@ PostgreSQL to WSL PostgreSQL migration belongs to `deploy/local-wsl-postgres`.
 - Shutdown first closes registered SSE streams and then waits for ordinary
   requests; systemd keeps a 15-second upper bound before forced termination.
 
+## Authentication Container Platform
+
+Database addresses are scoped to the calling process. On the current WSL
+mirrored host, keep the native backend's `DATABASE_URL` and Ory's host-side
+`ORY_DATABASE_PROBE_URL` on `127.0.0.1:5432`, and explicitly set
+`ORY_DATABASE_URL` to the container-accessible address of that same database.
+Keep these settings in both the source environment and `~/.config/orf/orf.env`
+so reinstalling the runtime preserves the distinction. See the canonical
+[local and container database access rules](../../docs/project/public-ip-infra.md)
+for the network boundary and TLS requirements.
+
+`docker-compose.ory.yml` owns the shared Kratos image and platform for both the
+migration job and authentication server. It explicitly uses
+`DOCKER_DEFAULT_PLATFORM`, defaulting to `linux/amd64`. Set this variable to the
+host's native Linux platform in `~/.config/orf/orf.env`; native ARM hosts use
+`linux/arm64`. Keep the same setting in the source environment when reinstalling
+the current-host runtime.
+
+An ARM release build can replace a shared local image tag. The explicit Compose
+platform makes a mismatched cached image ineligible: Compose pulls the requested
+platform or reports an error instead of silently running it through emulation.
+After recovery, verify the actual container image architecture, `/health/ready`,
+the backend's `/health/auth`, and a password login through the public application.
+
+```mermaid
+flowchart LR
+  E["Host environment: target CPU"] --> C["Compose: shared Kratos image/platform"]
+  C --> M["Kratos migration"]
+  M -->|success| K["Kratos: password and session API"]
+  C -->|matching image unavailable| F["Startup error"]
+```
+
 ## Install And Activate
 
 ```bash
