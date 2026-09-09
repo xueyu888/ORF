@@ -1425,6 +1425,11 @@ textarea.feedback-issue-sidebar-input {
   padding: 14px;
 }
 
+.feedback-create-body-field {
+  --orf-rich-text-editor-min-height: min(240px, 40dvh);
+  --orf-rich-text-editor-max-height: min(640px, 60dvh);
+}
+
 .feedback-create-draft-notice {
   display: flex;
   align-items: center;
@@ -1624,6 +1629,10 @@ html[data-orf-display-contrast="high"] .feedback-issue-row {
 
   .feedback-create-draft-notice {
     display: grid;
+  }
+
+  .feedback-create-body-field {
+    --orf-rich-text-editor-min-height: min(160px, 40dvh);
   }
 
   .feedback-button,

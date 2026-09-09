@@ -67,6 +67,7 @@ export type FeedbackWebHost = {
       submitLabel?: string;
     }>;
     CommentDraftFields: ComponentType<{
+      autoGrow?: boolean;
       currentUserId: string;
       draft: FeedbackCommentDraft;
       idleHint?: string;

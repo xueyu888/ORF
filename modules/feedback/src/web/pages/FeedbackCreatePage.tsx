@@ -337,6 +337,7 @@ export function FeedbackCreatePage() {
             </div>
             <div className="feedback-create-body-field">
               <CommentDraftFields
+                autoGrow
                 currentUserId={currentUser?.id ?? ""}
                 draft={draft}
                 idleHint=""

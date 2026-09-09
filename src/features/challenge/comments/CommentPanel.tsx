@@ -829,6 +829,7 @@ export function serializeCommentDraft(draft: CommentDraft) {
 export function CommentDraftFields({
   allowEmptySubmit = false,
   autoFocus = false,
+  autoGrow = false,
   cancelLabel = "取消",
   currentUserId,
   draft,
@@ -845,6 +846,7 @@ export function CommentDraftFields({
 }: {
   allowEmptySubmit?: boolean;
   autoFocus?: boolean;
+  autoGrow?: boolean;
   cancelLabel?: string;
   currentUserId: string;
   draft: CommentDraft;
@@ -872,6 +874,7 @@ export function CommentDraftFields({
     <div ref={fieldRef} className="orf-comment-rich-text-field">
       <OrfRichTextDraftEditor
         autoFocus={autoFocus}
+        autoGrow={autoGrow}
         currentUserId={currentUserId}
         draft={draft}
         idleHint={uploadError || (idleHint ?? "Enter 发送，Shift + Enter 换行")}

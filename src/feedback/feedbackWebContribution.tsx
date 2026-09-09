@@ -151,6 +151,7 @@ function FeedbackCommentComposer({
 }
 
 function FeedbackCommentDraftFields({
+  autoGrow,
   currentUserId,
   draft,
   idleHint,
@@ -162,6 +163,7 @@ function FeedbackCommentDraftFields({
   submitLabel = "发送评论",
   submitOnEnter,
 }: {
+  autoGrow?: boolean;
   currentUserId: string;
   draft: FeedbackCommentDraft;
   idleHint?: string;
@@ -175,6 +177,7 @@ function FeedbackCommentDraftFields({
 }) {
   return (
     <CommentDraftFields
+      autoGrow={autoGrow}
       currentUserId={currentUserId}
       draft={draft as OrfRichTextDraft}
       idleHint={idleHint}
