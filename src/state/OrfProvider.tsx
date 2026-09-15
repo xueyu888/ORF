@@ -35,6 +35,7 @@ import { readModelInvalidationKey } from "../features/realtime/readModelInvalida
 import { clearReadModelCache } from "./readModelCache";
 import { clearChatFeedSessionCache } from "../features/chat/chatFeedSessionCache";
 import { clearPreparedVisualBackgrounds } from "../utils/visualBackgrounds";
+import { useAdminUsersSynchronization } from "./useAdminUsersSynchronization";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
 import { useRealtimeReconciliation } from "../features/realtime/useRealtimeReconciliation";
 import {
@@ -136,6 +137,7 @@ function chatRouteChannelIdFromPathname(pathname: string) {
 }
 
 interface OrfContextValue {
+  usersSyncFailed: boolean;
   state: OrfState;
   reportsData: ReportsPageData | null;
   currentUser: OrfUser | null;
@@ -676,10 +678,14 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     if (loadReportsData) void refreshReportsData().catch(() => undefined);
   }, [authReady, isApproved, isAuthenticated, loadReportsData, refreshReportsData, refreshTaskManagementData, taskManagementInvalidationKey]);
 
-  useEffect(() => {
-    if (!usersInvalidationKey || !authReady || !isAuthenticated || !isApproved || !isAdmin) return;
-    void refreshUsers().catch(() => undefined);
-  }, [authReady, isAdmin, isApproved, isAuthenticated, refreshUsers, usersInvalidationKey]);
+  const usersSynchronization = useAdminUsersSynchronization({
+    userId: authReady && isAuthenticated && isApproved && isAdmin ? authUserId : null,
+    connectionEpoch: realtimeConnectionState.connectionEpoch,
+    invalidationKey: usersInvalidationKey,
+    membersPageVisible: location.pathname === "/system/members",
+    refresh: refreshUsers,
+  });
+  const usersSyncFailed = usersSynchronization.status === "retrying";
 
   useEffect(() => {
     if (!permissionsInvalidationKey || !authReady || !isAuthenticated || !isApproved) return;
@@ -737,6 +743,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const value = useMemo<OrfContextValue>(
     () => ({
       state,
+      usersSyncFailed,
       reportsData,
       currentUser,
       authConnectionError,
@@ -779,6 +786,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       ...commentActions,
     }),
     [
+      state,
+      usersSyncFailed,
       authConnectionError,
       authReady,
       attentionState,

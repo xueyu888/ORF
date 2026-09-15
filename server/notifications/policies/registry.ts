@@ -3,6 +3,11 @@ import type { NotificationPolicyDescriptor } from "../contracts";
 import { notificationPresentationPolicy } from "../presentationRegistry";
 
 export const notificationPolicyRegistry: Partial<Record<CoreNotificationKind, NotificationPolicyDescriptor>> = {
+  "registration.requested": {
+    kind: "registration.requested",
+    replyTarget: "none",
+    stream: "personalNotification",
+  },
   "challenge.application.approved": {
     kind: "challenge.application.approved",
     replyTarget: "notification-target",

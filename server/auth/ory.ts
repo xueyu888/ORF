@@ -3,8 +3,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { teamMembers, users } from "../db/schema";
 import { env } from "../env";
-import { getDefaultRuntimeScope, runtimeScopeStorageId } from "../repositories/runtimeScope";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
+import { registerUser } from "../users/registerUser";
 
 export type AuthenticatedOrfUser = {
   id: string;
@@ -249,19 +249,9 @@ async function existingMembershipRole(userId: string): Promise<AuthenticatedOrfU
   return null;
 }
 
-async function createDefaultScopeMembership(userId: string): Promise<AuthenticatedOrfUser["role"]> {
-  const scope = await getDefaultRuntimeScope();
-  if (!scope) {
-    return "member";
-  }
-
-  await db.insert(teamMembers).values({ teamId: runtimeScopeStorageId(scope), userId, role: "member" }).onConflictDoNothing();
-  return "member";
-}
-
 async function upsertOrfUser(
   identity: OryIdentity,
-  options: { newUserStatus?: AuthenticatedOrfUser["status"]; recordOnline?: boolean } = {},
+  options: { recordOnline?: boolean } = {},
 ): Promise<AuthenticatedOrfUser> {
   const email = identityEmail(identity);
   if (!email) {
@@ -308,18 +298,15 @@ async function upsertOrfUser(
 
   const id = await nextUserId();
   const createdLastOnlineAt = lastOnlineAt ?? null;
-  await db.insert(users).values({
+  await registerUser({
     id,
     name: identityDisplayName,
     email,
     oryIdentityId: identity.id,
-    status: options.newUserStatus ?? "pending",
-    createdAt: new Date().toISOString().slice(0, 10),
     lastOnlineAt: createdLastOnlineAt,
   });
 
-  const role = await createDefaultScopeMembership(id);
-  return { id, name: identityDisplayName, email, role, status: options.newUserStatus ?? "pending", lastOnlineAt: createdLastOnlineAt, avatarUrl: null };
+  return { id, name: identityDisplayName, email, role: "member", status: "pending", lastOnlineAt: createdLastOnlineAt, avatarUrl: null };
 }
 
 export async function getAuthenticatedOrfUser(cookie: string | undefined): Promise<AuthenticatedOrfUser | null> {
@@ -485,7 +472,7 @@ export async function loginWithPassword(identifier: string, password: string) {
     throw new Error("Ory login did not return a session token");
   }
 
-  const user = await upsertOrfUser(auth.session.identity, { newUserStatus: "pending", recordOnline: true });
+  const user = await upsertOrfUser(auth.session.identity, { recordOnline: true });
   return { sessionToken: auth.session_token, user };
 }
 
@@ -563,7 +550,7 @@ export async function registerWithPassword(input: { name: string; email: string;
     throw new Error("Ory registration did not return a session token");
   }
 
-  const user = await upsertOrfUser(auth.session.identity, { newUserStatus: "pending", recordOnline: true });
+  const user = await upsertOrfUser(auth.session.identity, { recordOnline: true });
   return { sessionToken: auth.session_token, user };
 }
 

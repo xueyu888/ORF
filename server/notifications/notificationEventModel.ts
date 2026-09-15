@@ -278,6 +278,8 @@ export function notificationActionFor(input: NotificationActionInput): Notificat
   if (providerAction !== undefined) return providerAction;
 
   switch (input.kind) {
+    case "registration.requested":
+      return { href, label: "审核注册" };
     case "objective.published":
       return { href, label: "打开悬赏" };
     case "challenge.application.created":

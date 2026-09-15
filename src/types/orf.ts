@@ -11,6 +11,7 @@ export type UncertaintyLevel = "简易" | "入门" | "进阶" | "破局" | "渡�
 export type BountySource = "managerDefined" | "memberProposed";
 export type ChallengeApplicationStatus = "pending" | "approved" | "declined";
 export type CoreNotificationKind =
+  | "registration.requested"
   | "objective.published"
   | "challenge.application.created"
   | "challenge.application.approved"
@@ -33,7 +34,7 @@ export type CoreNotificationKind =
   | "worklog.submitted"
   | "worklog.reminder";
 export type NotificationKind = string;
-export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog" | "dataSync" | "chatMessage";
+export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog" | "dataSync" | "chatMessage" | "user";
 export type NotificationStream = "personalNotification" | "teamAnnouncement";
 export type NotificationDeliveryClass = "direct" | "mandatory" | "ordinary";
 export type NotificationReceiptAttentionLevel = "action_required" | "normal";

@@ -200,139 +200,154 @@ async function loadNotificationActorIsolationName(
   return rows[0]?.name?.trim() || input.actorName;
 }
 
-async function insertNotificationEvent(input: NotificationEventInput, eventId: string, createdAt: string, recipients: NotificationRecipientFact[]) {
-  const client = await pool.connect();
+async function insertNotificationEvent(client: PoolClient, input: NotificationEventInput, eventId: string, createdAt: string, recipients: NotificationRecipientFact[]) {
   const actorName = input.actorName.trim();
-  try {
-    await client.query("BEGIN");
-    const actorIsolationName = await loadNotificationActorIsolationName(client, {
+  const actorIsolationName = await loadNotificationActorIsolationName(client, {
+    actorName,
+    actorUserId: input.actorUserId,
+  });
+  const isolatedE2eActor = isE2eNotificationActorName(actorIsolationName);
+  await client.query(
+    `
+      INSERT INTO notification_events (
+        id, team_id, stream, actor_user_id, actor_name, kind, title, body,
+        target_type, target_id, target_href, reply_target_type, reply_target_id,
+        source_event_key, created_at, metadata
+      )
+      VALUES ($1, $2, $3::notification_stream, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb)
+    `,
+    [
+      eventId,
+      input.teamId,
+      input.stream,
+      input.actorUserId?.trim() || null,
       actorName,
-      actorUserId: input.actorUserId,
-    });
-    const isolatedE2eActor = isE2eNotificationActorName(actorIsolationName);
-    await client.query(
+      input.kind,
+      input.title.trim(),
+      input.body.trim(),
+      input.targetType,
+      input.targetId,
+      input.targetHref,
+      input.replyTargetType ?? null,
+      input.replyTargetId ?? null,
+      normalizeSourceEventKey(input.sourceEventKey),
+      createdAt,
+      JSON.stringify(notificationMetadataWithSystemReference(input.metadata, input.systemReference)),
+    ],
+  );
+
+  if (recipients.length > 0) {
+    const receiptRows = await client.query<NotificationReceiptRow>(
       `
-        INSERT INTO notification_events (
-          id, team_id, stream, actor_user_id, actor_name, kind, title, body,
-          target_type, target_id, target_href, reply_target_type, reply_target_id,
-          source_event_key, created_at, metadata
+        WITH input_recipients AS (
+          SELECT *
+          FROM unnest($3::uuid[], $4::timestamptz[], $5::text[], $6::text[], $7::text[]) AS item(user_id, read_at, recipient_reasons, delivery_class, attention_level)
         )
-        VALUES ($1, $2, $3::notification_stream, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb)
+        INSERT INTO notification_receipts (
+          event_id, recipient_user_id, read_at, delivered_at,
+          recipient_reasons, delivery_class, attention_level
+        )
+        SELECT
+          $1,
+          u.id,
+          input_recipients.read_at,
+          $8,
+          input_recipients.recipient_reasons::jsonb,
+          input_recipients.delivery_class,
+          input_recipients.attention_level
+        FROM input_recipients
+        INNER JOIN users u ON u.id = input_recipients.user_id
+        INNER JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = $2
+        WHERE COALESCE(u.status, 'active') = 'active'
+          AND ${e2eNotificationRecipientVisibilitySql({
+            actorNamePatternParam: "$10",
+            actorNameSql: "$9::text",
+            recipientEmailSql: "u.email",
+            recipientNameSql: "u.name",
+            viewerEmailsParam: "$11",
+          })}
+        ON CONFLICT (event_id, recipient_user_id) DO NOTHING
+        RETURNING recipient_user_id::text, read_at, delivered_at
       `,
       [
         eventId,
         input.teamId,
-        input.stream,
-        input.actorUserId?.trim() || null,
-        actorName,
-        input.kind,
-        input.title.trim(),
-        input.body.trim(),
-        input.targetType,
-        input.targetId,
-        input.targetHref,
-        input.replyTargetType ?? null,
-        input.replyTargetId ?? null,
-        normalizeSourceEventKey(input.sourceEventKey),
+        recipients.map((recipient) => recipient.userId),
+        recipients.map((recipient) => recipient.readAt),
+        recipients.map((recipient) => JSON.stringify(recipient.reasons)),
+        recipients.map((recipient) => recipient.deliveryClass),
+        recipients.map((recipient) => recipient.attentionLevel),
         createdAt,
-        JSON.stringify(notificationMetadataWithSystemReference(input.metadata, input.systemReference)),
+        actorIsolationName,
+        E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
+        normalizedE2eNotificationViewerEmails(),
       ],
     );
 
-    if (recipients.length > 0) {
-      const receiptRows = await client.query<NotificationReceiptRow>(
-        `
-          WITH input_recipients AS (
-            SELECT *
-            FROM unnest($3::uuid[], $4::timestamptz[], $5::text[], $6::text[], $7::text[]) AS item(user_id, read_at, recipient_reasons, delivery_class, attention_level)
-          )
-          INSERT INTO notification_receipts (
-            event_id, recipient_user_id, read_at, delivered_at,
-            recipient_reasons, delivery_class, attention_level
-          )
-          SELECT
-            $1,
-            u.id,
-            input_recipients.read_at,
-            $8,
-            input_recipients.recipient_reasons::jsonb,
-            input_recipients.delivery_class,
-            input_recipients.attention_level
-          FROM input_recipients
-          INNER JOIN users u ON u.id = input_recipients.user_id
-          INNER JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = $2
-          WHERE COALESCE(u.status, 'active') = 'active'
-            AND ${e2eNotificationRecipientVisibilitySql({
-              actorNamePatternParam: "$10",
-              actorNameSql: "$9::text",
-              recipientEmailSql: "u.email",
-              recipientNameSql: "u.name",
-              viewerEmailsParam: "$11",
-            })}
-          ON CONFLICT (event_id, recipient_user_id) DO NOTHING
-          RETURNING recipient_user_id::text, read_at, delivered_at
-        `,
-        [
-          eventId,
-          input.teamId,
-          recipients.map((recipient) => recipient.userId),
-          recipients.map((recipient) => recipient.readAt),
-          recipients.map((recipient) => JSON.stringify(recipient.reasons)),
-          recipients.map((recipient) => recipient.deliveryClass),
-          recipients.map((recipient) => recipient.attentionLevel),
-          createdAt,
-          actorIsolationName,
-          E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
-          normalizedE2eNotificationViewerEmails(),
-        ],
-      );
-
-      if ((input.stream === "personalNotification" || isolatedE2eActor) && receiptRows.rows.length > 0) {
-        await client.query(
-          `
-            WITH input_deliveries AS (
-              SELECT *
-              FROM unnest($2::text[], $3::uuid[]) AS item(id, recipient_user_id)
-            )
-            INSERT INTO notification_deliveries (
-              id, event_id, recipient_user_id, channel, status, attempts,
-              created_at, updated_at
-            )
-            SELECT id, $1, recipient_user_id, 'chat', 'pending', 0, $4, $4
-            FROM input_deliveries
-            ON CONFLICT DO NOTHING
-          `,
-          [
-            eventId,
-            receiptRows.rows.map((row) => notificationChatDeliveryId(eventId, row.recipient_user_id)),
-            receiptRows.rows.map((row) => row.recipient_user_id),
-            createdAt,
-          ],
-        );
-      }
-    }
-
-    if (input.stream === "teamAnnouncement" && !isolatedE2eActor) {
+    if ((input.stream === "personalNotification" || isolatedE2eActor) && receiptRows.rows.length > 0) {
       await client.query(
         `
+          WITH input_deliveries AS (
+            SELECT *
+            FROM unnest($2::text[], $3::uuid[]) AS item(id, recipient_user_id)
+          )
           INSERT INTO notification_deliveries (
             id, event_id, recipient_user_id, channel, status, attempts,
             created_at, updated_at
           )
-          VALUES ($1, $2, null, 'chat', 'pending', 0, $3, $3)
+          SELECT id, $1, recipient_user_id, 'chat', 'pending', 0, $4, $4
+          FROM input_deliveries
           ON CONFLICT DO NOTHING
         `,
-        [notificationChatDeliveryId(eventId), eventId, createdAt],
+        [
+          eventId,
+          receiptRows.rows.map((row) => notificationChatDeliveryId(eventId, row.recipient_user_id)),
+          receiptRows.rows.map((row) => row.recipient_user_id),
+          createdAt,
+        ],
       );
     }
-
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw error;
-  } finally {
-    client.release();
   }
+
+  if (input.stream === "teamAnnouncement" && !isolatedE2eActor) {
+    await client.query(
+      `
+        INSERT INTO notification_deliveries (
+          id, event_id, recipient_user_id, channel, status, attempts,
+          created_at, updated_at
+        )
+        VALUES ($1, $2, null, 'chat', 'pending', 0, $3, $3)
+        ON CONFLICT DO NOTHING
+      `,
+      [notificationChatDeliveryId(eventId), eventId, createdAt],
+    );
+  }
+}
+
+/** Persist the event, receipts and delivery outbox in the caller's transaction.
+ * The caller commits before publishing realtime events or delivering chat messages.
+ */
+export async function enqueueNotificationEvent(client: PoolClient, input: NotificationEventInput): Promise<string | null> {
+  const createdAt = nowIso();
+  const recipients = resolveNotificationRecipients({
+    actorUserId: input.actorUserId,
+    createdAt,
+    recipientFacts: input.recipientFacts,
+    recipientUserIds: input.recipientUserIds,
+    stream: input.stream,
+  });
+  if (input.stream === "personalNotification" && recipients.length === 0) return null;
+  const eventId = makeId("nevt");
+  await insertNotificationEvent(client, input, eventId, createdAt, recipients);
+  return eventId;
+}
+
+export async function publishCommittedNotificationEvent(teamId: string, eventId: string): Promise<AppNotification[]> {
+  const notifications = await listNotificationsForEvent(eventId);
+  for (const notification of notifications) {
+    publishRealtimeNotification(teamId, notification);
+  }
+  return notifications;
 }
 
 async function listNotificationsForEvent(eventId: string): Promise<AppNotification[]> {
@@ -403,7 +418,17 @@ export async function createNotificationEvent(input: NotificationEventInput): Pr
 
   const eventId = makeId("nevt");
   try {
-    await insertNotificationEvent({ ...input, sourceEventKey }, eventId, createdAt, recipients);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await insertNotificationEvent(client, { ...input, sourceEventKey }, eventId, createdAt, recipients);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error) {
     if (sourceEventKey && isPgUniqueViolation(error)) {
       const existingEventId = await findNotificationEventIdBySourceEventKey({
@@ -416,15 +441,11 @@ export async function createNotificationEvent(input: NotificationEventInput): Pr
     }
     throw error;
   }
-  const notifications = await listNotificationsForEvent(eventId);
-  for (const notification of notifications) {
-    publishRealtimeNotification(input.teamId, notification);
-  }
-  return notifications;
+  return publishCommittedNotificationEvent(input.teamId, eventId);
 }
 
-export async function getActiveAdminNotificationRecipients(teamId: string): Promise<string[]> {
-  const { rows } = await pool.query<{ id: string }>(
+export async function getActiveAdminNotificationRecipients(teamId: string, client: Pick<PoolClient, "query"> = pool): Promise<string[]> {
+  const { rows } = await client.query<{ id: string }>(
     `
       SELECT u.id
       FROM team_members tm

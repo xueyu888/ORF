@@ -52,6 +52,7 @@ export function MembersPage() {
     rejectRegistrationRequest,
     resetUserPassword,
     state,
+    usersSyncFailed,
     updateUser,
   } = useOrf();
   const [query, setQuery] = useState("");
@@ -264,6 +265,7 @@ export function MembersPage() {
 
   return (
     <div className="orf-user-management-page">
+      {usersSyncFailed && <p role="status">成员列表暂时无法更新，正在自动重试。</p>}
       <section className="orf-user-management-grid">
         <div className="orf-user-table-shell">
           <div className="orf-user-toolbar">

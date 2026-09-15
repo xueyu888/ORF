@@ -1,7 +1,7 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, useState } from "react";
 import { apiJson, getCurrentUserAccess, type CurrentUserAccessData, type PermissionRulesResponse, type ReportsPageData, type TaskManagementData, type UsersResponse } from "./apiClient";
 import { normalizeState } from "./orfStateSnapshot";
-import { shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
+import { taskManagementPathForRole } from "./orfDataLoading";
 import { mergeUserDisplayProfiles, userDisplayProfilesFromUsers } from "../domain/userDisplayProfile";
 import { loadReportsPage, reportsPageSnapshot } from "./readModelQueries";
 import { getDesktopSystemIdleSnapshot, getDesktopWindowState, isDesktopShellAvailable } from "../features/desktop/desktopShellRuntime";
@@ -142,13 +142,11 @@ export function useOrfDataState({
   const lastOnlineActivitySentAt = useRef(0);
   const lastUserInteractionAt = useRef<string | null>(new Date().toISOString());
   const loadedReadModelsRef = useRef(new Set<string>());
-  const loadedAdminUsersForRef = useRef<string | null>(null);
   const loadedIdentityRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (loadedIdentityRef.current === authUserId) return;
     loadedReadModelsRef.current.clear();
-    loadedAdminUsersForRef.current = null;
     loadedIdentityRef.current = authUserId;
     setReportsData(null);
     setDataReady(false);
@@ -213,10 +211,12 @@ export function useOrfDataState({
     [setState],
   );
 
+  const usersRequestVersion = useRef(0);
   const refreshUsers = useCallback(async () => {
+    const version = ++usersRequestVersion.current;
     const data = await apiJson<UsersResponse>("/api/users");
-    applyUsers(data);
-  }, [applyUsers]);
+    if (loadedIdentityRef.current === authUserId && version === usersRequestVersion.current) applyUsers(data);
+  }, [applyUsers, authUserId]);
 
   const applyCommentThread = useCallback(
     (commentThread: CommentThread) => {
@@ -235,7 +235,6 @@ export function useOrfDataState({
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
       loadedReadModelsRef.current.clear();
-      loadedAdminUsersForRef.current = null;
       resetNotificationState();
       setReportsData(null);
       setDataReady(false);
@@ -319,23 +318,6 @@ export function useOrfDataState({
       cancelled = true;
     };
   }, [applyReportsPageData, authReady, isApproved, isAuthenticated, loadReportsData]);
-
-  useEffect(() => {
-    if (!authReady || !isAuthenticated || !isApproved || !shouldFetchAdminCollections(currentUserRole) || !authUserId) return;
-    if (loadedAdminUsersForRef.current === authUserId) return;
-    let cancelled = false;
-    void apiJson<UsersResponse>("/api/users")
-      .then((data) => {
-        if (!cancelled) {
-          applyUsers(data);
-          loadedAdminUsersForRef.current = authUserId;
-        }
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [applyUsers, authReady, authUserId, currentUserRole, isApproved, isAuthenticated]);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
