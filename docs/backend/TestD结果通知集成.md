@@ -4,7 +4,7 @@ TestD 计划运行结果由专用测试机通过 `/webhooks/testd/results` 投�
 
 协议 `testd.plan-result/v1` 包含 eventId、instanceId、taskId、source、targetSha、actualSha、status、stage、summary、finishedAt。实际测试结论在 summary 中，completed 只表示报告已生成。报告链接为可选配置，禁止转发未经校验的链接、日志或凭据。
 
-认证头为 X-TestD-Event-Id、X-TestD-Timestamp、X-TestD-Signature。HMAC-SHA256 的输入为事件 ID、换行、Unix 秒时间戳、换行、原始 JSON。时间窗口五分钟，请求上限 64 KiB；重试不改变事件 ID，重新生成时间和签名。配置 secret 至少 32 字符，经受信任 TLS 入口投递。
+认证头为 X-TestD-Event-Id、X-TestD-Timestamp、X-TestD-Signature。HMAC-SHA256 的输入为事件 ID、换行、Unix 秒时间戳、换行、原始 JSON。时间窗口五分钟，请求上限 64 KiB；重试不改变事件 ID，重新生成时间和签名。配置 secret 至少 32 字符。本次部署按已确认的可信内网边界使用 HTTP 直连，不新增证书、隧道或网关；签名验证来源和完整性，不提供传输加密，不适用于未经保护的不可信网络。
 
 接收模块负责认证、结构校验和结果格式化；聊天模块负责频道权限、消息事务、实时事件和推送。以实例和事件 ID 派生稳定 messageId，复用 sendChatMessage 的幂等插入及消息投递 outbox；接收响应丢失后重复提交不会产生第二条聊天消息。不建立另一套系统通知事实。
 
