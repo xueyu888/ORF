@@ -15,6 +15,12 @@ type BotUserRow = {
 
 export type OrfChatChannelType = "public" | "private";
 
+export async function readOrfChatBotActor(input: { botEmail: string; botName: string; teamId: string }): Promise<ChatActor | null> {
+  const user = await findBotUser(input.teamId, input.botEmail);
+  if (!user || !user.role || (user.status && user.status !== "active")) return null;
+  return botActor(user, input.teamId, input.botName);
+}
+
 export async function ensureOrfChatBotActor(input: {
   botEmail: string;
   botName: string;
@@ -38,11 +44,15 @@ export async function ensureOrfChatBotActor(input: {
     [input.teamId, user.id],
   );
 
+  return botActor(user, input.teamId, name);
+}
+
+function botActor(user: BotUserRow, teamId: string, name: string): ChatActor {
   return {
     id: user.id,
     name: user.name || name,
     role: user.role === "admin" ? "admin" : "member",
-    scope: runtimeScope(input.teamId),
+    scope: runtimeScope(teamId),
     canCreatePrivateChannel: true,
     canCreatePublicChannel: true,
     canManageAnyChannel: false,
