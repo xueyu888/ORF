@@ -51,10 +51,8 @@ export function formatResult(event: TestdResult, config: ResultConfig): string {
   const conclusion = event.status === "interrupted" ? "运行中断" : event.status === "failed" ? "执行失败" :
     !s ? "缺少测试结果" : s.failed || s.infrastructureErrors ? "运行错误" : s.assertionFailed ? "断言未通过" :
       s.blocked || s.skipped || !s.passed ? "未全部完成" : "全部通过";
-  const stages = { queued: "排队", syncing: "同步代码", restarting: "重载服务", running: "执行测试" };
   const lines = [`TestD 测试计划 · ${conclusion}`, `触发：${event.source === "gitlab" ? "main 推送" : "手动按计划运行"}`,
-    `目标提交：${event.targetSha ?? "当前工作区"}`, `实际提交：${event.actualSha ?? "尚未加载"}`,
-    `结束阶段：${stages[event.stage]}`, `完成时间：${event.finishedAt}`, `任务：${event.taskId}`];
+    `本次测试代码版本：${event.actualSha ?? "尚未加载"}`, `完成时间：${event.finishedAt}`, `任务：${event.taskId}`];
   if (s) lines.push(`通过 ${s.passed} · 断言失败 ${s.assertionFailed} · 运行错误 ${s.failed} · 跳过 ${s.skipped} · 阻塞 ${s.blocked} · 基础设施错误 ${s.infrastructureErrors}`);
   if (event.reportUrl && config.reportOrigin) {
     const url = new URL(event.reportUrl);

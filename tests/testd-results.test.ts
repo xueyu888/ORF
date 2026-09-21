@@ -25,7 +25,10 @@ test("签名过期、字段范围、链接白名单和稳定消息 ID", () => {
   assert.match(resultMessageId(config, event.eventId), CLIENT_CHAT_MESSAGE_ID_PATTERN);
   assert.equal(resultMessageId(config, event.eventId), resultMessageId({ ...config }, event.eventId));
   assert.notEqual(resultMessageId(config, event.eventId), resultMessageId({ ...config, channelId: "another" }, event.eventId));
-  assert.match(formatResult(event, config), /断言未通过/);
+  const message = formatResult(event, config);
+  assert.match(message, /断言未通过/);
+  assert.match(message, /本次测试代码版本：a{40}/);
+  assert.doesNotMatch(message, /目标提交|实际提交|结束阶段/);
   assert.doesNotMatch(formatResult({ ...event, reportUrl: "https://evil.test/?token=secret" }, config), /evil|secret/);
   assert.match(formatResult({ ...event, reportUrl: "https://reports.example.test/?view=reports" }, config), /报告/);
 });
