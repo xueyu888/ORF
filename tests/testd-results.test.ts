@@ -3,7 +3,7 @@ import test from "node:test";
 import { createHmac } from "node:crypto";
 import Fastify from "fastify";
 import { CLIENT_CHAT_MESSAGE_ID_PATTERN } from "../src/domain/chatMessageSend";
-import { authenticateResult, formatResult, readResultConfig, resultMessageId, type TestdResult } from "../server/integrations/testd-results/model";
+import { authenticateResult, formatResult, readResultConfig, resultMessageId, resultSchema, type TestdResult } from "../server/integrations/testd-results/model";
 import { registerTestdResultRoute } from "../server/integrations/testd-results/route";
 
 const config = { secret: "s".repeat(32), instanceId: "test-23", teamId: "team-ai-app", channelId: "test-channel", reportOrigin: "https://reports.example.test" };
@@ -49,4 +49,28 @@ test("接收端仅认证后投递，异常可重试，同一事件给聊天相�
   const first = await app.inject(signed(event)), second = await app.inject(signed(event));
   assert.equal(first.statusCode, 200); assert.deepEqual(first.json(), second.json()); assert.equal(messages.size, 1);
   assert.equal((await app.inject(signed({ ...event, extra: "x".repeat(70000) }))).statusCode, 413);
+});
+
+test("v2 三种触发来源准确显示，v1 保持历史范围，定时事件幂等投递", async t => {
+  const app = Fastify(); t.after(() => app.close());
+  const messages = new Map<string, string>();
+  registerTestdResultRoute(app, config, async input => { messages.set(input.messageId, input.body); return input.messageId; });
+  const labels = { manual: "手动按计划运行", gitlab: "main 推送", scheduled: "定时执行" } as const;
+  for (const source of ["manual", "gitlab", "scheduled"] as const) {
+    const current: TestdResult = { ...event, schema: "testd.plan-result/v2", source, targetSha: source === "gitlab" ? event.targetSha : null };
+    assert.equal(resultSchema.safeParse(current).success, true);
+    assert.match(formatResult(current, config), new RegExp(`触发：${labels[source]}`));
+    assert.equal((await app.inject(signed(current))).statusCode, 200);
+    assert.equal((await app.inject(signed(current))).statusCode, 200);
+    assert.equal(messages.size, 1, "重投同一事件复用稳定消息 ID");
+  }
+  assert.match([...messages.values()][0]!, /触发：定时执行/);
+  for (const invalid of [
+    { ...event, source: "scheduled" },
+    { ...event, schema: "testd.plan-result/v3" },
+    { ...event, schema: "testd.plan-result/v2", source: "unknown" },
+    { ...event, schema: "testd.plan-result/v2", source: "scheduled", extra: true },
+  ]) assert.equal((await app.inject(signed(invalid))).statusCode, 400);
+  assert.equal((await app.inject(signed(event))).statusCode, 200, "历史 v1 待投递记录仍可发送");
+  assert.equal(messages.size, 1, "v1/v2 使用相同事件身份，不产生第二条消息");
 });
