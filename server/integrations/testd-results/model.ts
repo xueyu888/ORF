@@ -60,6 +60,20 @@ export function resultMessageId(config: ResultConfig, eventId: string): string {
   return `chat-message-client-${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
+function resultText(value: string): string {
+  return value.replace(/[\r\n]+/g, " ").replace(/[\\`*_[\]()!|~#>+\-.]/g, "\\$&");
+}
+
+function resultLink(label: string, value: string): string {
+  const href = new URL(value).href.replace(/[()<>]/g, character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `[${label}](${href})`;
+}
+
+const resultTimeFormat = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+});
+
 export function formatResult(event: TestdResult, config: ResultConfig): string {
   const s = event.summary;
   const regressionErrors = event.schema === "testd.plan-result/v3" ? event.summary?.regressionErrors : undefined;
@@ -68,17 +82,34 @@ export function formatResult(event: TestdResult, config: ResultConfig): string {
       s.blocked || s.skipped || !s.passed ? "未全部完成" : "全部通过";
   const sourceLabel = event.schema === "testd.plan-result/v3" && event.source !== "gitlab_merge_request"
     ? event.source === "manual" ? "手动运行" : "定时计划运行" : sourceLabels[event.source];
-  const lines = [`TestD 测试计划 · ${conclusion}`, `触发：${sourceLabel}`,
-    `本次测试代码版本：${event.actualSha ?? "尚未加载"}`, `完成时间：${event.finishedAt}`, `任务：${event.taskId}`];
-  if (s) lines.push(`通过 ${s.passed} · 断言失败 ${s.assertionFailed} · 运行错误 ${s.failed} · 跳过 ${s.skipped} · 阻塞 ${s.blocked} · 基础设施错误 ${s.infrastructureErrors}`);
+  const mr = event.schema === "testd.plan-result/v3" ? event.mergeRequest : undefined;
+  const icon = conclusion === "全部通过" ? "✅" : conclusion === "运行中断" || conclusion === "未全部完成" ? "⚠️" : "❌";
+  const sections = ["---", `**${icon} TestD · ${conclusion}${mr ? ` ｜ MR !${mr.iid}` : ""}**`];
+  if (mr) sections.push(`${resultText(mr.sourceBranch)} → ${resultText(mr.targetBranch)}`);
+  if (s) sections.push([
+    "**测试结果**",
+    `通过 ${s.passed} · 断言失败 ${s.assertionFailed} · 运行错误 ${s.failed}`,
+    `跳过 ${s.skipped} · 阻塞 ${s.blocked} · 基础设施错误 ${s.infrastructureErrors}`,
+  ].join("\n"));
   if (event.schema === "testd.plan-result/v3") {
-    if (s) lines.push(event.source === "manual" ? "手动运行不参与回归比较" : `回归错误 ${regressionErrors} · ${event.summary?.comparisonUnavailable ? "存在无法比较的会话" : "回归比较完成"}`);
-    if (event.mergeRequest) lines.push(`MR !${event.mergeRequest.iid}：${event.mergeRequest.sourceBranch} → ${event.mergeRequest.targetBranch}`, `源提交：${event.mergeRequest.sourceSha}`, `MR：${event.mergeRequest.url}`);
-    if (event.gate) lines.push(`合并门禁：${event.gate.state === "failed" ? "阻断" : "放行"}；${event.gate.reason}`);
+    const regression: string[] = [];
+    if (s) regression.push(event.source === "manual" ? "手动运行不参与回归比较" : `回归错误 ${regressionErrors} · ${event.summary?.comparisonUnavailable ? "存在无法比较的会话" : "回归比较完成"}`);
+    if (event.gate) regression.push(`**合并门禁：${event.gate.state === "failed" ? "阻断" : "放行"}**`, resultText(event.gate.reason));
+    if (regression.length) sections.push(regression.join("\n"));
   }
+  const links: string[] = [];
   if (event.reportUrl && config.reportOrigin) {
     const url = new URL(event.reportUrl);
-    if (url.origin === config.reportOrigin && !url.username && !url.password && ["http:", "https:"].includes(url.protocol)) lines.push(`报告：${url.href}`);
+    if (url.origin === config.reportOrigin && !url.username && !url.password && ["http:", "https:"].includes(url.protocol)) links.push(resultLink("查看测试报告", url.href));
   }
-  return lines.join("\n");
+  if (mr) links.push(resultLink("打开 MR", mr.url));
+  if (links.length) sections.push(links.join(" · "));
+  const metadata = [
+    `触发：${sourceLabel} · ${resultTimeFormat.format(new Date(event.finishedAt))}（UTC+8）`,
+    `测试版本：${event.actualSha ? `\`${event.actualSha}\`` : "尚未加载"}`,
+    ...(mr && mr.sourceSha !== event.actualSha ? [`源提交：\`${mr.sourceSha}\``] : []),
+    `任务：\`${event.taskId}\``,
+  ];
+  sections.push(metadata.map(line => `> ${line}`).join("\n"));
+  return sections.join("\n\n");
 }

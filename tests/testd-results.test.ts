@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createHmac } from "node:crypto";
 import Fastify from "fastify";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { CLIENT_CHAT_MESSAGE_ID_PATTERN } from "../src/domain/chatMessageSend";
+import { ChatMarkdown } from "../src/features/chat/chatMarkdown";
+import { shouldCompactChatMessage } from "../src/features/chat/chatMessagePresentation";
+import type { ChatMessage } from "../src/types/orf";
 import { authenticateResult, formatResult, readResultConfig, resultMessageId, resultSchema, type TestdResult } from "../server/integrations/testd-results/model";
 import { registerTestdResultRoute } from "../server/integrations/testd-results/route";
 
@@ -27,10 +32,85 @@ test("签名过期、字段范围、链接白名单和稳定消息 ID", () => {
   assert.notEqual(resultMessageId(config, event.eventId), resultMessageId({ ...config, channelId: "another" }, event.eventId));
   const message = formatResult(event, config);
   assert.match(message, /断言未通过/);
-  assert.match(message, /本次测试代码版本：a{40}/);
+  assert.match(message, /测试版本：`a{40}`/);
   assert.doesNotMatch(message, /目标提交|实际提交|结束阶段/);
   assert.doesNotMatch(formatResult({ ...event, reportUrl: "https://evil.test/?token=secret" }, config), /evil|secret/);
   assert.match(formatResult({ ...event, reportUrl: "https://reports.example.test/?view=reports" }, config), /报告/);
+});
+
+function mrResult(): Extract<TestdResult, { schema: "testd.plan-result/v3" }> {
+  return { ...event, schema: "testd.plan-result/v3", source: "gitlab_merge_request",
+    summary: { passed: 2, assertionFailed: 0, failed: 0, skipped: 0, blocked: 0, infrastructureErrors: 0,
+      interrupted: false, regressionErrors: 0, comparisonUnavailable: false },
+    mergeRequest: { projectId: 7, iid: 35, sourceBranch: "feature/52-testd优化", targetBranch: "main",
+      sourceSha: "a".repeat(40), url: "https://gitlab.example.test/develop/aio/-/merge_requests/35" },
+    gate: { state: "success", reason: "未发现回归错误" }, reportUrl: "https://reports.example.test/?runId=PLAN-(35)",
+  };
+}
+
+function renderedResult(current: TestdResult): string {
+  // Ignore plain text/emoji span wrappers while retaining semantic Markdown elements.
+  return renderToStaticMarkup(createElement(ChatMarkdown, { body: formatResult(current, config), usersById: new Map() }))
+    .replace(/<\/?span\b[^>]*>/g, "");
+}
+
+test("现有聊天渲染器直接展示通知分隔、结果层次和具名链接，并保留完整追踪信息", () => {
+  const current = mrResult();
+  const body = formatResult(current, config);
+  const html = renderedResult(current);
+  assert.match(html, /<hr /);
+  assert.match(html, /<strong>✅ TestD · 全部通过 ｜ MR !35<\/strong>/);
+  assert.match(html, /feature\/52-testd优化 → main/);
+  assert.match(html, /<strong>测试结果<\/strong>/);
+  assert.match(html, /通过 2 · 断言失败 0 · 运行错误 0/);
+  assert.match(html, /跳过 0 · 阻塞 0 · 基础设施错误 0/);
+  assert.match(html, /<strong>合并门禁：放行<\/strong>/);
+  assert.match(html, /href="https:\/\/reports.example.test\/\?runId=PLAN-%2835%29"[^>]*>查看测试报告<\/a>/);
+  assert.match(html, />打开 MR<\/a>/);
+  assert.match(html, /<blockquote /);
+  assert.match(html, /2026-09-16 09:00:00（UTC\+8）/);
+  assert.match(html, /任务：<code>12222222-2222-4222-8222-222222222222<\/code>/);
+  assert.equal(body.split("a".repeat(40)).length - 1, 1);
+  assert.doesNotMatch(body, /源提交/);
+  assert.match(renderedResult({ ...current, actualSha: "b".repeat(40) }), /源提交：<code>a{40}<\/code>/);
+  assert.match(renderedResult({ ...current, actualSha: null }), /测试版本：尚未加载/);
+});
+
+test("通知格式不掩盖失败、回归阻断、中断、缺少报告或无法比较", () => {
+  const current = mrResult();
+  const failed = renderedResult({ ...current, status: "failed", summary: null, reportUrl: undefined,
+    gate: { state: "success", reason: "无法完成回归判断，请查看执行结果" } });
+  assert.match(failed, /❌ TestD · 执行失败/);
+  assert.match(failed, /合并门禁：放行/);
+  assert.match(failed, /无法完成回归判断/);
+  assert.doesNotMatch(failed, /全部通过|查看测试报告|通过 0|回归比较完成/);
+  const regression = renderedResult({ ...current, summary: { ...current.summary!, regressionErrors: 1 }, gate: { state: "failed", reason: "发现回归错误" } });
+  assert.match(regression, /❌ TestD · 回归错误/);
+  assert.match(regression, /合并门禁：阻断/);
+  assert.match(renderedResult({ ...current, status: "interrupted" }), /⚠️ TestD · 运行中断/);
+  assert.match(renderedResult({ ...current, summary: { ...current.summary!, comparisonUnavailable: true } }), /存在无法比较的会话/);
+  assert.match(renderedResult({ ...current, finishedAt: "2026-09-16T20:00:00.000Z" }), /2026-09-17 04:00:00（UTC\+8）/);
+  for (const source of ["manual", "scheduled"] as const) {
+    const html = renderedResult({ ...current, source, mergeRequest: undefined, gate: undefined });
+    assert.match(html, source === "manual" ? /手动运行不参与回归比较/ : /定时计划运行/);
+    assert.doesNotMatch(html, /MR !|打开 MR|合并门禁/);
+  }
+});
+
+test("分支和门禁文字不注入 Markdown，连续通知继续复用五分钟紧凑规则", () => {
+  const current = mrResult();
+  const html = renderedResult({ ...current,
+    mergeRequest: { ...current.mergeRequest!, sourceBranch: "feature/**bold**_[link](value)_`code`" },
+    gate: { state: "success", reason: "策略 **不是通过** [说明](value)" },
+  });
+  assert.match(html, /feature\/\*\*bold\*\*_\[link\]\(value\)_`code`/);
+  assert.doesNotMatch(html, /<strong>bold|<strong>不是通过|<code>code|<em>/);
+  const previous = { source: "user", authorUserId: "testd-bot", createdAt: "2026-09-22T11:02:00.000Z", body: formatResult(current, config) } as ChatMessage;
+  const next = { ...previous, createdAt: "2026-09-22T11:06:00.000Z", body: formatResult({ ...current, status: "failed", summary: null }, config) };
+  assert.equal(shouldCompactChatMessage(previous, next), true);
+  assert.equal(shouldCompactChatMessage(previous, { ...next, createdAt: "2026-09-22T11:08:00.000Z" }), false);
+  assert.equal(shouldCompactChatMessage({ ...previous, body: "普通消息一" }, { ...next, body: "普通消息二" }), true);
+  assert.equal((renderedResult(current) + renderedResult({ ...current, status: "failed", summary: null })).match(/<hr /g)?.length, 2);
 });
 
 test("接收端仅认证后投递，异常可重试，同一事件给聊天相同消息 ID", async t => {

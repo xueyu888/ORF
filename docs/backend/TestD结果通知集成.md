@@ -10,6 +10,8 @@ TestD 计划运行结果由专用测试机通过 `/webhooks/testd/results` 投�
 
 接收模块负责认证、结构校验和结果格式化；聊天模块负责频道权限、消息事务、实时事件和推送。以实例和事件 ID 派生稳定 messageId，复用 sendChatMessage 的幂等插入及消息投递 outbox；接收响应丢失后重复提交不会产生第二条聊天消息。不建立另一套系统通知事实。
 
+通知正文复用现有 Markdown 渲染：每条以分隔线开始，首行加粗显示结果与可选 MR 编号，随后依次展示分支、测试统计、回归与独立合并门禁、具名报告/MR 链接。统计保留所有类别及零值，执行失败和门禁放行必须同时如实显示。来源、完成时间、完整实际测试 SHA 和任务 ID 放在末尾引用块；时间固定为 `Asia/Shanghai` 并标注 `UTC+8`，源提交仅在与实际测试 SHA 不同时另列。动态文字按 Markdown 字面文本转义，链接保留既有来源校验并编码 Markdown 定界符。上述格式只影响新生成的 TestD 结果通知正文，不改历史消息，不改频道样式或聊天组件；同一发送者五分钟内连续消息的紧凑显示规则保持原样。现有 Web、Windows 和 Android 客户端可直接显示，无需客户端发版。
+
 部署配置：`TESTD_RESULTS_ENABLED=true`、`TESTD_RESULTS_SECRET`、`TESTD_RESULTS_INSTANCE_ID`、`TESTD_RESULTS_TEAM_ID`、`TESTD_RESULTS_CHANNEL_ID`。测试结果固定由 TestD 机器人发出。目标团队已确定为 AI 应用团队（team-ai-app），频道为 TestD 测试通知，频道 type 必须为 public 且非系统频道。频道和机器人由显式配置脚本准备；仅启用接收接口不会自动创建频道。此集成不需要额外数据库迁移，复用聊天 messageId 唯一键。
 
 独立契约测试覆盖签名、过期、实例范围、字段限制、稳定消息 ID、发送错误和重投。上线验收应核对频道消息及其实际提交 SHA，并验证 Web/移动端沿现有聊天显示规则可读；HTTP 200 本身不算完成业务验收。
