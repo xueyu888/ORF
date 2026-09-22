@@ -2,9 +2,9 @@
 
 TestD 计划运行结果由专用测试机通过 `/webhooks/testd/results` 投递为 ORF 普通公开频道消息。调试工作区不投递；GitLab 工程动态仍沿原集成。团队、频道和允许的实例由服务端配置决定，不能由消息体选择。
 
-新协议 `testd.plan-result/v2` 包含 eventId、instanceId、taskId、source、targetSha、actualSha、status、stage、summary、finishedAt。source 为 manual/gitlab/scheduled，通知分别显示“手动按计划运行 / main 推送 / 定时执行”。一次性时间窗内每轮定时任务都发送独立结果；时间窗结束只停止定时补轮，不阻止 main 推送。调度由 TestD 拥有，ORF 只验证结果并格式化消息。实际测试结论在 summary 中，completed 只表示报告已生成。报告链接为可选配置，禁止转发未经校验的链接、日志或凭据。
+新协议 `testd.plan-result/v3` 包含 eventId、instanceId、taskId、source、targetSha、actualSha、status、stage、summary、finishedAt。source 为 manual/scheduled/gitlab_merge_request，对应“手动运行 / 定时计划运行 / GitLab MR 自动运行”。MR 替换 main 推送；MR 结果必须携带 mergeRequest（projectId、iid、sourceBranch、targetBranch=main、sourceSha、url）和 gate（state、reason），sourceSha 必须等于 targetSha。非 MR 结果不得携带 MR 或门禁。summary 增加 regressionErrors 和 comparisonUnavailable，门禁只由 TestD 决定，ORF 不重算回归、不调用 GitLab。当前仅回归错误阻断，无法判断或执行错误的放行必须与真实测试结论分别展示，不能显示为测试通过。一次性时间窗每轮独立通知；结束仅停止定时补轮。completed 只表示报告已生成。报告链接为可选配置，禁止转发未经校验的链接、日志或凭据。
 
-接收端同时接受历史 `testd.plan-result/v1`，v1 严格限定 manual/gitlab，不接受 scheduled。部署必须先升级 ORF 再启用新版 TestD。历史待投递记录保持原协议、事件 ID 和正文重试；两版沿用同一事件派生消息 ID，避免重复消息。v1 接收仅可在所有生产者升级且历史 v1 待投递记录清零后移除。
+接收端同时接受历史 v1（manual/gitlab）和 v2（manual/gitlab/scheduled），只用于原有不可变投递记录；不得将旧 main 通知重解释为 MR。部署先升级 ORF 再启用新版 TestD。历史待投递记录保持原协议、事件 ID 和正文重试；三版沿用同一事件派生消息 ID。旧版接收仅可在所有生产者升级且对应待投递记录清零后移除。本次仅后端发布，不涉及客户端发版或数据库迁移。
 
 认证头为 X-TestD-Event-Id、X-TestD-Timestamp、X-TestD-Signature。HMAC-SHA256 的输入为事件 ID、换行、Unix 秒时间戳、换行、原始 JSON。时间窗口五分钟，请求上限 64 KiB；重试不改变事件 ID，重新生成时间和签名。配置 secret 至少 32 字符。本次部署按已确认的可信内网边界使用 HTTP 直连，不新增证书、隧道或网关；签名验证来源和完整性，不提供传输加密，不适用于未经保护的不可信网络。
 

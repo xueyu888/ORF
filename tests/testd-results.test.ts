@@ -74,3 +74,21 @@ test("v2 三种触发来源准确显示，v1 保持历史范围，定时事件�
   assert.equal((await app.inject(signed(event))).statusCode, 200, "历史 v1 待投递记录仍可发送");
   assert.equal(messages.size, 1, "v1/v2 使用相同事件身份，不产生第二条消息");
 });
+
+test("v3 区分 MR 回归门禁和执行结果，严格校验来源与提交", async t => {
+  const app = Fastify(); t.after(() => app.close());
+  const messages: string[] = [];
+  registerTestdResultRoute(app, config, async input => { messages.push(input.body); return input.messageId; });
+  const mr = { projectId: 7, iid: 123, sourceBranch: "feature/testd", targetBranch: "main", sourceSha: event.targetSha, url: "https://gitlab.example.test/develop/aio/-/merge_requests/123" };
+  const current = { ...event, schema: "testd.plan-result/v3", source: "gitlab_merge_request", mergeRequest: mr,
+    summary: { ...event.summary, regressionErrors: 1, comparisonUnavailable: false }, gate: { state: "failed", reason: "发现回归错误，阻断合并" } };
+  assert.equal((await app.inject(signed(current))).statusCode, 200);
+  assert.match(messages[0]!, /回归错误/); assert.match(messages[0]!, /MR !123/); assert.match(messages[0]!, /合并门禁：阻断/);
+  const executionError = { ...current, status: "failed", summary: null, gate: { state: "success", reason: "无法判断回归，按当前策略放行" } };
+  assert.equal((await app.inject(signed(executionError))).statusCode, 200);
+  assert.match(messages[1]!, /执行失败/); assert.match(messages[1]!, /合并门禁：放行/); assert.doesNotMatch(messages[1]!, /全部通过/);
+  for (const invalid of [{ ...current, mergeRequest: undefined }, { ...current, gate: undefined }, { ...current, source: "scheduled" },
+    { ...current, mergeRequest: { ...mr, sourceSha: "b".repeat(40) } }, { ...current, mergeRequest: { ...mr, url: "javascript:alert(1)" } }]) {
+    assert.equal((await app.inject(signed(invalid))).statusCode, 400);
+  }
+});

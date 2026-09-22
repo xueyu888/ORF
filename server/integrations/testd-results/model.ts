@@ -3,21 +3,31 @@ import { z } from "zod";
 
 const sha = z.string().regex(/^[0-9a-f]{40}$/).nullable();
 const count = z.number().int().min(0).max(1_000_000);
+const summarySchema = z.object({ passed: count, assertionFailed: count, failed: count, skipped: count, blocked: count,
+  infrastructureErrors: count, interrupted: z.boolean() }).strict();
+const safeUrl = z.url().max(2048).refine(value => { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password; });
+const mergeRequestSchema = z.object({ projectId: z.number().int().positive(), iid: z.number().int().positive(),
+  sourceBranch: z.string().min(1).max(1024), targetBranch: z.literal("main"), sourceSha: z.string().regex(/^[0-9a-f]{40}$/), url: safeUrl }).strict();
 const resultFields = z.object({
   eventId: z.string().min(1).max(180), instanceId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/),
   taskId: z.string().uuid(),
   targetSha: sha, actualSha: sha, status: z.enum(["completed", "failed", "interrupted"]),
   stage: z.enum(["queued", "syncing", "restarting", "running"]),
-  summary: z.object({ passed: count, assertionFailed: count, failed: count, skipped: count, blocked: count,
-    infrastructureErrors: count, interrupted: z.boolean() }).strict().nullable(),
+  summary: summarySchema.nullable(),
   finishedAt: z.iso.datetime(), reportUrl: z.url().max(2048).optional(),
 }).strict();
 export const resultSchema = z.discriminatedUnion("schema", [
   resultFields.extend({ schema: z.literal("testd.plan-result/v1"), source: z.enum(["manual", "gitlab"]) }),
   resultFields.extend({ schema: z.literal("testd.plan-result/v2"), source: z.enum(["manual", "gitlab", "scheduled"]) }),
-]).refine(e => e.eventId === `${e.instanceId}:${e.taskId}`, "事件标识与任务不一致");
+  resultFields.extend({ schema: z.literal("testd.plan-result/v3"), source: z.enum(["manual", "scheduled", "gitlab_merge_request"]),
+    summary: summarySchema.extend({ regressionErrors: count, comparisonUnavailable: z.boolean() }).strict().nullable(),
+    mergeRequest: mergeRequestSchema.optional(), gate: z.object({ state: z.enum(["success", "failed"]), reason: z.string().min(1).max(255) }).strict().optional() }),
+]).refine(e => e.eventId === `${e.instanceId}:${e.taskId}`, "事件标识与任务不一致")
+  .refine(e => e.schema !== "testd.plan-result/v3" || (e.source === "gitlab_merge_request"
+    ? Boolean(e.mergeRequest && e.gate && e.mergeRequest.sourceSha === e.targetSha)
+    : !e.mergeRequest && !e.gate), "MR 来源、提交和门禁不一致");
 export type TestdResult = z.infer<typeof resultSchema>;
-const sourceLabels: Record<TestdResult["source"], string> = { manual: "手动按计划运行", gitlab: "main 推送", scheduled: "定时执行" };
+const sourceLabels: Record<TestdResult["source"], string> = { manual: "手动按计划运行", gitlab: "main 推送", scheduled: "定时执行", gitlab_merge_request: "GitLab MR 自动运行" };
 export type ResultConfig = { secret: string; instanceId: string; teamId: string; channelId: string; reportOrigin?: string };
 
 export function readResultConfig(env: NodeJS.ProcessEnv): ResultConfig | null {
@@ -52,12 +62,20 @@ export function resultMessageId(config: ResultConfig, eventId: string): string {
 
 export function formatResult(event: TestdResult, config: ResultConfig): string {
   const s = event.summary;
-  const conclusion = event.status === "interrupted" ? "运行中断" : event.status === "failed" ? "执行失败" :
+  const regressionErrors = event.schema === "testd.plan-result/v3" ? event.summary?.regressionErrors : undefined;
+  const conclusion = regressionErrors ? "回归错误" : event.status === "interrupted" ? "运行中断" : event.status === "failed" ? "执行失败" :
     !s ? "缺少测试结果" : s.failed || s.infrastructureErrors ? "运行错误" : s.assertionFailed ? "断言未通过" :
       s.blocked || s.skipped || !s.passed ? "未全部完成" : "全部通过";
-  const lines = [`TestD 测试计划 · ${conclusion}`, `触发：${sourceLabels[event.source]}`,
+  const sourceLabel = event.schema === "testd.plan-result/v3" && event.source !== "gitlab_merge_request"
+    ? event.source === "manual" ? "手动运行" : "定时计划运行" : sourceLabels[event.source];
+  const lines = [`TestD 测试计划 · ${conclusion}`, `触发：${sourceLabel}`,
     `本次测试代码版本：${event.actualSha ?? "尚未加载"}`, `完成时间：${event.finishedAt}`, `任务：${event.taskId}`];
   if (s) lines.push(`通过 ${s.passed} · 断言失败 ${s.assertionFailed} · 运行错误 ${s.failed} · 跳过 ${s.skipped} · 阻塞 ${s.blocked} · 基础设施错误 ${s.infrastructureErrors}`);
+  if (event.schema === "testd.plan-result/v3") {
+    if (s) lines.push(event.source === "manual" ? "手动运行不参与回归比较" : `回归错误 ${regressionErrors} · ${event.summary?.comparisonUnavailable ? "存在无法比较的会话" : "回归比较完成"}`);
+    if (event.mergeRequest) lines.push(`MR !${event.mergeRequest.iid}：${event.mergeRequest.sourceBranch} → ${event.mergeRequest.targetBranch}`, `源提交：${event.mergeRequest.sourceSha}`, `MR：${event.mergeRequest.url}`);
+    if (event.gate) lines.push(`合并门禁：${event.gate.state === "failed" ? "阻断" : "放行"}；${event.gate.reason}`);
+  }
   if (event.reportUrl && config.reportOrigin) {
     const url = new URL(event.reportUrl);
     if (url.origin === config.reportOrigin && !url.username && !url.password && ["http:", "https:"].includes(url.protocol)) lines.push(`报告：${url.href}`);
