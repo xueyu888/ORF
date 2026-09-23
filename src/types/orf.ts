@@ -32,9 +32,10 @@ export type CoreNotificationKind =
   | "chat.reaction.created"
   | "data.sync.conflict"
   | "worklog.submitted"
-  | "worklog.reminder";
+  | "worklog.reminder"
+  | "testd.mr.gate-result";
 export type NotificationKind = string;
-export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog" | "dataSync" | "chatMessage" | "user";
+export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog" | "dataSync" | "chatMessage" | "testdResult" | "user";
 export type NotificationStream = "personalNotification" | "teamAnnouncement";
 export type NotificationDeliveryClass = "direct" | "mandatory" | "ordinary";
 export type NotificationReceiptAttentionLevel = "action_required" | "normal";

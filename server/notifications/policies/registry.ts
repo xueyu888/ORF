@@ -113,6 +113,11 @@ export const notificationPolicyRegistry: Partial<Record<CoreNotificationKind, No
     replyTarget: "none",
     stream: "personalNotification",
   },
+  "testd.mr.gate-result": {
+    kind: "testd.mr.gate-result",
+    replyTarget: "none",
+    stream: "personalNotification",
+  },
 };
 
 const coreNotificationKindSet = new Set<string>(Object.keys(notificationPolicyRegistry));

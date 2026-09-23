@@ -4,17 +4,15 @@ import { createHmac } from "node:crypto";
 import Fastify from "fastify";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CLIENT_CHAT_MESSAGE_ID_PATTERN } from "../src/domain/chatMessageSend";
 import { ChatMarkdown } from "../src/features/chat/chatMarkdown";
-import { shouldCompactChatMessage } from "../src/features/chat/chatMessagePresentation";
-import type { ChatMessage } from "../src/types/orf";
-import { authenticateResult, directResultMessageId, formatResult, readResultConfig, resultMessageId, resultSchema, type TestdResult } from "../server/integrations/testd-results/model";
+import { formatNotificationChatBody } from "../server/notifications/notificationEventModel";
+import { authenticateResult, formatResult, readResultConfig, resultSchema, type TestdResult } from "../server/integrations/testd-results/model";
 import { orfRecipientEmail } from "../server/integrations/testd-results/author-recipient-map";
 import { readGitlabCommitAuthorEmail } from "../server/integrations/testd-results/gitlab-author";
-import { deliverTestdResult } from "../server/integrations/testd-results/delivery";
+import { deliverTestdResult, testdObserverEmails, type TestdDeliveryPorts } from "../server/integrations/testd-results/delivery";
 import { registerTestdResultRoute } from "../server/integrations/testd-results/route";
 
-const config = { secret: "s".repeat(32), instanceId: "test-23", teamId: "team-ai-app", channelId: "test-channel",
+const config = { secret: "s".repeat(32), instanceId: "test-23", teamId: "team-ai-app",
   gitlabUrl: "https://gitlab.example.test/", gitlabProjectId: 7, gitlabReadToken: "read-only", reportOrigin: "https://reports.example.test" };
 const taskId = "12222222-2222-4222-8222-222222222222";
 const event: TestdResult = { schema: "testd.plan-result/v1", instanceId: config.instanceId, eventId: `${config.instanceId}:${taskId}`, taskId,
@@ -26,22 +24,17 @@ function signed(body: unknown, timestamp = String(Math.floor(Date.now() / 1000))
     "x-testd-event-id": event.eventId, "x-testd-timestamp": timestamp, "x-testd-signature": createHmac("sha256", config.secret).update(`${event.eventId}\n${timestamp}\n${raw}`).digest("hex") } };
 }
 
-test("签名过期、字段范围、链接白名单和稳定消息 ID", () => {
+test("签名过期、字段范围和报告链接白名单", () => {
   assert.equal(readResultConfig({}), null);
   assert.throws(() => readResultConfig({ TESTD_RESULTS_ENABLED: "true" }));
   const env = { TESTD_RESULTS_ENABLED: "true", TESTD_RESULTS_SECRET: config.secret, TESTD_RESULTS_INSTANCE_ID: config.instanceId,
-    TESTD_RESULTS_TEAM_ID: config.teamId, TESTD_RESULTS_CHANNEL_ID: config.channelId, GITLAB_URL: config.gitlabUrl,
+    TESTD_RESULTS_TEAM_ID: config.teamId, GITLAB_URL: config.gitlabUrl,
     TESTD_RESULTS_GITLAB_PROJECT_ID: String(config.gitlabProjectId), TESTD_RESULTS_GITLAB_READ_TOKEN: config.gitlabReadToken };
   assert.equal(readResultConfig(env)?.gitlabProjectId, 7);
   assert.throws(() => readResultConfig({ ...env, TESTD_RESULTS_GITLAB_PROJECT_ID: "other" }), /项目 ID/);
   assert.throws(() => readResultConfig({ ...env, TESTD_RESULTS_GITLAB_READ_TOKEN: "" }), /READ_TOKEN/);
   const request = signed(event, "1700000000");
   assert.equal(authenticateResult(request.payload, event.eventId, "1700000000", request.headers["x-testd-signature"], config.secret), false);
-  assert.match(resultMessageId(config, event.eventId), CLIENT_CHAT_MESSAGE_ID_PATTERN);
-  assert.equal(resultMessageId(config, event.eventId), resultMessageId({ ...config }, event.eventId));
-  assert.notEqual(resultMessageId(config, event.eventId), resultMessageId({ ...config, channelId: "another" }, event.eventId));
-  assert.match(directResultMessageId(config, event.eventId), CLIENT_CHAT_MESSAGE_ID_PATTERN);
-  assert.notEqual(directResultMessageId(config, event.eventId), resultMessageId(config, event.eventId));
   const message = formatResult(event, config);
   assert.match(message, /断言未通过/);
   assert.match(message, /测试版本：`a{40}`/);
@@ -86,52 +79,82 @@ function mrResult(): Extract<TestdResult, { schema: "testd.plan-result/v3" }> {
   };
 }
 
-test("MR 门禁失败才给源提交作者发一次私聊，重试复用公开与私聊消息", async () => {
-  const publicMessages = new Map<string, string>();
-  const directMessages = new Map<string, string>();
-  const lookedUp: string[] = [];
-  let failDirect = false;
-  const ports = {
-    async sendPublic(input: { messageId: string; body: string }) { publicMessages.set(input.messageId, input.body); return input.messageId; },
-    async readCommitAuthor(projectId: number, sha: string) {
-      lookedUp.push(`${projectId}:${sha}`);
+test("MR 门禁通过只通知固定两人，失败另通知源提交作者；重试不重复", async () => {
+  const users = new Map([ ["tangyl@sdrising.com", "tangyl"], ["zrx@sdr.com", "zrx"], ["543@sd.com", "author"] ]);
+  const notifications = new Map<string, string[]>();
+  let lookupCount = 0;
+  let failAuthorLookup = false;
+  const ports: TestdDeliveryPorts = {
+    async readCommitAuthor(projectId, sha) {
+      assert.equal(projectId, 7);
+      assert.equal(sha, "a".repeat(40));
+      lookupCount += 1;
+      if (failAuthorLookup) throw new Error("GitLab 暂不可用");
       return "872294056@qq.com";
     },
-    async sendDirect(input: { messageId: string; body: string; recipientEmail: string }) {
-      if (failDirect) throw new Error("私聊投递失败");
-      assert.equal(input.recipientEmail, "543@sd.com");
-      directMessages.set(input.messageId, input.body);
+    async resolveRecipients(emails) {
+      return emails.map(email => {
+        const id = users.get(email);
+        if (!id) throw new Error(`未知用户：${email}`);
+        return id;
+      });
+    },
+    async publishNotification(input) {
+      if (!notifications.has(input.sourceEventKey)) notifications.set(input.sourceEventKey, input.recipientUserIds);
+      return input.sourceEventKey;
     },
   };
+  assert.deepEqual(testdObserverEmails, ["tangyl@sdrising.com", "zrx@sdr.com"]);
   const passed = mrResult();
-  const input = { event: passed, body: "TestD 门禁结果", messageId: resultMessageId(config, passed.eventId) };
-  await deliverTestdResult(input, config, ports);
-  await deliverTestdResult({ ...input, event: { ...passed, status: "failed", summary: null } }, config, ports);
-  assert.equal(publicMessages.size, 1);
-  assert.equal(directMessages.size, 0);
-  assert.equal(lookedUp.length, 0);
+  const successId = await deliverTestdResult({ event: passed, body: "门禁放行" }, ports);
+  assert.deepEqual(notifications.get(successId), ["tangyl", "zrx"]);
+  assert.equal(lookupCount, 0);
 
-  const failed = { ...passed, gate: { state: "failed" as const, reason: "发现回归错误" } };
-  failDirect = true;
-  await assert.rejects(deliverTestdResult({ ...input, event: failed }, config, ports), /私聊投递失败/);
-  assert.equal(publicMessages.size, 1, "私聊失败后公开消息保留且不重复");
-  failDirect = false;
-  await deliverTestdResult({ ...input, event: failed }, config, ports);
-  await deliverTestdResult({ ...input, event: failed }, config, ports);
-  assert.deepEqual(lookedUp, Array(3).fill(`7:${passed.mergeRequest!.sourceSha}`));
-  assert.deepEqual([...directMessages.keys()], [directResultMessageId(config, failed.eventId)]);
-  assert.equal(publicMessages.size, 1);
+  const failed = { ...passed, taskId: "32222222-2222-4222-8222-222222222222",
+    eventId: `${config.instanceId}:32222222-2222-4222-8222-222222222222`,
+    gate: { state: "failed" as const, reason: "发现回归错误" } };
+  failAuthorLookup = true;
+  await assert.rejects(deliverTestdResult({ event: failed, body: "门禁阻断" }, ports), /GitLab 暂不可用/);
+  assert.deepEqual(notifications.get(`testd:mr:v1:${failed.eventId}:observers`), ["tangyl", "zrx"]);
+  failAuthorLookup = false;
+  await deliverTestdResult({ event: failed, body: "门禁阻断" }, ports);
+  await deliverTestdResult({ event: failed, body: "门禁阻断" }, ports);
+  assert.deepEqual(notifications.get(`testd:mr:v1:${failed.eventId}:author`), ["author"]);
+  assert.equal(notifications.size, 3, "一次成功和一次失败共三条通知事件");
+  assert.equal(lookupCount, 3);
 });
 
-test("未登记的 Git 作者不能被猜测成其他 ORF 收件人", async () => {
-  const failed = { ...mrResult(), gate: { state: "failed" as const, reason: "回归错误" } };
-  let sentDirect = false;
-  await assert.rejects(deliverTestdResult({ event: failed, body: "失败", messageId: "public" }, config, {
-    sendPublic: async () => "public",
+test("提交作者本身是固定收件人时只生成一条通知事件", async () => {
+  const notifications: string[] = [];
+  await deliverTestdResult({ event: { ...mrResult(), gate: { state: "failed", reason: "回归错误" } }, body: "失败" }, {
+    readCommitAuthor: async () => "731705278@qq.com",
+    resolveRecipients: async emails => emails.map(email => email),
+    publishNotification: async input => { notifications.push(input.sourceEventKey); return input.sourceEventKey; },
+  });
+  assert.equal(notifications.length, 1);
+  assert.match(notifications[0]!, /:observers$/);
+});
+
+test("未登记的 Git 作者报错，固定收件人的通知保持可重试去重", async () => {
+  const notifications: string[] = [];
+  await assert.rejects(deliverTestdResult({ event: { ...mrResult(), gate: { state: "failed", reason: "回归错误" } }, body: "失败" }, {
     readCommitAuthor: async () => "unknown@example.test",
-    sendDirect: async () => { sentDirect = true; },
+    resolveRecipients: async emails => emails.map(email => email),
+    publishNotification: async input => { notifications.push(input.sourceEventKey); return input.sourceEventKey; },
   }), /未配置/);
-  assert.equal(sentDirect, false);
+  assert.equal(notifications.length, 1);
+  assert.match(notifications[0]!, /:observers$/);
+});
+
+test("手动、定时和历史协议只确认投递，不调用通知依赖", async () => {
+  const ports: TestdDeliveryPorts = {
+    readCommitAuthor: async () => { throw new Error("不可调用 GitLab"); },
+    resolveRecipients: async () => { throw new Error("不可查询收件人"); },
+    publishNotification: async () => { throw new Error("不可发布通知"); },
+  };
+  assert.equal(await deliverTestdResult({ event, body: "历史" }, ports), event.eventId);
+  const scheduled = { ...mrResult(), source: "scheduled" as const, mergeRequest: undefined, gate: undefined };
+  assert.equal(await deliverTestdResult({ event: scheduled, body: "定时" }, ports), scheduled.eventId);
 });
 
 function renderedResult(current: TestdResult): string {
@@ -140,9 +163,12 @@ function renderedResult(current: TestdResult): string {
     .replace(/<\/?span\b[^>]*>/g, "");
 }
 
-test("现有聊天渲染器直接展示通知分隔、结果层次和具名链接，并保留完整追踪信息", () => {
+test("系统通知投影展示结果层次和具名链接，并保留完整追踪信息", () => {
   const current = mrResult();
   const body = formatResult(current, config);
+  const projection = formatNotificationChatBody({ body, kind: "testd.mr.gate-result", targetHref: current.mergeRequest!.url,
+    targetType: "testdResult", title: "TestD MR !35 门禁通过" });
+  assert.match(projection, /^\*\*TestD MR !35 门禁通过\*\*/);
   const html = renderedResult(current);
   assert.match(html, /<hr /);
   assert.match(html, /<strong>✅ TestD · 全部通过 ｜ MR !35<\/strong>/);
@@ -183,7 +209,7 @@ test("通知格式不掩盖失败、回归阻断、中断、缺少报告或无�
   }
 });
 
-test("分支和门禁文字不注入 Markdown，连续通知继续复用五分钟紧凑规则", () => {
+test("分支和门禁文字不注入 Markdown", () => {
   const current = mrResult();
   const html = renderedResult({ ...current,
     mergeRequest: { ...current.mergeRequest!, sourceBranch: "feature/**bold**_[link](value)_`code`" },
@@ -191,20 +217,14 @@ test("分支和门禁文字不注入 Markdown，连续通知继续复用五分�
   });
   assert.match(html, /feature\/\*\*bold\*\*_\[link\]\(value\)_`code`/);
   assert.doesNotMatch(html, /<strong>bold|<strong>不是通过|<code>code|<em>/);
-  const previous = { source: "user", authorUserId: "testd-bot", createdAt: "2026-09-22T11:02:00.000Z", body: formatResult(current, config) } as ChatMessage;
-  const next = { ...previous, createdAt: "2026-09-22T11:06:00.000Z", body: formatResult({ ...current, status: "failed", summary: null }, config) };
-  assert.equal(shouldCompactChatMessage(previous, next), true);
-  assert.equal(shouldCompactChatMessage(previous, { ...next, createdAt: "2026-09-22T11:08:00.000Z" }), false);
-  assert.equal(shouldCompactChatMessage({ ...previous, body: "普通消息一" }, { ...next, body: "普通消息二" }), true);
-  assert.equal((renderedResult(current) + renderedResult({ ...current, status: "failed", summary: null })).match(/<hr /g)?.length, 2);
 });
 
-test("接收端仅认证后投递，异常可重试，同一事件给聊天相同消息 ID", async t => {
+test("接收端仅认证后投递，异常可重试，并保留 TestD 回执字段", async t => {
   const app = Fastify(); t.after(() => app.close());
-  const messages = new Map<string, string>(); let fail = false;
+  const delivered: string[] = []; let fail = false;
   registerTestdResultRoute(app, config, async input => {
     if (fail) throw new Error("isolated failure");
-    messages.set(input.messageId, input.body); return input.messageId;
+    delivered.push(input.body); return input.event.eventId;
   });
   assert.equal((await app.inject({ ...signed(event), headers: { "content-type": "application/json" } })).statusCode, 403);
   assert.equal((await app.inject(signed({ ...event, instanceId: "foreign" }))).statusCode, 400);
@@ -213,14 +233,23 @@ test("接收端仅认证后投递，异常可重试，同一事件给聊天相�
   fail = true; assert.equal((await app.inject(signed(event))).statusCode, 503);
   fail = false;
   const first = await app.inject(signed(event)), second = await app.inject(signed(event));
-  assert.equal(first.statusCode, 200); assert.deepEqual(first.json(), second.json()); assert.equal(messages.size, 1);
+  assert.equal(first.statusCode, 200); assert.deepEqual(first.json(), second.json());
+  assert.deepEqual(first.json(), { eventId: event.eventId, messageId: event.eventId });
+  assert.equal(delivered.length, 2);
   assert.equal((await app.inject(signed({ ...event, extra: "x".repeat(70000) }))).statusCode, 413);
 });
 
-test("v2 三种触发来源准确显示，v1 保持历史范围，定时事件幂等投递", async t => {
+test("v2 三种触发来源及 v1 历史事件仍可确认，非 MR 不生成通知", async t => {
   const app = Fastify(); t.after(() => app.close());
-  const messages = new Map<string, string>();
-  registerTestdResultRoute(app, config, async input => { messages.set(input.messageId, input.body); return input.messageId; });
+  const bodies: string[] = [];
+  registerTestdResultRoute(app, config, async input => {
+    bodies.push(input.body);
+    return deliverTestdResult(input, {
+      readCommitAuthor: async () => { throw new Error("旧事件不查询提交作者"); },
+      resolveRecipients: async () => { throw new Error("旧事件不查询收件人"); },
+      publishNotification: async () => { throw new Error("旧事件不发布通知"); },
+    });
+  });
   const labels = { manual: "手动按计划运行", gitlab: "main 推送", scheduled: "定时执行" } as const;
   for (const source of ["manual", "gitlab", "scheduled"] as const) {
     const current: TestdResult = { ...event, schema: "testd.plan-result/v2", source, targetSha: source === "gitlab" ? event.targetSha : null };
@@ -228,9 +257,9 @@ test("v2 三种触发来源准确显示，v1 保持历史范围，定时事件�
     assert.match(formatResult(current, config), new RegExp(`触发：${labels[source]}`));
     assert.equal((await app.inject(signed(current))).statusCode, 200);
     assert.equal((await app.inject(signed(current))).statusCode, 200);
-    assert.equal(messages.size, 1, "重投同一事件复用稳定消息 ID");
+    assert.equal((await app.inject(signed(current))).json().messageId, current.eventId);
   }
-  assert.match([...messages.values()][0]!, /触发：定时执行/);
+  assert.match(bodies.at(-1)!, /触发：定时执行/);
   for (const invalid of [
     { ...event, source: "scheduled" },
     { ...event, schema: "testd.plan-result/v3" },
@@ -238,14 +267,13 @@ test("v2 三种触发来源准确显示，v1 保持历史范围，定时事件�
     { ...event, schema: "testd.plan-result/v2", source: "scheduled", extra: true },
   ]) assert.equal((await app.inject(signed(invalid))).statusCode, 400);
   assert.equal((await app.inject(signed(event))).statusCode, 200, "历史 v1 待投递记录仍可发送");
-  assert.equal(messages.size, 1, "v1/v2 使用相同事件身份，不产生第二条消息");
 });
 
 test("v3 区分 MR 回归门禁和执行结果，严格校验来源与提交", async t => {
   const app = Fastify(); t.after(() => app.close());
   const messages: string[] = [];
   const events: TestdResult[] = [];
-  registerTestdResultRoute(app, config, async input => { messages.push(input.body); events.push(input.event); return input.messageId; });
+  registerTestdResultRoute(app, config, async input => { messages.push(input.body); events.push(input.event); return input.event.eventId; });
   const mr = { projectId: 7, iid: 123, sourceBranch: "feature/testd", targetBranch: "main", sourceSha: event.targetSha, url: "https://gitlab.example.test/develop/aio/-/merge_requests/123" };
   const current = { ...event, schema: "testd.plan-result/v3", source: "gitlab_merge_request", mergeRequest: mr,
     summary: { ...event.summary, regressionErrors: 1, comparisonUnavailable: false }, gate: { state: "failed", reason: "发现回归错误，阻断合并" } };

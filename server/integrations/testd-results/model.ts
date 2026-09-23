@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
 const sha = z.string().regex(/^[0-9a-f]{40}$/).nullable();
@@ -28,7 +28,7 @@ export const resultSchema = z.discriminatedUnion("schema", [
     : !e.mergeRequest && !e.gate), "MR 来源、提交和门禁不一致");
 export type TestdResult = z.infer<typeof resultSchema>;
 const sourceLabels: Record<TestdResult["source"], string> = { manual: "手动按计划运行", gitlab: "main 推送", scheduled: "定时执行", gitlab_merge_request: "GitLab MR 自动运行" };
-export type ResultConfig = { secret: string; instanceId: string; teamId: string; channelId: string;
+export type ResultConfig = { secret: string; instanceId: string; teamId: string;
   gitlabUrl: string; gitlabProjectId: number; gitlabReadToken: string; reportOrigin?: string };
 
 export function readResultConfig(env: NodeJS.ProcessEnv): ResultConfig | null {
@@ -42,7 +42,7 @@ export function readResultConfig(env: NodeJS.ProcessEnv): ResultConfig | null {
   if (!["http:", "https:"].includes(gitlabUrl.protocol) || gitlabUrl.username || gitlabUrl.password) throw new Error("无效 GitLab 地址");
   const gitlabProjectId = Number(required("TESTD_RESULTS_GITLAB_PROJECT_ID"));
   if (!Number.isSafeInteger(gitlabProjectId) || gitlabProjectId <= 0) throw new Error("无效 TestD GitLab 项目 ID");
-  const config: ResultConfig = { secret, instanceId, teamId: required("TESTD_RESULTS_TEAM_ID"), channelId: required("TESTD_RESULTS_CHANNEL_ID"),
+  const config: ResultConfig = { secret, instanceId, teamId: required("TESTD_RESULTS_TEAM_ID"),
     gitlabUrl: gitlabUrl.href, gitlabProjectId, gitlabReadToken: required("TESTD_RESULTS_GITLAB_READ_TOKEN") };
   if (env.TESTD_RESULTS_REPORT_ORIGIN) {
     const url = new URL(env.TESTD_RESULTS_REPORT_ORIGIN);
@@ -57,21 +57,6 @@ export function authenticateResult(raw: string, eventId: unknown, timestamp: unk
     Math.abs(now / 1000 - Number(timestamp)) > 300 || typeof signature !== "string" || !/^[0-9a-f]{64}$/.test(signature)) return false;
   const expected = createHmac("sha256", secret).update(`${eventId}\n${timestamp}\n${raw}`).digest();
   return timingSafeEqual(expected, Buffer.from(signature, "hex"));
-}
-
-export function resultMessageId(config: ResultConfig, eventId: string): string {
-  return stableMessageId(["testd-result-v1", config.instanceId, eventId, config.teamId, config.channelId]);
-}
-
-export function directResultMessageId(config: ResultConfig, eventId: string): string {
-  return stableMessageId(["testd-result-direct-v1", config.instanceId, eventId, config.teamId]);
-}
-
-function stableMessageId(parts: string[]): string {
-  const bytes = createHash("sha256").update(JSON.stringify(parts)).digest().subarray(0, 16);
-  bytes[6] = (bytes[6]! & 15) | 64; bytes[8] = (bytes[8]! & 63) | 128;
-  const h = bytes.toString("hex");
-  return `chat-message-client-${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
 function resultText(value: string): string {
