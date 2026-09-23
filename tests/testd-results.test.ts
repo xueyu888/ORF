@@ -8,10 +8,14 @@ import { CLIENT_CHAT_MESSAGE_ID_PATTERN } from "../src/domain/chatMessageSend";
 import { ChatMarkdown } from "../src/features/chat/chatMarkdown";
 import { shouldCompactChatMessage } from "../src/features/chat/chatMessagePresentation";
 import type { ChatMessage } from "../src/types/orf";
-import { authenticateResult, formatResult, readResultConfig, resultMessageId, resultSchema, type TestdResult } from "../server/integrations/testd-results/model";
+import { authenticateResult, directResultMessageId, formatResult, readResultConfig, resultMessageId, resultSchema, type TestdResult } from "../server/integrations/testd-results/model";
+import { orfRecipientEmail } from "../server/integrations/testd-results/author-recipient-map";
+import { readGitlabCommitAuthorEmail } from "../server/integrations/testd-results/gitlab-author";
+import { deliverTestdResult } from "../server/integrations/testd-results/delivery";
 import { registerTestdResultRoute } from "../server/integrations/testd-results/route";
 
-const config = { secret: "s".repeat(32), instanceId: "test-23", teamId: "team-ai-app", channelId: "test-channel", reportOrigin: "https://reports.example.test" };
+const config = { secret: "s".repeat(32), instanceId: "test-23", teamId: "team-ai-app", channelId: "test-channel",
+  gitlabUrl: "https://gitlab.example.test/", gitlabProjectId: 7, gitlabReadToken: "read-only", reportOrigin: "https://reports.example.test" };
 const taskId = "12222222-2222-4222-8222-222222222222";
 const event: TestdResult = { schema: "testd.plan-result/v1", instanceId: config.instanceId, eventId: `${config.instanceId}:${taskId}`, taskId,
   source: "gitlab", targetSha: "a".repeat(40), actualSha: "a".repeat(40), status: "completed", stage: "running", finishedAt: "2026-09-16T01:00:00.000Z",
@@ -25,17 +29,51 @@ function signed(body: unknown, timestamp = String(Math.floor(Date.now() / 1000))
 test("签名过期、字段范围、链接白名单和稳定消息 ID", () => {
   assert.equal(readResultConfig({}), null);
   assert.throws(() => readResultConfig({ TESTD_RESULTS_ENABLED: "true" }));
+  const env = { TESTD_RESULTS_ENABLED: "true", TESTD_RESULTS_SECRET: config.secret, TESTD_RESULTS_INSTANCE_ID: config.instanceId,
+    TESTD_RESULTS_TEAM_ID: config.teamId, TESTD_RESULTS_CHANNEL_ID: config.channelId, GITLAB_URL: config.gitlabUrl,
+    TESTD_RESULTS_GITLAB_PROJECT_ID: String(config.gitlabProjectId), TESTD_RESULTS_GITLAB_READ_TOKEN: config.gitlabReadToken };
+  assert.equal(readResultConfig(env)?.gitlabProjectId, 7);
+  assert.throws(() => readResultConfig({ ...env, TESTD_RESULTS_GITLAB_PROJECT_ID: "other" }), /项目 ID/);
+  assert.throws(() => readResultConfig({ ...env, TESTD_RESULTS_GITLAB_READ_TOKEN: "" }), /READ_TOKEN/);
   const request = signed(event, "1700000000");
   assert.equal(authenticateResult(request.payload, event.eventId, "1700000000", request.headers["x-testd-signature"], config.secret), false);
   assert.match(resultMessageId(config, event.eventId), CLIENT_CHAT_MESSAGE_ID_PATTERN);
   assert.equal(resultMessageId(config, event.eventId), resultMessageId({ ...config }, event.eventId));
   assert.notEqual(resultMessageId(config, event.eventId), resultMessageId({ ...config, channelId: "another" }, event.eventId));
+  assert.match(directResultMessageId(config, event.eventId), CLIENT_CHAT_MESSAGE_ID_PATTERN);
+  assert.notEqual(directResultMessageId(config, event.eventId), resultMessageId(config, event.eventId));
   const message = formatResult(event, config);
   assert.match(message, /断言未通过/);
   assert.match(message, /测试版本：`a{40}`/);
   assert.doesNotMatch(message, /目标提交|实际提交|结束阶段/);
   assert.doesNotMatch(formatResult({ ...event, reportUrl: "https://evil.test/?token=secret" }, config), /evil|secret/);
   assert.match(formatResult({ ...event, reportUrl: "https://reports.example.test/?view=reports" }, config), /报告/);
+});
+
+test("Git 作者映射只接受明确登记的邮箱", () => {
+  assert.equal(orfRecipientEmail("872294056@qq.com"), "543@sd.com");
+  assert.equal(orfRecipientEmail("731705278@qq.com"), "zrx@sdr.com");
+  assert.equal(orfRecipientEmail(" ZHURX@SDRISING.COM "), "zrx@sdr.com");
+  assert.equal(orfRecipientEmail("xueuy@qq.com"), "xueyu@qq.com");
+  assert.equal(orfRecipientEmail("474746922@qq.com"), "xueyu@qq.com");
+  assert.throws(() => orfRecipientEmail("codex-merge-check@local"), /未配置/);
+});
+
+test("GitLab 查询仅接受已配置项目和完整源 SHA 的作者邮箱", async () => {
+  const sha = "a".repeat(40);
+  const calls: string[] = [];
+  const request = async (input: URL | RequestInfo, init?: RequestInit) => {
+    calls.push(String(input));
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>)["PRIVATE-TOKEN"], config.gitlabReadToken);
+    return Response.json({ id: sha, author_email: "WUYZ@SDRISING.COM" });
+  };
+  assert.equal(await readGitlabCommitAuthorEmail(config, 7, sha, request as typeof fetch), "wuyz@sdrising.com");
+  assert.equal(calls[0], `https://gitlab.example.test/api/v4/projects/7/repository/commits/${sha}`);
+  await assert.rejects(readGitlabCommitAuthorEmail(config, 8, sha, request as typeof fetch), /不属于/);
+  assert.equal(calls.length, 1, "项目不一致时不得向 GitLab 查询");
+  await assert.rejects(readGitlabCommitAuthorEmail(config, 7, sha, async () => Response.json({ id: "b".repeat(40), author_email: "wuyz@sdrising.com" })), /SHA/);
+  await assert.rejects(readGitlabCommitAuthorEmail(config, 7, sha, async () => new Response("denied", { status: 403 })), /HTTP 403/);
 });
 
 function mrResult(): Extract<TestdResult, { schema: "testd.plan-result/v3" }> {
@@ -47,6 +85,54 @@ function mrResult(): Extract<TestdResult, { schema: "testd.plan-result/v3" }> {
     gate: { state: "success", reason: "未发现回归错误" }, reportUrl: "https://reports.example.test/?runId=PLAN-(35)",
   };
 }
+
+test("MR 门禁失败才给源提交作者发一次私聊，重试复用公开与私聊消息", async () => {
+  const publicMessages = new Map<string, string>();
+  const directMessages = new Map<string, string>();
+  const lookedUp: string[] = [];
+  let failDirect = false;
+  const ports = {
+    async sendPublic(input: { messageId: string; body: string }) { publicMessages.set(input.messageId, input.body); return input.messageId; },
+    async readCommitAuthor(projectId: number, sha: string) {
+      lookedUp.push(`${projectId}:${sha}`);
+      return "872294056@qq.com";
+    },
+    async sendDirect(input: { messageId: string; body: string; recipientEmail: string }) {
+      if (failDirect) throw new Error("私聊投递失败");
+      assert.equal(input.recipientEmail, "543@sd.com");
+      directMessages.set(input.messageId, input.body);
+    },
+  };
+  const passed = mrResult();
+  const input = { event: passed, body: "TestD 门禁结果", messageId: resultMessageId(config, passed.eventId) };
+  await deliverTestdResult(input, config, ports);
+  await deliverTestdResult({ ...input, event: { ...passed, status: "failed", summary: null } }, config, ports);
+  assert.equal(publicMessages.size, 1);
+  assert.equal(directMessages.size, 0);
+  assert.equal(lookedUp.length, 0);
+
+  const failed = { ...passed, gate: { state: "failed" as const, reason: "发现回归错误" } };
+  failDirect = true;
+  await assert.rejects(deliverTestdResult({ ...input, event: failed }, config, ports), /私聊投递失败/);
+  assert.equal(publicMessages.size, 1, "私聊失败后公开消息保留且不重复");
+  failDirect = false;
+  await deliverTestdResult({ ...input, event: failed }, config, ports);
+  await deliverTestdResult({ ...input, event: failed }, config, ports);
+  assert.deepEqual(lookedUp, Array(3).fill(`7:${passed.mergeRequest!.sourceSha}`));
+  assert.deepEqual([...directMessages.keys()], [directResultMessageId(config, failed.eventId)]);
+  assert.equal(publicMessages.size, 1);
+});
+
+test("未登记的 Git 作者不能被猜测成其他 ORF 收件人", async () => {
+  const failed = { ...mrResult(), gate: { state: "failed" as const, reason: "回归错误" } };
+  let sentDirect = false;
+  await assert.rejects(deliverTestdResult({ event: failed, body: "失败", messageId: "public" }, config, {
+    sendPublic: async () => "public",
+    readCommitAuthor: async () => "unknown@example.test",
+    sendDirect: async () => { sentDirect = true; },
+  }), /未配置/);
+  assert.equal(sentDirect, false);
+});
 
 function renderedResult(current: TestdResult): string {
   // Ignore plain text/emoji span wrappers while retaining semantic Markdown elements.
@@ -158,11 +244,14 @@ test("v2 三种触发来源准确显示，v1 保持历史范围，定时事件�
 test("v3 区分 MR 回归门禁和执行结果，严格校验来源与提交", async t => {
   const app = Fastify(); t.after(() => app.close());
   const messages: string[] = [];
-  registerTestdResultRoute(app, config, async input => { messages.push(input.body); return input.messageId; });
+  const events: TestdResult[] = [];
+  registerTestdResultRoute(app, config, async input => { messages.push(input.body); events.push(input.event); return input.messageId; });
   const mr = { projectId: 7, iid: 123, sourceBranch: "feature/testd", targetBranch: "main", sourceSha: event.targetSha, url: "https://gitlab.example.test/develop/aio/-/merge_requests/123" };
   const current = { ...event, schema: "testd.plan-result/v3", source: "gitlab_merge_request", mergeRequest: mr,
     summary: { ...event.summary, regressionErrors: 1, comparisonUnavailable: false }, gate: { state: "failed", reason: "发现回归错误，阻断合并" } };
   assert.equal((await app.inject(signed(current))).statusCode, 200);
+  assert.equal(events[0]?.schema, "testd.plan-result/v3");
+  if (events[0]?.schema === "testd.plan-result/v3") assert.equal(events[0].gate?.state, "failed");
   assert.match(messages[0]!, /回归错误/); assert.match(messages[0]!, /MR !123/); assert.match(messages[0]!, /合并门禁：阻断/);
   const executionError = { ...current, status: "failed", summary: null, gate: { state: "success", reason: "无法判断回归，按当前策略放行" } };
   assert.equal((await app.inject(signed(executionError))).statusCode, 200);

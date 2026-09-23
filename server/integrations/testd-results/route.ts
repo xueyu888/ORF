@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { authenticateResult, formatResult, resultMessageId, resultSchema, type ResultConfig } from "./model";
+import { authenticateResult, formatResult, resultMessageId, resultSchema, type ResultConfig, type TestdResult } from "./model";
 
-export type ResultDelivery = (input: { messageId: string; body: string }) => Promise<string>;
+export type ResultDelivery = (input: { messageId: string; body: string; event: TestdResult }) => Promise<string>;
 
 export function registerTestdResultRoute(app: FastifyInstance, config: ResultConfig, deliver: ResultDelivery) {
   void app.register(async scope => {
@@ -18,10 +18,10 @@ export function registerTestdResultRoute(app: FastifyInstance, config: ResultCon
       const result = resultSchema.safeParse(parsed);
       if (!result.success || result.data.instanceId !== config.instanceId || result.data.eventId !== eventId) return reply.code(400).send({ error: "invalid_result" });
       try {
-        const messageId = await deliver({ messageId: resultMessageId(config, result.data.eventId), body: formatResult(result.data, config) });
+        const messageId = await deliver({ messageId: resultMessageId(config, result.data.eventId), body: formatResult(result.data, config), event: result.data });
         return { eventId, messageId };
-      } catch {
-        request.log.error("TestD 结果投递失败：请检查已配置的机器人、团队和公开频道");
+      } catch (error) {
+        request.log.error({ reason: error instanceof Error ? error.message : "未知错误" }, "TestD 结果投递失败");
         return reply.code(503).send({ error: "delivery_unavailable" });
       }
     });

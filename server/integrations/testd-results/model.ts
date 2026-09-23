@@ -28,7 +28,8 @@ export const resultSchema = z.discriminatedUnion("schema", [
     : !e.mergeRequest && !e.gate), "MR 来源、提交和门禁不一致");
 export type TestdResult = z.infer<typeof resultSchema>;
 const sourceLabels: Record<TestdResult["source"], string> = { manual: "手动按计划运行", gitlab: "main 推送", scheduled: "定时执行", gitlab_merge_request: "GitLab MR 自动运行" };
-export type ResultConfig = { secret: string; instanceId: string; teamId: string; channelId: string; reportOrigin?: string };
+export type ResultConfig = { secret: string; instanceId: string; teamId: string; channelId: string;
+  gitlabUrl: string; gitlabProjectId: number; gitlabReadToken: string; reportOrigin?: string };
 
 export function readResultConfig(env: NodeJS.ProcessEnv): ResultConfig | null {
   if (env.TESTD_RESULTS_ENABLED !== "true") return null;
@@ -37,7 +38,12 @@ export function readResultConfig(env: NodeJS.ProcessEnv): ResultConfig | null {
   if (secret.length < 32) throw new Error("TESTD_RESULTS_SECRET 至少 32 字符");
   const instanceId = required("TESTD_RESULTS_INSTANCE_ID");
   if (!/^[a-zA-Z0-9_-]{1,80}$/.test(instanceId)) throw new Error("无效 TestD 实例 ID");
-  const config: ResultConfig = { secret, instanceId, teamId: required("TESTD_RESULTS_TEAM_ID"), channelId: required("TESTD_RESULTS_CHANNEL_ID") };
+  const gitlabUrl = new URL(required("GITLAB_URL"));
+  if (!["http:", "https:"].includes(gitlabUrl.protocol) || gitlabUrl.username || gitlabUrl.password) throw new Error("无效 GitLab 地址");
+  const gitlabProjectId = Number(required("TESTD_RESULTS_GITLAB_PROJECT_ID"));
+  if (!Number.isSafeInteger(gitlabProjectId) || gitlabProjectId <= 0) throw new Error("无效 TestD GitLab 项目 ID");
+  const config: ResultConfig = { secret, instanceId, teamId: required("TESTD_RESULTS_TEAM_ID"), channelId: required("TESTD_RESULTS_CHANNEL_ID"),
+    gitlabUrl: gitlabUrl.href, gitlabProjectId, gitlabReadToken: required("TESTD_RESULTS_GITLAB_READ_TOKEN") };
   if (env.TESTD_RESULTS_REPORT_ORIGIN) {
     const url = new URL(env.TESTD_RESULTS_REPORT_ORIGIN);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error("无效报告来源");
@@ -54,7 +60,15 @@ export function authenticateResult(raw: string, eventId: unknown, timestamp: unk
 }
 
 export function resultMessageId(config: ResultConfig, eventId: string): string {
-  const bytes = createHash("sha256").update(JSON.stringify(["testd-result-v1", config.instanceId, eventId, config.teamId, config.channelId])).digest().subarray(0, 16);
+  return stableMessageId(["testd-result-v1", config.instanceId, eventId, config.teamId, config.channelId]);
+}
+
+export function directResultMessageId(config: ResultConfig, eventId: string): string {
+  return stableMessageId(["testd-result-direct-v1", config.instanceId, eventId, config.teamId]);
+}
+
+function stableMessageId(parts: string[]): string {
+  const bytes = createHash("sha256").update(JSON.stringify(parts)).digest().subarray(0, 16);
   bytes[6] = (bytes[6]! & 15) | 64; bytes[8] = (bytes[8]! & 63) | 128;
   const h = bytes.toString("hex");
   return `chat-message-client-${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
