@@ -3202,9 +3202,10 @@ export async function getChatAttachmentContent(
       LEFT JOIN chat_messages m ON m.id = a.message_id
       WHERE a.id = $1
         AND a.team_id = $2
+        AND ${visibleChatMessageSql("m", "$3", "$4", "$5")}
       LIMIT 1
     `,
-    [attachmentId, storageTeamId(actor)],
+    [attachmentId, storageTeamId(actor), actor.id, E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN, normalizedE2eNotificationViewerEmails()],
   );
   const row = rows[0];
   if (!row || row.deleted_at) return { status: "notFound" };

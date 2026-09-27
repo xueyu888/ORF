@@ -1,3 +1,5 @@
+import { canReadWorkLog } from "../access/resourceAudience";
+import { workLogVisibilityFilter } from "../workLogs/workLogAccess";
 import { and, asc, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type {
@@ -929,9 +931,9 @@ export async function deleteMyWorkLogEntry(
   return { status: "ok", entries: await listMyWorkLogDay(user.id, scope, existing.workDate) };
 }
 
-export async function listWorkLogActivity(scope: RuntimeScope, query: WorkLogActivityQuery = {}): Promise<WorkLogActivityItem[]> {
+export async function listWorkLogActivity(scope: RuntimeScope, viewerUserId: string, query: WorkLogActivityQuery = {}): Promise<WorkLogActivityItem[]> {
   const storageScopeId = runtimeScopeStorageId(scope);
-  const filters = [eq(workLogEntries.teamId, storageScopeId)];
+  const filters = [eq(workLogEntries.teamId, storageScopeId), workLogVisibilityFilter(viewerUserId)];
   if (query.from) {
     filters.push(gte(workLogEntries.workDate, query.from));
   }
@@ -1089,7 +1091,7 @@ export async function getWorkLogReport(
     userFilters.push(eq(users.id, user.id));
   }
 
-  const userRows = await db
+  const allUserRows = await db
     .select({
       avatarObjectKey: users.avatarObjectKey,
       avatarUpdatedAt: users.avatarUpdatedAt,
@@ -1101,6 +1103,7 @@ export async function getWorkLogReport(
     .innerJoin(users, eq(teamMembers.userId, users.id))
     .where(and(...userFilters))
     .orderBy(asc(users.name), asc(users.id));
+  const userRows = allUserRows.filter((row) => canReadWorkLog(row.id, user.id));
   const userIds = userRows.map((row) => row.id);
   const days = dateRangeDays(query.from, query.to);
   const cellMap = new Map<string, ReportCellAccumulator>();

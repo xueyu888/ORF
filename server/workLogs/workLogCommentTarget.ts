@@ -1,3 +1,4 @@
+import { resolveWorkLogAccess } from "./workLogAccess";
 import { and, eq } from "drizzle-orm";
 import type {
   CommentTargetAccess,
@@ -18,11 +19,12 @@ function actorScopeId(actor: CommentTargetActor) {
   return actor.scope ? runtimeScopeStorageId(actor.scope) : "";
 }
 
-function canUseWorkLogCommentTarget(actor: CommentTargetActor, target: CommentTargetSnapshot): CommentTargetAccess {
+async function canUseWorkLogCommentTarget(actor: CommentTargetActor, target: CommentTargetSnapshot): Promise<CommentTargetAccess> {
   const storageScopeId = actorScopeId(actor);
   if (!storageScopeId || storageScopeId !== target.storageScopeId) {
     return "notFound";
   }
+  if (!await resolveWorkLogAccess(storageScopeId, target.targetId, actor.id)) return "notFound";
   return actor.role === "admin" || actor.role === "member" ? "allowed" : "forbidden";
 }
 

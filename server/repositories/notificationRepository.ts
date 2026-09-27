@@ -1,3 +1,4 @@
+import { notificationResourceVisibleSql } from "../notifications/notificationResourceAccess";
 import type {
   AppNotification,
   CommentTargetType,
@@ -381,6 +382,7 @@ async function listNotificationsForEvent(eventId: string): Promise<AppNotificati
       INNER JOIN notification_receipts r ON r.event_id = e.id
       LEFT JOIN users actor ON actor.id = e.actor_user_id
       WHERE e.id = $1
+        AND ${notificationResourceVisibleSql("e", "r.recipient_user_id")}
       ORDER BY r.delivered_at DESC, r.recipient_user_id
     `,
     [eventId],
@@ -530,6 +532,7 @@ async function notificationReceiptProjection(input: { notificationId: string; us
       LEFT JOIN users actor ON actor.id = e.actor_user_id
       INNER JOIN users recipient ON recipient.id = r.recipient_user_id
       WHERE e.team_id = $1
+        AND ${notificationResourceVisibleSql("e", "r.recipient_user_id")}
         AND ${e2eNotificationRecipientVisibilitySql({
           actorNamePatternParam: "$4",
           actorNameSql: "coalesce(actor.name, e.actor_name)",
@@ -584,6 +587,7 @@ export async function listNotificationsForUser(userId: string, scope: RuntimeSco
       LEFT JOIN users actor ON actor.id = e.actor_user_id
       INNER JOIN users recipient ON recipient.id = r.recipient_user_id
       WHERE e.team_id = $1
+        AND ${notificationResourceVisibleSql("e", "r.recipient_user_id")}
         AND ${e2eNotificationRecipientVisibilitySql({
           actorNamePatternParam: "$4",
           actorNameSql: "coalesce(actor.name, e.actor_name)",
@@ -620,6 +624,7 @@ export async function getUnreadNotificationCount(userId: string, scope: RuntimeS
       LEFT JOIN users actor ON actor.id = e.actor_user_id
       INNER JOIN users recipient ON recipient.id = r.recipient_user_id
       WHERE e.team_id = $1
+        AND ${notificationResourceVisibleSql("e", "r.recipient_user_id")}
         AND r.recipient_user_id = $2
         AND r.read_at IS NULL
         AND ${e2eNotificationRecipientVisibilitySql({
@@ -678,6 +683,7 @@ export async function markAllNotificationsRead(userId: string, scope: RuntimeSco
         LEFT JOIN users actor ON actor.id = e.actor_user_id,
              users recipient
         WHERE e.id = r.event_id
+        AND ${notificationResourceVisibleSql("e", "r.recipient_user_id")}
           AND recipient.id = r.recipient_user_id
           AND e.team_id = $1
           AND r.recipient_user_id = $2
@@ -831,6 +837,7 @@ export async function markNotificationReceiptsReadByEventIds(
         SET read_at = $4
         FROM notification_events e
         WHERE e.id = r.event_id
+        AND ${notificationResourceVisibleSql("e", "r.recipient_user_id")}
           AND e.team_id = $1
           AND r.recipient_user_id = $2
           AND r.event_id = ANY($3::text[])
@@ -857,6 +864,7 @@ export async function markNotificationReceiptsUnreadByEventIds(
         SET read_at = NULL
         FROM notification_events e
         WHERE e.id = r.event_id
+        AND ${notificationResourceVisibleSql("e", "r.recipient_user_id")}
           AND e.team_id = $1
           AND r.recipient_user_id = $2
           AND r.event_id = ANY($3::text[])

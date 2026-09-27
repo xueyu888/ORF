@@ -1,3 +1,4 @@
+import { notificationResourceVisibleSql } from "./notificationResourceAccess";
 export const E2E_NOTIFICATION_ACTOR_NAME_MARKER = "E2E";
 export const E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN = `%${E2E_NOTIFICATION_ACTOR_NAME_MARKER}%`;
 
@@ -73,14 +74,20 @@ export function visibleSystemNotificationMessageSql(input: {
     FROM notification_events isolated_event
     LEFT JOIN users isolated_actor ON isolated_actor.id = isolated_event.actor_user_id
     INNER JOIN users isolated_recipient ON isolated_recipient.id = ${input.recipientUserIdParam}::uuid
-    WHERE ${input.messageSql}.source = 'system'
-      AND isolated_event.id = ${input.messageSql}.system_metadata->>'notificationEventId'
-      AND NOT ${e2eNotificationRecipientVisibilitySql({
+    WHERE isolated_event.id IN (
+      CASE WHEN ${input.messageSql}.source = 'system'
+        THEN ${input.messageSql}.system_metadata->>'notificationEventId' END,
+      (SELECT isolated_root.system_metadata->>'notificationEventId'
+        FROM chat_messages isolated_root
+        WHERE isolated_root.id = ${input.messageSql}.root_message_id
+          AND isolated_root.source = 'system')
+    )
+      AND NOT (${notificationResourceVisibleSql("isolated_event", input.recipientUserIdParam)} AND ${e2eNotificationRecipientVisibilitySql({
         actorNamePatternParam: input.actorNamePatternParam,
         actorNameSql: "coalesce(isolated_actor.name, isolated_event.actor_name)",
         recipientEmailSql: "isolated_recipient.email",
         recipientNameSql: "isolated_recipient.name",
         viewerEmailsParam: input.viewerEmailsParam,
-      })}
+      })})
   )`;
 }

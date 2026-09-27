@@ -354,7 +354,7 @@ export function registerDriveRoutes(app: FastifyInstance) {
     }
     return sendRangedContent(reply, {
       body: outcome.body,
-      cacheControl: "private, max-age=60",
+      cacheControl: "private, no-store",
       contentDisposition: contentDispositionHeader(outcome.contentDisposition, outcome.fileName),
       contentLength: outcome.contentLength,
       contentType: outcome.contentType,

@@ -1,3 +1,4 @@
+import { resourceAudiences } from "../access/resourceAudience";
 import { createHash } from "node:crypto";
 import {
   CHAT_SYNC_MAX_INCREMENTAL_EVENTS,
@@ -43,6 +44,8 @@ function chatSyncPermissionFingerprint(actor: ChatActor) {
     canManageAnyMembers: actor.canManageAnyMembers,
     canRead: actor.canRead,
     canWrite: actor.canWrite,
+    resourceAudiences,
+    viewerUserId: actor.id,
     role: actor.role,
     teamId: storageTeamId(actor),
   })).digest("hex");

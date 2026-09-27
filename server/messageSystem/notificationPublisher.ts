@@ -1,3 +1,4 @@
+import { restrictNotificationAudience } from "../notifications/notificationResourceAccess";
 import type { CommentTargetType } from "../../src/types/orf";
 import { isCommentTargetType } from "../comments/commentTargetAdapters";
 import { notificationPolicy } from "../notifications/policies/registry";
@@ -14,12 +15,14 @@ type PublishNotificationEventInput = Omit<NotificationEventInput, "replyTargetId
 export async function publishNotificationEvent(input: PublishNotificationEventInput) {
   const policy = notificationPolicy(input.kind);
   const replyTarget = inferredReplyTarget(input, policy.replyTarget);
-  const notifications = await createNotificationEvent({
+  const restrictedInput = await restrictNotificationAudience({
     ...input,
     replyTargetId: input.replyTargetId ?? replyTarget?.targetId ?? null,
     replyTargetType: input.replyTargetType ?? replyTarget?.targetType ?? null,
     stream: input.stream ?? policy.stream,
   });
+  if (!restrictedInput) return [];
+  const notifications = await createNotificationEvent(restrictedInput);
   const eventId = notifications[0]?.id;
   if (eventId) {
     await flushNotificationChatDeliveriesForEvent(eventId).catch(() => undefined);

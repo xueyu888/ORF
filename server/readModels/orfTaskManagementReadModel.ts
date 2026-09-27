@@ -1,4 +1,6 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { workLogTargetVisibleSql } from "../workLogs/workLogAccess";
+import { sqlText } from "../access/resourceAudience";
+import { and, sql, desc, eq, inArray } from "drizzle-orm";
 import { createDefaultOrfReadModelRules, type ReportsPageData, type TaskManagementData } from "../../src/domain/orfReadModel";
 import type {
   CommentThread,
@@ -93,7 +95,13 @@ function scopedStorageId(scope: TaskManagementDataScope) {
 async function getCommentRows(scope: TaskManagementDataScope): Promise<[CommentThreadRow[], CommentMessageRow[], CommentAttachmentRow[]]> {
   try {
     const storageScopeId = scopedStorageId(scope);
-    const threadRows = await db.select().from(commentThreads).where(eq(commentThreads.teamId, storageScopeId));
+    const visibleWorkLogTarget = workLogTargetVisibleSql(
+      "comment_threads.target_id", "comment_threads.team_id", sqlText(scope.viewerUserId ?? ""),
+    );
+    const threadRows = await db.select().from(commentThreads).where(and(
+      eq(commentThreads.teamId, storageScopeId),
+      sql.raw(`(target_type <> 'workLog' OR ${visibleWorkLogTarget})`),
+    ));
     const threadIds = threadRows.map((thread) => thread.id);
     const messageRows =
       threadIds.length > 0

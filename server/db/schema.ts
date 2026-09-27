@@ -147,6 +147,7 @@ export const driveNodes = pgTable(
       .notNull()
       .references(() => teams.id, { onDelete: "cascade" }),
     parentId: text("parent_id"),
+    audienceId: text("audience_id"),
     nodeType: driveNodeTypeEnum("node_type").notNull(),
     name: text("name").notNull(),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),

@@ -1,3 +1,4 @@
+import { resolveWorkLogAccess } from "../workLogs/workLogAccess";
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import {
@@ -2560,9 +2561,11 @@ export async function listCommentMentionableUsers(
   }
 
   const scopedUsers = await getScopedUsers(runtimeScope(target.storageScopeId));
+  const audience = input.targetType === "workLog"
+    ? (await resolveWorkLogAccess(target.storageScopeId, input.targetId, actor.id))?.audience : null;
   return {
     status: "ok",
-    users: scopedUsers.filter((user) => user.status === "active"),
+    users: scopedUsers.filter((user) => user.status === "active" && (!audience || audience.readerUserIds.includes(user.id))),
   };
 }
 

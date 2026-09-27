@@ -302,6 +302,6 @@ export function registerWorkLogRoutes(app: FastifyInstance) {
     }
 
     const query = activityQuerySchema.parse(request.query);
-    return { entries: await listWorkLogActivity(context.scope, query) };
+    return { entries: await listWorkLogActivity(context.scope, context.user.id, query) };
   });
 }

@@ -1,3 +1,5 @@
+import { driveNodeVisibleSql } from "../drive/driveAccess";
+import { resolveWorkLogAccess } from "../workLogs/workLogAccess";
 import { Readable } from "node:stream";
 import {
   byteRangeContentLength,
@@ -624,7 +626,7 @@ async function ensureTeamDriveRoot(actor: ChatActor) {
   return createdRoot;
 }
 
-async function listChildren(parentNodeId: string, teamId: string) {
+async function listChildren(parentNodeId: string, teamId: string, viewerId: string) {
   const { rows } = await pool.query<DriveRow>(
     `
       SELECT n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
@@ -636,6 +638,7 @@ async function listChildren(parentNodeId: string, teamId: string) {
       LEFT JOIN drive_files f ON f.node_id = n.id
       LEFT JOIN users creator ON creator.id = n.created_by
       WHERE n.team_id = $1
+        AND ${driveNodeVisibleSql("n", viewerId)}
         AND n.parent_id = $2
         AND n.deleted_at IS NULL
       ORDER BY (n.node_type = 'folder') DESC, lower(n.name), n.created_at ASC
@@ -645,7 +648,7 @@ async function listChildren(parentNodeId: string, teamId: string) {
   return rows.map(driveNodeDto);
 }
 
-async function getDriveNodeById(nodeId: string, teamId: string, options: { includeDeleted?: boolean } = {}) {
+async function getDriveNodeById(nodeId: string, teamId: string, viewerId: string, options: { includeDeleted?: boolean } = {}) {
   const { rows } = await pool.query<DriveRow>(
     `
       SELECT n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
@@ -663,6 +666,7 @@ async function getDriveNodeById(nodeId: string, teamId: string, options: { inclu
       ) version_stats ON true
       LEFT JOIN users creator ON creator.id = n.created_by
       WHERE n.team_id = $1
+        AND ${driveNodeVisibleSql("n", viewerId)}
         AND n.id = $2
         AND ($3::boolean OR n.deleted_at IS NULL)
       LIMIT 1
@@ -672,7 +676,7 @@ async function getDriveNodeById(nodeId: string, teamId: string, options: { inclu
   return rows[0] ? driveNodeDto(rows[0]) : null;
 }
 
-async function listRecentNodes(teamId: string, limit = 12) {
+async function listRecentNodes(teamId: string, viewerId: string, limit = 12) {
   const { rows } = await pool.query<DriveRow>(
     `
       SELECT n.id, n.parent_id, n.node_type, n.name, n.created_by, creator.name AS created_by_name,
@@ -690,6 +694,7 @@ async function listRecentNodes(teamId: string, limit = 12) {
       ) version_stats ON true
       LEFT JOIN users creator ON creator.id = n.created_by
       WHERE n.team_id = $1
+        AND ${driveNodeVisibleSql("n", viewerId)}
         AND n.parent_id IS NOT NULL
         AND n.deleted_at IS NULL
       ORDER BY n.updated_at DESC, n.created_at DESC
@@ -700,21 +705,22 @@ async function listRecentNodes(teamId: string, limit = 12) {
   return rows.map(driveNodeDto);
 }
 
-async function countTrashNodes(teamId: string) {
+async function countTrashNodes(teamId: string, viewerId: string) {
   const { rows } = await pool.query<{ count: string }>(
-    "SELECT COUNT(*)::text AS count FROM drive_nodes WHERE team_id = $1 AND deleted_at IS NOT NULL",
+    `SELECT COUNT(*)::text AS count FROM drive_nodes WHERE team_id = $1 AND deleted_at IS NOT NULL AND ${driveNodeVisibleSql("drive_nodes", viewerId)}`,
     [teamId],
   );
   return Number(rows[0]?.count ?? 0);
 }
 
-async function findFolderNode(nodeId: string, teamId: string) {
+async function findFolderNode(nodeId: string, teamId: string, viewerId: string) {
   const { rows } = await pool.query<{ id: string }>(
     `
       SELECT id
       FROM drive_nodes
       WHERE id = $1
         AND team_id = $2
+        AND ${driveNodeVisibleSql("drive_nodes", viewerId)}
         AND node_type = 'folder'
         AND deleted_at IS NULL
       LIMIT 1
@@ -724,13 +730,14 @@ async function findFolderNode(nodeId: string, teamId: string) {
   return rows[0] ?? null;
 }
 
-async function findNode(nodeId: string, teamId: string) {
+async function findNode(nodeId: string, teamId: string, viewerId: string) {
   const { rows } = await pool.query<{ id: string; node_type: "folder" | "file"; parent_id: string | null }>(
     `
       SELECT id, node_type, parent_id
       FROM drive_nodes
       WHERE id = $1
         AND team_id = $2
+        AND ${driveNodeVisibleSql("drive_nodes", viewerId)}
         AND deleted_at IS NULL
       LIMIT 1
     `,
@@ -739,7 +746,7 @@ async function findNode(nodeId: string, teamId: string) {
   return rows[0] ?? null;
 }
 
-async function findDriveFileForVersion(fileId: string, teamId: string) {
+async function findDriveFileForVersion(fileId: string, teamId: string, viewerId: string) {
   const { rows } = await pool.query<DriveMutableFileRow>(
     `
       SELECT f.id, f.team_id, f.node_id, n.name AS node_name, f.object_key, f.file_name, f.mime_type,
@@ -753,6 +760,7 @@ async function findDriveFileForVersion(fileId: string, teamId: string) {
         WHERE file_id = f.id
       ) version_stats ON true
       WHERE f.id = $1
+        AND ${driveNodeVisibleSql("n", viewerId)}
         AND f.team_id = $2
         AND n.deleted_at IS NULL
       LIMIT 1
@@ -762,14 +770,22 @@ async function findDriveFileForVersion(fileId: string, teamId: string) {
   return rows[0] ?? null;
 }
 
+async function nodeHasRestrictedAudience(nodeId: string, teamId: string) {
+  const { rows } = await pool.query<{ restricted: boolean }>(
+    `SELECT NOT ${driveNodeVisibleSql("n", "")} AS restricted FROM drive_nodes n WHERE n.id = $1 AND n.team_id = $2`,
+    [nodeId, teamId],
+  );
+  return rows[0]?.restricted ?? true;
+}
+
 async function driveBootstrap(actor: ChatActor): Promise<DriveBootstrap> {
   const teamId = storageTeamId(actor);
   const root = await ensureTeamDriveRoot(actor);
   return {
-    children: await listChildren(root.id, teamId),
-    recentNodes: await listRecentNodes(teamId),
+    children: await listChildren(root.id, teamId, actor.id),
+    recentNodes: await listRecentNodes(teamId, actor.id),
     root,
-    trashCount: await countTrashNodes(teamId),
+    trashCount: await countTrashNodes(teamId, actor.id),
     uploadMaxBytes: env.ORF_INFRA_UPLOAD_MAX_BYTES,
   };
 }
@@ -798,7 +814,7 @@ function canManageChatDriveLinks(actor: ChatActor, channel: ChatChannelAccessRow
   return actor.canManageAnyChannel || channel.member_role === "owner" || channel.member_role === "admin";
 }
 
-async function listChatDriveLinks(channelId: string, teamId: string) {
+async function listChatDriveLinks(channelId: string, teamId: string, viewerId: string) {
   const { rows } = await pool.query<ChatDriveLinkRow>(
     `
       SELECT l.id AS link_id, l.channel_id, l.label, l.is_default_upload_target,
@@ -813,6 +829,7 @@ async function listChatDriveLinks(channelId: string, teamId: string) {
       LEFT JOIN drive_files f ON f.node_id = n.id
       LEFT JOIN users creator ON creator.id = n.created_by
       WHERE l.team_id = $1
+        AND ${driveNodeVisibleSql("n", viewerId)}
         AND l.channel_id = $2
       ORDER BY l.is_default_upload_target DESC, lower(COALESCE(l.label, n.name)), l.created_at ASC
     `,
@@ -833,7 +850,7 @@ export async function getChatDriveBootstrap(channelId: string, actor: ChatActor)
   return {
     status: "ok",
     drive: await driveBootstrap(actor),
-    links: await listChatDriveLinks(channel.channel.id, teamId),
+    links: await listChatDriveLinks(channel.channel.id, teamId, actor.id),
   };
 }
 
@@ -843,10 +860,10 @@ export async function listDriveChildren(
 ): Promise<Outcome<{ children: DriveNode[]; parentNodeId: string }>> {
   if (!actor.canRead) return { status: "forbidden" };
   const teamId = storageTeamId(actor);
-  const parent = await findFolderNode(input.parentNodeId, teamId);
+  const parent = await findFolderNode(input.parentNodeId, teamId, actor.id);
   if (!parent) return { status: "notFound" };
   return ok({
-    children: await listChildren(parent.id, teamId),
+    children: await listChildren(parent.id, teamId, actor.id),
     parentNodeId: parent.id,
   });
 }
@@ -955,7 +972,7 @@ export async function getDriveNodeDetails(
 ): Promise<Outcome<{ details: DriveNodeDetails }>> {
   if (!actor.canRead) return { status: "forbidden" };
   const teamId = storageTeamId(actor);
-  const node = await getDriveNodeById(input.nodeId, teamId, { includeDeleted: true });
+  const node = await getDriveNodeById(input.nodeId, teamId, actor.id, { includeDeleted: true });
   if (!node) return { status: "notFound" };
   const [activity, contextLinks, path, versions] = await Promise.all([
     listDriveNodeEvents(node.id, teamId),
@@ -993,7 +1010,7 @@ export async function searchDriveNodes(
   if (!actor.canRead) return { status: "forbidden" };
   const teamId = storageTeamId(actor);
   const params: unknown[] = [teamId];
-  const conditions = ["n.team_id = $1", "n.parent_id IS NOT NULL"];
+  const conditions = ["n.team_id = $1", "n.parent_id IS NOT NULL", driveNodeVisibleSql("n", actor.id)];
   const status = input.status ?? (input.scope === "trash" ? "trash" : "active");
   if (status === "trash") {
     conditions.push("n.deleted_at IS NOT NULL");
@@ -1189,6 +1206,7 @@ export async function listDriveTrash(actor: ChatActor): Promise<Outcome<{ nodes:
       ) version_stats ON true
       LEFT JOIN users creator ON creator.id = n.created_by
       WHERE n.team_id = $1
+        AND ${driveNodeVisibleSql("n", actor.id)}
         AND n.deleted_at IS NOT NULL
         AND (n.parent_id IS NULL OR parent.deleted_at IS NULL)
       ORDER BY n.deleted_at DESC, lower(n.name)
@@ -1207,7 +1225,7 @@ export async function createDriveFolder(
   const folderName = sanitizeFolderName(input.name);
   if (!folderName) return { status: "invalid" };
   const teamId = storageTeamId(actor);
-  const parent = await findFolderNode(input.parentNodeId, teamId);
+  const parent = await findFolderNode(input.parentNodeId, teamId, actor.id);
   if (!parent) return { status: "notFound" };
 
   const nodeId = makeId("drive-node");
@@ -1270,8 +1288,13 @@ export async function uploadDriveFile(
   const fileName = sanitizeDriveName(input.fileName);
   if (!fileName) return { status: "invalid" };
   const teamId = storageTeamId(actor);
-  const parent = await findFolderNode(input.parentNodeId, teamId);
+  const parent = await findFolderNode(input.parentNodeId, teamId, actor.id);
   if (!parent) return { status: "notFound" };
+  const workLogAccess = input.contextLink?.contextType === "workLog"
+    ? await resolveWorkLogAccess(teamId, input.contextLink.contextId, actor.id) : null;
+  if (input.contextLink?.contextType === "workLog" && !workLogAccess) return { status: "notFound" };
+  const audienceId = workLogAccess?.audience?.id ?? null;
+  if (input.channelId && (audienceId || await nodeHasRestrictedAudience(parent.id, teamId))) return { status: "forbidden" };
   const contextTitle = input.contextLink
     ? await resolveDriveContext(teamId, input.contextLink.contextType, input.contextLink.contextId)
     : null;
@@ -1395,6 +1418,9 @@ export async function uploadDriveFile(
         teamId,
         timestamp: now,
       });
+      if (audienceId) {
+        await client.query("UPDATE drive_nodes SET audience_id = $2 WHERE id = $1", [nodeId, audienceId]);
+      }
       if (input.contextLink) {
         const label = input.contextLink.label?.trim() || null;
         await client.query(
@@ -1505,7 +1531,7 @@ export async function deleteDriveNode(
 ): Promise<Outcome<{ deletedNodeIds: string[] }>> {
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
   const teamId = storageTeamId(actor);
-  const node = await findNode(input.nodeId, teamId);
+  const node = await findNode(input.nodeId, teamId, actor.id);
   if (!node || node.parent_id === null) return { status: "notFound" };
 
   const now = nowIso();
@@ -1530,12 +1556,16 @@ export async function deleteDriveNode(
             updated_at = $3,
             updated_by = $4
         WHERE id IN (SELECT id FROM target_nodes)
+          AND NOT EXISTS (SELECT 1 FROM drive_nodes protected_node
+            WHERE protected_node.id IN (SELECT id FROM target_nodes)
+              AND NOT ${driveNodeVisibleSql("protected_node", actor.id)})
         RETURNING id
       )
       SELECT id FROM updated
     `,
     [input.nodeId, teamId, now, actor.id],
   );
+  if (rows.length === 0) return { status: "forbidden" };
   if (rows.length > 0) {
     await recordDriveEvent(pool, {
       action: "node_deleted",
@@ -1555,7 +1585,7 @@ export async function restoreDriveNode(
 ): Promise<Outcome<{ node: DriveNode; restoredNodeIds: string[] }>> {
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
   const teamId = storageTeamId(actor);
-  const existing = await getDriveNodeById(input.nodeId, teamId, { includeDeleted: true });
+  const existing = await getDriveNodeById(input.nodeId, teamId, actor.id, { includeDeleted: true });
   if (!existing || !existing.deletedAt || existing.parentId === null) return { status: "notFound" };
 
   const now = nowIso();
@@ -1582,6 +1612,9 @@ export async function restoreDriveNode(
               updated_at = $3,
               updated_by = $4
           WHERE id IN (SELECT id FROM target_nodes)
+          AND NOT EXISTS (SELECT 1 FROM drive_nodes protected_node
+            WHERE protected_node.id IN (SELECT id FROM target_nodes)
+              AND NOT ${driveNodeVisibleSql("protected_node", actor.id)})
           RETURNING id
         )
         SELECT id FROM updated
@@ -1601,7 +1634,7 @@ export async function restoreDriveNode(
       timestamp: now,
     });
     await client.query("commit");
-    const node = await getDriveNodeById(input.nodeId, teamId);
+    const node = await getDriveNodeById(input.nodeId, teamId, actor.id);
     if (!node) return { status: "notFound" };
     return ok({ node, restoredNodeIds: rows.map((row) => row.id) });
   } catch (error) {
@@ -1619,7 +1652,7 @@ export async function getDriveFileVersions(
 ): Promise<Outcome<{ versions: DriveFileVersion[] }>> {
   if (!actor.canRead) return { status: "forbidden" };
   const teamId = storageTeamId(actor);
-  const file = await findDriveFileForVersion(input.fileId, teamId);
+  const file = await findDriveFileForVersion(input.fileId, teamId, actor.id);
   if (!file) return { status: "notFound" };
   return ok({ versions: await listDriveFileVersions(input.fileId, teamId) });
 }
@@ -1632,7 +1665,7 @@ export async function uploadDriveFileVersion(
   const uploadedFileName = sanitizeDriveName(input.fileName);
   if (!uploadedFileName) return { status: "invalid" };
   const teamId = storageTeamId(actor);
-  const file = await findDriveFileForVersion(input.fileId, teamId);
+  const file = await findDriveFileForVersion(input.fileId, teamId, actor.id);
   if (!file) return { status: "notFound" };
 
   const versionId = makeId("drive-version");
@@ -1760,7 +1793,7 @@ export async function uploadDriveFileVersion(
     await client.query("commit");
     persisted = true;
     const [node, versions] = await Promise.all([
-      getDriveNodeById(file.node_id, teamId),
+      getDriveNodeById(file.node_id, teamId, actor.id),
       listDriveFileVersions(file.id, teamId),
     ]);
     if (!node) return { status: "notFound" };
@@ -1784,7 +1817,7 @@ export async function restoreDriveFileVersion(
 ): Promise<Outcome<{ node: DriveNode; versions: DriveFileVersion[] }>> {
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
   const teamId = storageTeamId(actor);
-  const file = await findDriveFileForVersion(input.fileId, teamId);
+  const file = await findDriveFileForVersion(input.fileId, teamId, actor.id);
   if (!file) return { status: "notFound" };
   const { rows } = await pool.query<DriveFileVersionContentRow>(
     `
@@ -1891,7 +1924,7 @@ export async function restoreDriveFileVersion(
     });
     await client.query("commit");
     const [node, versions] = await Promise.all([
-      getDriveNodeById(file.node_id, teamId),
+      getDriveNodeById(file.node_id, teamId, actor.id),
       listDriveFileVersions(file.id, teamId),
     ]);
     if (!node) return { status: "notFound" };
@@ -1981,8 +2014,12 @@ export async function addDriveContextLink(
 ): Promise<Outcome<{ details: DriveNodeDetails }>> {
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
   const teamId = storageTeamId(actor);
-  const node = await findNode(input.nodeId, teamId);
+  const node = await findNode(input.nodeId, teamId, actor.id);
   if (!node) return { status: "notFound" };
+  const workLogAccess = input.contextType === "workLog"
+    ? await resolveWorkLogAccess(teamId, input.contextId, actor.id) : null;
+  if (input.contextType === "workLog" && !workLogAccess) return { status: "notFound" };
+  if (workLogAccess?.audience && node.parent_id === null) return { status: "invalid" };
   const contextTitle = await resolveDriveContext(teamId, input.contextType, input.contextId);
   if (!contextTitle) return { status: "notFound" };
   const now = nowIso();
@@ -1990,6 +2027,9 @@ export async function addDriveContextLink(
   const client = await pool.connect();
   try {
     await client.query("begin");
+    if (workLogAccess?.audience) {
+      await client.query("UPDATE drive_nodes SET audience_id = $2 WHERE id = $1 AND team_id = $3", [input.nodeId, workLogAccess.audience.id, teamId]);
+    }
     await client.query(
       `
         INSERT INTO drive_node_context_links (id, team_id, node_id, context_type, context_id, label, created_by, created_at)
@@ -2028,6 +2068,7 @@ export async function deleteDriveContextLink(
 ): Promise<Outcome<{ details: DriveNodeDetails }>> {
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
   const teamId = storageTeamId(actor);
+  if (!await findNode(input.nodeId, teamId, actor.id)) return { status: "notFound" };
   const { rows } = await pool.query<{ context_id: string; context_type: DriveContextType; label: string | null; node_id: string }>(
     `
       SELECT node_id, context_type, context_id, label
@@ -2093,6 +2134,7 @@ export async function getDriveFileContent(
       FROM drive_files f
       INNER JOIN drive_nodes n ON n.id = f.node_id
       WHERE f.id = $1
+        AND ${driveNodeVisibleSql("n", actor.id)}
         AND f.team_id = $2
         AND n.deleted_at IS NULL
       LIMIT 1
@@ -2144,7 +2186,7 @@ export async function addChatDriveLink(
   if (channel.status !== "ok") return channel;
   if (!canManageChatDriveLinks(actor, channel.channel)) return { status: "forbidden" };
   const teamId = storageTeamId(actor);
-  const node = await findNode(input.nodeId, teamId);
+  const node = await findNode(input.nodeId, teamId, actor.id);
   if (!node) return { status: "notFound" };
   if (input.isDefaultUploadTarget && node.node_type !== "folder") return { status: "invalid" };
 
@@ -2207,7 +2249,7 @@ export async function updateChatDriveLink(
       SELECT l.node_id, n.node_type
       FROM chat_channel_drive_links l
       INNER JOIN drive_nodes n ON n.id = l.node_id AND n.team_id = l.team_id AND n.deleted_at IS NULL
-      WHERE l.id = $1 AND l.team_id = $2 AND l.channel_id = $3
+      WHERE ${driveNodeVisibleSql("n", actor.id)} AND l.id = $1 AND l.team_id = $2 AND l.channel_id = $3
       LIMIT 1
     `,
     [input.linkId, teamId, input.channelId],
@@ -2270,7 +2312,7 @@ export async function deleteChatDriveLink(
     [input.linkId, teamId, input.channelId],
   );
   const link = rows[0];
-  if (!link) return { status: "notFound" };
+  if (!link || !await findNode(link.node_id, teamId, actor.id)) return { status: "notFound" };
   const now = nowIso();
   const client = await pool.connect();
   try {

@@ -404,7 +404,7 @@ export function validateDriveManagementSchema(snapshot: { columns: RuntimeTableC
       errors.push(`drive_nodes.${columnName} must be NOT NULL.`);
     }
   }
-  for (const columnName of ["parent_id", "created_by", "updated_by", "deleted_by", "deleted_at"]) {
+  for (const columnName of ["parent_id", "audience_id", "created_by", "updated_by", "deleted_by", "deleted_at"]) {
     if (!nodeColumns.has(columnName)) {
       errors.push(`drive_nodes.${columnName} is missing.`);
     }
