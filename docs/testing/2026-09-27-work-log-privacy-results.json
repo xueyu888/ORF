@@ -1,0 +1,386 @@
+{
+  "run": "privacy-1790514618629",
+  "commit": "31fb2199",
+  "startedAt": "2026-09-27T13:10:19.290Z",
+  "environment": {
+    "database": "isolated PostgreSQL 17, production schema only",
+    "auth": "real Ory password login with synthetic identities",
+    "storage": "orf-comment-attachments"
+  },
+  "checks": [
+    {
+      "name": "真实密码登录 luban"
+    },
+    {
+      "name": "真实密码登录 xue"
+    },
+    {
+      "name": "真实密码登录 other-admin"
+    },
+    {
+      "name": "真实密码登录 other-member"
+    },
+    {
+      "name": "浏览器提交私密日志并持久化",
+      "entryId": "worklog-1790514624444-82fb2a136b5f3-fe96a369-b8bc-439f-9d59-7169e4c17e96"
+    },
+    {
+      "name": "数据库作者身份正确"
+    },
+    {
+      "name": "真实附件上传持久化阅读范围"
+    },
+    {
+      "name": "薛雨可评论私密日志"
+    },
+    {
+      "name": "日志直链 luban"
+    },
+    {
+      "name": "动态隐私及普通日志回归 luban"
+    },
+    {
+      "name": "报表隔离 luban"
+    },
+    {
+      "name": "附件详情 luban"
+    },
+    {
+      "name": "真实附件下载字节 luban"
+    },
+    {
+      "name": "附件禁止共享缓存 luban"
+    },
+    {
+      "name": "分段下载不绕过权限 luban"
+    },
+    {
+      "name": "云盘全局搜索 luban"
+    },
+    {
+      "name": "历史版本 luban"
+    },
+    {
+      "name": "评论附件 luban"
+    },
+    {
+      "name": "通知列表 luban"
+    },
+    {
+      "name": "任务聚合数据评论隔离 luban"
+    },
+    {
+      "name": "桌面浏览器动态隔离 luban"
+    },
+    {
+      "name": "手机宽度无横向溢出 luban"
+    },
+    {
+      "name": "手机浏览器动态隔离 luban"
+    },
+    {
+      "name": "日志直链 xue"
+    },
+    {
+      "name": "动态隐私及普通日志回归 xue"
+    },
+    {
+      "name": "报表隔离 xue"
+    },
+    {
+      "name": "附件详情 xue"
+    },
+    {
+      "name": "真实附件下载字节 xue"
+    },
+    {
+      "name": "附件禁止共享缓存 xue"
+    },
+    {
+      "name": "分段下载不绕过权限 xue"
+    },
+    {
+      "name": "云盘全局搜索 xue"
+    },
+    {
+      "name": "历史版本 xue"
+    },
+    {
+      "name": "评论附件 xue"
+    },
+    {
+      "name": "通知列表 xue"
+    },
+    {
+      "name": "任务聚合数据评论隔离 xue"
+    },
+    {
+      "name": "桌面浏览器动态隔离 xue"
+    },
+    {
+      "name": "手机宽度无横向溢出 xue"
+    },
+    {
+      "name": "手机浏览器动态隔离 xue"
+    },
+    {
+      "name": "日志直链 other-admin"
+    },
+    {
+      "name": "动态隐私及普通日志回归 other-admin"
+    },
+    {
+      "name": "报表隔离 other-admin"
+    },
+    {
+      "name": "附件详情 other-admin"
+    },
+    {
+      "name": "真实附件下载字节 other-admin"
+    },
+    {
+      "name": "分段下载不绕过权限 other-admin"
+    },
+    {
+      "name": "云盘全局搜索 other-admin"
+    },
+    {
+      "name": "历史版本 other-admin"
+    },
+    {
+      "name": "评论附件 other-admin"
+    },
+    {
+      "name": "通知列表 other-admin"
+    },
+    {
+      "name": "任务聚合数据评论隔离 other-admin"
+    },
+    {
+      "name": "桌面浏览器动态隔离 other-admin"
+    },
+    {
+      "name": "手机宽度无横向溢出 other-admin"
+    },
+    {
+      "name": "手机浏览器动态隔离 other-admin"
+    },
+    {
+      "name": "日志直链 other-member"
+    },
+    {
+      "name": "动态隐私及普通日志回归 other-member"
+    },
+    {
+      "name": "报表隔离 other-member"
+    },
+    {
+      "name": "附件详情 other-member"
+    },
+    {
+      "name": "真实附件下载字节 other-member"
+    },
+    {
+      "name": "分段下载不绕过权限 other-member"
+    },
+    {
+      "name": "云盘全局搜索 other-member"
+    },
+    {
+      "name": "历史版本 other-member"
+    },
+    {
+      "name": "评论附件 other-member"
+    },
+    {
+      "name": "通知列表 other-member"
+    },
+    {
+      "name": "任务聚合数据评论隔离 other-member"
+    },
+    {
+      "name": "桌面浏览器动态隔离 other-member"
+    },
+    {
+      "name": "手机宽度无横向溢出 other-member"
+    },
+    {
+      "name": "手机浏览器动态隔离 other-member"
+    },
+    {
+      "name": "日志及评论仅向两名测试身份投递通知",
+      "count": 1
+    },
+    {
+      "name": "越权上传被拒 other-admin"
+    },
+    {
+      "name": "越权评论被拒 other-admin"
+    },
+    {
+      "name": "真实 SSE 不泄露私密内容 other-admin",
+      "events": 12
+    },
+    {
+      "name": "越权上传被拒 other-member"
+    },
+    {
+      "name": "越权评论被拒 other-member"
+    },
+    {
+      "name": "真实 SSE 不泄露私密内容 other-member",
+      "events": 11
+    },
+    {
+      "name": "普通附件共享回归 luban"
+    },
+    {
+      "name": "普通附件共享回归 xue"
+    },
+    {
+      "name": "普通附件共享回归 other-admin"
+    },
+    {
+      "name": "普通附件共享回归 other-member"
+    },
+    {
+      "name": "历史通知过滤 luban"
+    },
+    {
+      "name": "历史通知未读数过滤 luban"
+    },
+    {
+      "name": "历史公告列表 luban"
+    },
+    {
+      "name": "历史公告上下文直链 luban"
+    },
+    {
+      "name": "历史公告及回复全局搜索 luban"
+    },
+    {
+      "name": "历史公告话题直链 luban"
+    },
+    {
+      "name": "旧增量同步权限指纹失效 luban"
+    },
+    {
+      "name": "历史公告和回复增量事件隔离 luban"
+    },
+    {
+      "name": "历史通知过滤 xue"
+    },
+    {
+      "name": "历史通知未读数过滤 xue"
+    },
+    {
+      "name": "历史公告列表 xue"
+    },
+    {
+      "name": "历史公告上下文直链 xue"
+    },
+    {
+      "name": "历史公告及回复全局搜索 xue"
+    },
+    {
+      "name": "历史公告话题直链 xue"
+    },
+    {
+      "name": "旧增量同步权限指纹失效 xue"
+    },
+    {
+      "name": "历史公告和回复增量事件隔离 xue"
+    },
+    {
+      "name": "历史通知过滤 other-admin"
+    },
+    {
+      "name": "历史通知未读数过滤 other-admin"
+    },
+    {
+      "name": "历史公告列表 other-admin"
+    },
+    {
+      "name": "历史公告上下文直链 other-admin"
+    },
+    {
+      "name": "历史公告及回复全局搜索 other-admin"
+    },
+    {
+      "name": "历史公告话题直链 other-admin"
+    },
+    {
+      "name": "旧增量同步权限指纹失效 other-admin"
+    },
+    {
+      "name": "历史公告和回复增量事件隔离 other-admin"
+    },
+    {
+      "name": "历史通知过滤 other-member"
+    },
+    {
+      "name": "历史通知未读数过滤 other-member"
+    },
+    {
+      "name": "历史公告列表 other-member"
+    },
+    {
+      "name": "历史公告上下文直链 other-member"
+    },
+    {
+      "name": "历史公告及回复全局搜索 other-member"
+    },
+    {
+      "name": "历史公告话题直链 other-member"
+    },
+    {
+      "name": "旧增量同步权限指纹失效 other-member"
+    },
+    {
+      "name": "历史公告和回复增量事件隔离 other-member"
+    },
+    {
+      "name": "目录后代继承隔离"
+    },
+    {
+      "name": "不可通过删除共享祖先操作私密后代"
+    },
+    {
+      "name": "真实上传新文件版本"
+    },
+    {
+      "name": "薛雨恢复历史文件版本"
+    },
+    {
+      "name": "版本恢复仍受隔离"
+    },
+    {
+      "name": "解除日志关联后附件仍私密"
+    },
+    {
+      "name": "回收站隔离"
+    },
+    {
+      "name": "越权恢复被拒"
+    },
+    {
+      "name": "本人恢复后薛雨仍可读"
+    },
+    {
+      "name": "恢复后其他成员仍不可读"
+    },
+    {
+      "name": "浏览器无未捕获异常"
+    },
+    {
+      "name": "验收请求无服务端错误"
+    }
+  ],
+  "pageErrors": [],
+  "serverErrors": [],
+  "entryId": "worklog-1790514624444-82fb2a136b5f3-fe96a369-b8bc-439f-9d59-7169e4c17e96",
+  "nodeId": "drive-node-1790514624695-o-375816ad-f79f-4ddd-ae12-4da7c16daddd",
+  "fileId": "drive-file-1790514624695-n-301a7f0f-efb9-4f08-96f8-77edc0e66e2e",
+  "status": "passed",
+  "finishedAt": "2026-09-27T13:10:36.765Z"
+}
