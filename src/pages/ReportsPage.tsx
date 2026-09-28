@@ -1,13 +1,15 @@
+import { isAchievementPeriod } from "../domain/achievementPeriod";
 import { Award, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Medal, Minus, Target, TrendingDown, TrendingUp, Trophy, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { buildDateGrid, monthLabel } from "../components/DatePicker";
+import { DatePicker, buildDateGrid, monthLabel } from "../components/DatePicker";
 import { PageScaffold } from "../components/PageScaffold";
 import { UserAvatar } from "../components/UserAvatar";
-import { Button, Card, IconButton } from "../components/ui";
+import { Button, Card, IconButton, actionButtonClassName } from "../components/ui";
 import {
   buildLeaderboardRangeBounds,
   buildLeaderboardRows,
+  leaderboardExcludedEntries,
   buildSettlementDaySummaries,
   shiftLeaderboardEndDate,
   type LeaderboardDateRange,
@@ -25,6 +27,7 @@ import { reportsPageSnapshot } from "../state/readModelQueries";
 import { isDateOnlyString, localDateString } from "../utils/date";
 
 const timeRangeOptions: { label: string; value: TimeRange }[] = [
+  { label: "周度", value: "week" },
   { label: "月度", value: "month" },
   { label: "季度", value: "quarter" },
   { label: "年度", value: "year" },
@@ -48,7 +51,6 @@ export function ReportsPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>("quarter");
   const [endDate, setEndDate] = useState(() => linkedSettlementDate);
   const [customRange, setCustomRange] = useState<LeaderboardDateRange>(() => defaultCustomRange(linkedSettlementDate));
-  const [customDateBoundary, setCustomDateBoundary] = useState<CustomDateBoundary>("end");
   const [calendarDisplayMonth, setCalendarDisplayMonth] = useState(() => monthForDate(linkedSettlementDate));
   const [heatmapExpanded, setHeatmapExpanded] = useState(false);
   const appliedReportsLinkRef = useRef("");
@@ -69,9 +71,10 @@ export function ReportsPage() {
     [settlementDaySummaries],
   );
   const linkedSettlement = useMemo(
-    () => linkedObjectiveId ? reportsLinkedSettlement(reportsProjection, linkedObjectiveId, linkedSettlementDate) : null,
+    () => linkedObjectiveId ? reportsLinkedSettlement(reportsProjection, linkedObjectiveId) : null,
     [linkedObjectiveId, linkedSettlementDate, reportsProjection],
   );
+  const excluded = useMemo(() => leaderboardExcludedEntries(reportsProjection.pointLedger, timeRange, leaderboardRangeSelection), [reportsProjection.pointLedger, timeRange, leaderboardRangeSelection]);
   const maxPoints = Math.max(1, ...rows.map((row) => row.points));
   const changeEndDate = (nextDate: string) => {
     setEndDate(nextDate);
@@ -81,24 +84,23 @@ export function ReportsPage() {
     if (nextRange === "custom" && timeRange !== "custom") {
       const nextCustomRange = rangeBounds ? { end: rangeBounds.end, start: rangeBounds.start } : defaultCustomRange(endDate);
       setCustomRange(nextCustomRange);
-      setCustomDateBoundary("end");
       setCalendarDisplayMonth(monthForDate(nextCustomRange.end));
     }
     setTimeRange(nextRange);
   };
-  const changeCustomDate = (nextDate: string) => {
-    setCustomRange((current) => customRangeWithBoundary(current, customDateBoundary, nextDate));
+  const changeCustomDate = (nextDate: string, boundary: CustomDateBoundary = "end") => {
+    setCustomRange((current) => customRangeWithBoundary(current, boundary, nextDate));
     setCalendarDisplayMonth(monthForDate(nextDate));
-    if (customDateBoundary === "start") {
-      setCustomDateBoundary("end");
-    }
   };
 
   useEffect(() => {
-    if (!linkedObjectiveId && searchParams.get("date") === null) return;
-    const linkKey = `${linkedObjectiveId ?? ""}:${linkedSettlementDate}`;
+    if (!linkedObjectiveId && searchParams.get("date") === null && searchParams.get("start") === null) return;
+    const linkedPeriod = {start:searchParams.get("start") ?? "", end:searchParams.get("end") ?? ""};
+    const linkKey = `${linkedObjectiveId ?? ""}:${linkedSettlementDate}:${linkedPeriod.start}:${linkedPeriod.end}`;
     if (appliedReportsLinkRef.current === linkKey) return;
     appliedReportsLinkRef.current = linkKey;
+    if (isAchievementPeriod(linkedPeriod)) { setCustomRange(linkedPeriod); setTimeRange("custom"); return; }
+    if (linkedObjectiveId && !searchParams.has("date")) { setTimeRange("all"); return; }
     setTimeRange("quarter");
     setEndDate(linkedSettlementDate);
     setCalendarDisplayMonth(monthForDate(linkedSettlementDate));
@@ -107,15 +109,9 @@ export function ReportsPage() {
   return (
     <PageScaffold title="统计">
       <ReportsPeriodCard
-        customDateBoundary={customDateBoundary}
         customRange={customRange}
         endDate={endDate}
-        onCustomDateBoundaryChange={(boundary) => {
-          setCustomDateBoundary(boundary);
-          setCalendarDisplayMonth(monthForDate(customRange[boundary]));
-        }}
-        onDisplayMonthChange={setCalendarDisplayMonth}
-        onRevealHeatmap={() => setHeatmapExpanded(true)}
+        onCustomDateSelect={(boundary, date) => changeCustomDate(date, boundary)}
         onSelectDate={timeRange === "custom" ? changeCustomDate : changeEndDate}
         onShiftEndDate={(amount) => changeEndDate(shiftLeaderboardEndDate(endDate, timeRange, amount))}
         onTimeRangeChange={changeTimeRange}
@@ -132,7 +128,7 @@ export function ReportsPage() {
           <div>
             <h2>目标结算定位</h2>
             <p>
-              {linkedSettlement.objectiveTitle} · {linkedSettlementDate}
+              {linkedSettlement.objectiveTitle}
               {linkedSettlement.ledgerCount > 0 ? ` · ${formatSignedPoints(linkedSettlement.points)} 分 · ${linkedSettlement.ledgerCount} 条流水` : " · 暂无匹配流水"}
             </p>
           </div>
@@ -158,30 +154,23 @@ export function ReportsPage() {
         )}
       </Card>
 
+      <ReportsExcludedEntries title="跨界成果（未计入当前周期）" entries={excluded.crossing} objectives={reportsProjection.objectives} />
+      <ReportsExcludedEntries title={timeRange === "all" ? "归属待确认（已保留在全部积分）" : "归属待确认（未计入当前周期）"} entries={excluded.unassigned} objectives={reportsProjection.objectives} />
       <ReportsSettlementHeatmap
-        customDateBoundary={customDateBoundary}
-        customRange={customRange}
         dailySummaryByDate={settlementDaySummaryByDate}
         displayMonth={calendarDisplayMonth}
         expanded={heatmapExpanded}
         onExpandedChange={setHeatmapExpanded}
         onDisplayMonthChange={setCalendarDisplayMonth}
-        onSelectDate={timeRange === "custom" ? changeCustomDate : changeEndDate}
-        rangeBounds={rangeBounds}
-        selectedDate={timeRange === "custom" ? customRange[customDateBoundary] : endDate}
-        timeRange={timeRange}
       />
     </PageScaffold>
   );
 }
 
 function ReportsPeriodCard({
-  customDateBoundary,
   customRange,
   endDate,
-  onCustomDateBoundaryChange,
-  onDisplayMonthChange,
-  onRevealHeatmap,
+  onCustomDateSelect,
   onSelectDate,
   onShiftEndDate,
   onTimeRangeChange,
@@ -189,12 +178,9 @@ function ReportsPeriodCard({
   timeRange,
   today,
 }: {
-  customDateBoundary: CustomDateBoundary;
   customRange: LeaderboardDateRange;
   endDate: string;
-  onCustomDateBoundaryChange: (boundary: CustomDateBoundary) => void;
-  onDisplayMonthChange: (date: Date) => void;
-  onRevealHeatmap: () => void;
+  onCustomDateSelect: (boundary: CustomDateBoundary, date: string) => void;
   onSelectDate: (date: string) => void;
   onShiftEndDate: (amount: number) => void;
   onTimeRangeChange: (value: TimeRange) => void;
@@ -202,15 +188,7 @@ function ReportsPeriodCard({
   timeRange: TimeRange;
   today: string;
 }) {
-  const selectedCalendarDate = timeRange === "custom" ? customRange[customDateBoundary] : endDate;
-  const changeCustomBoundary = (boundary: CustomDateBoundary) => {
-    onCustomDateBoundaryChange(boundary);
-    onRevealHeatmap();
-  };
-  const showEndDateMonth = () => {
-    onDisplayMonthChange(monthForDate(endDate));
-    onRevealHeatmap();
-  };
+  const selectedCalendarDate = timeRange === "custom" ? customRange.end : endDate;
   const selectDate = (date: string) => {
     onSelectDate(date);
   };
@@ -222,52 +200,43 @@ function ReportsPeriodCard({
       <div className="reports-period-main-control">
         <TimeRangeControl timeRange={timeRange} onChange={changeTimeRange} />
         <div className="reports-period-summary" aria-live="polite">
-          <span>积分归属日</span>
+          <span>成果归属区间</span>
           <strong>{periodRangeSummary(timeRange, rangeBounds)}</strong>
           {timeRange !== "all" && <small>含结束日</small>}
         </div>
         <div className="reports-period-actions">
           {timeRange === "custom" ? (
             <div className="reports-custom-range-controls" aria-label="自定义统计日期">
-              <Button
-                aria-pressed={customDateBoundary === "start"}
-                className="reports-custom-boundary-button"
-                data-active={customDateBoundary === "start"}
-                onClick={() => changeCustomBoundary("start")}
-                size="sm"
-                type="button"
-                variant="secondary"
+              <DatePicker
+                ariaLabel="选择统计开始日期"
+                onChange={(date) => onCustomDateSelect("start", date)}
+                triggerClassName={actionButtonClassName({ className: "reports-custom-boundary-button", size: "sm", variant: "secondary" })}
+                value={customRange.start}
               >
                 <CalendarDays className="h-4 w-4" />
                 <span>开始</span>
                 <strong>{customRange.start}</strong>
-              </Button>
-              <Button
-                aria-pressed={customDateBoundary === "end"}
-                className="reports-custom-boundary-button"
-                data-active={customDateBoundary === "end"}
-                onClick={() => changeCustomBoundary("end")}
-                size="sm"
-                type="button"
-                variant="secondary"
+              </DatePicker>
+              <DatePicker
+                ariaLabel="选择统计结束日期"
+                onChange={(date) => onCustomDateSelect("end", date)}
+                triggerClassName={actionButtonClassName({ className: "reports-custom-boundary-button", size: "sm", variant: "secondary" })}
+                value={customRange.end}
               >
                 <CalendarDays className="h-4 w-4" />
                 <span>结束</span>
                 <strong>{customRange.end}</strong>
-              </Button>
+              </DatePicker>
             </div>
           ) : timeRange !== "all" && (
-            <div className="reports-period-stepper" aria-label="统计结束日期">
+            <div className="reports-period-stepper" aria-label="成果统计周期">
               <IconButton
                 icon={ChevronLeft}
                 label={`上一${periodWindowName(timeRange)}`}
                 onClick={() => onShiftEndDate(-1)}
                 size="sm"
               />
-              <Button className="reports-period-date-button" onClick={showEndDateMonth} size="sm" type="button" variant="secondary">
-                <CalendarDays className="h-4 w-4" />
-                {endDate}
-              </Button>
+              <ReportsCalendarPeriodInput value={endDate} timeRange={timeRange} onChange={onSelectDate} />
               <IconButton
                 icon={ChevronRight}
                 label={`下一${periodWindowName(timeRange)}`}
@@ -278,7 +247,7 @@ function ReportsPeriodCard({
           )}
           {timeRange !== "all" && (
             <Button disabled={selectedCalendarDate === today} onClick={() => selectDate(today)} size="sm" type="button" variant="secondary">
-              今天
+              本期
             </Button>
           )}
         </div>
@@ -307,40 +276,16 @@ function Leaderboard({ maxPoints, rows }: { maxPoints: number; rows: Leaderboard
   );
 }
 
-function ReportsSettlementHeatmap({
-  customDateBoundary,
-  customRange,
-  dailySummaryByDate,
-  displayMonth,
-  expanded,
-  onExpandedChange,
-  onDisplayMonthChange,
-  onSelectDate,
-  rangeBounds,
-  selectedDate,
-  timeRange,
-}: {
-  customDateBoundary: CustomDateBoundary;
-  customRange: LeaderboardDateRange;
+function ReportsSettlementHeatmap({ dailySummaryByDate, displayMonth, expanded, onExpandedChange, onDisplayMonthChange }: {
   dailySummaryByDate: Map<string, SettlementDaySummary>;
   displayMonth: Date;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onDisplayMonthChange: (date: Date) => void;
-  onSelectDate: (date: string) => void;
-  rangeBounds: LeaderboardRangeBounds | null;
-  selectedDate: string;
-  timeRange: TimeRange;
 }) {
   const monthTotal = settlementMonthTotal(dailySummaryByDate, displayMonth);
-  const monthEntries = Array.from(dailySummaryByDate.values()).filter((summary) => summary.date.startsWith(monthKey(displayMonth)));
-  const maxAbsolutePoints = Math.max(1, ...monthEntries.map((summary) => Math.abs(summary.points)));
-  const selectedRangeLabel = timeRange === "custom"
-    ? `${customRange.start} 至 ${customRange.end} · 正在选择${customDateBoundary === "start" ? "开始" : "结束"}日期`
-    : timeRange === "all"
-      ? "查看每天的积分结算强度"
-      : `${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}`;
-
+  const monthEntries = Array.from(dailySummaryByDate.values()).filter(summary => summary.date.startsWith(monthKey(displayMonth)));
+  const maxAbsolutePoints = Math.max(1, ...monthEntries.map(summary => Math.abs(summary.points)));
   return (
     <Card className="reports-heatmap-card" data-expanded={expanded}>
       <div className="reports-heatmap-heading">
@@ -349,7 +294,7 @@ function ReportsSettlementHeatmap({
             <span className="reports-summary-icon reports-summary-icon-cyan"><CalendarDays className="h-4 w-4" /></span>
             <h2>结算节奏</h2>
           </div>
-          <p>{expanded ? selectedRangeLabel : "按日期查看积分结算强度"}</p>
+          <p>{"按真实入账日期查看操作记录，不影响成果周期筛选"}</p>
         </div>
         <Button aria-expanded={expanded} onClick={() => onExpandedChange(!expanded)} size="sm" type="button" variant="secondary">
           {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -380,9 +325,8 @@ function ReportsSettlementHeatmap({
             dailySummaryByDate={dailySummaryByDate}
             displayMonth={displayMonth}
             maxAbsolutePoints={maxAbsolutePoints}
-            onSelectDate={timeRange === "all" ? undefined : onSelectDate}
-            rangeBounds={rangeBounds}
-            selectedDate={selectedDate}
+            rangeBounds={null}
+            selectedDate=""
           />
         </div>
       )}
@@ -535,9 +479,10 @@ function RankChange({ change }: { change: LeaderboardRankChange }) {
 }
 
 function previousRangeLabel(timeRange: TimeRange) {
-  if (timeRange === "month") return "上一月度窗口";
-  if (timeRange === "quarter") return "上一季度窗口";
-  if (timeRange === "year") return "上一年度窗口";
+  if (timeRange === "week") return "上一周";
+  if (timeRange === "month") return "上个月";
+  if (timeRange === "quarter") return "上一季度";
+  if (timeRange === "year") return "上一年";
   if (timeRange === "custom") return "自定义上一周期";
   return "上一周期";
 }
@@ -547,10 +492,10 @@ function leaderboardDescription(timeRange: TimeRange, rangeBounds: LeaderboardRa
     return "汇总全部公开积分流水，全部时间不计算排名变化。";
   }
   if (timeRange === "custom") {
-    return `${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}（含结束日）的积分和完成率；自定义范围不计算排名变化。`;
+    return `${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}（含首尾日期）完整包含的成果积分和完成率；自定义范围不计算排名变化。`;
   }
 
-  return `${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}（含结束日）的积分和完成率，并对比${previousRangeLabel(timeRange)}排名。`;
+  return `${rangeBounds?.start ?? "--"} 至 ${rangeBounds?.end ?? "--"}（含首尾日期）完整包含的成果积分和完成率，并对比${previousRangeLabel(timeRange)}排名。`;
 }
 
 function periodRangeSummary(timeRange: TimeRange, rangeBounds: LeaderboardRangeBounds | null) {
@@ -561,9 +506,10 @@ function periodRangeSummary(timeRange: TimeRange, rangeBounds: LeaderboardRangeB
 }
 
 function periodWindowName(timeRange: TimeRange) {
-  if (timeRange === "month") return "月度窗口";
-  if (timeRange === "quarter") return "季度窗口";
-  if (timeRange === "year") return "年度窗口";
+  if (timeRange === "week") return "周";
+  if (timeRange === "month") return "月";
+  if (timeRange === "quarter") return "季度";
+  if (timeRange === "year") return "年";
   return "窗口";
 }
 
@@ -582,19 +528,14 @@ function reportsDateFromSearch(searchParams: URLSearchParams, fallback: string) 
   return isDateOnlyString(value) ? value : fallback;
 }
 
-function reportsLinkedSettlement(data: ReportsPageData, objectiveId: string, date: string) {
+function reportsLinkedSettlement(data: ReportsPageData, objectiveId: string) {
   const objective = data.objectives.find((item) => item.id === objectiveId);
-  const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objectiveId && pointLedgerDate(entry) === date);
+  const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objectiveId);
   return {
     ledgerCount: ledger.length,
     objectiveTitle: objective?.title?.trim() || objectiveId,
     points: ledger.reduce((total, entry) => total + entry.points, 0),
   };
-}
-
-function pointLedgerDate(entry: ReportsPageData["pointLedger"][number]) {
-  const value = entry.settlementPeriodAt || entry.createdAt;
-  return /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
 }
 
 function customRangeWithBoundary(current: LeaderboardDateRange, boundary: CustomDateBoundary, value: string): LeaderboardDateRange {
@@ -656,4 +597,38 @@ function formatCalendarPoints(points: number) {
     return `${prefix}${(absolute / 1000).toFixed(absolute >= 10000 ? 0 : 1)}k`;
   }
   return `${prefix}${absolute.toFixed(absolute >= 100 ? 0 : 1)}`;
+}
+
+function ReportsCalendarPeriodInput({value, timeRange, onChange}: {value:string; timeRange:TimeRange; onChange:(date:string)=>void}) {
+  const year = Number(value.slice(0,4));
+  const quarter = Math.floor((Number(value.slice(5,7))-1)/3)+1;
+  if(timeRange === "month") return <input className="orf-input reports-period-input" aria-label="选择成果月份" type="month" value={value.slice(0,7)} onChange={e=>{if(/^\d{4}-\d{2}$/.test(e.target.value))onChange(`${e.target.value}-01`);}} />;
+  if(timeRange === "quarter" || timeRange === "year") return <div className="reports-calendar-period-input">
+    <input className="orf-input" aria-label="选择成果年份" type="number" min="1900" max="9999" value={year} onChange={e=>{const y=Number(e.target.value);if(Number.isInteger(y)&&y>=1900&&y<=9999)onChange(`${y}-${timeRange==='year'?'01':String((quarter-1)*3+1).padStart(2,'0')}-01`);}} />
+    {timeRange === "quarter" && <select className="orf-input" aria-label="选择成果季度" value={quarter} onChange={e=>onChange(`${year}-${String((Number(e.target.value)-1)*3+1).padStart(2,'0')}-01`)}>{[1,2,3,4].map(q=><option key={q} value={q}>第{q}季度</option>)}</select>}
+  </div>;
+  return <DatePicker ariaLabel="选择成果所在周" onChange={onChange} value={value} triggerClassName={actionButtonClassName({className:"reports-period-date-button",size:"sm",variant:"secondary"})}><CalendarDays className="h-4 w-4" />{value}</DatePicker>;
+}
+
+interface ExcludedAchievement {
+  key: string;
+  objectiveId: string;
+  title: string;
+  period: ReportsPageData["pointLedger"][number]["achievementPeriod"];
+  points: number;
+}
+
+function ReportsExcludedEntries({title,entries,objectives}: {title:string;entries:ReportsPageData["pointLedger"];objectives:ReportsPageData["objectives"]}) {
+  if(!entries.length)return null;
+  const names=new Map(objectives.map(o=>[o.id,o.title]));
+  const groups=new Map<string,ExcludedAchievement>();
+  for(const e of entries){
+    const key=e.settlementEventId??`legacy:${e.objectiveId}`;
+    const group=groups.get(key)??{key,objectiveId:e.objectiveId,title:names.get(e.objectiveId)??e.objectiveId,period:e.achievementPeriod,points:0};
+    group.points+=e.points;groups.set(key,group);
+  }
+  return <Card className="reports-heatmap-card reports-excluded-card"><h2>{title}</h2><p>以下积分不按天数分摊。归属待确认的记录保留原积分，确认区间后再纳入周期统计。</p>
+    <details><summary>共 {groups.size} 项，{entries.reduce((n,e)=>n+e.points,0).toFixed(2)} 分 · 查看明细</summary>
+    <ul>{[...groups.values()].map(e=><li key={e.key}><a href={`/tasks#objective:${encodeURIComponent(e.objectiveId)}`}>{e.title} · {e.points.toFixed(2)} 分</a><span>{e.period ? `${e.period.start} 至 ${e.period.end}` : "成果区间待确认"}</span></li>)}</ul></details>
+  </Card>;
 }

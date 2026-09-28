@@ -17,6 +17,7 @@ import {
   evidence,
   objectives,
   pointLedger,
+  objectiveSettlementEvents,
   results,
   resultTrendPoints,
   tasks,
@@ -70,6 +71,7 @@ async function getBountyHallSourceRows(scope: TaskManagementDataScope) {
     .where(eq(objectives.teamId, storageScopeId))
     .orderBy(desc(objectives.createdAt), desc(objectives.id));
   const resultRows = await db.select().from(results).where(eq(results.teamId, storageScopeId));
+  const settlementEventRows = await db.select().from(objectiveSettlementEvents).where(eq(objectiveSettlementEvents.teamId, storageScopeId));
   const pointLedgerRows = await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId));
   const taskRows = await db
     .select({ id: tasks.id, linkedObjectiveId: tasks.linkedObjectiveId, sortOrder: tasks.sortOrder })
@@ -86,6 +88,7 @@ async function getBountyHallSourceRows(scope: TaskManagementDataScope) {
     evidenceRows,
     objectiveRows,
     pointLedgerRows,
+    settlementEventRows,
     resultRows,
     storageScopeId,
     taskRows,
@@ -163,7 +166,7 @@ export async function getBountyHallData(viewer: { id: string; name: string; role
     userAvatarUrlById: objectiveParticipantAvatarUrls,
     userNameById,
   });
-  const pointLedgerItems = mapPointLedgerRows({ pointLedgerRows: rows.pointLedgerRows, userNameById });
+  const pointLedgerItems = mapPointLedgerRows({ pointLedgerRows: rows.pointLedgerRows, userNameById, settlementEventRows: rows.settlementEventRows });
   const canUseChallengeActions = viewer.role === "member";
   const items = objectiveItems.flatMap((objective) => {
     const objectiveResults = resultsByObjective.get(objective.id) ?? [];

@@ -12,7 +12,8 @@ type LedgerAuditRow = {
   objective_title: string | null;
   points: number;
   reason: string;
-  settlement_period_at: string;
+  achievement_start: string | null;
+  achievement_end: string | null;
   team_id: string;
   team_name: string | null;
   user_email: string | null;
@@ -65,15 +66,17 @@ async function main() {
           pl.member_name,
           pl.points,
           pl.reason,
-          pl.settlement_period_at::text AS settlement_period_at,
+          se.achievement_start::text AS achievement_start,
+          se.achievement_end::text AS achievement_end,
           pl.created_at::text AS created_at,
           u.email AS user_email
         FROM point_ledger pl
         LEFT JOIN teams t ON t.id = pl.team_id
         LEFT JOIN objectives o ON o.id = pl.objective_id AND o.team_id = pl.team_id
+        LEFT JOIN objective_settlement_events se ON se.id=pl.settlement_event_id AND se.team_id=pl.team_id
         LEFT JOIN users u ON u.id = pl.user_id
         WHERE pl.team_id = $1
-        ORDER BY pl.settlement_period_at DESC, pl.created_at DESC, pl.id
+        ORDER BY se.achievement_start DESC NULLS LAST, pl.created_at DESC, pl.id
       `,
       [teamId],
     );

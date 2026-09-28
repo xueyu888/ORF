@@ -1,3 +1,4 @@
+import { isAchievementPeriod, type AchievementPeriod } from "../../src/domain/achievementPeriod";
 import { resolveWorkLogAccess } from "../workLogs/workLogAccess";
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
@@ -106,6 +107,7 @@ import {
   objectives,
   objectiveLoot,
   objectiveSettlementEvents,
+  settlementPeriodCorrections,
   objectiveTrialReviews,
   pointLedger,
   projects,
@@ -329,11 +331,11 @@ function commentTargetHref(targetType: CommentTargetType, targetId: string, comm
 
 function reportsSettlementTargetHref(input: {
   objectiveId: string;
-  settledAt: string;
+  achievementPeriod: AchievementPeriod;
 }) {
-  const settledDate = /^\d{4}-\d{2}-\d{2}/.test(input.settledAt) ? input.settledAt.slice(0, 10) : "";
   const query = new URLSearchParams();
-  if (settledDate) query.set("date", settledDate);
+  query.set("start", input.achievementPeriod.start);
+  query.set("end", input.achievementPeriod.end);
   query.set("objective", input.objectiveId);
   return `/reports?${query.toString()}`;
 }
@@ -617,6 +619,7 @@ async function notifyObjectiveChallengersOfSettlement(input: {
   recipientUserIds: string[];
   settlementPoints: number;
   settledAt: string;
+  achievementPeriod: AchievementPeriod;
   teamId: string;
 }) {
   const recipients = await getActiveMemberNotificationRecipientsByIds(input.teamId, input.recipientUserIds);
@@ -641,7 +644,7 @@ async function notifyObjectiveChallengersOfSettlement(input: {
       targetTitle: input.objectiveTitle,
     },
     recipientUserIds: recipients,
-    targetHref: reportsSettlementTargetHref({ objectiveId: input.objectiveId, settledAt: input.settledAt }),
+    targetHref: reportsSettlementTargetHref({ objectiveId: input.objectiveId, achievementPeriod: input.achievementPeriod }),
     targetId: input.objectiveId,
     targetType: "objective",
     teamId: input.teamId,
@@ -3538,6 +3541,7 @@ export interface ReviewObjectiveLootInput {
 }
 
 export interface SettleObjectiveLootInput {
+  achievementPeriod: AchievementPeriod;
   lootId?: string;
   contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
   contributionRatios?: ContributionAllocation[];
@@ -3702,6 +3706,7 @@ export async function settleObjectiveLoot(
   input: SettleObjectiveLootInput,
   actorId: string,
 ): Promise<ObjectiveFlowMutationOutcome> {
+  if (!isAchievementPeriod(input.achievementPeriod)) return { status: "invalid" };
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
   if (!objective) return { status: "notFound" };
   const settlementEventKind = objectiveSettlementEventKindFor(objective);
@@ -3787,17 +3792,6 @@ export async function settleObjectiveLoot(
     settlementPoints: eventPlan.settlementPoints,
   });
   const createdAt = nowIso();
-  const [latestCompletedAcceptance] = settlementEventKind === "finalCompletion"
-    ? await db
-        .select({ reviewedAt: objectiveAcceptanceReviews.reviewedAt })
-        .from(objectiveAcceptanceReviews)
-        .where(and(eq(objectiveAcceptanceReviews.objectiveId, objectiveId), eq(objectiveAcceptanceReviews.acceptedResult, "completed")))
-        .orderBy(desc(objectiveAcceptanceReviews.reviewedAt))
-        .limit(1)
-    : [];
-  const settlementPeriodAt = settlementEventKind === "finalCompletion"
-    ? latestCompletedAcceptance?.reviewedAt ?? objective.acceptedAt ?? createdAt
-    : createdAt;
   const reason = input.reason?.trim() || input.contributionResolution?.reason.trim() || objectiveSettlementEventDefaultReason(settlementEventKind, objective.title);
   const settlementEventId = makeId("settlement-event");
   const existingPointRows = await db
@@ -3841,13 +3835,6 @@ export async function settleObjectiveLoot(
       return false;
     }
 
-    if (settlementEventKind === "finalCompletion") {
-      await tx
-        .update(pointLedger)
-        .set({ settlementPeriodAt })
-        .where(eq(pointLedger.objectiveId, objectiveId));
-    }
-
     await tx.insert(objectiveSettlementEvents).values({
       id: settlementEventId,
       teamId: objective.teamId,
@@ -3859,6 +3846,8 @@ export async function settleObjectiveLoot(
       settlementPoints: eventPlan.settlementPoints,
       reason,
       createdByUserId: actorId,
+      achievementStart: input.achievementPeriod.start,
+      achievementEnd: input.achievementPeriod.end,
       createdAt,
     });
 
@@ -3882,7 +3871,6 @@ export async function settleObjectiveLoot(
           memberName: item.memberName,
           points: item.points,
           reason,
-          settlementPeriodAt,
           createdAt,
         })),
       );
@@ -3917,6 +3905,7 @@ export async function settleObjectiveLoot(
     recipientUserIds: objectiveChallengerUserIds(objective),
     settlementPoints: eventPlan.settlementPoints,
     settledAt: createdAt,
+    achievementPeriod: input.achievementPeriod,
     teamId: objective.teamId,
   });
 
@@ -3928,6 +3917,32 @@ export async function settleObjectiveLoot(
   });
 
   return objectiveOutcome(objectiveId, runtimeScope(objective.teamId));
+}
+
+export async function correctSettlementAchievementPeriod(objectiveId: string, eventId: string, input: {
+  achievementPeriod: AchievementPeriod;
+  expectedPeriod: AchievementPeriod | null;
+  reason: string;
+}, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
+  if (!isAchievementPeriod(input.achievementPeriod) || !input.reason.trim()) return { status: "invalid" };
+  const changed = await db.transaction(async tx => {
+    const [event] = await tx.select().from(objectiveSettlementEvents)
+      .where(and(eq(objectiveSettlementEvents.id, eventId), eq(objectiveSettlementEvents.objectiveId, objectiveId))).for("update");
+    if (!event) return null;
+    if ((event.achievementStart ?? null) !== (input.expectedPeriod?.start ?? null) || (event.achievementEnd ?? null) !== (input.expectedPeriod?.end ?? null)) return null;
+    if (event.achievementStart === input.achievementPeriod.start && event.achievementEnd === input.achievementPeriod.end) return event.teamId;
+    await tx.insert(settlementPeriodCorrections).values({
+      id: makeId("settlement-period-correction"), settlementEventId: event.id,
+      oldStart: event.achievementStart, oldEnd: event.achievementEnd,
+      newStart: input.achievementPeriod.start, newEnd: input.achievementPeriod.end,
+      reason: input.reason.trim(), actorUserId: actorId, createdAt: nowIso(),
+    });
+    await tx.update(objectiveSettlementEvents).set({achievementStart:input.achievementPeriod.start, achievementEnd:input.achievementPeriod.end}).where(eq(objectiveSettlementEvents.id,event.id));
+    return event.teamId;
+  });
+  if (!changed) return {status:"invalid"};
+  publishObjectiveInvalidation({actorUserId:actorId,reason:"objective.lifecycle.changed",objectiveId,teamId:changed});
+  return objectiveOutcome(objectiveId,runtimeScope(changed));
 }
 
 function objectiveSettlementEventKindFor(

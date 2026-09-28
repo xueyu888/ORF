@@ -1,3 +1,4 @@
+import type { AchievementPeriod } from "../domain/achievementPeriod";
 import type { PermissionKey } from "../config/permissions";
 import type { AttachmentPreviewKind } from "../domain/attachmentPreviewKind";
 import type { ChatIntegrationProvider } from "../domain/chatIntegrationProvider";
@@ -45,6 +46,8 @@ export type WorkLogReminderStatus = "active" | "resolved";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type ObjectiveSettlementEventKind = "deadlinePenalty" | "finalCompletion";
+/** Historical accounting records do not open or close lifecycle settlement windows. */
+export type ObjectiveSettlementRecordKind = ObjectiveSettlementEventKind | "scoreScaleCorrection" | "historicalLedgerRestore";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
 export type UserRole = "admin" | "member";
 export type UserStatus = "pending" | "active" | "rejected" | "disabled";
@@ -476,20 +479,21 @@ export interface PointLedgerEntry {
   memberName: string;
   points: number;
   reason: string;
-  settlementPeriodAt: string;
+  achievementPeriod: AchievementPeriod | null;
   createdAt: string;
 }
 
 export interface ObjectiveSettlementEvent {
   id: string;
   objectiveId: string;
-  kind: ObjectiveSettlementEventKind;
+  kind: ObjectiveSettlementRecordKind;
   lootId?: string | null;
   basePoints: number;
   multiplier: number;
   settlementPoints: number;
   reason: string;
   createdByUserId: string;
+  achievementPeriod: AchievementPeriod | null;
   createdAt: string;
 }
 

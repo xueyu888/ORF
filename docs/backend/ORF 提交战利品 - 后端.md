@@ -158,11 +158,16 @@
 - 写入一条 `objectiveSettlementEvents`，记录结算事件类型、关联战利品、基础分、事件倍率和事件分值。
 - 按本地匿名互评结算结果或指挥官处理结果追加生成 `pointLedger`，不得删除同一目标历史账本。
 - `pointLedger.userId` 来自目标挑战者的 `Objective.challengerUserIds`；`memberName` 只是结算时按 UUID 派生的展示名快照。
-- `pointLedger.settlementPeriodAt` 是积分归属周期时间，事实源是同目标最后一条 `objectiveAcceptanceReviews.acceptedResult = completed` 的 `reviewedAt`；`pointLedger.createdAt` 只表示账本写入时间，不能用于月度、季度或年度归属。若目标此前已有逾期惩罚积分，最终验收通过并结算时必须把同目标历史积分行同步到该最终验收通过时间。
+- 成果归属由 `objectiveSettlementEvents.achievementStart/achievementEnd` 保存（数据库 DATE，包含首尾日期）。结算请求必须显式传入 `achievementPeriod: {start,end}`，后端验证真实日期及顺序，与事件、个人账本在同一事务提交。目标 `cycle` 只可作为页面建议，不作为已结算事实源。
+- `pointLedger` 通过 `settlementEventId` 取得归属区间，读模型展开为 `achievementPeriod`；账本不独立保存可修改的归属。验收 `reviewedAt`、事件及账本 `createdAt` 均保留真实时间，不用于成果周期筛选。
+- 后一次结算不得移动前一次结算的归属。管理员更正调用 `PATCH /api/objectives/:objectiveId/settlements/:eventId/achievement-period`，提交 `achievementPeriod`、`expectedPeriod` 和 `reason`，在事务内核验旧值并记录 `settlement_period_corrections`；不会重发积分、改变原始时间或绕过团队权限。
+- 缺失区间的历史事件、无事件关联的账本不得从验收日期猜测归属，读取返回 `achievementPeriod:null`。旧 `settlement_period_at` 暂留为迁移归档，退出新代码业务读写，待生产新版本切换和归档核验后再安排物理删除。
+- 已存在的历史补差 `scoreScaleCorrection` 与迁移专用 `historicalLedgerRestore` 是账务记录，不属于正常生命周期结算类型，不影响互评窗口或目标完成状态。恢复工具只按明确清单关联已有账本，不追加积分。恢复记录的基础分与事件分值均为所关联原账本的有符号合计，倍率为 1，仅作历史金额留档，不重新运行评分规则。
+- 历史恢复按目标、同一次原账本时间及说明核对；事件日期沿用原记录，用户明确更正的历史日期须写入依据。原账本时间保持不变，执行者及实际补录时间另写 `settlement_period_corrections` 审计；不把历史日期伪装成迁移执行日期。迁移清单保存原流水和新关联，事务中校验金额、成员、日期、目标状态不变，重复执行不得生成新事件或积分。
 - `pointLedger.points` 以 `0.01` 为最小单位分配，使用最大余数法保证个人积分合计等于目标结算积分。
 - `Objective.objectiveSettlementPoints` 只是该目标已写入账本积分的展示汇总，生命周期仍以 `Objective.flowStatus` 为准。
 
-结算事件分为两类：
+正常生命周期结算事件分为两类：
 
 - `deadlinePenalty`：目标已到截止日且验收不通过时，在 `revisionRequired` 状态执行；事件倍率为 `50%`，写入惩罚积分后目标仍保持 `revisionRequired`，挑战者必须继续完成并重新提交。
 - `finalCompletion`：最终验收通过后在 `accepted` 状态执行；如果此前已有 `deadlinePenalty`，该事件写入 `0` 分，本期扣掉的分不补回；否则沿用原按时/延期完成倍率。该事件完成后将 `Objective.flowStatus` 改为 `settled`。
@@ -185,3 +190,7 @@
 - 缺评、弃权和超过 `10%` 的偏离只作为验收页提示，不阻止指挥官提交合法的最终结算比例。
 - 匿名互评不能只依赖前端隐藏；新提交的原始互评不得进入 ORF 后端数据库或读模型，旧后端提交接口必须返回 `410`。
 - 任务和子任务状态不自动决定目标完成。
+
+## 成果区间迁移（2026-09-28）
+
+结构迁移 0102 仅增加可空区间、合法性约束和更正审计表，不推断历史日期。新结算必须提供有效区间；历史空值由迁移核对清单显式处理。AIO 八月授权批次以准确目标 ID 清单迁移为 2026-08-01 至 2026-08-31，保留原积分、人员、事件和时间。其余历史记录归属处理需管理员明确确认。

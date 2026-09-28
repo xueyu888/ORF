@@ -193,6 +193,7 @@ export function DatePicker({
         {children}
       </button>
       <DatePopover
+        ariaLabel={ariaLabel}
         dialogId={dialogId}
         displayMonth={displayMonth}
         min={min}
@@ -208,6 +209,7 @@ export function DatePicker({
 }
 
 function DatePopover({
+  ariaLabel,
   dialogId,
   displayMonth,
   min,
@@ -218,6 +220,7 @@ function DatePopover({
   position,
   value,
 }: {
+  ariaLabel: string;
   dialogId: string;
   displayMonth: Date;
   min?: string;
@@ -243,7 +246,7 @@ function DatePopover({
   return createPortal(
     <div
       ref={popoverRef}
-      aria-label="选择目标截止日期"
+      aria-label={ariaLabel}
       className={clsx("orf-date-popover", position?.placement === "top" && "orf-date-popover-top")}
       id={dialogId}
       role="dialog"

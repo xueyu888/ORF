@@ -875,6 +875,8 @@ export async function assertRuntimeDatabaseSchema() {
   const { pool: runtimePool } = await import("./client");
   const schemaClient = await runtimePool.connect();
   try {
+  const periodColumns = await schemaClient.query<{column_name:string}>("SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='objective_settlement_events' AND column_name IN ('achievement_start','achievement_end')");
+  if (periodColumns.rows.length !== 2) throw new DatabaseSchemaMismatchError(["objective_settlement_events achievement period columns are missing; apply migration 0102."]);
   let queryQueue = Promise.resolve();
   const pool = {
     query<T extends QueryResultRow = QueryResultRow>(queryText: string): Promise<QueryResult<T>> {

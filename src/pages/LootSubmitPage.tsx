@@ -1,3 +1,4 @@
+import { isAchievementPeriod, suggestedAchievementPeriod } from "../domain/achievementPeriod";
 import { ArrowLeft, CheckCircle2, Circle, ClipboardCheck, Send, XCircle } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
@@ -401,6 +402,11 @@ export function LootSubmitPage() {
   >({});
   const [resolutionEdited, setResolutionEdited] = useState(false);
   const [resolutionReason, setResolutionReason] = useState("");
+  const [achievementPeriod, setAchievementPeriod] = useState({ start: "", end: "" });
+  useEffect(() => {
+    setAchievementPeriod(suggestedAchievementPeriod(objective?.cycle ?? "") ?? { start: "", end: "" });
+  }, [objective?.id, objective?.cycle]);
+
   const [settlementMultiplierMode, setSettlementMultiplierMode] =
     useState<SettlementMultiplierMode>("default");
   const [settlementSummary, setSettlementSummary] = useState<LocalSettlementSummary | null>(null);
@@ -1019,16 +1025,18 @@ export function LootSubmitPage() {
       if (!confirmed) return;
     }
 
+    if (!isAchievementPeriod(achievementPeriod)) { setError("请选择有效的成果归属区间，开始日期不能晚于结束日期"); return; }
     setSubmittingAction("settle");
     try {
       const ok = await settleObjectiveLoot(objective.id, {
+        achievementPeriod,
         contributionResolution,
         lootId: latestLoot.id,
         reason: finalResolutionReason,
         settlementMultiplierMode,
         settlementParticipantUserIds,
       });
-      if (ok) navigate("/reports");
+      if (ok) navigate(`/reports?start=${achievementPeriod.start}&end=${achievementPeriod.end}&objective=${encodeURIComponent(objective.id)}`);
     } finally {
       setSubmittingAction(null);
     }
@@ -1286,6 +1294,14 @@ export function LootSubmitPage() {
               <div className="orf-loot-settlement-stack">
                 <div className="orf-loot-settlement-title">
                   {settlementTitle}
+                </div>
+                <div className="orf-loot-panel">
+                  <div className="text-sm font-semibold">成果归属区间</div>
+                  <p className="text-xs orf-text-secondary">包含首尾两天；决定积分统计归属，与实际验收和结算时间无关。请确认建议日期。</p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label>开始日期<input className="orf-input w-full" aria-label="成果归属开始日期" type="date" required value={achievementPeriod.start} onChange={e => setAchievementPeriod(p => ({...p, start:e.target.value}))} /></label>
+                    <label>结束日期<input className="orf-input w-full" aria-label="成果归属结束日期" type="date" required min={achievementPeriod.start} value={achievementPeriod.end} onChange={e => setAchievementPeriod(p => ({...p, end:e.target.value}))} /></label>
+                  </div>
                 </div>
                 {usesLocalContributionSettlement ? (
                   <LocalSettlementSummaryView

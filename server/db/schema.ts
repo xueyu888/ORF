@@ -18,7 +18,7 @@ import type {
   ObjectiveAlignmentRequestStatus,
   ObjectiveAcceptedResult,
   ObjectiveFlowStatus,
-  ObjectiveSettlementEventKind,
+  ObjectiveSettlementRecordKind,
   ObjectiveTrialReviewStatus,
   OrfStage,
   ResultAcceptedResult,
@@ -418,20 +418,35 @@ export const objectiveSettlementEvents = pgTable(
     objectiveId: text("objective_id")
       .notNull()
       .references(() => objectives.id, { onDelete: "cascade" }),
-    kind: text("kind").$type<ObjectiveSettlementEventKind>().notNull(),
+    kind: text("kind").$type<ObjectiveSettlementRecordKind>().notNull(),
     lootId: text("loot_id").references(() => objectiveLoot.id, { onDelete: "set null" }),
     basePoints: real("base_points").notNull(),
     multiplier: real("multiplier").notNull(),
     settlementPoints: real("settlement_points").notNull(),
     reason: text("reason").notNull(),
     createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
+    achievementStart: date("achievement_start", { mode: "string" }),
+    achievementEnd: date("achievement_end", { mode: "string" }),
     createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
   },
   (table) => ({
+    achievementPeriodCheck: check("objective_settlement_events_achievement_period_check", sql`(${table.achievementStart} IS NULL AND ${table.achievementEnd} IS NULL) OR (${table.achievementStart} IS NOT NULL AND ${table.achievementEnd} IS NOT NULL AND ${table.achievementStart} <= ${table.achievementEnd})`),
     objectiveKind: uniqueIndex("objective_settlement_events_objective_kind_idx").on(table.objectiveId, table.kind),
     teamCreatedAt: index("objective_settlement_events_team_created_at_idx").on(table.teamId, table.createdAt),
   }),
 );
+
+export const settlementPeriodCorrections = pgTable("settlement_period_corrections", {
+  id: text("id").primaryKey(),
+  settlementEventId: text("settlement_event_id").notNull().references(() => objectiveSettlementEvents.id),
+  oldStart: date("old_start", { mode: "string" }),
+  oldEnd: date("old_end", { mode: "string" }),
+  newStart: date("new_start", { mode: "string" }).notNull(),
+  newEnd: date("new_end", { mode: "string" }).notNull(),
+  reason: text("reason").notNull(),
+  actorUserId: uuid("actor_user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+}, table => ({ periodOrder: check("settlement_period_corrections_check", sql`${table.newStart} <= ${table.newEnd}`) }));
 
 export const pointLedger = pgTable("point_ledger", {
   id: text("id").primaryKey(),
@@ -446,7 +461,6 @@ export const pointLedger = pgTable("point_ledger", {
   memberName: text("member_name").notNull(),
   points: real("points").notNull(),
   reason: text("reason").notNull(),
-  settlementPeriodAt: timestamp("settlement_period_at", { mode: "string", withTimezone: true }).defaultNow().notNull(),
   createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
 });
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildLeaderboardRangeBounds, buildLeaderboardRows, buildSettlementDaySummaries } from "../src/domain/reportsLeaderboard";
+import { buildLeaderboardRangeBounds, buildLeaderboardRows, buildSettlementDaySummaries, leaderboardExcludedEntries } from "../src/domain/reportsLeaderboard";
 import type { Objective, ObjectiveAcceptanceReview, PointLedgerEntry, OrfUser, OrfUserDisplayProfile } from "../src/types/orf";
 
 const users: OrfUser[] = [
@@ -51,7 +51,7 @@ function ledger(input: Partial<PointLedgerEntry>): PointLedgerEntry {
     objectiveId: "objective-1",
     points: 0,
     reason: "验收结算",
-    settlementPeriodAt: input.createdAt ?? "2026-06-13T10:00:00.000Z",
+    achievementPeriod: {start:(input.createdAt ?? "2026-06-13").slice(0,10),end:(input.createdAt ?? "2026-06-13").slice(0,10)},
     userId: "user-a",
     ...input,
   };
@@ -142,7 +142,7 @@ test("leaderboard groups point sources by objective for segmented contribution b
           objectiveId: "objective-quality",
           points: 35,
           reason: "匿名互评贡献",
-          settlementPeriodAt: "2026-06-11T10:00:00.000Z",
+          achievementPeriod: {start:"2026-06-11",end:"2026-06-11"},
         }),
         ledger({
           createdAt: "2026-06-12T10:00:00.000Z",
@@ -150,7 +150,7 @@ test("leaderboard groups point sources by objective for segmented contribution b
           objectiveId: "objective-quality",
           points: 25,
           reason: "交付结果贡献",
-          settlementPeriodAt: "2026-06-12T10:00:00.000Z",
+          achievementPeriod: {start:"2026-06-12",end:"2026-06-12"},
         }),
         ledger({
           createdAt: "2026-06-13T10:00:00.000Z",
@@ -158,7 +158,7 @@ test("leaderboard groups point sources by objective for segmented contribution b
           objectiveId: "objective-cost",
           points: 20,
           reason: "目标结算",
-          settlementPeriodAt: "2026-06-13T10:00:00.000Z",
+          achievementPeriod: {start:"2026-06-13",end:"2026-06-13"},
         }),
       ],
     }),
@@ -277,7 +277,7 @@ test("quarterly leaderboard marks members without previous period ranks as new",
   assert.equal(rows[1]?.rankChange.kind, "new");
 });
 
-test("monthly leaderboard compares against the previous rolling month window", () => {
+test("monthly leaderboard compares against the previous calendar month", () => {
   const rows = buildLeaderboardRows(
     state({
       objectives: [
@@ -348,7 +348,7 @@ test("monthly leaderboard compares against the previous rolling month window", (
   });
 });
 
-test("monthly leaderboard assigns settlement to final acceptance period instead of ledger write time", () => {
+test("monthly leaderboard uses explicit achievement period instead of ledger write time", () => {
   const rows = buildLeaderboardRows(
     state({
       objectives: [
@@ -362,7 +362,7 @@ test("monthly leaderboard assigns settlement to final acceptance period instead 
           memberName: "成员甲",
           objectiveId: "objective-may",
           points: 10,
-          settlementPeriodAt: "2026-05-15T10:00:00.000Z",
+          achievementPeriod: {start:"2026-05-15",end:"2026-05-15"},
           userId: "user-a",
         }),
         ledger({
@@ -371,7 +371,7 @@ test("monthly leaderboard assigns settlement to final acceptance period instead 
           memberName: "成员乙",
           objectiveId: "objective-may",
           points: 20,
-          settlementPeriodAt: "2026-05-15T10:00:00.000Z",
+          achievementPeriod: {start:"2026-05-15",end:"2026-05-15"},
           userId: "user-b",
         }),
         ledger({
@@ -380,7 +380,7 @@ test("monthly leaderboard assigns settlement to final acceptance period instead 
           memberName: "成员甲",
           objectiveId: "objective-boundary",
           points: 30,
-          settlementPeriodAt: "2026-06-30T18:00:00.000Z",
+          achievementPeriod: {start:"2026-06-30",end:"2026-06-30"},
           userId: "user-a",
         }),
       ],
@@ -399,22 +399,11 @@ test("monthly leaderboard assigns settlement to final acceptance period instead 
   });
 });
 
-test("leaderboard rolling range uses the selected end date and includes that day", () => {
-  assert.deepEqual(buildLeaderboardRangeBounds("month", "2026-08-03"), {
-    end: "2026-08-03",
-    endExclusive: "2026-08-04",
-    start: "2026-07-03",
-  });
-  assert.deepEqual(buildLeaderboardRangeBounds("quarter", "2026-08-03"), {
-    end: "2026-08-03",
-    endExclusive: "2026-08-04",
-    start: "2026-05-03",
-  });
-  assert.deepEqual(buildLeaderboardRangeBounds("year", "2026-08-03"), {
-    end: "2026-08-03",
-    endExclusive: "2026-08-04",
-    start: "2025-08-03",
-  });
+test("leaderboard uses natural week month quarter and year boundaries", () => {
+  assert.deepEqual(buildLeaderboardRangeBounds("week", "2026-01-01"), {start:"2025-12-29",end:"2026-01-04",endExclusive:"2026-01-05"});
+  assert.deepEqual(buildLeaderboardRangeBounds("month", "2024-02-03"), {start:"2024-02-01",end:"2024-02-29",endExclusive:"2024-03-01"});
+  assert.deepEqual(buildLeaderboardRangeBounds("quarter", "2026-08-03"), {start:"2026-07-01",end:"2026-09-30",endExclusive:"2026-10-01"});
+  assert.deepEqual(buildLeaderboardRangeBounds("year", "2026-08-03"), {start:"2026-01-01",end:"2026-12-31",endExclusive:"2027-01-01"});
 });
 
 test("leaderboard custom range uses explicit inclusive start and end dates", () => {
@@ -440,7 +429,7 @@ test("custom leaderboard filters by explicit settlement range without rank compa
           id: "ledger-before-custom",
           memberName: "成员甲",
           points: 900,
-          settlementPeriodAt: "2026-06-30T10:00:00.000Z",
+          achievementPeriod: {start:"2026-06-30",end:"2026-06-30"},
           userId: "user-a",
         }),
         ledger({
@@ -448,7 +437,7 @@ test("custom leaderboard filters by explicit settlement range without rank compa
           id: "ledger-custom-start",
           memberName: "成员甲",
           points: 30,
-          settlementPeriodAt: "2026-07-01T10:00:00.000Z",
+          achievementPeriod: {start:"2026-07-01",end:"2026-07-01"},
           userId: "user-a",
         }),
         ledger({
@@ -456,7 +445,7 @@ test("custom leaderboard filters by explicit settlement range without rank compa
           id: "ledger-custom-end",
           memberName: "成员甲",
           points: 20,
-          settlementPeriodAt: "2026-08-20T10:00:00.000Z",
+          achievementPeriod: {start:"2026-08-20",end:"2026-08-20"},
           userId: "user-a",
         }),
         ledger({
@@ -464,7 +453,7 @@ test("custom leaderboard filters by explicit settlement range without rank compa
           id: "ledger-after-custom",
           memberName: "成员乙",
           points: 800,
-          settlementPeriodAt: "2026-08-21T10:00:00.000Z",
+          achievementPeriod: {start:"2026-08-21",end:"2026-08-21"},
           userId: "user-b",
         }),
       ],
@@ -478,23 +467,23 @@ test("custom leaderboard filters by explicit settlement range without rank compa
   assert.equal(rows[0]?.rankChange.kind, "unavailable");
 });
 
-test("settlement day summaries aggregate points by settlement period date", () => {
+test("settlement day summaries retain actual write dates independently of achievement periods", () => {
   const summaries = buildSettlementDaySummaries([
     ledger({
       createdAt: "2026-08-04T10:00:00.000Z",
       id: "ledger-late-write",
       points: 30,
-      settlementPeriodAt: "2026-08-03T18:00:00.000Z",
+      achievementPeriod: {start:"2026-08-03",end:"2026-08-03"},
     }),
     ledger({
       createdAt: "2026-08-03T10:00:00.000Z",
       id: "ledger-same-day",
       points: -5,
-      settlementPeriodAt: "2026-08-03T09:00:00.000Z",
+      achievementPeriod: {start:"2026-08-03",end:"2026-08-03"},
     }),
   ]);
 
-  assert.deepEqual(summaries, [{ count: 2, date: "2026-08-03", points: 25 }]);
+  assert.deepEqual(summaries, [{ count: 1, date: "2026-08-03", points: -5 }, {count:1,date:"2026-08-04",points:30}]);
 });
 
 test("quarterly rank change compares against the full previous period ranking", () => {
@@ -556,4 +545,21 @@ test("quarterly rank change compares against the full previous period ranking", 
     previousRank: 12,
   });
   assert.equal(rows.find((row) => row.userId === "user-a")?.rankChange.kind, "new");
+});
+
+test("crossing and unknown achievements are separate without prorating; all preserves points", () => {
+ const entries = [
+  ledger({id:"aug",points:80,createdAt:"2026-09-28T12:00:00Z",achievementPeriod:{start:"2026-08-01",end:"2026-08-31"}}),
+  ledger({id:"cross",points:100,achievementPeriod:{start:"2026-08-20",end:"2026-09-10"}}),
+  ledger({id:"unknown",points:50,achievementPeriod:null}),
+ ];
+ const data=state({objectives:[objective({})],pointLedger:entries});
+ const total=(rows:ReturnType<typeof buildLeaderboardRows>)=>rows.reduce((n,r)=>n+r.points,0);
+ assert.equal(total(buildLeaderboardRows(data,"month","2026-08-12")),80);
+ assert.equal(total(buildLeaderboardRows(data,"month","2026-09-12")),0);
+ assert.equal(total(buildLeaderboardRows(data,"quarter","2026-08-12")),180);
+ assert.equal(total(buildLeaderboardRows(data,"all")),230);
+ const excluded=leaderboardExcludedEntries(entries,"month","2026-08-12");
+ assert.deepEqual(excluded.crossing.map(e=>e.id),["cross"]);
+ assert.deepEqual(excluded.unassigned.map(e=>e.id),["unknown"]);
 });

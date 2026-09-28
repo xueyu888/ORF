@@ -383,7 +383,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope): Pro
       reviewedAt: item.reviewedAt,
     }));
   const objectiveSettlementEventItems = mapObjectiveSettlementEventRows(objectiveSettlementEventRows);
-  const pointLedgerItems = mapPointLedgerRows({ pointLedgerRows, userNameById });
+  const pointLedgerItems = mapPointLedgerRows({ pointLedgerRows, userNameById, settlementEventRows: objectiveSettlementEventRows });
   const commentItems: CommentThread[] = [...commentThreadRows]
     .filter((thread) => thread.targetType !== "feedback")
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
@@ -442,12 +442,13 @@ export async function getReportsPageData(scope: TaskManagementDataScope): Promis
     })
     .from(objectiveAcceptanceReviews)
     .where(eq(objectiveAcceptanceReviews.teamId, storageScopeId));
+  const objectiveSettlementEventRows = await db.select().from(objectiveSettlementEvents).where(eq(objectiveSettlementEvents.teamId, storageScopeId));
   const pointLedgerRows = await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId));
   const { userNameById, userProfiles: scopeUserProfiles } = await getUserMapsForStorageScope(storageScopeId);
   const data: ReportsPageData = {
     objectives: objectiveRows,
     objectiveAcceptanceReviews: objectiveAcceptanceReviewRows,
-    pointLedger: mapPointLedgerRows({ pointLedgerRows, userNameById }),
+    pointLedger: mapPointLedgerRows({ pointLedgerRows, userNameById, settlementEventRows: objectiveSettlementEventRows }),
     userProfiles: [],
   };
   return {

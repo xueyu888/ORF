@@ -1,3 +1,4 @@
+import { isAchievementPeriod } from "../../src/domain/achievementPeriod";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
@@ -26,6 +27,7 @@ import {
   reviewObjectiveLoot,
   reviewObjectiveTrialReview,
   settleObjectiveLoot,
+  correctSettlementAchievementPeriod,
   submitObjectiveLoot,
   submitObjectiveTrialReview,
   updateObjectiveBasePoints,
@@ -126,7 +128,9 @@ const reviewLootBodySchema = z.object({
   })).optional(),
   reason: z.string().trim().optional(),
 });
+const achievementPeriodSchema = z.object({start:z.string(),end:z.string()}).refine(isAchievementPeriod, "成果归属区间必须为有效日期且开始不晚于结束");
 const settleLootBodySchema = z.object({
+  achievementPeriod: achievementPeriodSchema,
   lootId: z.string().min(1).optional(),
   contributionResolution: z.object({
     ratios: z.array(contributionAllocationSchema).min(1),
@@ -512,6 +516,15 @@ export function registerOrfObjectiveRoutes(app: FastifyInstance) {
       return reply;
     }
     return sendObjectiveFlowOutcome(reply, await reviewObjectiveLoot(params.objectiveId, body, context.user.id));
+  });
+
+  app.patch("/api/objectives/:objectiveId/settlements/:eventId/achievement-period", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) return reply;
+    const params = z.object({objectiveId:z.string().min(1),eventId:z.string().min(1)}).parse(request.params);
+    const body = z.object({achievementPeriod:achievementPeriodSchema,expectedPeriod:achievementPeriodSchema.nullable(),reason:z.string().trim().min(1)}).parse(request.body);
+    if (!(await requireTargetInScope(reply,{type:"objective",id:params.objectiveId},context.scope,"Objective not found"))) return reply;
+    return sendObjectiveFlowOutcome(reply,await correctSettlementAchievementPeriod(params.objectiveId,params.eventId,body,context.user.id));
   });
 
   app.post("/api/objectives/:objectiveId/settle", async (request, reply) => {

@@ -1,3 +1,4 @@
+import type { AchievementPeriod } from "../domain/achievementPeriod";
 import { useMemo } from "react";
 import { hasPermission } from "../config/permissions";
 import { isObjectiveChallenger, objectiveChallengerCount } from "../domain/orfObjectiveParticipants";
@@ -44,6 +45,7 @@ export type ReviewObjectiveLootInput = {
   reason?: string;
 };
 export type SettleObjectiveLootInput = {
+  achievementPeriod: AchievementPeriod;
   lootId?: string;
   contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
   contributionRatios?: ContributionAllocation[];

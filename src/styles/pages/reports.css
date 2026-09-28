@@ -95,7 +95,7 @@
   font-weight: 680;
 }
 
-.reports-custom-boundary-button[data-active="true"] {
+.reports-custom-boundary-button[aria-expanded="true"] {
   border-color: color-mix(in srgb, var(--orf-accent-text) 44%, var(--orf-border));
   background: var(--orf-accent-soft);
   color: var(--orf-accent-text);
@@ -1177,4 +1177,20 @@
   .reports-calendar-day-number {
     font-size: 11px;
   }
+}
+
+.reports-calendar-period-input { display:flex; gap:8px; min-width:0; }
+.reports-calendar-period-input input { width:6.5rem; }
+.reports-period-input { max-width:11rem; min-height:36px; }
+.reports-excluded-card { padding:20px; }
+.reports-excluded-card h2 { font-weight:600; }
+.reports-excluded-card p { font-size:12px; margin:8px 0; }
+.reports-excluded-card ul { display:grid; gap:8px; margin-top:12px; }
+.reports-excluded-card summary { cursor:pointer; min-height:36px; padding:8px 0; }
+.reports-excluded-card li { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; overflow-wrap:anywhere; }
+@media(max-width:640px) {
+ .reports-calendar-period-input .orf-input, .reports-period-input { min-height:44px; }
+ .reports-period-main-control .orf-segmented-control { flex-wrap:wrap; border-radius:18px; }
+ .reports-period-main-control .orf-segmented-control > svg { display:none; }
+ .reports-excluded-card { padding:14px; }
 }

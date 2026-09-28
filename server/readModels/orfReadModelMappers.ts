@@ -1,3 +1,4 @@
+import { periodFromColumns } from "../../src/domain/achievementPeriod";
 import { asc, eq } from "drizzle-orm";
 import { objectiveParticipantSnapshot } from "../../src/domain/orfObjectiveParticipants";
 import { objectiveStageForFlowStatus } from "../../src/domain/orfLifecycle";
@@ -197,8 +198,10 @@ export function mapObjectiveRows(input: {
 
 export function mapPointLedgerRows(input: {
   pointLedgerRows: Array<typeof pointLedger.$inferSelect>;
+  settlementEventRows: Array<typeof objectiveSettlementEvents.$inferSelect>;
   userNameById: Map<string, string>;
 }) {
+  const eventPeriods = new Map(input.settlementEventRows.map(e => [e.id, periodFromColumns(e.achievementStart, e.achievementEnd)]));
   return [...input.pointLedgerRows]
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .map((item): PointLedgerEntry => ({
@@ -209,7 +212,7 @@ export function mapPointLedgerRows(input: {
       memberName: nameForUserId(input.userNameById, item.userId, item.memberName),
       points: item.points,
       reason: item.reason,
-      settlementPeriodAt: item.settlementPeriodAt,
+      achievementPeriod: item.settlementEventId ? eventPeriods.get(item.settlementEventId) ?? null : null,
       createdAt: item.createdAt,
     }));
 }
@@ -246,6 +249,7 @@ export function mapObjectiveSettlementEventRows(
       settlementPoints: item.settlementPoints,
       reason: item.reason,
       createdByUserId: item.createdByUserId,
+      achievementPeriod: periodFromColumns(item.achievementStart, item.achievementEnd),
       createdAt: item.createdAt,
     }));
 }

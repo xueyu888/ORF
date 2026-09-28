@@ -1623,7 +1623,7 @@ const initialOrfStateSeed: SeedInitialState = {
       memberName: "Kai Wang",
       points: 60,
       reason: "匿名互评贡献比例 60%",
-      settlementPeriodAt: "2026-05-16T10:00:00.000Z",
+      achievementPeriod: null,
       createdAt: "2026-05-16T10:00:00.000Z",
     },
     {
@@ -1633,7 +1633,7 @@ const initialOrfStateSeed: SeedInitialState = {
       memberName: "Nora Patel",
       points: 40,
       reason: "匿名互评贡献比例 40%",
-      settlementPeriodAt: "2026-05-16T10:00:00.000Z",
+      achievementPeriod: null,
       createdAt: "2026-05-16T10:00:00.000Z",
     },
   ],
