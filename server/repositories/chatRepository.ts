@@ -973,6 +973,26 @@ async function getMessageById(actor: ChatActor, messageId: string, client: Datab
   return message ?? null;
 }
 
+// A write acknowledgement belongs to the sender, not the resource's reader
+// audience. In particular, a delivery bot need not be able to read the private
+// notification it just projected. Ordinary reads still use getRawMessage.
+async function getSentMessageById(actor: ChatActor, input: { channelId: string; messageId: string }, client: PoolClient) {
+  const { rows } = await client.query<MessageRow>(
+    `
+      SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
+             u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
+             m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
+      FROM chat_messages m
+      INNER JOIN users u ON u.id = m.author_user_id
+      WHERE m.team_id = $1 AND m.channel_id = $2 AND m.id = $3 AND m.author_user_id = $4
+      LIMIT 1
+    `,
+    [storageTeamId(actor), input.channelId, input.messageId, actor.id],
+  );
+  const [message] = await buildMessages(rows, actor, client);
+  return message ?? null;
+}
+
 async function getRawMessage(actor: ChatActor, messageId: string, client: DatabaseReadClient = pool) {
   const teamId = storageTeamId(actor);
   const { rows } = await client.query<MessageRow>(
@@ -2409,7 +2429,7 @@ export async function sendChatMessage(
       }
     }
 
-    const message = await getMessageById(actor, messageId, client);
+    const message = await getSentMessageById(actor, { channelId: input.channelId, messageId }, client);
     const updatedChannel = await readVisibleChannel(actor, input.channelId, client);
     if (!message || !updatedChannel) {
       await client.query("ROLLBACK");
