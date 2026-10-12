@@ -2,6 +2,7 @@ import type { ChatMessage } from "../../types/orf";
 import { chatMessageSendStatus, type UnreadAnchor } from "./chatModels";
 
 export const chatReadReceiptStableMs = 1000;
+export const chatReadReceiptRetryMs = 3000;
 export const chatReadReceiptVisibleRatio = 0.5;
 
 type ChatReadThroughCandidateInput = {

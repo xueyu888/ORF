@@ -46,7 +46,7 @@ import {
   updatePendingMessageDelivery,
   upsertChannelMessage,
 } from "./chatModels";
-import { chatReadReceiptStableMs, selectChatReadThroughCandidate } from "./chatReadObserver";
+import { chatReadReceiptRetryMs, chatReadReceiptStableMs, selectChatReadThroughCandidate } from "./chatReadObserver";
 import { useChatLatestScrollStickiness } from "./useChatLatestScrollStickiness";
 import type { AppAttentionState } from "../interaction/appAttentionState";
 import { chatFeedSessionPrefetchRequests, chatFeedSessionSnapshots } from "./chatFeedSessionCache";
@@ -135,6 +135,7 @@ export function useChatFeedState({
   const [attentionRestoreRevision, setAttentionRestoreRevision] = useState(0);
   const [viewportLayoutIntentRevision, setViewportLayoutIntentRevision] = useState(0);
   const [unreadAnchor, setUnreadAnchor] = useState<UnreadAnchor | null>(null);
+  const [readReceiptRevision, setReadReceiptRevision] = useState(0);
   const [feedChannelId, setFeedChannelId] = useState<string | null>(null);
   const activeChannelIdRef = useRef<string | null>(null);
   const appAttentionStateRef = useRef(appAttentionState);
@@ -154,6 +155,7 @@ export function useChatFeedState({
   const pendingUnreadScrollRef = useRef<PendingUnreadScroll | null>(null);
   const prefetchRequestsRef = useRef(chatFeedSessionPrefetchRequests());
   const readMarkInFlightRef = useRef<string | null>(null);
+  const readReceiptRetryAfterRef = useRef(0);
   const unreadAnchorRef = useRef<UnreadAnchor | null>(null);
   const validatedRequestedMessageKeyRef = useRef<string | null>(null);
   const activeChannelId = activeChannel?.id ?? null;
@@ -549,19 +551,21 @@ export function useChatFeedState({
 
   const markReadThroughMessage = useCallback(async (channelId: string, messageId: string) => {
     const requestKey = `${channelId}:${messageId}`;
-    if (readMarkInFlightRef.current === requestKey) return;
+    if (readMarkInFlightRef.current !== null) return;
     readMarkInFlightRef.current = requestKey;
     try {
       const response = await markChatChannelReadRequest(channelId, { messageId });
+      readReceiptRetryAfterRef.current = 0;
       void onUnreadSummaryRefresh().catch(() => undefined);
-      if (activeChannelIdRef.current !== channelId) return;
       onChannelUpdate(response.channel);
+      if (activeChannelIdRef.current !== channelId || manualUnreadAutoReadSuppressedRef.current) return;
       setUnreadAnchor(buildUnreadAnchor(response.channel, currentUserIdRef.current));
-      manualUnreadAutoReadSuppressedRef.current = false;
     } catch {
-      // Automatic read receipts are opportunistic; manual "mark read" remains available on failure.
+      // Retry only after rechecking the current viewport and attention state.
+      readReceiptRetryAfterRef.current = Date.now() + chatReadReceiptRetryMs;
     } finally {
       if (readMarkInFlightRef.current === requestKey) readMarkInFlightRef.current = null;
+      setReadReceiptRevision((revision) => revision + 1);
     }
   }, [onChannelUpdate, onUnreadSummaryRefresh]);
 
@@ -593,8 +597,7 @@ export function useChatFeedState({
       return;
     }
 
-    const requestKey = `${channelId}:${candidate.id}`;
-    if (readMarkInFlightRef.current === requestKey) {
+    if (readMarkInFlightRef.current !== null) {
       cancelPendingReadReceipt();
       return;
     }
@@ -614,13 +617,16 @@ export function useChatFeedState({
         activeChannelIdRef.current !== channelId ||
         messagesLoadingRef.current ||
         !appAttentionStateRef.current.activelyViewed ||
+        (unreadAnchorRef.current?.manuallyUnread && manualUnreadAutoReadSuppressedRef.current) ||
+        pendingUnreadScrollRef.current?.channelId === channelId ||
+        pendingReadingPositionScrollRef.current?.channelId === channelId ||
         latestCandidate?.id !== candidate.id
       ) {
         window.requestAnimationFrame(scheduleVisibleReadReceipt);
         return;
       }
       void markReadThroughMessage(channelId, candidate.id);
-    }, chatReadReceiptStableMs);
+    }, Math.max(chatReadReceiptStableMs, readReceiptRetryAfterRef.current - Date.now()));
 
     pendingReadReceiptRef.current = { channelId, messageId: candidate.id, timer };
   }, [cancelPendingReadReceipt, markReadThroughMessage]);
@@ -1020,7 +1026,7 @@ export function useChatFeedState({
 
   useLayoutEffect(() => {
     scheduleVisibleReadReceipt();
-  }, [messages, messagesLoading, scheduleVisibleReadReceipt, unreadAnchor]);
+  }, [messages, messagesLoading, readReceiptRevision, scheduleVisibleReadReceipt, unreadAnchor]);
 
   useEffect(() => {
     if (!hasMainFeedUnread(unreadAnchor)) return undefined;

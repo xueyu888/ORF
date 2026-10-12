@@ -1460,56 +1460,62 @@ export async function getChatMessageContext(
 
   const limit = Math.max(3, Math.min(100, input.limit ?? 60));
   const radius = Math.max(1, Math.floor((limit - 1) / 2));
-  type RankedMessageRow = MessageRow & {
-    rn: number | string;
-    total_count: number | string;
-  };
-  const { rows } = await pool.query<RankedMessageRow>(
+  // Read one extra neighbour on each side to derive pagination without ranking the entire channel.
+  const contextMessageSql = `
+    SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
+           u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
+           m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by
+    FROM chat_messages m
+    INNER JOIN users u ON u.id = m.author_user_id
+    WHERE m.team_id = $1
+      AND m.channel_id = $2
+      AND m.root_message_id IS NULL
+      AND ${visibleChatMessageSql("m", "$5", "$6", "$7")}
+  `;
+  type ContextMessageRow = MessageRow & { context_side: "before" | "target" | "after" };
+  const { rows } = await pool.query<ContextMessageRow>(
     `
-      WITH ordered_roots AS (
-        SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
-               u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
-               m.source, m.system_metadata, m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by,
-               row_number() OVER (ORDER BY m.created_at ASC, m.id ASC) AS rn,
-               count(*) OVER () AS total_count
-        FROM chat_messages m
-        INNER JOIN users u ON u.id = m.author_user_id
-        WHERE m.team_id = $1
-          AND m.channel_id = $2
-          AND m.root_message_id IS NULL
-          AND ${visibleChatMessageSql("m", "$5", "$6", "$7")}
-      ),
-      target_root AS (
-        SELECT rn, total_count
-        FROM ordered_roots
-        WHERE id = $3
-        LIMIT 1
+      WITH target_root AS (
+        SELECT id, created_at FROM chat_messages WHERE id = $3 AND team_id = $1 AND channel_id = $2
+      ), before_roots AS (
+        ${contextMessageSql}
+          AND (m.created_at, m.id) < (SELECT created_at, id FROM target_root)
+        ORDER BY m.created_at DESC, m.id DESC
+        LIMIT $4
+      ), after_roots AS (
+        ${contextMessageSql}
+          AND (m.created_at, m.id) > (SELECT created_at, id FROM target_root)
+        ORDER BY m.created_at ASC, m.id ASC
+        LIMIT $4
       )
-      SELECT ordered_roots.*
-      FROM ordered_roots, target_root
-      WHERE ordered_roots.rn BETWEEN target_root.rn - $4 AND target_root.rn + $4
-      ORDER BY ordered_roots.rn ASC
+      SELECT * FROM (
+        SELECT before_roots.*, 'before' AS context_side FROM before_roots
+        UNION ALL
+        SELECT target_message.*, 'target' AS context_side FROM (${contextMessageSql} AND m.id = $3) target_message
+        UNION ALL
+        SELECT after_roots.*, 'after' AS context_side FROM after_roots
+      ) context_messages
+      ORDER BY created_at ASC, id ASC
     `,
     [
       storageTeamId(actor),
       input.channelId,
       rootMessageId,
-      radius,
+      radius + 1,
       actor.id,
       E2E_NOTIFICATION_ACTOR_NAME_SQL_PATTERN,
       normalizedE2eNotificationViewerEmails(),
     ],
   );
-  if (rows.length === 0) return { status: "notFound" };
-
-  const ranks = rows.map((row) => Number(row.rn));
-  const maxRank = Math.max(...ranks);
-  const minRank = Math.min(...ranks);
-  const totalCount = Number(rows[0]?.total_count ?? rows.length);
+  const targetRow = rows.find((row) => row.context_side === "target");
+  if (!targetRow) return { status: "notFound" };
+  const beforeRows = rows.filter((row) => row.context_side === "before");
+  const afterRows = rows.filter((row) => row.context_side === "after");
+  const contextRows = [...beforeRows.slice(-radius), targetRow, ...afterRows.slice(0, radius)];
   return ok({
-    hasNewerMessages: maxRank < totalCount,
-    hasOlderMessages: minRank > 1,
-    messages: await buildMessages(rows, actor),
+    hasNewerMessages: afterRows.length > radius,
+    hasOlderMessages: beforeRows.length > radius,
+    messages: await buildMessages(contextRows, actor),
     targetMessageId: rootMessageId,
   });
 }
