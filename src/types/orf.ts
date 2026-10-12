@@ -47,7 +47,7 @@ export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" |
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type ObjectiveSettlementEventKind = "deadlinePenalty" | "finalCompletion";
 /** Historical accounting records do not open or close lifecycle settlement windows. */
-export type ObjectiveSettlementRecordKind = ObjectiveSettlementEventKind | "scoreScaleCorrection" | "historicalLedgerRestore";
+export type ObjectiveSettlementRecordKind = ObjectiveSettlementEventKind | "scoreScaleCorrection" | "historicalLedgerRestore" | "historicalWorkAward";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
 export type UserRole = "admin" | "member";
 export type UserStatus = "pending" | "active" | "rejected" | "disabled";

@@ -163,6 +163,9 @@
 - 后一次结算不得移动前一次结算的归属。管理员更正调用 `PATCH /api/objectives/:objectiveId/settlements/:eventId/achievement-period`，提交 `achievementPeriod`、`expectedPeriod` 和 `reason`，在事务内核验旧值并记录 `settlement_period_corrections`；不会重发积分、改变原始时间或绕过团队权限。
 - 缺失区间的历史事件、无事件关联的账本不得从验收日期猜测归属，读取返回 `achievementPeriod:null`。旧 `settlement_period_at` 暂留为迁移归档，退出新代码业务读写，待生产新版本切换和归档核验后再安排物理删除。
 - 已存在的历史补差 `scoreScaleCorrection` 与迁移专用 `historicalLedgerRestore` 是账务记录，不属于正常生命周期结算类型，不影响互评窗口或目标完成状态。恢复工具只按明确清单关联已有账本，不追加积分。恢复记录的基础分与事件分值均为所关联原账本的有符号合计，倍率为 1，仅作历史金额留档，不重新运行评分规则。
+- 对管理员明确确认归属月份、独立工作事项和个人定额的历史额外工作，可信服务器操作员使用 `node --import tsx scripts/record-historical-work-award.ts --input <批准清单.json> [--apply]` 入账；默认仅预览。清单包含 `requestId`（UUID）、`teamId`、`projectId`、`title`、`actorUserId`、`reason`、`achievementPeriod` 和 `allocations: [{userId, points}]`。操作者必须是本团队 active 管理员，受分人必须是本团队 active 普通成员，积分为正整数；本入口仅处理完整的已结束自然月。
+- `historicalWorkAwardRepository` 在一个事务中创建独立历史工作目标、`historicalWorkAward` 账务事件和个人账本。目标为已结算，基础分及结算分为批准总额，事件倍率为1，成果月份由事件保存；真实补录时间、管理员及原因完整保留。不修改任何既有目标，不伪造成成员自行接受征召、提交战利品、客户验收或匿名互评；不创建这些行为的记录，详情说明本次采用管理员定额补录。
+- 每份批准清单的 requestId 确定目标和事件身份；事务锁保证并发安全。相同清单重复执行返回已执行，内容改变则拒绝；同项目、同月份、同标题重复登记也拒绝。账本是个人积分唯一来源，统计按事件成果区间累计。本运维入口没有普通用户 HTTP 写接口，不支持扣分、覆盖旧流水或修改原互评结果。
 - 历史恢复按目标、同一次原账本时间及说明核对；事件日期沿用原记录，用户明确更正的历史日期须写入依据。原账本时间保持不变，执行者及实际补录时间另写 `settlement_period_corrections` 审计；不把历史日期伪装成迁移执行日期。迁移清单保存原流水和新关联，事务中校验金额、成员、日期、目标状态不变，重复执行不得生成新事件或积分。
 - `pointLedger.points` 以 `0.01` 为最小单位分配，使用最大余数法保证个人积分合计等于目标结算积分。
 - `Objective.objectiveSettlementPoints` 只是该目标已写入账本积分的展示汇总，生命周期仍以 `Objective.flowStatus` 为准。
