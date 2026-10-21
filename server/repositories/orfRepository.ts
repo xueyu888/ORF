@@ -44,6 +44,7 @@ import {
   canUseFullCompletionSettlementMultiplier,
   canEditObjectiveBasePointsByFlow,
   hasPositiveObjectiveBasePoints,
+  isValidObjectiveBasePoints,
   planObjectiveAcceptance,
   planObjectiveSettlement,
   planObjectiveSettlementEvent,
@@ -4181,7 +4182,7 @@ export async function updateObjectiveBasePoints(
   basePoints: number,
   actorId: string,
 ): Promise<ObjectiveDetailsMutationOutcome> {
-  if (!Number.isInteger(basePoints) || basePoints < 1) {
+  if (!isValidObjectiveBasePoints(basePoints)) {
     return { status: "invalid" };
   }
 

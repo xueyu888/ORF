@@ -37,7 +37,15 @@ export const uncertaintyScores: Record<UncertaintyLevel, number> = {
   飞升: 810,
 };
 
-export const OBJECTIVE_BASE_POINTS_MIN = 1;
+export const OBJECTIVE_BASE_POINTS_MIN = 0.01;
+export const OBJECTIVE_BASE_POINTS_MAX = 2147483647;
+
+export function isValidObjectiveBasePoints(points: number) {
+  return Number.isFinite(points)
+    && points >= OBJECTIVE_BASE_POINTS_MIN
+    && points <= OBJECTIVE_BASE_POINTS_MAX
+    && points === Math.round(points * 100) / 100;
+}
 
 export type SettlementResult = Pick<
   Result,
@@ -125,7 +133,7 @@ export function normalizedObjectiveBasePoints(
 ) {
   const points = Number(objective?.objectiveBasePoints ?? 0);
   if (!Number.isFinite(points)) return 0;
-  return Math.max(0, Math.floor(points));
+  return Math.max(0, Number(points.toFixed(2)));
 }
 
 export function hasPositiveObjectiveBasePoints(

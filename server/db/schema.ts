@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, bigserial, boolean, check, date, foreignKey, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, bigserial, boolean, check, date, doublePrecision, foreignKey, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type { ChatIntegrationProvider } from "../../src/domain/chatIntegrationProvider";
 import type {
   BountySource,
@@ -300,8 +300,8 @@ export const objectives = pgTable("objectives", {
   lootSubmittedAt: timestamp("loot_submitted_at", { mode: "string", withTimezone: true }),
   acceptedResult: text("accepted_result").$type<ObjectiveAcceptedResult>(),
   completionMultiplier: real("completion_multiplier"),
-  objectiveBasePoints: integer("objective_base_points").notNull().default(0),
-  objectiveSettlementPoints: real("objective_settlement_points"),
+  objectiveBasePoints: numeric("objective_base_points", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
+  objectiveSettlementPoints: doublePrecision("objective_settlement_points"),
   publishedAt: date("published_at", { mode: "string" }),
   createdAt: date("created_at", { mode: "string" }).notNull(),
   updatedAt: date("updated_at", { mode: "string" }).notNull(),
@@ -420,9 +420,9 @@ export const objectiveSettlementEvents = pgTable(
       .references(() => objectives.id, { onDelete: "cascade" }),
     kind: text("kind").$type<ObjectiveSettlementRecordKind>().notNull(),
     lootId: text("loot_id").references(() => objectiveLoot.id, { onDelete: "set null" }),
-    basePoints: real("base_points").notNull(),
+    basePoints: doublePrecision("base_points").notNull(),
     multiplier: real("multiplier").notNull(),
-    settlementPoints: real("settlement_points").notNull(),
+    settlementPoints: doublePrecision("settlement_points").notNull(),
     reason: text("reason").notNull(),
     createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
     achievementStart: date("achievement_start", { mode: "string" }),
@@ -459,7 +459,7 @@ export const pointLedger = pgTable("point_ledger", {
   settlementEventId: text("settlement_event_id").references(() => objectiveSettlementEvents.id, { onDelete: "set null" }),
   userId: uuid("user_id").notNull().references(() => users.id),
   memberName: text("member_name").notNull(),
-  points: real("points").notNull(),
+  points: doublePrecision("points").notNull(),
   reason: text("reason").notNull(),
   createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
 });

@@ -214,7 +214,7 @@ type ObjectiveFlowStatus =
 
 逾期惩罚结算通知和最终结算通知都只发给目标 `Objective.challengerUserIds` 中仍为 active 的相关成员。通知正文只说明结算事件和跳转位置，不携带匿名互评原始评分、比例矩阵或个人积分明细。
 
-`Objective.objectiveBasePoints` 是目标基础分事实源，由指挥官直接设置为正整数。目标在 `accepted` 最终匿名互评阶段仍可修改目标分数；指挥官点击确认结算并写入最终结算事件后，目标进入 `settled`，目标分数随结算结果锁定。指标不再设置等级积分，`Result.uncertaintyLevel` / `Result.uncertaintyScore` 仅作为历史兼容字段保留，不参与新结算。
+`Objective.objectiveBasePoints` 是目标基础分事实源，由指挥官直接设置为最多两位小数的正数。目标在 `accepted` 最终匿名互评阶段仍可修改目标分数；指挥官点击确认结算并写入最终结算事件后，目标进入 `settled`，目标分数随结算结果锁定。指标不再设置等级积分，`Result.uncertaintyLevel` / `Result.uncertaintyScore` 仅作为历史兼容字段保留，不参与新结算。
 
 `Result.detail` 是指标详情唯一事实源。评论只保存讨论记录，不承载指标详情定义；战利品提交和验收读取同一个 `Result.detail` 字段作为只读上下文。
 

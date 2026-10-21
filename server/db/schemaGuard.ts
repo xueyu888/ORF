@@ -877,6 +877,14 @@ export async function assertRuntimeDatabaseSchema() {
   try {
   const periodColumns = await schemaClient.query<{column_name:string}>("SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='objective_settlement_events' AND column_name IN ('achievement_start','achievement_end')");
   if (periodColumns.rows.length !== 2) throw new DatabaseSchemaMismatchError(["objective_settlement_events achievement period columns are missing; apply migration 0102."]);
+  const scoreColumns = await schemaClient.query<{ table_name: string; column_name: string; data_type: string; numeric_scale: number | null }>(
+    "SELECT table_name,column_name,data_type,numeric_scale FROM information_schema.columns WHERE table_schema=current_schema() AND ((table_name='objectives' AND column_name IN ('objective_base_points','objective_settlement_points')) OR (table_name='objective_settlement_events' AND column_name IN ('base_points','settlement_points')) OR (table_name='point_ledger' AND column_name='points'))",
+  );
+  if (scoreColumns.rows.length !== 5 || scoreColumns.rows.some(column => column.column_name === "objective_base_points"
+    ? column.data_type !== "numeric" || column.numeric_scale !== 2
+    : column.data_type !== "double precision")) {
+    throw new DatabaseSchemaMismatchError(["Objective and ledger decimal point types are missing; apply migration 0103."]);
+  }
   let queryQueue = Promise.resolve();
   const pool = {
     query<T extends QueryResultRow = QueryResultRow>(queryText: string): Promise<QueryResult<T>> {

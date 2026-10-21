@@ -1,4 +1,5 @@
 import { isAchievementPeriod } from "../../src/domain/achievementPeriod";
+import { isValidObjectiveBasePoints } from "../../src/domain/orfSettlement";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
@@ -66,7 +67,7 @@ const objectiveDetailsBodySchema = z.object({
   finalDueAt: dateOnlySchema.optional(),
 }).refine((body) => body.title !== undefined || body.finalDueAt !== undefined, { message: "No objective fields to update" });
 const objectiveBasePointsBodySchema = z.object({
-  objectiveBasePoints: z.number().int().min(1),
+  objectiveBasePoints: z.number().refine(isValidObjectiveBasePoints, "目标分数必须为正数，最多两位小数"),
 });
 const objectiveProjectBodySchema = z.object({
   projectId: optionalNullableTextSchema,

@@ -29,7 +29,7 @@ import {
   shouldRenderObjectiveAsFrozen,
 } from "../../../domain/orfLifecycle";
 import { objectiveChallengerUserIds } from "../../../domain/orfObjectiveParticipants";
-import { canEditObjectiveBasePointsByFlow, objectiveBasePointsLabel } from "../../../domain/orfSettlement";
+import { canEditObjectiveBasePointsByFlow, isValidObjectiveBasePoints, OBJECTIVE_BASE_POINTS_MAX, OBJECTIVE_BASE_POINTS_MIN, objectiveBasePointsLabel } from "../../../domain/orfSettlement";
 import type {
   ObjectiveAlignmentRequest,
   ObjectiveAlignmentRequestKind,
@@ -1722,8 +1722,8 @@ function ObjectiveBasePointsControl({
     }
 
     const nextValue = Number(trimmedValue);
-    if (!Number.isInteger(nextValue) || nextValue < 1) {
-      notify("目标分数必须是正整数");
+    if (!isValidObjectiveBasePoints(nextValue)) {
+      notify("目标分数必须为正数，最多两位小数");
       cancelEditing();
       return;
     }
@@ -1759,8 +1759,10 @@ function ObjectiveBasePointsControl({
           autoFocus
           className="orf-objective-base-points-input"
           disabled={isSaving}
-          inputMode="numeric"
-          min={1}
+          inputMode="decimal"
+          min={OBJECTIVE_BASE_POINTS_MIN}
+          max={OBJECTIVE_BASE_POINTS_MAX}
+          step={0.01}
           onBlur={() => void saveValue()}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
@@ -1769,7 +1771,6 @@ function ObjectiveBasePointsControl({
               cancelEditing();
             }
           }}
-          pattern="[0-9]*"
           placeholder="待定"
           title="目标分数"
           type="number"
