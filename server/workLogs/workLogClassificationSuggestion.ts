@@ -1,14 +1,12 @@
 import type {
   WorkLogCategoryOption,
   WorkLogClassificationSuggestion,
-  WorkLogObjectiveOption,
 } from "../../src/types/orf";
 import { buildOpenAiCompatibleChatClient } from "../llm/openAiCompatibleChatClient";
 
 type SuggestionInput = {
   bodyMarkdown: string;
   categories: WorkLogCategoryOption[];
-  objectives: WorkLogObjectiveOption[];
 };
 
 type RawSuggestion = {
@@ -16,7 +14,6 @@ type RawSuggestion = {
   categoryName?: unknown;
   confidence?: unknown;
   kind?: unknown;
-  objectiveId?: unknown;
   reason?: unknown;
 };
 
@@ -27,7 +24,6 @@ export function isWorkLogClassificationSuggestionConfigured() {
 export async function suggestWorkLogClassification({
   bodyMarkdown,
   categories,
-  objectives,
 }: SuggestionInput): Promise<WorkLogClassificationSuggestion | null> {
   const client = buildOpenAiCompatibleChatClient();
   if (!client) return null;
@@ -41,9 +37,9 @@ export async function suggestWorkLogClassification({
           role: "system",
           content: [
             "你是 ORF 工作日志分类助手。只返回 JSON，不要解释。",
-            "你只能根据日志内容从候选目标、候选分类中选择，或者建议新建分类。",
-            "如果内容明显对应目标，优先选择目标；如果不对应任何目标但适合已有分类，选择分类；如果都不适合，建议 newCategory。",
-            "返回结构：{\"kind\":\"objective|category|newCategory|uncategorized\",\"objectiveId\":string|null,\"categoryId\":string|null,\"categoryName\":string|null,\"confidence\":0..1,\"reason\":string}",
+            "工作日志不关联目标。你只能根据日志内容选择候选分类，或者建议新建分类。",
+            "适合已有分类时选择 category；适合新分类时建议 newCategory；不需要分类时返回 uncategorized。",
+            "返回结构：{\"kind\":\"category|newCategory|uncategorized\",\"categoryId\":string|null,\"categoryName\":string|null,\"confidence\":0..1,\"reason\":string}",
           ].join("\n"),
         },
         {
@@ -51,12 +47,6 @@ export async function suggestWorkLogClassification({
           content: JSON.stringify(
             {
               log: bodyMarkdown.trim().slice(0, 3000),
-              objectives: objectives.slice(0, 80).map((objective) => ({
-                id: objective.id,
-                title: objective.title,
-                status: objective.flowStatus,
-                finalDueAt: objective.finalDueAt,
-              })),
               categories: categories.slice(0, 80).map((category) => ({
                 id: category.id,
                 name: category.name,
@@ -69,7 +59,7 @@ export async function suggestWorkLogClassification({
       ],
     });
 
-    return normalizeSuggestion(raw, { categories, objectives });
+    return normalizeSuggestion(raw, { categories });
   } catch {
     return null;
   }
@@ -77,7 +67,7 @@ export async function suggestWorkLogClassification({
 
 function normalizeSuggestion(
   raw: string,
-  options: Pick<SuggestionInput, "categories" | "objectives">,
+  options: Pick<SuggestionInput, "categories">,
 ): WorkLogClassificationSuggestion | null {
   const parsed = parseSuggestionJson(raw);
   if (!parsed) return null;
@@ -85,13 +75,8 @@ function normalizeSuggestion(
   const confidence = normalizeConfidence(parsed.confidence);
   const reason = typeof parsed.reason === "string" ? parsed.reason.trim().slice(0, 80) : null;
   const kind = typeof parsed.kind === "string" ? parsed.kind : "";
-  const objectiveId = typeof parsed.objectiveId === "string" ? parsed.objectiveId.trim() : "";
   const categoryId = typeof parsed.categoryId === "string" ? parsed.categoryId.trim() : "";
   const categoryName = typeof parsed.categoryName === "string" ? normalizeSuggestedCategoryName(parsed.categoryName) : "";
-
-  if (kind === "objective" && options.objectives.some((objective) => objective.id === objectiveId)) {
-    return { kind: "objective", objectiveId, categoryId: null, categoryName: null, confidence, reason };
-  }
 
   if (kind === "category" && options.categories.some((category) => category.id === categoryId)) {
     return { kind: "category", objectiveId: null, categoryId, categoryName: null, confidence, reason };

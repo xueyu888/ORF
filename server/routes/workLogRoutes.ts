@@ -200,15 +200,11 @@ export function registerWorkLogRoutes(app: FastifyInstance) {
     }
 
     const body = classificationSuggestionBodySchema.parse(request.body);
-    const [categories, objectives] = await Promise.all([
-      listWorkLogCategoryOptions(context.scope, context.user),
-      listWorkLogObjectiveOptions(context.user, context.scope),
-    ]);
+    const categories = await listWorkLogCategoryOptions(context.scope, context.user);
     return {
       suggestion: await suggestWorkLogClassification({
         bodyMarkdown: body.bodyMarkdown,
         categories,
-        objectives,
       }),
     };
   });

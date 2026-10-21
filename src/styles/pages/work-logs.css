@@ -3,8 +3,7 @@
 .work-logs-view-tab,
 .work-log-reminder-date-list button,
 .work-log-reminder-primary,
-.work-log-reminder-secondary,
-.work-logs-estimate-inputs button {
+.work-log-reminder-secondary {
   border-radius: var(--orf-radius-control);
 }
 .work-log-reminder-modal-backdrop {
@@ -626,12 +625,12 @@
   gap: 8px;
 }
 
-.work-logs-objective-select {
+.work-logs-category-select {
   min-width: 0;
   flex: 1;
 }
 
-.work-logs-objective-select .orf-select-trigger {
+.work-logs-category-select .orf-select-trigger {
   width: 100%;
   border-radius: var(--orf-radius-control);
 }
@@ -683,111 +682,6 @@
   color: var(--orf-text-muted);
   font-size: 12px;
   font-weight: 720;
-}
-
-.work-logs-completed-objective-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 9px 10px;
-  border: 1px solid var(--orf-warning-border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--orf-warning-bg) 78%, var(--orf-bg-card));
-  color: var(--orf-warning-text);
-  font-size: 12px;
-  font-weight: 760;
-  line-height: 1.5;
-}
-
-.work-logs-completed-objective-note svg {
-  flex: 0 0 auto;
-  margin-top: 1px;
-}
-
-.work-logs-estimate-control {
-  display: grid;
-  gap: 9px;
-  padding: 10px;
-  border: 1px solid var(--orf-border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--orf-bg-muted) 72%, transparent);
-}
-
-.work-logs-estimate-control[data-disabled="true"] {
-  opacity: 0.68;
-}
-
-.work-logs-estimate-heading,
-.work-logs-estimate-inputs {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.work-logs-estimate-heading {
-  justify-content: space-between;
-}
-
-.work-logs-estimate-heading div {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.work-logs-estimate-heading span {
-  color: var(--orf-text-primary);
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.work-logs-estimate-heading small {
-  color: var(--orf-text-muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.work-logs-estimate-heading strong {
-  color: var(--orf-warning-text);
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 850;
-}
-
-.work-logs-estimate-inputs input[type="range"] {
-  min-width: 0;
-  flex: 1;
-  accent-color: var(--orf-accent);
-}
-
-.work-logs-estimate-inputs input[type="number"] {
-  width: 72px;
-  height: 32px;
-  border: 1px solid var(--orf-border);
-  border-radius: var(--orf-radius-control);
-  background: var(--orf-bg-card);
-  color: var(--orf-text-primary);
-  font-size: 13px;
-  font-weight: 760;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
-.work-logs-estimate-inputs button {
-  display: inline-flex;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--orf-border);
-  border-radius: var(--orf-radius-control);
-  background: var(--orf-bg-card);
-  color: var(--orf-text-secondary);
-  padding: 0 9px;
-  font-size: 12px;
-  font-weight: 780;
-}
-
-.work-logs-estimate-inputs button:disabled {
-  opacity: 0.48;
 }
 
 .work-logs-editor.orf-rich-text-editor {
@@ -1821,24 +1715,10 @@ button.work-logs-team-cell:focus-visible {
     flex-direction: column;
   }
 
-.work-logs-estimate-heading {
-    align-items: center;
-    flex-direction: row;
-  }
-
-.work-logs-estimate-inputs,
-  .work-logs-history-actions,
+.work-logs-history-actions,
   .work-logs-report-controls {
     flex-wrap: wrap;
     justify-content: flex-start;
-  }
-
-.work-logs-estimate-inputs {
-    flex-wrap: nowrap;
-  }
-
-.work-logs-estimate-inputs input[type="number"] {
-    width: 64px;
   }
 
 .work-logs-entry-date-control {
@@ -2013,8 +1893,7 @@ button.work-logs-team-cell:focus-visible {
   border-top: 1px solid var(--orf-border);
 }
 
-.work-logs-entry-date-control,
-.work-logs-estimate-control {
+.work-logs-entry-date-control {
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -2026,13 +1905,7 @@ button.work-logs-team-cell:focus-visible {
   padding-bottom: 10px;
 }
 
-.work-logs-estimate-control {
-  border-top: 1px solid var(--orf-border);
-  padding-top: 12px;
-}
-
 .work-logs-entry-date-label span,
-.work-logs-estimate-heading span,
 .work-logs-history-heading h3,
 .work-logs-day-resources-heading strong,
 .work-logs-day-resource-row strong {
@@ -2040,7 +1913,6 @@ button.work-logs-team-cell:focus-visible {
 }
 
 .work-logs-entry-date-label small,
-.work-logs-estimate-heading small,
 .work-logs-history-heading span,
 .work-logs-day-resources-heading small,
 .work-logs-day-resource-row small {
@@ -2100,11 +1972,6 @@ button.work-logs-team-cell:focus-visible {
 
 .work-logs-editor-save-hint {
   font-weight: 600;
-}
-
-.work-logs-estimate-heading strong,
-.work-logs-estimate-inputs button {
-  font-weight: 650;
 }
 
 .work-logs-date-control .orf-date-trigger,
@@ -2181,8 +2048,7 @@ button.work-logs-team-cell:focus-visible {
   box-shadow: 0 5px 14px color-mix(in srgb, var(--orf-text-primary) 10%, transparent), inset 0 1px 0 var(--orf-material-content-shine);
 }
 
-.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-date-control > .orf-control:is(:hover, :focus-visible),
-.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-date-control .orf-date-trigger:is(:hover, :focus-visible) {
+.orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-date-control > .orf-control:is(:hover, :focus-visible), .orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-date-control .orf-date-trigger:is(:hover, :focus-visible) {
   border-color: var(--orf-accent-border);
   background: var(--orf-surface-control-hover);
   box-shadow: 0 6px 16px color-mix(in srgb, var(--orf-text-primary) 10%, transparent), inset 0 1px 0 var(--orf-material-content-shine);
@@ -2210,22 +2076,6 @@ button.work-logs-team-cell:focus-visible {
 
 .orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-panel-heading {
   border-color: color-mix(in srgb, var(--orf-material-content-hairline) 54%, var(--orf-workbench-hairline));
-}
-
-.orf-app-shell[data-page-scene="page_work_logs_background"] :is(
-  .work-logs-objective-select .orf-select-trigger,
-  .work-logs-entry-date-control .orf-date-trigger,
-  .work-logs-estimate-inputs input[type="number"],
-  .work-logs-estimate-inputs button,
-  .work-logs-editor-template-action
-) {
-  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 55%, var(--orf-workbench-hairline));
-  background: var(--orf-material-content-control);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--orf-material-content-shine) 46%, transparent);
-}
-
-.orf-app-shell[data-page-scene="page_work_logs_background"] :is(.work-logs-entry-date-control, .work-logs-estimate-control) {
-  border-color: color-mix(in srgb, var(--orf-material-content-hairline) 48%, var(--orf-workbench-hairline));
 }
 
 .orf-app-shell[data-page-scene="page_work_logs_background"] .work-logs-editor.orf-rich-text-editor {
@@ -2310,7 +2160,7 @@ body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) .work-logs
     .work-logs-report-popover,
     .work-log-reminder-modal
   ),
-  body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) :is(.orf-select-popover, .orf-date-popover) {
+    body:has(.orf-app-shell[data-page-scene="page_work_logs_background"]) :is(.orf-select-popover, .orf-date-popover) {
     background: var(--orf-surface-elevated);
   }
 }

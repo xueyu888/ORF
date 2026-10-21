@@ -125,7 +125,7 @@ test("work log members can save uncategorized logs without gaining managed categ
     requireObjectiveProgressEstimate: requiresObjectiveProgressEstimate(member),
   };
   const draft = { ...blankWorkLogEditorDraft(), bodyMarkdown: "今天完成了日常问题排查。" };
-  const choices = buildWorkLogClassificationChoices(draft, [], permissions, listBuiltInWorkLogCategoryOptions(member));
+  const choices = buildWorkLogClassificationChoices(draft, permissions, listBuiltInWorkLogCategoryOptions(member));
   assert.equal(choices.find((choice) => choice.value === "uncategorized")?.disabled, undefined);
   assert.equal(choices.some((choice) => choice.value === "category:new"), false);
   assert.equal(validateWorkLogEditorDraft(draft, permissions), "");
@@ -347,7 +347,7 @@ test("work log editor preserves id-less historical classification while editing"
     objectiveId: null,
     remainingEstimatePercent: 40,
   });
-  assert.ok(buildWorkLogClassificationChoices(draft, [], {
+  assert.ok(buildWorkLogClassificationChoices(draft, {
     allowCategories: false,
     allowUncategorized: false,
   }, []).some((choice) => choice.value === "historical:objective"));
@@ -379,7 +379,7 @@ test("work log editor preserves id-less historical classification while editing"
     allowUncategorized: false,
     requireObjectiveProgressEstimate: true,
   }), "");
-  assert.ok(buildWorkLogClassificationChoices(categoryDraft, [], {
+  assert.ok(buildWorkLogClassificationChoices(categoryDraft, {
     allowCategories: false,
     allowUncategorized: false,
   }, []).some((choice) => choice.value === "historical:category"));
@@ -436,6 +436,35 @@ test("work log edit save returns to the same entry baseline for continued editin
     canonicalWorkLogEditorDraft(afterSave.draft),
     canonicalWorkLogEntryForEdit(savedEntry),
   );
+});
+
+test("work log sessions discard unpublished goal selections but preserve historical goal snapshots", () => {
+  const restored = createWorkLogEditorSession({
+    userId: "user-1",
+    workDate: "2026-10-21",
+    draft: {
+      ...blankWorkLogEditorDraft(),
+      bodyMarkdown: "升级前尚未提交的正文",
+      classificationKind: "objective",
+      objectiveId: "old-goal",
+      objectiveTitleSnapshot: "旧目标",
+      progressEstimatePercent: 30,
+    },
+  });
+  assert.equal(restored.draft.bodyMarkdown, "升级前尚未提交的正文");
+  assert.equal(restored.draft.classificationKind, "uncategorized");
+  assert.equal(canonicalWorkLogEditorDraft(restored.draft).objectiveId, null);
+  assert.equal(canonicalWorkLogEditorDraft(restored.draft).remainingEstimatePercent, null);
+  const legacy = createWorkLogEditorSession({
+    userId: "user-1", workDate: "2026-10-21",
+    draft: { ...restored.draft, classificationKind: "objective", objectiveId: "old-goal", editingEntryId: "saved-log", progressEstimatePercent: 30 },
+  });
+  const edited = applyWorkLogEditorSessionDraftPatch(legacy, { bodyMarkdown: "只更新日志正文" });
+  assert.equal(workLogEditorDraftPreservesExistingClassification(edited.draft), true);
+  assert.equal(edited.draft.objectiveTitleSnapshot, "旧目标");
+  assert.equal(canonicalWorkLogEditorDraft(edited.draft).objectiveId, null);
+  assert.equal(canonicalWorkLogEditorDraft(edited.draft).remainingEstimatePercent, 70);
+  assert.equal(buildWorkLogClassificationChoices(restored.draft, { allowCategories: true, allowUncategorized: true }, []).some(choice => choice.value.startsWith("objective:")), false);
 });
 
 test("work log AI classification correctness compares canonical user selection", () => {

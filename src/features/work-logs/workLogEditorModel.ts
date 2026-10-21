@@ -1,6 +1,5 @@
 import { orfRichTextHasMeaningfulContent } from "../rich-text/OrfRichTextEditor";
 import type {
-  ObjectiveFlowStatus,
   WorkLogCategoryOption,
   WorkLogClassificationKind,
   WorkLogClassificationSuggestion,
@@ -251,7 +250,7 @@ export function createWorkLogEditorSession(input: {
   workDate: string;
 }): WorkLogEditorSession {
   return {
-    draft: input.draft ?? blankWorkLogEditorDraft(),
+    draft: workLogEditorDraftWithoutObjectiveSelection(input.draft ?? blankWorkLogEditorDraft()),
     revision: (input.previousRevision ?? 0) + 1,
     userId: input.userId,
     workDate: input.workDate,
@@ -264,7 +263,7 @@ export function applyWorkLogEditorSessionDraftPatch(
 ): WorkLogEditorSession {
   return {
     ...session,
-    draft: applyWorkLogEditorDraftPatch(session.draft, patch),
+    draft: workLogEditorDraftWithoutObjectiveSelection(applyWorkLogEditorDraftPatch(session.draft, patch)),
   };
 }
 
@@ -379,6 +378,20 @@ export function workLogEditorDraftFromEntry(entry: WorkLogEntry): WorkLogEditorD
   };
 }
 
+/** New drafts are goal-free; edits keep the existing goal snapshot read-only. */
+export function workLogEditorDraftWithoutObjectiveSelection(draft: WorkLogEditorDraft): WorkLogEditorDraft {
+  if (draft.classificationKind !== "objective") return draft;
+  if (!draft.editingEntryId) {
+    return applyWorkLogEditorDraftPatch(draft, { classificationKind: "uncategorized" });
+  }
+  return {
+    ...draft,
+    objectiveId: "",
+    objectiveTitleSnapshot: draft.objectiveTitleSnapshot || draft.objectiveId || "历史目标",
+    preserveExistingClassification: true,
+  };
+}
+
 export function parseWorkLogProgressEstimateInput(value: string) {
   if (!value.trim()) return null;
   const parsed = Number(value);
@@ -411,16 +424,7 @@ export function canonicalWorkLogEditorDraft(draft: WorkLogEditorDraft) {
 }
 
 export function canonicalWorkLogEntryForEdit(entry: WorkLogEntry) {
-  const classification = workLogEntryClassification(entry);
-  return {
-    bodyMarkdown: entry.bodyMarkdown.trim(),
-    categoryId:
-      classification.kind === "category" ? entry.categoryIdSnapshot ?? null : null,
-    categoryName: null,
-    objectiveId:
-      classification.kind === "objective" ? entry.objectiveIdSnapshot ?? null : null,
-    remainingEstimatePercent: entry.remainingEstimatePercent ?? null,
-  };
+  return canonicalWorkLogEditorDraft(workLogEditorDraftWithoutObjectiveSelection(workLogEditorDraftFromEntry(entry)));
 }
 
 export function validateWorkLogEditorDraft(
@@ -633,7 +637,7 @@ export function workLogSuggestionLabel(
     return `新分类：${suggestion.categoryName}`;
   }
   if (suggestion.kind === "uncategorized") {
-    return "暂不指定目标或分类";
+    return "保持未归类";
   }
   return "";
 }
@@ -680,7 +684,6 @@ export function formatWorkLogProgressEstimate(value: number | null | undefined, 
 
 export function buildWorkLogClassificationChoices(
   draft: WorkLogEditorDraft,
-  objectives: WorkLogObjectiveOption[],
   options: {
     allowCategories: boolean;
     allowNewCategory?: boolean;
@@ -698,7 +701,7 @@ export function buildWorkLogClassificationChoices(
         }
       : {
           value: "uncategorized",
-          label: "选择目标",
+          label: "未归类",
           disabled: true,
           alwaysVisible: true,
         },
@@ -742,23 +745,6 @@ export function buildWorkLogClassificationChoices(
       alwaysVisible: true,
     });
   }
-  choices.push(
-    ...objectives.map((objective) => ({
-      value: `objective:${objective.id}` as const,
-      label: objective.title,
-      description: `目标 · ${flowStatusLabel(objective.flowStatus)} · 截止 ${objective.finalDueAt}`,
-    })),
-  );
-  if (
-    draft.objectiveId &&
-    !objectives.some((objective) => objective.id === draft.objectiveId)
-  ) {
-    choices.push({
-      value: `objective:${draft.objectiveId}` as const,
-      label: draft.objectiveTitleSnapshot ?? draft.objectiveId,
-      description: "历史目标快照",
-    });
-  }
   if (
     draft.categoryId &&
     !categories.some((category) => category.id === draft.categoryId)
@@ -789,21 +775,4 @@ export function workLogEditorDraftPreservesExistingClassification(draft: WorkLog
 
 export function workLogEntryTargetLabel(entry: WorkLogEntry) {
   return workLogEntryClassification(entry).title;
-}
-
-function flowStatusLabel(status: ObjectiveFlowStatus) {
-  const labels: Record<ObjectiveFlowStatus, string> = {
-    accepted: "已验收",
-    applying: "申请中",
-    candidate: "候选",
-    closed: "关闭",
-    frozen: "实施",
-    open: "开放",
-    recruiting: "征召",
-    reestimating: "重估",
-    revisionRequired: "待返工",
-    settled: "已结算",
-    submitted: "待验收",
-  };
-  return labels[status];
 }
