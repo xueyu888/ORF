@@ -1274,12 +1274,12 @@
 }
 
 .orf-objective-base-points-editor {
-  width: 76px;
+  width: auto;
   padding: 0 8px;
 }
 
 .orf-objective-base-points-input {
-  width: 42px;
+  width: 13ch;
   min-width: 0;
   border: 0;
   outline: 0;
