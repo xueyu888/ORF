@@ -24,7 +24,6 @@ import {
   findBuiltInWorkLogCategoryForInput,
   listBuiltInWorkLogCategoryOptions,
   requiresObjectiveProgressEstimate,
-  unscopedWorkLogMemberNameList,
   workLogObjectiveSelectionCandidateFlowStatuses,
   workLogObjectiveDefaultFlowStatuses,
   type WorkLogClassificationSelection,

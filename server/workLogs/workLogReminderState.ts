@@ -1,7 +1,7 @@
 import type { FastifyBaseLogger } from "fastify";
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import type { WorkLogReminderState } from "../../src/types/orf";
-import { unscopedWorkLogMemberNameList } from "../../src/domain/orfWorkLogs";
+import { workLogFaeMemberNameList } from "../../src/domain/orfWorkLogs";
 import { env } from "../env";
 import { db } from "../db/client";
 import { objectives, teamMembers, teams, users, workLogEntries, workLogReminderStates } from "../db/schema";
@@ -172,7 +172,7 @@ async function isWorkLogReminderEligibleUser(teamId: string, userId: string) {
         and(
           eq(teamMembers.role, "member"),
           or(
-            inArray(users.name, [...unscopedWorkLogMemberNameList]),
+            inArray(users.name, [...workLogFaeMemberNameList]),
             sql`exists (
               select 1
               from ${objectives}
@@ -200,7 +200,7 @@ async function listWorkLogReminderEligibleUsers(teamId: string) {
         and(
           eq(teamMembers.role, "member"),
           or(
-            inArray(users.name, [...unscopedWorkLogMemberNameList]),
+            inArray(users.name, [...workLogFaeMemberNameList]),
             sql`exists (
               select 1
               from ${objectives}

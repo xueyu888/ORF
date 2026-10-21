@@ -25,17 +25,13 @@ type WorkLogBuiltInCategoryPolicy = {
   audience: "allWritableUsers";
 };
 
-type WorkLogUnscopedPolicy = {
-  memberNames: readonly string[];
-};
-
 export type WorkLogClassificationSelection = {
   kind: WorkLogClassificationKind;
   targetId: string | null;
   targetName: string;
 };
 
-export const unscopedWorkLogMemberNameList = ["邓滨虎", "何永杰"] as const;
+export const workLogFaeMemberNameList = ["邓滨虎", "何永杰"] as const;
 export const workLogBuiltInCategoryPolicies = [
   {
     id: "builtin:leave",
@@ -59,10 +55,7 @@ export const workLogObjectiveSelectionCandidateFlowStatuses = [
 ] as const satisfies readonly ObjectiveFlowStatus[];
 export const workLogObjectiveAlwaysSelectableFlowStatuses = workLogObjectiveDefaultFlowStatuses;
 
-const workLogUnscopedPolicy: WorkLogUnscopedPolicy = {
-  memberNames: unscopedWorkLogMemberNameList,
-};
-const unscopedWorkLogMemberNames = new Set<string>(workLogUnscopedPolicy.memberNames);
+const workLogFaeMemberNames = new Set<string>(workLogFaeMemberNameList);
 const workLogObjectiveDefaultFlowStatusSet = new Set<ObjectiveFlowStatus>(workLogObjectiveDefaultFlowStatuses);
 const workLogObjectiveSearchOnlyFlowStatusSet = new Set<ObjectiveFlowStatus>(workLogObjectiveSearchOnlyFlowStatuses);
 const workLogBuiltInCategoriesById = new Map<string, WorkLogBuiltInCategoryPolicy>(
@@ -151,12 +144,11 @@ export function canUseWorkLogCategoryInput(
 }
 
 export function canSaveUnscopedWorkLog(user: WorkLogPermissionUser | null | undefined) {
-  if (user?.role === "admin") return true;
-  return user?.role === "member" && unscopedWorkLogMemberNames.has(normalizedUserName(user.name));
+  return canWriteWorkLog(user);
 }
 
 export function requiresObjectiveProgressEstimate(user: WorkLogPermissionUser | null | undefined) {
-  return user?.role === "member" && !canSaveUnscopedWorkLog(user);
+  return user?.role === "member" && !workLogFaeMemberNames.has(normalizedUserName(user.name));
 }
 
 function objectiveFlowStatusForWorkLog(target: WorkLogObjectiveTarget) {

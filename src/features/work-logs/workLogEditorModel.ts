@@ -693,7 +693,7 @@ export function buildWorkLogClassificationChoices(
       ? {
           value: "uncategorized",
           label: "未归类",
-          description: "临时记录",
+          description: "不关联目标的日常工作",
           alwaysVisible: true,
         }
       : {

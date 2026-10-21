@@ -13,6 +13,7 @@ import {
   isObjectiveCompletedForWorkLog,
   isWorkLogSearchOnlyObjective,
   listBuiltInWorkLogCategoryOptions,
+  requiresObjectiveProgressEstimate,
   workLogObjectiveAlwaysSelectableFlowStatuses,
   workLogObjectiveCompletedSearchFlowStatuses,
   workLogObjectiveDefaultFlowStatuses,
@@ -89,7 +90,7 @@ test("work log target search and save include search-only objectives", () => {
   assert.equal(isObjectiveCompletedForWorkLog("frozen"), false);
 });
 
-test("work log built-in category policies keep leave open without granting managed categories", () => {
+test("work log members can save uncategorized logs without gaining managed category permissions", () => {
   const member = { email: "member@sdr.com", name: "普通成员", role: "member", status: "active" };
   const zhuRuixuan = { email: "zrx@sdr.com", name: "朱锐轩", role: "member", status: "active" };
   const faeMember = { email: "fae@sdr.com", name: "邓滨虎", role: "member", status: "active" };
@@ -108,7 +109,33 @@ test("work log built-in category policies keep leave open without granting manag
   assert.equal(canUseAllWorkLogObjectiveOptions(faeMember), false);
   assert.equal(canUseWorkLogCategoryInput(admin, { categoryName: "管理事务" }), true);
   assert.equal(canSaveUnscopedWorkLog(faeMember), true);
-  assert.equal(canSaveUnscopedWorkLog(member), false);
+  assert.equal(canSaveUnscopedWorkLog(member), true);
+  assert.equal(canSaveUnscopedWorkLog(admin), true);
+  assert.equal(canSaveUnscopedWorkLog({ ...member, status: "disabled" }), false);
+  assert.equal(canSaveUnscopedWorkLog({ ...admin, status: "pending" }), false);
+  assert.equal(canSaveUnscopedWorkLog(null), false);
+  assert.equal(requiresObjectiveProgressEstimate(member), true);
+  assert.equal(requiresObjectiveProgressEstimate(faeMember), false);
+  assert.equal(requiresObjectiveProgressEstimate(admin), false);
+
+  const permissions = {
+    allowCategories: true,
+    allowNewCategory: canUseWorkLogCategories(member),
+    allowUncategorized: canSaveUnscopedWorkLog(member),
+    requireObjectiveProgressEstimate: requiresObjectiveProgressEstimate(member),
+  };
+  const draft = { ...blankWorkLogEditorDraft(), bodyMarkdown: "今天完成了日常问题排查。" };
+  const choices = buildWorkLogClassificationChoices(draft, [], permissions, listBuiltInWorkLogCategoryOptions(member));
+  assert.equal(choices.find((choice) => choice.value === "uncategorized")?.disabled, undefined);
+  assert.equal(choices.some((choice) => choice.value === "category:new"), false);
+  assert.equal(validateWorkLogEditorDraft(draft, permissions), "");
+  assert.equal(canonicalWorkLogEditorDraft(draft).objectiveId, null);
+  assert.equal(canonicalWorkLogEditorDraft(draft).remainingEstimatePercent, null);
+  assert.equal(validateWorkLogEditorDraft(blankWorkLogEditorDraft(), permissions), "工作日志内容不能为空");
+
+  const objectiveDraft = applyWorkLogEditorDraftPatch(draft, { classificationKind: "objective", objectiveId: "obj-1" });
+  assert.equal(validateWorkLogEditorDraft(objectiveDraft, permissions), "请填写目标进度估计");
+  assert.equal(validateWorkLogEditorDraft({ ...objectiveDraft, progressEstimatePercent: 30 }, permissions), "");
 });
 
 test("work log local draft storage parses only the editor draft contract", () => {
